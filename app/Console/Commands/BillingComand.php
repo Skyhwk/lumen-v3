@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\MasterPelanggan;
+use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use Carbon\Carbon;
 use DB;
@@ -32,7 +33,7 @@ class BillingComand extends Command
         printf("\n[BillingComand] [%s] Start Running...", date('Y-m-d H:i:s'));
 
         // 1️⃣ Order detail → map no_order => tgl_sampling
-        $orderSamplingMap = OrderDetail::query()
+        $orderSamplingFromDetail = OrderDetail::query()
         ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
         ->where('order_detail.is_active', 1)
         ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
@@ -49,7 +50,27 @@ class BillingComand extends Command
                 'tgl_sampling' => $row->tgl_sampling,
                 'sales_id'     => $row->sales_id,
             ];
+        });
+
+        $orderSamplingFromHeader = OrderHeader::query()
+        ->whereNotExists(function ($q) {
+            $q->select(DB::raw(1))
+            ->from('order_detail as od')
+            ->whereColumn('od.id_order_header', 'order_header.id')
+            ->where('od.is_active', 1);
         })
+        ->whereNotNull('no_document')
+        ->select('no_order', 'sales_id')
+        ->distinct()
+        ->get()
+        ->keyBy('no_order')
+        ->map(fn ($row) => [
+            'tgl_sampling' => null,
+            'sales_id'     => $row->sales_id,
+        ]);
+
+        $orderSamplingMap = $orderSamplingFromDetail
+        ->merge($orderSamplingFromHeader)
         ->toArray();
 
         // 2️⃣ Ambil pelanggan + invoice + relasi
