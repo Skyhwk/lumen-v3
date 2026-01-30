@@ -607,17 +607,11 @@ class ProcessAfterOrder
 
         // Link LHP
         $linkIds = LinkLhp::where('no_order', $this->no_order)
-            ->pluck('id')
-            ->toArray();
-
-        if(count($linkIds) > 0) {
-            GenerateLink::whereIn('id_quotation', $linkIds)
-                ->where('type', 'lhp_rilis')
-                ->where('quotation_status', 'lhp_rilis')
-                ->update([
-                    'expired' => $dateYesterday
-                ]);
-        }
+            ->update([
+                'is_active' => 0,
+                'updated_at' => Carbon::now(),
+                'updated_by' => $this->created_by
+            ]);
     }
 
     private function encrypt($data)
