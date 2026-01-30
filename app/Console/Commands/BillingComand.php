@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\MasterPelanggan;
+use App\Models\OrderDetail;
 use Carbon\Carbon;
 use DB;
 
@@ -30,67 +31,111 @@ class BillingComand extends Command
     {
         printf("\n[BillingComand] [%s] Start Running...", date('Y-m-d H:i:s'));
 
-        $data = MasterPelanggan::with('invoices')
-        ->selectRaw('id_pelanggan, nama_pelanggan, sales_penanggung_jawab, sales_id')
+        // 1️⃣ Order detail → map no_order => tgl_sampling
+        $orderSamplingMap = OrderDetail::query()
+        ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
+        ->where('order_detail.is_active', 1)
+        ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
+        ->selectRaw('
+            order_detail.no_order,
+            MIN(order_detail.tanggal_sampling) AS tgl_sampling,
+            oh.sales_id
+        ')
+        ->groupBy('order_detail.no_order', 'oh.sales_id')
+        ->get()
+        ->keyBy('no_order')
+        ->map(function ($row) {
+            return [
+                'tgl_sampling' => $row->tgl_sampling,
+                'sales_id'     => $row->sales_id,
+            ];
+        })
+        ->toArray();
+
+        // 2️⃣ Ambil pelanggan + invoice + relasi
+        $data = MasterPelanggan::query()
+        ->with([
+            'invoices.recordPembayaran',
+            'invoices.recordWithdraw'
+        ])
+        ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
         ->where('is_active', 1)
+        // ->where('id_pelanggan', 'KSDE01')
         ->whereHas('invoices')
         ->get()
-        ->map(function($q) {
-            $tagihan = $q->invoices->sum('nilai_tagihan');
-            $terbayar = $q->invoices->reduce(function($carry, $b) {
-                $pembayaran = $b->recordPembayaran->sum('nilai_pembayaran') ?? 0;
-                $withdraw = $b->recordWithdraw->sum('nilai_pembayaran') ?? 0;
-                return $carry + $pembayaran + $withdraw;
-            }, 0);
+        ->map(function ($pelanggan) use ($orderSamplingMap) {
 
-            $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
+            $tagihan = $pelanggan->invoices->sum('nilai_tagihan');
 
-            $invoices = $q->invoices->map(function($qq) {
-                $tgl_sampling = null;
+            $invoices = $pelanggan->invoices
+                ->groupBy('no_invoice')
+                ->map(function ($group, $noInvoice) use ($orderSamplingMap) {
 
-                $terbayarInvoice = ($qq->recordPembayaran->sum('nilai_pembayaran') ?? 0) + ($qq->recordWithdraw->sum('nilai_pembayaran') ?? 0);
-                
-                $pph = $qq->recordWithdraw->sum(function($item) {
-                    return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
-                }) ?? 0;
+                    $first = $group->first();
 
-                $statusInvoice = abs($qq->nilai_tagihan - $terbayarInvoice) <= 10 ? 1 : 0;
-                
-                return [
-                    "id_pelanggan" => $qq->pelanggan_id,
-                    "no_quotation" => $qq->no_quotation,
-                    "no_order" => $qq->no_order,
-                    "no_invoice" => $qq->no_invoice,
-                    "periode" => $qq->periode,
-                    "tgl_sampling" => $tgl_sampling,
-                    "tgl_invoice" => $qq->tgl_invoice,
-                    "tgl_jatuh_tempo" => $qq->tgl_jatuh_tempo,
-                    "nilai_tagihan" => $qq->nilai_tagihan,
-                    "terbayar" => $terbayarInvoice,
-                    "pph" => $pph,
-                    "is_complete" => $statusInvoice,
-                ];
-            })->values()->toArray();
+                    $nilaiTagihan = $group->sum('nilai_tagihan');
 
-            $totalPph = collect($invoices)->sum(function($invoice) {
-                return $invoice['pph'] ?? 0;
-            });
+                    $pembayaran = $first->recordPembayaran->sum('nilai_pembayaran');
+                    $withdraw   = $first->recordWithdraw->sum('nilai_pembayaran');
+                    $terbayar   = $pembayaran + $withdraw;
+
+                    $pph = $first->recordWithdraw->sum(function ($item) {
+                        return $item->keterangan_pelunasan === 'PPH'
+                            ? $item->nilai_pembayaran
+                            : 0;
+                    });
+
+                    $periode = $group->pluck('periode')->filter()->unique()->values();
+                    $noOrder = $group->pluck('no_order')->unique()->values();
+
+                    $tglSampling = $noOrder
+                    ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? '-')
+                    ->filter()
+                    ->values();
+
+                    $sales_id = $noOrder
+                    ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
+                    ->filter()
+                    ->first(); // biasanya 1 invoice = 1 sales
+
+                    return [
+                        'id_pelanggan'   => $first->pelanggan_id,
+                        'no_quotation'   => $group->pluck('no_quotation')->unique()->implode(','),
+                        'no_order'       => $noOrder->implode(','),
+                        'no_invoice'     => $noInvoice,
+                        'periode'        => $periode->isEmpty() ? null : $periode->implode(','),
+                        'tgl_sampling'   => $tglSampling->isEmpty() ? null : $tglSampling->implode(','),
+                        'tgl_invoice'    => $first->tgl_invoice,
+                        'tgl_jatuh_tempo'=> $first->tgl_jatuh_tempo,
+                        'nilai_tagihan'  => $nilaiTagihan,
+                        'terbayar'       => $terbayar,
+                        'pph'            => $pph,
+                        'is_complete'    => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
+                        'sales_id'       => $sales_id
+                    ];
+                })
+                ->values();
+
+            $totalTerbayar = $invoices->sum('terbayar');
+            $totalPph      = $invoices->sum('pph');
 
             return [
-                'id_pelanggan' => $q->id_pelanggan,
-                'nama_pelanggan' => $q->nama_pelanggan,
-                'sales_penanggung_jawab' => $q->sales_penanggung_jawab,
-                'sales_id' => $q->sales_id,
-                'jumlah_invoice' => $q->invoices->count(),
-                'nilai_tagihan' => $tagihan,
-                'terbayar' => $terbayar,
-                'total_pph' => $totalPph,
-                'is_complete' => $status,
-                'invoices' => $invoices,
+                'id_pelanggan'            => $pelanggan->id_pelanggan,
+                'nama_pelanggan'          => $pelanggan->nama_pelanggan,
+                'sales_penanggung_jawab'  => $pelanggan->sales_penanggung_jawab,
+                'sales_id'                => $pelanggan->sales_id,
+                'jumlah_invoice'          => $invoices->count(),
+                'nilai_tagihan'           => $tagihan,
+                'terbayar'                => $totalTerbayar,
+                'total_pph'               => $totalPph,
+                'is_complete'             => abs($tagihan - $totalTerbayar) <= 10 ? 1 : 0,
+                'invoices'                => $invoices->toArray(),
             ];
-        })->values()->toArray();
+        })
+        ->values()
+        ->toArray();
 
-        printf("\n[BillingComand] [%s] Complete Calculate Data", date('Y-m-d H:i:s'));
+        printf("\n[BillingComand] [%s] Complete Calculate Data, total data : " . count($data), date('Y-m-d H:i:s'));
 
         printf("\n[BillingComand] [%s] Start Insert or Update", date('Y-m-d H:i:s'));
         $this->sync($data);
@@ -103,70 +148,6 @@ class BillingComand extends Command
         ->update(['periode' => null]);
 
         printf("\n[BillingComand] [%s] Complete Query Fixing", date('Y-m-d H:i:s'));
-
-        printf("\n[BillingComand] [%s] Start Query Update ", date('Y-m-d H:i:s'));
-        DB::statement("
-            UPDATE billing_list_detail b
-            JOIN (
-                SELECT 
-                    od.no_order,
-                    od.periode,
-                    MIN(od.tanggal_sampling) AS min_sampling
-                FROM order_detail od
-                WHERE od.tanggal_sampling IS NOT NULL
-                AND od.is_active = 1
-                AND od.periode IS NOT NULL
-                GROUP BY od.no_order, od.periode
-            ) x 
-            ON x.no_order COLLATE utf8mb4_general_ci = b.no_order
-            AND x.periode  COLLATE utf8mb4_general_ci = b.periode
-            SET b.tgl_sampling = x.min_sampling
-            WHERE b.tgl_sampling IS NULL
-            AND b.periode IS NOT NULL AND b.periode <> 'all';
-        ");
-
-        DB::statement("
-            UPDATE billing_list_detail b
-            JOIN (
-                SELECT 
-                    od.no_order,
-                    MIN(od.tanggal_sampling) AS min_sampling
-                FROM order_detail od
-                WHERE od.tanggal_sampling IS NOT NULL
-                AND od.is_active = 1
-                GROUP BY od.no_order
-            ) x 
-            ON x.no_order COLLATE utf8mb4_general_ci = b.no_order
-            SET b.tgl_sampling = x.min_sampling
-            WHERE b.tgl_sampling IS NULL
-            AND b.periode IS NULL;
-        ");
-
-        DB::statement("
-            UPDATE billing_list_detail b
-            JOIN (
-                SELECT 
-                    od.no_order,
-                    MIN(od.tanggal_sampling) AS min_sampling
-                FROM order_detail od
-                WHERE od.tanggal_sampling IS NOT NULL
-                AND od.is_active = 1
-                GROUP BY od.no_order
-            ) x 
-            ON x.no_order COLLATE utf8mb4_general_ci = b.no_order
-            SET b.tgl_sampling = x.min_sampling
-            WHERE b.tgl_sampling IS NULL
-            AND b.periode = 'all';
-        ");
-
-        DB::statement("
-            UPDATE billing_list_detail b
-            JOIN order_header oh 
-                ON oh.no_order = b.no_order
-            SET b.sales_id = oh.sales_id;
-        ");
-
-        printf("\n[BillingComand] [%s] Complete Query Update ", date('Y-m-d H:i:s'));
     }
 
     private function sync(array $data)
@@ -215,6 +196,7 @@ class BillingComand extends Command
                         'terbayar' => $inv['terbayar'],
                         'pph' => $inv['pph'],
                         'is_complete' => $inv['is_complete'],
+                        'sales_id' => $inv['sales_id'],
                         'created_at' => $now,
                         'updated_at' => $now,
                     ];
@@ -302,7 +284,7 @@ class BillingComand extends Command
                 INSERT INTO billing_list_detail
                 (billing_header_id, id_pelanggan, no_invoice, no_order,
                 no_quotation, periode, tgl_sampling, tgl_invoice,
-                tgl_jatuh_tempo, nilai_tagihan, terbayar, pph, is_complete,
+                tgl_jatuh_tempo, nilai_tagihan, terbayar, pph, is_complete, sales_id,
                 created_at, updated_at)
                 VALUES
             ";
@@ -311,7 +293,7 @@ class BillingComand extends Command
             $bindings = [];
 
             foreach ($chunk as $r) {
-                $values[] = "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                $values[] = "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
                 $bindings[] = $r['billing_header_id'];
                 $bindings[] = $r['id_pelanggan'];
                 $bindings[] = $r['no_invoice'];
@@ -325,6 +307,7 @@ class BillingComand extends Command
                 $bindings[] = $r['terbayar'];
                 $bindings[] = $r['pph'];
                 $bindings[] = $r['is_complete'];
+                $bindings[] = $r['sales_id'];
                 $bindings[] = $r['created_at'];
                 $bindings[] = $r['updated_at'];
             }
@@ -344,6 +327,7 @@ class BillingComand extends Command
                     terbayar = new.terbayar,
                     pph = new.pph,
                     is_complete = new.is_complete,
+                    sales_id = new.sales_id,
                     updated_at = new.updated_at
             ";
 
