@@ -552,7 +552,8 @@ class ReadyOrderController extends Controller
             $dataQuotation->save();
             
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
-            if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) {
+            if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) 
+            {
                 self::createInvoice($data, $dataQuotation, $request);
                 if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
                     self::createInvoice($data, $dataQuotation, $request, false);
@@ -611,6 +612,7 @@ class ReadyOrderController extends Controller
             throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
+
 
     public function generateOrderNonKontrak($request)
     {

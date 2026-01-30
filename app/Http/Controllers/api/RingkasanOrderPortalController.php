@@ -227,6 +227,7 @@ class RingkasanOrderPortalController extends Controller
             $query = LinkLhp::query(); 
             // 2. Tambahkan Filter
             $query->where('no_quotation', $ambilDB->no_quotation);
+            $query->where('is_active', true);
             // 3. Cek Tipe QTC
             // Gunakan empty check untuk array explode agar aman
             $parts = explode('/', $ambilDB->no_quotation);
