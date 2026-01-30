@@ -57,6 +57,7 @@ class ProcessAfterOrder
     {
         if(!$this->is_invoicing) {
             $this->saveLinkLhp();
+            $this->setLinkNonActive();
         }else{
             $this->deleteDataPengujianIfExist();
         }
@@ -597,6 +598,25 @@ class ProcessAfterOrder
                 'error' => $e->getMessage()
             ]);
             throw $e;
+        }
+    }
+
+    private function setLinkNonActive()
+    {
+        $dateYesterday = Carbon::now()->subDay()->format('Y-m-d');
+
+        // Link LHP
+        $linkIds = LinkLhp::where('no_order', $this->no_order)
+            ->pluck('id')
+            ->toArray();
+
+        if(count($linkIds) > 0) {
+            GenerateLink::whereIn('id_quotation', $linkIds)
+                ->where('type', 'lhp_rilis')
+                ->where('quotation_status', 'lhp_rilis')
+                ->update([
+                    'expired' => $dateYesterday
+                ]);
         }
     }
 
