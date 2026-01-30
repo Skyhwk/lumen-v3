@@ -606,7 +606,7 @@ class ProcessAfterOrder
         $dateYesterday = Carbon::now()->subDay()->format('Y-m-d');
 
         // Link LHP
-        $linkIds = LinkLhp::where('no_order', $this->no_order)
+        LinkLhp::where('no_order', $this->no_order)
             ->update([
                 'is_active' => 0,
                 'updated_at' => Carbon::now(),
