@@ -1753,7 +1753,6 @@ class RenderKontrak
                         } else {
                             $object = json_decode($values->data_sampling);
                         }
-                        dd($object);
                         $num_ = self::gabungDataDanJumlahTitik($object);
                         $bollean = false;
                         $periode_found = [];
