@@ -473,6 +473,7 @@ class ReadyOrderController extends Controller
                 $data->tanggal_order = Carbon::now()->format('Y-m-d H:i:s');
                 $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
                 $data->updated_by = $this->karyawan;
+                $data->sales_id = $dataQuotation->sales_id;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
             } else {
@@ -528,6 +529,7 @@ class ReadyOrderController extends Controller
                     $data->is_revisi = 0;
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->created_by = $this->karyawan;
+                    $data->sales_id = $dataQuotation->sales_id;
                     $data->save();
                 }
             }
@@ -885,6 +887,7 @@ class ReadyOrderController extends Controller
                 $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->sales_id = $dataQuotation->sales_id;
                 $data->save();
             } else {
                 $cek_no_qt = OrderHeader::where('no_document', $dataQuotation->no_document)->where('is_active', 1)->first();
@@ -939,6 +942,7 @@ class ReadyOrderController extends Controller
                     $data->is_revisi = 0;
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->created_by = $this->karyawan;
+                    $data->sales_id = $dataQuotation->sales_id;
                     $data->save();
                 }
             }
