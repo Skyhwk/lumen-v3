@@ -9,6 +9,7 @@ use App\Models\Jadwal;
 use App\Models\MasterKaryawan;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use App\Services\GetBawahan;
 
 class MonitoringJadwalSamplingSalesController extends Controller
 {
@@ -45,9 +46,7 @@ class MonitoringJadwalSamplingSalesController extends Controller
 
             // ATASAN SALES
             } elseif (in_array($jabatan, [21, 15, 154, 157])) {
-                $bawahan = GetBawahan::where('id', $this->user_id)
-                    ->pluck('id')
-                    ->toArray();
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('user_id')->toArray();
 
                 $bawahan[] = $this->user_id;
 

@@ -17,6 +17,7 @@ use Carbon\Carbon;
 use DataTables;
 use Exception;
 use Illuminate\Support\Str;
+use Log;
 
 class RekapSampelSamplingController extends Controller
 {
@@ -163,6 +164,16 @@ class RekapSampelSamplingController extends Controller
         return response()->json($data);
     }
 
+    public function checkSampelBeforeSave(Request $request)
+    {
+        $orderDetail = OrderDetail::where('no_sampel', $request->no_sampel)->first();
+
+        $isSampled = $orderDetail->tanggal_terima !== null;
+
+        return response()->json([
+            'is_sampled' => $isSampled
+        ], 200);
+    }
 
     public function saveOrderDetail(Request $request)
     {
@@ -170,6 +181,7 @@ class RekapSampelSamplingController extends Controller
         // dd($request->all());
         try {
             $orderDetail = OrderDetail::where(['id' => $request->id, 'is_active' => true])->first();
+            $beforeUpdate = clone $orderDetail;
             if ($request->tgl_tugas != '') $orderDetail->tanggal_sampling = $request->tgl_tugas;
             if ($request->tgl_terima != '') $orderDetail->tanggal_terima = $request->tgl_terima;
             if ($request->keterangan_1 != '') $orderDetail->keterangan_1 = $request->keterangan_1;
@@ -224,6 +236,17 @@ class RekapSampelSamplingController extends Controller
             $tc_update->save();
 
             DB::commit();
+
+            if($request->is_forced_update){
+                Log::channel('forced_update_sampel')->info('Forcing Update Sampel',[
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'nama_karyawan' => $this->karyawan,
+                    'waktu_update' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'before' => $beforeUpdate,
+                    'after' => $orderDetail
+                ]);
+            }
+
             return response()->json(['message' => 'Saved Successfully.'], 200);
         } catch (\Exception $e) {
             DB::rollback();

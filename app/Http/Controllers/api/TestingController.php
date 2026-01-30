@@ -227,67 +227,207 @@ class TestingController extends Controller
             
             switch ($request->menu) {
                 case 'getForecast' :
+                    // 1️⃣ Order detail → map no_order => tgl_sampling
+                    $orderSamplingFromDetail = OrderDetail::query()
+                    ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
+                    ->where('order_detail.is_active', 1)
+                    ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
+                    ->selectRaw('
+                        order_detail.no_order,
+                        MIN(order_detail.tanggal_sampling) AS tgl_sampling,
+                        oh.sales_id
+                    ')
+                    ->groupBy('order_detail.no_order', 'oh.sales_id')
+                    ->get()
+                    ->keyBy('no_order')
+                    ->map(function ($row) {
+                        return [
+                            'tgl_sampling' => $row->tgl_sampling,
+                            'sales_id'     => $row->sales_id,
+                        ];
+                    });
 
-                    $invoice = MasterPelanggan::with('invoices')
-                    ->selectRaw('id_pelanggan, nama_pelanggan, sales_penanggung_jawab, sales_id')
+                    $orderSamplingFromHeader = OrderHeader::query()
+                    ->whereNotExists(function ($q) {
+                        $q->select(DB::raw(1))
+                        ->from('order_detail as od')
+                        ->whereColumn('od.id_order_header', 'order_header.id')
+                        ->where('od.is_active', 1);
+                    })
+                    ->whereNotNull('no_document')
+                    ->select('no_order', 'sales_id')
+                    ->distinct()
+                    ->get()
+                    ->keyBy('no_order')
+                    ->map(fn ($row) => [
+                        'tgl_sampling' => null,
+                        'sales_id'     => $row->sales_id,
+                    ]);
+
+                    $orderSamplingMap = $orderSamplingFromDetail
+                    ->merge($orderSamplingFromHeader)
+                    ->toArray();
+
+                    // 2️⃣ Ambil pelanggan + invoice + relasi
+                    $invoice = MasterPelanggan::query()
+                    ->with([
+                        'invoices.recordPembayaran',
+                        'invoices.recordWithdraw'
+                    ])
+                    ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
                     ->where('is_active', 1)
+                    ->where('id_pelanggan', 'AATI01')
                     ->whereHas('invoices')
                     ->get()
-                    ->map(function($q) {
-                        $tagihan = $q->invoices->sum('nilai_tagihan');
-                        $terbayar = $q->invoices->reduce(function($carry, $b) {
-                            $pembayaran = $b->recordPembayaran->sum('nilai_pembayaran') ?? 0;
-                            $withdraw = $b->recordWithdraw->sum('nilai_pembayaran') ?? 0;
-                            return $carry + $pembayaran + $withdraw;
-                        }, 0);
-            
-                        $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
-            
-                        $invoices = $q->invoices->map(function($qq) {
-                            $tgl_sampling = null;
-                            
-                            $terbayarInvoice = ($qq->recordPembayaran->sum('nilai_pembayaran') ?? 0) + ($qq->recordWithdraw->sum('nilai_pembayaran') ?? 0);
-                            
-                            $pph = $qq->recordWithdraw->sum(function($item) {
-                                return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
-                            }) ?? 0;
-            
-                            $statusInvoice = abs($qq->nilai_tagihan - $terbayarInvoice) <= 10 ? 1 : 0;
-                            
-                            return [
-                                "id_pelanggan" => $qq->pelanggan_id,
-                                "no_quotation" => $qq->no_quotation,
-                                "no_order" => $qq->no_order,
-                                "no_invoice" => $qq->no_invoice,
-                                "periode" => $qq->periode,
-                                "tgl_sampling" => $tgl_sampling,
-                                "tgl_invoice" => $qq->tgl_invoice,
-                                "tgl_jatuh_tempo" => $qq->tgl_jatuh_tempo,
-                                "nilai_tagihan" => $qq->nilai_tagihan,
-                                "terbayar" => $terbayarInvoice,
-                                "pph" => $pph,
-                                "is_complete" => $statusInvoice,
-                            ];
-                        })->values()->toArray();
-            
-                        $totalPph = collect($invoices)->sum(function($invoice) {
-                            return $invoice['pph'] ?? 0;
-                        });
-            
-                        return [
-                            'id_pelanggan' => $q->id_pelanggan,
-                            'nama_pelanggan' => $q->nama_pelanggan,
-                            'sales_penanggung_jawab' => $q->sales_penanggung_jawab,
-                            'sales_id' => $q->sales_id,
-                            'jumlah_invoice' => $q->invoices->count(),
-                            'nilai_tagihan' => $tagihan,
-                            'terbayar' => $terbayar,
-                            'total_pph' => $totalPph,
-                            'is_complete' => $status,
-                            'invoices' => $invoices,
-                        ];
-                    })->values()->toArray();
+                    ->map(function ($pelanggan) use ($orderSamplingMap) {
 
+                        $tagihan = $pelanggan->invoices->sum('nilai_tagihan');
+
+                        $invoices = $pelanggan->invoices
+                            ->groupBy('no_invoice')
+                            ->map(function ($group, $noInvoice) use ($orderSamplingMap) {
+                                
+                                $first = $group->first();
+
+                                $nilaiTagihan = $group->sum('nilai_tagihan');
+
+                                $pembayaran = $first->recordPembayaran->sum('nilai_pembayaran');
+                                $withdraw   = $first->recordWithdraw->sum('nilai_pembayaran');
+                                $terbayar   = $pembayaran + $withdraw;
+
+                                $pph = $first->recordWithdraw->sum(function ($item) {
+                                    return $item->keterangan_pelunasan === 'PPH'
+                                        ? $item->nilai_pembayaran
+                                        : 0;
+                                });
+
+                                $periode = $group->pluck('periode')->filter()->unique()->values();
+                                $noOrder = $group->pluck('no_order')->unique()->values();
+
+                                $tglSampling = $noOrder
+                                ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
+                                ->filter()
+                                ->values();
+
+                                $sales_id = $noOrder
+                                ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
+                                ->filter()
+                                ->unique()
+                                ->values();
+                                // ->first(); // biasanya 1 invoice = 1 sales
+                                if($noInvoice == 'ISL/INV/2600413')dd($sales_id, $noOrder);
+                                return [
+                                    'id_pelanggan'   => $first->pelanggan_id,
+                                    'no_quotation'   => $group->pluck('no_quotation')->unique()->implode(','),
+                                    'no_order'       => $noOrder->implode(','),
+                                    'no_invoice'     => $noInvoice,
+                                    'periode'        => $periode->isEmpty() ? null : $periode->implode(','),
+                                    'tgl_sampling'   => $tglSampling->isEmpty() ? null : $tglSampling->implode(','),
+                                    'tgl_invoice'    => $first->tgl_invoice,
+                                    'tgl_jatuh_tempo'=> $first->tgl_jatuh_tempo,
+                                    'nilai_tagihan'  => $nilaiTagihan,
+                                    'terbayar'       => $terbayar,
+                                    'pph'            => $pph,
+                                    'is_complete'    => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
+                                    'sales_id'       => $sales_id
+                                ];
+                            })
+                            ->values();
+
+                        $totalTerbayar = $invoices->sum('terbayar');
+                        $totalPph      = $invoices->sum('pph');
+
+                        return [
+                            'id_pelanggan'            => $pelanggan->id_pelanggan,
+                            'nama_pelanggan'          => $pelanggan->nama_pelanggan,
+                            'sales_penanggung_jawab'  => $pelanggan->sales_penanggung_jawab,
+                            'sales_id'                => $pelanggan->sales_id,
+                            'jumlah_invoice'          => $invoices->count(),
+                            'nilai_tagihan'           => $tagihan,
+                            'terbayar'                => $totalTerbayar,
+                            'total_pph'               => $totalPph,
+                            'is_complete'             => abs($tagihan - $totalTerbayar) <= 10 ? 1 : 0,
+                            'invoices'                => $invoices->toArray(),
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+                    // dd($invoice);
+
+                    // $orderDetail = OrderDetail::query()
+                    //     ->where('is_active', 1)
+                    //     ->whereYear('tanggal_sampling', '>=', '2024')
+                    //     ->selectRaw('no_order, periode, MIN(tanggal_sampling) as tgl_sampling')
+                    //     ->groupBy('no_order', 'periode')
+                    //     ->get()->toArray();
+                    
+                    // $invoice = MasterPelanggan::with(['invoices'])
+                    // ->selectRaw('id_pelanggan, nama_pelanggan, sales_penanggung_jawab, sales_id')
+                    // ->where('is_active', 1)
+                    // ->whereHas('invoices')
+                    // // ->where('id_pelanggan', 'KSDE01')
+                    // ->get()
+                    // ->map(function($q) use ($orderDetail) {
+                    //     $tagihan = $q->invoices->sum('nilai_tagihan');
+
+                    //     $invoices = $q->invoices->groupBy('no_invoice')->map(function($group, $inv) use ($orderDetail) {
+                    //         $nilaiTagihan = $group->sum('nilai_tagihan');
+                    //         $recordPembayaran = $group[0]->recordPembayaran->sum('nilai_pembayaran') ?? 0;
+                    //         $recordWithdraw = $group[0]->recordWithdraw->sum('nilai_pembayaran') ?? 0;
+                    //         $terbayar = $recordPembayaran + $recordWithdraw;
+                    //         $id_pelanggan = $group[0]->pelanggan_id;
+                    //         $no_order = $group->pluck('no_order')->toArray();
+                    //         $no_quotation = $group->pluck('no_quotation')->toArray();
+                    //         $periode = $group->pluck('periode')
+                    //             ->filter(fn ($v) => !is_null($v) && $v !== '')
+                    //             ->values()
+                    //             ->toArray();
+
+                    //         $tgl_sampling = collect($orderDetail)->whereIn('no_order', $no_order)->pluck('tgl_sampling')->values()
+                    //         ->toArray();
+
+                    //         $pph = $group[0]->recordWithdraw->sum(function($item) {
+                    //             return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
+                    //         }) ?? 0;
+                            
+                    //         return [
+                    //             "id_pelanggan" => $id_pelanggan,
+                    //             "no_quotation" => implode(',', $no_quotation),
+                    //             "no_order" => implode(',', $no_order),
+                    //             "no_invoice" => $inv,
+                    //             "periode" => empty($periode) ? null : implode(',', $periode),
+                    //             "tgl_sampling" => empty($tgl_sampling) ? null : implode(',', $tgl_sampling),
+                    //             "tgl_invoice" => $group[0]->tgl_invoice,
+                    //             "tgl_jatuh_tempo" => $group[0]->tgl_jatuh_tempo,
+                    //             "nilai_tagihan" => $nilaiTagihan,
+                    //             "terbayar" => $terbayar,
+                    //             "pph" => $pph,
+                    //             "is_complete" => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
+                    //         ];
+                    //     })->values()->toArray();
+                        
+                    //     $totalPph = collect($invoices)->sum(function($invoice) {
+                    //         return $invoice['pph'] ?? 0;
+                    //     });
+                    //     $terbayar = collect($invoices)->sum(function($invoice) {
+                    //         return $invoice['terbayar'] ?? 0;
+                    //     });
+                    //     $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
+            
+                    //     return [
+                    //         'id_pelanggan' => $q->id_pelanggan,
+                    //         'nama_pelanggan' => $q->nama_pelanggan,
+                    //         'sales_penanggung_jawab' => $q->sales_penanggung_jawab,
+                    //         'sales_id' => $q->sales_id,
+                    //         'jumlah_invoice' => count($invoices),
+                    //         'nilai_tagihan' => $tagihan,
+                    //         'terbayar' => $terbayar,
+                    //         'total_pph' => $totalPph,
+                    //         'is_complete' => abs($tagihan - $terbayar) <= 10 ? 1 : 0,
+                    //         'invoices' => $invoices,
+                    //     ];
+                    // })->values()->toArray();
+                    // dd($invoice);
                     // $pelanggan = MasterPelanggan::query()
                     //     ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
                     //     ->where('is_active', 1)
@@ -2461,6 +2601,75 @@ class TestingController extends Controller
                     return response()->json([
                         'diff_summary' => $result
                     ]);
+                case 'getOrderWithSalesIDNull':
+                    try {
+                        DB::beginTransaction();
+
+                        // 1. Ambil order yang perlu diupdate
+                        $orders = OrderHeader::whereNull('sales_id')
+                            ->where('is_active', 1)
+                            ->get(['id','no_document']);
+
+                        if ($orders->isEmpty()) {
+                            DB::commit();
+
+                            return response()->json([
+                                'message' => 'Tidak ada order yang perlu diupdate'
+                            ], 200);
+                        }
+
+                        // 2. Ambil daftar no_document
+                        $docNumbers = $orders->pluck('no_document');
+
+                        // 3. Ambil mapping sales_id
+                        $kontrakMap = QuotationKontrakH::whereIn('no_document', $docNumbers)
+                            ->pluck('sales_id','no_document');
+
+                        $nonKontrakMap = QuotationNonKontrak::whereIn('no_document', $docNumbers)
+                            ->pluck('sales_id','no_document');
+
+                        // 4. Proses update
+                        $updated = 0;
+
+                        foreach ($orders as $order) {
+
+                            if (str_contains($order->no_document,'QTC')) {
+
+                                if (isset($kontrakMap[$order->no_document])) {
+                                    $order->sales_id = $kontrakMap[$order->no_document];
+                                    $order->save();
+                                    $updated++;
+                                }
+
+                            } else {
+
+                                if (isset($nonKontrakMap[$order->no_document])) {
+                                    $order->sales_id = $nonKontrakMap[$order->no_document];
+                                    $order->save();
+                                    $updated++;
+                                }
+
+                            }
+                        }
+
+                        DB::commit();
+
+                        return response()->json([
+                            'documents_processed' => $docNumbers,
+                            'total_diproses' => $orders->count(),
+                            'total_berhasil_update' => $updated
+                        ], 200);
+
+                    } catch (\Exception $e) {
+
+                        DB::rollBack();
+
+                        return response()->json([
+                            'message' => 'Terjadi kesalahan saat update sales_id',
+                            'error' => $e->getMessage()
+                        ], 500);
+                    }
+
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }

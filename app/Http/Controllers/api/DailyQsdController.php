@@ -12,6 +12,12 @@ use Yajra\Datatables\Datatables;
 use App\Models\DailyQsd;
 use App\Models\Invoice;
 
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+
 class DailyQsdController extends Controller
 {
     /**
@@ -27,12 +33,12 @@ class DailyQsdController extends Controller
     {
         // Query dasar
         $data = DailyQsd::whereYear('tanggal_kelompok', $request->tanggal_sampling);
-        
+
         // Apply cut off filter jika ada
         if ($request->cut_off != "all") {
             $data = $data->whereMonth('tanggal_kelompok', $request->cut_off);
         }
-        
+
         // Ambil invoice yang perlu di-exclude
         $excludeInv = $this->getExcludedInvoices();
 
@@ -40,76 +46,75 @@ class DailyQsdController extends Controller
         $page = $request->start > 29 ? "lanjut" : "awal";
 
         return Datatables::of($data)
-        ->filterColumn('no_invoice', function ($query, $keyword) {
-            if($keyword == '-'){
-                $query->whereNull('no_invoice');
-            } else {
-                $query->where('no_invoice', 'like', "%$keyword%");
-            }
-        })
-        ->filterColumn('tipe_quotation', function ($query, $keyword) {
-            if($keyword == ""){
-                $query->whereIn('kontrak', ["C", "N"]);
-            } else {
-                $query->where('kontrak', $keyword);
-            }
-        })
-        ->filterColumn('periode', function ($query, $keyword) use ($request) {
-            $this->applyPeriodeFilter($query, $keyword, $request);
-        })
-        ->filterColumn('tanggal_pembayaran', function ($query, $keyword) use ($request) {
-            $this->applyTanggalFilter($query, $keyword, 'tanggal_pembayaran', $request);
-        })
-        ->filterColumn('tanggal_sampling_min', function ($query, $keyword) use ($request) {
-            $this->applyTanggalFilter($query, $keyword, 'tanggal_sampling_min', $request);
-        })
-        ->filterColumn('no_order', function ($query, $keyword) {
-            $query->where('no_order', 'like', "%$keyword%")->orderBy('no_order', 'asc');
-        })
-        ->filterColumn('status_sampling', function ($query, $keyword) {
-            if( $keyword != 'Gabungan') 
-            {
-                $query->where('status_sampling', "$keyword");
-            } else {
-                $query->where('status_sampling', 'like', "%,%");
-            }
-        })
-        ->with([
-            'sumRevenue' => function ($query) {
-                return $query->sum('total_revenue');
-            },
-            'sumPpn' => function ($query) {
-                return $query->sum('total_ppn');
-            },
-            'sumPph' => function ($query) {
-                return $query->sum('total_pph');
-            },
-            'sumDiscount' => function ($query) {
-                return $query->sum('total_discount');
-            },
-            'sumQt' => function ($query) {
-                return $query->sum('biaya_akhir');
-            },
-            'revenueInvoice' => function ($query) use ($excludeInv) {
-                return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'revenue_invoice');
-            },
-            'sumInv' => function ($query) use ($excludeInv) {
-                return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_invoice');
-            },
-            'sumPembayaran' => function ($query) use ($excludeInv) {
-                return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_pembayaran');
-            },
-            'sumPengurangan' => function ($query) use ($excludeInv) {
-                return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_pengurangan');
-            },
-            'page' => function () use ($page) {
-                return $page;
-            },
-        ])
-        ->order(function ($query) {
-            $this->applyOrdering($query);
-        })
-        ->make(true);
+            ->filterColumn('no_invoice', function ($query, $keyword) {
+                if ($keyword == '-') {
+                    $query->whereNull('no_invoice');
+                } else {
+                    $query->where('no_invoice', 'like', "%$keyword%");
+                }
+            })
+            ->filterColumn('tipe_quotation', function ($query, $keyword) {
+                if ($keyword == "") {
+                    $query->whereIn('kontrak', ["C", "N"]);
+                } else {
+                    $query->where('kontrak', $keyword);
+                }
+            })
+            ->filterColumn('periode', function ($query, $keyword) use ($request) {
+                $this->applyPeriodeFilter($query, $keyword, $request);
+            })
+            ->filterColumn('tanggal_pembayaran', function ($query, $keyword) use ($request) {
+                $this->applyTanggalFilter($query, $keyword, 'tanggal_pembayaran', $request);
+            })
+            ->filterColumn('tanggal_sampling_min', function ($query, $keyword) use ($request) {
+                $this->applyTanggalFilter($query, $keyword, 'tanggal_sampling_min', $request);
+            })
+            ->filterColumn('no_order', function ($query, $keyword) {
+                $query->where('no_order', 'like', "%$keyword%")->orderBy('no_order', 'asc');
+            })
+            ->filterColumn('status_sampling', function ($query, $keyword) {
+                if ($keyword != 'Gabungan') {
+                    $query->where('status_sampling', "$keyword");
+                } else {
+                    $query->where('status_sampling', 'like', "%,%");
+                }
+            })
+            ->with([
+                'sumRevenue' => function ($query) {
+                    return $query->sum('total_revenue');
+                },
+                'sumPpn' => function ($query) {
+                    return $query->sum('total_ppn');
+                },
+                'sumPph' => function ($query) {
+                    return $query->sum('total_pph');
+                },
+                'sumDiscount' => function ($query) {
+                    return $query->sum('total_discount');
+                },
+                'sumQt' => function ($query) {
+                    return $query->sum('biaya_akhir');
+                },
+                'revenueInvoice' => function ($query) use ($excludeInv) {
+                    return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'revenue_invoice');
+                },
+                'sumInv' => function ($query) use ($excludeInv) {
+                    return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_invoice');
+                },
+                'sumPembayaran' => function ($query) use ($excludeInv) {
+                    return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_pembayaran');
+                },
+                'sumPengurangan' => function ($query) use ($excludeInv) {
+                    return $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_pengurangan');
+                },
+                'page' => function () use ($page) {
+                    return $page;
+                },
+            ])
+            ->order(function ($query) {
+                $this->applyOrdering($query);
+            })
+            ->make(true);
     }
 
     /**
@@ -335,5 +340,265 @@ class DailyQsdController extends Controller
             $query->orderBy('tanggal_sampling_min', 'desc')
                   ->orderBy('no_order', 'asc');
         }
+    }
+
+    public function export(Request $request)
+    {
+        // 1. Cek Password
+        if ($request->password !== env('EXPORT_DAILYQSD_PW')) {
+            return response()->json(['message' => 'Password salah! Akses ditolak.'], 403);
+        }
+
+        // 2. Query Data
+        $query = DailyQsd::whereYear('tanggal_kelompok', $request->tanggal_sampling);
+
+        if ($request->cut_off != "all") {
+            $query->whereMonth('tanggal_kelompok', $request->cut_off);
+        }
+
+        // 3. Hitung Summaries
+        $excludeInv = $this->getExcludedInvoices();
+
+        $sumRevenue = (clone $query)->sum('total_revenue');
+        $sumQt      = (clone $query)->sum('biaya_akhir');
+        $sumDiscount = (clone $query)->sum('total_discount');
+        $sumPpn     = (clone $query)->sum('total_ppn');
+        $sumPph     = (clone $query)->sum('total_pph');
+
+        $sumRevInv      = $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'revenue_invoice');
+        $sumNilaiInv    = $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_invoice');
+        $sumPembayaran  = $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_pembayaran');
+        $sumPengurangan = $this->calculateSumWithSpecialInvoice($query, $excludeInv, 'nilai_pengurangan');
+
+        // 4. Get Data
+        $data = $query->orderBy('tanggal_sampling_min', 'desc')
+            ->orderBy('no_order', 'asc')
+            ->get();
+
+        // 5. Setup Spreadsheet
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Helper Map Bulan Indo
+        $bulanIndo = [
+            '01' => 'Januari',
+            '02' => 'Februari',
+            '03' => 'Maret',
+            '04' => 'April',
+            '05' => 'Mei',
+            '06' => 'Juni',
+            '07' => 'Juli',
+            '08' => 'Agustus',
+            '09' => 'September',
+            '10' => 'Oktober',
+            '11' => 'November',
+            '12' => 'Desember'
+        ];
+
+        // --- TITLE ---
+        $periodeLabel = $request->cut_off !== 'all' ? " (". ($bulanIndo[$request->cut_off] ?? $request->cut_off) . ")" : '';
+        $title = "REKAPITULASI DAILY QSD - TAHUN {$request->tanggal_sampling}{$periodeLabel}";
+
+        $sheet->setCellValue('A1', $title);
+        $sheet->mergeCells('A1:V1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // --- HEADERS ---
+        $headers = [
+            'No',
+            'Revenue Order Sales',
+            'Total Order Sales',
+            'Discount',
+            'PPN',
+            'PPH',
+            'No. Order',
+            'No. Quotation',
+            'No. Invoice',
+            'Revenue by Invoice',
+            'Nominal Invoice',
+            'Nominal Pembayaran',
+            'Nominal Pengurangan',
+            'Tgl. Pembayaran',
+            'No. PO',
+            'Tipe Quotation',
+            'Periode',
+            'Nama Perusahaan',
+            'Konsultan',
+            'Status Sampling',
+            'Tanggal Awal Sampling',
+            'Sales Penanggung Jawab'
+        ];
+        $sheet->fromArray($headers, null, 'A3');
+
+        // --- SUMMARY ROW ---
+        $sheet->setCellValue('B4', $sumRevenue);
+        $sheet->setCellValue('C4', $sumQt);
+        $sheet->setCellValue('D4', $sumDiscount);
+        $sheet->setCellValue('E4', $sumPpn);
+        $sheet->setCellValue('F4', $sumPph);
+
+        $sheet->setCellValue('J4', $sumRevInv);
+        $sheet->setCellValue('K4', $sumNilaiInv);
+        $sheet->setCellValue('L4', $sumPembayaran);
+        $sheet->setCellValue('M4', $sumPengurangan);
+
+        // Merge kolom non-summary
+        $mergeColumns = ['A', 'G', 'H', 'I', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V'];
+        foreach ($mergeColumns as $col) {
+            $sheet->mergeCells("{$col}3:{$col}4");
+        }
+
+        // Styling Header
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '343A40']],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+        ];
+        $sheet->getStyle('A3:V4')->applyFromArray($headerStyle);
+        $sheet->getStyle('B4:F4')->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle('J4:M4')->getNumberFormat()->setFormatCode('#,##0');
+
+        // --- ISI DATA ---
+        $row = 5;
+        $no = 1;
+
+        // Closures Helper
+        // 1. Bersihin angka 0 jadi NULL
+        $cleanNum = function ($val) {
+            // Cek kalau null, string kosong, atau angka 0
+            if (is_null($val) || $val === '' || floatval($val) == 0) {
+                return null; // Return null biar sel beneran kosong
+            }
+            return $val;
+        };
+
+        // 2. Format Tanggal Indo (YYYY-MM-DD -> DD MMMM YYYY)
+        $formatDateIndo = function ($dateStr) use ($bulanIndo) {
+            if (!$dateStr || $dateStr === '-') return '';
+            try {
+                // Asumsi format DB: YYYY-MM-DD
+                $parts = explode('-', $dateStr);
+                if (count($parts) === 3) {
+                    $y = $parts[0];
+                    $m = $parts[1];
+                    $d = $parts[2];
+                    return "{$d} " . ($bulanIndo[$m] ?? '') . " {$y}";
+                }
+                return $dateStr;
+            } catch (\Exception $e) {
+                return $dateStr;
+            }
+        };
+
+        // 3. Format Periode Indo (YYYY-MM -> MMMM YYYY)
+        $formatPeriodeIndo = function ($periodeStr) use ($bulanIndo) {
+            if (!$periodeStr) return '';
+            try {
+                $parts = explode('-', $periodeStr);
+                if (count($parts) === 2) {
+                    return ($bulanIndo[$parts[1]] ?? '') . " " . $parts[0];
+                }
+                return $periodeStr;
+            } catch (\Exception $e) {
+                return $periodeStr;
+            }
+        };
+
+        // 4. Format List Tanggal (karena data bisa "tgl1, tgl2")
+        $formatDateList = function ($str) use ($formatDateIndo) {
+            if (!$str || $str === '-') return '';
+            $dates = explode(',', $str);
+            $result = [];
+            foreach ($dates as $d) {
+                $result[] = $formatDateIndo(trim($d));
+            }
+            return implode("\n", $result); // Pakai enter
+        };
+
+        foreach ($data as $item) {
+            $sheet->setCellValue('A' . $row, $no++);
+
+            // Angka (Pake cleanNum biar 0 jadi kosong)
+            $sheet->setCellValue('B' . $row, $cleanNum($item->total_revenue));
+            $sheet->setCellValue('C' . $row, $cleanNum($item->biaya_akhir));
+            $sheet->setCellValue('D' . $row, $cleanNum($item->total_discount));
+            $sheet->setCellValue('E' . $row, $cleanNum($item->total_ppn));
+            $sheet->setCellValue('F' . $row, $cleanNum($item->total_pph));
+
+            // Text Biasa
+            $sheet->setCellValue('G' . $row, $item->no_order);
+            $sheet->setCellValue('H' . $row, $item->no_quotation);
+
+            // Invoice List
+            $invList = $item->no_invoice ? str_replace(',', "\n", $item->no_invoice) : '';
+            $sheet->setCellValue('I' . $row, $invList);
+
+            // Angka Invoice
+            $sheet->setCellValue('J' . $row, $cleanNum($item->revenue_invoice));
+            $sheet->setCellValue('K' . $row, $cleanNum($item->nilai_invoice));
+            $sheet->setCellValue('L' . $row, $cleanNum($item->nilai_pembayaran));
+            $sheet->setCellValue('M' . $row, $cleanNum($item->nilai_pengurangan));
+
+            // Tanggal & Periode (Format Indo)
+            $sheet->setCellValue('N' . $row, $formatDateList($item->tanggal_pembayaran));
+            $sheet->setCellValue('O' . $row, $item->no_po);
+            $sheet->setCellValue('P' . $row, $item->kontrak === "C" ? "Kontrak" : "Non Kontrak");
+
+            $sheet->setCellValue('Q' . $row, $formatPeriodeIndo($item->periode)); // Pake helper
+
+            $sheet->setCellValue('R' . $row, $item->nama_perusahaan);
+            $sheet->setCellValue('S' . $row, $item->konsultan);
+            $sheet->setCellValue('T' . $row, $item->status_sampling);
+
+            $sheet->setCellValue('U' . $row, $formatDateIndo($item->tanggal_sampling_min)); // Pake helper
+
+            $sheet->setCellValue('V' . $row, $item->sales_nama);
+
+            // Styling Warna Baris
+            $sheet->getStyle('B' . $row)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('C3E6CB');
+            $sheet->getStyle('C' . $row)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFEEBA');
+            $sheet->getStyle('J' . $row)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('BEE5EB');
+            $sheet->getStyle('K' . $row)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('B8DAFF');
+
+            $row++;
+        }
+
+        // --- FINAL FORMATTING ---
+        $lastRow = $row - 1;
+
+        // 1. Auto Width (Looping manual biar pasti)
+        foreach (range('A', 'V') as $columnID) {
+            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        }
+
+        // 2. Format Angka (Currency tanpa Rp, cuma ribuan separator)
+        // Note: Kalau sel isinya NULL (dari cleanNum), format ini gak bakal nampilin 0.
+        $sheet->getStyle('B5:F' . $lastRow)->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle('J5:M' . $lastRow)->getNumberFormat()->setFormatCode('#,##0');
+
+        // 3. Alignment & Wrap
+        // Reset Wrap text ke FALSE dulu global
+        $sheet->getStyle('A5:V' . $lastRow)->getAlignment()->setWrapText(false);
+        $sheet->getStyle('A5:V' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+
+        // Khusus kolom List (Invoice & Tgl Bayar) kita paksa Wrap Text karena pake \n
+        $sheet->getStyle('I5:I' . $lastRow)->getAlignment()->setWrapText(true);
+        $sheet->getStyle('N5:N' . $lastRow)->getAlignment()->setWrapText(true);
+
+        // 4. Border
+        $sheet->getStyle('A5:V' . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        // Output
+        $writer = new Xlsx($spreadsheet);
+        $fileName = "Rekapitulasi_Daily_QSD_" . date('Ymd_His') . ".xlsx";
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $fileName . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer->save('php://output');
+        exit;
     }
 }

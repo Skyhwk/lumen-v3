@@ -1748,40 +1748,42 @@ class RenderKontrak
                 );
                 foreach ($detail as $key => $value) {
                     foreach (json_decode($value->data_pendukung_sampling) as $keys => $values) {
-                        if (is_array($values->data_sampling)) {
-                            $object = $values->data_sampling;
-                        } else {
-                            $object = json_decode($values->data_sampling);
-                        }
-                        
-                        $num_ = self::gabungDataDanJumlahTitik($object);
-                        $bollean = false;
-                        $periode_found = [];
-                        
-                        foreach ($num_ as $key_ => $val_) {
-                            
-                            $td_kat = implode(" ", [
-                                strtoupper(explode("-", $val_->kategori_1)[1]),
-                                strtoupper(explode("-", htmlspecialchars_decode($val_->kategori_2))[1]),
-                                $val_->jumlah_titik,
-                                $x_,
-                                $val_->total_parameter,
-                                implode(" ", $val_->parameter)
-                            ]);
 
-                            $td_kat1 = strtoupper(
-                                explode("-", $a->kategori_2)[1]
-                            );
-                            
-                            if (in_array($values->periode_kontrak, $a->periode) && !in_array($values->periode_kontrak, $periode_found) && $th_left == $td_kat) {
-                                $periode_found[] = $values->periode_kontrak;
+                        $object = is_array($values->data_sampling)
+                            ? $values->data_sampling
+                            : json_decode($values->data_sampling);
+
+                        $num_ = self::gabungDataDanJumlahTitik($object);
+
+                        $found = false;
+
+                        foreach ($num_ as $val_) {
+                            $kat1Parts = explode("-", $val_->kategori_1);
+                            $kat2Parts = explode("-", html_entity_decode($val_->kategori_2));
+                            $aKat2Parts = explode("-", html_entity_decode($a->kategori_2));
+
+                            $kat1 = strtoupper($kat1Parts[1] ?? $val_->kategori_1);
+                            $kat2 = strtoupper($kat2Parts[1] ?? $val_->kategori_2);
+                            $aKat2 = strtoupper($aKat2Parts[1] ?? $a->kategori_2);
+
+                            $matchKategori = ($kat2 === $aKat2);
+                            $matchPeriode  = in_array($values->periode_kontrak, $a->periode);
+                            $matchRegulasi = ($val_->regulasi ?? null) === ($a->regulasi ?? null);
+
+                            if ($matchKategori && $matchPeriode && $matchRegulasi) {
+
                                 $pdf->WriteHTML(
-                                    '<td style="font-size: 8px; text-align:center;">' . $val_->jumlah_titik . "</td>"
+                                    '<td style="font-size:8px; text-align:center;">'
+                                    . ($val_->jumlah_titik ?? 0)
+                                    . '</td>'
                                 );
-                                $bollean = true;
+
+                                $found = true;
+                                break;
                             }
                         }
-                        if ($bollean == false) {
+
+                        if (!$found) {
                             $pdf->WriteHTML("<td></td>");
                         }
                     }
