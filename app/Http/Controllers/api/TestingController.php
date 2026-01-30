@@ -228,7 +228,7 @@ class TestingController extends Controller
             switch ($request->menu) {
                 case 'getForecast' :
                     // 1️⃣ Order detail → map no_order => tgl_sampling
-                    $orderSamplingMap = OrderDetail::query()
+                    $orderSamplingFromDetail = OrderDetail::query()
                     ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
                     ->where('order_detail.is_active', 1)
                     ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
@@ -245,7 +245,27 @@ class TestingController extends Controller
                             'tgl_sampling' => $row->tgl_sampling,
                             'sales_id'     => $row->sales_id,
                         ];
+                    });
+
+                    $orderSamplingFromHeader = OrderHeader::query()
+                    ->whereNotExists(function ($q) {
+                        $q->select(DB::raw(1))
+                        ->from('order_detail as od')
+                        ->whereColumn('od.id_order_header', 'order_header.id')
+                        ->where('od.is_active', 1);
                     })
+                    ->whereNotNull('no_document')
+                    ->select('no_order', 'sales_id')
+                    ->distinct()
+                    ->get()
+                    ->keyBy('no_order')
+                    ->map(fn ($row) => [
+                        'tgl_sampling' => null,
+                        'sales_id'     => $row->sales_id,
+                    ]);
+
+                    $orderSamplingMap = $orderSamplingFromDetail
+                    ->merge($orderSamplingFromHeader)
                     ->toArray();
 
                     // 2️⃣ Ambil pelanggan + invoice + relasi
@@ -256,7 +276,7 @@ class TestingController extends Controller
                     ])
                     ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
                     ->where('is_active', 1)
-                    // ->where('id_pelanggan', 'KSDE01')
+                    ->where('id_pelanggan', 'AATI01')
                     ->whereHas('invoices')
                     ->get()
                     ->map(function ($pelanggan) use ($orderSamplingMap) {
@@ -266,7 +286,7 @@ class TestingController extends Controller
                         $invoices = $pelanggan->invoices
                             ->groupBy('no_invoice')
                             ->map(function ($group, $noInvoice) use ($orderSamplingMap) {
-
+                                
                                 $first = $group->first();
 
                                 $nilaiTagihan = $group->sum('nilai_tagihan');
@@ -292,8 +312,10 @@ class TestingController extends Controller
                                 $sales_id = $noOrder
                                 ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
                                 ->filter()
-                                ->first(); // biasanya 1 invoice = 1 sales
-
+                                ->unique()
+                                ->values();
+                                // ->first(); // biasanya 1 invoice = 1 sales
+                                if($noInvoice == 'ISL/INV/2600413')dd($sales_id, $noOrder);
                                 return [
                                     'id_pelanggan'   => $first->pelanggan_id,
                                     'no_quotation'   => $group->pluck('no_quotation')->unique()->implode(','),
