@@ -57,8 +57,8 @@ class ProcessAfterOrder
     {
         if(!$this->is_invoicing) {
             $this->saveLinkLhp();
-            $this->setLinkNonActive();
         }else{
+            $this->setLinkNonActive();
             $this->deleteDataPengujianIfExist();
         }
         $this->saveUseKuotaData();
