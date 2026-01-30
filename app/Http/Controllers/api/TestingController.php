@@ -2579,6 +2579,75 @@ class TestingController extends Controller
                     return response()->json([
                         'diff_summary' => $result
                     ]);
+                case 'getOrderWithSalesIDNull':
+                    try {
+                        DB::beginTransaction();
+
+                        // 1. Ambil order yang perlu diupdate
+                        $orders = OrderHeader::whereNull('sales_id')
+                            ->where('is_active', 1)
+                            ->get(['id','no_document']);
+
+                        if ($orders->isEmpty()) {
+                            DB::commit();
+
+                            return response()->json([
+                                'message' => 'Tidak ada order yang perlu diupdate'
+                            ], 200);
+                        }
+
+                        // 2. Ambil daftar no_document
+                        $docNumbers = $orders->pluck('no_document');
+
+                        // 3. Ambil mapping sales_id
+                        $kontrakMap = QuotationKontrakH::whereIn('no_document', $docNumbers)
+                            ->pluck('sales_id','no_document');
+
+                        $nonKontrakMap = QuotationNonKontrak::whereIn('no_document', $docNumbers)
+                            ->pluck('sales_id','no_document');
+
+                        // 4. Proses update
+                        $updated = 0;
+
+                        foreach ($orders as $order) {
+
+                            if (str_contains($order->no_document,'QTC')) {
+
+                                if (isset($kontrakMap[$order->no_document])) {
+                                    $order->sales_id = $kontrakMap[$order->no_document];
+                                    $order->save();
+                                    $updated++;
+                                }
+
+                            } else {
+
+                                if (isset($nonKontrakMap[$order->no_document])) {
+                                    $order->sales_id = $nonKontrakMap[$order->no_document];
+                                    $order->save();
+                                    $updated++;
+                                }
+
+                            }
+                        }
+
+                        DB::commit();
+
+                        return response()->json([
+                            'documents_processed' => $docNumbers,
+                            'total_diproses' => $orders->count(),
+                            'total_berhasil_update' => $updated
+                        ], 200);
+
+                    } catch (\Exception $e) {
+
+                        DB::rollBack();
+
+                        return response()->json([
+                            'message' => 'Terjadi kesalahan saat update sales_id',
+                            'error' => $e->getMessage()
+                        ], 500);
+                    }
+
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
