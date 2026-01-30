@@ -89,7 +89,7 @@ class BillingComand extends Command
                     $noOrder = $group->pluck('no_order')->unique()->values();
 
                     $tglSampling = $noOrder
-                    ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
+                    ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? '-')
                     ->filter()
                     ->values();
 
