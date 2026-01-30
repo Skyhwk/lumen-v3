@@ -57,8 +57,9 @@ class ProcessAfterOrder
     {
         if(!$this->is_invoicing) {
             $this->saveLinkLhp();
+            $this->setLinkActiveIfExist();
         }else{
-            $this->setLinkNonActive();
+            $this->setLinkNonActiveIfExist();
             $this->deleteDataPengujianIfExist();
         }
         $this->saveUseKuotaData();
@@ -601,7 +602,7 @@ class ProcessAfterOrder
         }
     }
 
-    private function setLinkNonActive()
+    private function setLinkNonActiveIfExist()
     {
         $dateYesterday = Carbon::now()->subDay()->format('Y-m-d');
 
@@ -609,6 +610,17 @@ class ProcessAfterOrder
         LinkLhp::where('no_order', $this->no_order)
             ->update([
                 'is_active' => 0,
+                'updated_at' => Carbon::now(),
+                'updated_by' => $this->created_by
+            ]);
+    }
+
+    private function setLinkActiveIfExist()
+    {
+        // Link LHP
+        LinkLhp::where('no_order', $this->no_order)
+            ->update([
+                'is_active' => 1,
                 'updated_at' => Carbon::now(),
                 'updated_by' => $this->created_by
             ]);
