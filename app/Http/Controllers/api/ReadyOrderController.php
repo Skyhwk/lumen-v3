@@ -562,6 +562,8 @@ class ReadyOrderController extends Controller
                 }
             }
 
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->first();
+
             // self::createInvoice($data, $dataQuotation, $request);
             // if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
             //     self::createInvoice($data, $dataQuotation, $request, false);
