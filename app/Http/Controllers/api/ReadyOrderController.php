@@ -1580,47 +1580,47 @@ class ReadyOrderController extends Controller
                         $existing_detail->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                         $existing_detail->save();
                     } else {
-                        // array_push($penambahan_data, $changes);
-                        // DB::rollback();
-                        // return response()->json([
-                        //     'status' => 'failed',
-                        //     'message' => "Ditemukan inkonsistensi data pada sistem. Mohon hubungi tim IT untuk pemeriksaan lebih lanjut.",
-                        // ], 401);
-                        $existing_detail_non_aktif = OrderDetail::where('no_order', $data_lama->no_order)
-                        ->where('no_sampel', $changes)
-                        ->first();
+                        array_push($penambahan_data, $changes);
+                        DB::rollback();
+                        return response()->json([
+                            'status' => 'failed',
+                            'message' => "Ditemukan inkonsistensi data pada sistem. Mohon hubungi tim IT untuk pemeriksaan lebih lanjut.",
+                        ], 401);
+                        // $existing_detail_non_aktif = OrderDetail::where('no_order', $data_lama->no_order)
+                        // ->where('no_sampel', $changes)
+                        // ->first();
                         
-                        if ($existing_detail_non_aktif && $existing_detail_non_aktif->is_active == 0) {
-                            $tanggal_sampling = $existing_detail_non_aktif->tanggal_sampling;
-                            if ($detail_baru[$changes]["status_sampling"] != 'SD') {
-                                $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
-                                $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
-                                if (!$tanggal_sampling) {
-                                    DB::rollback();
-                                    return response()->json([
-                                        'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> yang belum dijadwalkan. <br> ↓ <br> <strong>' . $search_kategori . ' </strong> <br> ↓ <br> silahkan hubungi admin terkait untuk update jadwal.!',
-                                        'status' => 401
-                                    ], 401);
-                                }
-                            }
-                            $existing_detail_non_aktif->kategori_1 = $detail_baru[$changes]["status_sampling"];
-                            $existing_detail_non_aktif->kategori_2 = $detail_baru[$changes]["kategori_1"];
-                            $existing_detail_non_aktif->kategori_3 = $detail_baru[$changes]["kategori_2"];
-                            $existing_detail_non_aktif->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];
-                            $existing_detail_non_aktif->parameter = json_encode($detail_baru[$changes]["parameter"]);
-                            $existing_detail_non_aktif->regulasi = json_encode($detail_baru[$changes]["regulasi"]);
-                            $existing_detail_non_aktif->tanggal_sampling = $tanggal_sampling;
-                            $existing_detail_non_aktif->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-                            $existing_detail_non_aktif->is_active = 1;
-                            $existing_detail_non_aktif->save();
-                        } else {
-                            array_push($penambahan_data, $changes);
-                            DB::rollback();
-                            return response()->json([
-                                'status' => 'failed',
-                                'message' => "Ditemukan inkonsistensi data pada sistem. Mohon hubungi tim IT untuk pemeriksaan lebih lanjut.",
-                            ], 401);
-                        }
+                        // if ($existing_detail_non_aktif && $existing_detail_non_aktif->is_active == 0) {
+                        //     $tanggal_sampling = $existing_detail_non_aktif->tanggal_sampling;
+                        //     if ($detail_baru[$changes]["status_sampling"] != 'SD') {
+                        //         $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
+                        //         $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
+                        //         if (!$tanggal_sampling) {
+                        //             DB::rollback();
+                        //             return response()->json([
+                        //                 'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> yang belum dijadwalkan. <br> ↓ <br> <strong>' . $search_kategori . ' </strong> <br> ↓ <br> silahkan hubungi admin terkait untuk update jadwal.!',
+                        //                 'status' => 401
+                        //             ], 401);
+                        //         }
+                        //     }
+                        //     $existing_detail_non_aktif->kategori_1 = $detail_baru[$changes]["status_sampling"];
+                        //     $existing_detail_non_aktif->kategori_2 = $detail_baru[$changes]["kategori_1"];
+                        //     $existing_detail_non_aktif->kategori_3 = $detail_baru[$changes]["kategori_2"];
+                        //     $existing_detail_non_aktif->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];
+                        //     $existing_detail_non_aktif->parameter = json_encode($detail_baru[$changes]["parameter"]);
+                        //     $existing_detail_non_aktif->regulasi = json_encode($detail_baru[$changes]["regulasi"]);
+                        //     $existing_detail_non_aktif->tanggal_sampling = $tanggal_sampling;
+                        //     $existing_detail_non_aktif->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                        //     $existing_detail_non_aktif->is_active = 1;
+                        //     $existing_detail_non_aktif->save();
+                        // } else {
+                        //     array_push($penambahan_data, $changes);
+                        //     DB::rollback();
+                        //     return response()->json([
+                        //         'status' => 'failed',
+                        //         'message' => "Ditemukan inkonsistensi data pada sistem. Mohon hubungi tim IT untuk pemeriksaan lebih lanjut.",
+                        //     ], 401);
+                        // }
                     }
                 }
             }
@@ -2719,9 +2719,10 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
+
             // self::updateCustomer($request);
             $generator = new Barcode();
-            $data_detail_lama = OrderDetail::where('no_order', $data_lama->no_order)->where('is_active', 1)->get();
+            $data_detail_lama = OrderDetail::where('no_order', $data_lama->no_order)->get();
 
             OrderDetail::where('no_order', $no_order)->update([
                 'nama_perusahaan' => $dataQuotation->nama_perusahaan,
@@ -2771,7 +2772,6 @@ class ReadyOrderController extends Controller
             }, $sampel_detail_baru);
             sort($sampel_detail_baru);
 
-            // dd($sampel_order_lama, $sampel_detail_baru);
             $perubahan_data = array_values(array_intersect($sampel_order_lama, $sampel_detail_baru));
             $pengurangan_data = array_values(array_diff($sampel_order_lama, $sampel_detail_baru));
             $penambahan_data = array_values(array_diff($sampel_detail_baru, $sampel_order_lama));
