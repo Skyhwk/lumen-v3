@@ -170,9 +170,21 @@
                 @endif --}}
 
                 @if ($header->regulasi_custom != null)
+                @php
+                    $customRegulasi = json_decode($header->regulasi_custom, true);
+                    $pages = collect($customRegulasi)->pluck('page')->sort()->values();
+
+                    $secondLast = $pages[$pages->count() - 2];
+                    $last       = $pages[$pages->count() - 1];
+
+                    if ($page > $secondLast && $page < $last) {
+                        // skip render
+                        return;
+                    }
+                @endphp
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                            @if ($y->page == $page)
+                            @if ($y->page == $page && !in_array($page, [$last, $secondLast]))
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
                                 </tr>
