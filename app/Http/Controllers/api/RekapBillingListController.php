@@ -35,7 +35,7 @@ class RekapBillingListController extends Controller
             )
             ->where('is_complete', $request->is_complete);
 
-        $page = $request->start > 29 ? "lanjut" : "awal";
+        $page = $request->start > 9 ? "lanjut" : "awal";
 
         return DataTables::of($data)
             ->with([
