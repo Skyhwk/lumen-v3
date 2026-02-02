@@ -171,26 +171,25 @@
 
                 @if ($header->regulasi_custom != null)
                 @php
-                    $customRegulasi = json_decode($header->regulasi_custom, true);
-                    $pages = collect($customRegulasi)->pluck('page')->sort()->values();
+                    $customRegulasi = collect(json_decode($header->regulasi_custom, true));
+                    $pages = $customRegulasi->pluck('page')->sort()->values();
+                    $count = $pages->count();
 
-                    $secondLast = $pages[$pages->count() - 2];
-                    $last       = $pages[$pages->count() - 1];
-
-                    if ($page > $secondLast && $page < $last) {
-                        // skip render
-                        return;
-                    }
+                    $last = $count > 0 ? $pages[$count - 1] : null;
+                    $secondLast = $count > 1 ? $pages[$count - 2] : null;
                 @endphp
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                            @if ($y->page == $page && !in_array($page, [$last, $secondLast]))
-                                <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
-                                </tr>
-                            @endif
-                        @endforeach
-                    </table>
+
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                    @foreach ($customRegulasi as $y)
+                        @if ($y['page'] == $page && ($count <= 2 || !in_array($page, [$last, $secondLast])))
+                            <tr>
+                                <td class="custom5" colspan="3">
+                                    <strong>{{ $y['regulasi'] }}</strong>
+                                </td>
+                            </tr>
+                        @endif
+                    @endforeach
+                </table>
                 @endif
                 @if (!empty($keterangan_koreksi))
                     @php
