@@ -557,7 +557,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) 
             {
                 self::createInvoice($data, $dataQuotation, $request);
-                if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
+                if ((int)$dataQuotation->biaya_akhir > (int)$request->tagihan_awal) {
                     self::createInvoice($data, $dataQuotation, $request, false);
                 }
             }
@@ -1019,7 +1019,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
             self::createInvoice($data, $dataQuotation, $request);
-            if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
+            if ((int)$dataQuotation->biaya_akhir > (int)$request->tagihan_awal) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
 
@@ -1414,7 +1414,7 @@ class ReadyOrderController extends Controller
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
             self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-            if ((float)str_replace(',', '', $dataQuotation->biaya_akhir) > (float)str_replace(',', '', $request->tagihan_awal)) {
+            if ((int)str_replace(',', '', $dataQuotation->biaya_akhir) > (int)str_replace(',', '', $request->tagihan_awal)) {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
             }
 
@@ -2425,13 +2425,13 @@ class ReadyOrderController extends Controller
                 $periode = $dataQuotation->detail->pluck('periode_kontrak')->toArray();
                 foreach ($periode as $key => $value) {
                     self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, true, $key == 0);
-                    if($key == 0 && (float)$dataQuotation->detail[0]->biaya_akhir > (float)str_replace(',', '', $request->tagihan_awal)){
+                    if($key == 0 && (int)$dataQuotation->detail[0]->biaya_akhir > (int)str_replace(',', '', $request->tagihan_awal)){
                         self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, false, true);
                     }
                 }
             } else {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-                if ((float)$dataQuotation->biaya_akhir > (float)str_replace(',', '', $request->tagihan_awal)) {
+                if ((int)$dataQuotation->biaya_akhir > (int)str_replace(',', '', $request->tagihan_awal)) {
                     self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
                 }
             }
