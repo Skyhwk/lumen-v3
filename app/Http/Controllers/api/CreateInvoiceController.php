@@ -443,10 +443,10 @@ class CreateInvoiceController extends Controller
     {
         try {
 
-            $data = OrderHeader::select('id_pelanggan', 'nama_perusahaan', 'konsultan')
+            $data = OrderHeader::select('id_pelanggan', 'nama_perusahaan')
                 ->where('is_active', true)
                 ->where('nama_perusahaan', 'like', '%' . $request->term . '%')
-                ->groupBy('id_pelanggan', 'nama_perusahaan', 'konsultan')
+                ->groupBy('id_pelanggan', 'nama_perusahaan')
                 ->get();
 
             return response()->json([

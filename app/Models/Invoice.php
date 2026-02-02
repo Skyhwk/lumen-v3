@@ -82,4 +82,9 @@ class Invoice extends Sector
         return $this->belongsTo(OrderHeader::class, 'no_order', 'no_order');
     }
 
+    public function custom()
+    {
+        return $this->belongsTo(CustomInvoice::class, 'no_invoice', 'no_invoice');
+    }
+
 }
