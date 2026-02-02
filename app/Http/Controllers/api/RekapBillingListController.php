@@ -489,28 +489,31 @@ class RekapBillingListController extends Controller
 
     public function sendEmail(Request $request)
     {
-        if (is_array($request->cc) && count($request->cc) === 1 && $request->cc[0] === "") {
-            $request->cc = [];
+        function normalizeEmails($input)
+        {
+            if (empty($input)) return [];
+
+            if (is_array($input)) {
+                $input = implode(',', $input);
+            }
+
+            return array_filter(array_map('trim', explode(',', $input)));
         }
-        
-        // 1. Pecah berdasarkan koma, lalu bersihkan spasi di setiap elemen
-        // array_map + trim akan membersihkan spasi di awal/akhir setiap email
-        $emailList = array_map('trim', explode(',', $request->to));
 
-        // 2. Filter untuk membuang elemen kosong (misal ada koma di akhir: "a@mail.com, ")
-        $emailList = array_filter($emailList);
-
+        $toList  = normalizeEmails($request->to);
+        $ccList  = normalizeEmails($request->cc);
+        $bccList = normalizeEmails($request->bcc);
         $results = [];
 
-        foreach ($emailList as $recipient) {
+        foreach ($toList as $recipient) {
             // Pastikan hanya mengirim jika string recipient valid
             if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
                 $email = SendEmail::where('to', $recipient)
                     ->where('subject', $request->subject)
                     ->where('body', $request->content)
-                    ->where('cc', $request->cc)
-                    ->where('bcc', $request->bcc)
-                    ->where('attachments', $request->attachments)
+                    ->where('cc', $ccList)
+                    ->where('bcc', $bccList)
+                    // ->where('attachment', $request->attachments)
                     ->where('karyawan', $this->karyawan)
                     ->fromFinance()
                     ->send();
@@ -552,6 +555,6 @@ class RekapBillingListController extends Controller
 
         $tahunSingkat = substr($pecah[0], -2); // Ambil '25' dari '2025'
 
-        return $pecah[2] . ' ' . $bulanEng[(int)$pecah[1]] . ' ' . $tahunSingkat;
+        return $pecah[2] . '-' . $bulanEng[(int)$pecah[1]] . '-' . $tahunSingkat;
     }
 }
