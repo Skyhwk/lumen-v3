@@ -497,7 +497,7 @@ class LemburController extends Controller
                 'type_document' => 'Lembur',
                 'tanggal' => $request->tanggal_lembur,
                 'created_by' => $this->karyawan,
-                'status' => $this->grade === 'MANAGER' ? 'APPROVE ATASAN' : null,
+                'status' => $this->grade === 'MANAGER' ? 'APPROVE ATASAN' : 'DRAFT',
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
             $details = [];
