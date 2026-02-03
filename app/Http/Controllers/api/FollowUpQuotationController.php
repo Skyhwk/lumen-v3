@@ -34,6 +34,13 @@ use Exception;
 
 use App\Services\OrderChangeNotifier;
 
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Cell\DataType; // PENTING BUAT NO TELEPON
+
 class FollowUpQuotationController extends Controller
 {
     public function index(Request $request)
@@ -55,7 +62,8 @@ class FollowUpQuotationController extends Controller
                     ->where('is_approved', true)
                     ->where('is_emailed', true)
                     ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
+                    ->orderBy('tanggal_penawaran', 'desc')
+                    ->orderBy('id', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::select('request_quotation_kontrak_H.*', 'master_karyawan.nama_lengkap as sales_name')
                     ->with([
@@ -73,7 +81,8 @@ class FollowUpQuotationController extends Controller
                     ->where('is_approved', true)
                     ->where('is_emailed', true)
                     ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
+                    ->orderBy('tanggal_penawaran', 'desc')
+                    ->orderBy('id', 'desc');
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -118,6 +127,234 @@ class FollowUpQuotationController extends Controller
             return response()->json([
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    public function exportExcel(Request $request)
+    {
+        try {
+            if ($request->mode == 'non_kontrak') {
+                $data = QuotationNonKontrak::select('request_quotation.*', 'master_karyawan.nama_lengkap as sales_name')
+                    ->with([
+                        'sales',
+                        'sampling' => function ($q) {
+                            $q->orderBy('periode_kontrak', 'asc');
+                        }
+                    ])
+                    ->leftJoin('master_karyawan', 'request_quotation.sales_id', '=', 'master_karyawan.id')
+                    ->where('request_quotation.id_cabang', $request->cabang)
+                    ->whereIn('flag_status', ['emailed', 'sp'])
+                    ->where('is_generate_data_lab', 1)
+                    ->where('request_quotation.is_active', true)
+                    ->where('is_approved', true)
+                    ->where('is_emailed', true)
+                    ->whereYear('tanggal_penawaran', $request->year)
+                    ->orderBy('tanggal_penawaran', 'desc')
+                    ->orderBy('id', 'desc');
+            } else if ($request->mode == 'kontrak') {
+                $data = QuotationKontrakH::select('request_quotation_kontrak_H.*', 'master_karyawan.nama_lengkap as sales_name')
+                    ->with([
+                        'sales',
+                        'detail',
+                        'sampling' => function ($q) {
+                            $q->orderBy('periode_kontrak', 'asc');
+                        }
+                    ])
+                    ->leftJoin('master_karyawan', 'request_quotation_kontrak_H.sales_id', '=', 'master_karyawan.id')
+                    ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
+                    ->whereIn('flag_status', ['emailed', 'sp'])
+                    ->where('is_generate_data_lab', 1)
+                    ->where('request_quotation_kontrak_H.is_active', true)
+                    ->where('is_approved', true)
+                    ->where('is_emailed', true)
+                    ->whereYear('tanggal_penawaran', $request->year)
+                    ->orderBy('tanggal_penawaran', 'desc')
+                    ->orderBy('id', 'desc');
+            }
+
+            $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
+            switch ($jabatan) {
+                case 24: // Sales Staff
+                    $data->where('sales_id', $this->user_id);
+                    break;
+                case 21: // Sales Supervisor
+                    $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
+                        ->pluck('id')
+                        ->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('sales_id', $bawahan);
+                    break;
+            }
+
+            $data = $data->get();
+            
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+
+            // --- JUDUL ---
+            $sheet->setCellValue('A1', 'REPORT FOLLOW UP QUOTATION');
+            $sheet->mergeCells('A1:N1'); // Merge sampe N
+            $sheet->getStyle('A1')->applyFromArray([
+                'font' => ['bold' => true, 'size' => 16],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+
+            // --- SUB JUDUL ---
+            $sheet->setCellValue('A2', $request->year . ' | ' . strtoupper(str_replace('_', ' ', $request->mode)));
+            $sheet->mergeCells('A2:N2');
+            $sheet->getStyle('A2')->applyFromArray([
+                'font' => ['italic' => true, 'size' => 11],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+
+            // --- HEADER TABEL (URUTAN SESUAI UI JS) ---
+            $startRow = 4;
+            $headers = [
+                'No', 
+                'Kode Promo', 
+                'No Quotation', 
+                'ID Pelanggan', 
+                'Nama Perusahaan', 
+                'Konsultan', 
+                'No Tlp Perusahaan', 
+                'Status QS',      // Di UI ini nampilin "QS Ulang" dari data_lama
+                'Ket Reject SP', 
+                'Keterangan',
+                'Total Price', 
+                'Total Discount',
+                'Sales', 
+                'Created At'
+            ];
+            
+            $col = 'A';
+            foreach ($headers as $header) {
+                $sheet->setCellValue($col . $startRow, $header);
+                $col++;
+            }
+
+            // Style Header
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2C3E50']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]]
+            ];
+            $sheet->getStyle('A' . $startRow . ':N' . $startRow)->applyFromArray($headerStyle);
+            $sheet->getRowDimension($startRow)->setRowHeight(25);
+
+            // --- ISI DATA ---
+            $rowNum = $startRow + 1;
+            $no = 1;
+
+            foreach ($data as $row) {
+                // Logic Status QS (QS Ulang) - Sesuai UI index 8
+                $statusQS = '-';
+                if ($row->data_lama) {
+                    $parsed = json_decode($row->data_lama);
+                    if ($parsed && isset($parsed->no_order)) {
+                        $statusQS = 'QS Ulang';
+                    }
+                }
+
+                // Format Tanggal Indo
+                $createdAt = $row->created_at 
+                    ? \Carbon\Carbon::parse($row->created_at)->locale('id')->translatedFormat('d F Y H:i') 
+                    : '-';
+
+                $sheet->setCellValue('A' . $rowNum, $no++);
+                $sheet->setCellValue('B' . $rowNum, $row->kode_promo ?? '-');
+                $sheet->setCellValue('C' . $rowNum, $row->no_document);
+                $sheet->setCellValue('D' . $rowNum, $row->pelanggan_ID);
+                $sheet->setCellValue('E' . $rowNum, $row->nama_perusahaan);
+                $sheet->setCellValue('F' . $rowNum, $row->konsultan ?? '-');
+                
+                // No Tlp Perusahaan (String biar 0 aman)
+                $sheet->setCellValueExplicit('G' . $rowNum, $row->no_tlp_perusahaan ?? '-', DataType::TYPE_STRING);
+                
+                $sheet->setCellValue('H' . $rowNum, $statusQS);
+                $sheet->setCellValue('I' . $rowNum, $row->ket_reject_sp ?? '-');
+                $sheet->setCellValue('J' . $rowNum, $row->keterangan ?? '-');
+                
+                // Angka
+                $sheet->setCellValue('K' . $rowNum, $row->grand_total);
+                $sheet->setCellValue('L' . $rowNum, $row->total_ppn);
+                
+                $sheet->setCellValue('M' . $rowNum, $row->sales_name ?? '-');
+                $sheet->setCellValue('N' . $rowNum, $createdAt);
+
+                // --- LOGIKA WARNA (Sesuai RowCallback UI) ---
+                $rowColor = null;
+
+                if ($row->flag_status === 'rejected') {
+                    $rowColor = 'D6D8DB'; // Secondary
+                } elseif ($row->flag_status === 'void') {
+                    $rowColor = 'F5C6CB'; // Danger
+                } elseif ($row->flag_status === 'sp') {
+                    $rowColor = 'FFEEBA'; // Warning
+                } elseif ($row->flag_status === 'emailed') {
+                    $rowColor = 'C3E6CB'; // Success
+                }
+
+                if ($row->kode_promo !== null && $row->flag_status !== 'rejected' && $row->flag_status !== 'sp') {
+                    $rowColor = 'BEE5EB'; 
+                }
+
+                if ($rowColor) {
+                    $sheet->getStyle('A' . $rowNum . ':N' . $rowNum)->applyFromArray([
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $rowColor]]
+                    ]);
+                }
+
+                $rowNum++;
+            }
+
+            // --- FINISHING ---
+            $lastRow = $rowNum - 1;
+            $sheet->getStyle('A' . $startRow . ':N' . $lastRow)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]]
+            ]);
+
+            // Format Currency (Kolom K dan L)
+            $sheet->getStyle('K'.($startRow+1).':L' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+            
+            // Alignment Center (No, Kode Promo, No Qt, ID, Status QS, Sales, Created At)
+            $alignCenterCols = ['A', 'B', 'C', 'D', 'H', 'N'];
+            foreach ($alignCenterCols as $col) {
+                $sheet->getStyle($col.($startRow+1).':'.$col.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
+
+            // Auto Fit Columns
+            foreach (range('A', 'N') as $col) {
+                if ($col === 'J') { 
+                    // KHUSUS KOLOM J (KETERANGAN)
+                    // Matikan AutoSize biar gak bablas lebarnya
+                    $sheet->getColumnDimension($col)->setAutoSize(false);
+                    
+                    // Set Lebar Manual (35 unit Excel itu kira-kira 200px+)
+                    $sheet->getColumnDimension($col)->setWidth(35); 
+                    
+                    // Nyalain Wrap Text biar turun ke bawah kalau kepanjangan
+                    $sheet->getStyle($col . ($startRow + 1) . ':' . $col . $lastRow)
+                        ->getAlignment()->setWrapText(true);
+                        
+                } else {
+                    // Kolom lain tetep AutoSize
+                    $sheet->getColumnDimension($col)->setAutoSize(true);
+                }
+            }
+
+            $writer = new Xlsx($spreadsheet);
+            $fileName = 'Report_FollowUp_Qt_' . date('YmdHis') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $fileName . '"');
+            header('Cache-Control: max-age=0');
+
+            $writer->save('php://output');
+            exit;
+
+        } catch (Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
         }
     }
 
