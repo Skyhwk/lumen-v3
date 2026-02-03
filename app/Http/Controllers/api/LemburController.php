@@ -491,23 +491,7 @@ class LemburController extends Controller
     {
         DB::beginTransaction();
         try {
-            $romanMonth = [
-                '01' => 'I',
-                '02' => 'II',
-                '03' => 'III',
-                '04' => 'IV',
-                '05' => 'V',
-                '06' => 'VI',
-                '07' => 'VII',
-                '08' => 'VIII',
-                '09' => 'IX',
-                '10' => 'X',
-                '11' => 'XI',
-                '12' => 'XII'
-            ];
-            // $prefix = 'ISL/LEMBUR/' . date('y') . '-' . $romanMonth[date('m')];
-            // $no_document = $prefix . '/' . str_pad($this->getLatestNumber($prefix), 6, '0', STR_PAD_LEFT);
-            $no_document = str_replace('.', '', str_replace('/', '', microtime(true)));
+            $no_document = str_replace('.', '/', microtime(true));
             FormHeader::on('intilab_apps')->create([
                 'no_document' => $no_document,
                 'type_document' => 'Lembur',
