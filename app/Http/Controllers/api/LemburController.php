@@ -9,7 +9,9 @@ use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Telegram\Bot\Methods\Get;
 use Yajra\Datatables\Datatables;
 
 
@@ -996,7 +999,7 @@ class LemburController extends Controller
                     'jam_mulai' => $request->jam_mulai,
                     'jam_selesai' => $request->jam_selesai,
                     'tanggal_mulai' => $request->tanggal_lembur,
-                    'tanggal_selesai' => $request->tanggal_selesai ?? $request->tanggal_lembur,
+                    'tanggal_selesai' => !empty($request->tanggal_selesai) ? $request->tanggal_selesai : $request->tanggal_lembur ?? null,
                     'approved_atasan_by' => $this->grade === 'MANAGER' ? $this->karyawan : null,
                     'approved_atasan_at' => $this->grade === 'MANAGER' ? Carbon::now()->format('Y-m-d H:i:s') : null,
                     'keterangan' => $request->keterangan,
@@ -1007,6 +1010,23 @@ class LemburController extends Controller
             // dd($details);
             FormDetail::on('android_intilab')->insert($details);
 
+            $sendNotifTo = [];
+            if($this->grade === 'MANAGER') {
+                $idBuDella = 5;
+                $atasan = GetAtasan::where('id', $idBuDella)->get();
+                $bawahan = GetBawahan::where('id', $idBuDella)->get();
+                $sendNotifTo = array_merge($atasan->pluck('id')->toArray(), $bawahan->pluck('id')->toArray());
+            } else {
+                $atasan = GetAtasan::where('id', $this->user_id)->get();
+                $sendNotifTo = $atasan->pluck('id')->toArray();
+            }
+            
+            Notification::whereIn('id', $sendNotifTo)
+                ->title('Lembur Telah Dibuat!')
+                ->message('Lembur telah dibuat' . ' Oleh ' . $this->karyawan)
+                ->url('/form-lembur')
+                ->send();
+                
             DB::commit();
             return response()->json([
                 'success' => true,
