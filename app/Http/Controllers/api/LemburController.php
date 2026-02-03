@@ -37,7 +37,7 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                        WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING APPROVE HRD" 
+                        WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
                         WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
                         WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                         WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
