@@ -18,8 +18,9 @@ class MaintenanceCustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $now          = Carbon::now();
         $sixMonthsAgo = Carbon::now()->subMonths(6)->format('Y-m-d');
+
+        $periodeSix = Carbon::now()->subMonths(6)->format('m-Y');
 
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
 
@@ -29,11 +30,10 @@ class MaintenanceCustomerController extends Controller
                 'id_pelanggan',
                 DB::raw('MAX(tanggal_order) as tanggal_order')
             )
-            ->where('flag_status', 'ordered')
             ->where('is_active', true)
             ->groupBy('id_pelanggan');
 
-        $orderHeader = OrderHeader::joinSub($lastOrder, 'last_order', function ($join) {
+        $orderHeaderNonKontrak = OrderHeader::joinSub($lastOrder, 'last_order', function ($join) {
             $join->on('order_header.id_pelanggan', '=', 'last_order.id_pelanggan')
                 ->on('order_header.tanggal_order', '=', 'last_order.tanggal_order')
                 ->on('order_header.id', '=', 'last_order.id');
@@ -49,9 +49,44 @@ class MaintenanceCustomerController extends Controller
                 'order_header.nama_pic_order',
                 'order_header.no_pic_order',
                 'order_header.sales_id',
-                'master_karyawan.nama_lengkap'
+                'order_header.no_document',
+                'master_karyawan.nama_lengkap',
+                DB::raw("'non_kontrak' as tipe_order"),
+                DB::raw("order_header.tanggal_order as tanggal_sort") // Kolom untuk sorting
             )
+            ->where('order_header.no_document', 'LIKE', '%QT/%')
             ->where('order_header.tanggal_order', '<=', $sixMonthsAgo);
+
+        $orderHeaderKontrak = OrderHeader::joinSub($lastOrder, 'last_order', function ($join) {
+            $join->on('order_header.id_pelanggan', '=', 'last_order.id_pelanggan')
+                ->on('order_header.tanggal_order', '=', 'last_order.tanggal_order')
+                ->on('order_header.id', '=', 'last_order.id');
+        })
+            ->join('master_karyawan', 'order_header.sales_id', '=', 'master_karyawan.id')
+            ->join('request_quotation_kontrak_H', 'order_header.no_document', '=', 'request_quotation_kontrak_H.no_document')
+            ->select(
+                'order_header.id',
+                'order_header.id_pelanggan',
+                'request_quotation_kontrak_H.periode_kontrak_akhir as tanggal_order',
+                'order_header.nama_perusahaan',
+                'order_header.konsultan',
+                'order_header.no_tlp_perusahaan',
+                'order_header.nama_pic_order',
+                'order_header.no_pic_order',
+                'order_header.sales_id',
+                'order_header.no_document',
+                'master_karyawan.nama_lengkap',
+                DB::raw("'kontrak' as tipe_order"),
+                // Konversi MM-YYYY ke YYYY-MM-DD untuk sorting
+                DB::raw("STR_TO_DATE(CONCAT('01-', request_quotation_kontrak_H.periode_kontrak_akhir), '%d-%m-%Y') as tanggal_sort")
+            )
+            ->where('order_header.no_document', 'LIKE', '%QTC/%')
+            ->whereRaw("STR_TO_DATE(CONCAT('01-', request_quotation_kontrak_H.periode_kontrak_akhir), '%d-%m-%Y') <= ?", 
+                [Carbon::now()->subMonths(6)->endOfMonth()->format('Y-m-d')]);
+
+        $orderHeader = $orderHeaderNonKontrak->union($orderHeaderKontrak);
+
+
 
         switch ($jabatan) {
             case 24:
@@ -69,7 +104,8 @@ class MaintenanceCustomerController extends Controller
                 break;
         }
 
-        $orderHeader = $orderHeader->orderBy('order_header.tanggal_order', 'desc')->get();
+        $orderHeader = $orderHeader->orderBy('tanggal_sort', 'desc');
+
 
         return DataTables::of($orderHeader)->make(true);
     }
@@ -87,52 +123,8 @@ class MaintenanceCustomerController extends Controller
 
     }
 
-    private static function latestQuot($kontrak, $nonKontrak, $id)
+   public function export(Request $request)
     {
-        $latestKontrak    = null;
-        $latestNonKontrak = null;
-
-        if ($kontrak && $kontrak->periode_kontrak_akhir != null) {
-            // formatnya contoh: "05-2024"
-            $periodeAkhir = Carbon::createFromFormat('m-Y', $kontrak->periode_kontrak_akhir)->endOfMonth();
-
-            // kalau periode akhir sudah lewat bulan sekarang
-            if ($periodeAkhir->lt(Carbon::now()->startOfMonth())) {
-                $latestKontrak = $kontrak->updated_at ?? $kontrak->created_at;
-            }
-        }
-
-        if ($nonKontrak) {
-            $latestNonKontrak = $nonKontrak->updated_at ?? $nonKontrak->created_at;
-        }
-
-        // kalau dua-duanya null, ya null aja
-        if (! $latestNonKontrak && ! $latestKontrak) {
-            return null;
-        }
-
-        // kalau salah satu null, ambil yang gak null
-        if (! $latestNonKontrak) {
-            return $latestKontrak;
-        }
-
-        if (! $latestKontrak) {
-            return $latestNonKontrak;
-        }
-
-        // ambil yang paling baru (tertinggi)
-        return Carbon::parse($latestNonKontrak)->gt(Carbon::parse($latestKontrak))
-            ? $latestNonKontrak
-            : $latestKontrak;
-    }
-
-    public function export(Request $request)
-    {
-        // 1. Cek Password
-        if ($request->password !== env('EXPORT_DAILYQSD_PW')) {
-            return response()->json(['message' => 'Password salah! Akses ditolak.'], 403);
-        }
-
         // 2. Query Data (sama seperti di method index)
         $sixMonthsAgo = Carbon::now()->subMonths(6)->format('Y-m-d');
         $jabatan      = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -143,11 +135,10 @@ class MaintenanceCustomerController extends Controller
                 'id_pelanggan',
                 DB::raw('MAX(tanggal_order) as tanggal_order')
             )
-            ->where('flag_status', 'ordered')
             ->where('is_active', true)
             ->groupBy('id_pelanggan');
 
-        $orderHeader = OrderHeader::joinSub($lastOrder, 'last_order', function ($join) {
+        $orderHeaderNonKontrak = OrderHeader::joinSub($lastOrder, 'last_order', function ($join) {
             $join->on('order_header.id_pelanggan', '=', 'last_order.id_pelanggan')
                 ->on('order_header.tanggal_order', '=', 'last_order.tanggal_order')
                 ->on('order_header.id', '=', 'last_order.id');
@@ -162,11 +153,43 @@ class MaintenanceCustomerController extends Controller
                 'order_header.no_tlp_perusahaan',
                 'order_header.nama_pic_order',
                 'order_header.no_pic_order',
-                'order_header.no_document',
                 'order_header.sales_id',
-                'master_karyawan.nama_lengkap'
+                'order_header.no_document',
+                'master_karyawan.nama_lengkap',
+                DB::raw("'non_kontrak' as tipe_order"),
+                DB::raw("order_header.tanggal_order as tanggal_sort") // Kolom untuk sorting
             )
+            ->where('order_header.no_document', 'LIKE', '%QT/%')
             ->where('order_header.tanggal_order', '<=', $sixMonthsAgo);
+
+        $orderHeaderKontrak = OrderHeader::joinSub($lastOrder, 'last_order', function ($join) {
+            $join->on('order_header.id_pelanggan', '=', 'last_order.id_pelanggan')
+                ->on('order_header.tanggal_order', '=', 'last_order.tanggal_order')
+                ->on('order_header.id', '=', 'last_order.id');
+        })
+            ->join('master_karyawan', 'order_header.sales_id', '=', 'master_karyawan.id')
+            ->join('request_quotation_kontrak_H', 'order_header.no_document', '=', 'request_quotation_kontrak_H.no_document')
+            ->select(
+                'order_header.id',
+                'order_header.id_pelanggan',
+                'request_quotation_kontrak_H.periode_kontrak_akhir as tanggal_order',
+                'order_header.nama_perusahaan',
+                'order_header.konsultan',
+                'order_header.no_tlp_perusahaan',
+                'order_header.nama_pic_order',
+                'order_header.no_pic_order',
+                'order_header.sales_id',
+                'order_header.no_document',
+                'master_karyawan.nama_lengkap',
+                DB::raw("'kontrak' as tipe_order"),
+                // Konversi MM-YYYY ke YYYY-MM-DD untuk sorting
+                DB::raw("STR_TO_DATE(CONCAT('01-', request_quotation_kontrak_H.periode_kontrak_akhir), '%d-%m-%Y') as tanggal_sort")
+            )
+            ->where('order_header.no_document', 'LIKE', '%QTC/%')
+            ->whereRaw("STR_TO_DATE(CONCAT('01-', request_quotation_kontrak_H.periode_kontrak_akhir), '%d-%m-%Y') <= ?", 
+                [Carbon::now()->subMonths(6)->endOfMonth()->format('Y-m-d')]);
+
+        $orderHeader = $orderHeaderNonKontrak->union($orderHeaderKontrak);
 
         // Filter berdasarkan jabatan
         switch ($jabatan) {
@@ -185,7 +208,8 @@ class MaintenanceCustomerController extends Controller
                 break;
         }
 
-        $data = $orderHeader->orderBy('order_header.tanggal_order', 'desc')->get();
+        // Sekarang bisa orderBy menggunakan kolom tanggal_sort
+        $data = $orderHeader->orderBy('tanggal_sort', 'desc')->get();
 
         // 3. Setup Spreadsheet
         $spreadsheet = new Spreadsheet();
@@ -235,13 +259,22 @@ class MaintenanceCustomerController extends Controller
         $row = 3;
         $no  = 1;
 
-        // Helper Format Tanggal Indonesia (YYYY-MM-DD -> DD MMMM YYYY)
+        // Helper Format Tanggal Indonesia (support 2 format: YYYY-MM-DD dan MM-YYYY)
         $formatDateIndo = function ($dateStr) use ($bulanIndo) {
-            if (! $dateStr || $dateStr === '-') {
+            if (!$dateStr || $dateStr === '-') {
                 return '';
             }
 
             try {
+                // Cek apakah format MM-YYYY (kontrak)
+                if (preg_match('/^\d{2}-\d{4}$/', $dateStr)) {
+                    $parts = explode('-', $dateStr);
+                    $m = $parts[0];
+                    $y = $parts[1];
+                    return ($bulanIndo[$m] ?? '') . " {$y}";
+                }
+                
+                // Format YYYY-MM-DD (non-kontrak)
                 $parts = explode('-', $dateStr);
                 if (count($parts) === 3) {
                     $y = $parts[0];
@@ -249,6 +282,7 @@ class MaintenanceCustomerController extends Controller
                     $d = $parts[2];
                     return "{$d} " . ($bulanIndo[$m] ?? '') . " {$y}";
                 }
+                
                 return $dateStr;
             } catch (\Exception $e) {
                 return $dateStr;
@@ -267,8 +301,12 @@ class MaintenanceCustomerController extends Controller
             $sheet->setCellValue('I' . $row, $item->no_document ?? '-');
             $sheet->setCellValue('J' . $row, $item->nama_lengkap);
 
-            // Hitung selisih bulan untuk color coding (tidak ditampilkan di kolom)
-            $selisihBulan = Carbon::parse($item->tanggal_order)->diffInMonths(Carbon::now());
+            // Hitung selisih bulan menggunakan tanggal_sort yang sudah dalam format standard
+            try {
+                $selisihBulan = Carbon::parse($item->tanggal_sort)->diffInMonths(Carbon::now());
+            } catch (\Exception $e) {
+                $selisihBulan = 0; // Default jika parsing gagal
+            }
 
             // Styling warna untuk highlight customer yang sudah lama tidak order
             if ($selisihBulan >= 9) {
