@@ -1876,17 +1876,20 @@ class RenderInvoice
             } elseif (data_get($customInvoice->data[0], 'id_cabang') == 5) {
                 $area = 'Pemalang';
             }
-
+            
             $pr = '';
-            if ($dataHead->periode != null) {
+            if ($dataHead->periode != null && $dataHead->periode != 'all') {
                 $pr = self::tanggal_indonesia($dataHead->periode, 'period');
             } else {
-                $pr = "";
+                if($dataHead->periode == 'all'){
+                    $pr = "Semua Periode";
+                }{
+                    $pr = "";
+                }
             }
-
+            
             $konsultant = $dataHead->nama_perusahaan;
             $jab_pic = '';
-
             $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $dataHead->no_invoice) . '.pdf';
             $jab_pic = data_get($customInvoice->data[0], 'jabatan_pic');
 
@@ -1896,7 +1899,7 @@ class RenderInvoice
                 $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
                 if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
             }
-
+            
             $footer = array(
                 'odd' => array(
                     'C' => array(
@@ -2001,7 +2004,7 @@ class RenderInvoice
                         ');
 
             $no = 1;
-
+            
             foreach ($customInvoice->data as $k => $invoice) {
                 // Debugging the invoice details
 
@@ -2116,31 +2119,31 @@ class RenderInvoice
                 $pdf->writeHTML('
                                 <tr>
                                     <td style="width:60%; border: 1px solid; padding: 3px;" colspan="7"><span style="font-size: 10px;"><b>TOTAL SETELAH DISKON</b></span></td>
-                                    <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->total_tagihan - $customInvoice->harga->diskon) . '</td>
+                                    <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->sub_total - $customInvoice->harga->diskon) . '</td>
                                 </tr>
                                 ');
             }
-dd($customInvoice->harga->pph);
-
             if ($customInvoice->harga->ppn != 0 && $customInvoice->harga->ppn != null) {
                 $pdf->writeHTML('
-                                <tr>
-                                <td style="width:60%; border: 1px solid; padding: 3px;" colspan="7"><span style="font-size: 10px;"><b>PPN</b></span><br><span style="font-size: 7px;">(*Total PPN)</span></td>
-                                <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->ppn) . '</td></tr>
+                <tr>
+                <td style="width:60%; border: 1px solid; padding: 3px;" colspan="7"><span style="font-size: 10px;"><b>PPN</b></span><br><span style="font-size: 7px;">(*Total PPN)</span></td>
+                <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->ppn) . '</td></tr>
                                 ');
             }
-            if ($customInvoice->harga->pph != 0 && $customInvoice->harga->pph != null) {
+            
+            if (!empty($customInvoice->harga->pph) && $customInvoice->harga->pph != 0 && $customInvoice->harga->pph != null) {
                 $pdf->writeHTML('
-                            <tr>
-                            <td style="width:60%; border: 1px solid; padding:3px;" colspan="7"><span style="font-size: 10px;"><b>PPH</b></span><br><span style="font-size: 7px;">(*Total PPH)</span></td>
-                            <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->pph) . '</td></tr>
-                            ');
+                <tr>
+                <td style="width:60%; border: 1px solid; padding:3px;" colspan="7"><span style="font-size: 10px;"><b>PPH</b></span><br><span style="font-size: 7px;">(*Total PPH)</span></td>
+                <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->pph) . '</td></tr>
+                ');
             }
+            // dd($customInvoice->harga);
             
             $pdf->writeHTML('
                         <tr>
                         <td style="width:60%; border: 1px solid; font-size: 10px; padding:3px;" colspan="7"><span><b>TOTAL</b></span></td>
-                        <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->sub_total - $customInvoice->harga->diskon - $customInvoice->harga->pph + $customInvoice->harga->ppn) . '</td></tr>
+                        <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->total_tagihan) . '</td></tr>
                         ');
             $pdf->writeHTML('
                         <tr><td colspan="5" style="height: 10px;"></td></tr>
@@ -2148,12 +2151,13 @@ dd($customInvoice->harga->pph);
                         <td style="width:60%; border: 1px solid; font-size: 10px; padding: 3px;" colspan="7"><b style="text-transform: uppercase;">' . $dataHead->keterangan . '</b></td>
                         <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->nilai_tagihan) . '</td></tr>
                         ');
-
-            if (abs($customInvoice->harga->total_harga - $customInvoice->harga->nilai_tagihan) > 10) {
+                        
+            // dd($customInvoice->harga);
+            if (abs($customInvoice->harga->total_tagihan - $customInvoice->harga->nilai_tagihan) > 10) {
                 $pdf->writeHTML('
                             <tr>
                             <td style="width:60%; border: 1px solid; font-size: 10px; padding:3px;" colspan="7"><b style="text-transform: uppercase;">SISA PEMBAYARAN</b></td>
-                            <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->total_harga - $customInvoice->harga->nilai_tagihan) . '</td></tr>
+                            <td style="width:33%; border: 1px solid; font-size: 9px; text-align:center;" colspan="2" class="text-right">' . self::rupiah($customInvoice->harga->total_tagihan - $customInvoice->harga->nilai_tagihan) . '</td></tr>
                             ');
             }
             $pdf->writeHTML('
@@ -2182,7 +2186,7 @@ dd($customInvoice->harga->pph);
 
             $filePath = public_path('invoice/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            dd($fileName);
+            // dd($filePath);
             return $fileName;
         } catch (\Exception $e) {
             return response()->json(

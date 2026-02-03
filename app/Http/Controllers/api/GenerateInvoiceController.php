@@ -462,19 +462,50 @@ class GenerateInvoiceController extends Controller
 
     public function rollbackCustom(Request $request)
     {
-        $updatedCount = Invoice::where('no_invoice', $request->no_invoice)
-            ->update(
-                [
-                    'is_custom' => false,
-                    'custom_invoice' => null,
-                ]
-            );
+        DB::beginTransaction();
+        try {
+            $invoices = Invoice::with('custom')
+                ->where('no_invoice', $request->no_invoice)
+                ->get();
 
-        self::generatePDF($request->no_invoice);
+            foreach ($invoices as $key => $item) {
+                $customInvoice = $item->custom;
 
-        return response()->json([
-            'message' => "Custom payroll has been rollback."
-        ]);
+                if (!$customInvoice) continue;
+
+                // pastikan old_nilai_tagihan itu array (kalau dari json)
+                $oldNilai = json_decode($customInvoice->old_nilai_tagihan, true);
+                $oldTotal = json_decode($customInvoice->old_total_tagihan, true);
+                $oldPPN = json_decode($customInvoice->old_ppn);
+
+                // dd($oldNilai, $oldTotal, $oldPPN);
+
+                if (is_string($oldNilai)) {
+                    $oldNilai = json_decode($oldNilai, true) ?? [];
+                }
+
+                if (!array_key_exists($key, $oldNilai)) continue;
+
+                $item->nilai_tagihan = $oldNilai[$key];
+                $item->ppn = $oldPPN[$key];
+                $item->total_tagihan = $oldTotal[$key];
+                $item->is_custom = false;
+                $item->save();
+            }
+            CustomInvoice::where('no_invoice', $request->no_invoice)->delete();
+            self::generatePDF($request->no_invoice);
+            DB::commit();
+
+            return response()->json([
+                'message' => "Custom payroll has been rollback."
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollback();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
     }
 
     public function sendEmail(Request $request)
@@ -693,6 +724,7 @@ class GenerateInvoiceController extends Controller
         // dd($request->harga['total_custom']);
         DB::beginTransaction();
         try {
+            // dd($request->all());
             $invoice = Invoice::where('is_active', true)
                 ->where('no_invoice', $request->no_invoice)
                 ->get();
