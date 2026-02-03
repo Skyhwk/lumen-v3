@@ -37,7 +37,7 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                        WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING APPROVE HRD" 
+                        WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
                         WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
                         WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                         WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
@@ -99,7 +99,7 @@ class LemburController extends Controller
                 DB::raw('CASE 
                                 WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
                                 WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED" 
+                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                                 WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
                                 WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
                                 WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
@@ -158,7 +158,7 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED" 
+                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
                                 WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
                                 WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                                 WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
@@ -222,7 +222,7 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED" 
+                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
                                 WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
                                 WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                                 WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
@@ -284,9 +284,9 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING APPROVE HRD" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "WAITING APPROVE FINANCE" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED" 
+                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
+                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
+                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                                 WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
                                 WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
                                 WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
@@ -354,9 +354,9 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING APPROVE HRD" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "WAITING APPROVE FINANCE" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED" 
+                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
+                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
+                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
                                 WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
                                 WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
                                 WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
@@ -392,12 +392,9 @@ class LemburController extends Controller
                 'form_header.status'
             )
             ->where('form_header.type_document', 'Lembur')
-            // ->where(function ($query) {
-            //     $query->whereNotNull('MAX(fd.approved_hrd_by)')->orWhereNotNull('MAX(fd.rejected_hrd_by)');
-            // })
             ->havingRaw("
                 (
-                    (MAX(fd.approved_finance_by) IS NOT NULL AND MAX(fd.approved_hrd_by) IS NOT NULL)
+                    (MAX(fd.approved_finance_by) IS NOT NULL OR MAX(fd.approved_hrd_by) IS NOT NULL)
                 )
             ")
             ->whereIn('form_header.created_by', $bawahan)
@@ -417,7 +414,18 @@ class LemburController extends Controller
 
     public function getListKaryawan(Request $request)
     {
-        $allKaryawan = MasterKaryawan::select('id', 'nama_lengkap')->where('is_active', true)->where('department', $request->dept)->get();
+        $getBawahan = GetBawahan::where('id', $this->user_id)->get();
+        $getAtasan = GetAtasan::where('id', $this->user_id)->get();
+        $allKaryawan = collect([$getBawahan, $getAtasan])
+        ->flatten()
+        ->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'nama_lengkap' => $item->nama_lengkap,
+            ];
+        })
+        ->unique('id')
+        ->values();
 
         return response()->json(
             [
@@ -499,8 +507,7 @@ class LemburController extends Controller
             ];
             // $prefix = 'ISL/LEMBUR/' . date('y') . '-' . $romanMonth[date('m')];
             // $no_document = $prefix . '/' . str_pad($this->getLatestNumber($prefix), 6, '0', STR_PAD_LEFT);
-            $timestamp = Carbon::now()->timestamp;
-            $no_document = substr($timestamp, 0, 10);
+            $no_document = str_replace('.', '', str_replace('/', '', microtime(true)));
             FormHeader::on('android_intilab')->create([
                 'no_document' => $no_document,
                 'type_document' => 'Lembur',
@@ -604,6 +611,8 @@ class LemburController extends Controller
                 $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->approved_hrd_by = $this->karyawan;
                 $formDetail->approved_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
+                $formDetail->rejected_finance_by = null;
+                $formDetail->rejected_finance_at = null;
                 $formDetail->save();
             }
 
