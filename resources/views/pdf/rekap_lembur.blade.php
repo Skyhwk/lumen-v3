@@ -40,6 +40,7 @@
 <body>
     <div class="header">
         <h2>Rekap Lembur</h2>
+        @php \Carbon\Carbon::setLocale('id'); @endphp
         <p>Tanggal: {{ \Carbon\Carbon::parse($tanggal)->translatedFormat('d F Y') }}</p>
     </div>
 
