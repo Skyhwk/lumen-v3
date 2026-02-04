@@ -16,6 +16,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -417,15 +418,15 @@ class LemburController extends Controller
         $getBawahan = GetBawahan::where('id', $this->user_id)->get();
         $getAtasan = GetAtasan::where('id', $this->user_id)->get();
         $allKaryawan = collect([$getBawahan, $getAtasan])
-        ->flatten()
-        ->map(function ($item) {
-            return [
-                'id' => $item->id,
-                'nama_lengkap' => $item->nama_lengkap,
-            ];
-        })
-        ->unique('id')
-        ->values();
+            ->flatten()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'nama_lengkap' => $item->nama_lengkap,
+                ];
+            })
+            ->unique('id')
+            ->values();
 
         return response()->json(
             [
@@ -441,9 +442,28 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
             $header = FormHeader::on('intilab_apps')->find($request->id);
-    
+
+            $exist = FormDetail::on('intilab_apps')->where(
+                [
+                    'tanggal_mulai' => $request->tanggal_lembur,
+                    'department_id' => $this->department
+                ]
+            )
+                ->whereIn('user_id', $request->data)
+                ->whereNull('rejected_atasan_by')
+                ->where('no_document', '!=', $header->no_document)
+                ->get();
+
+            if ($exist->count() > 0) {
+                DB::rollback();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anggota telah memiliki form lembur pada tanggal tersebut, Mohon di cek kembali',
+                ], 500);
+            }
+
             FormDetail::on('intilab_apps')->where('no_document', $header->no_document)->delete();
-            
+
             foreach ($request->data as $detail) {
                 $atasan = MasterKaryawan::select('atasan_langsung')->where('id', $detail)->first()->atasan_langsung;
                 $details[] = [
@@ -465,8 +485,16 @@ class LemburController extends Controller
             // dd($details);
             FormDetail::on('intilab_apps')->insert($details);
 
+            $title = 'Request Lembur Kamu Berhasil Diperbaharui!';
+
+            $body = $this->grade === 'MANAGER'
+                ? 'Cek secara berkala untuk persetujuan HRD'
+                : 'Cek secara berkala untuk persetujuan atasan';
+
+            self::sendNotificationLembur([$this->user_id], $title, $body);
+
             DB::commit();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Form Lembur berhasil diupdate',
@@ -483,8 +511,6 @@ class LemburController extends Controller
                 'line' => $th->getLine()
             ], 500);
         }
-
-
     }
 
     public function createLembur(Request $request)
@@ -506,7 +532,7 @@ class LemburController extends Controller
                     'tanggal_mulai' => $request->tanggal_lembur,
                     'department_id' => $this->department
                 ]
-                )
+            )
                 ->whereIn('user_id', $request->data)
                 ->whereNull('rejected_atasan_by')
                 ->get();
@@ -541,7 +567,7 @@ class LemburController extends Controller
             FormDetail::on('intilab_apps')->insert($details);
 
             $sendNotifTo = [];
-            if($this->grade === 'MANAGER') {
+            if ($this->grade === 'MANAGER') {
                 $idBuDella = 5;
                 $atasan = GetAtasan::where('id', $idBuDella)->get();
                 $bawahan = GetBawahan::where('id', $idBuDella)->get();
@@ -550,19 +576,41 @@ class LemburController extends Controller
                 $atasan = GetAtasan::where('id', $this->user_id)->get();
                 $sendNotifTo = $atasan->pluck('id')->toArray();
             }
-            
+
             Notification::whereIn('id', $sendNotifTo)
                 ->title('Lembur Telah Dibuat!')
                 ->message('Lembur telah dibuat' . ' Oleh ' . $this->karyawan)
                 ->url('/form-lembur')
                 ->send();
 
+            $users = collect($request->data)
+                ->filter(fn($id) => (int) $id !== (int) $this->user_id)
+                ->values()
+                ->toArray();
+
+            $creator = [$this->user_id];
+
+            $title = 'Request Lembur Kamu Berhasil Dibuat!';
+
+            $body = $this->grade === 'MANAGER'
+                ? 'Cek secara berkala untuk persetujuan HRD'
+                : 'Cek secara berkala untuk persetujuan atasan';
+
+            self::sendNotificationLembur($creator, $title, $body);
+
+            self::sendNotificationLembur(
+                $users,
+                'WOOHOOO!, Kamu termasuk dalam tim lembur pada ' . Carbon::parse($request->tanggal_lembur)->formatLocalized('%d %B %Y', 'id_ID') . '!',
+                'Waktu: ' . $request->jam_mulai . ' - ' . $request->jam_selesai . ' WIB (' . $request->keterangan . ')',
+            );
+
+            // dd('here');
             DB::commit();
             return response()->json([
                 'success' => true,
                 'message' => 'Form Lembur berhasil dibuat',
                 'data' => [
-                    'no_document' => $no_document
+                    // 'no_document' => $no_document
                 ]
             ], 200);
         } catch (\Throwable $th) {
@@ -589,7 +637,7 @@ class LemburController extends Controller
     }
 
 
-     public function approveLembur(Request $request)
+    public function approveLembur(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -628,12 +676,17 @@ class LemburController extends Controller
                 ->url('/form-lembur')
                 ->send();
 
+            $title = 'Request Lembur Kamu Telah disetujui HRD!';
+
+            $body = 'Cek secara berkala untuk persetujuan Finance';
+
+            self::sendNotificationLembur([$this->user_id], $title, $body);
+
             DB::commit();
             return response()->json([
                 'success' => true,
                 'message' => 'Form Lembur berhasil disetujui'
             ], 200);
-
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
@@ -684,6 +737,12 @@ class LemburController extends Controller
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/form-lembur')
                 ->send();
+
+            $title = 'Request Lembur Kamu Tidak disetujui oleh HRD!';
+
+            $body = 'karena ' . $request->keterangan;
+
+            self::sendNotificationLembur([$this->user_id], $title, $body);
 
             DB::commit();
             return response()->json([
@@ -785,6 +844,11 @@ class LemburController extends Controller
                 ->url('/form-lembur')
                 ->send();
 
+            $title = 'Request Lembur Kamu Tidak disetujui HRD!';
+
+            $body = 'Karena ' . $request->keterangan;
+
+            self::sendNotificationLembur([$this->user_id], $title, $body);
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -843,7 +907,6 @@ class LemburController extends Controller
                 'success' => true,
                 'message' => 'Form Lembur berhasil disetujui'
             ], 200);
-
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
@@ -897,7 +960,6 @@ class LemburController extends Controller
                 'success' => true,
                 'message' => 'Form Lembur berhasil ditolak'
             ], 200);
-
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
@@ -908,4 +970,25 @@ class LemburController extends Controller
         }
     }
 
+    private function sendNotificationLembur($users, $title, $body)
+    {
+        $payload = [
+            'data[title]' => $title,
+            'data[body]'  => $body,
+            'data[url]'   => '/form-lembur',
+            'data[type]'  => 'lembur',
+        ];
+
+        foreach ($users as $index => $userId) {
+            $payload["users[$index]"] = $userId;
+        }
+
+        Http::asForm()
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'x-slice' => env('APPS_NOTIFICATION_SLICE'),
+            ])
+            ->withToken(env('APPS_INTERNAL_TOKEN'))
+            ->post('https://apps.intilab.com/android-attendance/api/route', $payload);
+    }
 }
