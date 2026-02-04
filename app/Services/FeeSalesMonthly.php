@@ -27,8 +27,7 @@ class FeeSalesMonthly
     public function __construct()
     {
         $this->currentYear = Carbon::now()->year;
-        // $this->currentMonth =  Carbon::now()->format('m');
-        $this->currentMonth =  '01';
+        $this->currentMonth =  Carbon::now()->format('m');
         $this->currentPeriod = $this->currentYear . "-" . $this->currentMonth;
 
         $monthStr = [
@@ -53,14 +52,6 @@ class FeeSalesMonthly
     {
         DB::beginTransaction();
         try {
-            // $salesList = MasterKaryawan::whereIn('id_jabatan', [
-            //     24, // Sales Officer
-            //     148, // Customer Relation Officer
-            // ])
-            //     ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
-            //     ->where('is_active', true)
-            //     ->orderBy('nama_lengkap', 'asc')
-            //     ->get();
             printf("[FeeSalesMonthly] [%s] Running Fee Sales Monthly\n", Carbon::now()->format('Y-m-d H:i:s'));
 
             $masterTargetSales = MasterTargetSales::where('tahun', $this->currentYear)->where('is_active', true)->whereNotNull($this->currentMonthStr)->get();
@@ -166,7 +157,7 @@ class FeeSalesMonthly
                 
                 printf("[FeeSalesMonthly] [%s] Mapping Data Completed\n", Carbon::now()->format('Y-m-d H:i:s'));
                 
-                printf("[FeeSalesMonthly] [%s] Start Insert Data\n", Carbon::now()->format('Y-m-d H:i:s'));
+                printf("[FeeSalesMonthly] [%s] Start Insert Data for period %s\n", Carbon::now()->format('Y-m-d H:i:s'), $this->currentPeriod);
                 // MASTER FEE SALES
                 $masterFeeSales = new MasterFeeSales();
 
@@ -201,6 +192,7 @@ class FeeSalesMonthly
                 $mutasiFeeSales->amount = $totalFee;
                 $mutasiFeeSales->description = 'Fee Sales ' . Carbon::createFromFormat('Y-m', $this->currentPeriod)->translatedFormat('F Y');
                 $mutasiFeeSales->status = 'Done';
+                $mutasiFeeSales->created_at = Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth();
                 $mutasiFeeSales->created_by = 'System';
                 $mutasiFeeSales->updated_by = 'System';
 
@@ -215,6 +207,7 @@ class FeeSalesMonthly
                     $saldoFeeSales->sales_id = $salesId;
                     $saldoFeeSales->active_balance = $totalFee;
                 }
+                $saldoFeeSales->created_at = Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth();
                 $saldoFeeSales->updated_by = 'System';
                 $saldoFeeSales->created_by = 'System';
                 $saldoFeeSales->save();
