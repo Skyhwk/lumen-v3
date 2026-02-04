@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Jobs\GenerateDocumentJadwalJob;
 use App\Models\GenerateLink;
+use App\Models\JobTask;
 use App\Models\MasterCabang;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
@@ -11,6 +12,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\GetAtasan;
 use App\Services\SendEmail;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -111,12 +113,26 @@ class RemailJadwalController extends Controller
             }
 
             if ($request->mode == 'non_kontrak') {
+                JobTask::insert([
+                    'job'         => 'GenerateDocumentJadwal',
+                    'status'      => 'processing',
+                    'no_document' => $cek->no_document,
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
                 $job = new GenerateDocumentJadwalJob('QT', $cek->id, $this->karyawan);
                 $this->dispatch($job);
             } else {
+                JobTask::insert([
+                    'job'         => 'GenerateDocumentJadwal',
+                    'status'      => 'processing',
+                    'no_document' => $cek->no_document,
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
                 $job = new GenerateDocumentJadwalJob('QTC', $cek->id, $this->karyawan);
                 $this->dispatch($job);
             }
+
+            DB::commit();
 
             return response()->json([
                 'message' => 'Dokumen jadwal berhasil dibuat',
