@@ -550,6 +550,11 @@ class GenerateDocumentJadwal
 
             // Loop untuk setiap periode
             foreach ($sampling_plans as $key => $sampling_plan) {
+
+            if ($key > 0) {
+                $pdf->addPage();
+            }
+    
                 // Reset hasParsial untuk setiap periode
                 $hasParsial = false;
 
@@ -737,8 +742,6 @@ class GenerateDocumentJadwal
                 <p style="font-size: 9px; font-style: italic; margin-top: 5px; text-align: left;">
                     <b>Catatan:</b> Sampler dapat berubah sewaktu-waktu sesuai dengan kondisi lapangan.
                 </p>');
-                    $pdf->addPage();
-
                 }
 
             } // End foreach sampling_plans
