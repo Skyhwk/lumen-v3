@@ -27,10 +27,15 @@ class EmailLhpController extends Controller
         ->whereYear('created_at', $request->periode)
         ->where('is_active', true);
 
+
         if ($request->id_cabang)
             $rekapOrder->where('id_cabang', $request->id_cabang);
-        if ($request->periode)
-            $rekapOrder->whereYear('tanggal_penawaran', $request->periode);
+
+        // if ($request->periode)
+        //     $rekapOrder->whereYear('tanggal_penawaran', $request->periode);
+
+
+        // dd($rekapOrder->get());
         
         $karyawan = $request->attributes->has('user') ? $request->attributes->get('user')->karyawan : null;
         

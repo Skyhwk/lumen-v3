@@ -18,7 +18,7 @@ class RekapLemburController extends Controller
 {
     public function index()
     {
-        $rekap = FormDetail::on('android_intilab')
+        $rekap = FormDetail::on('intilab_apps')
             ->select('tanggal_mulai as tanggal', DB::raw('count(user_id) as jumlah'))
             ->whereNotNull('approved_finance_by')
             ->where('is_active', true)
@@ -34,7 +34,7 @@ class RekapLemburController extends Controller
 
         $rekap = [];
         foreach ($divisi as $item) {
-            $detail = FormDetail::on('android_intilab')
+            $detail = FormDetail::on('intilab_apps')
                 ->where('department_id', $item->id)
                 ->where('tanggal_mulai', $date)
                 ->whereNotNull('approved_finance_by')
