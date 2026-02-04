@@ -8,6 +8,11 @@
 
     $total = count($data);
     
+    $customRegulasi = json_decode($header->regulasi_custom, true);
+    $pages = collect($customRegulasi)->pluck('page')->sort()->values();
+
+    $secondLast = $pages[$pages->count() - 2];
+    $last       = $pages[$pages->count() - 1];
 @endphp
 
 <div class="left" style="page-break-before: always;">
@@ -22,7 +27,7 @@
         @else
             <th rowspan="1" class="pd-5-solid-top-center" style="white-space: nowrap;">HASIL UJI</th>
         @endif
-        @if ($page != 3)
+        @if ($page != $last)
         <th width="75" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">BAKU MUTU</th>
         @endif
         <th rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SATUAN</th>
@@ -57,7 +62,7 @@
                 @if ($hasTerkoreksi)
                     <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['terkoreksi'] ?? '' !!}</td>
                 @endif
-                @if ($page != 3)
+                @if ($page != $last)
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
                 @endif
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>

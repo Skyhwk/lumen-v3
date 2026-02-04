@@ -924,6 +924,16 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
 
+                $additionPage1 = collect($additionPage1)
+                    ->sortBy(fn ($item) => mb_strtolower($item['parameter']))
+                    ->values()
+                    ->toArray();
+
+                $additionPage2 = collect($additionPage2)
+                    ->sortBy(fn ($item) => mb_strtolower($item['parameter']))
+                    ->values()
+                    ->toArray();
+
                 return response()->json([ 
                     'status'             => true,
                     'data'               => $mainData,
