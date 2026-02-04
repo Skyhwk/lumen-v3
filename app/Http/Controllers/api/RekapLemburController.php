@@ -49,9 +49,12 @@ class RekapLemburController extends Controller
 
             if ($detail->isNotEmpty()) {
                 $karyawan = MasterKaryawan::whereIn('id', $detail->pluck('user_id')->unique()->toArray())->get();
+
                 $detail->map(function ($item) use ($karyawan) {
                     $item->karyawan = $karyawan->where('id', $item->user_id)->first();
                 });
+
+                $detail = $detail->sortBy(fn($item) => $item->karyawan->nama_lengkap ?? '')->values();
 
                 $rekap[] = [
                     'kode_divisi' => $item->kode_divisi,
@@ -108,14 +111,44 @@ class RekapLemburController extends Controller
 
             $rowIdx++;
 
+            // group detail by keterangan
+            $grouped = [];
             foreach ($divisi['detail'] as $row) {
-                $sheet->setCellValue("A{$rowIdx}", $no++);
-                $sheet->setCellValueExplicit("B{$rowIdx}", $row['karyawan']['nik_karyawan'] ?? '-', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); // Biar 0 di depan gak ilang
-                $sheet->setCellValue("C{$rowIdx}", $row['karyawan']['nama_lengkap'] ?? '-');
-                $sheet->setCellValue("D{$rowIdx}", $row['jam_mulai']);
-                $sheet->setCellValue("E{$rowIdx}", $row['jam_selesai']);
-                $sheet->setCellValue("F{$rowIdx}", $row['keterangan']);
-                $rowIdx++;
+                $key = $row['keterangan'] ?? '-';
+                $grouped[$key][] = $row;
+            }
+
+            foreach ($grouped as $keterangan => $rows) {
+                $startRow = $rowIdx;
+                $countRow = count($rows);
+
+                foreach ($rows as $i => $row) {
+                    $sheet->setCellValue("A{$rowIdx}", $no++);
+                    $sheet->setCellValueExplicit(
+                        "B{$rowIdx}",
+                        $row['karyawan']['nik_karyawan'] ?? '-',
+                        \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+                    );
+                    $sheet->setCellValue("C{$rowIdx}", $row['karyawan']['nama_lengkap'] ?? '-');
+                    $sheet->setCellValue("D{$rowIdx}", $row['jam_mulai']);
+                    $sheet->setCellValue("E{$rowIdx}", $row['jam_selesai']);
+
+                    // keterangan cuma ditulis sekali
+                    if ($i === 0) {
+                        $sheet->setCellValue("F{$rowIdx}", $keterangan);
+                    }
+
+                    $rowIdx++;
+                }
+
+                // merge keterangan kalo lebih dari 1 row
+                if ($countRow > 1) {
+                    $endRow = $startRow + $countRow - 1;
+                    $sheet->mergeCells("F{$startRow}:F{$endRow}");
+                    $sheet->getStyle("F{$startRow}:F{$endRow}")
+                        ->getAlignment()
+                        ->setVertical(Alignment::VERTICAL_CENTER);
+                }
             }
         }
 
