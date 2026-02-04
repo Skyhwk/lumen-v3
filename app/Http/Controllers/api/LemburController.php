@@ -501,6 +501,23 @@ class LemburController extends Controller
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
             $details = [];
+            $exist = FormDetail::on('intilab_apps')->where(
+                [
+                    'tanggal_mulai' => $request->tanggal_lembur,
+                    'department_id' => $this->department
+                ]
+                )
+                ->whereIn('user_id', $request->data)
+                ->whereNull('rejected_atasan_by')
+                ->get();
+
+            if ($exist->count() > 0) {
+                DB::rollback();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anggota telah memiliki form lembur pada tanggal tersebut, Mohon di cek kembali',
+                ], 500);
+            }
 
             foreach ($request->data as $detail) {
                 $atasan = MasterKaryawan::select('atasan_langsung')->where('id', $detail)->first()->atasan_langsung;
