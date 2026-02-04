@@ -338,7 +338,7 @@ class ProcessAfterOrder
 
             $linkLhp->update([
                 'id_token' => $tokenId,
-                'link' => env('PORTAL_LHP', 'https://portal.intilab.com/lhp/') . $token
+                'link' => env('PORTAL_LHP') . $token
             ]);
 
             Log::info('Created non-kontrak reorder link', [
@@ -410,7 +410,7 @@ class ProcessAfterOrder
 
         $linkLhp->update([
             'id_token' => $tokenId,
-            'link' => env('PORTAL_LHP', 'https://portal.intilab.com/lhp/') . $token
+            'link' => env('PORTAL_LHP') . $token
         ]);
 
         Log::info('Created non-kontrak non-reorder link', [
@@ -478,7 +478,7 @@ class ProcessAfterOrder
 
         $linkLhp->update([
             'id_token' => $tokenId,
-            'link' => env('PORTAL_LHP', 'https://portal.intilab.com/lhp/') . $token
+            'link' => env('PORTAL_LHP') . $token
         ]);
 
         Log::info('Created LHP link for period', [
@@ -580,7 +580,7 @@ class ProcessAfterOrder
 
                 $linkRingkasan->update([
                     'id_token' => $tokenId,
-                    'link' => env('PORTAL_RINGKASAN_ORDER', 'https://portal.intilab.com/ringkasan-order/') . $token
+                    'link' => env('PORTALV4'). 'ringkasan-order/' . $token
                 ]);
 
                 Log::info('Created new ringkasan order link', [
