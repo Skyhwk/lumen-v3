@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
+use Mpdf;
 use DataTables;
 
 use App\Models\FormDetail;
@@ -27,7 +28,7 @@ class RekapLemburController extends Controller
         return DataTables::of($rekap)->make(true);
     }
 
-    public function detail(Request $request)
+    private function getRekap($date)
     {
         $divisi = MasterDivisi::where('is_active', true)->get();
 
@@ -35,7 +36,7 @@ class RekapLemburController extends Controller
         foreach ($divisi as $item) {
             $detail = FormDetail::on('intilab_apps')
                 ->where('department_id', $item->id)
-                ->where('tanggal_mulai', $request->tanggal)
+                ->where('tanggal_mulai', $date)
                 ->whereNotNull('approved_finance_by')
                 ->where('is_active', true)
                 ->get();
@@ -54,6 +55,42 @@ class RekapLemburController extends Controller
             }
         }
 
-        return response()->json(['data' => $rekap, 'message' => 'Data retrieved successfully'], 200);
+        return $rekap;
+    }
+
+    public function detail(Request $request)
+    {
+        return response()->json(['data' => $this->getRekap($request->tanggal), 'message' => 'Data retrieved successfully'], 200);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $mpdf = new Mpdf();
+
+        $mpdf->WriteHTML(view('pdf.rekap_lembur', [
+            'data' => $this->getRekap($request->tanggal),
+            'tanggal' => $request->tanggal
+        ])->render());
+
+        return $mpdf->Output('Rekap_Lembur_' . $request->tanggal . '.pdf', 'D');
+    }
+
+    public function generatePdf(Request $request)
+    {
+        $mpdf = new Mpdf();
+
+        $mpdf->WriteHTML(view('pdf.rekap_lembur', [
+            'data' => $this->getRekap($request->tanggal),
+            'tanggal' => $request->tanggal
+        ])->render());
+
+        $filename = 'Rekap_Lembur_' . $request->tanggal . '.pdf';
+        $path = public_path('rekap_lembur');
+
+        if (!file_exists($path)) mkdir($path, 0777, true);
+
+        $mpdf->Output($path . '/' . $filename, \Mpdf\Output\Destination::FILE);
+
+        return response()->json(['data' => $filename, 'message' => 'PDF generated successfully'], 200);
     }
 }
