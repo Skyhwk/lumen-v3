@@ -583,6 +583,15 @@ class LemburController extends Controller
                 ->url('/form-lembur')
                 ->send();
 
+            if ($this->grade !== 'MANAGER') {
+                $atasan = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                Notification::where('id', $atasan)
+                    ->title('Lembur divisi ' . $this->department . ' Menunggu Persetujuan!')
+                    ->message('Mohon approve sebelum jam 4 sore')
+                    ->url('/form-lembur')
+                    ->send();
+            }
+
             $users = collect($request->data)
                 ->filter(fn($id) => (int) $id !== (int) $this->user_id)
                 ->values()
@@ -966,6 +975,23 @@ class LemburController extends Controller
                 'success' => false,
                 'message' => 'Terjadi kesalahan sistem',
                 'error' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function testNotif()
+    {
+        try {
+            self::sendNotificationLembur([601], 'test', 'test');
+
+            return response()->json([
+                'success' => true
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => 'Error: ' . $th->getMessage()
             ], 500);
         }
     }
