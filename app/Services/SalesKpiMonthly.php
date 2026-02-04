@@ -117,6 +117,24 @@ class SalesKpiMonthly
                         ->groupBy('d.sales_id', 'd.kontrak')
                         ->get();
 
+
+                    $forecastData = DB::table('forecast_sp as f')
+                        ->whereIn('f.sales_id', $getAllSales)
+                        ->whereYear('f.tanggal_sampling_min', '=', explode('-', $periodeBulan)[0])
+                        ->whereMonth('f.tanggal_sampling_min', '=', explode('-', $periodeBulan)[1])
+                        ->selectRaw("
+                            f.sales_id,
+                            CASE WHEN f.status_quotation = 'kontrak' THEN 'C' ELSE 'N' END as kontrak,     
+                            SUM(CASE WHEN f.status_customer = 'exist' THEN f.revenue_forecast ELSE 0 END) as revenue_forecast_exist,
+                            SUM(CASE WHEN f.status_customer = 'new' THEN f.revenue_forecast ELSE 0 END) as revenue_forecast_new
+                        ")
+                        ->groupBy('f.sales_id', 'f.status_quotation')
+                        ->get();
+                    
+
+
+                    
+
                     // dd($quotationData);
 
                     // ==================== GABUNGKAN DATA ====================
@@ -125,6 +143,10 @@ class SalesKpiMonthly
 
                     $dataByKontrak = collect($quotationData)->groupBy(function($item) {
                         return $item->sales_id . '_' . ($item->kontrak ?? 'N');
+                    });
+
+                    $forecastByKontrak = collect($forecastData)->groupBy(function($item) {
+                        return $item->sales_id . '_' . $item->kontrak;
                     });
 
                     // dd($dataByKontrak);
@@ -137,6 +159,10 @@ class SalesKpiMonthly
                         $nonKontrak = $dataByKontrak->get($salesId . '_N');
                         // Ambil data kontrak (kontrak = 'C')
                         $kontrak = $dataByKontrak->get($salesId . '_C');
+
+
+                        $forecastNonKontrak = $forecastByKontrak->get($salesId . '_N');
+                        $forecastKontrak = $forecastByKontrak->get($salesId . '_C');
 
                         $dataInsert[] = [
                             'karyawan_id' => $salesId,
@@ -178,6 +204,15 @@ class SalesKpiMonthly
                             'revenue_bysampling_order_kontrak_new' => 0,
                             'revenue_bysampling_order_kontrak_exist' => 0,
 
+
+                            // Forecast Revenue - Non Kontrak
+                            'revenue_forecast_nonkontrak_new' => $forecastNonKontrak ? $forecastNonKontrak->sum('revenue_forecast_new') : 0,
+                            'revenue_forecast_nonkontrak_exist' => $forecastNonKontrak ? $forecastNonKontrak->sum('revenue_forecast_exist') : 0,
+
+                            // Forecast Revenue - Kontrak
+                            'revenue_forecast_kontrak_new' => $forecastKontrak ? $forecastKontrak->sum('revenue_forecast_new') : 0,
+                            'revenue_forecast_kontrak_exist' => $forecastKontrak ? $forecastKontrak->sum('revenue_forecast_exist') : 0,
+
                             'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         ];
                     }
@@ -212,6 +247,10 @@ class SalesKpiMonthly
                             'revenue_bysampling_order_nonkontrak_exist',
                             'revenue_bysampling_order_kontrak_new',
                             'revenue_bysampling_order_kontrak_exist',
+                            'revenue_forecast_nonkontrak_new',
+                            'revenue_forecast_nonkontrak_exist',
+                            'revenue_forecast_kontrak_new',
+                            'revenue_forecast_kontrak_exist',
                             'updated_at'
                         ]
                     );
