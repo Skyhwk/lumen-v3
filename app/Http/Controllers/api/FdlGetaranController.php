@@ -260,33 +260,87 @@ class FdlGetaranController extends Controller
                 $kercepT_mms = $kercepT;
                 $kercepP_mms = $kercepP;
                 $kercepB_mms = $kercepB;
-                $percep_ms2 = $percep;
-                $percepT_ms2 = $percepT;
-                $percepP_ms2 = $percepP;
-                $percepB_ms2 = $percepB;
+                $percep_mms2 = $percep;
+                $percepT_mms2 = $percepT;
+                $percepP_mms2 = $percepP;
+                $percepB_mms2 = $percepB;
 
                 if ($data->sat_kec == "m/s") {
-                    $kercep_mms = round(($kercep * 10000), 4);
-                    $kercepT_mms = round(($kercepT * 10000), 4);
-                    $kercepP_mms = round(($kercepP * 10000), 4);
-                    $kercepB_mms = round(($kercepB * 10000), 4);
+                    $kercep_mms = round(($kercep * 1000), 4);
+                    $kercepT_mms = round(($kercepT * 1000), 4);
+                    $kercepP_mms = round(($kercepP * 1000), 4);
+                    $kercepB_mms = round(($kercepB * 1000), 4);
                 }
 
-                if ($data->sat_per == "mm/s2") {
-                    $percep_ms2 = round(($percep / 10000), 4);
-                    $percepT_ms2 = round(($percepT / 10000), 4);
-                    $percepP_ms2 = round(($percepP / 10000), 4);
-                    $percepB_ms2 = round(($percepB / 10000), 4);
+                if ($data->sat_per == "m/s2") {
+                    $percep_mms2 = round(($percep * 1000), 4);
+                    $percepT_mms2 = round(($percepT * 1000), 4);
+                    $percepP_mms2 = round(($percepP * 1000), 4);
+                    $percepB_mms2 = round(($percepB * 1000), 4);
                 }
+
+                // switch ($parameterValue) {
+                //     case "Getaran (4 Hz)":
+                //         $kercep_mms = (10/4) * $kercep_mms;
+                //         break;
+                //     case "Getaran (5 Hz)":
+                //         $kercep_mms = (10/5) * $kercep_mms;
+                //         break;
+                //     case "Getaran (6.3 Hz)":
+                //         $kercep_mms = (10/6.3) * $kercep_mms;
+                //         break;
+                //     case "Getaran (8 Hz)":
+                //         $kercep_mms = (10/8) * $kercep_mms;
+                //         break;
+                //     case "Getaran (10 Hz)":
+                //         $kercep_mms = (10/10) * $kercep_mms;
+                //         break;
+                //     case "Getaran (12.5 Hz)":
+                //         $kercep_mms = (10/12.5) * $kercep_mms;
+                //         break;
+                //     case "Getaran (16 Hz)":
+                //         $kercep_mms = (10/16) * $kercep_mms;
+                //         break;
+                //     case "Getaran (20 Hz)":
+                //         $kercep_mms = (10/20) * $kercep_mms;
+                //         break;
+                //     case "Getaran (25 Hz)":
+                //         $kercep_mms = (10/25) * $kercep_mms;
+                //         break;
+                //     case "Getaran (31.5 Hz)":
+                //         $kercep_mms = (10/31.5) * $kercep_mms;
+                //         break;
+                //     case "Getaran (40 Hz)":
+                //         $kercep_mms = (10/40) * $kercep_mms;
+                //         break;
+                //     case "Getaran (50 Hz)":
+                //         $kercep_mms = (10/50) * $kercep_mms;
+                //         break;
+                //     case "Getaran (63 Hz)":
+                //         $kercep_mms = (10/63) * $kercep_mms;
+                //         break;
+                //     default:
+                //         // Tidak ada konversi untuk parameter lainnya
+                //         break;
+                // }
+
+                // Ekstrak nilai Hz dari parameter menggunakan regex
+                if (preg_match('/Getaran \(([0-9.]+) Hz\)/', $parameterValue, $matches)) {
+                    $hz = floatval($matches[1]);
+                    $kercep_mms = (10 / $hz) * $kercep_mms;
+                }
+
                 $kercep_mms = $kercep_mms < 0.1 ? '<0.1' : $kercep_mms;
                 $kercepT_mms = $kercepT_mms < 0.1 ? '<0.1' : $kercepT_mms;
                 $kercepP_mms = $kercepP_mms < 0.1 ? '<0.1' : $kercepP_mms;
                 $kercepB_mms = $kercepB_mms < 0.1 ? '<0.1' : $kercepB_mms;
 
-                $percep_ms2 = $percep_ms2 < 0.1 ? '<0.1' : $percep_ms2;
-                $percepT_ms2 = $percepT_ms2 < 0.1 ? '<0.1' : $percepT_ms2;
-                $percepP_ms2 = $percepP_ms2 < 0.1 ? '<0.1' : $percepP_ms2;
-                $percepB_ms2 = $percepB_ms2 < 0.1 ? '<0.1' : $percepB_ms2;
+                $percep_mms2 = $percep_mms2 < 0.1 ? '<0.1' : $percep_mms2;
+                $percepT_mms2 = $percepT_mms2 < 0.1 ? '<0.1' : $percepT_mms2;
+                $percepP_mms2 = $percepP_mms2 < 0.1 ? '<0.1' : $percepP_mms2;
+                $percepB_mms2 = $percepB_mms2 < 0.1 ? '<0.1' : $percepB_mms2;
+
+                
                 
 
                 if($kategori_3 == 13 || $kategori_3 == 14 || $kategori_3 == 15 || $kategori_3 == 16 || $kategori_3 == 17 || $kategori_3 == 18 || $kategori_3 == 19) {
@@ -296,19 +350,19 @@ class FdlGetaranController extends Controller
                         ], 401);
                     }
                     if($kategori_3 == 17) {
-                        if ($percepB_ms2) {
+                        if ($percepB_mms2) {
                             $hasil = json_encode([
-                                "Percepatan_Tangan" => $percepT_ms2,
-                                "Percepatan_Pinggang" => $percepP_ms2,
-                                "Percepatan_Betis" => $percepB_ms2,
+                                "Percepatan_Tangan" => $percepT_mms2,
+                                "Percepatan_Pinggang" => $percepP_mms2,
+                                "Percepatan_Betis" => $percepB_mms2,
                                 "Kecepatan_Tangan" => $kercepT_mms,
                                 "Kecepatan_Pinggang" => $kercepP_mms,
                                 "Kecepatan_Betis" => $kercepB_mms
                             ]);
                         } else {
                             $hasil = json_encode([
-                                "Percepatan_Tangan" => $percepT_ms2,
-                                "Percepatan_Pinggang" => $percepP_ms2,
+                                "Percepatan_Tangan" => $percepT_mms2,
+                                "Percepatan_Pinggang" => $percepP_mms2,
                                 "Kecepatan_Tangan" => $kercepT_mms,
                                 "Kecepatan_Pinggang" => $kercepP_mms
                             ]);
@@ -316,7 +370,7 @@ class FdlGetaranController extends Controller
                         
                     }else {
                         $hasil = json_encode([
-                            "Percepatan" => $percep_ms2,
+                            "Percepatan" => $percep_mms2,
                             "Kecepatan" => $kercep_mms
                         ]);
                     }
@@ -327,19 +381,19 @@ class FdlGetaranController extends Controller
                         ], 401);
                     }
 
-                    if ($percepB_ms2) {
+                    if ($percepB_mms2) {
                         $hasil = json_encode([
-                            "Percepatan_Tangan" => $percepT_ms2,
-                            "Percepatan_Pinggang" => $percepP_ms2,
-                            "Percepatan_Betis" => $percepB_ms2,
+                            "Percepatan_Tangan" => $percepT_mms2,
+                            "Percepatan_Pinggang" => $percepP_mms2,
+                            "Percepatan_Betis" => $percepB_mms2,
                             "Kecepatan_Tangan" => $kercepT_mms,
                             "Kecepatan_Pinggang" => $kercepP_mms,
                             "Kecepatan_Betis" => $kercepB_mms
                         ]);
                     } else {
                         $hasil = json_encode([
-                            "Percepatan_Tangan" => $percepT_ms2,
-                            "Percepatan_Pinggang" => $percepP_ms2,
+                            "Percepatan_Tangan" => $percepT_mms2,
+                            "Percepatan_Pinggang" => $percepP_mms2,
                             "Kecepatan_Tangan" => $kercepT_mms,
                             "Kecepatan_Pinggang" => $kercepP_mms
                         ]);

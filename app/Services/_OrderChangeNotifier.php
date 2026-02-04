@@ -4,7 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\View;
 
-use Mpdf\Mpdf as PDF;
+use App\Services\MpdfService as PDF;
 use Mpdf\HTMLParserMode;
 
 class OrderChangeNotifier

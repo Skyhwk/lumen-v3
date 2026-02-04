@@ -21,7 +21,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\PersiapanSampelHeader;
 use Carbon\Carbon;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Models\DataLapanganAir;
 use App\Models\DataLapanganKebisingan;
 use App\Models\DataLapanganKebisinganPersonal;
@@ -93,7 +93,10 @@ class BasOnlineController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("1", $myPrivileges);
+            $query =OrderDetail::query();
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -105,7 +108,7 @@ class BasOnlineController extends Controller
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true); // Pastikan plan aktif
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
@@ -113,6 +116,9 @@ class BasOnlineController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -168,6 +174,9 @@ class BasOnlineController extends Controller
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -302,7 +311,10 @@ class BasOnlineController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("1", $myPrivileges);
+            $query =OrderDetail::query();
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -314,7 +326,7 @@ class BasOnlineController extends Controller
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true); // Pastikan plan aktif
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
@@ -322,6 +334,9 @@ class BasOnlineController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -380,6 +395,9 @@ class BasOnlineController extends Controller
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -2235,7 +2253,7 @@ class BasOnlineController extends Controller
                         continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                     }
 
-                    if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)'){
+                    if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)'){
                         continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
                     }
 
@@ -2243,7 +2261,6 @@ class BasOnlineController extends Controller
                     $verified = $this->verifyStatus($sample->no_sample, $parameter);
                     
                     if (!$verified) {
-                        
                         $status = 'belum selesai';
                         break;
                     }

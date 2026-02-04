@@ -81,6 +81,16 @@ class WsValueUdara extends Sector
         return $this->belongsTo(Subkontrak::class, 'id_subkontrak', 'id');
     }
 
+    public function dustfall()
+    {
+        return $this->belongsTo(DustFallHeader::class, 'id_dustfall_header', 'id');
+    }
+
+    public function debuPersonal()
+    {
+        return $this->belongsTo(DebuPersonalHeader::class, 'id_debu_personal_header', 'id');
+    }
+
     public function getDataAnalyst()
     {
         $relations = [
@@ -96,6 +106,8 @@ class WsValueUdara extends Sector
             'pencahayaan',
             'swab',
             'subkontrak',
+            'dustfall',
+            'debuPersonal'
         ];
 
         foreach ($relations as $relation) {
@@ -109,6 +121,14 @@ class WsValueUdara extends Sector
 
     public function detailLingkunganKerja() {
         return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
+    }
+    
+    public function lapangan_getaran() {
+        return $this->belongsTo('App\Models\DataLapanganGetaran', 'no_sampel', 'no_sampel');
+    }
+    
+    public function lapangan_getaran_personal() {
+        return $this->belongsTo('App\Models\DataLapanganGetaranPersonal', 'no_sampel', 'no_sampel');
     }
     
 }

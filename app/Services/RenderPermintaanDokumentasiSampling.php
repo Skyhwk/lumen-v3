@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Mpdf\Mpdf;
+use Mpdf;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;

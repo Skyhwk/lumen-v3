@@ -10,7 +10,7 @@ use App\Models\QrDocument;
 use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 
 class RenderInvoice
 {
@@ -187,43 +187,43 @@ class RenderInvoice
             if ($dataHead->jabatan_pic != '')
                 $jab_pic = ' (' . $dataHead->jabatan_pic . ')';
 
-            $qr_img = '';
-            if ($dataHead->is_generate == 1) {
-                $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
-                $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
-                if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
-            }
+            // $qr_img = '';
+            // if ($dataHead->is_generate == 1) {
+            //     $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            //     $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            //     if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+            // }
 
-            $footer = array(
-                'odd' => array(
-                    'C' => array(
-                        'content' => 'Hal {PAGENO} dari {nbpg}',
-                        'font-size' => 6,
-                        'font-style' => 'I',
-                        'font-family' => 'serif',
-                        'color' => '#606060'
-                    ),
-                    'R' => array(
-                        'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
-                        'font-size' => 5,
-                        'font-style' => 'I',
-                        // 'font-style' => 'B',
-                        'font-family' => 'serif',
-                        'color' => '#000000'
-                    ),
-                    'L' => array(
-                        'content' => '' . $qr_img . '',
-                        'font-size' => 4,
-                        'font-style' => 'I',
-                        // 'font-style' => 'B',
-                        'font-family' => 'serif',
-                        'color' => '#000000'
-                    ),
-                    'line' => -1,
-                )
-            );
+            // $footer = array(
+            //     'odd' => array(
+            //         'C' => array(
+            //             'content' => 'Hal {PAGENO} dari {nbpg}',
+            //             'font-size' => 6,
+            //             'font-style' => 'I',
+            //             'font-family' => 'serif',
+            //             'color' => '#606060'
+            //         ),
+            //         'R' => array(
+            //             'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+            //             'font-size' => 5,
+            //             'font-style' => 'I',
+            //             // 'font-style' => 'B',
+            //             'font-family' => 'serif',
+            //             'color' => '#000000'
+            //         ),
+            //         'L' => array(
+            //             'content' => '' . $qr_img . '',
+            //             'font-size' => 4,
+            //             'font-style' => 'I',
+            //             // 'font-style' => 'B',
+            //             'font-family' => 'serif',
+            //             'color' => '#000000'
+            //         ),
+            //         'line' => -1,
+            //     )
+            // );
 
-            $pdf->setFooter($footer);
+            // $pdf->setFooter($footer);
 
             $trAlamat = '<tr>
                             <td style="width:35%;"><p style="font-size: 10px;"><u>Alamat Kantor :</u><br><span
@@ -1811,16 +1811,74 @@ class RenderInvoice
                     <tr>
                         <td style="padding-right:50px;">
                         </td>
+            ');
+
+            $qr_img = '';
+            $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            if ($qr) {
+                 if($nilai_tagihan > 4999999){
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+                 } else {
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
+                 }
+            }
+            if($nilai_tagihan > 4999999){
+                $pdf->writeHTML('
+                            <td width="25%" style="text-align:center;">
+                                <div style="float: right; text-align: center;">
+                                    <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br><br><br><br><br><br>
+                                    <span style="border-bottom: solid 1px #000; font-size:10px;"><b>' . $dataHead->nama_pj . '</b></span><br>
+                                    <span style="font-size:10px;">' . $dataHead->jabatan_pj . '</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                ');
+            } else {
+                $pdf->writeHTML('
                         <td width="25%" style="text-align:center;">
                             <div style="float: right; text-align: center;">
-                                <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br><br><br><br><br><br>
-                                <span style="border-bottom: solid 1px #000; font-size:10px;"><b>' . $dataHead->nama_pj . '</b></span><br>
-                                <span style="font-size:10px;">' . $dataHead->jabatan_pj . '</span>
+                                <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br>
+                                <span>' . $qr_img . '</span><br>
                             </div>
                         </td>
                     </tr>
                 </table>
             ');
+            }
+
+            $footer = array(
+                'odd' => array(
+                    'C' => array(
+                        'content' => 'Hal {PAGENO} dari {nbpg}',
+                        'font-size' => 6,
+                        'font-style' => 'I',
+                        'font-family' => 'serif',
+                        'color' => '#606060'
+                    ),
+                    'R' => array(
+                        'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                        'font-size' => 5,
+                        'font-style' => 'I',
+                        // 'font-style' => 'B',
+                        'font-family' => 'serif',
+                        'color' => '#000000'
+                    ),
+                    'L' => array(
+                        'content' =>  $nilai_tagihan > 4999999 ? '' . $qr_img . '' : '',
+                        'font-size' => 4,
+                        'font-style' => 'I',
+                        // 'font-style' => 'B',
+                        'font-family' => 'serif',
+                        'color' => '#000000'
+                    ),
+                    'line' => -1,
+                )
+            );
+
+            $pdf->setFooter($footer);
+
             $filePath = public_path('invoice/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
             return $fileName;
@@ -1885,43 +1943,43 @@ class RenderInvoice
             $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $dataHead->no_invoice) . '.pdf';
             $jab_pic = $customInvoice->data[0]->jabatan_pic;
 
-            $qr_img = '';
-            if ($dataHead->is_generate == 1) {
-                $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
-                $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
-                if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
-            }
+            // $qr_img = '';
+            // if ($dataHead->is_generate == 1) {
+            //     $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            //     $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            //     if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+            // }
 
-            $footer = array(
-                'odd' => array(
-                    'C' => array(
-                        'content' => 'Hal {PAGENO} dari {nbpg}',
-                        'font-size' => 6,
-                        'font-style' => 'I',
-                        'font-family' => 'serif',
-                        'color' => '#606060'
-                    ),
-                    'R' => array(
-                        'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
-                        'font-size' => 5,
-                        'font-style' => 'I',
-                        // 'font-style' => 'B',
-                        'font-family' => 'serif',
-                        'color' => '#000000'
-                    ),
-                    'L' => array(
-                        'content' => '' . $qr_img . '',
-                        'font-size' => 4,
-                        'font-style' => 'I',
-                        // 'font-style' => 'B',
-                        'font-family' => 'serif',
-                        'color' => '#000000'
-                    ),
-                    'line' => -1,
-                )
-            );
+            // $footer = array(
+            //     'odd' => array(
+            //         'C' => array(
+            //             'content' => 'Hal {PAGENO} dari {nbpg}',
+            //             'font-size' => 6,
+            //             'font-style' => 'I',
+            //             'font-family' => 'serif',
+            //             'color' => '#606060'
+            //         ),
+            //         'R' => array(
+            //             'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+            //             'font-size' => 5,
+            //             'font-style' => 'I',
+            //             // 'font-style' => 'B',
+            //             'font-family' => 'serif',
+            //             'color' => '#000000'
+            //         ),
+            //         'L' => array(
+            //             'content' => '' . $qr_img . '',
+            //             'font-size' => 4,
+            //             'font-style' => 'I',
+            //             // 'font-style' => 'B',
+            //             'font-family' => 'serif',
+            //             'color' => '#000000'
+            //         ),
+            //         'line' => -1,
+            //     )
+            // );
 
-            $pdf->setFooter($footer);
+            // $pdf->setFooter($footer);
 
             $trAlamat = '<tr>
                 <td style="width:35%;"><p style="font-size: 10px;"><u>Alamat Kantor :</u><br><span
@@ -2156,22 +2214,80 @@ class RenderInvoice
             $pdf->writeHTML('
                     </tbody>
                 </table>
-                        ');
+            ');
+
             $pdf->writeHTML('
-                        <table style="margin-top: 30px;" width="100%">
-                            <tr>
-                            <td style="padding-right:50px;">
-                            </td>
+                <table style="margin-top: 30px;" width="100%">
+                    <tr>
+                        <td style="padding-right:50px;">
+                        </td>
+            ');
+
+            $qr_img = '';
+            $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            if ($qr) {
+                 if($customInvoice->harga->nilai_tagihan > 4999999){
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+                 } else {
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
+                 }
+            }
+            if($customInvoice->harga->nilai_tagihan > 4999999){
+                $pdf->writeHTML('
                             <td width="25%" style="text-align:center;">
-                            <div style="float: right; text-align: center;">
-                            <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br><br><br><br><br><br>
-                            <span style="border-bottom: solid 1px #000; font-size:10px;"><b>' . $dataHead->nama_pj . '</b></span><br>
-                            <span style="font-size:10px;">' . $dataHead->jabatan_pj . '</span>
-                            </div>
+                                <div style="float: right; text-align: center;">
+                                    <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br><br><br><br><br><br>
+                                    <span style="border-bottom: solid 1px #000; font-size:10px;"><b>' . $dataHead->nama_pj . '</b></span><br>
+                                    <span style="font-size:10px;">' . $dataHead->jabatan_pj . '</span>
+                                </div>
                             </td>
-                            </tr>
-                            </table>
-                            ');
+                        </tr>
+                    </table>
+                ');
+            } else {
+                $pdf->writeHTML('
+                        <td width="25%" style="text-align:center;">
+                            <div style="float: right; text-align: center;">
+                                <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br>
+                                <span>' . $qr_img . '</span><br>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            ');
+            }
+
+            $footer = array(
+                'odd' => array(
+                    'C' => array(
+                        'content' => 'Hal {PAGENO} dari {nbpg}',
+                        'font-size' => 6,
+                        'font-style' => 'I',
+                        'font-family' => 'serif',
+                        'color' => '#606060'
+                    ),
+                    'R' => array(
+                        'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                        'font-size' => 5,
+                        'font-style' => 'I',
+                        // 'font-style' => 'B',
+                        'font-family' => 'serif',
+                        'color' => '#000000'
+                    ),
+                    'L' => array(
+                        'content' =>  $customInvoice->harga->nilai_tagihan > 4999999 ? '' . $qr_img . '' : '',
+                        'font-size' => 4,
+                        'font-style' => 'I',
+                        // 'font-style' => 'B',
+                        'font-family' => 'serif',
+                        'color' => '#000000'
+                    ),
+                    'line' => -1,
+                )
+            );
+
+            $pdf->setFooter($footer);
 
             $filePath = public_path('invoice/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);

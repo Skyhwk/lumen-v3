@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ForecastSP;
 use App\Services\GetBawahan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -74,6 +75,8 @@ class SummaryQSDController extends Controller
             $teamData['team_total_staff']         = array_sum($teamTotalStaff);
         }
 
+        [$forecastTotal, $forecastTotalPeriode] = $this->getForecastTotal($year, $type);
+
         return response()->json([
             'success'           => true,
             'type'              => $type,
@@ -81,6 +84,8 @@ class SummaryQSDController extends Controller
             'data'              => array_values($teamsData),
             'all_total_periode' => $allteam_total_periode,
             'all_total'         => array_sum($allteam_total_periode),
+            'forecast_total'    => $forecastTotal,
+            'forecast_total_periode' => $forecastTotalPeriode,
             'message'           => 'Data berhasil diproses!',
         ], 200);
     }
@@ -196,11 +201,11 @@ class SummaryQSDController extends Controller
         $query = DB::table('daily_qsd')
             ->select(
                 'sales_id',
-                DB::raw("MONTH(tanggal_sampling_min) as month_num"),
+                DB::raw("MONTH(tanggal_kelompok) as month_num"),
                 DB::raw('SUM(total_revenue) as total_revenue')
             )
             ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01'])
-            ->whereYear('tanggal_sampling_min', $tahun);
+            ->whereYear('tanggal_kelompok', $tahun);
 
         // Apply type filters
         switch ($type) {
@@ -241,7 +246,7 @@ class SummaryQSDController extends Controller
         }
 
         // OPTIMASI: Mapping bulan lebih efisien dengan array statis
-        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
         $result     = [];
 
         foreach ($data as $record) {
@@ -263,7 +268,7 @@ class SummaryQSDController extends Controller
     {
         return [
             'Jan' => 0, 'Feb' => 0, 'Mar' => 0, 'Apr' => 0,
-            'Mei' => 0, 'Jun' => 0, 'Jul' => 0, 'Agu' => 0,
+            'Mei' => 0, 'Jun' => 0, 'Jul' => 0, 'Agt' => 0,
             'Sep' => 0, 'Okt' => 0, 'Nov' => 0, 'Des' => 0
         ];
     }
@@ -300,5 +305,41 @@ class SummaryQSDController extends Controller
         }
 
         return $resignedMembers;
+    }
+
+    private function getForecastTotal($tahun, $type)
+    {
+        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun);
+
+        // Apply type filters
+        switch ($type) {
+            case 'contract':
+                $forecasts->where('status_quotation', 'kontrak');
+                break;
+
+            case 'new':
+                $forecasts->where('status_customer', 'new');
+                break;
+
+            default:
+                // By default, get all forecasts
+                break;
+        }
+
+        $forecasts = $forecasts->get();
+
+        $totalSummaryThisYear = 0;
+
+        $totalSummaryPerPeriode = $this->getEmptyOrder();
+
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+
+        foreach ($forecasts as $forecast) {
+            $indexBulan = $monthNames[intval(explode('-', $forecast->tanggal_sampling_min)[1])];
+            $totalSummaryPerPeriode[$indexBulan] += $forecast->revenue_forecast;
+            $totalSummaryThisYear += $forecast->revenue_forecast;
+        }
+
+        return [$totalSummaryThisYear, $totalSummaryPerPeriode];
     }
 }

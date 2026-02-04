@@ -129,4 +129,14 @@ class QuotationNonKontrak extends Sector
     {
         return $this->hasOne(LinkLhp::class, 'no_quotation', 'no_document');
     }
+
+    public function dailyQsd()
+    {
+        return $this->hasMany(DailyQsd::class, 'no_quotation', 'no_document');
+    }
+
+    public function jadwal()
+    {
+        return $this->hasMany(Jadwal::class, 'no_quotation', 'no_document')->where('is_active', true);
+    }
 }

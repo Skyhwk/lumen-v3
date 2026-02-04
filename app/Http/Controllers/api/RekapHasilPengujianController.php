@@ -30,6 +30,29 @@ class RekapHasilPengujianController extends Controller
         ->make(true);
     }
 
+    public function updateKeterangan(Request $request)
+    {
+        try {
+            $linkLhp = LinkLhp::findOrFail($request->id);
+            $linkLhp->update([
+                'keterangan' => $request->keterangan
+            ]);
+
+            return response()->json([
+                'message' => 'Keterangan berhasil diupdate'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => $th->getMessage()
+            ], 500);
+        }
+
+    }
+
+
+
     public function reject(Request $request) 
     {
         $linkLhp = LinkLhp::find($request->id);

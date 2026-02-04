@@ -1,22 +1,21 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
-use Illuminate\Http\Request;
-use App\Models\SamplingPlan;
+use App\Http\Controllers\Controller;
+use App\Jobs\GenerateDocumentJadwalJob;
+use App\Models\Jadwal;
+use App\Models\JobTask;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
-use App\Models\JobTask;
-use App\Models\Jadwal;
+use App\Models\SamplingPlan;
+use App\Services\EmailJadwal;
+use App\Services\GenerateQrDocument;
 use App\Services\JadwalServices;
 use App\Services\Notification;
-use App\Services\EmailJadwal;
-use App\Jobs\RenderAndEmailJadwal;
-use App\Http\Controllers\Controller;
-use Yajra\Datatables\Datatables;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Yajra\Datatables\Datatables;
 
 class ValidatorSPController extends Controller
 {
@@ -37,7 +36,7 @@ class ValidatorSPController extends Controller
                     )
                         ->groupBy('id_sampling', 'no_quotation', 'kategori', 'updated_by', 'updated_at', 'created_by', 'created_at')
                         ->orderByRaw('COALESCE(updated_at, created_at) DESC');
-                }
+                },
             ])
             ->where('is_active', true)
             ->where('status', 1)
@@ -97,8 +96,8 @@ class ValidatorSPController extends Controller
         try {
             $cek = SamplingPlan::where('id', $request->sampling_id)->first();
 
-            if (!is_null($cek)) {
-                $cek->status = 0;
+            if (! is_null($cek)) {
+                $cek->status        = 0;
                 $cek->status_jadwal = 'cancel'; /* ['booking','fixed','jadwal','cancel',null] */
                 $cek->save();
                 // step cancel jadwal
@@ -113,165 +112,121 @@ class ValidatorSPController extends Controller
             DB::commit();
             return response()->json([
                 'message' => 'Jadwal has been rejected!',
-                'status' => '200'
+                'status'  => '200',
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => '500'
+                'status'  => '500',
             ], 500);
         }
     }
 
     public function approveJadwal(Request $request)
     {
-        $timestamp = Carbon::now()->format('Y-m-d H:i:s');
-        $type = explode('/', $request->no_document)[1];
+
+        $timestamp    = Carbon::now()->format('Y-m-d H:i:s');
+        $type         = explode('/', $request->no_document)[1];
+        $chekNotice   = null;
+        $mailfilename = null;
+
         DB::beginTransaction();
         try {
+            $cek = SamplingPlan::where('id', $request->sampling_id)->first();
             if ($type == 'QTC') {
-                $chekNotice = QuotationKontrakH::where('no_document', $request->no_document)->where('flag_status', 'rejected')->first();
-                if ($chekNotice) {
+                $chekNotice = QuotationKontrakH::where('no_document', $request->no_document)->first();
+
+                if (! $chekNotice) {
+                    throw new \Exception('Data quotation tidak ditemukan');
+                }
+
+                if ($chekNotice->flag_status === 'rejected') {
                     return response()->json([
-                        'message' => 'No Qt ' . $request->no_document . ' sedang di reject,menunggu dari sales!',
-                        'status' => '401'
+                        'message' => 'No Qt ' . $request->no_document . ' sedang di reject, menunggu dari sales!',
+                        'status'  => 401,
                     ], 401);
                 }
 
-                $cek = SamplingPlan::where('id', $request->sampling_id)->first();
-                $cek->is_approved = 1;
-                $cek->approved_by = $this->karyawan;
-                $cek->approved_at = $timestamp;
-                $cek->status_jadwal = 'jadwal'; /* ['booking','fixed','jadwal','cancel',null] */
+                $cek->is_approved   = 1;
+                $cek->approved_by   = $this->karyawan;
+                $cek->approved_at   = $timestamp;
+                $cek->status_jadwal = 'jadwal';
                 $cek->save();
 
-                $checkJadwal = JadwalServices::on('no_quotation', $request->no_document)->countJadwalApproved();
+                $checkJadwal    = JadwalServices::on('no_quotation', $request->no_document)->countJadwalApproved();
                 $chekQoutations = JadwalServices::on('no_quotation', $request->no_document)
                     ->on('quotation_id', $request->quotation_id)->countQuotation();
 
-                if ($chekQoutations == $checkJadwal) {//$request->no_document
-                    $data = Jadwal::select([
-                        'periode',
-                        DB::raw("GROUP_CONCAT(DISTINCT tanggal ORDER BY tanggal ASC) as tanggal"),
-                        DB::raw("MIN(jam_mulai) as jam_mulai"),
-                        DB::raw("MAX(jam_selesai) as jam_selesai"),
-                        DB::raw("GROUP_CONCAT(DISTINCT sampler) as sampler")
-                    ])
-                    ->where('no_quotation', $request->no_document)
-                    ->where('is_active', true)
-                    ->groupBy('periode')
-                    ->get();
+                if ($chekQoutations == $checkJadwal) {
+                    (new GenerateQrDocument())->insert('jadwal_kontrak', $chekNotice, $this->karyawan);
 
-                    $value = [];
-                    if($data->isNotEmpty()){
-                        foreach ($data as $row) {
-                            $periode = $row->periode; // contoh: '2025-03'
-                            $value[$periode] = [
-                                'tanggal' => array_unique(explode(',', $row->tanggal)),
-                                'jam_mulai' => $row->jam_mulai,
-                                'jam_selesai' => $row->jam_selesai,
-                                'sampler' => array_unique(explode(',', $row->sampler)),
-                            ];
-                        }
-                    }
-                    ksort($value);
-                    JobTask::insert([
-                        'job' => 'RenderAndEmailJadwal',
-                        'status' => 'processing',
-                        'no_document' => $request->no_document,
-                        'timestamp' => $timestamp
-                    ]);
-                    $dataRequest = (object) [];
-                    foreach ($request->all() as $key => $val) {
-                        $dataRequest->$key = $val;
-                    }
-                    $dataRequest->karyawan = $this->karyawan;
-                    $dataRequest->karyawan_id = $this->user_id;
-                    $dataRequest->timestamp = $timestamp;
-
-                    $job = new RenderAndEmailJadwal($dataRequest, $value);
+                    $job = new GenerateDocumentJadwalJob('QTC', $chekNotice->id, $this->karyawan);
                     $this->dispatch($job);
 
-                    // $sales = JadwalServices::on('no_quotation', $request->no_document)->getQuotation();
-                    // $message = "Jadwal No Quotation $request->no_document Sudah Di Aprrove & Melakukan Pengriman Email Ke Client";
-                    // Notification::where('id', $sales->sales_id)->title('Recap_QT')->message($message)->url('url')->send();
-                    DB::commit();
-                    return response()->json([
-                        'message' => 'Jadwal has been successfully sent!',
-                        'status' => '200'
-                    ], 200);
-                } else {
-                    $sales = JadwalServices::on('no_quotation', $cek->no_quotation)->getQuotation();
-                    $message = "No Sampling $cek->no_document/$cek->no_quotation sedang melakukan approve dari $checkJadwal ke $chekQoutations jumlah kontrak";
-                    Notification::where('id', $sales->sales_id)->title('Jadwal Approved')->message($message)->url('/sampling-plan')->send();
+                    JobTask::insert([
+                        'job'         => 'GenerateDocumentJadwal',
+                        'status'      => 'processing',
+                        'no_document' => $chekNotice->no_document,
+                        'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
 
-                    DB::commit();
-                    return response()->json([
+                } else {
+                    $response = response()->json([
                         'message' => 'Jadwal has been saved! ' . $chekQoutations . '/' . ($checkJadwal),
-                        'status' => '200'
+                        'status'  => '200',
                     ], 200);
                 }
+
             } else if ($type == 'QT') { //else kondisi QT
-                $cek = SamplingPlan::where('id', $request->sampling_id)->first();
-                $cek->is_approved = 1;
-                $cek->approved_by = $this->karyawan;
-                $cek->approved_at = $timestamp;
+                $chekNotice = QuotationNonKontrak::where('no_document', $request->no_document)->first();
+
+                if (! $chekNotice) {
+                    throw new \Exception('Data quotation tidak ditemukan');
+                }
+
+                if ($chekNotice->flag_status === 'rejected') {
+                    return response()->json([
+                        'message' => 'No Qt ' . $request->no_document . ' sedang di reject, menunggu dari sales!',
+                        'status'  => 401,
+                    ], 401);
+                }
+
+                // GENERATE QR
+                (new GenerateQrDocument())->insert('jadwal_non_kontrak', $chekNotice, $this->karyawan);
+
+                // dd( $mailfilename);
+                $cek->is_approved   = 1;
+                $cek->approved_by   = $this->karyawan;
+                $cek->approved_at   = $timestamp;
                 $cek->status_jadwal = 'jadwal'; /* ['booking','fixed','jadwal','cancel',null] */
                 $cek->save();
 
-                $data = Jadwal::select(
-                    DB::raw("GROUP_CONCAT(DISTINCT(tanggal) SEPARATOR ',') as tanggal"),
-                    DB::raw("MIN(jam_mulai) as jam_mulai"),
-                    DB::raw("MAX(jam_selesai) as jam_selesai"),
-                    DB::raw("GROUP_CONCAT(DISTINCT(sampler) SEPARATOR ',') as sampler"),
-                )
-                    ->where('no_quotation', $request->no_document)
-                    ->where('is_active', true)
-                    ->groupBy('no_quotation')
-                    ->first();
-
-                $value = [];
-                if ($data != null) {
-                    $value['tanggal'] = \explode(',', $data->tanggal);
-                    $value['jam_mulai'] = $data->jam_mulai;
-                    $value['jam_selesai'] = $data->jam_selesai;
-                    $value['sampler'] = \explode(',', $data->sampler);
-                }
-
-                JobTask::insert([
-                    'job' => 'RenderAndEmailJadwal',
-                    'status' => 'processing',
-                    'no_document' => $request->no_document,
-                    'timestamp' => $timestamp
-                ]);
-
-                $dataRequest = (object) [];
-                foreach ($request->all() as $key => $val) {
-                    $dataRequest->$key = $val;
-                }
-                $dataRequest->karyawan = $this->karyawan;
-                $dataRequest->karyawan_id = $this->user_id;
-                $dataRequest->timestamp = $timestamp;
-
-                $job = new RenderAndEmailJadwal($dataRequest, $value);
+                $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan);
                 $this->dispatch($job);
 
-                $sales = JadwalServices::on('no_quotation', $cek->no_quotation)->getQuotation();
-                $message = "No Sampling $request->no_document sedang melakukan pengriman email ke client";
-                Notification::where('id', $sales->sales_id)->title('Jadwal Approved')->message($message)->url('/sampling-plan')->send();
+                JobTask::insert([
+                    'job'         => 'GenerateDocumentJadwal',
+                    'status'      => 'processing',
+                    'no_document' => $chekNotice->no_document,
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
 
-                DB::commit();
-                return response()->json([
-                    'message' => 'Jadwal has been Save.! and Send Email',
-                    'status' => '200'
-                ], 200);
             }
+
+            DB::commit();
+
+            return $response ?? response()->json([
+                'message' => 'Jadwal telah di approve!',
+                'status'  => '200',
+            ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => '500'
+                'status'  => '500',
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
@@ -291,6 +246,17 @@ class ValidatorSPController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage(), 'status' => '500'], 500);
         }
+    }
+
+    private function encrypt($data)
+    {
+        $ENCRYPTION_KEY       = 'intilab_jaya';
+        $ENCRYPTION_ALGORITHM = 'AES-256-CBC';
+        $EncryptionKey        = base64_decode($ENCRYPTION_KEY);
+        $InitializationVector = openssl_random_pseudo_bytes(openssl_cipher_iv_length($ENCRYPTION_ALGORITHM));
+        $EncryptedText        = openssl_encrypt($data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
+        $return               = base64_encode($EncryptedText . '::' . $InitializationVector);
+        return $return;
     }
 
 }
