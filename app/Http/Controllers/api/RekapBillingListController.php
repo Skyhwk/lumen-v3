@@ -90,7 +90,8 @@ class RekapBillingListController extends Controller
                 'master_karyawan.nama_lengkap as sales_penanggung_jawab'
             )
             ->leftJoin('master_karyawan', 'master_karyawan.id', '=', 'billing_list_detail.sales_id')
-            ->where('billing_header_id', $request->id_header);
+            ->where('billing_header_id', $request->id_header)
+            ->orderByRaw('(billing_list_detail.nilai_tagihan - billing_list_detail.terbayar) DESC');
         $page = $request->start > 29 ? "lanjut" : "awal";
 
         return DataTables::of($data)
@@ -111,7 +112,10 @@ class RekapBillingListController extends Controller
                 'page'               => function () use ($page) {
                     return $page;
                 },
-            ])->make(true);
+            ])->orderColumn('nilai_piutang', function ($query, $order) {
+                $query->orderByRaw('(billing_list_detail.nilai_tagihan - billing_list_detail.terbayar) ' . $order);
+            })
+            ->make(true);
 
     }
 
@@ -487,54 +491,184 @@ class RekapBillingListController extends Controller
         }
     }
 
+    // public function sendEmail(Request $request)
+    // {
+    //     dd($request->all());
+    //     function normalizeEmails($input)
+    //     {
+    //         if (empty($input)) return [];
+
+    //         if (is_array($input)) {
+    //             $input = implode(',', $input);
+    //         }
+
+    //         return array_filter(array_map('trim', explode(',', $input)));
+    //     }
+
+    //     $toList  = normalizeEmails($request->to);
+    //     $ccList  = normalizeEmails($request->cc);
+    //     $bccList = normalizeEmails($request->bcc);
+    //     $results = [];
+
+    //     foreach ($toList as $recipient) {
+    //         // Pastikan hanya mengirim jika string recipient valid
+    //         if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+    //             $email = SendEmail::where('to', $recipient)
+    //                 ->where('subject', $request->subject)
+    //                 ->where('body', $request->content)
+    //                 ->where('cc', $ccList)
+    //                 ->where('bcc', $bccList)
+    //                 // ->where('attachment', $request->attachments)
+    //                 ->where('karyawan', $this->karyawan)
+    //                 ->fromFinance()
+    //                 ->send();
+                    
+    //             $results[] = [
+    //                 'recipient' => $recipient,
+    //                 'status' => $email ? 'Success' : 'Failed'
+    //             ];
+    //         } else {
+    //             $results[] = [
+    //                 'recipient' => $recipient,
+    //                 'status' => 'Invalid Email Format'
+    //             ];
+    //         }
+    //     }
+
+    //     return response()->json([
+    //         'success' => true,
+    //         'message' => 'Proses pengiriman email berhasil.',
+    //         'details' => $results
+    //     ]);
+    // }
+
     public function sendEmail(Request $request)
     {
-        function normalizeEmails($input)
-        {
-            if (empty($input)) return [];
-
-            if (is_array($input)) {
-                $input = implode(',', $input);
+        try {
+            function normalizeEmails($input)
+            {
+                if (empty($input)) return [];
+                if (is_array($input)) {
+                    $input = implode(',', $input);
+                }
+                return array_filter(array_map('trim', explode(',', $input)));
             }
-
-            return array_filter(array_map('trim', explode(',', $input)));
-        }
-
-        $toList  = normalizeEmails($request->to);
-        $ccList  = normalizeEmails($request->cc);
-        $bccList = normalizeEmails($request->bcc);
-        $results = [];
-
-        foreach ($toList as $recipient) {
-            // Pastikan hanya mengirim jika string recipient valid
-            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
-                $email = SendEmail::where('to', $recipient)
-                    ->where('subject', $request->subject)
-                    ->where('body', $request->content)
-                    ->where('cc', $ccList)
-                    ->where('bcc', $bccList)
-                    // ->where('attachment', $request->attachments)
-                    ->where('karyawan', $this->karyawan)
-                    ->fromFinance()
-                    ->send();
+            
+            $toList  = normalizeEmails($request->to);
+            $ccList  = normalizeEmails($request->cc);
+            $bccList = normalizeEmails($request->bcc);
+            
+            // Siapkan attachments untuk PHPMailer
+            $attachmentsForEmail = [];
+            
+            if ($request->has('attachments') && !empty($request->attachments)) {
+                // Buat folder temp di public jika belum ada
+                $publicTempDir = public_path('temp/email-attachments');
+                if (!file_exists($publicTempDir)) {
+                    mkdir($publicTempDir, 0777, true);
+                }
+                
+                foreach ($request->attachments as $attachment) {
+                    // Validasi struktur data
+                    if (!isset($attachment['data']) || !isset($attachment['name'])) {
+                        \Log::warning('Attachment missing data or name');
+                        continue;
+                    }
                     
-                $results[] = [
-                    'recipient' => $recipient,
-                    'status' => $email ? 'Success' : 'Failed'
-                ];
-            } else {
-                $results[] = [
-                    'recipient' => $recipient,
-                    'status' => 'Invalid Email Format'
-                ];
+                    $fileData = $attachment['data'];
+                    
+                    if (preg_match('/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,/', $fileData, $matches)) {
+                        $mimeType = $matches[1];
+                        $base64Content = substr($fileData, strpos($fileData, ',') + 1);
+                        $decodedFile = base64_decode($base64Content);
+                        
+                        // Validasi decoded file tidak kosong
+                        if (empty($decodedFile)) {
+                            \Log::warning('Failed to decode attachment: ' . $attachment['name']);
+                            continue;
+                        }
+                        
+                        // Sanitize filename untuk keamanan
+                        $safeFileName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $attachment['name']);
+                        
+                        // Unique filename tanpa timestamp (file tidak akan dihapus otomatis)
+                        $uniqueFileName = uniqid() . '_' . $safeFileName;
+                        
+                        // Simpan ke public folder
+                        $publicPath = $publicTempDir . '/' . $uniqueFileName;
+                        
+                        // Cek apakah berhasil menyimpan file
+                        $writeResult = file_put_contents($publicPath, $decodedFile);
+                        if ($writeResult === false) {
+                            \Log::error('Failed to save temporary file: ' . $publicPath);
+                            continue;
+                        }
+                        
+                        // Path relatif dari public folder untuk SendEmail service
+                        $relativePath = 'temp/email-attachments/' . $uniqueFileName;
+                        
+                        $attachmentsForEmail[] = [
+                            'path' => $relativePath,
+                            'name' => $safeFileName
+                        ];
+                        
+                        \Log::info('Attachment saved: ' . $uniqueFileName);
+                    }
+                }
             }
+            
+            $results = [];
+            
+            foreach ($toList as $recipient) {
+                if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                    try {
+                        $email = SendEmail::where('to', $recipient)
+                            ->where('subject', $request->subject)
+                            ->where('body', $request->content)
+                            ->where('cc', $ccList)
+                            ->where('bcc', $bccList)
+                            ->where('attachment', $attachmentsForEmail)
+                            ->where('karyawan', $this->karyawan)
+                            ->fromFinance()
+                            ->send();
+                            
+                        $results[] = [
+                            'recipient' => $recipient,
+                            'status' => $email ? 'Success' : 'Failed',
+                            'attachments_count' => count($attachmentsForEmail)
+                        ];
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to send email to ' . $recipient . ': ' . $e->getMessage());
+                        $results[] = [
+                            'recipient' => $recipient,
+                            'status' => 'Failed',
+                            'error' => $e->getMessage()
+                        ];
+                    }
+                } else {
+                    $results[] = [
+                        'recipient' => $recipient,
+                        'status' => 'Invalid Email Format'
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Proses pengiriman email berhasil.',
+                'details' => $results,
+                'total_recipients' => count($results),
+                'total_attachments' => count($attachmentsForEmail)
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error sending email: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Terjadi kesalahan saat mengirim email: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Proses pengiriman email berhasil.',
-            'details' => $results
-        ]);
     }
 
     protected function tanggalInggris($tanggal)
