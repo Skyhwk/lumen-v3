@@ -582,6 +582,15 @@ class LemburController extends Controller
                 ->message('Lembur telah dibuat' . ' Oleh ' . $this->karyawan)
                 ->url('/form-lembur')
                 ->send();
+            
+            if($this->grade !== 'MANAGER'){
+                $atasan = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                Notification::where('id', $atasan)
+                ->title('Lembur divisi ' . $this->department . ' Menunggu Persetujuan!')
+                ->message('Mohon approve sebelum jam 4 sore')
+                ->url('/form-lembur')
+                ->send();
+            }
 
             $users = collect($request->data)
                 ->filter(fn($id) => (int) $id !== (int) $this->user_id)
