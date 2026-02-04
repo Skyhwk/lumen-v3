@@ -57,22 +57,38 @@
         </thead>
         <tbody>
             @php $no = 1; @endphp
+
             @foreach ($data as $divisi)
                 <tr class="divisi-row">
                     <td colspan="6">({{ $divisi['kode_divisi'] }}) {{ $divisi['nama_divisi'] }}</td>
                 </tr>
-                @foreach ($divisi['detail'] as $row)
-                    <tr>
-                        <td style="text-align: center;">{{ $no++ }}</td>
-                        <td style="text-align: center;">{{ $row['karyawan']['nik_karyawan'] ?? '-' }}</td>
-                        <td>{{ $row['karyawan']['nama_lengkap'] ?? '-' }}</td>
-                        <td style="text-align: center;">{{ $row['jam_mulai'] }}</td>
-                        <td style="text-align: center;">{{ $row['jam_selesai'] }}</td>
-                        <td>{{ $row['keterangan'] }}</td>
-                    </tr>
+
+                @php
+                    $grouped = collect($divisi['detail'])->groupBy(function ($item) {
+                        return $item['keterangan'] ?? '-';
+                    });
+                @endphp
+
+                @foreach ($grouped as $keterangan => $rows)
+                    @foreach ($rows as $i => $row)
+                        <tr>
+                            <td style="text-align:center">{{ $no++ }}</td>
+                            <td style="text-align:center">{{ $row['karyawan']['nik_karyawan'] ?? '-' }}</td>
+                            <td>{{ $row['karyawan']['nama_lengkap'] ?? '-' }}</td>
+                            <td style="text-align:center">{{ $row['jam_mulai'] }}</td>
+                            <td style="text-align:center">{{ $row['jam_selesai'] }}</td>
+
+                            @if ($i === 0)
+                                <td rowspan="{{ count($rows) }}">
+                                    {{ $keterangan }}
+                                </td>
+                            @endif
+                        </tr>
+                    @endforeach
                 @endforeach
             @endforeach
         </tbody>
+
     </table>
 </body>
 
