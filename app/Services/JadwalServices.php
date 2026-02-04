@@ -8,6 +8,7 @@ use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Models\MasterSubKategori;
 use App\Models\PersiapanSampelHeader;
+use App\Models\PersiapanSampelDetail;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
@@ -737,7 +738,7 @@ class JadwalServices
                             "samplerOld" => $psh->sampler_jadwal,
                             "samplerNew" => $newSamplerString
                         ];
-                        $dirtyPersiapanBoolean = $this->chekDirtyPersiapan($dataParsing);
+                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
                         if($dirtyPersiapanBoolean){
                             if($psh->tanggal_sampling != $dataUpdate->tanggal){
                                 $psh->is_active =false;
@@ -1108,8 +1109,14 @@ class JadwalServices
                             "samplerOld" => $psh->sampler_jadwal,
                             "samplerNew" => $newSamplers
                         ];
-                        $dirtyPersiapanBoolean = $this->chekDirtyPersiapan($dataParsing);
-                        dd($dirtyPersiapanBoolean);
+                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
+                        if($dirtyPersiapanBoolean){
+                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
+                                $psh->is_active =false;
+                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
+                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
+                            }
+                        }
                         // E. Eksekusi Simpan
                         Log::info('Debug Dirty Check', [
                             'no_quotation' => $dataUpdate->no_quotation,
@@ -1729,7 +1736,7 @@ class JadwalServices
         }
     }
 
-    private function chekDirtyPersiapan(array $dataParse) : bool
+    private function checkIsIdentical(array $dataParse) : bool
     {
         
         $oldArray = $dataParse['nosampelOld'] ?? [];
