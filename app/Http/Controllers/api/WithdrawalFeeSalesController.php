@@ -41,7 +41,7 @@ class WithdrawalFeeSalesController extends Controller
         $mutasiFeeSales = new MutasiFeeSales();
         $mutasiFeeSales->sales_id = $withdrawalFeeSales->sales_id;
         $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
-        $mutasiFeeSales->mutation_type = 'Kredit';
+        $mutasiFeeSales->mutation_type = 'Debit';
         $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
         $mutasiFeeSales->description = 'Withdrawal Approved by Finance';
         $mutasiFeeSales->status = 'Done';
@@ -66,7 +66,7 @@ class WithdrawalFeeSalesController extends Controller
         $mutasiFeeSales = new MutasiFeeSales();
         $mutasiFeeSales->sales_id = $withdrawalFeeSales->sales_id;
         $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
-        $mutasiFeeSales->mutation_type = 'Debit';
+        $mutasiFeeSales->mutation_type = 'Kredit';
         $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
         $mutasiFeeSales->description = 'Withdrawal Rejected by Finance, Balance Restored';
         $mutasiFeeSales->status = 'Done';
