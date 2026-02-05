@@ -736,15 +736,8 @@ class GenerateInvoiceController extends Controller
                     'details' => json_encode($request->data),
                     'ppn' => data_get($request->harga, 'ppn', 0),
                     'pph' => data_get($request->harga, 'pph', 0),
-                    'total' => data_get($request->harga, 'total', 0),
                     'diskon' => data_get($request->harga, 'diskon', 0),
                     'sub_total' => data_get($request->harga, 'sub_total', 0),
-                    'total_pph' => data_get($request->harga, 'total_pph', 0),
-                    'total_ppn' => data_get($request->harga, 'total_ppn', 0),
-                    'total_harga' => data_get($request->harga, 'total_harga', 0),
-                    'sisa_tagihan' => data_get($request->harga, 'sisa_tagihan', 0),
-                    'total_custom' => data_get($request->harga, 'total_custom', 0),
-                    'total_diskon' => data_get($request->harga, 'total_diskon', 0),
                     'nilai_tagihan' => data_get($request->harga, 'nilai_tagihan', 0),
                     'total_tagihan' => data_get($request->harga, 'total_tagihan', 0),
 
@@ -764,15 +757,8 @@ class GenerateInvoiceController extends Controller
                     // numbers
                     'ppn' => (float) data_get($request->harga, 'ppn', 0),
                     'pph' => (float) data_get($request->harga, 'pph', 0),
-                    'total' => (float) data_get($request->harga, 'total', 0),
                     'diskon' => (float) data_get($request->harga, 'diskon', 0),
                     'sub_total' => (float) data_get($request->harga, 'sub_total', 0),
-                    'total_pph' => (float) data_get($request->harga, 'total_pph', 0),
-                    'total_ppn' => (float) data_get($request->harga, 'total_ppn', 0),
-                    'total_harga' => (float) data_get($request->harga, 'total_harga', 0),
-                    'sisa_tagihan' => (float) data_get($request->harga, 'sisa_tagihan', 0),
-                    'total_custom' => (float) data_get($request->harga, 'total_custom', 0),
-                    'total_diskon' => (float) data_get($request->harga, 'total_diskon', 0),
                     'nilai_tagihan' => (float) data_get($request->harga, 'nilai_tagihan', 0),
                     'total_tagihan' => (float) data_get($request->harga, 'total_tagihan', 0),
                 ]);
@@ -782,10 +768,17 @@ class GenerateInvoiceController extends Controller
                 'is_custom' => true,
                 'updated_at' => Carbon::now(),
                 'updated_by' => $this->karyawan,
-                'nilai_tagihan' => data_get($request->harga, 'nilai_tagihan', 0),
-                'total_tagihan' => data_get($request->harga, 'total_tagihan', 0),
-                'ppn' => data_get($request->harga, 'ppn', 0),
+                'nilai_tagihan' => 0,
+                'total_tagihan' => 0,
+                'ppn' => 0,
             ]);
+            $update = Invoice::where('no_invoice', $request->no_invoice)->first();
+
+            $update->nilai_tagihan = data_get($request->harga, 'nilai_tagihan', 0);
+            $update->total_tagihan = data_get($request->harga, 'total_tagihan', 0);
+            $update->ppn = data_get($request->harga, 'ppn', 0);
+
+            $update->save();
             // $filename = \str_replace("/", "_", $request->no_invoice);
             //     $path = public_path() . "/qr_documents/" . $filename . '.svg';
             //     $link = 'https://www.intilab.com/validation/';
@@ -904,6 +897,117 @@ class GenerateInvoiceController extends Controller
             return response()->json([
                 'error' => 'Terjadi kesalahan server',
                 'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function convertCustom()
+    {
+        $invoices = Invoice::where('is_custom', true)
+            ->where('is_active', true)
+            ->whereNotNull('custom_invoice')
+            ->where('custom_invoice', '!=', 'null')
+            ->pluck('no_invoice')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $CustomInvoices = [];
+
+        try {
+            foreach ($invoices as $invoiceNo) {
+                $inv = Invoice::where('no_invoice', $invoiceNo)->get();
+                $first = $inv->first();
+
+                if (!$first || empty($first->custom_invoice) || $first->custom_invoice === 'null') {
+                    continue;
+                }
+
+                $custom = json_decode($first->custom_invoice); // object
+                $harga  = $custom->harga ?? (object) [];
+                $details = $custom->data ?? [];
+
+                $totalTagihan = (isset($harga->total_tagihan) && $harga->total_tagihan !== '')
+                    ? (int) $harga->total_tagihan
+                    : (
+                        (int) ($harga->total_custom ?? 0)
+                        + (int) ($harga->total_ppn ?? 0)
+                        - (int) ($harga->total_pph ?? 0)
+                        - (int) ($harga->total_diskon ?? 0)
+                    );
+
+                $newPpn = (int) ($harga->total_ppn ?? $inv->sum('ppn') ?? 0);
+                $newPph = (int) ($harga->total_pph ?? $inv->sum('pph') ?? 0);
+                $newNilaiTagihan = (int) ($harga->nilai_tagihan ?? 0);
+
+                $CustomInvoices[] = [
+                    'no_invoice' => $first->no_invoice,
+                    'details' => json_encode($details),
+                    'ppn' => $newPpn,
+                    'pph' => $newPph,
+                    'old_ppn' => json_encode($inv->pluck('ppn')->toArray()),
+                    'diskon' => (int) ($harga->total_diskon ?? 0),
+                    'sub_total' => (int) ($harga->total_custom ?? 0),
+                    'total_tagihan' => $totalTagihan,
+                    'nilai_tagihan' => $newNilaiTagihan,
+                    'old_total_tagihan' => json_encode($inv->pluck('total_tagihan')->toArray()),
+                    'old_nilai_tagihan' => json_encode($inv->pluck('nilai_tagihan')->toArray()),
+                ];
+
+                // zero-kan semua row invoice yang sama
+                Invoice::where('no_invoice', $invoiceNo)->update([
+                    'ppn' => 0,
+                    'total_tagihan' => 0,
+                    'nilai_tagihan' => 0,
+                ]);
+
+                // set nilai baru ke row "first" (row utama)
+                $update = Invoice::where('no_invoice', $invoiceNo)->first();
+                $update->ppn = $newPpn;
+                $update->total_tagihan = $totalTagihan;
+                $update->nilai_tagihan = $newNilaiTagihan;
+
+                $update->save();
+            }
+
+            if (!empty($CustomInvoices)) {
+                CustomInvoice::insert($CustomInvoices);
+            }
+
+            return response()->json(['success' => true, 'count' => count($CustomInvoices)]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    public function rollbackConvert()
+    {
+        try {
+            $invoices = Invoice::where('is_custom', true)
+                ->where('is_active', true)
+                ->whereNotNull('custom_invoice')
+                ->where('custom_invoice', '!=', 'null')
+                ->pluck('no_invoice')
+                ->unique()
+                ->values()
+                ->toArray();
+            foreach ($invoices as $invoiceNo) {
+                $request = new Request([
+                    'no_invoice' => $invoiceNo,
+                ]);
+
+                $this->rollbackCustom($request);
+            }
+
+            Invoice::whereIn('no_invoice', $invoices)->update('is_custom', true);
+            return response()->json(['success' => true]);
+        } catch (\Throwable $th) {  
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $th->getMessage()
             ], 500);
         }
     }
