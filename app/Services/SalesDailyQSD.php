@@ -301,7 +301,7 @@ class SalesDailyQSD
                     - COALESCE(rq.total_ppn,0)
                 ) AS total_revenue_non_kontrak,
 
-                oh.tanggal_order AS tanggal_sampling_min
+                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min
             ');
     }
 
@@ -309,6 +309,7 @@ class SalesDailyQSD
     {
         return self::baseNonPengujianQuery($arrayYears)
             ->join('request_quotation_kontrak_H as rq', 'oh.no_document', '=', 'rq.no_document')
+            ->join('request_quotation_kontrak_D as rqkd', 'rq.id', '=', 'rqkd.id_request_quotation_kontrak_H')
             ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
             ->selectRaw('
                 oh.no_order,
@@ -317,7 +318,7 @@ class SalesDailyQSD
                 oh.nama_perusahaan,
                 oh.konsultan,
                 "Non Pengujian" AS status_sampling,
-                NULL AS periode,
+                rqkd.periode_kontrak AS periode,
                 "C" AS kontrak,
 
                 rq.sales_id AS sales_id_kontrak,
@@ -326,15 +327,15 @@ class SalesDailyQSD
                 NULL AS sales_id_non_kontrak,
                 NULL AS sales_nama_non_kontrak,
 
-                rq.total_discount AS total_discount_kontrak,
-                rq.total_ppn AS total_ppn_kontrak,
-                rq.total_pph AS total_pph_kontrak,
-                rq.biaya_akhir AS biaya_akhir_kontrak,
-                rq.grand_total AS grand_total_kontrak,
+                rqkd.total_discount AS total_discount_kontrak,
+                rqkd.total_ppn AS total_ppn_kontrak,
+                rqkd.total_pph AS total_pph_kontrak,
+                rqkd.biaya_akhir AS biaya_akhir_kontrak,
+                rqkd.grand_total AS grand_total_kontrak,
 
-                (COALESCE(rq.biaya_akhir,0)
-                    + COALESCE(rq.total_pph,0)
-                    - COALESCE(rq.total_ppn,0)
+                (COALESCE(rqkd.biaya_akhir,0)
+                    + COALESCE(rqkd.total_pph,0)
+                    - COALESCE(rqkd.total_ppn,0)
                 ) AS total_revenue_kontrak,
 
                 NULL AS total_discount_non_kontrak,
@@ -348,7 +349,7 @@ class SalesDailyQSD
 
                 NULL AS total_revenue_non_kontrak,
 
-                oh.tanggal_order AS tanggal_sampling_min
+                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min
             ');
     }
 
@@ -441,7 +442,7 @@ class SalesDailyQSD
                 $invoices = $invoiceMap[$keyExact] ?? collect();
             }
             [$noInvoice, $isLunas, $pelunasan, $nominal, $revenueInvoice, $pengurangan, $tanggalPembayaran, $po] = self::buildInvoiceInfo($invoices);
-            
+
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
