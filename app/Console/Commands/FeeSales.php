@@ -5,6 +5,8 @@ use App\Helpers\WorkerFeeSales;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
+use App\Services\FeeSalesMonthly;
+
 class FeeSales extends Command
 {
     protected $signature   = 'calculatefeesales';
@@ -12,6 +14,7 @@ class FeeSales extends Command
 
     public function handle()
     {
-        WorkerFeeSales::run();
+        (new FeeSalesMonthly())->run();
+        // WorkerFeeSales::run();
     }
 }
