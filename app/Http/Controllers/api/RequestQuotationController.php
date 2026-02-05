@@ -5975,29 +5975,39 @@ class RequestQuotationController extends Controller
     }
 
     public function getLastNoSampel(Request $request){
-        $data_lama = QuotationKontrakH::where('no_document', $request->no_quotation)->first()->data_lama;
+        try {
+            $data_lama = QuotationKontrakH::where('no_document', $request->no_quotation)->first()->data_lama;
 
-        if (!$data_lama) {
+            if (!$data_lama) {
+                return response()->json([
+                    'message' => 'Data not found',
+                    'data' => 0
+                ], 404);
+            }
+            $data_lama = json_decode($data_lama);
+
+            $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first();
+
+            if (!$data) {
+                return response()->json([
+                    'message' => 'Data not found',
+                    'data' => 0
+                ], 404);
+            }
+
+            $data = $data->no_sampel;
+
             return response()->json([
-                'message' => 'Data not found',
-                'data' => 0
-            ], 404);
-        }
-        $data_lama = json_decode($data_lama);
-
-        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first()->no_sampel;
-
-        if (!$data) {
+                'message' => 'Success',
+                'data' => \explode('/', $data)[1]
+            ], 200);
+        } catch (\Exception $e) {
+            dd($e);
             return response()->json([
-                'message' => 'Data not found',
-                'data' => 0
-            ], 404);
+                'message' => $e->getMessage(),
+                'line' => $e->getLine()
+            ], 401);
         }
-
-        return response()->json([
-            'message' => 'Success',
-            'data' => \explode('/', $data)[1]
-        ], 200);
     }
 
 }
