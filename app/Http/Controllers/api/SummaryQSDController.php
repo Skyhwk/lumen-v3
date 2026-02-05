@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\ForecastSP;
 use App\Services\GetBawahan;
+use App\Services\GetDepartmentHierarchy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -77,11 +78,31 @@ class SummaryQSDController extends Controller
 
         [$forecastTotal, $forecastTotalPeriode] = $this->getForecastTotal($year, $type);
 
+        $forecastPerSales = $this->getForecastPerSales($year, $type);
+
+        $includedSales = [];
+
+        $hierarchy = new GetDepartmentHierarchy();
+        $salesHierarchy = $hierarchy->getByDepartment('sales', 'tree');
+
+        $forecastData = collect($salesHierarchy)
+            ->flatMap(function ($root) use ($forecastPerSales, &$includedSales) {
+                return $this->flattenWithRootPromotion(
+                    $root,
+                    $forecastPerSales,
+                    $includedSales,
+                    1,
+                    true // root context
+                );
+            })
+            ->values();
+
         return response()->json([
             'success'           => true,
             'type'              => $type,
             'year'              => $year,
             'data'              => array_values($teamsData),
+            'forecast_data'     => $forecastData,
             'all_total_periode' => $allteam_total_periode,
             'all_total'         => array_sum($allteam_total_periode),
             'forecast_total'    => $forecastTotal,
@@ -341,5 +362,119 @@ class SummaryQSDController extends Controller
         }
 
         return [$totalSummaryThisYear, $totalSummaryPerPeriode];
+    }
+
+    private function getForecastPerSales(int $tahun, string $type)
+    {
+        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun);
+
+        // Apply type filters
+        switch ($type) {
+            case 'contract':
+                $forecasts->where('status_quotation', 'kontrak');
+                break;
+
+            case 'new':
+                $forecasts->where('status_customer', 'new');
+                break;
+
+            default:
+                // By default, get all forecasts
+                break;
+        }
+
+        $forecasts = $forecasts->get();
+
+        $monthNames = ['', 'Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+
+        $result = [];
+
+        foreach ($forecasts as $forecast) {
+            $sid = $forecast->sales_id;
+
+            if (!isset($result[$sid])) {
+                $result[$sid] = [
+                    'total_tahun' => 0,
+                    'periode' => $this->getEmptyOrder(),
+                ];
+            }
+
+            $bulan = $monthNames[intval(explode('-', $forecast->tanggal_sampling_min)[1])];
+
+            $result[$sid]['periode'][$bulan] += $forecast->revenue_forecast;
+            $result[$sid]['total_tahun'] += $forecast->revenue_forecast;
+        }
+
+        return $result;
+    }
+
+    private function flattenWithRootPromotion(
+        array $node,
+        array $forecastPerSales,
+        array &$includedSales,
+        int $level,
+        bool $isRootContext = false
+    ): array {
+
+        $result = [];
+        $salesId = $node['id'];
+
+        $hasForecast = isset($forecastPerSales[$salesId]);
+        // $hasForecast = true;
+        $alreadyIncluded = in_array($salesId, $includedSales);
+
+        // =============================
+        // CASE 1 — node punya forecast → include
+        // =============================
+        if ($hasForecast && !$alreadyIncluded) {
+
+            $includedSales[] = $salesId;
+
+            $result[] = [
+                'sales_id' => $salesId,
+                'nama_sales' => $node['nama_lengkap'] ?? null,
+                'employee_level' => $level,
+                'grade' => $node['grade'],
+                'total_tahun' => $forecastPerSales[$salesId]['total_tahun'] ?? 0,
+                'is_active' => $node['is_active'] ?? false,
+                'is_root' => $isRootContext,
+                'periode' => $forecastPerSales[$salesId]['periode'] ?? $this->getEmptyOrder(),
+            ];
+
+            // anak turun level +1
+            foreach ($node['bawahan'] ?? [] as $child) {
+                $result = array_merge(
+                    $result,
+                    $this->flattenWithRootPromotion(
+                        $child,
+                        $forecastPerSales,
+                        $includedSales,
+                        $level + 1,
+                        false
+                    )
+                );
+            }
+
+            return $result;
+        }
+
+        // =============================
+        // CASE 2 — node TIDAK punya forecast
+        // → cek anak → promote anak jadi root
+        // =============================
+        foreach ($node['bawahan'] ?? [] as $child) {
+            $result = array_merge(
+                $result,
+                $this->flattenWithRootPromotion(
+                    $child,
+                    $forecastPerSales,
+                    $includedSales,
+                    1,      // reset level
+                    true    // promoted root
+                )
+            );
+        }
+
+        return $result;
     }
 }

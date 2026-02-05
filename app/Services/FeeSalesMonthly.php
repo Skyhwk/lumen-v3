@@ -52,14 +52,7 @@ class FeeSalesMonthly
     {
         DB::beginTransaction();
         try {
-            // $salesList = MasterKaryawan::whereIn('id_jabatan', [
-            //     24, // Sales Officer
-            //     148, // Customer Relation Officer
-            // ])
-            //     ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
-            //     ->where('is_active', true)
-            //     ->orderBy('nama_lengkap', 'asc')
-            //     ->get();
+            printf("[FeeSalesMonthly] [%s] Running Fee Sales Monthly\n", Carbon::now()->format('Y-m-d H:i:s'));
 
             $masterTargetSales = MasterTargetSales::where('tahun', $this->currentYear)->where('is_active', true)->whereNotNull($this->currentMonthStr)->get();
             $categoryStr = config('kategori.id');
@@ -79,7 +72,7 @@ class FeeSalesMonthly
 
                 $quotations = DailyQsd::with('orderHeader.orderDetail')
                     ->where('sales_id', $salesId)
-                    ->whereDate('tanggal_kelompok', '>=', '2025-10-01')
+                    ->whereDate('tanggal_kelompok', '>=', '2026-01-01')
                     ->whereDate('tanggal_kelompok', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
                     ->get()
@@ -87,7 +80,10 @@ class FeeSalesMonthly
                         if ($isExistsInFeeSales($qsd)) return null;
 
                         $totalFeeExternal = ClaimFeeExternal::where('no_order', $qsd->no_order)->when($qsd->periode, fn ($q) =>$q->where('periode', $qsd->periode))->where('is_active', true)->sum('nominal');
-                        $qsd->total_revenue -= $totalFeeExternal;
+
+                        $nilai_pengurangan = $qsd->nilai_pengurangan;
+                        $nominal_potong = ($totalFeeExternal + $nilai_pengurangan);
+                        $qsd->total_revenue -= $nominal_potong;
 
                         if ($qsd->periode) {
                             $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
@@ -100,8 +96,13 @@ class FeeSalesMonthly
                     })
                     ->filter()
                     ->values();
-
+                
+                printf("[FeeSalesMonthly] [%s] Calculate Data Completed\n", Carbon::now()->format('Y-m-d H:i:s'));
+                
                 if ($quotations->isEmpty()) continue;
+
+                printf("[FeeSalesMonthly] [%s] Find ".$quotations->count()." Data\n", Carbon::now()->format('Y-m-d H:i:s'));
+                printf("[FeeSalesMonthly] [%s] Start Mapping Data\n", Carbon::now()->format('Y-m-d H:i:s'));
 
                 // FEE AMOUNT
                 $targetAmount = json_decode($targetSales->target, true)[$this->currentPeriod];
@@ -113,7 +114,7 @@ class FeeSalesMonthly
                 // FEE CATEGORY
                 $targetCategory = collect($targetSales->{$this->currentMonthStr});
                 $achievedCategoryDetails = $targetCategory->map(
-                    function ($_, $category) use ($quotations, $targetCategory) {
+                    function ($_, $category) use ($quotations, $targetCategory, $categoryStr) {
                         $target = $targetCategory[$category];
 
                         $achieved = $quotations->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)
@@ -153,7 +154,10 @@ class FeeSalesMonthly
                     'no_invoice' => $quotation->no_invoice,
                     'total_revenue' => $quotation->total_revenue,
                 ])->values();
-
+                
+                printf("[FeeSalesMonthly] [%s] Mapping Data Completed\n", Carbon::now()->format('Y-m-d H:i:s'));
+                
+                printf("[FeeSalesMonthly] [%s] Start Insert Data for period %s\n", Carbon::now()->format('Y-m-d H:i:s'), $this->currentPeriod);
                 // MASTER FEE SALES
                 $masterFeeSales = new MasterFeeSales();
 
@@ -184,10 +188,11 @@ class FeeSalesMonthly
 
                 $mutasiFeeSales->sales_id = $salesId;
                 $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
-                $mutasiFeeSales->mutation_type = 'Debit';
+                $mutasiFeeSales->mutation_type = 'Kredit';
                 $mutasiFeeSales->amount = $totalFee;
                 $mutasiFeeSales->description = 'Fee Sales ' . Carbon::createFromFormat('Y-m', $this->currentPeriod)->translatedFormat('F Y');
                 $mutasiFeeSales->status = 'Done';
+                $mutasiFeeSales->created_at = Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth();
                 $mutasiFeeSales->created_by = 'System';
                 $mutasiFeeSales->updated_by = 'System';
 
@@ -202,12 +207,17 @@ class FeeSalesMonthly
                     $saldoFeeSales->sales_id = $salesId;
                     $saldoFeeSales->active_balance = $totalFee;
                 }
+                $saldoFeeSales->created_at = Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth();
                 $saldoFeeSales->updated_by = 'System';
                 $saldoFeeSales->created_by = 'System';
                 $saldoFeeSales->save();
+
+                printf("[FeeSalesMonthly] [%s] Insert Data Completed\n", Carbon::now()->format('Y-m-d H:i:s'));
             }
             DB::commit();
+            printf("[FeeSalesMonthly] [%s] Running Fee Sales Monthly Completed\n", Carbon::now()->format('Y-m-d H:i:s'));
         } catch (\Throwable $th) {
+            printf("[FeeSalesMonthly] [%s] Running Fee Sales Monthly Error\n Line: %s\n Message: %s", Carbon::now()->format('Y-m-d H:i:s'), $th->getLine(), $th->getMessage());
             DB::rollBack();
             Log::error('[FeeSalesMonthly] Error: ' . $th->getMessage() . ' Line: ' . $th->getLine());
         }

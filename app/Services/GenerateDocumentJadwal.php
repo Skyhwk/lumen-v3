@@ -486,7 +486,8 @@ class GenerateDocumentJadwal
 
             $sampling_plans = $data->sampling
                 ->where('no_quotation', $data->no_document)
-                ->sortByDesc('id');
+                ->sortByDesc('id')
+                ->values();
 
             // Inisialisasi PDF di LUAR loop - hanya sekali
             $mpdfConfig = [
@@ -550,6 +551,12 @@ class GenerateDocumentJadwal
 
             // Loop untuk setiap periode
             foreach ($sampling_plans as $key => $sampling_plan) {
+
+                if ($key > 0) {
+                    $pdf->addPage();
+                }
+
+
                 // Reset hasParsial untuk setiap periode
                 $hasParsial = false;
 
@@ -562,39 +569,41 @@ class GenerateDocumentJadwal
 
                 $periode_       = '';
                 $status_kontrak = 'NON CONTRACT';
+
                 if (explode("/", $sampling_plan->no_quotation)[1] == 'QTC') {
                     $status_kontrak = 'CONTRACT';
                     $periode_       = self::tanggal_indonesia($sampling_plan->periode_kontrak, 'period');
                 }
 
                 // Set header untuk setiap periode
-                $pdf->SetHTMLHeader('
-            <table class="tabel" width="100%">
-                <tr class="tr_top">
-                    <td class="text-left text-wrap" style="width: 33.33%;"><img class="img_0"
-                            src="' . public_path() . '/img/isl_logo.png" alt="ISL">
-                    </td>
-                    <td style="width: 33.33%; text-align: center;">
-                        <h5 style="text-align:center; font-size:14px;"><b><u>SAMPLING PLAN</u></b></h5>
-                        <p style="font-size: 10px;text-align:center;margin-top: -10px;">' . $periode_ . '</p>
-                    </td>
-                    <td style="text-align: right;">
-                        <p style="font-size: 9px; text-align:right;">' . self::tanggal_indonesia(date('Y-m-d')) . ' - ' . date('G:i') . '</p> <br>
-                        <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . $status_kontrak . '</span> <span style="font-size:11px; font-weight: bold; border: 1px solid gray;" id="status_sampling">' . $sampling . '</span>
-                    </td>
-                </tr>
-            </table>
-            <table class="table table-bordered" width="100%">
-                <tr>
-                    <td colspan="2" style="font-size: 12px; padding: 5px;"><h6 style="font-size:12px; font-weight: bold;" id="nama_customer">' . preg_replace('/&AMP;+/', '&', $perusahaan) . '</h6></td>
-                    <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;" id="no_document">' . $sampling_plan->no_quotation . '</span></td>
-                </tr>
-                <tr>
-                    <td colspan="2" style="font-size: 12px; padding: 5px;"><span style="font-size:12px;" id="alamat_customer">' . $data->alamat_sampling . '</span></td>
-                    <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;" id="no_document_sp">' . $sampling_plan->no_document . '</span></td>
-                </tr>
-            </table>
-        ');
+               $pdf->WriteHTML('
+                <table class="tabel" width="100%">
+                    <tr class="tr_top">
+                        <td class="text-left text-wrap" style="width: 33.33%;"><img class="img_0"
+                                src="' . public_path() . '/img/isl_logo.png" alt="ISL" width="80">
+                        </td>
+                        <td style="width: 33.33%; text-align: center;">
+                            <h5 style="text-align:center; font-size:14px;"><b><u>SAMPLING PLAN</u></b></h5>
+                            <p style="font-size: 10px;text-align:center;margin-top: -10px;">' . $periode_ . '</p>
+                        </td>
+                        <td style="text-align: right;">
+                            <p style="font-size: 9px; text-align:right;">' . self::tanggal_indonesia(date('Y-m-d')) . ' - ' . date('G:i') . '</p> <br>
+                            <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . $status_kontrak . '</span> 
+                            <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . $sampling . '</span>
+                        </td>
+                    </tr>
+                </table>
+                <table class="table table-bordered" width="100%">
+                    <tr>
+                        <td colspan="2" style="font-size: 12px; padding: 5px;"><h6 style="font-size:12px; font-weight: bold;">' . preg_replace('/&AMP;+/', '&', $perusahaan) . '</h6></td>
+                        <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;">' . $sampling_plan->no_quotation . '</span></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="font-size: 12px; padding: 5px;"><span style="font-size:12px;">' . $data->alamat_sampling . '</span></td>
+                        <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;">' . $sampling_plan->no_document . '</span></td>
+                    </tr>
+                </table>
+                ');
 
                 // Tabel Keterangan Pengujian
                 $pdf->WriteHTML('
@@ -737,8 +746,6 @@ class GenerateDocumentJadwal
                 <p style="font-size: 9px; font-style: italic; margin-top: 5px; text-align: left;">
                     <b>Catatan:</b> Sampler dapat berubah sewaktu-waktu sesuai dengan kondisi lapangan.
                 </p>');
-                    $pdf->addPage();
-
                 }
 
             } // End foreach sampling_plans
