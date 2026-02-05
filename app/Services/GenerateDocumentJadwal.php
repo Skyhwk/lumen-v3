@@ -486,8 +486,9 @@ class GenerateDocumentJadwal
 
             $sampling_plans = $data->sampling
                 ->where('no_quotation', $data->no_document)
-                ->sortByDesc('id')
+                ->sortBy('periode_kontrak')
                 ->values();
+            
 
             // Inisialisasi PDF di LUAR loop - hanya sekali
             $mpdfConfig = [
