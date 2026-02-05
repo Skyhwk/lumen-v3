@@ -28,12 +28,14 @@ class SalesDailyQSD
         $rekapOrder = self::buildQueryQsd($arrayYears);
         
         $rekapOrderNonPengujian = self::buildQueryNonPengujian($arrayYears);
-
+        
         $rows = self::streamData($rekapOrder, $rekapOrderNonPengujian);
+        
         // Invoice Mapping
         [$invoiceMap, $spesialInv, $noQTSpesial, $mapedInv, $groupedInvSpesial] = self::buildInvoiceMaps($arrayYears);
         // Buffering
         $buffer = self::bufferMapping($rows, $invoiceMap);
+        
         // First Grouped/Grouped Data
         [$withInvoice, $groupedSpesial, $withoutInvoice, $firstGrouped, $grouped, $result] = self::processGroupings($buffer, $spesialInv, $mapedInv, $groupedInvSpesial, $noQTSpesial);
         // Simpan ke DB
@@ -243,11 +245,9 @@ class SalesDailyQSD
         return $rekapOrder;
     }
 
-    private static function buildQueryNonPengujian(array $arrayYears)
+    private static function baseNonPengujianQuery(array $arrayYears)
     {
         return DB::table('order_header as oh')
-            ->join('request_quotation as rq', 'oh.no_document', '=', 'rq.no_document')
-            ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
             ->where('oh.is_active', 1)
             ->whereIn(DB::raw('LEFT(oh.tanggal_order, 4)'), $arrayYears)
             ->whereNotIn('oh.id_pelanggan', self::EXCLUDE_CUSTOMERS)
@@ -256,36 +256,106 @@ class SalesDailyQSD
                     ->from('order_detail as od')
                     ->whereRaw('od.id_order_header = oh.id')
                     ->where('od.is_active', 1);
-            })
+            });
+    }
+
+    private static function nonKontrakQuery(array $arrayYears)
+    {
+        return self::baseNonPengujianQuery($arrayYears)
+            ->join('request_quotation as rq', 'oh.no_document', '=', 'rq.no_document')
+            ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
             ->selectRaw('
-                oh.no_order, 
-                oh.no_document AS no_quotation, 
-                0 AS total_cfr, 
-                oh.nama_perusahaan, 
-                oh.konsultan, 
-                "Non Pengujian" AS status_sampling, 
-                NULL AS periode, 
-                "N" AS kontrak, 
-                NULL AS sales_id_kontrak, 
-                NULL AS sales_nama_kontrak, 
-                rq.sales_id AS sales_id_non_kontrak, 
-                mk.nama_lengkap AS sales_nama_non_kontrak, 
-                NULL AS total_discount_kontrak, 
-                NULL AS total_ppn_kontrak, 
-                NULL AS total_pph_kontrak, 
-                NULL AS biaya_akhir_kontrak, 
-                NULL AS grand_total_kontrak, 
-                NULL AS total_revenue_kontrak, 
-                rq.total_discount AS total_discount_non_kontrak, 
-                rq.total_ppn AS total_ppn_non_kontrak, 
-                rq.total_pph AS total_pph_non_kontrak, 
-                rq.biaya_akhir AS biaya_akhir_non_kontrak, 
-                rq.grand_total AS grand_total_non_kontrak, 
-                rq.pelanggan_ID AS pelanggan_id_kontrak, 
-                rq.pelanggan_ID AS pelanggan_id_non_kontrak, 
-                (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0)) AS total_revenue_non_kontrak, 
+                oh.no_order,
+                oh.no_document AS no_quotation,
+                0 AS total_cfr,
+                oh.nama_perusahaan,
+                oh.konsultan,
+                "Non Pengujian" AS status_sampling,
+                NULL AS periode,
+                "N" AS kontrak,
+
+                NULL AS sales_id_kontrak,
+                NULL AS sales_nama_kontrak,
+
+                rq.sales_id AS sales_id_non_kontrak,
+                mk.nama_lengkap AS sales_nama_non_kontrak,
+
+                NULL AS total_discount_kontrak,
+                NULL AS total_ppn_kontrak,
+                NULL AS total_pph_kontrak,
+                NULL AS biaya_akhir_kontrak,
+                NULL AS grand_total_kontrak,
+                NULL AS total_revenue_kontrak,
+
+                rq.total_discount AS total_discount_non_kontrak,
+                rq.total_ppn AS total_ppn_non_kontrak,
+                rq.total_pph AS total_pph_non_kontrak,
+                rq.biaya_akhir AS biaya_akhir_non_kontrak,
+                rq.grand_total AS grand_total_non_kontrak,
+
+                rq.pelanggan_ID AS pelanggan_id_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
+
+                (COALESCE(rq.biaya_akhir,0)
+                    + COALESCE(rq.total_pph,0)
+                    - COALESCE(rq.total_ppn,0)
+                ) AS total_revenue_non_kontrak,
+
                 oh.tanggal_order AS tanggal_sampling_min
             ');
+    }
+
+    private static function kontrakQuery(array $arrayYears)
+    {
+        return self::baseNonPengujianQuery($arrayYears)
+            ->join('request_quotation_kontrak_H as rq', 'oh.no_document', '=', 'rq.no_document')
+            ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
+            ->selectRaw('
+                oh.no_order,
+                oh.no_document AS no_quotation,
+                0 AS total_cfr,
+                oh.nama_perusahaan,
+                oh.konsultan,
+                "Non Pengujian" AS status_sampling,
+                NULL AS periode,
+                "C" AS kontrak,
+
+                rq.sales_id AS sales_id_kontrak,
+                mk.nama_lengkap AS sales_nama_kontrak,
+
+                NULL AS sales_id_non_kontrak,
+                NULL AS sales_nama_non_kontrak,
+
+                rq.total_discount AS total_discount_kontrak,
+                rq.total_ppn AS total_ppn_kontrak,
+                rq.total_pph AS total_pph_kontrak,
+                rq.biaya_akhir AS biaya_akhir_kontrak,
+                rq.grand_total AS grand_total_kontrak,
+
+                (COALESCE(rq.biaya_akhir,0)
+                    + COALESCE(rq.total_pph,0)
+                    - COALESCE(rq.total_ppn,0)
+                ) AS total_revenue_kontrak,
+
+                NULL AS total_discount_non_kontrak,
+                NULL AS total_ppn_non_kontrak,
+                NULL AS total_pph_non_kontrak,
+                NULL AS biaya_akhir_non_kontrak,
+                NULL AS grand_total_non_kontrak,
+
+                rq.pelanggan_ID AS pelanggan_id_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
+
+                NULL AS total_revenue_non_kontrak,
+
+                oh.tanggal_order AS tanggal_sampling_min
+            ');
+    }
+
+    private static function buildQueryNonPengujian(array $arrayYears)
+    {
+        return self::nonKontrakQuery($arrayYears)
+            ->unionAll(self::kontrakQuery($arrayYears));
     }
 
     private static function streamData($rekapOrder, $rekapOrderNonPengujian)
@@ -371,7 +441,7 @@ class SalesDailyQSD
                 $invoices = $invoiceMap[$keyExact] ?? collect();
             }
             [$noInvoice, $isLunas, $pelunasan, $nominal, $revenueInvoice, $pengurangan, $tanggalPembayaran, $po] = self::buildInvoiceInfo($invoices);
-
+            
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
