@@ -20,6 +20,9 @@ class UpdateForecastSPService
         // Fetch jadwal kontrak dengan periode
         printf("\n[UpdateForecastSP] Fetching jadwal KONTRAK (with periode)...");
         $jadwalKontrak = Jadwal::selectRaw('no_quotation as no_document, periode, MIN(tanggal) as tanggal')
+            ->whereHas('samplingPlan', function ($query) {
+                $query->where('is_active', 1);
+            })
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->where('is_active', 1)
             ->whereNotNull('periode')
@@ -32,6 +35,9 @@ class UpdateForecastSPService
         // Fetch jadwal non-kontrak tanpa periode
         printf("\n[UpdateForecastSP] Fetching jadwal NON KONTRAK (without periode)...");
         $jadwalNonKontrak = Jadwal::selectRaw('no_quotation as no_document, NULL as periode, MIN(tanggal) as tanggal')
+            ->whereHas('samplingPlan', function ($query) {
+                $query->where('is_active', 1);
+            })
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->where('is_active', 1)
             ->whereNull('periode')
@@ -263,7 +269,7 @@ class UpdateForecastSPService
 
         // printf("\n[UpdateForecastSP] Truncating table forecast_sp...");
 
-        // ForecastSP::truncate();
+        ForecastSP::truncate();
 
         // printf("\n[UpdateForecastSP] Truncated table");
 
