@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Notification;
+use App\Services\Notification as NotificationService;
 use App\Models\User;
 use App\Models\UserToken;
 use App\Models\MasterKaryawan;
@@ -82,10 +83,12 @@ class NotificationController extends Controller
 
     public function sendNotificationToV3(Request $request)
     {
-        Notification::whereIn('id', $request->users)
+        NotificationService::whereIn('id', $request->users)
             ->title($request->title)
-            ->message($request->message)
+            ->message($request->body)
             ->url($request->url)
             ->send();
+
+        return response()->json(['data' => 'success']);
     }
 }
