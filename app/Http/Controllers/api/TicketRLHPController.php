@@ -189,72 +189,81 @@ class TicketRLHPController extends Controller
             ->first();
 
         if ($data) { // NON DIRECT
-        $hasAir    = $data->relationLoaded('lhps_air') && $data->lhps_air;
-        $hasLing   = $data->relationLoaded('lhps_ling') && $data->lhps_ling;
-        $hasEmisiC = $data->relationLoaded('lhps_emisi_c') && $data->lhps_emisi_c;
-        $hasEmisiI = $data->relationLoaded('lhps_emisi_isokinetik') && $data->lhps_emisi_isokinetik;
+            $hasAir    = $data->relationLoaded('lhps_air') && $data->lhps_air;
+            $hasLing   = $data->relationLoaded('lhps_ling') && $data->lhps_ling;
+            $hasEmisiC = $data->relationLoaded('lhps_emisi_c') && $data->lhps_emisi_c;
+            $hasEmisiI = $data->relationLoaded('lhps_emisi_isokinetik') && $data->lhps_emisi_isokinetik;
 
-        /**
-         * Kalau cuma punya lhps_ling saja
-         */
-        if ($hasLing) {
+            /**
+             * Kalau cuma punya lhps_ling saja
+             */
+            if ($hasLing) {
 
-            $parameter = json_decode($data->parameter, true) ?? [];
+                $parameter = json_decode($data->parameter, true) ?? [];
 
-            if (count($parameter) < 2) {
-                return response()->json([
-                    'message' => 'No LHP ini Tidak dapat melakukan revisi LHP',
-                ], 404);
+                if (count($parameter) < 2) {
+                    return response()->json([
+                        'message' => 'No LHP ini Tidak dapat melakukan revisi LHP',
+                    ], 404);
+                }
             }
-        }
 
-        $param = OrderDetail::where('is_active', true)
-            ->where('cfr', $request->no_lhp)
-            ->pluck('parameter') // ambil kolom parameter saja
-            ->flatMap(fn($p) => json_decode($p, true) ?? [])
-            ->unique()
-            ->map(function ($item) {
-                [$id, $name] = explode(';', $item);
-                return (object) [
-                    'id'   => $id,
-                    'name' => $name,
-                ];
-            })
-            ->values();
+            $param = OrderDetail::where('is_active', true)
+                ->where('cfr', $request->no_lhp)
+                ->pluck('parameter') // ambil kolom parameter saja
+                ->flatMap(fn($p) => json_decode($p, true) ?? [])
+                ->unique()
+                ->map(function ($item) {
+                    [$id, $name] = explode(';', $item);
+                    return (object) [
+                        'id'   => $id,
+                        'name' => $name,
+                    ];
+                })
+                ->values();
 
-        $data->parameter = $param;
+            $data->parameter = $param;
 
-        if ($hasAir) {
-            $data->detailParameter = $data->lhps_air->lhpsAirDetail;
-        }
-        if ($hasLing) {
-            $data->detailParameter = $data->lhps_ling->lhpsLingDetail;
-        }
-        if ($hasEmisiC) {
-            $data->detailParameter = $data->lhps_emisi_c->lhpsEmisiCDetail;
-        }
+            if ($hasAir) {
+                $data->detailParameter = $data->lhps_air->lhpsAirDetail;
+            }
+            if ($hasLing) {
+                $data->detailParameter = $data->lhps_ling->lhpsLingDetail;
+            }
+            if ($hasEmisiC) {
+                $data->detailParameter = $data->lhps_emisi_c->lhpsEmisiCDetail;
+            }
 
-        if ($hasEmisiI) {
-            $data->detailParameter = $data->lhps_emisi_isokinetik->lhpsEmisiIsokinetikDetail;
-        }
+            if ($hasEmisiI) {
+                $data->detailParameter = $data->lhps_emisi_isokinetik->lhpsEmisiIsokinetikDetail;
+            }
 
-        // $arrayModels = [
-        //     LhpsLingHeader::class,
-        //     LhpsAirHeader::class,
-        //     lhps_emisi_c::class
-        // ]
+            // $arrayModels = [
+            //     LhpsLingHeader::class,
+            //     LhpsAirHeader::class,
+            //     lhps_emisi_c::class
+            // ]
 
-        return response()->json([
-            'type'    => 'NON DIRECT',
-            'data'    => $data,
-            'message' => 'Data found',
-        ], 200);
+            return response()->json([
+                'type'    => 'NON DIRECT',
+                'data'    => $data,
+                'message' => 'Data found',
+            ], 200);
         } else { // DIRECT
-            $orderDetails = OrderDetail::with(['orderHeader', 'lhps_emisi'])
+            $orderDetails = OrderDetail::with(['orderHeader', 'lhps_emisi', 'lhps_getaran', 'lhps_kebisingan', 'lhps_kebisingan_personal', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_swab_udara', 'lhps_microbiologi'])
                 ->where('cfr', $request->no_lhp)
                 ->where('is_active', true)
                 ->where(function ($q) {
-                    $q->whereHas('lhps_emisi');
+                    $q->whereHas('lhps_emisi')
+                        ->orWhereHas('lhps_getaran')
+                        ->orWhereHas('lhps_kebisingan')
+                        ->orWhereHas('lhps_kebisingan_personal')
+                        ->orWhereHas('lhps_medanlm')
+                        ->orWhereHas('lhps_pencahayaan')
+                        ->orWhereHas('lhps_sinaruv')
+                        ->orWhereHas('lhps_iklim')
+                        ->orWhereHas('lhps_swab_udara')
+                        ->orWhereHas('lhps_microbiologi');
                 })
                 ->get();
 
