@@ -913,13 +913,19 @@ class AppsBasController extends Controller
                         return response()->json(['status' => 'error', 'message' => 'No quotation tidak ditemukan atau tidak sesuai dengan tanggal sampling dan no sampel.'], 404);
                     }
 
+                    $search  = ['&#039;', '/', ',', '.', '@', '"', '`'];
+                    $replace = ["'",       '',  '',  '',  '',  '',  ''];
+
                     if ($header) {
                         $detailData = [
                             'catatan' => $item['catatan'] ?? '',
                             'informasi_teknis' => $item['informasi_teknis'] ?? $header->informasi_teknis,
                             'waktu_mulai' => $item['waktu_mulai'] ?? $header->waktu_mulai,
                             'waktu_selesai' => $item['waktu_selesai'] ?? $header->waktu_selesai,
-                            'filename' => str_replace("&#039;", "'", $item['filename_bas'] ?? $header->filename_bas),
+                            'filename' => str_replace(
+                            ['&#039;', '/', ',', '.', '@', '"', '`'],
+                            ["'",       '',  '',  '',  '',  '',  ''],
+                            $item['filename_bas'] ?? $header->filename_bas),
                             // $item['filename_bas'] ?? $header->filename_bas,
                             'no_sampel' => $item['no_sampel'] ?? []
                         ];
