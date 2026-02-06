@@ -913,9 +913,6 @@ class AppsBasController extends Controller
                         return response()->json(['status' => 'error', 'message' => 'No quotation tidak ditemukan atau tidak sesuai dengan tanggal sampling dan no sampel.'], 404);
                     }
 
-                    $search  = ['&#039;', '/', ',', '.', '@', '"', '`'];
-                    $replace = ["'",       '',  '',  '',  '',  '',  ''];
-
                     if ($header) {
                         $detailData = [
                             'catatan' => $item['catatan'] ?? '',
