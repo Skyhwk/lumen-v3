@@ -58,26 +58,34 @@ class NotificationController extends Controller
 
     public function readNotificationAll(Request $request)
     {
-        $data = Notification::where('user_id', $this->user_id)->update(['is_read'=>true]);
-        return response()->json(['data'=>$data]);
+        $data = Notification::where('user_id', $this->user_id)->update(['is_read' => true]);
+        return response()->json(['data' => $data]);
     }
 
     public function deleteNotificationAll(Request $request)
     {
         $data = Notification::where('user_id', $this->user_id)->delete();
-        return response()->json(['data'=>$data]);
+        return response()->json(['data' => $data]);
     }
 
     public function deleteNotification(Request $request)
     {
         $data = Notification::where('user_id', $this->user_id)->where('id', $request->id)->delete();
-        return response()->json(['data'=>$data]);
+        return response()->json(['data' => $data]);
     }
 
     public function readNotification(Request $request)
     {
-        $data = Notification::where('user_id', $this->user_id)->where('id', $request->id)->update(['is_read'=>true]);
-        return response()->json(['data'=>$data]);
+        $data = Notification::where('user_id', $this->user_id)->where('id', $request->id)->update(['is_read' => true]);
+        return response()->json(['data' => $data]);
     }
 
+    public function sendNotificationToV3(Request $request)
+    {
+        Notification::whereIn('id', $request->users)
+            ->title($request->title)
+            ->message($request->message)
+            ->url($request->url)
+            ->send();
+    }
 }
