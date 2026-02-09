@@ -31,6 +31,7 @@ class Kernel extends ConsoleKernel
         Commands\SchaduleUpdateQsd::class,
         Commands\SchaduleUpdateSummaryQsd::class,
         Commands\FeeSales::class,
+        Commands\FeeSales2::class,
         Commands\AssignSales::class,
         Commands\BillingComand::class
     ];
