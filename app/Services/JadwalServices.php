@@ -768,7 +768,7 @@ class JadwalServices
                 }
             } catch (\Throwable $th) {
                 // Tangkap error dengan detail yang cukup
-                DB::commit();
+                DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
@@ -1136,7 +1136,7 @@ class JadwalServices
                 }
             } catch (\Throwable $th) {
                 // Tangkap error dengan detail yang cukup
-                DB::commit();
+                DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
             DB::commit();
