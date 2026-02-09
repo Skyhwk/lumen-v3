@@ -768,6 +768,7 @@ class JadwalServices
                 }
             } catch (\Throwable $th) {
                 // Tangkap error dengan detail yang cukup
+                DB::commit();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
@@ -1054,7 +1055,6 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                dd('ss');
                 // 1. Validasi awal (Fail fast)
                 if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
 
@@ -1136,6 +1136,7 @@ class JadwalServices
                 }
             } catch (\Throwable $th) {
                 // Tangkap error dengan detail yang cukup
+                DB::commit();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
             DB::commit();
