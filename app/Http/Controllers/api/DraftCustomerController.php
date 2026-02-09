@@ -296,8 +296,16 @@ class DraftCustomerController extends Controller
                 // Random dari yang available
                 $selectedSales = $availableSales->random();
 
-                $dataPelanggan['sales_id'] = $selectedSales->id;
-                $dataPelanggan['sales_penanggung_jawab'] = $selectedSales->nama_lengkap;
+                // BUAT KE BANK DATA DULU (CEK APAKAH SUDAH FULL BANK DATA, KALAU YA SET NULL)
+                $currentBankData = MasterPelanggan::whereNull('sales_penanggung_jawab')->whereNull('sales_id')->where('is_active', true)->count();
+
+                if($currentBankData > 5000) {
+                    $dataPelanggan['sales_id'] = $selectedSales->id;
+                    $dataPelanggan['sales_penanggung_jawab'] = $selectedSales->nama_lengkap;
+                } else {
+                    $dataPelanggan['sales_id'] = null;
+                    $dataPelanggan['sales_penanggung_jawab'] = null;
+                }
                 // END RANDOMIZE SALES
 
                 $existingPelanggan = MasterPelanggan::where('nama_pelanggan', 'like', '%' . $clearNamaPelanggan . '%')->where('is_active', true)->first();

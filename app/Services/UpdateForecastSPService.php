@@ -20,6 +20,9 @@ class UpdateForecastSPService
         // Fetch jadwal kontrak dengan periode
         printf("\n[UpdateForecastSP] Fetching jadwal KONTRAK (with periode)...");
         $jadwalKontrak = Jadwal::selectRaw('no_quotation as no_document, periode, MIN(tanggal) as tanggal')
+            ->whereHas('samplingPlan', function ($query) {
+                $query->where('is_active', 1);
+            })
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->where('is_active', 1)
             ->whereNotNull('periode')
@@ -32,6 +35,9 @@ class UpdateForecastSPService
         // Fetch jadwal non-kontrak tanpa periode
         printf("\n[UpdateForecastSP] Fetching jadwal NON KONTRAK (without periode)...");
         $jadwalNonKontrak = Jadwal::selectRaw('no_quotation as no_document, NULL as periode, MIN(tanggal) as tanggal')
+            ->whereHas('samplingPlan', function ($query) {
+                $query->where('is_active', 1);
+            })
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->where('is_active', 1)
             ->whereNull('periode')
@@ -300,6 +306,9 @@ class UpdateForecastSPService
 
         printf("\n[UpdateForecastSP] Upserting %d rows to forecast_sp...", count($dataToInsert));
 
+        // Collect valid UUIDs for deletion
+        $validIds = collect($dataToInsert)->pluck('uuid')->unique()->values()->toArray();
+
         // Upsert dengan chunk untuk menghindari memory issue
         $chunks = array_chunk($dataToInsert, 1000);
         $totalUpserted = 0;
@@ -324,6 +333,18 @@ class UpdateForecastSPService
             printf("\n[UpdateForecastSP] Upserted %d rows...", $totalUpserted);
         }
 
+        $arrayYears = self::getYearRange(Carbon::now()->year);
+
+        // Delete old records that are not in the new data
+        $deletedCount = 0;
+        if (!empty($validIds)) {
+            $deletedCount = DB::table('forecast_sp')
+                ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
+                ->whereNotIn('uuid', $validIds)
+                ->delete();
+        }
+
+        printf("\n[UpdateForecastSP] Deleted %d old records", $deletedCount);
         printf("\n[UpdateForecastSP] Upsert completed: %d rows", $totalUpserted);
 
         // Update status_customer (new/exist) based on pelanggan_ID and order
@@ -369,5 +390,15 @@ class UpdateForecastSPService
         $totalTime = microtime(true) - $startTime;
 
         printf("\n[UpdateForecastSP] Finished. Total time: %.3f seconds", $totalTime);
+    }
+
+    private static function getYearRange(int $currentYear): array
+    {
+        $nextYear = (int)Carbon::create($currentYear, 12, 1)->addYear(1)->endOfMonth()->format('Y');
+        $arrayYears = [];
+        for ($i = 2024; $i <= $nextYear; $i++) {
+            $arrayYears[] = $i;
+        }
+        return $arrayYears;
     }
 }

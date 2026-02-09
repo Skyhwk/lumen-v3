@@ -1,12 +1,15 @@
 <?php
 namespace App\Http\Controllers\api;
 
+use App\Helpers\Slice;
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderPdfPenawaran;
+use App\Models\AksesMenu;
 use App\Models\ExpiredLink;
 use App\Models\GenerateLink;
 use App\Models\Jadwal;
 use App\Models\JobTask;
+use App\Models\Menu;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
@@ -14,6 +17,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\RenderJadwalKontrakCopy;
 use App\Services\RenderKontrakCopy;
 use App\Services\RenderNonKontrakCopy;
+use App\Services\SalesKpiMonthly;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -212,8 +216,7 @@ class FixingController extends Controller
                 }
 
                 return response()->json([
-                    'message'     => 'Job rendering PDF sedang diproses.',
-                    'job_task_id' => $jobTaskId,
+                    'message' => 'Job rendering PDF sedang diproses.',
                 ]);
             }
         } catch (\Exception $e) {
@@ -439,19 +442,19 @@ class FixingController extends Controller
         }
     }
 
-    public function test(Request $request)
+    public function renderJadwalCopy(Request $request)
     {
         try {
 
             $timestamp = Carbon::now()->format('Y-m-d H:i:s');
 
-             $dataRequest = (object) [
-                    'no_document' => $request->no_quotation,
-                    'quotation_id' => $request->quotation_id,
-                    'karyawan' => $this->karyawan,
-                    'karyawan_id' => $this->user_id,
-                    'timestamp' => $timestamp,
-                ];
+            $dataRequest = (object) [
+                'no_document'  => $request->no_quotation,
+                'quotation_id' => $request->quotation_id,
+                'karyawan'     => $this->karyawan,
+                'karyawan_id'  => $this->user_id,
+                'timestamp'    => $timestamp,
+            ];
             (new RenderJadwalKontrakCopy($dataRequest))
                 ->where('quotation_id', $request->quotation_id)
                 ->where('tanggal_penawaran', $request->tanggal_penawaran)
@@ -467,6 +470,103 @@ class FixingController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function encrypt(Request $request)
+    {
+        return response()->json(['slice' => Slice::makeSlice($request->controller_name, $request->method_name)], 200);
+    }
+
+    public function decrypt(Request $request)
+    {
+        $decryptedSlice = Slice::makeDecrypt($request->slice);
+        $route          = json_decode($decryptedSlice);
+
+        if (empty($route->controller) || empty($route->function)) {
+            return response()->json(['error' => 'Invalid slice'], 400);
+        }
+
+        return response()->json(['controller' => $route->controller, 'method' => $route->function], 200);
+    }
+
+    public function test()
+    {
+        $data = SalesKpiMonthly::run();
+
+        return response()->json($data, 200);
+    }
+
+
+    public function updateParentAksesMenu(Request $request)
+    {
+
+        try {
+            $data = Menu::where('is_active', true)->get();
+
+            $parentMap = $this->buildParentMapping($data);
+
+            $aksesMenus = AksesMenu::all();
+
+            $updated = 0;
+            $details = [];
+
+            foreach ($aksesMenus as $aksesMenu) {
+                $akses = $aksesMenu->akses;
+
+                if (is_array($akses) && ! empty($akses)) {
+                    $updatedAkses = collect($akses)->map(function ($item) use ($parentMap) {
+                        $menuName       = $item['name'] ?? '';
+                        $item['parent'] = $parentMap[$menuName] ?? '';
+
+                        return $item;
+                    })->toArray();
+
+                    $aksesMenu->akses = $updatedAkses;
+                    $aksesMenu->save();
+
+                    $updated++;
+                    $details[] = [
+                        'user_id'    => $aksesMenu->user_id,
+                        'total_menu' => count($updatedAkses),
+                    ];
+                }
+            }
+
+            return response()->json([
+                'message' => "Successfully updated parent for {$updated} akses menu records",
+                'updated_count' => $updated,
+                'details'       => $details,
+            ]);
+        } catch (\Throwable $th) {
+            throw $th;
+        }
+    }
+
+    private function buildParentMapping($menus)
+    {
+        $parentMap = [];
+
+        foreach ($menus as $menu) {
+            $parentName = $menu->menu;
+
+            if (isset($menu->submenu) && is_array($menu->submenu)) {
+                foreach ($menu->submenu as $submenu) {
+                    $submenu     = (object) $submenu;
+                    $submenuName = $submenu->nama_inden_menu;
+
+                    $parentMap[$submenuName] = $parentName;
+
+                    // Level 3: Menu di bawah submenu
+                    if (isset($submenu->sub_menu) && is_array($submenu->sub_menu)) {
+                        foreach ($submenu->sub_menu as $subMenuItem) {
+                            $parentMap[$subMenuItem] = $parentName . '/' . $submenuName;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $parentMap;
     }
 
 }

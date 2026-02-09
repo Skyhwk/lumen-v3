@@ -904,7 +904,7 @@ class StpsController extends Controller
                                             $sampleNumbers[] = $orderDetail->no_sampel;
                                         }
                                     } else {
-                                        $sampleNumbers[] = $orderDetail->no_sampel;
+                                        if (!$idRegulasiOrder && !$idRegulasiPenawaran) $sampleNumbers[] = $orderDetail->no_sampel;
                                     }
                                 }
                             }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Notification;
+use App\Services\Notification as NotificationService;
 use App\Models\User;
 use App\Models\UserToken;
 use App\Models\MasterKaryawan;
@@ -58,26 +59,36 @@ class NotificationController extends Controller
 
     public function readNotificationAll(Request $request)
     {
-        $data = Notification::where('user_id', $this->user_id)->update(['is_read'=>true]);
-        return response()->json(['data'=>$data]);
+        $data = Notification::where('user_id', $this->user_id)->update(['is_read' => true]);
+        return response()->json(['data' => $data]);
     }
 
     public function deleteNotificationAll(Request $request)
     {
         $data = Notification::where('user_id', $this->user_id)->delete();
-        return response()->json(['data'=>$data]);
+        return response()->json(['data' => $data]);
     }
 
     public function deleteNotification(Request $request)
     {
         $data = Notification::where('user_id', $this->user_id)->where('id', $request->id)->delete();
-        return response()->json(['data'=>$data]);
+        return response()->json(['data' => $data]);
     }
 
     public function readNotification(Request $request)
     {
-        $data = Notification::where('user_id', $this->user_id)->where('id', $request->id)->update(['is_read'=>true]);
-        return response()->json(['data'=>$data]);
+        $data = Notification::where('user_id', $this->user_id)->where('id', $request->id)->update(['is_read' => true]);
+        return response()->json(['data' => $data]);
     }
 
+    public function sendNotificationToV3(Request $request)
+    {
+        NotificationService::whereIn('id', $request->users)
+            ->title($request->title)
+            ->message($request->body)
+            ->url($request->url)
+            ->send();
+
+        return response()->json(['data' => 'success']);
+    }
 }
