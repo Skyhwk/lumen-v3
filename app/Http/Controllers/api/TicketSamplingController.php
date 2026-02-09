@@ -144,13 +144,13 @@ class TicketSamplingController extends Controller
 
             $data->save();
 
-            $user_programming = MasterKaryawan::where('id_department', 7)
-                ->whereNotIn('id', [10, 15, 93, 123])
-                ->where('is_active', true)
-                ->pluck('id')
-                ->toArray();
+            // $user_programming = MasterKaryawan::where('id_department', 7)
+            //     ->whereNotIn('id', [10, 15, 93, 123])
+            //     ->where('is_active', true)
+            //     ->pluck('id')
+            //     ->toArray();
 
-            Notification::whereIn('id', $user_programming)
+            Notification::whereIn('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-sampling')
@@ -502,15 +502,9 @@ class TicketSamplingController extends Controller
 
             $data->save();
 
-            $message = 'Ticket Sampling telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim IT';
+            $message = 'Ticket Sampling telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim Admin Sampling';
 
-            $user_programmer = MasterKaryawan::where('id_department', 7)
-                ->whereNotIn('id', [10, 15, 93, 123])
-                ->where('is_active', true)
-                ->pluck('id')
-                ->toArray();
-
-            Notification::whereIn('id', $user_programmer)
+            Notification::whereIn('nama_lengkap', $data->solve_by)
                 ->title('Ticket Sampling Siap Diproses!')
                 ->message($message)
                 ->url('/ticket-sampling')
