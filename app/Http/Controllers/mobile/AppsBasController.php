@@ -4345,6 +4345,13 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailSenyawaVolatile::class
+            ],
+            [
+                "parameter" => "LEGIONELLA",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailMicrobiologi::class
+            
             ]
         ];
 
