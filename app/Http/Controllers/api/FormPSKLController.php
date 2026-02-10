@@ -248,7 +248,17 @@ class FormPSKLController extends Controller
         $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
         $data->is_active = false;
         $data->save();
-        return response()->json(['message' => 'Data berhasil dihapus'], 200);
+        return response()->json(['message' => 'Form PSKL berhasil dihapus'], 200);
+    }
+
+    public function reOpen(Request $request) {
+        $data = FormPSKL::where('id', $request->id)->first();
+        $data->status = "WAITING PROCESS";
+        $data->is_rejected = false;
+        $data->rejected_by = null;
+        $data->rejected_at = null;
+        $data->save();
+        return response()->json(['message' => 'Form PSKL berhasil direopen'], 200);
     }
 
 }
