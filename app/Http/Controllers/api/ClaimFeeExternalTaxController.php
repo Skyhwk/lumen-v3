@@ -1,5 +1,7 @@
 <?php
+
 namespace App\Http\Controllers\api;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\ClaimFeeExternal;
@@ -7,7 +9,7 @@ use App\Models\OrderHeader;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-
+use Illuminate\Http\File;
 
 class ClaimFeeExternalTaxController extends Controller
 {
@@ -142,15 +144,52 @@ class ClaimFeeExternalTaxController extends Controller
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
             $query->whereDate($column, $value);
 
-        // YYYY-MM
+            // YYYY-MM
         } elseif (preg_match('/^\d{4}-\d{2}$/', $value)) {
             $query->whereYear($column, substr($value, 0, 4))
                 ->whereMonth($column, substr($value, 5, 2));
 
-        // YYYY
+            // YYYY
         } elseif (preg_match('/^\d{4}$/', $value)) {
             $query->whereYear($column, $value);
         }
     }
+    public function uploadFile(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $file = $request->file('file_input');
 
+            // Validasi file
+            if (!$file || $file->getClientOriginalExtension() !== 'pdf') {
+                return response()->json(['error' => 'File tidak valid. Harus .pdf'], 400);
+            }
+
+            $claim = ClaimFeeExternal::find($request->id);
+            // Pastikan folder invoice ada
+            $folder = public_path('claim_fee_external');
+            if (!file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            // Generate nama file unik
+            $fileName = $claim->no_order . '-' . $claim->periode .  '.pdf';
+
+            // Simpan file
+            $file->move($folder, $fileName);
+            $claim->filename = $fileName;
+            $claim->save();
+
+            DB::commit();
+            return response()->json([
+                'success'  => 'Sukses menyimpan file upload',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
