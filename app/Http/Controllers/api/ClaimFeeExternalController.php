@@ -18,7 +18,7 @@ class ClaimFeeExternalController extends Controller
 
         $query = ClaimFeeExternal::query()
             ->where('is_active', true)
-            ->whereIn('status_pembayaran', ['WAITING PROCESS', 'PROCESSED', 'REJECTED']);
+            ->whereIn('status_pembayaran', ['WAITING PROCESS', 'REJECTED']);
 
         if (in_array($jabatan, [24, 86, 148])) {
             $query->where('sales_id', $this->user_id);
@@ -41,7 +41,7 @@ class ClaimFeeExternalController extends Controller
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
         
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true)->where('status_pembayaran', 'TRANSFER');
+            ->where('is_active', true)->whereIn('status_pembayaran', ['PROCESSED', 'READY TO TRANSFER', 'TRANSFER']);
 
         if (in_array($jabatan, [24, 86, 148])) {
             $query->where('sales_id', $this->user_id);

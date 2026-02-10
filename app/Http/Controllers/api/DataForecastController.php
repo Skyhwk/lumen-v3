@@ -45,6 +45,15 @@ class DataForecastController extends Controller
         ], 200);
     }
 
+    public function indexData(Request $request){
+        // Menggunakan query() agar efisien
+        $data = ForecastSP::whereYear('tanggal_sampling_min', $request->year);
+
+        // Paksa order ke kolom yang PASTI ADA, misalnya tanggal_sampling_min
+        return Datatables::of($data)
+            ->make(true);
+    }
+
     private function getForecastPerSales(int $tahun)
     {
         $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun)->get();
