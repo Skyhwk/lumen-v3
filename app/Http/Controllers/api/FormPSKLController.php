@@ -233,8 +233,25 @@ class FormPSKLController extends Controller
             $data->sales_id = $this->user_id;
             $data->save();
 
+            $message = 'Form PSKL Telah Ditambahkan';
+
+            $user_TC = MasterKaryawan::where('id_department', 17)
+                ->whereNotIn('id', [18, 83])
+                ->where('is_active', true)
+                ->pluck('id')
+                ->toArray();
+
+            Notification::whereIn('id', $user_TC)
+                ->title('Ticket Form PSKL !')
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
+                ->url('/form-pskl')
+                ->send();
+
             DB::commit();
-            return response()->json(['message' => 'Data berhasil disimpan'], 200);
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 400);
@@ -248,7 +265,81 @@ class FormPSKLController extends Controller
         $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
         $data->is_active = false;
         $data->save();
-        return response()->json(['message' => 'Data berhasil dihapus'], 200);
+
+        $message = 'Form PSKL telah di hapus';
+
+        Notification::where('nama_lengkap', $data->created_by)
+                ->title('Form PSKL Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/form-pskl')
+                ->send();
+        return response()->json([
+            'success' => true,
+            'message' => $message
+        ], 200);
+    }
+
+    public function reOpen(Request $request) {
+        DB::beginTransaction();
+        try {
+            $data = FormPSKL::where('id', $request->id)->first();
+            $data->status = "WAITING PROCESS";
+            $data->is_rejected = false;
+            $data->save();
+            DB::commit();
+
+            $message = 'Form PSKL telah di re-open';
+
+            // 🔑 ambil target notifikasi
+            $targetUser = $data->rejected_by ?: $data->solved_by;
+
+            if ($targetUser) {
+                Notification::where('nama_lengkap', $targetUser)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    public function done(Request $request) 
+    {
+        DB::beginTransaction();
+        try {
+            $data = FormPSKL::where('id', $request->id)->first();
+            $data->done_by = $this->karyawan;
+            $data->tanggal_selesai = Carbon::now()->format('Y-m-d H:i:s');
+            $data->status = 'DONE';
+            $data->save();
+
+            $message = 'Form PSKL telah di done';
+            Notification::where('nama_lengkap', $data->solved_by)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+            
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $th->getMessage()], 400);
+        }
     }
 
 }
