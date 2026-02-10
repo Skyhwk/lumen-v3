@@ -9,7 +9,8 @@ use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Models\MasterKaryawan;
-
+use App\Services\Notification;
+use App\Services\GetBawahan;
 class PermohonanPsklController extends Controller
 {
     public function index(Request $request)
@@ -32,8 +33,18 @@ class PermohonanPsklController extends Controller
             $data->status = 'PROCESSED';
             $data->save();
 
+            $message = 'Form PSKL telah di process';
+            Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Form PSKL berhasil diproses'], 200);
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
         } catch (\Exception $th) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => $th->getMessage()], 400);
@@ -53,26 +64,47 @@ class PermohonanPsklController extends Controller
             $data->status = 'REJECTED';
             $data->save();
 
+            $message = 'Form PSKL telah di reject';
+            Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+            
+
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Form PSKL berhasil di reject']);
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
         } catch (\Exception $th) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => $th->getMessage()], 400);
         }
     }
 
-    public function done(Request $request) 
+    public function solve(Request $request) 
     {
         DB::beginTransaction();
         try {
             $data = FormPSKL::where('id', $request->id)->first();
-            $data->done_by = $this->karyawan;
-            $data->tanggal_selesai = Carbon::now()->format('Y-m-d H:i:s');
-            $data->status = 'DONE';
+            $data->solved_by = $this->karyawan;
+            $data->solved_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->status = 'SOLVED';
             $data->save();
 
+            $message = 'Form PSKL telah di solve';
+            Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+            
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Form PSKL berhasil di selesaikan']);
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
         } catch (\Exception $th) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => $th->getMessage()], 400);
