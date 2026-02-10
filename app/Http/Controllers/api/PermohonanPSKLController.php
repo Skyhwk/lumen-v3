@@ -9,7 +9,8 @@ use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Models\MasterKaryawan;
-
+use App\Services\Notification;
+use App\Services\GetBawahan;
 class PermohonanPsklController extends Controller
 {
     public function index(Request $request)
