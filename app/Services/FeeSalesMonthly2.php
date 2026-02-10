@@ -137,6 +137,7 @@ class FeeSalesMonthly2
                             return $recap;
                         });
 
+                    $masterFeeSales->paid_achieved_amount += $paidAchievedAmount;
                     $masterFeeSales->claimed_fee += $claimedFee;
                     $masterFeeSales->recap = json_encode($recap);
                     $masterFeeSales->updated_by = 'System';
