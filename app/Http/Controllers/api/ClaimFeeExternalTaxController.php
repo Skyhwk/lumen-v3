@@ -173,7 +173,7 @@ class ClaimFeeExternalTaxController extends Controller
             }
 
             // Generate nama file unik
-            $fileName = $claim->no_order . '-' . $claim->periode .  '.pdf';
+            $fileName = $claim->no_order . empty($claim->periode) ? '' : '-' . $claim->periode .  '.pdf';
 
             // Simpan file
             $file->move($folder, $fileName);
