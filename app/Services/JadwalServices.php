@@ -8,10 +8,12 @@ use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Models\MasterSubKategori;
 use App\Models\PersiapanSampelHeader;
+use App\Models\PersiapanSampelDetail;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 
@@ -625,7 +627,6 @@ class JadwalServices
             //update order
             
             if ($dataUpdate->kategori != null) {
-                
                 $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
                 if ($tipe_qt == 'QTC') {
                     $status_order = QuotationKontrakH::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
@@ -690,50 +691,85 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                
-                if ($orderh && !empty($dataUpdate->kategori)) {
-                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                // 1. Validasi awal (Fail fast)
+                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderh) {
+                    // 2. Bentuk array no_sampel (Data Preparation)
                     $array_no_samples = [];
                     foreach ($dataUpdate->kategori as $kategori) {
-                        $pra_no_sample = explode(" - ", $kategori)[1];
-                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                        $parts = explode(" - ", $kategori);
+                        if (isset($parts[1])) {
+                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
+                        }
                     }
 
-                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    // 3. Query PersiapanSampelHeader (Clean Query)
                     $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function($query) use ($array_no_samples) {
+                        ->where(function ($query) use ($array_no_samples) {
                             foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
                             }
                         })
+                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+                        ->whereNotNull('no_sampel')
                         ->first();
 
+                    // 4. Proses Update jika PSH ditemukan
                     if ($psh) {
-                        // 3. Siapin data sampler yang baru
-                        $newSamplers = [];
-                        foreach ($dataUpdate->sampler as $s) {
-                            // Ambil namanya aja, sesuai format 'id,nama'
-                            $newSamplers[] = explode(',', $s)[1]; 
-                        }
+                        // A. Proses Sampler Baru (Dilakukan sekali saja)
+                        $newSamplers = array_map(function ($s) {
+                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
+                        }, $dataUpdate->sampler);
                         
-                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
-                        $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($newSamplers, $oldSamplers);
-                        // 4. Update field sampler_jadwal dan save
-                        if (count($diff) > 0) {
-                            $psh->no_sampel = json_encode($array_no_samples);
+                        $newSamplerString = implode(',', $newSamplers);
+                        // B. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
+                        if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
-                            $psh->sampler_jadwal = implode(',', $newSamplers);
-                            $psh->updated_by = $dataUpdate->karyawan;
-                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                        } 
+                        // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
+                        $dataParsing =[
+                            "nosampelOld" => json_decode($psh->no_sampel),
+                            "nosampelNew" => $array_no_samples,
+                            "samplerOld" => $psh->sampler_jadwal,
+                            "samplerNew" => $newSamplerString
+                        ];
+                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
+                        if($dirtyPersiapanBoolean){
+                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
+                                $psh->is_active =false;
+                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
+                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
+                            }
+                        }
+                        // D. Set Data yang SELALU diupdate (Apapun kondisinya)
+                         $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->sampler_jadwal = $newSamplerString;
+                        // E. Eksekusi Simpan
+                        Log::info('Debug Dirty Check', [
+                            'no_quotation' => $dataUpdate->no_quotation,
+                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+                            'no_sampel_new' => $psh->no_sampel,
+                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+                            'sampler_new' => $psh->sampler_jadwal,
+                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+                            'tanggal_new' => $psh->tanggal_sampling,
+                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
+                        ]);
+                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
+                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
                             $psh->save();
                         }
                     }
                 }
             } catch (\Throwable $th) {
+                // Tangkap error dengan detail yang cukup
                 DB::rollBack();
-                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+                throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
             DB::commit();
@@ -1019,52 +1055,90 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                
-                if ($orderh && !empty($dataUpdate->kategori)) {
-                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                // 1. Validasi awal (Fail fast)
+                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderh) {
+                    // 2. Bentuk array no_sampel (Data Preparation)
                     $array_no_samples = [];
                     foreach ($dataUpdate->kategori as $kategori) {
-                        $pra_no_sample = explode(" - ", $kategori)[1];
-                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                        $parts = explode(" - ", $kategori);
+                        if (isset($parts[1])) {
+                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
+                        }
                     }
 
-                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    // 3. Query PersiapanSampelHeader (Clean Query)
                     $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function($query) use ($array_no_samples) {
+                        ->where(function ($query) use ($array_no_samples) {
                             foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
                             }
                         })
+                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+                        ->whereNotNull('no_sampel')
                         ->first();
 
+                    // 4. Proses Update jika PSH ditemukan
                     if ($psh) {
-                        // 3. Siapin data sampler yang baru
-                        $newSamplers = [];
-                        foreach ($dataUpdate->sampler as $s) {
-                            // Ambil namanya aja, sesuai format 'id,nama'
-                            $newSamplers[] = explode(',', $s)[1]; 
-                        }
+                        // A. Proses Sampler Baru (Dilakukan sekali saja)
+                        $newSamplers = array_map(function ($s) {
+                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
+                        }, $dataUpdate->sampler);
+                        
+                        $newSamplerString = implode(',', $newSamplers);
 
-                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
-                        $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($newSamplers, $oldSamplers);
-                        // 4. Update field sampler_jadwal dan save
-                        if (count($diff) > 0) {
-                            $psh->no_sampel = json_encode($array_no_samples);
+                        // B. Set Data yang SELALU diupdate (Apapun kondisinya)
+                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->sampler_jadwal = $newSamplerString;
+                        
+                        // C. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
+                        // Jika detail_bas_documents KOSONG (null), berarti belum dikunci/tanda tangan -> Update Tanggal
+                        if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
-                            $psh->sampler_jadwal = implode(',', $newSamplers);
-                            $psh->updated_by = $dataUpdate->karyawan;
-                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                        } 
+
+                        // D logika jika jadwal berubah total tanggal tanpa ada pengurangan no sampel dan sampler
+                        $dataParsing =[
+                            "nosampelOld" => json_decode($psh->no_sampel),
+                            "nosampelNew" => $array_no_samples,
+                            "samplerOld" => $psh->sampler_jadwal,
+                            "samplerNew" => $newSamplers
+                        ];
+                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
+                        if($dirtyPersiapanBoolean){
+                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
+                                $psh->is_active =false;
+                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
+                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
+                            }
+                        }
+                        // E. Eksekusi Simpan
+                        Log::info('Debug Dirty Check', [
+                            'no_quotation' => $dataUpdate->no_quotation,
+                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+                            'no_sampel_new' => $psh->no_sampel,
+                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+                            'sampler_new' => $psh->sampler_jadwal,
+                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+                            'tanggal_new' => $psh->tanggal_sampling,
+                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
+                        ]);
+                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
+                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
                             $psh->save();
                         }
                     }
                 }
             } catch (\Throwable $th) {
+                // Tangkap error dengan detail yang cukup
                 DB::rollBack();
-                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+                throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
-
             DB::commit();
             return true;
         } catch (Exception $ex) {
@@ -1661,5 +1735,27 @@ class JadwalServices
             DB::rollBack();
             throw new Exception($e->getMessage(), 401);
         }
+    }
+
+    private function checkIsIdentical(array $dataParse) : bool
+    {
+        
+        $oldArray = $dataParse['nosampelOld'] ?? [];
+        $newArray = $dataParse['nosampelNew'] ?? [];
+        
+        $oldSampler = $dataParse['samplerOld'] ?? '';
+        $newSampler = $dataParse['samplerNew'] ?? '';
+
+        // --- TAMBAHAN UNTUK SKENARIO 4 ---
+        // Sort array agar urutan A-Z, sehingga ["B", "A"] menjadi ["A", "B"]
+        sort($oldArray);
+        sort($newArray);
+        // ----------------------------------
+
+        // Sekarang bandingkan
+        $isArrayIdentical = ($oldArray === $newArray);
+        $isSamplerIdentical = ($oldSampler === $newSampler);
+
+        return $isArrayIdentical && $isSamplerIdentical;
     }
 }
