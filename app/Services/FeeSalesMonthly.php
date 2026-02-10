@@ -62,15 +62,32 @@ class FeeSalesMonthly
         $this->categoryStr = config('kategori.id');
     }
 
-    public function run()
+    public function run($periode = NULL)
     {
+        if ($periode) {
+            $arrMonth = explode('-', $periode);
+            $this->year = $arrMonth[0];
+            $this->month = $arrMonth[1];
+            $this->period = $periode;
+            $this->timestamp = Carbon::create($this->year, $this->month)->endOfMonth();
+            $this->monthStr = self::INDO_MONTHS[$this->month];
+            printf("[FeeSalesMonthly] [%s] Running Fee Sales Monthly For %s \n", date('Y-m-d H:i:s'), $this->period);
+        } else {
+            printf("[FeeSalesMonthly] [%s] Running Fee Sales Monthly For %s \n", date('Y-m-d H:i:s'), $this->period);
+        }
+
         DB::beginTransaction();
         try {
+            printf("[FeeSalesMonthly] [%s] get master target sales \n", date('Y-m-d H:i:s'));
             $masterTargetSales = MasterTargetSales::where(['tahun' => $this->year, 'is_active' => true])->whereNotNull($this->monthStr)->get();
+            printf("[FeeSalesMonthly] [%s] get master target sales done \n", date('Y-m-d H:i:s'));
+            printf("[FeeSalesMonthly] [%s] start looping master target sales \n", date('Y-m-d H:i:s'));
             foreach ($masterTargetSales as $targetSales) {
+                printf("[FeeSalesMonthly] [%s] start looping master target sales for sales id %s \n", date('Y-m-d H:i:s'), $targetSales->karyawan_id);
                 $salesId = $targetSales->karyawan_id;
 
                 $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $salesId, 'period' => $this->period, 'is_active' => true])->exists();
+                printf("[FeeSalesMonthly] [%s] master fee sales exists for sales id %s \n", date('Y-m-d H:i:s'), $salesId);
                 if ($masterFeeSalesExists) continue;
 
                 $feeSalesRecap = MasterFeeSales::where(['sales_id' => $salesId, 'is_active' => true])->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
@@ -80,7 +97,8 @@ class FeeSalesMonthly
 
                     return $recap['periode'] === $qsd->periode;
                 });
-
+                printf("[FeeSalesMonthly] [%s] is exists in fee sales done \n", date('Y-m-d H:i:s'));
+                printf("[FeeSalesMonthly] [%s] start getting quotations \n", date('Y-m-d H:i:s'));
                 $quotations = DailyQsd::with('orderHeader.orderDetail')
                     ->where('sales_id', $salesId)
                     ->whereDate('tanggal_kelompok', '>=', $this->cutOff)
@@ -107,8 +125,9 @@ class FeeSalesMonthly
                     })
                     ->filter()
                     ->values();
-
+                printf("[FeeSalesMonthly] [%s] get quotations done \n", date('Y-m-d H:i:s'));
                 if ($quotations->isEmpty()) continue;
+                printf("[FeeSalesMonthly] [%s] Start Calculating Achievement \n", date('Y-m-d H:i:s'));
 
                 // CALCULATE CATEGORY
                 $targetCategory = collect($targetSales->{$this->monthStr});
@@ -160,7 +179,8 @@ class FeeSalesMonthly
                     'is_lunas' => $quotation->is_lunas,
                     'total_revenue' => $quotation->total_revenue,
                 ])->values();
-
+                printf("[FeeSalesMonthly] [%s] Calculating Achievement Done \n", date('Y-m-d H:i:s'));
+                printf("[FeeSalesMonthly] [%s] Start Inserting Data \n", date('Y-m-d H:i:s'));
                 // MASTER FEE SALES
                 $masterFeeSales = new MasterFeeSales();
 
@@ -213,6 +233,7 @@ class FeeSalesMonthly
                     $saldoFeeSales->created_at = $this->timestamp;
                 }
                 $saldoFeeSales->save();
+                printf("[FeeSalesMonthly] [%s] Inserting Data Done \n", date('Y-m-d H:i:s'));
             }
             DB::commit();
         } catch (\Throwable $th) {

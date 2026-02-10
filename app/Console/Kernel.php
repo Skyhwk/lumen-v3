@@ -10,9 +10,9 @@ use App\Console\Commands\CacheCommand;
 use App\Console\Commands\ScheduleUpdateForecastSP;
 use App\Console\Commands\SchaduleUpdateQsd;
 use App\Console\Commands\SchaduleUpdateSummaryQsd;
-use App\Console\Commands\FeeSales;
 use App\Console\Commands\AssignSales;
 use App\Console\Commands\BillingComand;
+use App\Console\Commands\CalculateFeeSales;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -30,10 +30,9 @@ class Kernel extends ConsoleKernel
         Commands\ScheduleUpdateForecastSP::class,
         Commands\SchaduleUpdateQsd::class,
         Commands\SchaduleUpdateSummaryQsd::class,
-        Commands\FeeSales::class,
-        Commands\FeeSales2::class,
         Commands\AssignSales::class,
-        Commands\BillingComand::class
+        Commands\BillingComand::class,
+        Commands\CalculateFeeSales::class,
     ];
 
     /**
