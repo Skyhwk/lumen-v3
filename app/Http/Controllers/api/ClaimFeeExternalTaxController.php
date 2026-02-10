@@ -55,7 +55,7 @@ class ClaimFeeExternalTaxController extends Controller
         $status = $request->status;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true)->where('is_approved_manajer', true)->whereIn('status_pembayaran', ['WAITING TO TRANSFER', 'TRANSFER', 'REJECTED']);
+            ->where('is_active', true)->where('is_approved_manajer', true)->whereIn('status_pembayaran', ['READY TO TRANSFER', 'TRANSFER', 'REJECTED']);
 
         return DataTables::of($query)
             ->filter(function ($query) use ($request) {
