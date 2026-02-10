@@ -12,6 +12,7 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Services\GetBawahan;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Models\MasterKaryawan;
 
 class FormPSKLController extends Controller
 {
