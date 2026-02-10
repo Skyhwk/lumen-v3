@@ -17,9 +17,11 @@ use App\Models\{
 
 class WithdrawalFeeSalesController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $withdrawalFeeSales = WithdrawalFeeSales::with('sales')->latest();
+        $withdrawalFeeSales = WithdrawalFeeSales::with('sales')
+        ->whereIn('status', $request->status)
+        ->latest();
 
         return DataTables::of($withdrawalFeeSales)
             ->filterColumn('sales.nama_lengkap', function ($query, $keyword) {
@@ -33,8 +35,31 @@ class WithdrawalFeeSalesController extends Controller
     public function approve(Request $request)
     {
         $withdrawalFeeSales = WithdrawalFeeSales::find($request->id);
+        $filename = null;
+        if ($request->hasFile('image')) {
+        $dir_image = "withdrawal_fee_sales";
+
+        if (!file_exists(public_path($dir_image))) {
+            mkdir(public_path($dir_image), 0777, true);
+        }
+
+            $batchNumber = str_replace('/', '_', $withdrawalFeeSales->batch_number);
+            $microtime = str_replace('.', '', microtime(true));
+
+            $file = $request->file('image');
+            $extension = $file->getClientOriginalExtension();
+
+            $filename = 'transfer_' . $batchNumber . '_' . $microtime . '.' . $extension;
+
+            $file->move(public_path($dir_image), $filename);
+        }
+
 
         $withdrawalFeeSales->status = 'Approved';
+        $withdrawalFeeSales->amount = $request->nominal;
+        $withdrawalFeeSales->pph = $request->pph_percent;
+        $withdrawalFeeSales->amount_transfer = $request->nominal_transfer;
+        $withdrawalFeeSales->filename_pph = $filename;
         $withdrawalFeeSales->approved_by = $this->karyawan;
         $withdrawalFeeSales->approved_at = Carbon::now();
 
@@ -81,5 +106,39 @@ class WithdrawalFeeSalesController extends Controller
         $withdrawalFeeSales->save();
 
         return response()->json(['message' => 'Withdrawal Fee Sales rejected successfully'], 200);
+    }
+
+
+     public function Transfer(Request $request)
+    {
+        $withdrawalFeeSales = WithdrawalFeeSales::find($request->id);
+        $filename = null;
+        if ($request->hasFile('image')) {
+        $dir_image = "withdrawal_fee_sales";
+
+        if (!file_exists(public_path($dir_image))) {
+            mkdir(public_path($dir_image), 0777, true);
+        }
+
+            $batchNumber = str_replace('/', '_', $withdrawalFeeSales->batch_number);
+            $microtime = str_replace('.', '', microtime(true));
+
+            $file = $request->file('image');
+            $extension = $file->getClientOriginalExtension();
+
+            $filename = 'transfer_' . $batchNumber . '_' . $microtime . '.' . $extension;
+
+            $file->move(public_path($dir_image), $filename);
+        }
+
+
+        $withdrawalFeeSales->status = 'Transfered';
+        $withdrawalFeeSales->filename_transfer = $filename;
+        $withdrawalFeeSales->transfered_by = $this->karyawan;
+        $withdrawalFeeSales->transfered_at = Carbon::now();
+ 
+        $withdrawalFeeSales->save();
+
+        return response()->json(['message' => 'Withdrawal Fee Sales transferred successfully'], 200);
     }
 }
