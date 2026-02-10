@@ -3723,6 +3723,11 @@ class InputParameterController extends Controller
 			$data_lapangan = $data_lapangan->toArray();
 			$pemasangan = json_decode($data_lapangan[0]['pengukuran']);
 			$pengambilan = json_decode($data_lapangan[1]['pengukuran']);
+
+			$luas_botol_raw = $pemasangan->luas_botol;
+
+			$luas_botol = (float) preg_replace('/[^0-9.]/', '', $luas_botol_raw);
+
 			
 			$start = Carbon::parse($pemasangan->tanggal_pemasangan . ' ' . $data_lapangan[0]['waktu_pengukuran']);
 			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $data_lapangan[1]['waktu_pengukuran']);
@@ -3743,6 +3748,7 @@ class InputParameterController extends Controller
 			$function = $functionObj->function;
 			$data_parsing = $request->all();
 			$data_parsing = (object)$data_parsing;
+			$data_parsing->luas_botol = $luas_botol;
 			$data_parsing->selisih_hari = $selisih_hari;
 			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
