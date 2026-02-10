@@ -82,7 +82,6 @@ class PortalSdController extends Controller
                     "pelanggan_ID" => $data->pelanggan_ID,
                     "nama_perusahaan" => $data->nama_perusahaan,
                     "nama_pic_order" => $data->nama_pic_order,
-
                 ];
             }
             return response()->json($formatData, 200);
@@ -217,6 +216,7 @@ class PortalSdController extends Controller
                 $chek->tercatat = $request->tercatat;
                 $chek->volume = $request->volume;
                 $chek->kondisi_ubnormal = json_encode($request->kondisi_ubnormal);
+                $chek->alamat_perusahaan = $request->alamat_perusahaan;
                 $chek->updated_at = DATE('Y-m-d H:i:s');
                 $chek->save();
                 DB::commit();
@@ -309,83 +309,96 @@ class PortalSdController extends Controller
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
                 $currentDateTime =date('Y-m-d H:i:s');
                 if ($dataSave !== null) {
-                    $existing = json_decode($dataSave->internal_data);
-                    // Buat index dari existing berdasarkan no_sampel + jenis_sampel
-                    $indexed = [];
-                    
-                    foreach ($existing as $item) {
-                        $item = (array) $item;
-                        $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-                        $indexed[$key] = $item;
-                    }
-
-                    // Sekarang proses incoming data
-                    foreach ($incoming as $item) {
-                        $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-
-                        if (!isset($indexed[$key])) {
-                            $item['date_time'] = $currentDateTime;
-                        } else {
-                            $existingItem = $indexed[$key];
-                            $isChanged = false;
-
-                            // 1. Cek Field Sederhana (String/Angka/Null)
-                            // Masukkan 'warna', 'keruh', 'bau' ke sini karena datanya string biasa
-                            $fieldsToCheck = ['ph', 'dhl', 'sistem_lock', 'jenis_sampel', 'warna', 'keruh', 'bau', 'suhu'];
-                            
-                            foreach ($fieldsToCheck as $field) {
-                                $newValue = $item[$field] ?? null;
-                                $oldValue = $existingItem[$field] ?? null;
-
-                                // Bandingkan nilai. Gunakan != agar "4" (string) dianggap sama dengan 4 (int)
-                                if ($newValue != $oldValue) {
-                                    $isChanged = true;
-                                    break; // Jika satu beda, sudah dianggap berubah, stop loop field
-                                }
-                            }
-
-                            // 2. Cek Field Array (Hanya Jenis Wadah)
-                            // Hanya jalankan jika field sederhana belum ditemukan perubahan
-                            if (!$isChanged) {
-                                $newWadah = $item['jenis_wadah'] ?? [];
-                                $oldWadah = $existingItem['jenis_wadah'] ?? [];
-                                
-                                // Pastikan format array murni
-                                if (!is_array($newWadah)) $newWadah = (array)$newWadah;
-                                if (!is_array($oldWadah)) $oldWadah = (array)$oldWadah;
-
-                                // Sort agar urutan tidak mempengaruhi ('A','B' dianggap sama dengan 'B','A')
-                                sort($newWadah);
-                                sort($oldWadah);
-
-                                if (json_encode($newWadah) !== json_encode($oldWadah)) {
-                                    $isChanged = true;
-                                }
-                            }
-
-                            // Set date_time
-                            // Jika berubah update waktu, jika tidak pakai waktu lama
-                            $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
-                        }
+                    if($dataSave->internal_data !== null){
+                        $existing = json_decode($dataSave->internal_data);
+                        // Buat index dari existing berdasarkan no_sampel + jenis_sampel
+                        $indexed = [];
                         
-                        // Update data di indexed untuk disimpan kembali
-                        $indexed[$key] = $item;
+                        foreach ($existing as $item) {
+                            $item = (array) $item;
+                            $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
+                            $indexed[$key] = $item;
+                        }
+    
+                        // Sekarang proses incoming data
+                        foreach ($incoming as $item) {
+                            $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
+    
+                            if (!isset($indexed[$key])) {
+                                $item['date_time'] = $currentDateTime;
+                            } else {
+                                $existingItem = $indexed[$key];
+                                $isChanged = false;
+    
+                                // 1. Cek Field Sederhana (String/Angka/Null)
+                                // Masukkan 'warna', 'keruh', 'bau' ke sini karena datanya string biasa
+                                $fieldsToCheck = ['ph', 'dhl', 'sistem_lock', 'jenis_sampel', 'warna', 'keruh', 'bau', 'suhu'];
+                                
+                                foreach ($fieldsToCheck as $field) {
+                                    $newValue = $item[$field] ?? null;
+                                    $oldValue = $existingItem[$field] ?? null;
+    
+                                    // Bandingkan nilai. Gunakan != agar "4" (string) dianggap sama dengan 4 (int)
+                                    if ($newValue != $oldValue) {
+                                        $isChanged = true;
+                                        break; // Jika satu beda, sudah dianggap berubah, stop loop field
+                                    }
+                                }
+    
+                                // 2. Cek Field Array (Hanya Jenis Wadah)
+                                // Hanya jalankan jika field sederhana belum ditemukan perubahan
+                                if (!$isChanged) {
+                                    $newWadah = $item['jenis_wadah'] ?? [];
+                                    $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                                    
+                                    // Pastikan format array murni
+                                    if (!is_array($newWadah)) $newWadah = (array)$newWadah;
+                                    if (!is_array($oldWadah)) $oldWadah = (array)$oldWadah;
+    
+                                    // Sort agar urutan tidak mempengaruhi ('A','B' dianggap sama dengan 'B','A')
+                                    sort($newWadah);
+                                    sort($oldWadah);
+    
+                                    if (json_encode($newWadah) !== json_encode($oldWadah)) {
+                                        $isChanged = true;
+                                    }
+                                }
+    
+                                // Set date_time
+                                // Jika berubah update waktu, jika tidak pakai waktu lama
+                                $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
+                            }
+                            
+                            // Update data di indexed untuk disimpan kembali
+                            $indexed[$key] = $item;
+                        }
+    
+                        
+                        // Hasil akhir
+                        $merged = array_values($indexed); // hilangkan key numerik, jadi array kembali
+                        $dataToSave = [
+                            'internal_data'   => json_encode($merged)
+                        ];
+                        // Update existing
+                        $dataToSave['update_at'] = date('Y-m-d H:i:s');
+                        SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
+                            ->where('periode', $request->periode)
+                            ->update($dataToSave);
+                    }else{
+                        // Add periode to array for new insert
+                        $dataToSave = [
+                            'periode' => $request->periode,
+                            'tanggal_sampling' => date('Y-m-d'),
+                            'update_at' => date('Y-m-d H:i:s'),
+                            'update_by' => 'start Internal',
+                            'internal_data' => json_encode($incoming) // langsung saja
+                        ];
+                        SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
+                            ->where('periode', $request->periode)
+                            ->update($dataToSave);
                     }
-
-                    
-                    // Hasil akhir
-                    $merged = array_values($indexed); // hilangkan key numerik, jadi array kembali
-                    $dataToSave = [
-                        'internal_data'   => json_encode($merged)
-                    ];
-                    // Update existing
-                    $dataToSave['update_at'] = date('Y-m-d H:i:s');
-                    SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
-                        ->where('periode', $request->periode)
-                        ->update($dataToSave);
                 } else {
                     // Add periode to array for new insert
-
                     $dataToSave = [
                         'id_header' => $request->idSampelDiantar,
                         'periode' => $request->periode,
@@ -498,7 +511,8 @@ class PortalSdController extends Controller
             return response()->json([
                 'error' => true,
                 'message' => $e->getMessage(),
-                'line' =>$e->getLine()
+                'line' =>$e->getLine(),
+                'file' => $e->getFile()
             ], 500);
         }
     }
