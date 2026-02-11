@@ -13,6 +13,6 @@ class MasterSubKategoriAset extends Sector
 
     public function kategori()
     {
-        return $this->belongsTo(MasterKategoriAset::class, 'kategori_aset_id');
+        return $this->belongsTo(MasterKategoriAset::class, 'id_kategori', 'id');
     }
 }
