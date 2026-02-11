@@ -230,6 +230,28 @@ class MasterPelangganController extends Controller
                 if ($request->kategori_pelanggan != '')
                     $dataPelanggan['kategori_pelanggan'] = $request->kategori_pelanggan;
 
+                // ===== cek apakah hanya sales yang berubah =====
+                $original = $pelanggan->only([
+                    'nama_pelanggan',
+                    'wilayah',
+                    'sub_kategori',
+                    'npwp',
+                    'bahan_pelanggan',
+                    'merk_pelanggan',
+                ]);
+
+                $newDataToCompare = $dataPelanggan;
+                unset(
+                    $newDataToCompare['sales_id'],
+                    $newDataToCompare['sales_penanggung_jawab'],
+                    $newDataToCompare['updated_by'],
+                    $newDataToCompare['updated_at'],
+                    $newDataToCompare['id_cabang'],
+                    $newDataToCompare['kategori_pelanggan']
+                );
+
+                $isOnlySalesChanged = $original == $newDataToCompare;
+
                 $pelanggan->update($dataPelanggan);
 
                 if ($request->has('kontak_pelanggan')) {
@@ -251,12 +273,24 @@ class MasterPelangganController extends Controller
                             if (substr($noTlp, 0, 2) === "62") { // convert depannya jadi 0
                                 $noTlp = "0" . substr($noTlp, 2);
                             }
-                            // cek noTlp
-                            $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->where('is_active', true)->first();
-                            if ($sameTelNumber && $sameTelNumber->pelanggan_id !== $pelanggan->id) {
-                                DB::rollback();
-                                return response()->json(['message' => 'Nomor telepon perusahaan sudah ada'], 400);
-                            };
+
+                            $currentKontak = null;
+
+                            if (!empty($request->kontak_pelanggan['id'][$index])) {
+                                $currentKontak = KontakPelanggan::find($request->kontak_pelanggan['id'][$index]);
+                            }
+                            
+                            $isNoTlpChanged = !$currentKontak || $currentKontak->no_tlp_perusahaan !== $noTlp;
+
+                            // skip cek nomor kalau cuma sales yang berubah | noTlp tidak berubah
+                            if (!$isOnlySalesChanged || $isNoTlpChanged) {
+                                // cek noTlp
+                                $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->where('is_active', true)->first();
+                                if ($sameTelNumber && $sameTelNumber->pelanggan_id !== $pelanggan->id) {
+                                    DB::rollback();
+                                    return response()->json(['message' => 'Nomor telepon perusahaan sudah ada'], 400);
+                                };
+                            }
 
                             $kontak = [
                                 'pelanggan_id' => $pelanggan->id,
@@ -498,7 +532,7 @@ class MasterPelangganController extends Controller
                 }
             }
 
-            DB::commit();
+            // DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan']);
         } catch (\Exception $e) {
             DB::rollback();
