@@ -4,13 +4,10 @@ namespace App\Models;
 
 use App\Models\Sector;
 
-use Illuminate\Database\Eloquent\SoftDeletes;
-
 class WithdrawalFeeSales extends Sector
 {
-    use SoftDeletes;
-
     protected $guarded = ['id'];
+    public $timestamps = false;
 
     public function sales()
     {

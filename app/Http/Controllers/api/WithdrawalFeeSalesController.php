@@ -22,6 +22,7 @@ class WithdrawalFeeSalesController extends Controller
         $withdrawalFeeSales = WithdrawalFeeSales::with('sales')
         ->whereIn('status', $request->status)
         ->latest();
+        $withdrawalFeeSales = WithdrawalFeeSales::with('sales')->where('is_active', true)->latest();
 
         return DataTables::of($withdrawalFeeSales)
             ->filterColumn('sales.nama_lengkap', function ($query, $keyword) {
@@ -54,26 +55,31 @@ class WithdrawalFeeSalesController extends Controller
             $file->move(public_path($dir_image), $filename);
         }
 
+        $timestamp = Carbon::now();
 
+        $withdrawalFeeSales = WithdrawalFeeSales::where(['id' => $request->id, 'is_active' => true])->latest()->first();
         $withdrawalFeeSales->status = 'Approved';
         $withdrawalFeeSales->amount = $request->nominal;
         $withdrawalFeeSales->pph = $request->pph_percent;
         $withdrawalFeeSales->amount_transfer = $request->nominal_transfer;
         $withdrawalFeeSales->filename_pph = $filename;
         $withdrawalFeeSales->approved_by = $this->karyawan;
-        $withdrawalFeeSales->approved_at = Carbon::now();
+        $withdrawalFeeSales->approved_at = $timestamp;
 
         $mutasiFeeSales = new MutasiFeeSales();
+
         $mutasiFeeSales->sales_id = $withdrawalFeeSales->sales_id;
         $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
+        $mutasiFeeSales->period = $timestamp->year . '-' . $timestamp->month;
         $mutasiFeeSales->mutation_type = 'Debit';
         $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
         $mutasiFeeSales->description = 'Withdrawal Approved by Finance';
         $mutasiFeeSales->status = 'Done';
         $mutasiFeeSales->created_by = $this->karyawan;
-        $mutasiFeeSales->updated_by = $this->karyawan;
+        $mutasiFeeSales->created_at = $timestamp;
+
         $mutasiFeeSales->save();
- 
+
         $withdrawalFeeSales->save();
 
         return response()->json(['message' => 'Withdrawal Fee Sales approved successfully'], 200);
@@ -81,26 +87,32 @@ class WithdrawalFeeSalesController extends Controller
 
     public function reject(Request $request)
     {
-        $withdrawalFeeSales = WithdrawalFeeSales::find($request->id);
+        $timestamp = Carbon::now();
 
+        $withdrawalFeeSales = WithdrawalFeeSales::where(['id' => $request->id, 'is_active' => true])->latest()->first();
         $withdrawalFeeSales->status = 'Rejected';
         $withdrawalFeeSales->rejected_by = $this->karyawan;
-        $withdrawalFeeSales->rejected_at = Carbon::now();
+        $withdrawalFeeSales->rejected_at = $timestamp;
         $withdrawalFeeSales->reject_reason = $request->reason;
 
         $mutasiFeeSales = new MutasiFeeSales();
+
         $mutasiFeeSales->sales_id = $withdrawalFeeSales->sales_id;
         $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
+        $mutasiFeeSales->period = $timestamp->year . '-' . $timestamp->month;
         $mutasiFeeSales->mutation_type = 'Kredit';
         $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
         $mutasiFeeSales->description = 'Withdrawal Rejected by Finance, Balance Restored';
         $mutasiFeeSales->status = 'Done';
         $mutasiFeeSales->created_by = $this->karyawan;
-        $mutasiFeeSales->updated_by = $this->karyawan;
+        $mutasiFeeSales->created_at = $timestamp;
+
         $mutasiFeeSales->save();
 
         $saldoFeeSales = SaldoFeeSales::where('sales_id', $withdrawalFeeSales->sales_id)->first();
         $saldoFeeSales->active_balance += $withdrawalFeeSales->amount;
+        $saldoFeeSales->updated_by = 'System';
+        $saldoFeeSales->updated_at = $timestamp;
         $saldoFeeSales->save();
 
         $withdrawalFeeSales->save();

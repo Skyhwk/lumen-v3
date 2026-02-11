@@ -82,7 +82,6 @@ class PortalSdController extends Controller
                     "pelanggan_ID" => $data->pelanggan_ID,
                     "nama_perusahaan" => $data->nama_perusahaan,
                     "nama_pic_order" => $data->nama_pic_order,
-
                 ];
             }
             return response()->json($formatData, 200);
@@ -217,10 +216,73 @@ class PortalSdController extends Controller
                 $chek->tercatat = $request->tercatat;
                 $chek->volume = $request->volume;
                 $chek->kondisi_ubnormal = json_encode($request->kondisi_ubnormal);
+                $chek->alamat_perusahaan = $request->alamat_perusahaan;
                 $chek->updated_at = DATE('Y-m-d H:i:s');
                 $chek->save();
                 DB::commit();
                 return response()->json(['data' => $chek->id], 200);
+            }
+            
+        } catch (\Exception $ex) {
+            //throw $th;
+            DB::rollback();
+            return response()->json([
+                "message" => $ex->getMessage(),
+                "line" => $ex->getLine(),
+                "file" => $ex->getFile()
+            ], 500);
+        }
+    }
+
+    private function storeHeaderEksternal($request)
+    {
+        
+        DB::beginTransaction();
+        try {
+            $sampelDiantarID = $request->idSampelDiantar;
+            if ($sampelDiantarID != null && $sampelDiantarID != "") {
+                $chek = SampelDiantar::where('id', $sampelDiantarID)->first();
+            } else {
+                $chek = null;
+            }
+            if ($chek == null) {
+                $data = new SampelDiantar;
+
+                $bulanRomawi = [
+                    1 => 'I',
+                    2 => 'II',
+                    3 => 'III',
+                    4 => 'IV',
+                    5 => 'V',
+                    6 => 'VI',
+                    7 => 'VII',
+                    8 => 'VIII',
+                    9 => 'IX',
+                    10 => 'X',
+                    11 => 'XI',
+                    12 => 'XII',
+                ];
+
+                $prefix = 'ISL/TSD';
+                $year = date('y'); // 2 digit tahun
+                $month = $bulanRomawi[intval(date('n'))]; // bulan dalam Romawi
+                $lastDocument = SampelDiantar::latest('no_document')->first();
+
+                if ($lastDocument) {
+                    $lastNumber = intval(substr($lastDocument->no_document, -6));
+                    $newNumber = str_pad($lastNumber + 1, 6, '0', STR_PAD_LEFT);
+                } else {
+                    $newNumber = '000001';
+                }
+                $data->no_quotation = $request->no_document;
+                $data->no_order = $request->no_order;
+                $data->nama_perusahaan = $request->nama_perusahaan;
+                $data->no_document = "{$prefix}/{$year}-{$month}/{$newNumber}";
+                $data->created_at = DATE('Y-m-d H:i:s');
+                $data->save();
+                $getId = $data;
+                DB::commit();
+                return $getId;
             }
             
         } catch (\Exception $ex) {
@@ -247,83 +309,96 @@ class PortalSdController extends Controller
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
                 $currentDateTime =date('Y-m-d H:i:s');
                 if ($dataSave !== null) {
-                    $existing = json_decode($dataSave->internal_data);
-                    // Buat index dari existing berdasarkan no_sampel + jenis_sampel
-                    $indexed = [];
-                    
-                    foreach ($existing as $item) {
-                        $item = (array) $item;
-                        $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-                        $indexed[$key] = $item;
-                    }
-
-                    // Sekarang proses incoming data
-                    foreach ($incoming as $item) {
-                        $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-
-                        if (!isset($indexed[$key])) {
-                            $item['date_time'] = $currentDateTime;
-                        } else {
-                            $existingItem = $indexed[$key];
-                            $isChanged = false;
-
-                            // 1. Cek Field Sederhana (String/Angka/Null)
-                            // Masukkan 'warna', 'keruh', 'bau' ke sini karena datanya string biasa
-                            $fieldsToCheck = ['ph', 'dhl', 'sistem_lock', 'jenis_sampel', 'warna', 'keruh', 'bau', 'suhu'];
-                            
-                            foreach ($fieldsToCheck as $field) {
-                                $newValue = $item[$field] ?? null;
-                                $oldValue = $existingItem[$field] ?? null;
-
-                                // Bandingkan nilai. Gunakan != agar "4" (string) dianggap sama dengan 4 (int)
-                                if ($newValue != $oldValue) {
-                                    $isChanged = true;
-                                    break; // Jika satu beda, sudah dianggap berubah, stop loop field
-                                }
-                            }
-
-                            // 2. Cek Field Array (Hanya Jenis Wadah)
-                            // Hanya jalankan jika field sederhana belum ditemukan perubahan
-                            if (!$isChanged) {
-                                $newWadah = $item['jenis_wadah'] ?? [];
-                                $oldWadah = $existingItem['jenis_wadah'] ?? [];
-                                
-                                // Pastikan format array murni
-                                if (!is_array($newWadah)) $newWadah = (array)$newWadah;
-                                if (!is_array($oldWadah)) $oldWadah = (array)$oldWadah;
-
-                                // Sort agar urutan tidak mempengaruhi ('A','B' dianggap sama dengan 'B','A')
-                                sort($newWadah);
-                                sort($oldWadah);
-
-                                if (json_encode($newWadah) !== json_encode($oldWadah)) {
-                                    $isChanged = true;
-                                }
-                            }
-
-                            // Set date_time
-                            // Jika berubah update waktu, jika tidak pakai waktu lama
-                            $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
-                        }
+                    if($dataSave->internal_data !== null){
+                        $existing = json_decode($dataSave->internal_data);
+                        // Buat index dari existing berdasarkan no_sampel + jenis_sampel
+                        $indexed = [];
                         
-                        // Update data di indexed untuk disimpan kembali
-                        $indexed[$key] = $item;
+                        foreach ($existing as $item) {
+                            $item = (array) $item;
+                            $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
+                            $indexed[$key] = $item;
+                        }
+    
+                        // Sekarang proses incoming data
+                        foreach ($incoming as $item) {
+                            $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
+    
+                            if (!isset($indexed[$key])) {
+                                $item['date_time'] = $currentDateTime;
+                            } else {
+                                $existingItem = $indexed[$key];
+                                $isChanged = false;
+    
+                                // 1. Cek Field Sederhana (String/Angka/Null)
+                                // Masukkan 'warna', 'keruh', 'bau' ke sini karena datanya string biasa
+                                $fieldsToCheck = ['ph', 'dhl', 'sistem_lock', 'jenis_sampel', 'warna', 'keruh', 'bau', 'suhu'];
+                                
+                                foreach ($fieldsToCheck as $field) {
+                                    $newValue = $item[$field] ?? null;
+                                    $oldValue = $existingItem[$field] ?? null;
+    
+                                    // Bandingkan nilai. Gunakan != agar "4" (string) dianggap sama dengan 4 (int)
+                                    if ($newValue != $oldValue) {
+                                        $isChanged = true;
+                                        break; // Jika satu beda, sudah dianggap berubah, stop loop field
+                                    }
+                                }
+    
+                                // 2. Cek Field Array (Hanya Jenis Wadah)
+                                // Hanya jalankan jika field sederhana belum ditemukan perubahan
+                                if (!$isChanged) {
+                                    $newWadah = $item['jenis_wadah'] ?? [];
+                                    $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                                    
+                                    // Pastikan format array murni
+                                    if (!is_array($newWadah)) $newWadah = (array)$newWadah;
+                                    if (!is_array($oldWadah)) $oldWadah = (array)$oldWadah;
+    
+                                    // Sort agar urutan tidak mempengaruhi ('A','B' dianggap sama dengan 'B','A')
+                                    sort($newWadah);
+                                    sort($oldWadah);
+    
+                                    if (json_encode($newWadah) !== json_encode($oldWadah)) {
+                                        $isChanged = true;
+                                    }
+                                }
+    
+                                // Set date_time
+                                // Jika berubah update waktu, jika tidak pakai waktu lama
+                                $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
+                            }
+                            
+                            // Update data di indexed untuk disimpan kembali
+                            $indexed[$key] = $item;
+                        }
+    
+                        
+                        // Hasil akhir
+                        $merged = array_values($indexed); // hilangkan key numerik, jadi array kembali
+                        $dataToSave = [
+                            'internal_data'   => json_encode($merged)
+                        ];
+                        // Update existing
+                        $dataToSave['update_at'] = date('Y-m-d H:i:s');
+                        SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
+                            ->where('periode', $request->periode)
+                            ->update($dataToSave);
+                    }else{
+                        // Add periode to array for new insert
+                        $dataToSave = [
+                            'periode' => $request->periode,
+                            'tanggal_sampling' => date('Y-m-d'),
+                            'update_at' => date('Y-m-d H:i:s'),
+                            'update_by' => 'start Internal',
+                            'internal_data' => json_encode($incoming) // langsung saja
+                        ];
+                        SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
+                            ->where('periode', $request->periode)
+                            ->update($dataToSave);
                     }
-
-                    
-                    // Hasil akhir
-                    $merged = array_values($indexed); // hilangkan key numerik, jadi array kembali
-                    $dataToSave = [
-                        'internal_data'   => json_encode($merged)
-                    ];
-                    // Update existing
-                    $dataToSave['update_at'] = date('Y-m-d H:i:s');
-                    SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
-                        ->where('periode', $request->periode)
-                        ->update($dataToSave);
                 } else {
                     // Add periode to array for new insert
-
                     $dataToSave = [
                         'id_header' => $request->idSampelDiantar,
                         'periode' => $request->periode,
@@ -342,6 +417,9 @@ class PortalSdController extends Controller
                 $dataSave = SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
                     ->where('periode', $request->periode)
                     ->first();
+                if($dataSave == null){
+                    $dataSave = $this->storeHeaderEksternal($request);
+                }
                 $incoming = $request->external_data;
                 // Pastikan array
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
@@ -351,7 +429,7 @@ class PortalSdController extends Controller
                     $existing = [];
                     $currentDateTime = date('Y-m-d H:i:s');
                      // Hanya decode jika eksternal_data bukan null dan string valid JSON
-                    if (!empty($dataSave->eksternal_data)) {
+                    if ( isset($dataSave->eksternal_data) && !empty($dataSave->eksternal_data)) {
                         $existing = json_decode($dataSave->eksternal_data, true) ?? [];
                     }
                     // Merge jika existing tidak kosong
@@ -388,25 +466,44 @@ class PortalSdController extends Controller
                         $merged = array_values($indexed);
                     }
                      // Simpan hasil
-                    SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
-                    ->where('periode', $request->periode)
-                    ->update([
-                        'eksternal_data' => json_encode($merged),
-                        'petugas_pengambilan_sampel' => $request->sampler,
-                        'update_at' => date('Y-m-d H:i:s'),
-                        'is_ukur_suhu' => $request->is_ukur_suhu,
-                        'tanggal_diambil_oleh_pihak_pelanggan' => $request->tanggal_diambil_oleh_pihak_pelanggan,
-                        'tujuan_pengujian' => json_encode($request->tujuan_pengujian),
-                        'waktu_diambil_pelanggan' => $request->waktu_diambil_pelanggan,
-                        'nama_sertifikat'=>$request->nama_sertifikat,
-                        'metode_standar'=>$request->metode_standar,
-                        'sampler'=>$request->sampler,
-                        'cara_pengambilan_sample'=>$request->cara_pengambilan_sample,
-                    ]);
+                     if($request->idSampelDiantar != null){
+                         SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
+                         ->where('periode', $request->periode)
+                         ->update([
+                             'eksternal_data' => json_encode($merged),
+                             'petugas_pengambilan_sampel' => $request->sampler,
+                             'update_at' => date('Y-m-d H:i:s'),
+                             'is_ukur_suhu' => $request->is_ukur_suhu,
+                             'tanggal_diambil_oleh_pihak_pelanggan' => $request->tanggal_diambil_oleh_pihak_pelanggan,
+                             'tujuan_pengujian' => json_encode($request->tujuan_pengujian),
+                             'waktu_diambil_pelanggan' => $request->waktu_diambil_pelanggan,
+                             'nama_sertifikat'=>$request->nama_sertifikat,
+                             'metode_standar'=>$request->metode_standar,
+                             'sampler'=>$request->sampler,
+                             'cara_pengambilan_sample'=>$request->cara_pengambilan_sample,
+                         ]);
+                     }else{
+                        $dataCreate =[
+                            'id_header' => $dataSave->id,
+                             'eksternal_data' => json_encode($merged),
+                             'petugas_pengambilan_sampel' => $request->sampler,
+                             'is_ukur_suhu' => $request->is_ukur_suhu,
+                             'tanggal_diambil_oleh_pihak_pelanggan' => $request->tanggal_diambil_oleh_pihak_pelanggan,
+                             'tujuan_pengujian' => json_encode($request->tujuan_pengujian),
+                             'waktu_diambil_pelanggan' => $request->waktu_diambil_pelanggan,
+                             'nama_sertifikat'=>$request->nama_sertifikat,
+                             'metode_standar'=>$request->metode_standar,
+                             'sampler'=>$request->sampler,
+                             'cara_pengambilan_sample'=>$request->cara_pengambilan_sample,
+                             'created_at' => date('Y-m-d H:i:s'),
+                             'created_by' => 'start Eksternal',
+                         ];
+                         SampelDiantarDetail::create($dataCreate);
+                     }
                 }
 
                 return response()->json([
-                    'sampeldiantarid' => $request->idSampelDiantar,
+                    'sampeldiantarid' => $dataSave->id,
                     'periode' => $request->periode,
                 ], 200);
             }
@@ -414,7 +511,8 @@ class PortalSdController extends Controller
             return response()->json([
                 'error' => true,
                 'message' => $e->getMessage(),
-                'line' =>$e->getLine()
+                'line' =>$e->getLine(),
+                'file' => $e->getFile()
             ], 500);
         }
     }
@@ -579,40 +677,40 @@ class PortalSdController extends Controller
 
     public function chekStepSd(Request $request)
     {
-        // $type = explode('/', $request->no_document)[1] ?? null; // Tidak digunakan
         $mode = $request->mode;
 
+        // 1. Ambil Data Induk
         $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
-            // Pastikan periode tidak null dan tidak string 'null' sebelum query
             if ($request->periode && $request->periode !== 'null') {
                 $q->where('periode', $request->periode);
             } else {
-                // Jika periode adalah null atau 'null', kita mungkin ingin mencari detail tanpa periode spesifik
-                // atau detail di mana periode adalah NULL di database. Sesuaikan ini.
                 $q->whereNull('periode');
             }
         }])
-            ->where('no_quotation', $request->no_document)
-            ->where('no_order', $request->no_order)
-            ->where('periode_kontrak',$request->periode)
-            ->first();
+        ->where('no_quotation', $request->no_document)
+        ->where('no_order', $request->no_order)
+        ->where('periode_kontrak', $request->periode)
+        ->first();
 
+        // 2. Cek Mode Terima
         if ($mode === 'terima') {
-            return response()->json(['status' => $sampelDiantar !== null], 200);
+            if ($sampelDiantar && $sampelDiantar->nama_pengantar_sampel != null) {
+                return response()->json(['status' => true], 200);
+            }
+            return response()->json(['status' => false], 200);
         }
 
-        // Jika mode bukan 'terima', $sampelDiantar harus ada
+        // 3. Validasi Keberadaan Data
         if (!in_array($mode, ['internal_data', 'eksternal_data']) || !$sampelDiantar) {
-            return response()->json(['status' => false, 'message' => 'Data sampel diantar tidak ditemukan atau mode tidak valid.'], 200);
+            return response()->json([
+                'status' => false, 
+                'message' => 'Data sampel diantar tidak ditemukan atau mode tidak valid.'
+            ], 200);
         }
 
-        // Dapatkan record detail spesifik yang menyimpan array JSON.
-        // Asumsi: ada satu record detail per periode yang menyimpan array ini.
-        // Atau, jika detail adalah koleksi item sampel individual, logika ini perlu diubah.
+        // 4. Ambil Detail Spesifik
         $detailForPeriod = null;
         if ($sampelDiantar->detail->isNotEmpty()) {
-            // Jika Anda punya cara spesifik untuk mengidentifikasi record detail utama, gunakan itu.
-            // Untuk saat ini, kita ambil yang pertama yang cocok dengan periode request (jika ada).
             $requestedPeriode = ($request->periode === 'null' || !$request->periode) ? null : $request->periode;
             $detailForPeriod = $sampelDiantar->detail->first(function ($item) use ($requestedPeriode) {
                 return $item->periode == $requestedPeriode;
@@ -620,13 +718,13 @@ class PortalSdController extends Controller
         }
 
         if (!$detailForPeriod) {
-            return response()->json(['status' => false, 'message' => 'Detail sampel untuk periode yang diminta tidak ditemukan.'], 200);
+            return response()->json([
+                'status' => false, 
+                'message' => 'Detail sampel untuk periode yang diminta tidak ditemukan.'
+            ], 200);
         }
 
-        $dataField = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
-        $jsonData = json_decode($detailForPeriod->$dataField ?? '[]', true);
-        $isFinished = $detailForPeriod->is_finished ?? 0;
-
+        // 5. Ambil Data Referensi dari OrderDetail
         $orderDetails = OrderDetail::where('kategori_1', 'SD')
             ->where('no_order', $request->no_order)
             ->where('no_quotation', $request->no_document)
@@ -634,75 +732,110 @@ class PortalSdController extends Controller
             ->where('periode', ($request->periode === 'null' || !$request->periode) ? null : $request->periode)
             ->get(['no_sampel', 'kategori_3']);
 
-
-
-        // Jika status sudah 'finished', mungkin tidak perlu proses update 'is_active' lagi
-        // Kecuali jika ada logika bisnis lain yang mengharuskannya.
-        // Untuk saat ini, kita lanjutkan proses modifikasi jsonData terlepas dari $isFinished,
-        // karena $isValid hanya menentukan status awal.
-
-        // Buat array yang berisi no_sampel dari $orderDetails untuk pencarian cepat
+        $targetCount = $orderDetails->count();
+        
+        // 6. Persiapan untuk Sanitisasi
         $orderSampelNumbers = $orderDetails->pluck('no_sampel')->toArray();
         $orderKategoriRaw = $orderDetails->pluck('kategori_3')->toArray();
         $cleanedKategori = array_map(fn($item) => explode('-', $item, 2)[1] ?? $item, $orderKategoriRaw);
         $normalizedKategori = array_map(fn($item) => strtolower(trim($item)), $cleanedKategori);
+        
+        // 7. Ambil & Sanitasi Data untuk Mode yang Diminta
+        $dataField = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
+        $jsonData = json_decode($detailForPeriod->$dataField ?? '[]', true);
         $jsonDataModified = false;
 
-        // Iterasi pada $jsonData dengan reference (&) agar perubahan langsung terjadi pada array
         foreach ($jsonData as &$item) {
-            if (!isset($item['no_sampel'])) {
-                continue;
-            }
+            if (!isset($item['no_sampel'])) continue;
 
             $notInSampel = !in_array($item['no_sampel'], $orderSampelNumbers);
-            $jenisSampel = strtolower(trim($item['jenis_sampel']));
+            $jenisSampel = strtolower(trim($item['jenis_sampel'] ?? ''));
             $notInKategori = !in_array($jenisSampel, $normalizedKategori);
+            
             if ($notInSampel || $notInKategori) {
                 if (($item['is_active'] ?? true) !== false) {
                     $item['is_active'] = false;
-                    // $item['date_time'] = date('Y-m-d H:i:s');
                     $jsonDataModified = true;
                 }
             }
         }
-        unset($item); // Hapus referensi setelah loop
+        unset($item);
 
-        // Jika ada modifikasi pada $jsonData, update record $detailForPeriod
+        // 8. Simpan jika ada perubahan
         if ($jsonDataModified) {
-            $detailForPeriod->update([
-                $dataField => json_encode($jsonData) // Simpan seluruh array jsonData yang sudah dimodifikasi
-            ]);
+            $detailForPeriod->update([$dataField => json_encode($jsonData)]);
+            $detailForPeriod->$dataField = json_encode($jsonData);
         }
 
-        $activeSdCount = 0;
-        // Loop lagi pada $jsonData (yang mungkin sudah dimodifikasi) untuk menghitung item aktif
-        foreach ($jsonData as $item) {
-            // Item dianggap aktif jika 'is_active' tidak ada (implisit aktif)
-            // ATAU jika 'is_active' secara eksplisit bernilai true.
-            if (!isset($item['is_active']) || $item['is_active'] === true) {
-                $activeSdCount++;
+        // 9. Helper: Hitung item aktif dari JSON string
+        $countActiveInJson = function($jsonStr) {
+            $data = json_decode($jsonStr ?? '[]', true);
+            $count = 0;
+            foreach ($data as $d) {
+                if (!isset($d['is_active']) || $d['is_active'] === true) {
+                    $count++;
+                }
+            }
+            return $count;
+        };
+
+        // 10. LOGIKA VALIDASI BERTINGKAT
+        $isValid = false;
+        $message = '';
+        $currentActiveCount = $countActiveInJson($detailForPeriod->$dataField);
+
+        if ($mode === 'internal_data') {
+            // ✅ INTERNAL: Cukup cek apakah sudah lengkap
+            if (empty($jsonData) || count($jsonData) === 0) {
+                $isValid = false;
+                $message = 'Data Internal belum diisi sama sekali.';
+            } else {
+                $isValid = ($currentActiveCount === $targetCount);
+                $message = $isValid ? 'Validasi Internal Berhasil.' : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
+            }
+        } 
+        elseif ($mode === 'eksternal_data') {
+            // ✅ EKSTERNAL: CEK INTERNAL DULU!
+            $internalData = json_decode($detailForPeriod->$mode ?? '[]', true);
+            $internalCount = $countActiveInJson($detailForPeriod->$mode);
+            
+            // Cek apakah internal sudah diisi
+            if (empty($internalData) || count($internalData) === 0) {
+                $isValid = false;
+                $message = 'Data Internal belum diisi. Selesaikan Internal Data terlebih dahulu.';
+            } 
+            // Cek apakah internal sudah lengkap
+            elseif ($internalCount !== $targetCount) {
+                $isValid = false;
+                $message = "Data Internal belum lengkap ($internalCount dari $targetCount). Selesaikan Internal Data terlebih dahulu.";
+            } 
+            // Jika internal sudah OK, baru cek eksternal
+            else {
+                if (empty($jsonData) || count($jsonData) === 0) {
+                    $isValid = false;
+                    $message = 'Data Eksternal belum diisi sama sekali.';
+                } else {
+                    $isValid = ($currentActiveCount === $targetCount);
+                    $message = $isValid ? 'Validasi Eksternal Berhasil.' : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
+                }
             }
         }
 
-        $isValid = false;
-        if ($isFinished == 1) {
+        // 11. Override jika sudah finished
+        if (($detailForPeriod->is_finished ?? 0) == 1) {
             $isValid = true;
-        } else {
-            // Validasi awal: jumlah sampel di JSON harus cocok dengan jumlah order detail
-            // Anda mungkin ingin validasi yang lebih kompleks di sini
-            $isValid = count($orderDetails) === $activeSdCount;
+            $message = 'Data sudah selesai (Finished).';
         }
 
-        // Status akhir bisa jadi berdasarkan $isValid ATAU hasil pengecekan setelah modifikasi.
-        // Misalnya, apakah semua item di jsonData sekarang memiliki status 'is_active' yang sesuai.
-        // Untuk saat ini, kita kembalikan $isValid yang ditentukan di awal.
         return response()->json([
-            'status' => $isValid, // Atau status lain yang lebih relevan setelah update
-            'message' => $isValid ? 'Validasi berhasil.' : 'Validasi gagal atau data tidak lengkap.',
-            'od_count' => count($orderDetails),
-            'sd_count' => $activeSdCount,
-            // 'updated_data_preview' => $jsonData // Opsional: untuk debugging
+            'status' => $isValid,
+            'message' => $message,
+            'od_count' => $targetCount,
+            'sd_count' => $currentActiveCount,
+            'mode_checked' => $mode
         ], 200);
     }
+
+    
 
 }
