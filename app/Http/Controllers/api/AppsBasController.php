@@ -2340,6 +2340,10 @@ class AppsBasController extends Controller
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                 }
 
+                if(in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                    continue;
+                }
+
                 $verified = $this->verifyStatus($sample->no_sample, $parameter);
                 if (!$verified) {
                     // dd("Parameter {$parameter['parameter']} tidak memenuhi syarat");

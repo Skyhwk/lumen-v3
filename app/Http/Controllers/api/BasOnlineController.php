@@ -2257,6 +2257,10 @@ class BasOnlineController extends Controller
                         continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
                     }
 
+                    if(in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
+                    }
+
                     
                     $verified = $this->verifyStatus($sample->no_sample, $parameter);
                     
