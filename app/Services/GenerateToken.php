@@ -28,19 +28,9 @@ class GenerateToken
                 // }
             }else if( $type_doc == 'non_kontrak' ){
                 // if(is_null($data->expired)){
-                    $created_at = Carbon::createFromFormat('Y-m-d H:i:s', $data->created_at);
-                    $tanggal_penawaran = Carbon::createFromFormat('Y-m-d', $data->tanggal_penawaran);
-                        if ($created_at->year == $tanggal_penawaran->year) {
-                            $expired = $tanggal_penawaran
-                                        ->copy()
-                                        ->addMonths(3)
-                                        ->format('Y-m-d');
-                        } else {
-                            $expired = $created_at
-                                        ->copy()
-                                        ->addMonth(1)
-                                        ->format('Y-m-d');
-                        }
+                    $expired = Carbon::createFromFormat('Y-m-d', $data->tanggal_penawaran)
+                                ->addMonths(3)
+                                ->format('Y-m-d');
                 // }
             } else if( $type_doc == 'INVOICE' ){
                 // if(is_null($data->expired)){
