@@ -1319,7 +1319,6 @@ class BasOnlineController extends Controller
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
                     
                     if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
-                        dd('masuk');
                         $status[$sample->no_sample] = 'selesai';
                     } else {
                         $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
