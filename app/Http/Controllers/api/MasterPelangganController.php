@@ -532,7 +532,7 @@ class MasterPelangganController extends Controller
                 }
             }
 
-            // DB::commit();
+            DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan']);
         } catch (\Exception $e) {
             DB::rollback();
