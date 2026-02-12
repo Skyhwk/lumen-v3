@@ -1317,7 +1317,12 @@ class BasOnlineController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    
+                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                        $status[$sample->no_sample] = 'selesai';
+                    } else {
+                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    }
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
@@ -2255,6 +2260,10 @@ class BasOnlineController extends Controller
 
                     if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)'){
                         continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
+                    }
+
+                    if(in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
                     }
 
                     

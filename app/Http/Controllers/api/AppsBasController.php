@@ -402,7 +402,12 @@ class AppsBasController extends Controller
                     $item->no_sample = $item->no_sampel;
                     if ($item->kategori_2 === "1-Air") {
                         $exists = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
-                        $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
+                        // $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
+                        if(in_array($item->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                            $detail_sampling_sampel[$key]['status'] = 'selesai';
+                        } else {
+                            $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
+                        }
                         $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
                         $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
                         $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
@@ -1314,7 +1319,12 @@ class AppsBasController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    // $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                        $status[$sample->no_sample] = 'selesai';
+                    } else {
+                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    }
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
