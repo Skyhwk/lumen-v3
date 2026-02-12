@@ -661,6 +661,23 @@ class MasterKaryawanController extends Controller
 
             $karyawan->save();
 
+            $user = User::where('id', $karyawan->user_id)->first();
+            
+            $user->updated_by = $this->karyawan;
+            $user->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $user->is_active = false;
+
+            $user->save();
+
+            DB::connection('intilab_apps')
+                ->table('users')
+                ->where('user_id', $karyawan->id)
+                ->update([
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'is_active' => false
+                ]);
+
             $job = new NonaktifKaryawanJob($karyawan);
             $this->dispatch($job);
 
