@@ -150,7 +150,7 @@ class TicketSamplingController extends Controller
             //     ->pluck('id')
             //     ->toArray();
 
-            Notification::whereIn('nama_lengkap', $data->created_by)
+            Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-sampling')
@@ -162,6 +162,7 @@ class TicketSamplingController extends Controller
                 'message' => $message
             ], 200);
         } catch (\Throwable $th) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal Proses menyelesaikan Ticket Sampling: ' . $th->getMessage()
@@ -196,6 +197,7 @@ class TicketSamplingController extends Controller
                 'message' => $message
             ], 200);
         } catch (\Throwable $th) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal Proses solve Ticket Sampling: ' . $th->getMessage()

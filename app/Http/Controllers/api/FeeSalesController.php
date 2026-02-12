@@ -61,11 +61,14 @@ class FeeSalesController extends Controller
 
         if (!$targetSales) return response()->json(['message' => 'Target Sales not found'], 404);
 
-        $masterFeeSales = MasterFeeSales::where([
-            'sales_id' => $request->salesId,
-            'period' => $request->year . '-' . $request->month,
-            'is_active' => true
-        ])->latest()->first();
+        $masterFeeSales = MasterFeeSales::with('rekap')
+            ->where([
+                'sales_id' => $request->salesId,
+                'period' => $request->year . '-' . $request->month,
+                'is_active' => true
+            ])
+            ->latest()
+            ->first();
 
         return response()->json([
             'targetSales' => $targetSales,

@@ -43,8 +43,8 @@ class FormPSKLController extends Controller
     {
         $query = FormPSKL::where('is_active', 1)
             ->when($request->status == 'atas', 
-                fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED"]),
-                fn($q) => $q->where('status', 'DONE')
+                fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED", "REOPEN", "PENDING" , 'SOLVED']),
+                fn($q) => $q->whereIn('status', ['DONE'])
             );
         // Panggil helper di sini
         $data = $this->applyJabatanFilter($query, $request)->get();
@@ -285,15 +285,17 @@ class FormPSKLController extends Controller
         DB::beginTransaction();
         try {
             $data = FormPSKL::where('id', $request->id)->first();
-            $data->status = "WAITING PROCESS";
-            $data->is_rejected = false;
+            $data->status = "REOPEN";
+            $data->reopen_by = $this->karyawan;
+            $data->reopen_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->reopen_notes = $request->alasan_reopen;
             $data->save();
             DB::commit();
 
             $message = 'Form PSKL telah di re-open';
 
             // 🔑 ambil target notifikasi
-            $targetUser = $data->rejected_by ?: $data->solved_by;
+            $targetUser = $data->solved_by;
 
             if ($targetUser) {
                 Notification::where('nama_lengkap', $targetUser)
@@ -322,7 +324,7 @@ class FormPSKLController extends Controller
         try {
             $data = FormPSKL::where('id', $request->id)->first();
             $data->done_by = $this->karyawan;
-            $data->tanggal_selesai = Carbon::now()->format('Y-m-d H:i:s');
+            $data->done_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->status = 'DONE';
             $data->save();
 

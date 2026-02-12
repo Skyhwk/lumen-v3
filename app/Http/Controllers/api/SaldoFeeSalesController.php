@@ -59,8 +59,7 @@ class SaldoFeeSalesController extends Controller
         $pendingWithdrawal = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'status' => 'Pending', 'is_active' => true]);
 
         $mutasiStats = MutasiFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
-            ->whereMonth('created_at', $request->month)
-            ->whereYear('created_at', $request->year)
+            ->where('period', $request->year . '-' . $request->month)
             ->selectRaw("SUM(CASE WHEN mutation_type = 'Debit' THEN amount ELSE 0 END) as total_debit")
             ->selectRaw("SUM(CASE WHEN mutation_type = 'Kredit' THEN amount ELSE 0 END) as total_credit")
             ->first();
@@ -82,8 +81,7 @@ class SaldoFeeSalesController extends Controller
     public function getMutasiSaldo(Request $request)
     {
         $mutasiSaldo = MutasiFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
-            ->whereMonth('created_at', $request->month)
-            ->whereYear('created_at', $request->year)
+            ->where('period', $request->year . '-' . $request->month)
             ->latest();
 
         return DataTables::of($mutasiSaldo)->make(true);

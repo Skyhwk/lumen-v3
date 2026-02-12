@@ -7,5 +7,5 @@ use App\Models\Sector;
 class MutasiFeeSales extends Sector
 {
     protected $guarded = ['id'];
-    public $timestamp = false;
+    public $timestamps = false;
 }

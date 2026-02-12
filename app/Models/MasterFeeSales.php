@@ -7,5 +7,10 @@ use App\Models\Sector;
 class MasterFeeSales extends Sector
 {
     protected $guarded = ['id'];
-    public $timestamp = false;
+    public $timestamps = false;
+
+    public function rekap()
+    {
+        return $this->hasMany(RekapFeeSales::class, 'fee_sales_id');
+    }
 }

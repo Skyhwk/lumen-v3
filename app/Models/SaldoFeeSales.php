@@ -7,5 +7,5 @@ use App\Models\Sector;
 class SaldoFeeSales extends Sector
 {
     protected $guarded = ['id'];
-    public $timestamp = false;
+    public $timestamps = false;
 }

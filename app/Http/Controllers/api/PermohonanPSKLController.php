@@ -17,8 +17,8 @@ class PermohonanPsklController extends Controller
     {
         $query = FormPSKL::where('is_active', 1)
             ->when($request->status == 'atas', 
-                fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED"]),
-                fn($q) => $q->where('status', 'DONE')
+                    fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED", "REOPEN", "PENDING" , 'SOLVED']),
+                    fn($q) => $q->whereIn('status', ['DONE'])
             );
 
         return Datatables::of($query)->make(true);
@@ -60,7 +60,7 @@ class PermohonanPsklController extends Controller
             $data->rejected_by = $this->karyawan;
             $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_rejected = true;
-            $data->catatan_reject = $request->alasan_reject;
+            $data->reject_notes = $request->alasan_reject;
             $data->status = 'REJECTED';
             $data->save();
 
@@ -71,6 +71,35 @@ class PermohonanPsklController extends Controller
                     ->url('/form-pskl')
                     ->send();
             
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $th->getMessage()], 400);
+        }
+    }
+
+    public function pending(Request $request) 
+    {
+        DB::beginTransaction();
+        try {
+            $data = FormPSKL::where('id', $request->id)->first();
+            $data->pending_by = $this->karyawan;
+            $data->pending_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->pending_notes = $request->alasan_pending;
+            $data->status = 'PENDING';
+            $data->save();
+
+            $message = 'Form PSKL telah di pending';
+            Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
 
             DB::commit();
             return response()->json([
