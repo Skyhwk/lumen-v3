@@ -303,6 +303,124 @@ class MesinAbsenHandler extends BaseController
         }
     }
 
+    public function IotSync(Request $request)
+    {
+        $data = [];
+        try {
+            if($request->token == 'intilab_jaya'){
+                if($request->mode == 'sync'){
+                    $deviceCode = $request->device; // Misal: ISL05
+                    
+                    $mesinAbsen = MesinAbsen::where('kode_mesin', $deviceCode)->first();
+                    
+                    if($mesinAbsen == null){
+                        // Mode Access Door
+                        $data = DB::table('access_door')
+                            ->join('rfid_card', 'access_door.kode_rfid', '=', 'rfid_card.kode_kartu')
+                            ->join('master_karyawan', 'rfid_card.userid', '=', 'master_karyawan.id')
+                            ->where('kode_mesin', $deviceCode)
+                            ->select(
+                                'master_karyawan.id as employee_id',
+                                'rfid_card.kode_kartu as rfid',
+                                'master_karyawan.nama_lengkap as full_name'
+                            )
+                            ->get();
+                        
+                        $devices = DB::table('devices')
+                            ->where('kode_device', $deviceCode)
+                            ->first();
+
+                        $nameDevice = $devices->nama_device;
+                        $mode = $devices->mode;
+                    } else {
+                        // Mode Attendance
+                        if ($mesinAbsen->id_cabang == 1) {
+                            $nameDevice = 'HEAD OFFICE';
+                        } elseif ($mesinAbsen->id_cabang == 4) {
+                            $nameDevice = 'RO-KARAWANG';
+                        } else {
+                            $nameDevice = 'RO-PEMALANG';
+                        }
+
+                        $mode = $mesinAbsen->mode;
+                        
+                        $data = DB::table('master_karyawan')
+                            ->join('rfid_card', 'master_karyawan.id', '=', 'rfid_card.userid')
+                            ->where('master_karyawan.is_active', 1)
+                            ->where('master_karyawan.id_cabang', $mesinAbsen->id_cabang)
+                            ->select(
+                                'master_karyawan.id as employee_id',
+                                'rfid_card.kode_kartu as rfid',
+                                'master_karyawan.nama_lengkap as full_name'
+                            )
+                            ->get();
+                    }
+
+                    // Path folder per device: storage/app/public/iot/{device_code}/
+                    $deviceFolder = public_path('iot/' . $deviceCode);
+                    
+                    // Pastikan folder device ada
+                    if (!file_exists($deviceFolder)) {
+                        mkdir($deviceFolder, 0755, true);
+                    }
+                    
+                    // File selalu bernama "access.bin" (akan overwrite yang lama)
+                    $filepath = $deviceFolder . '/access.bin';
+                    
+                    // Generate binary file
+                    $this->generateAccessBin($data, $filepath);
+                    
+                    return response()->json([
+                        'nameDevice' => $nameDevice,
+                        'mode' => $mode,
+                        'path' => "http://apps.intilab.com/public/iot/" . $deviceCode . "/access.bin"
+                    ], 200);
+                }
+            }
+            
+        } catch (\Throwable $th) {
+            return response()->json('Error : ' . $th->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Generate binary file access.bin sesuai format ESP32
+     * 
+     * Format per record (64 bytes):
+     * - employee_id: 16 bytes (null-terminated string)
+     * - rfid: 16 bytes (null-terminated string)
+     * - full_name: 32 bytes (null-terminated string)
+     */
+    private function generateAccessBin($data, $filepath)
+    {
+        $handle = fopen($filepath, 'wb');
+        
+        if (!$handle) {
+            throw new \Exception("Cannot create file: " . $filepath);
+        }
+        
+        foreach ($data as $record) {
+            // employee_id - 16 bytes
+            $employeeId = str_pad(substr((string)$record->employee_id, 0, 15), 16, "\0");
+            fwrite($handle, $employeeId);
+            
+            // rfid - 16 bytes
+            $rfid = str_pad(substr((string)$record->rfid, 0, 15), 16, "\0");
+            fwrite($handle, $rfid);
+            
+            // full_name - 32 bytes
+            $fullName = str_pad(substr((string)$record->full_name, 0, 31), 32, "\0");
+            fwrite($handle, $fullName);
+        }
+        
+        fclose($handle);
+        
+        // Log info
+        $filesize = filesize($filepath);
+        $recordCount = $filesize / 64;
+        \Log::info("Generated access.bin for device: {$filepath}, Records: {$recordCount}, Size: {$filesize} bytes");
+    }
+
     public function handleMultiDevice(Request $request)
     {
         switch ($request->handle) {
