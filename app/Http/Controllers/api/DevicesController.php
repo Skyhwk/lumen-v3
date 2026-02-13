@@ -43,6 +43,20 @@ class DevicesController extends Controller
         return false;
     }
 
+    private function send_mqtt_iot($data)
+    {
+        $mqtt = new phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
+
+        if ($mqtt->connect(true, null, '', '')) {
+            $mqtt->publish('/intilab/iot/multidevice', $data, 0);
+            $mqtt->close();
+
+            return true;
+        }
+
+        return false;
+    }
+
     public function save(Request $request)
     {
         $oldDevice = null;
@@ -62,6 +76,12 @@ class DevicesController extends Controller
         if ($request->mode) $data['mode'] = $request->mode;
 
         $mqtt = $this->send_mqtt(json_encode((object) [
+            'topic' => 'change_mode',
+            'device' => $oldDevice ? $oldDevice->kode_device : $request->kode_device,
+            'data' => $request->mode, // normal, open, close
+        ]));
+
+        $mqttIot = $this->send_mqtt_iot(json_encode((object) [
             'topic' => 'change_mode',
             'device' => $oldDevice ? $oldDevice->kode_device : $request->kode_device,
             'data' => $request->mode, // normal, open, close
