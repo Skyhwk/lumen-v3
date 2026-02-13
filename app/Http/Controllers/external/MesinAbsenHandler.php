@@ -15,6 +15,14 @@ use App\Jobs\SendMqttAccess;
 
 class MesinAbsenHandler extends BaseController
 {
+    private $array_mode = [
+        'normal' => 0,
+        'open' => 1,
+        'close' => 3,
+        'scan' => 4,
+        'add' => 5,
+    ];
+
     public function index(Request $request)
     {
         if($request->token == 'intilab_jaya'){
@@ -330,7 +338,7 @@ class MesinAbsenHandler extends BaseController
                             ->first();
 
                         $nameDevice = $devices->nama_device ?? 'Unknown Device';
-                        $mode = $devices->mode ?? 'normal';
+                        $mode = $devices->mode ? $this->array_mode[$devices->mode] : $this->array_mode['normal'];
                     } else {
                         // Mode Attendance
                         if ($mesinAbsen->id_cabang == 1) {
@@ -341,7 +349,7 @@ class MesinAbsenHandler extends BaseController
                             $nameDevice = 'RO-PEMALANG';
                         }
 
-                        $mode = $mesinAbsen->mode ?? 'scan';
+                        $mode = $mesinAbsen->mode ? $this->array_mode[$mesinAbsen->mode] : $this->array_mode['scan'];
                         
                         $data = DB::table('master_karyawan')
                             ->join('rfid_card', 'master_karyawan.id', '=', 'rfid_card.userid')
