@@ -349,7 +349,7 @@ class MesinAbsenHandler extends BaseController
                             $nameDevice = 'RO-PEMALANG';
                         }
 
-                        $mode = $mesinAbsen->mode ? $this->array_mode[$mesinAbsen->mode] : $this->array_mode['scan'];
+                        $mode = $mesinAbsen->mode ? $this->array_mode[strtolower($mesinAbsen->mode)] : $this->array_mode['scan'];
                         
                         $data = DB::table('master_karyawan')
                             ->join('rfid_card', 'master_karyawan.id', '=', 'rfid_card.userid')
@@ -390,9 +390,7 @@ class MesinAbsenHandler extends BaseController
                     return response()->json([
                         'nameDevice' => $nameDevice,
                         'mode' => $mode,
-                        'path' => "http://apps.intilab.com/v3/public/iot/" . $deviceCode . "/access.bin",
-                        'records' => count($data),
-                        'filesize' => file_exists($filepath) ? filesize($filepath) : 0
+                        'path' => "http://apps.intilab.com/v3/public/iot/" . $deviceCode . "/access.bin"
                     ], 200);
                 }
             }
