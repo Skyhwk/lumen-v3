@@ -166,6 +166,7 @@ class InterviewHRDController extends Controller
                 ->whereIn('recruitment.id_cabang', $this->privilageCabang)
                 ->where('recruitment.is_active', true)
                 ->where('recruitment.flag', 0)
+                ->whereYear('recruitment.created_at', $request->year)
                 ->where(function ($query) {
                     $query->where('recruitment.status', '=', 'APPROVE INTERVIEW HRD')
                         ->orWhere('recruitment.status', '=', 'INTERVIEW HRD')

@@ -105,6 +105,7 @@ class InterviewUserController extends Controller
             ->where('recruitment.is_active', true)
             ->where('recruitment.flag', 0)
             ->where('recruitment.status', "INTERVIEW USER")
+            ->whereYear('recruitment.created_at', $request->year)
             ->distinct();
 
         return Datatables::of($data)->make(true);
