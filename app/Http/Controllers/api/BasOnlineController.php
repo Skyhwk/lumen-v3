@@ -2249,12 +2249,13 @@ class BasOnlineController extends Controller
 
             $status = 'selesai';
             if (!empty($parameters)) {
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
                 foreach ($parameters as $parameter) {
                     // dump($sample->no_sample);
                     if($parameter['category'] == '6-Padatan'){
                         continue; // Skip Padatan
                     }
-                    if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)' || $parameter['parameter'] == 'Xylene secara personil sampling (SC)') {
+                    if (in_array($parameter['parameter'], $parameterBypass)) {
                         continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                     }
 
@@ -4354,6 +4355,13 @@ class BasOnlineController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailSenyawaVolatile::class
+            ],
+            [
+                "parameter" => "VOC Sebagai NMHC",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => null,
+                "model2" => null
             ]
         ];
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];
