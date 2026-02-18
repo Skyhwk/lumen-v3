@@ -19,48 +19,88 @@ class ContractController extends Controller
     public function index(Request $request)
     {
         try {
-            $subTahun = substr($request->year, -2); 
+            // $subTahun = substr($request->year, -2); 
+            $subTahun = $request->year; 
 
-            $ordersQuery = OrderHeader::select(
-                'no_document',
-                DB::raw('MAX(wilayah) as wilayah'),
-                DB::raw('MAX(nama_perusahaan) as nama_perusahaan'),
-                DB::raw('SUM(total_dpp) as summary')
-            )
-            ->where('is_active', 1)
-            ->where('no_document', "LIKE", "%QTC/$subTahun%")
-            ->groupBy('no_document');
-            
-            // Eksekusi query
-            $orders = $ordersQuery->get();
+            $orders = OrderHeader::select(
+                            'nama_perusahaan',
+                            DB::raw('MAX(wilayah) as wilayah'),
+                            // Menggabungkan no_document menjadi string untuk referensi jika perlu
+                            DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
+                            DB::raw('SUM(total_dpp) as summary')
+                        )
+                        ->where('is_active', 1)
+                        ->where('tanggal_penawaran', "LIKE", "%$subTahun-%")
+                        ->groupBy('nama_perusahaan')
+                        ->get();
 
-            // Total summary
-            $total_summary = $orders->sum('summary');
+                    // 2. Ambil semua no_document unik dari perusahaan tersebut untuk ditarik detailnya
+                    // Kita perlu memecah kembali daftar_no_doc jika ada banyak dokumen
+                    $allNoDocs = [];
+                    foreach ($orders as $o) {
+                        $docs = explode(', ', $o->daftar_no_doc);
+                        $allNoDocs = array_merge($allNoDocs, $docs);
+                    }
+                    $allNoDocs = array_unique($allNoDocs);
 
-            // Init total bulanan
-            $bulanTotals = [
-                'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
-                'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
-                'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
-            ];
-            // dd($orders);
+                    // 3. Tarik semua data Quotation Detail berdasarkan kumpulan no_document tersebut
+                    $allQuotations = QuotationKontrakH::with(['detail' => function($q) use ($request) {
+                            $q->where('periode_kontrak', 'LIKE', '%' . $request->year . '%');
+                        }])
+                        ->whereIn('no_document', $allNoDocs)
+                        ->get()
+                        ->groupBy('no_document');
 
-            $noDocs = $orders->pluck('no_document')->toArray();
+                    // 4. Inisialisasi Total untuk Footer
+                    $bulanTotals = [
+                        'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+                        'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+                        'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+                    ];
 
-            $allQuotations = QuotationKontrakH::with('detail')
-            ->whereIn('no_document', $noDocs)
-            ->get()
-            ->groupBy('no_document');
+                    // 5. Mapping data Bulanan ke setiap baris Perusahaan
+                    foreach ($orders as $order) {
+                        $myDocs = explode(', ', $order->daftar_no_doc);
+                        
+                        // Penampung summary bulan untuk perusahaan ini (campuran QT dan QTC)
+                        $perusahaanBulan = [
+                            'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+                            'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+                            'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+                        ];
 
-            // Tambahin properti bulan_summary di tiap order
-            foreach ($orders as $order) {
-                $bulan = $this->processDetails($allQuotations[$order->no_document] ?? []);
-                $order->bulan_summary = $bulan;
+                        foreach ($myDocs as $docNo) {
+                            if (str_contains($docNo, 'QTC')) {
+                                // SKENARIO KONTRAK: Ambil dari tabel kontrak & detail
+                                if (isset($allQuotations[$docNo])) {
+                                    $contractSummary = $this->processDetails($allQuotations[$docNo]);
+                                    foreach ($contractSummary as $bln => $val) {
+                                        $perusahaanBulan[$bln] += $val;
+                                    }
+                                }
+                            } else {
+                                // SKENARIO NON-KONTRAK (QT): Ambil langsung dari OrderHeader
+                                // Kita perlu ambil data asli baris ini untuk mendapatkan tanggal_penawaran dan total_dpp-nya
+                                $rawDoc = OrderHeader::where('no_document', $docNo)
+                                    ->where('is_active', 1)
+                                    ->first();
 
-                foreach ($bulan as $key => $val) {
-                    $bulanTotals[$key] += $val;
-                }
-            }
+                                if ($rawDoc && $rawDoc->tanggal_penawaran) {
+                                    $bulanKey = $this->getBulanFromTanggal($rawDoc->tanggal_penawaran);
+                                    if ($bulanKey) {
+                                        $perusahaanBulan[$bulanKey] += (float) $rawDoc->total_dpp;
+                                    }
+                                }
+                            }
+                        }
+
+                        $order->bulan_summary = $perusahaanBulan;
+
+                        // Tambahkan ke total footer
+                        foreach ($perusahaanBulan as $key => $val) {
+                            $bulanTotals[$key] += $val;
+                        }
+                    }
 
             // Pake datatables dari collection
             return datatables()->of($orders)
@@ -68,7 +108,7 @@ class ContractController extends Controller
                     return $row->bulan_summary;
                 })
                 ->with(array_merge([
-                    'total_summary' => $total_summary,
+                    'total_summary' => $orders->sum('summary'),
                 ], collect($bulanTotals)->mapWithKeys(fn($v, $k) => ["total_{$k}" => $v])->toArray()))
                 ->make(true);
 
@@ -78,6 +118,19 @@ class ContractController extends Controller
     }
 
 
+    private function getBulanFromTanggal($tanggal) 
+    {
+        $mapBulan = [
+            '01' => 'january', '02' => 'february', '03' => 'march', '04' => 'april',
+            '05' => 'may', '06' => 'june', '07' => 'july', '08' => 'august',
+            '09' => 'september', '10' => 'october', '11' => 'november', '12' => 'december',
+        ];
+
+        $parts = explode('-', $tanggal);
+        $bulanNum = $parts[1] ?? null;
+
+        return $mapBulan[$bulanNum] ?? null;
+    }
     private function processDetails($quotationHeaders)
     {
         $bulan = [

@@ -38,6 +38,8 @@ $router->get('/api/device_intilab', 'external\MesinAbsenHandler@Sync');
 $router->post('/api/multi-device', 'external\MesinAbsenHandler@handleMultiDevice');
 $router->get('/api/summaryParameter', 'external\SummaryParameterHandler@index');
 
+$router->get('/api/iot-intilab', 'external\MesinAbsenHandler@IotSync');
+
 //custom untuk testing di produksi
 $router->post('/api/custom', 'external\CustomController@handle');
 $router->get('/api/total', 'external\CustomController@total');

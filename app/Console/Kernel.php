@@ -13,6 +13,7 @@ use App\Console\Commands\SchaduleUpdateSummaryQsd;
 use App\Console\Commands\AssignSales;
 use App\Console\Commands\BillingComand;
 use App\Console\Commands\CalculateFeeSales;
+use App\Console\Commands\SummaryFeeSales;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -33,6 +34,7 @@ class Kernel extends ConsoleKernel
         Commands\AssignSales::class,
         Commands\BillingComand::class,
         Commands\CalculateFeeSales::class,
+        Commands\SummaryFeeSales::class,
     ];
 
     /**
