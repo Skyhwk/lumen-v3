@@ -223,9 +223,79 @@ class TestingController extends Controller
     { 
         
         try {
-            //code...
-            
             switch ($request->menu) {
+                case 'contract-order':
+                    // 1. Ambil data Order per Perusahaan
+                    $subTahun = substr($request->year, -2); 
+                    $orders = OrderHeader::select(
+                            'nama_perusahaan',
+                            DB::raw('MAX(wilayah) as wilayah'),
+                            // Menggabungkan no_document menjadi string untuk referensi jika perlu
+                            DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
+                            DB::raw('SUM(total_dpp) as summary')
+                        )
+                        ->where('is_active', 1)
+                        ->where('nama_perusahaan', $request->nama_perusahaan)
+                        ->where('no_document', "LIKE", "%QTC/$subTahun%")
+                        ->groupBy('nama_perusahaan')
+                        ->get();
+
+                        dd($orders);
+
+                    // 2. Ambil semua no_document unik dari perusahaan tersebut untuk ditarik detailnya
+                    // Kita perlu memecah kembali daftar_no_doc jika ada banyak dokumen
+                    $allNoDocs = [];
+                    foreach ($orders as $o) {
+                        $docs = explode(', ', $o->daftar_no_doc);
+                        $allNoDocs = array_merge($allNoDocs, $docs);
+                    }
+                    $allNoDocs = array_unique($allNoDocs);
+
+                    // 3. Tarik semua data Quotation Detail berdasarkan kumpulan no_document tersebut
+                    $allQuotations = QuotationKontrakH::with(['detail' => function($q) use ($request) {
+                            $q->where('periode_kontrak', 'LIKE', '%' . $request->year . '%');
+                        }])
+                        ->whereIn('no_document', $allNoDocs)
+                        ->get()
+                        ->groupBy('no_document');
+
+                    // 4. Inisialisasi Total untuk Footer
+                    $bulanTotals = [
+                        'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+                        'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+                        'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+                    ];
+
+                    // 5. Mapping data Bulanan ke setiap baris Perusahaan
+                    foreach ($orders as $order) {
+                        // Ambil semua dokumen milik perusahaan ini
+                        $myDocs = explode(', ', $order->daftar_no_doc);
+                        
+                        // Kumpulkan semua header quotation yang terkait dengan dokumen-dokumen perusahaan ini
+                        $relatedQuotationHeaders = [];
+                        foreach ($myDocs as $docNo) {
+                            if (isset($allQuotations[$docNo])) {
+                                // allQuotations[$docNo] berisi Collection dari QuotationKontrakH
+                                foreach ($allQuotations[$docNo] as $qHeader) {
+                                    $relatedQuotationHeaders[] = $qHeader;
+                                }
+                            }
+                        }
+
+                        // Proses akumulasi bulanan untuk semua dokumen milik perusahaan ini
+                        $bulanSummary = $this->processDetails($relatedQuotationHeaders);
+                        $order->bulan_summary = $bulanSummary;
+
+                        // Tambahkan ke total footer
+                        foreach ($bulanSummary as $key => $val) {
+                            $bulanTotals[$key] += $val;
+                        }
+                    }
+
+                    // 6. Return Data (Contoh format JSON untuk DataTables)
+                    // Pake datatables dari collection
+                    return response()->json(["data" => $orders],200);
+                    break;
                 case 'getForecast' :
                     // 1️⃣ Order detail → map no_order => tgl_sampling
                     $orderSamplingFromDetail = OrderDetail::query()
@@ -2569,6 +2639,39 @@ class TestingController extends Controller
             //throw $th;
             return response()->json(["message" =>$th->getMessage(),"line"=>$th->getLine()],500);
         }
+    }
+
+    private function processDetails($quotationHeaders)
+    {
+        $bulan = [
+            'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+            'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+            'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+        ];
+
+        foreach ($quotationHeaders as $value) {
+            if(!$value->detail->isEmpty()){
+                foreach ($value->detail as $detail) {
+                    $bulanStr = explode('-', $detail->periode_kontrak)[1] ?? null;
+                    switch ($bulanStr) {
+                        case '01': $bulan['january'] += $detail->total_dpp; break;
+                        case '02': $bulan['february'] += $detail->total_dpp; break;
+                        case '03': $bulan['march'] += $detail->total_dpp; break;
+                        case '04': $bulan['april'] += $detail->total_dpp; break;
+                        case '05': $bulan['may'] += $detail->total_dpp; break;
+                        case '06': $bulan['june'] += $detail->total_dpp; break;
+                        case '07': $bulan['july'] += $detail->total_dpp; break;
+                        case '08': $bulan['august'] += $detail->total_dpp; break;
+                        case '09': $bulan['september'] += $detail->total_dpp; break;
+                        case '10': $bulan['october'] += $detail->total_dpp; break;
+                        case '11': $bulan['november'] += $detail->total_dpp; break;
+                        case '12': $bulan['december'] += $detail->total_dpp; break;
+                    }
+                }
+            }
+        }
+
+        return $bulan;
     }
     /*=== logic compare === */
    // CONTROLLER CODE - Ambil semua records, bukan first()
