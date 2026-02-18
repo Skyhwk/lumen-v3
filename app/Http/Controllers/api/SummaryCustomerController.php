@@ -4,11 +4,6 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 
-use App\Models\{
-    MasterPelanggan,
-    OrderHeader,
-};
-
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 use Carbon\Carbon;
