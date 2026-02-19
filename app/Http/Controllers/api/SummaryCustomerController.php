@@ -33,7 +33,7 @@ class SummaryCustomerController extends Controller
             ->where('oh.is_active', true)
             ->where('mp.is_active', true)
             ->groupBy('oh.id_pelanggan', 'mp.nama_pelanggan')
-            ->orderBy('last_id', 'desc'); // 👈 pakai alias ini
+            ->orderBy('total_biaya', 'desc');
 
         return DataTables::of($query)
         ->editColumn('no_documents', function ($row) {
