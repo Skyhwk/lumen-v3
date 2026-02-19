@@ -18,7 +18,7 @@ class ArsipRecruitmentController extends Controller
 {
     public function index(Request $request)
     {
-        $searchYear = $request->search;
+        $searchYear = $request->year;
         $db = isset($searchYear) ? date('Y', strtotime($searchYear)) : $this->db;
 
         $data = DataKandidat::select(

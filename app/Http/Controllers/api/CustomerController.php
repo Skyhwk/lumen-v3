@@ -60,6 +60,21 @@ class CustomerController extends Controller
                 DB::raw('COALESCE(qkd.periode_kontrak, qn.created_at)'),
                 ["$tahun-01-01", "$tahun-12-31"]
             )
+            ->where(function ($w) {
+                $w
+                    // ✅ kalau ada kontrak header, harus ordered
+                    ->where(function ($x) {
+                        $x->whereNotNull('qk.id')
+                            ->where('qk.flag_status', 'ordered')
+                            // kalau ada qkd juga, pastiin ordered juga
+                            ->where(function ($y) {
+                                $y->whereNull('qkd.id')
+                                    ->orWhere('qkd.flag_status', 'ordered');
+                            });
+                    })
+                    // ✅ kalau nggak ada kontrak header, fallback ke non-kontrak
+                    ->orWhereNull('qk.id');
+            })
             ->select(array_merge(
                 [
                     'oh.id_pelanggan',
@@ -69,7 +84,9 @@ class CustomerController extends Controller
                 $monthCases,
                 [DB::raw("($totalTahunExpr) as total_tahun")]
             ))
-            ->groupBy('oh.id_pelanggan');
+            ->groupBy('oh.id_pelanggan')
+            ->orderBy('total_tahun', 'desc');
+
 
         return \DataTables::of($query)->make(true);
     }
