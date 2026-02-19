@@ -27,11 +27,12 @@ class ContractController extends Controller
                             DB::raw('MAX(wilayah) as wilayah'),
                             // Menggabungkan no_document menjadi string untuk referensi jika perlu
                             DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
-                            DB::raw('SUM(total_dpp) as summary')
+                            DB::raw('SUM(COALESCE(biaya_akhir, 0) - COALESCE(total_ppn, 0)) as summary')
                         )
                         ->where('is_active', 1)
                         ->where('tanggal_penawaran', "LIKE", "%$subTahun-%")
                         ->groupBy('nama_perusahaan')
+                        ->orderByDesc('summary')
                         ->get();
 
                     // 2. Ambil semua no_document unik dari perusahaan tersebut untuk ditarik detailnya
@@ -61,7 +62,6 @@ class ContractController extends Controller
                     // 5. Mapping data Bulanan ke setiap baris Perusahaan
                     foreach ($orders as $order) {
                         $myDocs = explode(', ', $order->daftar_no_doc);
-                        
                         // Penampung summary bulan untuk perusahaan ini (campuran QT dan QTC)
                         $perusahaanBulan = [
                             'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
@@ -103,7 +103,9 @@ class ContractController extends Controller
                     }
 
             // Pake datatables dari collection
+            $orders = $orders->sortByDesc('summary')->values();
             return datatables()->of($orders)
+                ->addIndexColumn()
                 ->addColumn('bulan_summary', function ($row) {
                     return $row->bulan_summary;
                 })
@@ -142,20 +144,19 @@ class ContractController extends Controller
         foreach ($quotationHeaders as $value) {
             foreach ($value->detail as $detail) {
                 $bulanStr = explode('-', $detail->periode_kontrak)[1] ?? null;
-
                 switch ($bulanStr) {
-                    case '01': $bulan['january'] += $detail->total_dpp; break;
-                    case '02': $bulan['february'] += $detail->total_dpp; break;
-                    case '03': $bulan['march'] += $detail->total_dpp; break;
-                    case '04': $bulan['april'] += $detail->total_dpp; break;
-                    case '05': $bulan['may'] += $detail->total_dpp; break;
-                    case '06': $bulan['june'] += $detail->total_dpp; break;
-                    case '07': $bulan['july'] += $detail->total_dpp; break;
-                    case '08': $bulan['august'] += $detail->total_dpp; break;
-                    case '09': $bulan['september'] += $detail->total_dpp; break;
-                    case '10': $bulan['october'] += $detail->total_dpp; break;
-                    case '11': $bulan['november'] += $detail->total_dpp; break;
-                    case '12': $bulan['december'] += $detail->total_dpp; break;
+                    case '01': $bulan['january'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '02': $bulan['february'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '03': $bulan['march'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '04': $bulan['april'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '05': $bulan['may'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '06': $bulan['june'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '07': $bulan['july'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '08': $bulan['august'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '09': $bulan['september'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '10': $bulan['october'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '11': $bulan['november'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
+                    case '12': $bulan['december'] += ((float)$detail->biaya_akhir - (float)$detail->total_ppn); break;
                 }
             }
         }

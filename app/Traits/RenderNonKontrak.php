@@ -20,7 +20,6 @@ trait RenderNonKontrak
         DB::beginTransaction();
         try {
             $filename = $this->renderHeader($id);
-
             $update = QuotationNonKontrak::where('id', $id)->first();
             if ($update) {
                 $update->filename = $filename;
@@ -39,11 +38,11 @@ trait RenderNonKontrak
 
     static function renderHeader($id)
     {
-        $data = QuotationNonKontrak::with('cabang', 'sales')
+        $data = QuotationNonKontrak::with('cabang', 'sales','orderHeader')
             ->where('is_active', true)
             ->where('id', $id)
             ->first();
-
+        $NoOrder = $data && $data->orderHeader ? $data->orderHeader->no_order : null;
         $mpdfConfig = array(
             'mode' => 'utf-8',
             'format' => 'A4',
@@ -161,7 +160,8 @@ trait RenderNonKontrak
                   <p style="font-size: 10px;line-height:1.5px;">Tangerang, ' . self::tanggal_indonesia(date('Y-m-d')) . '</p>
                 </td>
                 <td style="vertical-align: top; text-align:right;">
-                  <span style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-bottom:20px;" id="status_sampling">' . $sampling . '</span>
+                  <span style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-bottom:20px;" id="status_sampling">' . $sampling . '</span><br>
+                  <span style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-bottom:20px;" id="status_sampling">' . $NoOrder . '</span>
                 </td>
               </tr>
               <tr>

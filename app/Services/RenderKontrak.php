@@ -64,7 +64,7 @@ class RenderKontrak
     public function renderHeader($id, $lang)
     {
         try {
-            $data = QuotationKontrakH::with('cabang', 'sales')
+            $data = QuotationKontrakH::with('cabang', 'sales','order')
                 ->where('is_active', true)
                 ->where('id', $id)
                 ->first();
@@ -275,7 +275,7 @@ class RenderKontrak
     {
         app()->setLocale($lang);
         Carbon::setLocale($lang);
-
+        $NoOrder = $data && $data->order ? $data->order->no_order : null;
         try {
             $pdf->WriteHTML(
                 ' <table class="table table-bordered" style="font-size: 8px;">
@@ -1035,13 +1035,37 @@ class RenderKontrak
                         <table class="head2" width="100%">
                             <tr>
                                 <td colspan="2">
-                                    <p style="font-size: 10px;line-height:1.5px;">Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '</p>
+                                    <p style="font-size: 10px; line-height:1.5px;">
+                                        Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '
+                                    </p>
                                 </td>
-                                <td style="vertical-align: top; text-align:right;">
-                                    <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . strtoupper(__('QTC.header.contract')) . '</span>
-                                    <span style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-top:5px;" id="status_sampling">' . $sampling . '</span>
+                                <td style="vertical-align: top;">
+                                    <!-- Tabel pembantu dengan text-align right -->
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <tr>
+                                            <td style="text-align: right; padding-bottom: 1.5px;">
+                                                <!-- Kotak Pertama: Contract + Sampling -->
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;">
+                                                    ' . strtoupper(__('QTC.header.contract')) . '
+                                                </span>
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;" id="status_sampling">
+                                                    ' . $sampling . '
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align: right;">
+                                                <!-- Kotak Kedua: No Order -->
+                                                <!-- Tambahkan display: inline-block agar border membungkus teks dengan rapi -->
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;">
+                                                    ' . $NoOrder . '
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </table>
                                 </td>
                             </tr>
+
                             <tr>
                                 <td colspan="2" width="80%">
                                     <h6 style="font-size:9pt; font-weight: bold; white-space: pre-wrap; white-space: -moz-pre-wrap; white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;">' . $konsultant . $perusahaan . '</h6>
