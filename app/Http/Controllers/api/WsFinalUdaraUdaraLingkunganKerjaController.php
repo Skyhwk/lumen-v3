@@ -621,6 +621,14 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         'rejected_at'  => Carbon::now(),
 
                     ]);
+                } else if ($request->data_type == 'partikulat') {
+                    $data = PartikulatHeader::where('id', $request->id)->update([
+                        'is_approve'   => 0,
+                        'notes_reject' => $request->note,
+                        'rejected_by'  => $this->karyawan,
+                        'rejected_at'  => Carbon::now(),
+
+                    ]);
                 } else {
                     // If neither 'lingkungan' nor 'direct', return an error message
                     return response()->json(['message' => 'Invalid data_type provided.'], 400);
