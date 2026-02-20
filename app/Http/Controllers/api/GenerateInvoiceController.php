@@ -940,15 +940,20 @@ class GenerateInvoiceController extends Controller
                     if (isset($values->keterangan_lainnya)) {
                         $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                     }
-                    for ($i = 0; $i < count(array_chunk($cekArray, 30)); $i++) {
-                        foreach (array_chunk($cekArray, 30)[$i] as $keys => $dataSampling) {
+                    $resetData = reset($cekArray);
+                    $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
+                        ? $resetData->data_sampling
+                        : $cekArray;
+                    for ($i = 0; $i < count(array_chunk($usingData, 30)); $i++) {
+                        foreach (array_chunk($usingData, 30)[$i] as $keys => $dataSampling) {
                             if ($keys == 0) {
-                                if ($i == count(array_chunk($cekArray, 30)) - 1) {
-                                    $rowspan = count(array_chunk($cekArray, 30)[$i]) + 1 + $tambah;
+                                if ($i == count(array_chunk($usingData, 30)) - 1) {
+                                    $rowspan = count(array_chunk($usingData, 30)[$i]) + 1 + $tambah;
                                 } else {
-                                    $rowspan = count(array_chunk($cekArray, 30)[$i]) + 1;
+                                    $rowspan = count(array_chunk($usingData, 30)[$i]) + 1;
                                 }
                             }
+                            dd($dataSampling);
                             $kategori2 = explode("-", $dataSampling->kategori_2);
                             $split = explode("/", $values->no_document);
                             if ($split[1] == 'QTC') {
@@ -1002,7 +1007,7 @@ class GenerateInvoiceController extends Controller
 
                             array_push($collectionDetail, $invoiceDetails);
                         }
-                        $isLastElement = $i == count(array_chunk($cekArray, 30)) - 1;
+                        $isLastElement = $i == count(array_chunk($usingData, 30)) - 1;
                         if ($isLastElement) {
                             if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
                                 if (isset($values->keterangan_transportasi)) {
