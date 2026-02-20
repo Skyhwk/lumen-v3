@@ -953,7 +953,6 @@ class GenerateInvoiceController extends Controller
                                     $rowspan = count(array_chunk($usingData, 30)[$i]) + 1;
                                 }
                             }
-                            dd($dataSampling);
                             $kategori2 = explode("-", $dataSampling->kategori_2);
                             $split = explode("/", $values->no_document);
                             if ($split[1] == 'QTC') {
