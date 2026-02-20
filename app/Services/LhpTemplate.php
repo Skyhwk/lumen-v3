@@ -453,7 +453,8 @@ class LhpTemplate
                     '277;medan listrik',
                     '236;gelombang elektro',
                     '578;t.bakteri (8 jam)',
-                    '579;t. jamur (8 jam)'
+                    '579;t. jamur (8 jam)',
+                    '1300;legionella'
                     ]
                 );
             })) {
