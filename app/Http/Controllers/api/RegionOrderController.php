@@ -47,8 +47,7 @@ class RegionOrderController extends Controller
 
         $query = DB::table(DB::raw("($subSql) as sub"))
             ->select('*')
-            ->addBinding($bindings, 'where')
-            ->orderBy('total_order', 'desc'); // <-- tambah ini
+            ->addBinding($bindings, 'where');
 
         if ($search) {
             $searchLower = '%' . strtolower($search) . '%';
@@ -57,9 +56,25 @@ class RegionOrderController extends Controller
         }
 
         return DataTables::of($query)
-            ->editColumn('quotations', function ($row) {
-                return $row->quotations ? json_decode($row->quotations) : [];
-            })
-            ->make(true);
+        ->order(function ($query) use ($request) {
+
+            $orderColumn = $request->input(
+                'columns.' . $request->input('order.0.column') . '.data'
+            );
+
+            $orderDir = $request->input('order.0.dir');
+
+            $allowed = ['wilayah', 'total_order'];
+
+            if (in_array($orderColumn, $allowed)) {
+                $query->orderBy("sub.$orderColumn", $orderDir);
+            } else {
+                $query->orderByDesc('sub.total_order'); // default
+            }
+        })
+        ->editColumn('quotations', function ($row) {
+            return $row->quotations ? json_decode($row->quotations) : [];
+        })
+        ->make(true);
     }
 }

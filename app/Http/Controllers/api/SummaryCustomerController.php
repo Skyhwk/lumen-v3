@@ -8,10 +8,6 @@ use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-
-
-
-
 class SummaryCustomerController extends Controller
 {
     public function index(Request $request)
@@ -46,8 +42,7 @@ class SummaryCustomerController extends Controller
 
         $query = DB::table(DB::raw("($subSql) as sub"))
             ->select('*')
-            ->addBinding($bindings, 'where')
-            ->orderByDesc('total_biaya');
+            ->addBinding($bindings, 'where');
 
         if ($search) {
             $searchLower = '%' . strtolower($search) . '%';
@@ -58,15 +53,32 @@ class SummaryCustomerController extends Controller
         }
 
         return DataTables::of($query)
-            ->skipTotalRecords()
-            ->editColumn('quotations', function ($row) {
-                $data = json_decode($row->quotations, true) ?? [];
-                usort($data, function ($a, $b) {
-                    return $b['biaya_akhir'] <=> $a['biaya_akhir'];
-                });
-                return $data;
-            })
-            ->make(true);
+        ->order(function ($query) use ($request) {
+
+            $orderColumn = $request->input('columns.' . $request->input('order.0.column') . '.data');
+            $orderDir = $request->input('order.0.dir');
+
+            if ($orderColumn === 'nama_pelanggan') {
+                $query->orderByRaw("LOWER(sub.nama_pelanggan) $orderDir");
+            } elseif ($orderColumn === 'total_biaya') {
+                $query->orderBy("sub.total_biaya", $orderDir);
+            } elseif ($orderColumn === 'total_order') {
+                $query->orderBy("sub.total_order", $orderDir);
+            } elseif ($orderColumn === 'id_pelanggan') {
+                $query->orderBy("sub.id_pelanggan", $orderDir);
+            } else {
+                $query->orderByDesc("sub.total_biaya");
+            }
+        })
+        ->skipTotalRecords()
+        ->editColumn('quotations', function ($row) {
+            $data = json_decode($row->quotations, true) ?? [];
+            usort($data, function ($a, $b) {
+                return $b['biaya_akhir'] <=> $a['biaya_akhir'];
+            });
+            return $data;
+        })
+        ->make(true);
     }
 
 }
