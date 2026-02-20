@@ -17,4 +17,19 @@ class DataAset extends Sector
     {
         return $this->belongsTo(MasterSubKategoriAset::class, 'id_subkategori_aset', 'id');
     }
+
+    public function fixing_histories()
+    {
+        return $this->hasMany(AsetFixingHistories::class, 'aset_id', 'id');
+    }
+
+    public function used_histories()
+    {
+        return $this->hasMany(AsetUsedHistories::class, 'aset_id', 'id');
+    }
+
+    public function damage_histories()
+    {
+        return $this->hasMany(AsetDamageHistories::class, 'aset_id', 'id');
+    }
 }
