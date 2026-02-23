@@ -1,14 +1,19 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-
+use App\Models\MasterKaryawan;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
+use App\Models\SalesKpi;
+use App\Models\TargetSales;
+use App\Services\GetBawahan;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 use Carbon\Carbon;
 
-use App\Models\{DailyQsd, MasterTargetSales};
+Carbon::setLocale('id');
 
 class DashboardSalesController extends Controller
 {
