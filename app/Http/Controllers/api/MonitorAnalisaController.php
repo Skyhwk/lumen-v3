@@ -69,11 +69,23 @@ class MonitorAnalisaController extends Controller
             ];
 
             $subQuery = collect($models)
-                ->flatMap(fn ($model) =>
-                    $model::where('is_active', true)
-                        ->whereIn('no_sampel', $noSampel)
-                        ->get(['no_sampel', 'parameter'])
-                )
+                ->flatMap(function ($model) use ($noSampel) {
+                    // Cari attribute is_approved atau is_approve secara dinamis
+                    $instance = new $model;
+                    if ($instance->getAttribute('is_approved') !== null || \Schema::hasColumn($instance->getTable(), 'is_approved')) {
+                        $query = $model::where('is_active', true)
+                            ->where('is_approved', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    } elseif ($instance->getAttribute('is_approve') !== null || \Schema::hasColumn($instance->getTable(), 'is_approve')) {
+                        $query = $model::where('is_active', true)
+                            ->where('is_approve', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    } else {
+                        $query = $model::where('is_active', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    }
+                    return $query->get(['no_sampel', 'parameter']);
+                })
                 ->groupBy('no_sampel')
                 ->map(fn ($items) =>
                     $items->pluck('parameter')->implode(',')
@@ -90,11 +102,22 @@ class MonitorAnalisaController extends Controller
             ];
 
             $subQuery = collect($models)
-                ->flatMap(fn ($model) =>
-                    $model::where('is_active', true)
-                        ->whereIn('no_sampel', $noSampel)
-                        ->get(['no_sampel', 'parameter'])
-                )
+                ->flatMap(function ($model) use ($noSampel) {
+                    $instance = new $model;
+                    if ($instance->getAttribute('is_approved') !== null || \Schema::hasColumn($instance->getTable(), 'is_approved')) {
+                        $query = $model::where('is_active', true)
+                            ->where('is_approved', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    } elseif ($instance->getAttribute('is_approve') !== null || \Schema::hasColumn($instance->getTable(), 'is_approve')) {
+                        $query = $model::where('is_active', true)
+                            ->where('is_approve', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    } else {
+                        $query = $model::where('is_active', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    }
+                    return $query->get(['no_sampel', 'parameter']);
+                })
                 ->groupBy('no_sampel')
                 ->map(fn ($items) =>
                     $items->pluck('parameter')->implode(',')
@@ -104,11 +127,22 @@ class MonitorAnalisaController extends Controller
                 EmisiCerobongHeader::class
             ];
             $subQuery = collect($models)
-                ->flatMap(fn ($model) =>
-                    $model::where('is_active', true)
-                        ->whereIn('no_sampel', $noSampel)
-                        ->get(['no_sampel', 'parameter'])
-                )
+                ->flatMap(function ($model) use ($noSampel) {
+                    $instance = new $model;
+                    if ($instance->getAttribute('is_approved') !== null || \Schema::hasColumn($instance->getTable(), 'is_approved')) {
+                        $query = $model::where('is_active', true)
+                            ->where('is_approved', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    } elseif ($instance->getAttribute('is_approve') !== null || \Schema::hasColumn($instance->getTable(), 'is_approve')) {
+                        $query = $model::where('is_active', true)
+                            ->where('is_approve', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    } else {
+                        $query = $model::where('is_active', true)
+                            ->whereIn('no_sampel', $noSampel);
+                    }
+                    return $query->get(['no_sampel', 'parameter']);
+                })
                 ->groupBy('no_sampel')
                 ->map(fn ($items) =>
                     $items->pluck('parameter')->implode(',')
