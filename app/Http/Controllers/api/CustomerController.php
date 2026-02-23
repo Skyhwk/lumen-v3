@@ -68,8 +68,7 @@ class CustomerController extends Controller
                             ->where('qk.flag_status', 'ordered')
                             // kalau ada qkd juga, pastiin ordered juga
                             ->where(function ($y) {
-                                $y->whereNull('qkd.id')
-                                    ->orWhere('qkd.flag_status', 'ordered');
+                                $y->whereNull('qkd.id');
                             });
                     })
                     // ✅ kalau nggak ada kontrak header, fallback ke non-kontrak

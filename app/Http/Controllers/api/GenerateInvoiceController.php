@@ -803,7 +803,19 @@ class GenerateInvoiceController extends Controller
                 $collectionDetail = [];
                 $values = json_decode(json_encode($valSampling));
                 $cekArray = json_decode($values->data_pendukung_sampling);
+                $periode = null;
+                if ($values->periode != null && $values->periode != '' && $values->periode != 'null') {
+                    if ($values->periode === 'all') {
+                        $periode = 'Semua Periode';
+                    } else {
+                        $periode = self::tanggal_indonesia($values->periode, 'period');
+                    }
+                }
                 // dd($cekArray);
+                $allPeriode = false;
+                if ($periode === "Semua Periode") {
+                    $allPeriode = true;
+                }
                 if ($cekArray == []) {
                     $tambah = 0;
 
@@ -955,12 +967,13 @@ class GenerateInvoiceController extends Controller
                             }
                             $kategori2 = explode("-", $dataSampling->kategori_2);
                             $split = explode("/", $values->no_document);
+
                             if ($split[1] == 'QTC') {
                                 if (isset($dataSampling->keterangan_pengujian)) {
                                     $total_harga_qtc = self::rupiah($dataSampling->harga_total);
                                     $ket_qtc = $dataSampling->keterangan_pengujian . ' Parameter';
                                 } else {
-                                    $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik * count($dataSampling->periode)));
+                                    $total_harga_qtc = self::rupiah($allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
                                     $ket_qtc = strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . " Parameter";
                                     foreach ($dataSampling->regulasi as $rg => $v) {
                                         $reg = '';
@@ -973,7 +986,7 @@ class GenerateInvoiceController extends Controller
                                 }
                                 $invoiceDetails = (object) [
                                     'keterangan' => $ket_qtc,
-                                    'titk' => $dataSampling->jumlah_titik * count($dataSampling->periode),
+                                    'titk' => $allPeriode ? $dataSampling->jumlah_titik * count($dataSampling->periode) : $dataSampling->jumlah_titik,
                                     'harga_satuan' => intval(preg_replace('/[^0-9]/', '', $dataSampling->harga_satuan)),
                                     'total_harga' => intval(preg_replace('/[^0-9]/', '', $total_harga_qtc)),
                                 ];
@@ -1448,6 +1461,31 @@ class GenerateInvoiceController extends Controller
                 'error' => 'Terjadi kesalahan server',
                 'message' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    protected static function tanggal_indonesia($tanggal, $mode = null)
+    {
+        $bulan = [
+            1 => "Januari",
+            "Februari",
+            "Maret",
+            "April",
+            "Mei",
+            "Juni",
+            "Juli",
+            "Agustus",
+            "September",
+            "Oktober",
+            "November",
+            "Desember",
+        ];
+
+        $var = explode("-", $tanggal);
+        if ($mode == "period") {
+            return $bulan[(int) $var[1]] . " " . $var[0];
+        } else {
+            return $var[2] . " " . $bulan[(int) $var[1]] . " " . $var[0];
         }
     }
 }
