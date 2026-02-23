@@ -147,6 +147,9 @@ class DashboardSalesController extends Controller
                 'revenue'                     => $currRevenue,
                 'target'                      => $targetAmount,
 
+                'new'                         => $currDailyQsd->where('status_customer', 'new')->sum('total_revenue'),
+                'existing'                    => $currDailyQsd->where('status_customer', 'exist')->sum('total_revenue'),
+
                 'kontrak'                     => $currDailyQsd->where('kontrak', 'C')->sum('total_revenue'),
                 'non_kontrak'                 => $currDailyQsd->where('kontrak', 'N')->sum('total_revenue'),
 
