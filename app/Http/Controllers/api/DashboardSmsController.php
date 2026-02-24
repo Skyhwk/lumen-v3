@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 Carbon::setLocale('id');
 
-class DashboardSalesController extends Controller
+class DashboardSmsController extends Controller
 {
     public function index(Request $request)
     {
