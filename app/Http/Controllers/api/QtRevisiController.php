@@ -15,7 +15,7 @@ class QtRevisiController extends Controller
     public function index(Request $request){
         $tahun = request()->tahun;
         
-        $data = OrderHeader::with(['quotationNonKontrak', 'quotationKontrakH'])->where('is_revisi', true)
+        $data = OrderHeader::with(['quotationNonKontrak', 'quotationKontrakH', 'sales'])->where('is_revisi', true)
         ->whereYear('tanggal_penawaran', $tahun)
         ->where('is_active', 1)
         ->orderBy('tanggal_penawaran', 'desc');
