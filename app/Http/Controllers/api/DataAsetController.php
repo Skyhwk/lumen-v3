@@ -149,6 +149,7 @@ class DataAsetController extends Controller
             $data->kondisi              = $request->kondisi;
             $data->ruang                = $request->ruang_name;
             $data->lokasi               = $request->lokasi_name;
+            $data->umur_manfaat         = $request->umur_manfaat;
             $data->created_by           = $this->karyawan;
             $data->created_at           = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_active            = true;
@@ -202,6 +203,7 @@ class DataAsetController extends Controller
             $data->kondisi              = $request->kondisi;
             $data->ruang                = $request->ruang_name;
             $data->lokasi               = $request->lokasi_name;
+            $data->umur_manfaat         = $request->umur_manfaat;
             $data->updated_by           = $this->karyawan;
             $data->updated_at           = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_active            = true;
