@@ -29,7 +29,7 @@ class DashboardSalesController extends Controller
 
     public function __construct()
     {
-        $this->user_id = 37;
+        // $this->user_id = 37;
 
         Carbon::setLocale('id');
 
