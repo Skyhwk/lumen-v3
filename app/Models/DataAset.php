@@ -32,4 +32,9 @@ class DataAset extends Sector
     {
         return $this->hasMany(AsetDamageHistories::class, 'aset_id', 'id');
     }
+
+    public function transfer_histories()
+    {
+        return $this->hasMany(AsetTransferHistories::class, 'aset_id', 'id');
+    }
 }
