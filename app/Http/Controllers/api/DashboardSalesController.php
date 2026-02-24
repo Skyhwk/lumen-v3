@@ -29,8 +29,6 @@ class DashboardSalesController extends Controller
 
     public function __construct()
     {
-        // $this->user_id = 37;
-
         Carbon::setLocale('id');
 
         $this->categoryStr = config('kategori.id');
@@ -38,12 +36,14 @@ class DashboardSalesController extends Controller
 
     public function index(Request $request)
     {
+        $karyawanId = $request->attributes->get('user')->karyawan->id;
+
         $date = Carbon::create($request->year, $request->month, 1);
         $currMonth = $date->month;
         $prevMonth = $date->subMonth()->month;
 
         $dailyQsd = DailyQsd::with('orderHeader.orderDetail')
-            ->where('sales_id', $this->user_id)
+            ->where('sales_id', $karyawanId)
             ->whereYear('tanggal_kelompok', $request->year)
             ->get()
             ->map(function ($qsd) {
@@ -66,7 +66,7 @@ class DashboardSalesController extends Controller
         $growthRevenue = $this->calculateGrowth($currRevenue, $prevRevenue);
 
         $targetSales = MasterTargetSales::where([
-            'karyawan_id' => $this->user_id,
+            'karyawan_id' => $karyawanId,
             'is_active'   => true,
             'tahun'       => $request->year
         ])->latest()->first();
