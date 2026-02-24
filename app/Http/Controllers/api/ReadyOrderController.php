@@ -1581,7 +1581,7 @@ class ReadyOrderController extends Controller
                     $dataD->kategori_3 = $value->kategori_2;
                     $dataD->cfr = $no_cfr;
                     $dataD->keterangan_1 = $penamaan_titik;
-                    $dataD->parameter = json_encode($value->parameter);
+                    $dataD->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);;
                     $dataD->regulasi = json_encode($value->regulasi);
                     $dataD->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $dataD->created_at = Carbon::now()->format('Y-m-d H:i:s');
