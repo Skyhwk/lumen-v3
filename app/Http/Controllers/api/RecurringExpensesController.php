@@ -64,6 +64,7 @@ class RecurringExpensesController extends Controller
                 'virtual_account'  => $request['virtual_account'] ?? null,
                 'vendor'           => $request['vendor'] ?? null,
                 'receiver_name'    => $request['receiver_name'] ?? null,
+                'bank_name'        => $request['bank_name'] ?? null,
                 'keterangan'       => $request['keterangan'] ?? null,
                 'amount'           => $request['amount'] ?? 0,
 
@@ -158,7 +159,6 @@ class RecurringExpensesController extends Controller
                 'paid_by'              => $request['paid_by'],
                 'payment_method'       => $request['payment_method'] ?? null,
                 'payment_reference'    => $request['payment_reference'] ?? null,
-                'bank_name'            => $request['nbank_names'] ?? null,
                 'notes'                => $request['notes'] ?? null,
                 'filename'             => $safeName ?? null,
                 'created_at'           => Carbon::now()->format('Y-m-d H:i:s'),
@@ -330,7 +330,7 @@ class RecurringExpensesController extends Controller
 
     public function bankList()
     {
-        $data = RecurringDetails::all()->pluck('bank_name')->unique()->toArray();
+        $data = RecurringExpenses::all()->pluck('bank_name')->unique()->toArray();
 
         return response()->json([
             'data' => $data
