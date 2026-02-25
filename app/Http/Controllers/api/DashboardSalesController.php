@@ -36,6 +36,7 @@ class DashboardSalesController extends Controller
 
     public function index(Request $request)
     {
+        
         $karyawanId = $request->attributes->get('user')->karyawan->id;
 
         $date = Carbon::create($request->year, $request->month, 1);
@@ -104,6 +105,7 @@ class DashboardSalesController extends Controller
             $prevAchieved = $prevAchievedCategory->sum() == 0 ? 1 : $prevAchievedCategory->sum();
             $prevTarget = $prevTargetCategory->count();
         }
+         
         $currTargetKategori = $currAchieved . '/' . $currTarget;
         $prevTargetKategori = $prevAchieved . '/' . $prevTarget;
 
@@ -124,6 +126,7 @@ class DashboardSalesController extends Controller
 
         $period = Carbon::create($request->year, $request->month, 1)->format('Y-m');
         $target = json_decode(optional($targetSales)->target ?: '[]', true);
+       
         $targetAmount = isset($target[$period]) ? $target[$period] : 0;
 
         $newCustomerRevenue = $currQsd->filter(fn($qsd) => $qsd->status_customer == 'new')->sum('total_revenue');
