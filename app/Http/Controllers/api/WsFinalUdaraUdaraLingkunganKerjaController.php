@@ -283,6 +283,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 $item->nama_header = $bakuMutu->nama_header ?? null;
             }
 
+
             $getSatuan = new HelperSatuan;
 
             $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
@@ -299,6 +300,10 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
                 return $hasilUji;
             };
+
+            // dd($getHasilUji);
+
+            // dd($processedData);
 
             return Datatables::of($processedData)
                 ->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
@@ -361,37 +366,36 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         "C{$index}",
                     ];
 
-                    if ($index == 17) {
+                   if ($index == 17) {
                         foreach ($keysToTry as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
                         foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
-                    }
-                    if ($index == 15) {
+                    } elseif ($index == 15) {
                         foreach ($keysToTry as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
                         foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
-                    }
-                    if ($index == 16) {
+                    } elseif ($index == 16) {
                         foreach ($keysToTry as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
                         foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
                     } else {
                         foreach ($keysToTry as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
                         foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
                         }
                     }
+                    
 
                     return '-';
                 })
