@@ -148,7 +148,7 @@ class DataAsetController extends Controller
             $data->qr_filename          = $filename_qr;
             $data->jenis_aset           = $request->jenis_alat_name;
             $data->id_kategori_aset     = $request->id_kategori_aset;
-            $data->id_subkategori_aset  = $request->id_subkategori_aset;
+            $data->id_subkategori_aset  = $request->id_subkategori_aset ?: null;
             $data->merk                 = $request->merk;
             $data->tipe                 = $request->tipe;
             $data->harga                = str_replace(',', '', $request->harga);
@@ -190,7 +190,7 @@ class DataAsetController extends Controller
                 ], 400);
             }
             $data->id_kategori_aset     = $request->id_kategori_aset;
-            $data->id_subkategori_aset  = $request->id_subkategori_aset;
+            $data->id_subkategori_aset  = $request->id_subkategori_aset ?: null;
             $data->merk                 = $request->merk;
             $data->tipe                 = $request->tipe;
             $data->harga                = str_replace(',', '', $request->harga);
