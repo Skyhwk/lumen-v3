@@ -31,7 +31,7 @@ class DataAsetController extends Controller
                 \DB::raw('SUM(CASE WHEN data_aset.status_alat = "ready" THEN 1 ELSE 0 END) as ready'),
                 \DB::raw('SUM(CASE WHEN data_aset.status_alat = "used" THEN 1 ELSE 0 END) as used'),
                 \DB::raw('SUM(CASE WHEN data_aset.status_alat = "fixing" THEN 1 ELSE 0 END) as fixing'),
-                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "damage" THEN 1 ELSE 0 END) as damage')
+                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "damaged" THEN 1 ELSE 0 END) as damage')
             )
             ->leftJoin('master_kategori_aset', 'master_kategori_aset.id', '=', 'data_aset.id_kategori_aset')
             ->leftJoin('master_sub_kategori_aset', 'master_sub_kategori_aset.id', '=', 'data_aset.id_subkategori_aset')
@@ -137,6 +137,11 @@ class DataAsetController extends Controller
             $generated_no_cs = $this->generateNoSC('CS', strtoupper($request->jenis_alat_name));
             [$filename_qr, $unicode] = $this->generateQRAset($generated_no_cs, $request);
             
+            $checkGeneratedCS = DataAset::where('no_cs', $generated_no_cs)->first();
+            if($checkGeneratedCS){
+                $generated_no_cs = $this->generateNoSC('CS', strtoupper($request->jenis_alat_name));
+                [$filename_qr, $unicode] = $this->generateQRAset($generated_no_cs, $request);
+            }
             $data                       = new DataAset();
             $data->no_cs                = $generated_no_cs;
             $data->unicode              = $unicode;
