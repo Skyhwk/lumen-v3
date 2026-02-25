@@ -36,10 +36,11 @@ class ViewPerSalesController extends Controller
     // =========================================================================
     public function index(Request $request): \Illuminate\Http\JsonResponse
     {
+        
         try {
             $now            = Carbon::now();
-            $currentYear    = $now->year;
-            $currentMonth   = $now->month;
+            $currentYear    = (int) ($request->input('tahun') ?? $now->year);
+            $currentMonth   = (int) ($request->input('bulan') ?? $now->month);
             $currentPeriode = $now->format('Y-m');
             $startOfMonth   = $now->copy()->startOfMonth();
             $tahun          = $request->input('tahun', $currentYear);
@@ -238,7 +239,11 @@ class ViewPerSalesController extends Controller
             $members = GetBawahan::on('id', $managerId)
                 ->all()
                 ->filter(function ($item) use (&$addedIds) {
-                    if (in_array($item->id, $addedIds)) return false;
+                    // 2. Cek apakah ID sudah pernah ditambahkan (duplikasi)
+                    if (in_array($item->id, $addedIds)) {
+                        return false;
+                    }
+                    // Simpan ID agar tidak duplikat dan loloskan filter
                     $addedIds[] = $item->id;
                     return true;
                 });
