@@ -86,6 +86,8 @@ class MaintenanceCustomerController extends Controller
 
         $orderHeader = $orderHeaderNonKontrak->union($orderHeaderKontrak);
 
+        $orderHeader = DB::query()->fromSub($orderHeader, 'orders');
+
 
 
         switch ($jabatan) {
@@ -107,7 +109,11 @@ class MaintenanceCustomerController extends Controller
         $orderHeader = $orderHeader->orderBy('tanggal_sort', 'desc');
 
 
-        return DataTables::of($orderHeader)->make(true);
+        return DataTables::of($orderHeader)
+        ->filterColumn('nama_lengkap', function ($query, $keyword) {
+            $query->where('nama_lengkap', 'like', "%{$keyword}%");
+        })
+        ->make(true);
     }
 
     public function getDetail(Request $request)
