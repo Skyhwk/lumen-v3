@@ -74,7 +74,7 @@ class PlanktonController extends Controller
         ->make(true);
     }
 
-    public function approveData(Request $request){
+    public function approveSampel(Request $request){
         DB::beginTransaction();
         try {
             $data = Subkontrak::where('id', $request->id)->first();
