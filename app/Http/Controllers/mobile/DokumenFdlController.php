@@ -75,7 +75,7 @@ class DokumenFdlController extends Controller
         ])
         ->select(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->where('is_active', true)
-        ->where('no_quotation', 'ISL/QT/26-II/002526R2')
+        // ->where('no_quotation', 'ISL/QT/26-II/002526R2')
         ->whereBetween('tanggal_sampling', [$startDate, $endDate])
         ->groupBy(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->get();
