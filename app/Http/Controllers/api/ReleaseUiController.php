@@ -168,6 +168,7 @@ class ReleaseUiController extends Controller
                 'done_at'       => $endTime,
                 'duration_sec'  => $duration,
                 'patch'         => $numberPatch,
+                'keterangan'    => json_encode($request->notes),
                 'is_main'       => true
             ]);
 
