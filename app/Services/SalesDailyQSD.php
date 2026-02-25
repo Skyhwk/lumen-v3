@@ -130,25 +130,26 @@ class SalesDailyQSD
             ");
 
             DB::statement("
+                UPDATE daily_qsd d
+                JOIN (
+                    SELECT uuid,
+                        STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d') AS tgl_bayar,
+                        STR_TO_DATE(SUBSTRING_INDEX(tanggal_sampling_min, ',', 1), '%Y-%m-%d') AS tgl_sampling
+                    FROM daily_qsd
+                    WHERE tanggal_pembayaran IS NOT NULL
+                ) x ON x.uuid = d.uuid
+                SET d.tanggal_kelompok = LEAST(x.tgl_bayar, x.tgl_sampling)
+            ");
+
+            DB::statement("
                 UPDATE daily_qsd
-                SET is_invoicing = TRUE
+                SET is_invoicing = 1
             ");
 
             DB::statement("
                 UPDATE daily_qsd dq
                 INNER JOIN order_detail od ON od.no_order = dq.no_order
-                SET dq.is_invoicing = FALSE
-            ");
-
-            DB::statement("
-                UPDATE daily_qsd
-                SET tanggal_kelompok = 
-                    CASE 
-                        WHEN tanggal_pembayaran IS NOT NULL 
-                            THEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d')
-                        ELSE tanggal_sampling_min
-                    END
-                WHERE is_invoicing = TRUE
+                SET dq.is_invoicing = 0
             ");
 
             printf("[SchaduleUpdateQsd] [%s] Updating daily_qsd completed", Carbon::now()->format('Y-m-d H:i:s'));

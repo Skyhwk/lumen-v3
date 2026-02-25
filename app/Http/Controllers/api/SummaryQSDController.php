@@ -4,7 +4,6 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\ForecastSP;
 use App\Services\GetBawahan;
-use App\Services\GetDepartmentHierarchy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,79 +34,82 @@ class SummaryQSDController extends Controller
         // Build team lookup map once
         $this->teamLookup = $this->buildTeamLookupMap($allMembers);
 
-        // Get revenue data - OPTIMIZED
+        // Get revenue data
         $bulkDPP = $this->getRevenueFromDailyQSD($allMemberIds, $year, $type);
 
-        // Find resigned members
-        $resignedMemberIds = array_diff(array_keys($bulkDPP), $allMemberIds);
+        // Get forecast per sales (single query)
+        $forecastPerSales = $this->getForecastPerSales($year, $type);
 
-        if (!empty($resignedMemberIds)) {
+        // Find resigned members from revenue data
+        $resignedFromRevenue = array_diff(array_keys($bulkDPP), $allMemberIds);
+        // Find resigned members from forecast data
+        $resignedFromForecast = array_diff(array_keys($forecastPerSales), $allMemberIds);
+        // Merge unique resigned ids
+        $resignedMemberIds = array_unique(array_merge($resignedFromRevenue, $resignedFromForecast));
+
+        if (! empty($resignedMemberIds)) {
             $resignedMembers = $this->getResignedMembersWithTeam($resignedMemberIds);
             $allMembers      = array_merge($allMembers, $resignedMembers);
         }
 
-        $teamsData = $this->processTeamData($allMembers, $bulkDPP);
+        $teamsData = $this->processTeamData($allMembers, $bulkDPP, $forecastPerSales);
 
-        // Calculate team totals - OPTIMIZED
-        $allteam_total_periode = $this->emptyOrder;
+        // Calculate team totals
+        $allteam_total_periode          = $this->emptyOrder;
+        $allteam_forecast_total_periode = $this->emptyOrder;
 
         foreach ($teamsData as &$teamData) {
-            $teamTotal      = $this->emptyOrder;
-            $teamTotalStaff = $this->emptyOrder;
+            $teamTotal              = $this->emptyOrder;
+            $teamTotalStaff         = $this->emptyOrder;
+            $teamForecastTotal      = $this->emptyOrder;
+            $teamForecastTotalStaff = $this->emptyOrder;
 
             foreach (['staff', 'supervisor', 'manager'] as $grade) {
-                if (!empty($teamData[$grade])) {
+                if (! empty($teamData[$grade])) {
                     foreach ($teamData[$grade] as &$member) {
                         foreach ($member['order'] as $month => $amount) {
-                            $teamTotal[$month] += $amount;
+                            $teamTotal[$month]             += $amount;
                             $allteam_total_periode[$month] += $amount;
-                            
+
                             if ($grade === 'staff') {
                                 $teamTotalStaff[$month] += $amount;
+                            }
+                        }
+
+                        foreach ($member['forecast'] as $month => $amount) {
+                            $teamForecastTotal[$month]              += $amount;
+                            $allteam_forecast_total_periode[$month] += $amount;
+
+                            if ($grade === 'staff') {
+                                $teamForecastTotalStaff[$month] += $amount;
                             }
                         }
                     }
                 }
             }
 
-            $teamData['team_total_periode']       = $teamTotal;
-            $teamData['team_total']               = array_sum($teamTotal);
-            $teamData['team_total_staff_periode'] = $teamTotalStaff;
-            $teamData['team_total_staff']         = array_sum($teamTotalStaff);
+            $teamData['team_total_periode']          = $teamTotal;
+            $teamData['team_total']                  = array_sum($teamTotal);
+            $teamData['team_total_staff_periode']    = $teamTotalStaff;
+            $teamData['team_total_staff']            = array_sum($teamTotalStaff);
+            $teamData['team_forecast_total_periode'] = $teamForecastTotal;
+            $teamData['team_forecast_total']         = array_sum($teamForecastTotal);
+            $teamData['team_forecast_staff_periode'] = $teamForecastTotalStaff;
+            $teamData['team_forecast_staff']         = array_sum($teamForecastTotalStaff);
         }
 
-        [$forecastTotal, $forecastTotalPeriode] = $this->getForecastTotal($year, $type);
-
-        $forecastPerSales = $this->getForecastPerSales($year, $type);
-
-        $includedSales = [];
-
-        $hierarchy = new GetDepartmentHierarchy();
-        $salesHierarchy = $hierarchy->getByDepartment('sales', 'tree');
-
-        $forecastData = collect($salesHierarchy)
-            ->flatMap(function ($root) use ($forecastPerSales, &$includedSales) {
-                return $this->flattenWithRootPromotion(
-                    $root,
-                    $forecastPerSales,
-                    $includedSales,
-                    1,
-                    true // root context
-                );
-            })
-            ->values();
+        $forecastTotal = array_sum($allteam_forecast_total_periode);
 
         return response()->json([
-            'success'           => true,
-            'type'              => $type,
-            'year'              => $year,
-            'data'              => array_values($teamsData),
-            'forecast_data'     => $forecastData,
-            'all_total_periode' => $allteam_total_periode,
-            'all_total'         => array_sum($allteam_total_periode),
-            'forecast_total'    => $forecastTotal,
-            'forecast_total_periode' => $forecastTotalPeriode,
-            'message'           => 'Data berhasil diproses!',
+            'success'                => true,
+            'type'                   => $type,
+            'year'                   => $year,
+            'data'                   => array_values($teamsData),
+            'all_total_periode'      => $allteam_total_periode,
+            'all_total'              => array_sum($allteam_total_periode),
+            'forecast_total'         => $forecastTotal,
+            'forecast_total_periode' => $allteam_forecast_total_periode,
+            'message'                => 'Data berhasil diproses!',
         ], 200);
     }
 
@@ -179,18 +181,17 @@ class SummaryQSDController extends Controller
         return $lookup;
     }
 
-    // OPTIMASI: Process team data dalam satu loop
-    private function processTeamData($allMembers, $bulkDPP)
+    // OPTIMASI: Process team data dalam satu loop, inject forecast per member
+    private function processTeamData($allMembers, $bulkDPP, $forecastPerSales)
     {
         $teamsData = [];
-
         foreach ($allMembers as $member) {
             $teamIndex  = $member['team_index'];
             $grade      = $member['grade'];
             $memberId   = $member['id'];
             $isResigned = $member['is_resigned'] ?? false;
 
-            if (!isset($teamsData[$teamIndex])) {
+            if (! isset($teamsData[$teamIndex])) {
                 $teamsData[$teamIndex] = [
                     'staff'      => [],
                     'supervisor' => [],
@@ -198,12 +199,16 @@ class SummaryQSDController extends Controller
                 ];
             }
 
-            $memberData                = $member['data'];
-            $memberData['order']       = $bulkDPP[$memberId] ?? $this->emptyOrder;
-            $memberData['total_order'] = array_sum($memberData['order']);
-            $memberData['is_resigned'] = $isResigned;
+            $forecastData = $forecastPerSales[$memberId] ?? null;
 
-            if ($memberData['total_order'] > 0 || in_array($grade, ['manager', 'supervisor'])) {
+            $memberData                   = $member['data'];
+            $memberData['order']          = $bulkDPP[$memberId] ?? $this->emptyOrder;
+            $memberData['total_order']    = array_sum($memberData['order']);
+            $memberData['forecast']       = $forecastData['periode'] ?? $this->emptyOrder;
+            $memberData['total_forecast'] = $forecastData['total_tahun'] ?? 0;
+            $memberData['is_resigned']    = $isResigned;
+
+            if ($memberData['total_order'] > 0 || $memberData['total_forecast'] > 0 || in_array($grade, ['manager', 'supervisor'])) {
                 $teamsData[$teamIndex][$grade][] = $memberData;
             }
         }
@@ -218,7 +223,6 @@ class SummaryQSDController extends Controller
             return [];
         }
 
-        // Base query dengan filter awal
         $query = DB::table('daily_qsd')
             ->select(
                 'sales_id',
@@ -228,7 +232,6 @@ class SummaryQSDController extends Controller
             ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01'])
             ->whereYear('tanggal_kelompok', $tahun);
 
-        // Apply type filters
         switch ($type) {
             case 'order':
                 $query->whereNotNull('no_order')
@@ -266,18 +269,17 @@ class SummaryQSDController extends Controller
             return [];
         }
 
-        // OPTIMASI: Mapping bulan lebih efisien dengan array statis
         $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
         $result     = [];
 
         foreach ($data as $record) {
             $salesId = $record->sales_id;
-            
-            if (!isset($result[$salesId])) {
+
+            if (! isset($result[$salesId])) {
                 $result[$salesId] = $this->emptyOrder;
             }
-            
-            $monthKey = $monthNames[$record->month_num];
+
+            $monthKey                     = $monthNames[$record->month_num];
             $result[$salesId][$monthKey] += $record->total_revenue;
         }
 
@@ -290,14 +292,13 @@ class SummaryQSDController extends Controller
         return [
             'Jan' => 0, 'Feb' => 0, 'Mar' => 0, 'Apr' => 0,
             'Mei' => 0, 'Jun' => 0, 'Jul' => 0, 'Agt' => 0,
-            'Sep' => 0, 'Okt' => 0, 'Nov' => 0, 'Des' => 0
+            'Sep' => 0, 'Okt' => 0, 'Nov' => 0, 'Des' => 0,
         ];
     }
 
     // OPTIMASI: Batch query dengan lookup map
     private function getResignedMembersWithTeam($resignedMemberIds)
     {
-        // Single query untuk semua resigned users
         $resignedUsers = DB::table('master_karyawan')
             ->select('id', 'nama_lengkap', 'grade', 'atasan_langsung', 'image')
             ->whereIn('id', $resignedMemberIds)
@@ -306,8 +307,18 @@ class SummaryQSDController extends Controller
         $resignedMembers = [];
 
         foreach ($resignedUsers as $user) {
-            // Gunakan lookup map yang sudah dibuat
-            $teamIndex = $this->teamLookup[$user->atasan_langsung] ?? 0;
+            $atasanList = json_decode($user->atasan_langsung, true) ?? [];
+
+            $teamIndex = 0; 
+
+            foreach ($atasanList as $atasanId) {
+                $atasanId = (int) $atasanId;
+
+                if (isset($this->teamLookup[$atasanId])) {
+                    $teamIndex = $this->teamLookup[$atasanId];
+                    break; 
+                }
+            }
 
             $resignedMembers[] = [
                 'id'          => $user->id,
@@ -328,47 +339,10 @@ class SummaryQSDController extends Controller
         return $resignedMembers;
     }
 
-    private function getForecastTotal($tahun, $type)
-    {
-        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun);
-
-        // Apply type filters
-        switch ($type) {
-            case 'contract':
-                $forecasts->where('status_quotation', 'kontrak');
-                break;
-
-            case 'new':
-                $forecasts->where('status_customer', 'new');
-                break;
-
-            default:
-                // By default, get all forecasts
-                break;
-        }
-
-        $forecasts = $forecasts->get();
-
-        $totalSummaryThisYear = 0;
-
-        $totalSummaryPerPeriode = $this->getEmptyOrder();
-
-        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
-
-        foreach ($forecasts as $forecast) {
-            $indexBulan = $monthNames[intval(explode('-', $forecast->tanggal_sampling_min)[1])];
-            $totalSummaryPerPeriode[$indexBulan] += $forecast->revenue_forecast;
-            $totalSummaryThisYear += $forecast->revenue_forecast;
-        }
-
-        return [$totalSummaryThisYear, $totalSummaryPerPeriode];
-    }
-
     private function getForecastPerSales(int $tahun, string $type)
     {
         $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun);
 
-        // Apply type filters
         switch ($type) {
             case 'contract':
                 $forecasts->where('status_quotation', 'kontrak');
@@ -379,100 +353,34 @@ class SummaryQSDController extends Controller
                 break;
 
             default:
-                // By default, get all forecasts
                 break;
         }
 
         $forecasts = $forecasts->get();
 
-        $monthNames = ['', 'Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
 
         $result = [];
 
         foreach ($forecasts as $forecast) {
             $sid = $forecast->sales_id;
 
-            if (!isset($result[$sid])) {
+            if (! isset($result[$sid])) {
                 $result[$sid] = [
                     'total_tahun' => 0,
-                    'periode' => $this->getEmptyOrder(),
+                    'periode'     => $this->getEmptyOrder(),
                 ];
             }
 
-            $bulan = $monthNames[intval(explode('-', $forecast->tanggal_sampling_min)[1])];
+            $bulanNumber = Carbon::parse($forecast->tanggal_sampling_min)->format('n');
+            $bulan       = $monthNames[$bulanNumber];
 
-            $result[$sid]['periode'][$bulan] += $forecast->revenue_forecast;
-            $result[$sid]['total_tahun'] += $forecast->revenue_forecast;
-        }
-
-        return $result;
-    }
-
-    private function flattenWithRootPromotion(
-        array $node,
-        array $forecastPerSales,
-        array &$includedSales,
-        int $level,
-        bool $isRootContext = false
-    ): array {
-
-        $result = [];
-        $salesId = $node['id'];
-
-        $hasForecast = isset($forecastPerSales[$salesId]);
-        // $hasForecast = true;
-        $alreadyIncluded = in_array($salesId, $includedSales);
-
-        // =============================
-        // CASE 1 — node punya forecast → include
-        // =============================
-        if ($hasForecast && !$alreadyIncluded) {
-
-            $includedSales[] = $salesId;
-
-            $result[] = [
-                'sales_id' => $salesId,
-                'nama_sales' => $node['nama_lengkap'] ?? null,
-                'employee_level' => $level,
-                'grade' => $node['grade'],
-                'total_tahun' => $forecastPerSales[$salesId]['total_tahun'] ?? 0,
-                'is_active' => $node['is_active'] ?? false,
-                'is_root' => $isRootContext,
-                'periode' => $forecastPerSales[$salesId]['periode'] ?? $this->getEmptyOrder(),
-            ];
-
-            // anak turun level +1
-            foreach ($node['bawahan'] ?? [] as $child) {
-                $result = array_merge(
-                    $result,
-                    $this->flattenWithRootPromotion(
-                        $child,
-                        $forecastPerSales,
-                        $includedSales,
-                        $level + 1,
-                        false
-                    )
-                );
+            if (! isset($result[$sid]['periode'][$bulan])) {
+                $result[$sid]['periode'][$bulan] = 0;
             }
 
-            return $result;
-        }
-
-        // =============================
-        // CASE 2 — node TIDAK punya forecast
-        // → cek anak → promote anak jadi root
-        // =============================
-        foreach ($node['bawahan'] ?? [] as $child) {
-            $result = array_merge(
-                $result,
-                $this->flattenWithRootPromotion(
-                    $child,
-                    $forecastPerSales,
-                    $includedSales,
-                    1,      // reset level
-                    true    // promoted root
-                )
-            );
+            $result[$sid]['periode'][$bulan] += $forecast->revenue_forecast;
+            $result[$sid]['total_tahun']     += $forecast->revenue_forecast;
         }
 
         return $result;

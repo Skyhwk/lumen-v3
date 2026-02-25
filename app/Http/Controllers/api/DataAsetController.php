@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\AsetDamageHistories;
 use App\Models\AsetFixingHistories;
+use App\Models\AsetTransferHistories;
 use App\Models\AsetUsedHistories;
 use App\Models\DataAset;
 use App\Models\MasterKaryawan;
@@ -42,7 +43,7 @@ class DataAsetController extends Controller
     }
 
     public function getDetail(Request $request){
-        $data = DataAset::with('fixing_histories', 'used_histories', 'damage_histories')
+        $data = DataAset::with('fixing_histories', 'used_histories', 'damage_histories', 'transfer_histories')
             ->where('jenis_aset', $request->jenis_aset)
             ->where('is_active', true)
             ->get();
@@ -67,6 +68,12 @@ class DataAsetController extends Controller
     
     public function getAsetUsedHistories(Request $request){
         $data = AsetUsedHistories::with('aset')->where('aset_id', $request->aset_id)->get();
+
+        return DataTables::of($data)->make(true);
+    }
+
+    public function getAsetTransferHistories(Request $request){
+        $data = AsetTransferHistories::with('aset')->where('aset_id', $request->aset_id)->get();
 
         return DataTables::of($data)->make(true);
     }
@@ -100,10 +107,13 @@ class DataAsetController extends Controller
             // $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            $aset = DataAset::find($data->aset_id);
-            $aset->status_alat = 'ready';
-            $aset->is_ready_use = 1;
-            $aset->save();
+            // Cek jika column mengandung tanggal
+            if($request->column == 'tanggal_pengembalian' || $request->column == 'tanggal_selesai'){
+                $aset = DataAset::find($data->aset_id);
+                $aset->status_alat = 'ready';
+                $aset->is_ready_use = 1;
+                $aset->save();
+            }
 
             DB::commit();
             return response()->json([
@@ -139,6 +149,7 @@ class DataAsetController extends Controller
             $data->kondisi              = $request->kondisi;
             $data->ruang                = $request->ruang_name;
             $data->lokasi               = $request->lokasi_name;
+            $data->umur_manfaat         = $request->umur_manfaat;
             $data->created_by           = $this->karyawan;
             $data->created_at           = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_active            = true;
@@ -177,9 +188,22 @@ class DataAsetController extends Controller
             $data->tanggal_pembelian    = $request->tanggal_pembelian;
             $data->status               = $request->status;
             $data->is_labeled           = $request->is_labeled === 'true' ? true : false;
+
+            // Cek Jika Lokasi/Ruang Berubah
+            if($request->ruang_name != $data->ruang || $request->lokasi_name != $data->lokasi){
+                $transfer = new AsetTransferHistories();
+                $transfer->aset_id = $data->id;
+                $transfer->posisi_awal = $data->ruang . ' - ' . $data->lokasi;
+                $transfer->posisi_akhir = $request->ruang_name . ' - ' . $request->lokasi_name;
+                $transfer->created_by = $this->karyawan;
+                $transfer->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                $transfer->save();
+            }
+
             $data->kondisi              = $request->kondisi;
             $data->ruang                = $request->ruang_name;
             $data->lokasi               = $request->lokasi_name;
+            $data->umur_manfaat         = $request->umur_manfaat;
             $data->updated_by           = $this->karyawan;
             $data->updated_at           = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_active            = true;
@@ -250,6 +274,7 @@ class DataAsetController extends Controller
                 $data->tanggal_pengembalian  = $request->tanggal_pengembalian;
             }
             $data->peminjam             = $request->peminjam['value'];
+            $data->keterangan           = $request->keterangan;
             $data->created_by           = $this->karyawan;
             $data->created_at           = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
@@ -288,6 +313,9 @@ class DataAsetController extends Controller
             $data->tanggal_mulai        = $request->tanggal_mulai;
             if(isset($request->tanggal_selesai) && !empty($request->tanggal_selesai)){
                 $data->tanggal_selesai  = $request->tanggal_selesai;
+            }
+            if(isset($request->catatan) && !empty($request->catatan)){
+                $data->catatan          = $request->catatan;
             }
             $data->mekanik              = $request->mekanik['value'];
             $data->created_by           = $this->karyawan;
@@ -359,7 +387,7 @@ class DataAsetController extends Controller
         if (!$data) {
             return $prefix . "-" . $jenis_aset . '-001';
         }else{
-            $cs_to_array = explode('-', $data->first()->no_cs);
+            $cs_to_array = explode('-', $data->no_cs);
             $cs_to_array[2] = $cs_to_array[2] + 1;
             return $prefix . "-" . $jenis_aset . '-' . str_pad($cs_to_array[2], 3, '0', STR_PAD_LEFT);
         }
