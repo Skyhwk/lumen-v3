@@ -184,11 +184,11 @@ class DraftAirController extends Controller
 
             foreach (($request->nama_parameter ?? []) as $key => $val) {
                 $exeption = ['Plankton', 'Benthos', 'Necton'];
-
+                $akr = '';
                 if(in_array($key, $exeption)){
                     $akreditasi = Parameter::where('nama_lab', $key)->where('id_kategori', 1)->where('is_active', true)->where('status', 'AKREDITASI')->first(); 
                     if(!$akreditasi){
-                        $request->akr[$key] = 'ẍ';
+                        $akr = 'ẍ';
                     }
                 }
                 $baku_mutu = [];
@@ -197,7 +197,7 @@ class DraftAirController extends Controller
                 }
                 LhpsAirDetail::create([
                     'id_header'     => $header->id,
-                    'akr'           => $request->akr[$key] ?? '',
+                    'akr'           => $request->akr[$key] ?? $akr ?? '',
                     'parameter_lab' => str_replace("'", '', $key),
                     'parameter'     => $val,
                     'hasil_uji'     => $request->hasil_uji[$key] ?? '',
