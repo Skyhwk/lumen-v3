@@ -228,13 +228,11 @@ class DataForecastController extends Controller
 
         }
 
-
         return $teamsData;
     }
 
     private function getResignedMembersWithTeam($resignedMemberIds)
     {
-
 
         $resignedUsers = DB::table('master_karyawan')
             ->select('id', 'nama_lengkap', 'grade', 'atasan_langsung', 'image')
@@ -245,7 +243,18 @@ class DataForecastController extends Controller
 
         foreach ($resignedUsers as $user) {
             // Gunakan lookup map yang sudah dibuat
-            $teamIndex = $this->teamLookup[$user->atasan_langsung] ?? 0;
+            $atasanList = json_decode($user->atasan_langsung, true) ?? [];
+
+            $teamIndex = 0;
+
+            foreach ($atasanList as $atasanId) {
+                $atasanId = (int) $atasanId;
+
+                if (isset($this->teamLookup[$atasanId])) {
+                    $teamIndex = $this->teamLookup[$atasanId];
+                    break;
+                }
+            }
 
             $resignedMembers[] = [
                 'id'          => $user->id,
@@ -262,7 +271,6 @@ class DataForecastController extends Controller
                 ],
             ];
         }
-
 
         return $resignedMembers;
     }

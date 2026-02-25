@@ -5985,7 +5985,7 @@ class RequestQuotationController extends Controller
         }
         $data_lama = json_decode($data_lama);
 
-        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first()->no_sampel;
+        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first();
 
         if (!$data) {
             return response()->json([
@@ -5996,7 +5996,7 @@ class RequestQuotationController extends Controller
 
         return response()->json([
             'message' => 'Success',
-            'data' => \explode('/', $data)[1]
+            'data' => \explode('/', $data->no_sampel)[1]
         ], 200);
     }
 

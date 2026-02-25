@@ -132,12 +132,12 @@ class SalesDailyQSD
             DB::statement("
                 UPDATE daily_qsd d
                 JOIN (
-                    SELECT id,
+                    SELECT uuid,
                         STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d') AS tgl_bayar,
                         STR_TO_DATE(SUBSTRING_INDEX(tanggal_sampling_min, ',', 1), '%Y-%m-%d') AS tgl_sampling
                     FROM daily_qsd
                     WHERE tanggal_pembayaran IS NOT NULL
-                ) x ON x.id = d.id
+                ) x ON x.uuid = d.uuid
                 SET d.tanggal_kelompok = LEAST(x.tgl_bayar, x.tgl_sampling)
             ");
 
