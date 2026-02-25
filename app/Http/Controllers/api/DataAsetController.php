@@ -27,7 +27,11 @@ class DataAsetController extends Controller
                 'data_aset.jenis_aset',
                 'master_kategori_aset.nama_kategori',
                 'master_sub_kategori_aset.nama_sub_kategori',
-                \DB::raw('COUNT(data_aset.id) as total')
+                \DB::raw('COUNT(data_aset.id) as total'),
+                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "ready" THEN 1 ELSE 0 END) as ready'),
+                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "used" THEN 1 ELSE 0 END) as used'),
+                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "fixing" THEN 1 ELSE 0 END) as fixing'),
+                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "damage" THEN 1 ELSE 0 END) as damage')
             )
             ->leftJoin('master_kategori_aset', 'master_kategori_aset.id', '=', 'data_aset.id_kategori_aset')
             ->leftJoin('master_sub_kategori_aset', 'master_sub_kategori_aset.id', '=', 'data_aset.id_subkategori_aset')
