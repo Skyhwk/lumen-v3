@@ -105,13 +105,13 @@ class TicketRevisiQtController extends Controller
     {
         $search = $request->input('no_document');
 
-        $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap', 'sales_id')
-            ->select('id', 'no_document', 'nama_perusahaan')
+        $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
             ->where('is_active', true);
 
-        $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap', 'sales_id')
-            ->select('id', 'no_document', 'nama_perusahaan')
+        $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
             ->where('is_active', true);
 
