@@ -43,7 +43,7 @@ class ViewPerSalesController extends Controller
             $currentPeriode = $now->format('Y-m');
             $startOfMonth   = $now->copy()->startOfMonth();
             $tahun          = $request->input('tahun', $currentYear);
-            dd($currentYear,$currentMonth);
+            
             // 1. Ambil seluruh member tim (flat array)
             $members   = $this->getAllTeamMembers();                    // [{id, name, team_name, grade, ...}]
             $salesIds  = array_column($members, 'id');                 // [1, 2, 3, ...]
@@ -87,8 +87,8 @@ class ViewPerSalesController extends Controller
         $kontrakRows = QuotationKontrakH::whereIn('sales_id', $salesIds)
             ->whereYear('created_at', $year)
             ->whereMonth('created_at', $month)
-            ->with(['detail' => fn($q) => $q->where('periode_kontrak', $periode)
-                ->select('id_request_quotation_kontrak_h', 'biaya_akhir', 'total_ppn')
+            ->with(['detail' => fn($q) => 
+                $q->select('id_request_quotation_kontrak_h', 'biaya_akhir', 'total_ppn')
             ])
             ->where('is_active',true)
             ->select('id', 'sales_id', 'flag_status')
