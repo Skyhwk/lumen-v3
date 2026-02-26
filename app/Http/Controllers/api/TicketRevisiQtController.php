@@ -80,11 +80,13 @@ class TicketRevisiQtController extends Controller
     {
         $search = $request->input('q');
 
-        $kontrak = QuotationKontrakH::select('no_document', 'nama_perusahaan')
+        $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'pelanggan_ID', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
             ->where('is_active', true);
 
-        $nonKontrak = QuotationNonKontrak::select('no_document', 'nama_perusahaan')
+        $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'pelanggan_ID', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
             ->where('is_active', true);
 
@@ -94,6 +96,8 @@ class TicketRevisiQtController extends Controller
             ->limit(10)
             ->get();
 
+        $results = $results->makeHidden(['id']);
+
         return response()->json($results, 200);
     }
 
@@ -101,17 +105,21 @@ class TicketRevisiQtController extends Controller
     {
         $search = $request->input('no_document');
 
-        $kontrak = QuotationKontrakH::select('no_document', 'nama_perusahaan')
+        $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap', 'sales_id')
+            ->select('id', 'no_document', 'nama_perusahaan')
             ->where('no_document', 'like', "%{$search}%")
             ->where('is_active', true);
 
-        $nonKontrak = QuotationNonKontrak::select('no_document', 'nama_perusahaan')
+        $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap', 'sales_id')
+            ->select('id', 'no_document', 'nama_perusahaan')
             ->where('no_document', 'like', "%{$search}%")
             ->where('is_active', true);
 
         $results = $kontrak
             ->unionAll($nonKontrak)
             ->first();
+
+        $results = $results->makeHidden(['id']);
 
         return response()->json(['data' => $results], 200);
     }
