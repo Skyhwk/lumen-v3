@@ -4,181 +4,260 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Services\GetBawahan;
+use Illuminate\Support\Facades\DB;
 
 use Carbon\Carbon;
 
 Carbon::setLocale('id');
 
-use App\Models\MasterKaryawan;
-use App\Models\QuotationKontrakH;
-use App\Models\QuotationNonKontrak;
-use App\Models\TargetSales;
-use App\Models\RekapLiburKalender;
+use App\Models\{QuotationKontrakH, QuotationNonKontrak, DailyQsd, MasterTargetSales};
 
 class ViewPerSalesController extends Controller
 {
-    public function index(Request $r)
+    private array $indoMonths = [
+        1 => 'januari',  2 => 'februari', 3  => 'maret',    4  => 'april',
+        5 => 'mei',      6 => 'juni',     7  => 'juli',     8  => 'agustus',
+        9 => 'september',10 => 'oktober', 11 => 'november', 12 => 'desember',
+    ];
+
+    private array $managerIds = [19, 41, 14];
+    private array $categoryStr;
+
+    public function __construct()
     {
-        // Clean dan setup tanggal
-        $clean = fn($d) => Carbon::parse(preg_replace('/\s\(.*\)$/', '', $d));
-        $start = $clean($r->startDate);
-        $end = $clean($r->endDate);
+        Carbon::setLocale('id');
+        $this->categoryStr = config('kategori.id');
+    }
 
-        $monthKey = strtolower($start->format('M'));
-        $year = $start->year;
+    // =========================================================================
+    // ENTRY POINT
+    // =========================================================================
+    public function index(Request $request): \Illuminate\Http\JsonResponse
+    {
+        
+        try {
+            $now            = Carbon::now();
+            $currentYear    = (int) ($request->input('tahun') ?? $now->year);
+            $currentMonth   = (int) ($request->input('bulan') ?? $now->month);
+            $currentPeriode = $now->format('Y-m');
+            $startOfMonth   = $now->copy()->startOfMonth();
+            $tahun          = $request->input('tahun', $currentYear);
+            
+            // 1. Ambil seluruh member tim (flat array)
+            $members   = $this->getAllTeamMembers();                    // [{id, name, team_name, grade, ...}]
+            $salesIds  = array_column($members, 'id');                 // [1, 2, 3, ...]
 
-        // Get working days data
-        $rekapLibur = RekapLiburKalender::where(['tahun' => $year, 'is_active' => true])->first();
-        $workingDays = $rekapLibur ? json_decode($rekapLibur->tanggal, true) : [];
+            // 2. Ambil SEMUA data sekaligus (bulk — hanya N query total, bukan N × query)
+            $bulkData  = $this->fetchAllBulkData($salesIds, $currentYear, $currentMonth, $currentPeriode, $tahun);
 
-        // Process date range dan target calculation berdasarkan filter
-        switch ($r->rangeFilter) {
-            case 'Daily':
-                $start = $start->startOfDay();
-                $end = $end->endOfDay();
-                $currentMonth = $start->format('Y-m');
-                $monthWorkingDays = isset($workingDays[$currentMonth]) ? count($workingDays[$currentMonth]) : 0;
-                $targetCalc = fn($t) => $monthWorkingDays > 0 ? ($t->$monthKey ?? 0) / $monthWorkingDays : 0;
-                break;
-
-            case 'Weekly':
-                // $targetCalc = function ($t) use ($start, $end, $monthKey, $workingDays) {
-                //     $currentMonth = $start->format('Y-m');
-                //     $monthWorkingDays = isset($workingDays[$currentMonth]) ? count($workingDays[$currentMonth]) : 0;
-
-                //     $dateRangeWorkingDays = 0;
-                //     if (isset($workingDays[$currentMonth])) {
-                //         foreach ($workingDays[$currentMonth] as $workingDate) {
-                //             $date = Carbon::parse($workingDate);
-                //             if ($date->between($start, $end)) $dateRangeWorkingDays++;
-                //         }
-                //     }
-
-                //     dd($currentMonth, $monthWorkingDays, $dateRangeWorkingDays, $monthWorkingDays > 0 ? (($t->$monthKey ?? 0) / $monthWorkingDays) * $dateRangeWorkingDays : 0);
-                //     return $monthWorkingDays > 0 ? (($t->$monthKey ?? 0) / $monthWorkingDays) * $dateRangeWorkingDays : 0;
-                // };
-                $targetCalc = function ($t) use ($start, $end, $monthKey, $workingDays) {
-                    $currentMonth = $start->format('Y-m');
-                    $daysInMonth = $workingDays[$currentMonth] ?? [];
-                    $monthWorkingDays = count($daysInMonth);
-                    $rangeDays = count(array_filter($daysInMonth, fn($d) => Carbon::parse($d)->between($start, $end)));
-
-                    return $monthWorkingDays > 0 ? (($t->$monthKey ?? 0) / $monthWorkingDays) * $rangeDays : 0;
-                };
-                break;
-
-            case 'Monthly':
-                $start = $start->startOfMonth()->startOfDay();
-                $end = $end->endOfMonth()->endOfDay();
-                $targetCalc = fn($t) => $t->$monthKey ?? 0;
-                break;
-
-            case 'Yearly':
-                $start = $start->startOfYear()->startOfDay();
-                $end = $end->endOfYear()->endOfDay();
-                $targetCalc = fn($t) => collect(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'])->sum(fn($m) => $t->$m ?? 0);
-                break;
-
-            default:
-                $targetCalc = fn() => 0;
+            // 3. Build result — hitung metric dari collection in-memory (0 query tambahan)
+            $result = array_map(
+                fn($member) => [
+                    'sales_id'   => $member['id'],
+                    'sales_name' => $member['name'],
+                    'team'       => $member['team_name'],
+                    'grade'      => $member['grade'],
+                    'data'       => $this->buildMetrics($member['id'], $currentMonth, $currentPeriode, $tahun, $bulkData),
+                ],
+                $members
+            );
+            return response()->json(['data' => $result]);
+        } catch (\Throwable $th) {
+            return response()->json(['line' => $th->getLine(), 'message' => $th->getMessage(),'file'=>$th->getFile()], 500);
         }
+    }
 
-        // Get sales data dengan filter role
-        $sales = MasterKaryawan::whereIn('id_jabatan', [21, 24])->where('is_active', true);
+    // =========================================================================
+    // STEP 2: BULK FETCH — semua query dikumpulkan di sini, dipanggil SEKALI
+    // Total query: 7 (tidak peduli berapa banyak sales)
+    // =========================================================================
+    private function fetchAllBulkData(
+        array  $salesIds,
+        int    $year,
+        int    $month,
+        string $periode,
+        int    $tahun
+    ): array {
+        $statusExcluded = ['ordered', 'rejected', 'void'];
+        $statusOrdered  = 'ordered';
 
-        $ids = [];
-        $userId = $this->user_id;
-        $roleId = $r->attributes->get('user')->karyawan->id_jabatan;
+        // ── Query 1: Quotation Kontrak (count + amount, grouped by sales & status bucket) ──
+        // Kita ambil raw lalu classify di PHP — 1 query untuk semua kombinasi
+        $kontrakRows = QuotationKontrakH::whereIn('sales_id', $salesIds)
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->with(['detail' => fn($q) => 
+                $q->select('id_request_quotation_kontrak_h', 'biaya_akhir', 'total_ppn')
+            ])
+            ->where('is_active',true)
+            ->select('id', 'sales_id', 'flag_status')
+            ->get();
 
-        if ($roleId == 24) { // SALES STAFF
-            $ids = [$userId];
-        } elseif (in_array($roleId, [21, 15])) { // SALES SPV & MANAGER
-            $ids = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $userId)
-                ->where('is_active', true)
-                ->pluck('id')
-                ->push($userId)
-                ->toArray();
-        }
+        // ── Query 2: Quotation Non-Kontrak (count + amount, grouped by sales & status bucket) ──
+        $nonKontrakRows = QuotationNonKontrak::whereIn('sales_id', $salesIds)
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->where('is_active',true)
+            ->select('sales_id', 'flag_status', DB::raw('(biaya_akhir - total_ppn) as net_amount'))
+            ->get();
 
-        if (!empty($ids)) $sales->whereIn('id', $ids);
-
-        $sales = $sales->orderBy('nama_lengkap')->get();
-
-        // Setup card colors
-        $cardColors = ['info', 'tosca', 'secondary', 'danger'];
-        $spvSales = MasterKaryawan::where([
-            'id_jabatan' => 21,
-            'is_active' => true
-        ])->orderBy('id')->pluck('id')->toArray();
-
-        $spvColors = [];
-        foreach ($spvSales as $index => $spvId) {
-            $spvColors[$spvId] = $cardColors[$index % count($cardColors)];
-        }
-
-        // Assign card colors to sales
-        foreach ($sales as &$s) {
-            $spvId = null;
-            $atasanLangsung = json_decode($s->atasan_langsung);
-
-            if (isset($spvColors[$s->id])) {
-                $spvId = $s->id;
-            } else {
-                foreach ($atasanLangsung as $atasanId) {
-                    if (isset($spvColors[$atasanId])) {
-                        $spvId = $atasanId;
-                        break;
-                    }
+        // ── Query 3: DailyQsd + relasi (1 query dengan eager load) ──
+        $dailyQsdAll = DailyQsd::with(['orderHeader' => fn($q) => $q->with('orderDetail:id,id_order_header,periode,kategori_3')])
+            ->whereIn('sales_id', $salesIds)
+            ->whereYear('tanggal_kelompok', $year)
+            ->whereMonth('tanggal_kelompok', $month)
+            ->select('sales_id', 'tanggal_kelompok', 'total_revenue', 'status_customer', 'kontrak', 'periode', 'no_order')
+            ->get()
+            ->each(function ($qsd) {
+                // Filter orderDetail per periode di PHP (sudah eager loaded)
+                if ($qsd->periode && optional($qsd->orderHeader)->orderDetail) {
+                    $filtered = $qsd->orderHeader->orderDetail->filter(
+                        fn($od) => $od->periode === $qsd->periode
+                    )->values();
+                    $qsd->orderHeader->setRelation('orderDetail', $filtered);
                 }
-            }
+            })
+            ->groupBy('sales_id');
 
-            $s->cardColor = $spvId && isset($spvColors[$spvId]) ? $spvColors[$spvId] : 'light';
+        // ── Query 4: MasterTargetSales (semua aktif untuk tahun ini) ──
+        $targetAll = MasterTargetSales::whereIn('karyawan_id', $salesIds)
+            ->where(['is_active' => true, 'tahun' => $tahun])
+            ->latest()
+            ->get()
+            ->keyBy('karyawan_id');   // map by karyawan_id untuk O(1) lookup
+
+        return compact('kontrakRows', 'nonKontrakRows', 'dailyQsdAll', 'targetAll');
+    }
+
+    // =========================================================================
+    // STEP 3: BUILD METRIC PER SALES — pure in-memory, 0 query
+    // =========================================================================
+    private function buildMetrics(
+        int    $salesId,
+        int    $currentMonth,
+        string $currentPeriode,
+        int    $tahun,
+        array  $bulkData
+    ): array {
+        ['kontrakRows'    => $kontrakRows,
+         'nonKontrakRows' => $nonKontrakRows,
+         'dailyQsdAll'    => $dailyQsdAll,
+         'targetAll'      => $targetAll] = $bulkData;
+
+        $statusExcluded = ['ordered', 'rejected', 'void'];
+        $statusOrdered  = 'ordered';
+
+        // ── Kontrak milik sales ini ──
+        $kontrak = $kontrakRows->where('sales_id', $salesId);
+
+        $kontrakNew   = $kontrak->whereNotIn('flag_status', $statusExcluded);
+        $kontrakExist = $kontrak->where('flag_status', $statusOrdered);
+
+        $countQtNew   = $kontrakNew->count();
+        $countQtExist = $kontrakExist->count();
+
+        $amountQtNew   = $kontrakNew->flatMap->detail->sum(fn($d) => $d->biaya_akhir - $d->total_ppn);
+        $amountQtExist = $kontrakExist->flatMap->detail->sum(fn($d) => $d->biaya_akhir - $d->total_ppn);
+
+        // ── Non-Kontrak milik sales ini ──
+        $nonKontrak = $nonKontrakRows->where('sales_id', $salesId);
+
+        $countQtNew   += $nonKontrak->whereNotIn('flag_status', $statusExcluded)->count();
+        $countQtExist += $nonKontrak->where('flag_status', $statusOrdered)->count();
+
+        $amountQtNew   += $nonKontrak->whereNotIn('flag_status', $statusExcluded)->sum('net_amount');
+        $amountQtExist += $nonKontrak->where('flag_status', $statusOrdered)->sum('net_amount');
+
+        // ── DailyQsd milik sales ini ──
+        $qsdList    = $dailyQsdAll->get($salesId, collect());
+        $revenue    = $qsdList->sum('total_revenue');
+        $newCust    = $qsdList->where('status_customer', 'new')->count();
+        $existCust  = $qsdList->where('status_customer', 'exist')->count();
+        $ordNew     = $qsdList->where('status_customer', 'new')->sum('total_revenue');
+        $ordExist   = $qsdList->where('status_customer', 'exist')->sum('total_revenue');
+        $ordKontrak = $qsdList->where('kontrak', 'C')->sum('total_revenue');
+        $ordNonK    = $qsdList->where('kontrak', 'N')->sum('total_revenue');
+
+        // ── Target ──
+        $targetSales    = $targetAll->get($salesId);
+        $targetAmount   = 0;
+        $targetKategori = '0/0';
+        $achieved       = 0;
+        $targetCount    = 0;
+
+        if ($targetSales) {
+            $monthKey       = $this->indoMonths[$currentMonth];
+            $targetByCategory = collect($targetSales->$monthKey ?? [])->filter(fn($v) => $v > 0);
+            $targetCount    = $targetByCategory->count();
+
+            // Flatten semua orderDetail dari qsdList sekali saja
+            $allOrderDetails = $qsdList->flatMap(fn($q) => optional($q->orderHeader)->orderDetail ?? collect());
+
+           $achievedSum = $targetByCategory->map(function ($target, $category) use ($allOrderDetails) {
+                $achieved = $allOrderDetails
+                    ->filter(fn($od) => collect($this->categoryStr[$category])->contains($od->kategori_3))
+                    ->count();
+                return ($target && $achieved) ? floor($achieved / $target) : 0;
+            })->sum();
+
+            $achieved     = $achievedSum === 0 ? 1 : $achievedSum;
+            $targetKategori = $achieved . '/' . $targetCount;
+
+            // Target amount
+            $targetJson   = json_decode($targetSales->target ?? '[]', true);
+            $targetAmount = $targetJson[$currentPeriode] ?? 0;
         }
 
-        // Calculate sales metrics
-        $salesIds = $sales->pluck('id')->toArray();
+        return [
+            'new_customers'     => $newCust,
+            'exist_customers'   => $existCust,
+            'all_qt_new'        => $countQtNew,
+            'all_qt_exist'      => $countQtExist,
+            'amount_qt_new'     => $amountQtNew,
+            'amount_qt_exist'   => $amountQtExist,
+            'revenue'           => $revenue,
+            'target_amount'     => $targetAmount,
+            'target_kategori'   => $targetKategori,
+            'order_new'         => $ordNew,
+            'order_existing'    => $ordExist,
+            'order_kontrak'     => $ordKontrak,
+            'order_non_kontrak' => $ordNonK,
+        ];
+    }
 
-        if (!empty($salesIds)) {
-            // Get quotation data dengan UNION query
-            $quotation = fn($model) => $model::select(['sales_id', 'pelanggan_ID', 'biaya_akhir', 'flag_status'])
-                ->whereBetween('tanggal_penawaran', [$start, $end])
-                ->whereIn('sales_id', $salesIds)
-                ->where('is_active', true);
+    // =========================================================================
+    // TEAM HELPERS
+    // =========================================================================
+    private function getAllTeamMembers(): array
+    {
+        $allMembers = [];
+        $addedIds   = [];
 
-            $quotationData = $quotation(QuotationKontrakH::class)
-                ->union($quotation(QuotationNonKontrak::class))
-                ->get();
+        foreach ($this->managerIds as $teamIndex => $managerId) {
+            $members = GetBawahan::on('id', $managerId)
+                ->all()
+                ->filter(function ($item) use (&$addedIds) {
+                    // 2. Cek apakah ID sudah pernah ditambahkan (duplikasi)
+                    if (in_array($item->id, $addedIds)) {
+                        return false;
+                    }
+                    // Simpan ID agar tidak duplikat dan loloskan filter
+                    $addedIds[] = $item->id;
+                    return true;
+                });
 
-            // Get target data
-            $targetData = TargetSales::whereIn('user_id', $salesIds)
-                ->where('year', $year)
-                ->where('is_active', true)
-                ->get()
-                ->keyBy('user_id');
-
-            // Process metrics untuk setiap sales
-            foreach ($sales as &$s) {
-                $salesData = $quotationData->where('sales_id', $s->id);
-
-                // Hitung metrics
-                $s->count_penawaran = $salesData->count();
-                $s->total_penawaran = $salesData->sum('biaya_akhir');
-
-                $orderedData = $salesData->where('flag_status', 'ordered');
-                $s->count_order = $orderedData->count();
-                $s->total_order = $orderedData->sum('biaya_akhir');
-
-                // Hitung repeat vs new orders
-                $customerCounts = $orderedData->groupBy('pelanggan_ID')->map->count();
-                $s->count_repeat_orders = $customerCounts->filter(fn($count) => $count >= 2)->count();
-                $s->count_new_orders = $customerCounts->filter(fn($count) => $count == 1)->count();
-
-                // Set target
-                $target = $targetData->get($s->id);
-                $s->target_sales = $target ? $targetCalc($target) : 0;
+            foreach ($members as $item) {
+                $allMembers[] = [
+                    'id'         => $item->id,
+                    'name'       => $item->nama_lengkap,
+                    'team_index' => $teamIndex,
+                    'team_name'  => 'Tim ' . ($teamIndex + 1),
+                    'grade'      => strtolower($item->grade),
+                ];
             }
         }
 
-        return response()->json(['data' => $sales, 'statusCode' => 200]);
+        return $allMembers;
     }
 }

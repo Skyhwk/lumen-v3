@@ -27,6 +27,20 @@ class LingkunganHidupLogam24_6j
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C3 = null;
+        $C4 = null;
+        $C5 = null;
+        $C6 = null;
+        $C7 = null;
+        $C8 = null;
+        $C9 = null;
+        $C10 = null;
+        $C11 = null;
+        $C12 = null;
+        $C13 = null;
+        $C14 = null;
+        $C15 = null;
+        $C16 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -48,6 +62,9 @@ class LingkunganHidupLogam24_6j
             $C1 = 0;
         } else {
             foreach($data->ks as $key => $value) {
+                if($data->tipe_data == 'ulk'){
+                    $Vstd = round(($data->average_flow * $data->durasi) / 1000, 1);
+                }
                 $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 
                 $result = round($rawC, 4);
@@ -73,7 +90,7 @@ class LingkunganHidupLogam24_6j
             //     $C = '<0.0128';
             // }
 
-            $C1 = $C / 1000;
+            $C15 = $C / 1000;
             $satuan = 'ug/Nm³';
         }
 
@@ -113,9 +130,23 @@ class LingkunganHidupLogam24_6j
             // 'hasil2' => $C1,
             // 'hasil3' => $C2,
             'satuan' => $satuan,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
+            'C' => isset($C) ? $C : null,
+            'C1' => isset($C1) ? $C1 : null,
+            'C2' => isset($C2) ? $C2 : null,
+            'C3' => isset($C3) ? $C3 : null,
+            'C4' => isset($C4) ? $C4 : null,
+            'C5' => isset($C5) ? $C5 : null,
+            'C6' => isset($C6) ? $C6 : null,
+            'C7' => isset($C7) ? $C7 : null,
+            'C8' => isset($C8) ? $C8 : null,
+            'C9' => isset($C9) ? $C9 : null,
+            'C10' => isset($C10) ? $C10 : null,
+            'C11' => isset($C11) ? $C11 : null,
+            'C12' => isset($C12) ? $C12 : null,
+            'C13' => isset($C13) ? $C13 : null,
+            'C14' => isset($C14) ? $C14 : null,
+            'C15' => isset($C15) ? $C15 : null,
+            'C16' => isset($C16) ? $C16 : null,
             'data_pershift' => $data_pershift,
             'vl' => $vl,
             'st' => $st,

@@ -75,6 +75,7 @@ class DokumenFdlController extends Controller
         ])
         ->select(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->where('is_active', true)
+        // ->where('no_quotation', 'ISL/QT/26-II/002526R2')
         ->whereBetween('tanggal_sampling', [$startDate, $endDate])
         ->groupBy(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->get();
@@ -150,7 +151,6 @@ class DokumenFdlController extends Controller
                 'batch_user' => $group->pluck('userid')->implode(','),
             ];
         })->values()->toArray();
-        // dd($final);
         // Filter berdasarkan nama karyawan (case-insensitive)
         if (!$isProgrammer) {
             $arrayFinal = array_filter($final, function ($item) {
@@ -179,22 +179,28 @@ class DokumenFdlController extends Controller
                 return $item;
             }, $final);
         }
+        // dd(array_values($arrayFinal));
+
         // Ambil no_order untuk query selanjutnya
         $orderNos = array_column($arrayFinal, 'no_order');
+
+        // dd($orderNos);
 
         // Ambil data persiapan header berdasarkan no_order
         $persiapanHeaders = PersiapanSampelHeader::whereIn('no_order', $orderNos)
             ->where('is_active', true)
             ->orderBy('id', 'desc')
             ->get()
-            ->keyBy('no_order');
+            ->keyBy(function ($item) {
+                return $item->no_order . '|' . $item->tanggal_sampling;
+            });
 
-        // dd($persiapanHeaders);
 
         
         foreach ($arrayFinal as &$item) {
-            if (isset($persiapanHeaders[$item['no_order']])) {
-                $header = $persiapanHeaders[$item['no_order']];
+            $key = $item['no_order'] . '|' . $item['jadwal'];
+            if (isset($persiapanHeaders[$key])) {
+                $header = $persiapanHeaders[$key];
 
                 if ($header->detail_cs_documents) {
                     $item['detail_cs_documents'] = json_decode($header->detail_cs_documents, true);
