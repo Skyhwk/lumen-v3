@@ -62,6 +62,9 @@ class LingkunganHidupLogam24_6j
             $C1 = 0;
         } else {
             foreach($data->ks as $key => $value) {
+                if($data->tipe_data == 'ulk'){
+                    $Vstd = round(($data->average_flow * $data->durasi) / 1000, 1);
+                }
                 $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 
                 $result = round($rawC, 4);
