@@ -84,7 +84,16 @@ class DataAsetController extends Controller
 
     public function getKaryawan(Request $request){
         $departmentFixing = [];
-        $data = MasterKaryawan::where('is_active', true)->get()->pluck('nama_lengkap')->toArray();
+        $data = MasterKaryawan::where('is_active', true)
+            ->select('nama_lengkap', 'nik_karyawan')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'nama_lengkap' => $item['nama_lengkap'],
+                    'nik_karyawan' => $item['nik_karyawan']
+                ];
+            })
+            ->toArray();
 
         return response()->json([
             'data' => $data
