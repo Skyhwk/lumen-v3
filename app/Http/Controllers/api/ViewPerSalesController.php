@@ -5,14 +5,13 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\GetBawahan;
-use App\Services\GetDepartmentHierarchy;
 use Illuminate\Support\Facades\DB;
 
 use Carbon\Carbon;
 
 Carbon::setLocale('id');
 
-use App\Models\{QuotationKontrakH, QuotationNonKontrak, OrderHeader, DailyQsd, MasterTargetSales};
+use App\Models\{QuotationKontrakH, QuotationNonKontrak, DailyQsd, MasterTargetSales};
 
 class ViewPerSalesController extends Controller
 {
@@ -44,7 +43,7 @@ class ViewPerSalesController extends Controller
             $currentPeriode = $now->format('Y-m');
             $startOfMonth   = $now->copy()->startOfMonth();
             $tahun          = $request->input('tahun', $currentYear);
-
+            dd($currentYear,$currentMonth);
             // 1. Ambil seluruh member tim (flat array)
             $members   = $this->getAllTeamMembers();                    // [{id, name, team_name, grade, ...}]
             $salesIds  = array_column($members, 'id');                 // [1, 2, 3, ...]
@@ -63,9 +62,7 @@ class ViewPerSalesController extends Controller
                 ],
                 $members
             );
-
             return response()->json(['data' => $result]);
-
         } catch (\Throwable $th) {
             return response()->json(['line' => $th->getLine(), 'message' => $th->getMessage(),'file'=>$th->getFile()], 500);
         }
@@ -88,18 +85,20 @@ class ViewPerSalesController extends Controller
         // ── Query 1: Quotation Kontrak (count + amount, grouped by sales & status bucket) ──
         // Kita ambil raw lalu classify di PHP — 1 query untuk semua kombinasi
         $kontrakRows = QuotationKontrakH::whereIn('sales_id', $salesIds)
-            ->whereYear('tanggal_penawaran', $year)
-            ->whereMonth('tanggal_penawaran', $month)
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
             ->with(['detail' => fn($q) => $q->where('periode_kontrak', $periode)
                 ->select('id_request_quotation_kontrak_h', 'biaya_akhir', 'total_ppn')
             ])
+            ->where('is_active',true)
             ->select('id', 'sales_id', 'flag_status')
             ->get();
 
         // ── Query 2: Quotation Non-Kontrak (count + amount, grouped by sales & status bucket) ──
         $nonKontrakRows = QuotationNonKontrak::whereIn('sales_id', $salesIds)
-            ->whereYear('tanggal_penawaran', $year)
-            ->whereMonth('tanggal_penawaran', $month)
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->where('is_active',true)
             ->select('sales_id', 'flag_status', DB::raw('(biaya_akhir - total_ppn) as net_amount'))
             ->get();
 
