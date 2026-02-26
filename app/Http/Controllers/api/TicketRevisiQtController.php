@@ -110,22 +110,22 @@ class TicketRevisiQtController extends Controller
 
     public function getQtDetail(Request $request)
     {
-        $karyawan = $request->attributes->get('user')->karyawan;
-        $bawahanIds = GetBawahan::where('id', $karyawan->id)->get()->pluck('id')->toArray();
-        $bawahanIds[] = $karyawan->id;
+        // $karyawan = $request->attributes->get('user')->karyawan;
+        // $bawahanIds = GetBawahan::where('id', $karyawan->id)->get()->pluck('id')->toArray();
+        // $bawahanIds[] = $karyawan->id;
 
         $search = $request->input('no_document');
 
         $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap')
-            ->select('id', 'no_document', 'nama_perusahaan', 'sales_id')
+            ->select('id', 'no_document', 'pelanggan_ID', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
-            ->whereIn('sales_id', $bawahanIds)
+            // ->whereIn('sales_id', $bawahanIds)
             ->where('is_active', true);
 
         $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap')
-            ->select('id', 'no_document', 'nama_perusahaan', 'sales_id')
+            ->select('id', 'no_document', 'pelanggan_ID', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
-            ->whereIn('sales_id', $bawahanIds)
+            // ->whereIn('sales_id', $bawahanIds)
             ->where('is_active', true);
 
         $results = $kontrak
