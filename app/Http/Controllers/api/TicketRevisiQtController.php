@@ -521,50 +521,6 @@ class TicketRevisiQtController extends Controller
         }
     }
 
-    public function approveTicket(Request $request)
-    {
-        // dd($request->all());
-        DB::beginTransaction();
-        try {
-            $data = TicketRevisiQt::find($request->id);
-            $data->approved_by = $this->karyawan;
-            $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-
-            $data->save();
-
-            $message = 'Ticket Revisi Qt telah diapprove oleh ' . $this->karyawan . ' dan siap untuk diproses oleh admin sales';
-
-            $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
-                ->where('is_active', true)
-                ->pluck('id')
-                ->toArray();
-
-            Notification::whereIn('id', $user_adm_sales)
-                ->title('Ticket Revisi Qt Siap Diproses!')
-                ->message($message)
-                ->url('/ticket-revisi-qt')
-                ->send();
-
-            Notification::where('nama_lengkap', $data->created_by)
-                ->title('Ticket Revisi Qt Update')
-                ->message($message)
-                ->url('/ticket-revisi-qt')
-                ->send();
-
-            DB::commit();
-            return response()->json([
-                'success' => true,
-                'message' => $message
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollback();
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal Proses Ticket Revisi Qt: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
     public function getSales(Request $request)
     {
         $sales = MasterKaryawan::where('is_active', true)->whereIn('id_jabatan', [22, 23, 25])->get(['id', 'nama_lengkap']);
@@ -598,6 +554,12 @@ class TicketRevisiQtController extends Controller
                 'delegated_to' => $request->sales_id,
                 'status' => 'WAITING PROCESS'
             ]);
+
+        Notification::where('id', $request->sales_id)
+            ->title('Ticket Revisi Qt !')
+            ->message("Ticket revisi QT baru telah didelegasikan oleh {$this->karyawan} dan siap diproses oleh anda.")
+            ->url('/ticket-revisi-qt')
+            ->send();
 
         return response()->json([
             'success' => true,
