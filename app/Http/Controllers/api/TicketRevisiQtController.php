@@ -24,62 +24,78 @@ class TicketRevisiQtController extends Controller
 {
     public function index(Request $request)
     {
-        try {
-            $jabatanId = $request->attributes->get('user')->karyawan->id_jabatan;
-            if (in_array($jabatanId, [22,23,25])) {
-                $data = TicketRevisiQt::where('is_active', true)
-                    ->orderBy('id', 'desc');
-                return Datatables::of($data)
-                    ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_revisi_qt/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
-                    })
-                    ->make(true);
+        $karyawan = $request->attributes->get('user')->karyawan;
+
+        if (in_array($karyawan->id_jabatan, [24, 148])) { // so + cro
+            $data = TicketRevisiQt::where(['request_by' => $karyawan->nama_lengkap, 'is_active' => true])->orderBy('id', 'desc');
+
+            return Datatables::of($data)
+                ->addColumn('reff', function ($row) {
+                    $filePath = public_path('ticket_revisi_qt/' . $row->filename);
+                    if (file_exists($filePath) && is_file($filePath)) {
+                        return file_get_contents($filePath);
+                    }
+
+                    return 'File not found';
+                })
+                ->make(true);
+        };
+
+        if (in_array($karyawan->id_jabatan, [22, 23, 25])) { // sales adm
+            $pic = DB::table('pic_tiket_revisi_qt')->first();
+            if ($karyawan->id === $pic->sales_id) {
+                $data = TicketRevisiQt::where(['is_active' => true])->orderBy('id', 'desc');
             } else {
-
-                $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
-                $data = TicketRevisiQt::whereIn('request_by', $getBawahan)
-                    ->where('is_active', true)
-                    ->orderBy('id', 'desc');
-
-                return Datatables::of($data)
-                    ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_revisi_qt/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
-                    })
-                    ->addColumn('can_approve', function ($row) use ($getBawahan) {
-                        // comment
-                        return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
-                    })
-                    ->make(true);
+                $data = TicketRevisiQt::where(['delegated_to' => $karyawan->id, 'is_active' => true])->orderBy('id', 'desc');
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'data' => [],
-                'message' => $e->getMessage(),
-            ], 201);
+
+            return Datatables::of($data)
+                ->addColumn('reff', function ($row) {
+                    $filePath = public_path('ticket_revisi_qt/' . $row->filename);
+                    if (file_exists($filePath) && is_file($filePath)) {
+                        return file_get_contents($filePath);
+                    }
+
+                    return 'File not found';
+                })
+                ->addColumn('can_delegate', $karyawan->id === $pic->sales_id)
+                ->make(true);
         }
+
+        $data = TicketRevisiQt::where(['is_active' => true])->orderBy('id', 'desc');
+
+        return Datatables::of($data)
+            ->addColumn('reff', function ($row) {
+                $filePath = public_path('ticket_revisi_qt/' . $row->filename);
+                if (file_exists($filePath) && is_file($filePath)) {
+                    return file_get_contents($filePath);
+                }
+
+                return 'File not found';
+            })
+            ->make(true);
     }
 
     public function getQt(Request $request)
     {
+        $karyawan = $request->attributes->get('user')->karyawan;
+        $bawahanIds = GetBawahan::where('id', $karyawan->id)->get()->pluck('id')->toArray();
+        $bawahanIds[] = $karyawan->id;
+
         $search = $request->input('q');
 
-        $kontrak = QuotationKontrakH::select('no_document')
+        $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'pelanggan_ID', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
+            ->whereIn('sales_id', $bawahanIds)
             ->where('is_active', true);
 
-        $nonKontrak = QuotationNonKontrak::select('no_document')
+        $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'pelanggan_ID', 'nama_perusahaan', 'sales_id')
             ->where('no_document', 'like', "%{$search}%")
+            ->whereIn('sales_id', $bawahanIds)
             ->where('is_active', true);
+
 
         $results = $kontrak
             ->unionAll($nonKontrak)
@@ -87,9 +103,39 @@ class TicketRevisiQtController extends Controller
             ->limit(10)
             ->get();
 
+        $results = $results->makeHidden(['id']);
+
         return response()->json($results, 200);
     }
 
+    public function getQtDetail(Request $request)
+    {
+        $karyawan = $request->attributes->get('user')->karyawan;
+        $bawahanIds = GetBawahan::where('id', $karyawan->id)->get()->pluck('id')->toArray();
+        $bawahanIds[] = $karyawan->id;
+
+        $search = $request->input('no_document');
+
+        $kontrak = QuotationKontrakH::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'nama_perusahaan', 'sales_id')
+            ->where('no_document', 'like', "%{$search}%")
+            ->whereIn('sales_id', $bawahanIds)
+            ->where('is_active', true);
+
+        $nonKontrak = QuotationNonKontrak::with('sales:id,nama_lengkap')
+            ->select('id', 'no_document', 'nama_perusahaan', 'sales_id')
+            ->where('no_document', 'like', "%{$search}%")
+            ->whereIn('sales_id', $bawahanIds)
+            ->where('is_active', true);
+
+        $results = $kontrak
+            ->unionAll($nonKontrak)
+            ->first();
+
+        $results = $results->makeHidden(['id']);
+
+        return response()->json(['data' => $results], 200);
+    }
 
     public function void(Request $request)
     {
@@ -107,7 +153,7 @@ class TicketRevisiQtController extends Controller
             $data->save();
 
             if ($this->karyawan == $data->created_by) {
-                $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22,23,25])
+                $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
                     ->where('is_active', true)
                     ->pluck('id')
                     ->toArray();
@@ -119,6 +165,12 @@ class TicketRevisiQtController extends Controller
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Ticket Revisi Qt Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/ticket-revisi-qt')
+                    ->send();
+
+                Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                     ->title('Ticket Revisi Qt Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
                     ->url('/ticket-revisi-qt')
@@ -153,12 +205,18 @@ class TicketRevisiQtController extends Controller
 
             $data->save();
 
-            $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22,23,25])
+            $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
                 ->where('is_active', true)
                 ->pluck('id')
                 ->toArray();
 
             Notification::whereIn('id', $user_adm_sales)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                 ->title('Ticket Revisi Qt Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-revisi-qt')
@@ -193,6 +251,12 @@ class TicketRevisiQtController extends Controller
             $data->save();
 
             Notification::where('nama_lengkap', $data->created_by)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                 ->title('Ticket Revisi Qt Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-revisi-qt')
@@ -233,6 +297,12 @@ class TicketRevisiQtController extends Controller
                 ->url('/ticket-revisi-qt')
                 ->send();
 
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -262,6 +332,12 @@ class TicketRevisiQtController extends Controller
             $data->save();
 
             Notification::where('nama_lengkap', $data->solve_by)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                 ->title('Ticket Revisi Qt Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-revisi-qt')
@@ -302,6 +378,12 @@ class TicketRevisiQtController extends Controller
                 ->url('/ticket-revisi-qt')
                 ->send();
 
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -333,7 +415,7 @@ class TicketRevisiQtController extends Controller
             DB::commit();
 
             if ($this->karyawan == $data->created_by) {
-                $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22,23,25])
+                $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
                     ->where('is_active', true)
                     ->pluck('id')
                     ->toArray();
@@ -345,6 +427,12 @@ class TicketRevisiQtController extends Controller
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Ticket Revisi Qt Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/ticket-revisi-qt')
+                    ->send();
+
+                Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                     ->title('Ticket Revisi Qt Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
                     ->url('/ticket-revisi-qt')
@@ -450,11 +538,11 @@ class TicketRevisiQtController extends Controller
                 $message = 'Ticket Revisi Qt Telah Diperbarui';
             }
 
-            $data->status = 'WAITING PROCESS';
+            $data->status = 'WAITING TO DELEGATE';
 
             $data->save();
 
-            $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22,23,25])
+            $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
                 ->where('is_active', true)
                 ->pluck('id')
                 ->toArray();
@@ -488,47 +576,49 @@ class TicketRevisiQtController extends Controller
         }
     }
 
-    public function approveTicket(Request $request)
+    public function getSales(Request $request)
     {
-        // dd($request->all());
-        DB::beginTransaction();
-        try {
-            $data = TicketRevisiQt::find($request->id);
-            $data->approved_by = $this->karyawan;
-            $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+        $sales = MasterKaryawan::where('is_active', true)->whereIn('id_jabatan', [22, 23, 25])->get(['id', 'nama_lengkap']);
 
-            $data->save();
+        return response()->json([
+            'success' => true,
+            'data' => $sales,
+            'pic' => DB::table('pic_tiket_revisi_qt')->first()
+        ], 200);
+    }
 
-            $message = 'Ticket Revisi Qt telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh admin sales';
+    public function setPIC(Request $request)
+    {
+        DB::table('pic_tiket_revisi_qt')->updateOrInsert(
+            ['id' => 1],
+            ['sales_id' => $request->sales_id]
+        );
 
-            $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22,23,25])
-                ->where('is_active', true)
-                ->pluck('id')
-                ->toArray();
+        return response()->json([
+            'success' => true,
+            'message' => 'PIC berhasil diupdate'
+        ], 200);
+    }
 
-            Notification::whereIn('id', $user_adm_sales)
-                ->title('Ticket Revisi Qt Siap Diproses!')
-                ->message($message)
-                ->url('/ticket-revisi-qt')
-                ->send();
+    public function delegate(Request $request)
+    {
+        TicketRevisiQt::where('id', $request->id)
+            ->update([
+                'delegated_by' => $this->karyawan,
+                'delegated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'delegated_to' => $request->sales_id,
+                'status' => 'WAITING PROCESS'
+            ]);
 
-            Notification::where('nama_lengkap', $data->created_by)
-                ->title('Ticket Revisi Qt Update')
-                ->message($message)
-                ->url('/ticket-revisi-qt')
-                ->send();
+        Notification::where('id', $request->sales_id)
+            ->title('Ticket Revisi Qt Update')
+            ->message("Ticket revisi QT baru telah didelegasikan oleh {$this->karyawan} dan siap diproses oleh anda.")
+            ->url('/ticket-revisi-qt')
+            ->send();
 
-            DB::commit();
-            return response()->json([
-                'success' => true,
-                'message' => $message
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollback();
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal Proses Ticket Revisi Qt: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Ticket Revisi Qt telah di delegasikan oleh ' . $this->karyawan
+        ], 200);
     }
 }
