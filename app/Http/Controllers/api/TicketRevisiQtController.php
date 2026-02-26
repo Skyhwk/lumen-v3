@@ -169,6 +169,12 @@ class TicketRevisiQtController extends Controller
                     ->message($message . ' Oleh ' . $this->karyawan)
                     ->url('/ticket-revisi-qt')
                     ->send();
+
+                Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
+                    ->title('Ticket Revisi Qt Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/ticket-revisi-qt')
+                    ->send();
             }
 
             DB::commit();
@@ -210,6 +216,12 @@ class TicketRevisiQtController extends Controller
                 ->url('/ticket-revisi-qt')
                 ->send();
 
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -239,6 +251,12 @@ class TicketRevisiQtController extends Controller
             $data->save();
 
             Notification::where('nama_lengkap', $data->created_by)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                 ->title('Ticket Revisi Qt Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-revisi-qt')
@@ -279,6 +297,12 @@ class TicketRevisiQtController extends Controller
                 ->url('/ticket-revisi-qt')
                 ->send();
 
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -308,6 +332,12 @@ class TicketRevisiQtController extends Controller
             $data->save();
 
             Notification::where('nama_lengkap', $data->solve_by)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                 ->title('Ticket Revisi Qt Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-revisi-qt')
@@ -343,6 +373,12 @@ class TicketRevisiQtController extends Controller
             $data->save();
 
             Notification::where('nama_lengkap', $data->created_by)
+                ->title('Ticket Revisi Qt Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-revisi-qt')
+                ->send();
+
+            Notification::where('id', DB::table('pic_tiket_revisi_qt')->first()->sales_id)
                 ->title('Ticket Revisi Qt Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-revisi-qt')
@@ -575,7 +611,7 @@ class TicketRevisiQtController extends Controller
             ]);
 
         Notification::where('id', $request->sales_id)
-            ->title('Ticket Revisi Qt !')
+            ->title('Ticket Revisi Qt Update')
             ->message("Ticket revisi QT baru telah didelegasikan oleh {$this->karyawan} dan siap diproses oleh anda.")
             ->url('/ticket-revisi-qt')
             ->send();
