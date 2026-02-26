@@ -103,7 +103,7 @@ class TicketRevisiQtController extends Controller
             ->limit(10)
             ->get();
 
-        $results = $results->makeHidden(['id']);
+        $results = $results->isNotEmpty() ? $results->makeHidden(['id']) : [];
 
         return response()->json($results, 200);
     }
@@ -612,7 +612,7 @@ class TicketRevisiQtController extends Controller
 
         Notification::where('id', $request->sales_id)
             ->title('Ticket Revisi Qt Update')
-            ->message("Ticket revisi QT baru telah didelegasikan oleh {$this->karyawan} dan siap diproses oleh anda.")
+            ->message("Ticket revisi Qt baru telah didelegasikan oleh {$this->karyawan} dan siap diproses oleh anda.")
             ->url('/ticket-revisi-qt')
             ->send();
 
