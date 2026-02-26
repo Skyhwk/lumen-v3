@@ -103,7 +103,7 @@ class TicketRevisiQtController extends Controller
             ->limit(10)
             ->get();
 
-        $results = $results->isNotEmpty() ? $results->makeHidden(['id']) : [];
+        $results = $results ? $results->makeHidden(['id']) : [];
 
         return response()->json($results, 200);
     }
@@ -132,7 +132,7 @@ class TicketRevisiQtController extends Controller
             ->unionAll($nonKontrak)
             ->first();
 
-        $results = $results->isNotEmpty() ? $results->makeHidden(['id']) : [];
+        $results = $results ? $results->makeHidden(['id']) : [];
 
         return response()->json(['data' => $results], 200);
     }
