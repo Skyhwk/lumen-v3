@@ -2645,6 +2645,24 @@ class InputParameterController extends Controller
                     }
                 }
 
+				//PARAM AUTO APPROVE
+				$paramAutoApprove = [
+					'Bau', 'Angka Bau', 'Angka Bau (NA)', 'AOX',
+					'Kekeruhan', 'Kekeruhan (APHA-B-23-NA)', 'Kekeruhan (APHA-B-23)',
+					'Kekeruhan (IKM-SP-NA)', 'Kekeruhan (IKM-SP)',
+					'TDS', 'TDS (APHA-C-23-NA)', 'TDS (APHA-C-23)',
+					'TDS (IKM-KM-NA)', 'TDS (IKM-KM)',
+					'DO', 'DO (C-03-NA)', 'DO (C-03)', 'DO (G-03-NA)', 'DO (G-03)',
+					'DHL', 'DTL'
+				];
+
+				if (in_array($request->parameter, $paramAutoApprove)) {
+					$data->is_approved = 1;
+					$data->approved_by = 'System'; 
+					$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+					$data->save();
+				}
+
 				DB::commit();
 				return (object)[
 					'message'=> 'Value Parameter berhasil disimpan.!',

@@ -75,6 +75,7 @@ class DokumenFdlController extends Controller
         ])
         ->select(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->where('is_active', true)
+        // ->where('no_quotation', 'ISL/QT/26-II/002526R2')
         ->whereBetween('tanggal_sampling', [$startDate, $endDate])
         ->groupBy(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->get();
@@ -150,7 +151,6 @@ class DokumenFdlController extends Controller
                 'batch_user' => $group->pluck('userid')->implode(','),
             ];
         })->values()->toArray();
-        // dd($final);
         // Filter berdasarkan nama karyawan (case-insensitive)
         if (!$isProgrammer) {
             $arrayFinal = array_filter($final, function ($item) {
@@ -179,22 +179,28 @@ class DokumenFdlController extends Controller
                 return $item;
             }, $final);
         }
+        // dd(array_values($arrayFinal));
+
         // Ambil no_order untuk query selanjutnya
         $orderNos = array_column($arrayFinal, 'no_order');
+
+        // dd($orderNos);
 
         // Ambil data persiapan header berdasarkan no_order
         $persiapanHeaders = PersiapanSampelHeader::whereIn('no_order', $orderNos)
             ->where('is_active', true)
             ->orderBy('id', 'desc')
             ->get()
-            ->keyBy('no_order');
+            ->keyBy(function ($item) {
+                return $item->no_order . '|' . $item->tanggal_sampling;
+            });
 
-        // dd($persiapanHeaders);
 
         
         foreach ($arrayFinal as &$item) {
-            if (isset($persiapanHeaders[$item['no_order']])) {
-                $header = $persiapanHeaders[$item['no_order']];
+            $key = $item['no_order'] . '|' . $item['jadwal'];
+            if (isset($persiapanHeaders[$key])) {
+                $header = $persiapanHeaders[$key];
 
                 if ($header->detail_cs_documents) {
                     $item['detail_cs_documents'] = json_decode($header->detail_cs_documents, true);
@@ -237,7 +243,7 @@ class DokumenFdlController extends Controller
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
                 ->whereIn('id_jabatan', [41, 42])
                 ->exists();
-
+            
             // Deteksi apakah jenis quotation kontrak (QTC) atau non-kontrak (QT)
             $isKontrak = Str::contains($request->no_quotation, '/QTC/');
 
@@ -256,6 +262,8 @@ class DokumenFdlController extends Controller
             if ($isKontrak) {
                 $data = $data->where('tanggal_sampling', $request->tangal_sampling);
                 // $data->where('tanggal_sampling', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
+            }else{
+                $data = $data->where('tanggal_sampling', $request->tangal_sampling);
             }
 
             // Eksekusi query
@@ -322,7 +330,7 @@ class DokumenFdlController extends Controller
                 $allowPush = false;
                 $samplerTerpilih = $loggedInUser;
 
-                if ($isProgrammer) {
+                if (!$isProgrammer) {
                     // Programmer bisa lihat semua, ambil salah satu sampler
                     $allowPush = true;
 
@@ -367,13 +375,13 @@ class DokumenFdlController extends Controller
                     ];
                 }
             }
-            
+// dd($data);
             $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
                 ->where('no_quotation', $request->no_quotation)
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
                 ->first();
-    
+            
             // Lakukan pencocokan signature per baris data
             if ($persiapan && $persiapan->detail_cs_documents) {
                 $csDocuments = json_decode($persiapan->detail_cs_documents, true);
@@ -451,7 +459,7 @@ class DokumenFdlController extends Controller
     public function updateData(Request $request)
     {
     
-        // dd($request->all());
+        
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
             try {
@@ -580,10 +588,10 @@ class DokumenFdlController extends Controller
                 if (! $nomorQuotation) {
                     return response()->json(['message' => 'Nomor quotation tidak ditemukan'], 400);
                 }
-
+              
                 // PersiapanSampelHeader
                 $persiapanSampel = PersiapanSampelHeader::where('no_quotation', $nomorQuotation)->where('tanggal_sampling', $tanggalSampling)->where('is_active', 1)->orderBy('id', 'desc')->first();
-                // dd($persiapanSampel);
+               
                 if (! $persiapanSampel) {
                     return response()->json(['message'=>'Persiapan Belum Disiapkan Harap Menghubungi Admin Sampling Untuk Melakukan Update Persiapan'],401);
                     // $persiapanSampel = new PersiapanSampelHeader();

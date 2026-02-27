@@ -1138,7 +1138,7 @@ class ReadyOrderController extends Controller
                     $DataOrderDetail->kategori_3 = $value->kategori_2;
                     $DataOrderDetail->cfr = $no_cfr;
                     $DataOrderDetail->keterangan_1 = $penamaan_titik;
-                    $DataOrderDetail->parameter = json_encode($value->parameter);
+                    $DataOrderDetail->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);
                     $DataOrderDetail->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $DataOrderDetail->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $DataOrderDetail->created_by = $this->karyawan;
@@ -1581,7 +1581,7 @@ class ReadyOrderController extends Controller
                     $dataD->kategori_3 = $value->kategori_2;
                     $dataD->cfr = $no_cfr;
                     $dataD->keterangan_1 = $penamaan_titik;
-                    $dataD->parameter = json_encode($value->parameter);
+                    $dataD->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);;
                     $dataD->regulasi = json_encode($value->regulasi);
                     $dataD->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $dataD->created_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -2031,7 +2031,7 @@ class ReadyOrderController extends Controller
                                 $DataOrderDetail->cfr = $no_cfr;
                                 $DataOrderDetail->keterangan_1 = $penamaan_titik;
                                 $DataOrderDetail->periode = $periode_kontrak;
-                                $DataOrderDetail->parameter = json_encode($value->parameter);
+                                $DataOrderDetail->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);
                                 $DataOrderDetail->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                                 $DataOrderDetail->created_at = Carbon::now()->format('Y-m-d H:i:s');
                                 $DataOrderDetail->created_by = $this->karyawan;
@@ -2468,7 +2468,7 @@ class ReadyOrderController extends Controller
                     $DataOrderDetail->kategori_3 = $value->kategori_2;
                     $DataOrderDetail->cfr = $no_cfr;
                     $DataOrderDetail->keterangan_1 = $penamaan_titik;
-                    $DataOrderDetail->parameter = json_encode($value->parameter);
+                    $DataOrderDetail->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);
                     $DataOrderDetail->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $DataOrderDetail->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $DataOrderDetail->created_by = $this->karyawan;

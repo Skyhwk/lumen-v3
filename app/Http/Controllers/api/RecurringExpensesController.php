@@ -11,9 +11,12 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Services\Email;
 use App\Jobs\RenderAndEmailJadwal;
+use App\Models\NationalHoliday;
 use App\Models\RecurringDetails;
 use App\Models\RecurringExpenses;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class RecurringExpensesController extends Controller
@@ -47,20 +50,21 @@ class RecurringExpensesController extends Controller
                 $dueDay = max(1, min(31, $dueDay));
             }
 
-            $nextDue = $this->calculateNextDueDate(
-                startDate: $startDate,
-                unit: $unit,
-                value: $value,
-                dueDay: $dueDay,
-                // untuk header baru, next_due_date = occurrence pertama setelah/di start_date
-                anchorDate: $startDate
+            $nextDue = $this->calculateFirstDueDate(
+                $startDate,
+                $unit,
+                $value,
+                $dueDay
             );
+
+            $aliasNextDue = $this->adjustAliasDueDate($nextDue);
 
             $header = RecurringExpenses::create([
                 'batch_id'         => $batchId,
                 'virtual_account'  => $request['virtual_account'] ?? null,
                 'vendor'           => $request['vendor'] ?? null,
                 'receiver_name'    => $request['receiver_name'] ?? null,
+                'bank_name'        => $request['bank_name'] ?? null,
                 'keterangan'       => $request['keterangan'] ?? null,
                 'amount'           => $request['amount'] ?? 0,
 
@@ -70,6 +74,7 @@ class RecurringExpensesController extends Controller
 
                 'start_date'       => $startDate->toDateString(),
                 'next_due_date'    => $nextDue->toDateString(),
+                'alias_next_due_date' => $aliasNextDue->toDateString(),
                 'last_payment_at'  => null,
                 'is_active'        => (int)($request['is_active'] ?? 1),
             ]);
@@ -161,32 +166,35 @@ class RecurringExpensesController extends Controller
             ]);
 
             // anchor untuk hitung next: prefer pakai next_due_date yg lagi aktif
+            $unit  = $header->recurrence_unit;
+            $value = (int) ($header->recurrence_value ?? 1);
+
+            // ✅ anchor jadwal: selalu pakai next_due_date yg sedang aktif
             $anchor = $header->next_due_date
                 ? Carbon::parse($header->next_due_date)->startOfDay()
-                : $paidDate;
+                : Carbon::parse($header->start_date)->startOfDay();
 
-            $unit  = $header->recurrence_unit;
-            $value = (int)($header->recurrence_value ?? 1);
+            // due_day hanya untuk MONTH
+            $dueDay = ($unit === 'MONTH')
+                ? (int) ($header->due_day ?? $anchor->day)
+                : null;
 
-            // kalau bukan MONTH, due_day harus null (permintaan lu)
-            $dueDay = ($unit === 'MONTH') ? (int)($header->due_day ?? $anchor->day) : null;
-            if ($unit !== 'MONTH') {
-                $header->due_day = null;
-            }
-
-            // next_due_date = anchor + interval
+            // ✅ next_due_date = jadwal + interval (paten)
             $nextDue = $this->calculateNextDueDate(
-                startDate: Carbon::parse($header->start_date ?? $anchor->toDateString())->startOfDay(),
-                unit: $unit,
-                value: $value,
-                dueDay: $dueDay,
-                anchorDate: $anchor,
-                // untuk payment: maju 1 cycle dari anchor
-                moveForwardOneCycle: true
+                Carbon::parse($header->start_date ?? $anchor->toDateString())->startOfDay(),
+                $unit,
+                $value,
+                $dueDay,
+                $anchor,
+                // ✅ hanya MONTH yang butuh flag ini, tapi boleh juga false untuk non-month (gak ngaruh)
+                ($unit === 'MONTH')
             );
 
-            $header->last_payment_at = $paidDate->toDateString();
-            $header->next_due_date   = $nextDue->toDateString();
+            $aliasNextDue = $this->adjustAliasDueDate($nextDue);
+
+            $header->last_payment_at      = $paidDate->toDateString();
+            $header->next_due_date        = $nextDue->toDateString();
+            $header->alias_next_due_date  = $aliasNextDue->toDateString();
             $header->save();
 
             return response()->json([
@@ -206,12 +214,12 @@ class RecurringExpensesController extends Controller
      * - DAY/WEEK/YEAR: based on anchorDate (+value)
      */
     private function calculateNextDueDate(
-        Carbon $startDate,
-        string $unit,
-        int $value,
-        ?int $dueDay,
-        Carbon $anchorDate,
-        bool $moveForwardOneCycle = false
+        $startDate,
+        $unit,
+        $value,
+        $dueDay,
+        $anchorDate,
+        $moveForwardOneCycle = false
     ): Carbon {
         $value = max(1, (int)$value);
 
@@ -250,11 +258,53 @@ class RecurringExpensesController extends Controller
     /**
      * Set day of month; if day overflow (e.g. 31 in Feb), clamp to last day.
      */
-    private function setDayClamped(Carbon $date, int $day): Carbon
+    private function setDayClamped($date,$day): Carbon
     {
         $day = max(1, min(31, $day));
         $lastDay = $date->copy()->endOfMonth()->day;
         return $date->copy()->day(min($day, $lastDay));
+    }
+
+    private function adjustAliasDueDate($date): Carbon
+    {
+        $d = $date->copy()->startOfDay();
+
+        // safety guard biar gak infinite loop
+        $guard = 0;
+
+        while (($this->isWeekend($d) || $this->isHolidayIndonesia($d)) && $guard < 370) {
+            $d->subDay(); // mundur sehari
+            $guard++;
+        }
+
+        return $d;
+    }
+
+    private function isHolidayIndonesia($date): bool
+    {
+        return NationalHoliday::whereDate('date', $date->toDateString())
+            ->where('type', 'NATIONAL') // kalau mau include cuti bersama: ->whereIn('type',['NATIONAL','CUTI_BERSAMA'])
+            ->exists();
+    }
+
+    private function isWeekend($date): bool
+    {
+        return $date->isSaturday() || $date->isSunday();
+    }
+
+    private function calculateFirstDueDate(
+        $startDate,
+        $unit,
+        $value,
+        $dueDay
+    ): Carbon {
+        if ($unit === 'MONTH') {
+            $day = max(1, min(31, (int)($dueDay ?? $startDate->day)));
+            return $this->setDayClamped($startDate->copy(), $day);
+        }
+
+        // WEEK/DAY/YEAR: first due = start_date itu sendiri
+        return $startDate->copy()->startOfDay();
     }
 
     public function getCountRecurringExpenses()
@@ -269,9 +319,18 @@ class RecurringExpensesController extends Controller
         ];
 
         $data = RecurringExpenses::where('is_active', 1)
-            ->whereIn('next_due_date', $targetDates)
-            ->orderBy('next_due_date')
+            ->whereIn('alias_next_due_date', $targetDates)
+            ->orderBy('alias_next_due_date')
             ->get();
+
+        return response()->json([
+            'data' => $data
+        ]);
+    }
+
+    public function bankList()
+    {
+        $data = RecurringExpenses::all()->pluck('bank_name')->unique()->toArray();
 
         return response()->json([
             'data' => $data
