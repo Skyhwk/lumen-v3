@@ -123,7 +123,9 @@ class DataAsetController extends Controller
             // Cek jika column mengandung tanggal
             if($request->column == 'tanggal_pengembalian' || $request->column == 'tanggal_selesai'){
                 $aset = DataAset::find($data->aset_id);
-                $aset->status_alat = 'ready';
+                if($aset->status_alat !== 'damaged'){
+                    $aset->status_alat = 'ready';
+                }
                 $aset->is_ready_use = 1;
                 $aset->save();
             }
