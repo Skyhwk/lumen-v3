@@ -76,13 +76,18 @@ class LingkunganHidupLogam24_6j
 
         // tipe data = ambient, ulk, volatile
         if($data->tipe_data == 'ulk'){
-            $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+            if($data->parameter == 'Pb (24 Jam)'){
+                $C15 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+                $satuan = 'ug/Nm³';
+            }else {
+                $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+                $satuan = 'mg/m³';
+            }
 
             // if(!is_null($mdl) && $C1 < 0.000013) {
             //     $C1 = '<0.000013';
             // }
 
-            $satuan = 'mg/m³';
         }else if($data->tipe_data == 'ambient') {
             $C = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
 
