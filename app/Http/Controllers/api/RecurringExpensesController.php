@@ -157,7 +157,6 @@ class RecurringExpensesController extends Controller
                 'paid_at'              => $paidAt->format('Y-m-d H:i:s'),
                 'paid_amount'          => $request['paid_amount'],
                 'paid_by'              => $request['paid_by'],
-                'payment_method'       => $request['payment_method'] ?? null,
                 'payment_reference'    => $request['payment_reference'] ?? null,
                 'notes'                => $request['notes'] ?? null,
                 'filename'             => $safeName ?? null,
