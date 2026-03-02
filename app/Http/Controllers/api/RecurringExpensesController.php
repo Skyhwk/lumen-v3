@@ -156,7 +156,7 @@ class RecurringExpensesController extends Controller
                 'recurring_expense_id' => $header->id,
                 'paid_at'              => $paidAt->format('Y-m-d H:i:s'),
                 'paid_amount'          => $request['paid_amount'],
-                'paid_by'              => $request['paid_by'],
+                'paid_from'              => $request['paid_from'],
                 'payment_reference'    => $request['payment_reference'] ?? null,
                 'notes'                => $request['notes'] ?? null,
                 'filename'             => $safeName ?? null,
@@ -330,6 +330,15 @@ class RecurringExpensesController extends Controller
     public function bankList()
     {
         $data = RecurringExpenses::all()->pluck('bank_name')->unique()->toArray();
+
+        return response()->json([
+            'data' => $data
+        ]);
+    }
+
+    public function paidFromList()
+    {
+        $data = RecurringDetails::all()->pluck('paid_from')->unique()->toArray();
 
         return response()->json([
             'data' => $data
