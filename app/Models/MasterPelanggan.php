@@ -115,4 +115,14 @@ class MasterPelanggan extends Sector
             ? $this->latestDFUS
             : null;
     }
+
+    public function quotasiNonKontrak()
+    {
+        return $this->hasMany(QuotationNonKontrak::class, 'pelanggan_ID', 'id_pelanggan');
+    }
+
+    public function quotasiKontrak()
+    {
+        return $this->hasMany(QuotationKontrakH::class, 'pelanggan_ID', 'id_pelanggan');
+    }
 }
