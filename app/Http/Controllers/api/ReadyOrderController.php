@@ -2342,9 +2342,12 @@ class ReadyOrderController extends Controller
                 }
                 $no = $no_urut_sample;
                 $trigger = 0;
-                $kategori = '';
-                $regulasi = $cek_detail->regulasi ?? [];
-                $parameter = $cek_detail->parameter ?? [];
+                // $kategori = '';
+                // $regulasi = $cek_detail->regulasi ?? [];
+                // $parameter = $cek_detail->parameter ?? [];
+                $kategori = ($cek_detail) ? $cek_detail->kategori_3 : '';
+                $regulasi = ($cek_detail && $cek_detail->regulasi != null) ? json_decode($cek_detail->regulasi) : [];
+                $parameter = ($cek_detail && $cek_detail->parameter != null) ? json_decode($cek_detail->parameter) : [];
                 $oldPeriode = '';
                 $mark = [];
                 foreach ($penambahan_data as $changes) {
