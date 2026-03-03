@@ -240,7 +240,7 @@ class RenderNonKontrakCopy
             foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
                 $kategori = explode("-", $a->kategori_1);
                 $kategori2 = explode("-", $a->kategori_2);
-                $is_paket = $a->is_paket_analisa;
+                $is_paket = isset($a->is_paket_analisa) ? $a->is_paket_analisa : false;
                 $kategori2Value = (isset($kategori2[1]) ? strtoupper($kategori2[1]) : '') . ($is_paket ? ' - (' . strtoupper($a->paket) . ')' : '');
                 $penamaan_titik = "";
                 if (!empty($a->penamaan_titik)) {
