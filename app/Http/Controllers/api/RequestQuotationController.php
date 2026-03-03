@@ -688,13 +688,14 @@ class RequestQuotationController extends Controller
                         'harga_total' => $hargaAnalisa,
                         'volume' => $vol,
                         'biaya_preparasi' => $temp_preparasi,
-                        ...($is_paket ? [
-                            'is_paket_analisa' => $is_paket,
-                            'paket_id' => $item->paket_id,
-                            'paket' => $item->paket,
-                            'kelipatan_dasar' => $kelipatan,
-                        ] : []),
                     ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
 
                     switch ($kategori) {
                         case '1':
@@ -1622,13 +1623,14 @@ class RequestQuotationController extends Controller
                         'harga_total' => $hargaAnalisa,
                         'volume' => $vol,
                         'biaya_preparasi' => $temp_preparasi,
-                        ...($is_paket ? [
-                            'is_paket_analisa' => $is_paket,
-                            'paket_id' => $item->paket_id,
-                            'paket' => $item->paket,
-                            'kelipatan_dasar' => $kelipatan,
-                        ] : []),
                     ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
 
                     switch ($kategori) {
                         case '1':
