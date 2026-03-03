@@ -58,6 +58,7 @@ class ViewPerSalesController extends Controller
                     'sales_name' => $member['name'],
                     'team'       => $member['team_name'],
                     'grade'      => $member['grade'],
+                    'jabatan'      => $member['jabatan'],
                     'data'       => $this->buildMetrics($member['id'], $currentMonth, $currentPeriode, $tahun, $bulkData),
                 ],
                 $members
@@ -248,12 +249,15 @@ class ViewPerSalesController extends Controller
                 });
 
             foreach ($members as $item) {
+                $skipJabatan = [23];
+                if(in_array($item->id_jabatan, $skipJabatan)) continue;
                 $allMembers[] = [
                     'id'         => $item->id,
                     'name'       => $item->nama_lengkap,
                     'team_index' => $teamIndex,
                     'team_name'  => 'Tim ' . ($teamIndex + 1),
                     'grade'      => strtolower($item->grade),
+                    'jabatan'    => $item->id_jabatan
                 ];
             }
         }

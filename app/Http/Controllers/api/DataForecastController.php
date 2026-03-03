@@ -82,10 +82,19 @@ class DataForecastController extends Controller
     public function indexData(Request $request)
     {
         // Menggunakan query() agar efisien
-        $data = ForecastSP::whereYear('tanggal_sampling_min', $request->year);
+        $data = ForecastSP::with('pelanggan')
+        ->whereYear('tanggal_sampling_min', $request->year);
 
         // Paksa order ke kolom yang PASTI ADA, misalnya tanggal_sampling_min
         return Datatables::of($data)
+            ->addColumn('nama_perusahaan', function ($row) {
+                return $row->pelanggan ? $row->pelanggan->nama_pelanggan : '-';
+            })
+            ->filterColumn('nama_perusahaan', function ($query, $keyword) {
+                $query->whereHas('pelanggan', function ($q) use ($keyword) {
+                    $q->where('nama_pelanggan', 'like', "%{$keyword}%");
+                });
+            })
             ->make(true);
     }
 
