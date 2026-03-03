@@ -2330,9 +2330,16 @@ class ReadyOrderController extends Controller
                     ->orderBy('no_sampel', 'DESC')
                     ->first();
 
-                $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                // $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
                 // dd($no_urut_sample);
-                $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                // $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                if($cek_detail) {
+                    $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                    $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                } else {
+                    $no_urut_sample = 0;
+                    // $no_urut_cfr = 0;
+                }
                 $no = $no_urut_sample;
                 $trigger = 0;
                 $kategori = '';
