@@ -31,7 +31,8 @@ class DataAsetController extends Controller
                 \DB::raw('SUM(CASE WHEN data_aset.status_alat = "ready" THEN 1 ELSE 0 END) as ready'),
                 \DB::raw('SUM(CASE WHEN data_aset.status_alat = "used" THEN 1 ELSE 0 END) as used'),
                 \DB::raw('SUM(CASE WHEN data_aset.status_alat = "fixing" THEN 1 ELSE 0 END) as fixing'),
-                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "damaged" THEN 1 ELSE 0 END) as damage')
+                \DB::raw('SUM(CASE WHEN data_aset.status_alat = "damaged" THEN 1 ELSE 0 END) as damage'),
+                \DB::raw('SUM(data_aset.harga) as total_harga')
             )
             ->leftJoin('master_kategori_aset', 'master_kategori_aset.id', '=', 'data_aset.id_kategori_aset')
             ->leftJoin('master_sub_kategori_aset', 'master_sub_kategori_aset.id', '=', 'data_aset.id_subkategori_aset')
@@ -43,7 +44,32 @@ class DataAsetController extends Controller
             )
             ->orderBy('data_aset.jenis_aset', 'asc');
 
-        return DataTables::of($data)->make(true);
+        $sumTotalHarga = DataAset::where('is_active', true)->sum('harga');
+        $sumTotalAset = DataAset::where('is_active', true)->count();
+        $sumTotalReady = DataAset::where('is_active', true)->where('status_alat', 'ready')->count();
+        $sumTotalUsed = DataAset::where('is_active', true)->where('status_alat', 'used')->count();
+        $sumTotalFixing = DataAset::where('is_active', true)->where('status_alat', 'fixing')->count();
+        $sumTotalDamage = DataAset::where('is_active', true)->where('status_alat', 'damaged')->count();
+
+        return DataTables::of($data)
+            ->with([
+                'sumTotalHarga' => $sumTotalHarga,
+                'sumTotalAset' => $sumTotalAset,
+                'sumTotalReady' => $sumTotalReady,
+                'sumTotalUsed' => $sumTotalUsed,
+                'sumTotalFixing' => $sumTotalFixing,
+                'sumTotalDamage' => $sumTotalDamage
+            ])
+            ->filterColumn('jenis_aset', function ($query, $keyword) {
+                $query->where('data_aset.jenis_aset', 'like', "%$keyword%");
+            })
+            ->filterColumn('nama_kategori', function ($query, $keyword) {
+                $query->where('master_kategori_aset.nama_kategori', 'like', "%$keyword%");
+            })
+            ->filterColumn('nama_sub_kategori', function ($query, $keyword) {
+                $query->where('master_sub_kategori_aset.nama_sub_kategori', 'like', "%$keyword%");
+            })
+            ->make(true);
     }
 
     public function getDetail(Request $request){
@@ -55,6 +81,23 @@ class DataAsetController extends Controller
         return response()->json([
             'message' => 'Data aset berhasil ditemukan',
             'data' => $data
+        ], 200);
+    }
+
+    public function generateQr(Request $request){
+        $data = DataAset::find($request->id);
+        [$filename_qr, $unicode] = $this->generateQRAset($data->no_cs, $data);
+
+        $data->qr_filename = $filename_qr;
+        $data->unicode = $unicode;
+        $data->save();
+
+        return response()->json([
+            'message' => 'Qr Code aset '.$data->no_cs.' berhasil di generate',
+            'data' => [
+                'filename_qr' => $filename_qr,
+                'unicode' => $unicode
+            ]
         ], 200);
     }
 
