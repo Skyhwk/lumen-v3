@@ -11,6 +11,7 @@ use DataTables;
 use App\Services\Notification;
 
 use App\Models\{PurchaseRequest, PurchaseRequestItem, DataAset};
+use App\Services\GetBawahan;
 
 class PurchaseRequestsController extends Controller
 {
@@ -38,9 +39,23 @@ class PurchaseRequestsController extends Controller
         ], 200);
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])->where('is_active', true)->latest();
+        $employee = $request->attributes->get('user')->karyawan;
+
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee']);
+        if ($employee->grade === 'STAFF') {
+            $purchaseRequests = $purchaseRequests->where('created_by', $employee->nama_lengkap);
+        }
+
+        if ($employee->grade === 'SUPERVISOR' || $employee->grade === 'MANAGER') {
+            $creator = GetBawahan::where('id', $employee->id)->get()->pluck('nama_lengkap')->toArray();
+            $creator[] = $employee->nama_lengkap;
+
+            $purchaseRequests = $purchaseRequests->whereIn('created_by', $creator);
+        }
+
+        $purchaseRequests = $purchaseRequests->where('is_active', true)->latest();
 
         return DataTables::of($purchaseRequests)->make(true);
     }
@@ -198,7 +213,7 @@ class PurchaseRequestsController extends Controller
         $rejectedCount = $children->whereNotNull('rejected_at')->count();
 
         if (($approvedCount + $rejectedCount) !== $total) { // masih ada yang blm diproses
-            return;
+            return response()->json(['message' => "{$request->action} successfully"], 201);
         }
 
         $parent = PurchaseRequest::findOrFail($parentId);
