@@ -68,8 +68,11 @@ class JadwalHandler extends BaseController
                     $current = max(strtotime($item->start_date), strtotime($startDate));
                     $end = min(strtotime($item->end_date), strtotime($endDate));
 
-                    while($current <= $end) {
-                        $dates[] = (object)['tanggal_libur' => date('Y-m-d', $current)];
+                     while($current <= $end) {
+                        $dates[] = (object)[
+                            'tanggal_libur' => date('Y-m-d', $current),
+                            'keterangan'    => $item->deskripsi, // ← tambah field ini (sesuaikan nama kolomnya)
+                        ];
                         $current = strtotime('+1 day', $current);
                     }
                     return $dates;
