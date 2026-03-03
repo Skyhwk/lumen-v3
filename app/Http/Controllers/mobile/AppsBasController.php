@@ -919,7 +919,10 @@ class AppsBasController extends Controller
                             'informasi_teknis' => $item['informasi_teknis'] ?? $header->informasi_teknis,
                             'waktu_mulai' => $item['waktu_mulai'] ?? $header->waktu_mulai,
                             'waktu_selesai' => $item['waktu_selesai'] ?? $header->waktu_selesai,
-                            'filename' => str_replace("&#039;", "'", $item['filename_bas'] ?? $header->filename_bas),
+                            'filename' => str_replace(
+                            ['&#039;', '/', ',', '.', '@', '"', '`'],
+                            ["'",       '',  '',  '',  '',  '',  ''],
+                            $item['filename_bas'] ?? $header->filename_bas),
                             // $item['filename_bas'] ?? $header->filename_bas,
                             'no_sampel' => $item['no_sampel'] ?? []
                         ];
@@ -1305,7 +1308,12 @@ class AppsBasController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    // $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                        $status[$sample->no_sample] = 'selesai';
+                    } else {
+                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    }
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
@@ -3742,6 +3750,13 @@ class AppsBasController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "Medan Magnet",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DataLapanganMedanLM::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "Power Density",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
@@ -4342,6 +4357,13 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailSenyawaVolatile::class
+            ],
+            [
+                "parameter" => "LEGIONELLA",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailMicrobiologi::class
+            
             ]
         ];
 

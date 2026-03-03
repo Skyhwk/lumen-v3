@@ -56,11 +56,11 @@ class RenderNonKontrak
     private function generate($id, $lang)
     {
         try {
-            $data = QuotationNonKontrak::with('cabang', 'sales')
+            $data = QuotationNonKontrak::with('cabang', 'sales','orderHeader')
                 ->where('is_active', true)
                 ->where('id', $id)
                 ->first();
-
+            $NoOrder = $data && $data->orderHeader ? $data->orderHeader->no_order : null;
             $mpdfConfig = array(
                 'mode' => 'utf-8',
                 'format' => 'A4',
@@ -197,9 +197,25 @@ class RenderNonKontrak
                     <table class="head2" width="100%">
                         <tr>
                             <td colspan="2"><p style="font-size: 10px;line-height:1.5px;">Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '</p></td>
-                            <td style="vertical-align: top; text-align:right;"><span
-                            style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-bottom:20px;"
-                            id="status_sampling">' . $sampling . '</span></td>
+                           <td style="vertical-align: top;">
+                            <!-- Gunakan tabel bantuan agar posisi presisi -->
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <tr>
+                                    <td style="text-align: right; padding-bottom: 1.2px;">
+                                        <span style="font-size:10px; font-weight: bold; border: 1px solid gray; padding: 2px 5px;">
+                                            ' . $sampling . '
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align: right;">
+                                        <span style="font-size:10px; font-weight: bold; border: 1px solid gray; padding: 2px 5px;">
+                                            ' . $NoOrder . '
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
                         </tr>
                         <tr>
                             <td colspan="2" width="80%"><h6 style="font-size:9pt; font-weight: bold; white-space: pre-wrap; white-space: -moz-pre-wrap; white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;">' . $konsultant . preg_replace('/&AMP;+/', '&', $perusahaan) . '</h6></td>

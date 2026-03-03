@@ -475,7 +475,7 @@ class TicketProgrammingController extends Controller
 
             if($this->grade == 'MANAGER' && $data->kategori == 'PERUBAHAN_DATA') {
                 $data->approved_by = $this->karyawan;
-                $data->approved_time = Carbon::now()->format('Y-m-d H:i:s');
+                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             }
 
             $data->save();

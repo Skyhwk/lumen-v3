@@ -306,10 +306,11 @@ class SertifikatWebinarController extends Controller
             $highestRow = $sheet->getHighestRow();
 
             // Ambil header row (row 1)
-            $headers = $sheet->rangeToArray("A1:{$highestColumn}1")[0];
+            $headers = $sheet->rangeToArray("A10:{$highestColumn}10")[0];
 
             // Cari index kolom "Nama Lengkap"
             $startIndex = null;
+            
             foreach ($headers as $i => $header) {
                 $normalized = strtolower(trim($header));
                 if (str_contains($normalized, 'nama lengkap')) {
@@ -317,7 +318,7 @@ class SertifikatWebinarController extends Controller
                     break;
                 }
             }
-
+            
             if ($startIndex === null) {
                 DB::rollBack();
                 return response()->json([
@@ -360,10 +361,10 @@ class SertifikatWebinarController extends Controller
 
             $participants = [];
 
-            for ($row = 2; $row <= $highestRow; $row++) {
+            for ($row = 11; $row <= $highestRow; $row++) {
                 $email = $sheet->getCellByColumnAndRow(4, $row)->getValue(); // D
                 $name  = $sheet->getCellByColumnAndRow(9, $row)->getValue(); // I
-
+                
                 if ($email || $name) {
                     $participants[] = [
                         'email' => $email,
@@ -396,6 +397,7 @@ class SertifikatWebinarController extends Controller
             // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
+            dd($th);
             DB::rollBack();
             return response()->json([
                 'message' =>

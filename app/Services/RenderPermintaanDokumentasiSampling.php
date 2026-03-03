@@ -138,6 +138,9 @@ class RenderPermintaanDokumentasiSampling
 
     public function renderPdf($permintaanDokumentasiSampling, $qr, $periode = null)
     {
+        ini_set("pcre.backtrack_limit", "10000000");
+        ini_set("pcre.recursion_limit", "10000000");
+
         DB::beginTransaction();
 
         try {

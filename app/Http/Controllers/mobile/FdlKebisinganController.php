@@ -35,32 +35,52 @@ class FdlKebisinganController extends Controller
 {
     public function getSample(Request $request)
     {
-        if (isset($request->no_sample) && $request->no_sample != null) {
-            $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
+        if (!empty($request->no_sample)) {
+
+            $order = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where('kategori_2', '4-Udara')
                 ->where('kategori_3', 'LIKE', '%-Kebisingan%')
-                ->where('is_active', 1)->first();
-            if (is_null($data)) {
+                ->where('is_active', 1)
+                ->first();
+
+            if (!$order) {
                 return response()->json([
                     'message' => 'No Sample tidak ditemukan..'
                 ], 401);
-            } else 
-            {
-                $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
-                return response()->json([
-                    'no_sample'    => $data->no_sampel,
-                    'jenis'        => $cek->nama_sub_kategori,
-                    'keterangan' => $data->keterangan_1,
-                    'id_ket' => explode('-', $data->kategori_3)[0],
-                    'id_ket2' => explode('-', $data->kategori_2)[0],
-                    'param' => $data->parameter
-                ], 200);
             }
-        } else {
+
+            $cek = MasterSubKategori::where('id', explode('-', $order->kategori_3)[0])->first();
+
+            // ✅ Decode TANPA menimpa $order
+            $parameter = json_decode($order->parameter, true);
+
+            $param = null;
+
+            if (!empty($parameter[0])) {
+                $parts = explode(';', $parameter[0], 2);
+                $param = $parts[1] ?? null;
+            }
+
+            $waktu = "Sesaat";
+
+            if (!empty($param) && preg_match('/\(([^)]+)\)/', $param, $match)) {
+                $waktu = $match[1];
+            }
+
             return response()->json([
-                'message' => 'Fatal Error'
-            ], 401);
+                'no_sample'          => $order->no_sampel,
+                'jenis'              => $cek->nama_sub_kategori ?? null,
+                'keterangan'         => $order->keterangan_1,
+                'id_ket'             => explode('-', $order->kategori_3)[0],
+                'id_ket2'            => explode('-', $order->kategori_2)[0],
+                'param'              => $order->parameter,
+                'kategori_pengujian' => $waktu
+            ], 200);
         }
+
+        return response()->json([
+            'message' => 'Fatal Error'
+        ], 401);
     }
 
     public function store(Request $request)

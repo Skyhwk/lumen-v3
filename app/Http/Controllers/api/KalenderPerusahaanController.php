@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
-
+use Illuminate\Support\Facades\Http;
 class KalenderPerusahaanController extends Controller
 {
     public function indexKalender(Request $request)
@@ -228,6 +228,20 @@ class KalenderPerusahaanController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function hariLibur(Request $request)
+    {
+        try {
+            $response = Http::get('https://hari-libur-api.vercel.app/api?year=' . $request->tahun);
+            return response()->json([
+                'data' => $response->json(),
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 401);
         }
     }
 }

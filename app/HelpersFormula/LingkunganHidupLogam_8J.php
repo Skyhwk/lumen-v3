@@ -49,7 +49,7 @@ class LingkunganHidupLogam_8J
             if ((float) $Vstd <= 0) {
                 $rawC = 0;
                 $Qs = 0;
-                $C = 0;
+                $result = 0;
             } else {
                 $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 

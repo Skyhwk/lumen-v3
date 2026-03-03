@@ -75,7 +75,8 @@ use App\Models\{
     SertifikatWebinarDetail,
     LayoutCertificate,
     JenisFont,
-    TemplateBackground
+    TemplateBackground,
+    MasterTargetSales
 };
 use App\Services\{
     GetAtasan,
@@ -219,14 +220,84 @@ class TestingController extends Controller
     
         return array_values($roots);
     }
-    
+
     public function show(Request $request)
     { 
         
         try {
-            //code...
-            
             switch ($request->menu) {
+                case 'contract-order':
+                    // 1. Ambil data Order per Perusahaan
+                    $subTahun = substr($request->year, -2); 
+                    $orders = OrderHeader::select(
+                            'nama_perusahaan',
+                            DB::raw('MAX(wilayah) as wilayah'),
+                            // Menggabungkan no_document menjadi string untuk referensi jika perlu
+                            DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
+                            DB::raw('SUM(total_dpp) as summary')
+                        )
+                        ->where('is_active', 1)
+                        ->where('nama_perusahaan', $request->nama_perusahaan)
+                        ->where('no_document', "LIKE", "%QTC/$subTahun%")
+                        ->groupBy('nama_perusahaan')
+                        ->get();
+
+                        dd($orders);
+
+                    // 2. Ambil semua no_document unik dari perusahaan tersebut untuk ditarik detailnya
+                    // Kita perlu memecah kembali daftar_no_doc jika ada banyak dokumen
+                    $allNoDocs = [];
+                    foreach ($orders as $o) {
+                        $docs = explode(', ', $o->daftar_no_doc);
+                        $allNoDocs = array_merge($allNoDocs, $docs);
+                    }
+                    $allNoDocs = array_unique($allNoDocs);
+
+                    // 3. Tarik semua data Quotation Detail berdasarkan kumpulan no_document tersebut
+                    $allQuotations = QuotationKontrakH::with(['detail' => function($q) use ($request) {
+                            $q->where('periode_kontrak', 'LIKE', '%' . $request->year . '%');
+                        }])
+                        ->whereIn('no_document', $allNoDocs)
+                        ->get()
+                        ->groupBy('no_document');
+
+                    // 4. Inisialisasi Total untuk Footer
+                    $bulanTotals = [
+                        'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+                        'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+                        'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+                    ];
+
+                    // 5. Mapping data Bulanan ke setiap baris Perusahaan
+                    foreach ($orders as $order) {
+                        // Ambil semua dokumen milik perusahaan ini
+                        $myDocs = explode(', ', $order->daftar_no_doc);
+                        
+                        // Kumpulkan semua header quotation yang terkait dengan dokumen-dokumen perusahaan ini
+                        $relatedQuotationHeaders = [];
+                        foreach ($myDocs as $docNo) {
+                            if (isset($allQuotations[$docNo])) {
+                                // allQuotations[$docNo] berisi Collection dari QuotationKontrakH
+                                foreach ($allQuotations[$docNo] as $qHeader) {
+                                    $relatedQuotationHeaders[] = $qHeader;
+                                }
+                            }
+                        }
+
+                        // Proses akumulasi bulanan untuk semua dokumen milik perusahaan ini
+                        $bulanSummary = $this->processDetails($relatedQuotationHeaders);
+                        $order->bulan_summary = $bulanSummary;
+
+                        // Tambahkan ke total footer
+                        foreach ($bulanSummary as $key => $val) {
+                            $bulanTotals[$key] += $val;
+                        }
+                    }
+
+                    // 6. Return Data (Contoh format JSON untuk DataTables)
+                    // Pake datatables dari collection
+                    return response()->json(["data" => $orders],200);
+                    break;
                 case 'getForecast' :
                     // 1️⃣ Order detail → map no_order => tgl_sampling
                     $orderSamplingFromDetail = OrderDetail::query()
@@ -685,116 +756,8 @@ class TestingController extends Controller
                     break;
                 case 'this':
 
-                    $tanggal = $request->tanggal;
-                    // $qt_non_kontrak = OrderHeader::where('no_document', 'like', '%QT/%')
-                    //     ->where('is_active', 1)
-                    //     ->where('tanggal_order', $tanggal)
-                    //     ->pluck('no_document')->toArray();
-
-                    // $dataNonKontrak = DailyQsd::whereIn('no_quotation', $qt_non_kontrak)
-                    //     ->select('sales_id', 'no_quotation', 'total_revenue', 'biaya_akhir')
-                    //     ->get()->toArray();
-
-                    // $dataKontrak = DailyQsd::select('sales_id', 'no_quotation', 'total_revenue', 'biaya_akhir')
-                    //     ->where('tanggal_sampling_min', $tanggal)
-                    //     ->where('no_quotation', 'LIKE', '%QTC/%')
-                    //     ->get()->toArray();
-                    
-                    // $allData = array_merge($dataNonKontrak, $dataKontrak);
-
-                    // dd($allData);
-                    // $result = [];
-                    // foreach ($allData as $row) {
-                    //     $sales_id = $row['sales_id'];
-                    //     if (!isset($result[$sales_id])) {
-                    //         $result[$sales_id] = [
-                    //             'sales_id' => $sales_id,
-                    //             'jumlah_order' => 0,
-                    //             'total_revenue' => 0,
-                    //             'biaya_akhir' => 0,
-                    //         ];
-                    //     }
-                    //     $result[$sales_id]['jumlah_order'] += 1;
-                    //     $result[$sales_id]['total_revenue'] += floatval($row['total_revenue']);
-                    //     $result[$sales_id]['biaya_akhir'] += floatval($row['biaya_akhir']);
-                    // }
-
-                    // $result = array_values($result);
-                    $result = DailyQsd::query()
-                    ->select('sales_id')
-                    ->selectRaw('COUNT(*) as jumlah_order')
-                    ->selectRaw('SUM(total_revenue) as total_revenue')
-                    ->selectRaw('SUM(biaya_akhir) as biaya_akhir')
-                    ->where(function($q) use ($tanggal) {
-                        $q->whereHas('orderHeader', function($qh) use ($tanggal) {
-                            $qh->where('no_document', 'like', '%QT/%')
-                                ->where('is_active', 1)
-                                ->where('tanggal_order', $tanggal);
-                        })
-                        ->orWhere(function($qq) use ($tanggal) {
-                            $qq->where('tanggal_sampling_min', $tanggal)
-                                ->where('no_quotation', 'LIKE', '%QTC/%');
-                        });
-                    })
-                    ->groupBy('sales_id')
-                    ->get()
-                    ->map(function($row) {
-                        return [
-                            'sales_id' => $row->sales_id,
-                            'jumlah_order' => (int) $row->jumlah_order,
-                            'total_revenue' => (float) $row->total_revenue,
-                            'biaya_akhir' => (float) $row->biaya_akhir,
-                        ];
-                    })
-                    ->values()
-                    ->toArray();
-                    dd($result);
-
-                    $dataBawahan = Getbawahan::where('id', 890)
-                        ->get()
-                        ->filter(function($q){
-                            return $q->id != 890;
-                        })
-                        ->map(function($q){
-                            return[
-                                'id' => $q->id,
-                                'nama_lengkap' => $q->nama_lengkap,
-                                'grade' => $q->grade,
-                                'id_jabatan' => $q->id_jabatan,
-                                'atasan_langsung' => $q->atasan_langsung
-                            ];
-                        })->values()->toArray();
-
-                    $strukturSales = $this->buildStrukturSales($dataBawahan);
-
-                    return response()->json([
-                        'strukturSales' => $strukturSales,
-                        'penjualan' => $result
-                    ], 200);
-
-
-                    $cekData = OrderDetail::where('is_active', 1)
-                        ->where('tanggal_sampling', '>=', '2026-01-01')
-                        ->get();
-
-                    foreach ($cekData as $item) {
-                        $no_qt = $item->no_quotation;
-                        $kategori = \explode('-', $item->kategori_3)[1] . ' - ' . \explode('/', $item->no_sampel)[1];
-                        $cekJadwal = Jadwal::where('no_quotation', $no_qt)
-                        ->where('kategori', 'LIKE', '%' . $kategori . '%')
-                        ->where('is_active', 1)->first();
-                        if ($cekJadwal != NULL) {
-                            $tanggalJadwal = $cekJadwal->tanggal;
-                            $tanggalSampling = $item->tanggal_sampling;
-                            if ($tanggalJadwal != $tanggalSampling) {
-                                $item->tanggal_sampling = $tanggalJadwal;
-                                $item->save();
-
-                                FacadesLog::info('Update tanggal sampling: ' . $item->no_sampel . ' dari tanggal awal: ' . $tanggalSampling . ' ke tanggal jadwal: ' . $tanggalJadwal);
-                            }
-                        }
-                    }
-
+                    $data = (new SalesDailyQSD())->run();
+                    dd($data);
                     return response()->json(['message' => 'Berhasil update tanggal sampling'], 200);
                     break;
                 case 'attributes':
@@ -2683,6 +2646,39 @@ class TestingController extends Controller
             //throw $th;
             return response()->json(["message" =>$th->getMessage(),"line"=>$th->getLine()],500);
         }
+    }
+
+    private function processDetails($quotationHeaders)
+    {
+        $bulan = [
+            'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+            'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+            'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+        ];
+
+        foreach ($quotationHeaders as $value) {
+            if(!$value->detail->isEmpty()){
+                foreach ($value->detail as $detail) {
+                    $bulanStr = explode('-', $detail->periode_kontrak)[1] ?? null;
+                    switch ($bulanStr) {
+                        case '01': $bulan['january'] += $detail->total_dpp; break;
+                        case '02': $bulan['february'] += $detail->total_dpp; break;
+                        case '03': $bulan['march'] += $detail->total_dpp; break;
+                        case '04': $bulan['april'] += $detail->total_dpp; break;
+                        case '05': $bulan['may'] += $detail->total_dpp; break;
+                        case '06': $bulan['june'] += $detail->total_dpp; break;
+                        case '07': $bulan['july'] += $detail->total_dpp; break;
+                        case '08': $bulan['august'] += $detail->total_dpp; break;
+                        case '09': $bulan['september'] += $detail->total_dpp; break;
+                        case '10': $bulan['october'] += $detail->total_dpp; break;
+                        case '11': $bulan['november'] += $detail->total_dpp; break;
+                        case '12': $bulan['december'] += $detail->total_dpp; break;
+                    }
+                }
+            }
+        }
+
+        return $bulan;
     }
     /*=== logic compare === */
    // CONTROLLER CODE - Ambil semua records, bukan first()

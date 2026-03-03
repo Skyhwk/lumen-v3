@@ -478,7 +478,16 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						'rejected_at' => Carbon::now(),
 
 					]);
-				} else if ($request->data_type == 'sinar_uv') {
+				}else if ($request->data_type == 'dustfall') {
+					// Update data for 'direct'
+					$data = DustFallHeader::where('id', $request->id)->update([
+						'is_approved' => 0,
+						'notes_reject' => $request->note,
+						'rejected_by' => $this->karyawan,
+						'rejected_at' => Carbon::now(),
+
+					]);
+				}else if ($request->data_type == 'sinar_uv') {
 					// Update data for 'direct'
 					$data = SinarUvHeader::where('id', $request->id)->update([
 						'is_approve' => 0,

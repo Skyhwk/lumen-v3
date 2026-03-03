@@ -1,6 +1,7 @@
 <?php
 namespace App\Console\Commands;
 
+use App\Helpers\WorkerAutomaticApprove;
 use App\Helpers\WorkerDailyQSDSales;
 use App\Helpers\WorkerReassign;
 use App\Helpers\WorkerSummaryParameter;
@@ -31,6 +32,9 @@ class ScheduleEverySecond extends Command
                 // WorkerApproveAnalyst::run();
 
                 WorkerSummaryParameter::run();
+                
+                // INI AUTO APPROVE
+                WorkerAutomaticApprove::run();
 
                 // WorkerUpdateKpiSales::run();
 

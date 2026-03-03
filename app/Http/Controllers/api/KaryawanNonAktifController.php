@@ -17,7 +17,7 @@ class KaryawanNonAktifController extends Controller
         $this->autoNaKaryawan();
 
         $data = MasterKaryawan::with('divisi', 'jabatan', 'cabang')
-            ->where('active', true)
+            ->where('active', false)
             ->where('is_active', false)
             ->where('deleted_by', null)
             ->get();

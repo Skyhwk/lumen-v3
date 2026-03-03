@@ -33,6 +33,7 @@ use Yajra\Datatables\Datatables;
 class SamplingPlanController extends Controller
 {
 
+    /*  */
     public function index(Request $request)
     {
         
@@ -44,8 +45,12 @@ class SamplingPlanController extends Controller
                 $query->WithTypeModelSub();
             },
         ])
-            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 'created_by', 'created_at', 'updated_at', 'updated_by')
-            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang', 'created_by', 'created_at', 'updated_at', 'updated_by')
+            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 
+            DB::raw('MAX(created_by) as created_by'), 
+            DB::raw('MIN(created_at) as created_at'), // Ambil waktu buat paling awal
+            DB::raw('MAX(updated_at) as updated_at'), // Ambil waktu update paling baru
+            DB::raw('MAX(updated_by) as updated_by') ) // Ambil user update terakhir)
+            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang')
             ->whereNotNull('no_quotation')
             ->where('is_active', $active);
 
@@ -134,9 +139,26 @@ class SamplingPlanController extends Controller
             ->filterColumn('kategori', function ($query, $keyword) {
                 $query->where('kategori', 'like', '%' . $keyword . '%');
             })
-        // Filter kolom 'sampler' dengan where biasa, karena havingRaw tidak berfungsi di sini
+            // Filter kolom 'sampler' dengan where biasa, karena havingRaw tidak berfungsi di sini
+            // ->filterColumn('sampler', function ($query, $keyword) {
+            //     $query->where('sampler', 'like', '%' . $keyword . '%');
+            // })
             ->filterColumn('sampler', function ($query, $keyword) {
-                $query->where('sampler', 'like', '%' . $keyword . '%');
+                // Dapatkan nama tabel asli secara dinamis (misal: 'jadwals' atau 'jadwal_samplers')
+                $table = $query->getModel()->getTable(); 
+
+                // Gunakan WHERE EXISTS agar outer query tidak membuang row teman-temannya
+                $query->whereExists(function ($subquery) use ($keyword, $table) {
+                    $subquery->select(DB::raw(1))
+                             ->from("$table as sub")
+                             // Hubungkan subquery dengan outer query menggunakan kunci Grouping Anda
+                             // (Pastikan kolom-kolom ini adalah yang mendefinisikan 1 jadwal yang sama)
+                             ->whereColumn("sub.id_sampling", "$table.id_sampling")
+                             ->whereColumn("sub.tanggal", "$table.tanggal")
+                             ->whereColumn("sub.no_quotation", "$table.no_quotation")
+                             // Filter pencarian sampler di sini
+                             ->where('sub.sampler', 'like', '%' . $keyword . '%');
+                });
             })
             ->filterColumn('created_by', function ($query, $keyword) {
                 $query->where(function ($q) use ($keyword) {
@@ -1080,6 +1102,52 @@ class SamplingPlanController extends Controller
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 400);
+        }
+    }
+
+    public function checkDocumentStatus(Request $request)
+    {
+        try {
+            // 1. Ambil data order
+            $geOrder = OrderHeader::where('no_document', $request->no_quotation)->first(['no_order']);
+            // 2. Siapkan variabel
+            $array_no_samples = [];
+            // Pastikan periode null jika string kosong
+            $periode = ($request->periode == "") ? $request->periode : $request->periode; 
+            $jsonDecodeKategori = json_decode($request->kategori);
+            if ($geOrder && $jsonDecodeKategori) {
+                foreach ($jsonDecodeKategori as $kategori) {
+                    // Pastikan format kategori benar ada " - "
+                    $parts = explode(" - ", $kategori);
+                    if(isset($parts[1])) {
+                        $pra_no_sample = $parts[1];
+                        $array_no_samples[] = $geOrder->no_order . '/' . $pra_no_sample;
+                    }
+                }
+            }
+
+            // 3. Query Database
+            // Perhatikan: $request->tanggal (sesuai kiriman frontend)
+            $checkPreparationSample = PersiapanSampelHeader::where('no_quotation', $request->no_quotation)
+                ->where('periode', $periode)
+                ->where('tanggal_sampling', $request->tanggal) // <--- UBAH INI (sesuai key frontend)
+                ->where(function ($query) use ($array_no_samples) {
+                            foreach ($array_no_samples as $sampel) {
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
+                            }
+                        })
+                ->whereNotNull('detail_bas_documents') // <--- PERBAIKI TYPO (detai -> detail)
+                ->where('is_active', true)
+                ->first();
+                
+            // 4. Return
+            $statusDoc = $checkPreparationSample ? true : false;
+            
+            return response()->json(['status_document' => $statusDoc], 200);
+
+        } catch (\Throwable $th) {
+            // Jangan dd() di API production, return error message
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 }

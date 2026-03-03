@@ -72,6 +72,7 @@ class RandomSalesAssign
                 ->where('is_active', true)
                 ->where('sales_id', '<>', $customerMasDedi)
                 ->whereNotIn('sales_id', $excludedSalesIds)
+                ->whereNotNull('sales_id')
                 ->whereIn('sales_id', array_column(self::$salesIdInactive, 'id'))
                 ->get();
 
@@ -117,6 +118,7 @@ class RandomSalesAssign
                 ->where('is_active', true)
                 ->whereNotIn('id', $allID)
                 ->where('sales_id', '<>', $customerMasDedi)
+                ->whereNotNull('sales_id')
                 ->whereIn('sales_id', $excludedSalesIds)
                 ->get();
 
@@ -143,6 +145,7 @@ class RandomSalesAssign
                 ->where('is_active', true)
                 ->whereNotIn('id', $allID)
                 ->where('sales_id', '<>', $customerMasDedi)
+                ->whereNotNull('sales_id')
                 ->whereNotIn('sales_id', $excludedSalesIds)
                 ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex) {
                     Log::channel('reassign_customer')->info("== Processing Chunk #{$chunkIndex} ==", [

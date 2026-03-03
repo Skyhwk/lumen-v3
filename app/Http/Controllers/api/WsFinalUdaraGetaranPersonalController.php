@@ -156,9 +156,9 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
 
 					$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
-					if ($paparan <= 30) {
+					if ($paparan < 30) {
 						$item->nab = 20;
-					} else if ($paparan > 30 && $paparan < 60) {
+					} else if ($paparan >= 30 && $paparan < 60) {
 						$item->nab = 14;
 					} else if ($paparan >= 60 && $paparan < 120) {
 						$item->nab = 10;

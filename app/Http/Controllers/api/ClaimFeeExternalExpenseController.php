@@ -9,20 +9,14 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 
-class RequestFeeExternalController extends Controller
+class ClaimFeeExternalExpenseController extends Controller
 {
     public function outstandingIndex(Request $request)
     {
         $status = $request->status;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true)->where('is_approved_manajer', true);
-
-        if (is_array($status)) {
-            $query->whereIn('status_pembayaran', $status);
-        } else {
-            $query->where('status_pembayaran', $status);
-        }
+            ->where('is_active', true)->where('is_approved_manajer', true)->where('status_pembayaran', 'READY TO TRANSFER')->whereNull('transferred_by');
 
         return DataTables::of($query)
             ->filter(function ($query) use ($request) {
@@ -61,13 +55,7 @@ class RequestFeeExternalController extends Controller
         $status = $request->status;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true)->where('is_approved_manajer', true);
-
-        if (is_array($status)) {
-            $query->whereIn('status_pembayaran', $status);
-        } else {
-            $query->where('status_pembayaran', $status);
-        }
+            ->where('is_active', true)->where('is_approved_manajer', true)->where('status_pembayaran', 'TRANSFER')->whereNotNull('transferred_by');
 
         return DataTables::of($query)
             ->filter(function ($query) use ($request) {
@@ -126,8 +114,8 @@ class RequestFeeExternalController extends Controller
         $claim->status_pembayaran = "TRANSFER";
         $claim->transferred_by = $this->karyawan;
         $claim->tanggal_pembayaran = $request->transfer_date;
-        $claim->potongan = $request->potongan;
-        $claim->nominal_bayar = $request->nominal_bayar;
+        // $claim->potongan = $request->potongan;
+        // $claim->nominal_bayar = $request->nominal_bayar;
         $claim->save();
 
         return response()->json(['message' => 'Claim Fee External Berhasil Ditransfer']);

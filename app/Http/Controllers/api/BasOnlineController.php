@@ -1317,7 +1317,12 @@ class BasOnlineController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    
+                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                        $status[$sample->no_sample] = 'selesai';
+                    } else {
+                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    }
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
@@ -2244,17 +2249,22 @@ class BasOnlineController extends Controller
 
             $status = 'selesai';
             if (!empty($parameters)) {
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
                 foreach ($parameters as $parameter) {
                     // dump($sample->no_sample);
                     if($parameter['category'] == '6-Padatan'){
                         continue; // Skip Padatan
                     }
-                    if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)' || $parameter['parameter'] == 'Xylene secara personil sampling (SC)') {
+                    if (in_array($parameter['parameter'], $parameterBypass)) {
                         continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                     }
 
                     if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)'){
                         continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
+                    }
+
+                    if(in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
                     }
 
                     
@@ -4334,11 +4344,24 @@ class BasOnlineController extends Controller
                 "model2" => DetailLingkunganHidup::class
             ],
             [
+                "parameter" => "LEGIONELLA",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailMicrobiologi::class
+            ],
+            [
                 "parameter" => "Isopropil Alkohol",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailSenyawaVolatile::class
+            ],
+            [
+                "parameter" => "VOC Sebagai NMHC",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => null,
+                "model2" => null
             ]
         ];
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];
