@@ -6053,10 +6053,10 @@ class RequestQuotationController extends Controller
     public function indexPaket(Request $request)
     {
         $query = TemplatePaketAnalisa::where('is_active', true)
-            ->where('kategori', 'like', '%' . $request->kategori . '-%');
+            ->where('kategori', 'like',  $request->kategori . '-%');
 
         if (!empty($request->sub_kategori) && $request->sub_kategori !== '0') {
-            $query->where('sub_kategori', 'like', '%' . $request->sub_kategori . '-%');
+            $query->where('sub_kategori', 'like', $request->sub_kategori . '-%');
         }
 
         $data = $query->get();
