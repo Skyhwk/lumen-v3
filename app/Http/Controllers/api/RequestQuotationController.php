@@ -6050,4 +6050,55 @@ class RequestQuotationController extends Controller
         ], 200);
     }
 
+    public function indexPaket(Request $request)
+    {
+        $query = TemplatePaketAnalisa::where('is_active', true)
+            ->where('kategori', 'like', '%' . $request->kategori . '%');
+
+        if (!empty($request->sub_kategori) && $request->sub_kategori !== '0') {
+            $query->where('sub_kategori', 'like', '%' . $request->sub_kategori . '%');
+        }
+
+        $data = $query->get();
+
+        return DataTables::of($data)
+            ->editColumn('data_pendukung_sampling', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+
+                if (empty($data) || ! is_array($data)) {
+                    return [];
+                }
+
+                foreach ($data as $i => &$row) {
+                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
+                }
+
+                return $data;
+            })
+            ->addColumn('harga_paket', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+                $harga_paket = 0;
+                if (empty($data) || ! is_array($data)) {
+                    return 0;
+                }
+
+                foreach ($data as $i => &$row) {
+                    $harga_paket += $row['harga_paket'];
+                }
+                return $harga_paket;
+            })
+            ->make(true);
+    }
+
+    public function getKategoriPaket(Request $request)
+    {
+        $data = MasterKategori::where('is_active', true)->select('id', 'nama_kategori')->get();
+
+        $data->prepend((object) [
+            'id' => '0',
+            'nama_kategori' => 'Multi Kategori',
+        ]);
+        return response()->json($data);
+    }
+
 }
