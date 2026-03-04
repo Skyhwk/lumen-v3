@@ -363,13 +363,17 @@ class RenderKontrak
                             <b style="font-size: 13px;">' . $kategori2[1] . " " . $penamaan_titik . "</b>
                             <hr>"
                 );*/
+
+                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                 $pdf->WriteHTML(
-                    ' <tr>
+                    ' <tr style="' . $rowBg . '">
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                         <td style="font-size: 13px; padding: 5px;">
                             <b style="font-size: 13px;">' . $kategori2[1] . "</b>
                             <hr>"
                 );
+            
                 if ($a->regulasi !== null && count($a->regulasi) > 0 && $a->regulasi[0] != "") {
                     foreach ($a->regulasi as $k => $v) {
                         $reg__ = '';
@@ -1182,8 +1186,10 @@ class RenderKontrak
                                         <hr>"
                             );*/
 
+                            $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                             $pdf->WriteHTML(
-                                ' <tr>
+                                ' <tr style="' . $rowBg . '">
                                     <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                                     <td style="font-size: 13px; padding: 5px;">
                                         <b style="font-size: 13px;">' . $kategori2[1] . "</b>

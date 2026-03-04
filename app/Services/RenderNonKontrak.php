@@ -300,8 +300,10 @@ class RenderNonKontrak
                         <hr>"
                 );*/
 
+                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                 $pdf->WriteHTML(
-                    ' <tr>
+                    ' <tr style="' . $rowBg . '">
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
                         <td style="font-size: 13px; padding:5px">
                         <b style="font-size: 13px;">' . $kategori2Value . "</b>
