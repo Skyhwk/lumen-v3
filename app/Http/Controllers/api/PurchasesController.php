@@ -19,23 +19,20 @@ class PurchasesController extends Controller
 {
     public function index(Request $request)
     {
-        // $employee = $request->attributes->get('user')->karyawan;
+        $employee = $request->attributes->get('user')->karyawan;
 
         $purchaseRequests = PurchaseRequest::with(['items' => fn($q) => $q->whereNull('rejected_at'), 'employee'])
             ->whereIn('status', ["Approved", "Partially Approved"])
             ->where('is_active', true)
             ->latest();
 
-        // if ($employee->grade === 'STAFF') {
-        //     $purchaseRequests = $purchaseRequests->where('created_by', $employee->nama_lengkap);
-        // }
+        $lowers = GetBawahan::where('id', $employee->id)->get()->pluck('nama_lengkap')->toArray();
 
-        // if ($employee->grade === 'SUPERVISOR' || $employee->grade === 'MANAGER') {
-        //     $creator = GetBawahan::where('id', $employee->id)->get()->pluck('nama_lengkap')->toArray();
-        //     $creator[] = $employee->nama_lengkap;
-
-        //     $purchaseRequests = $purchaseRequests->whereIn('created_by', $creator);
-        // }
+        if (in_array($employee->id_jabatan, [45, 48])) {
+            $purchaseRequests = $purchaseRequests->whereNull('delegated_to')->orWhereIn('delegated_to', $lowers);
+        } else {
+            $purchaseRequests = $purchaseRequests->where('delegated_to', $employee->nama_lengkap);
+        }
 
         return DataTables::of($purchaseRequests)->make(true);
     }
