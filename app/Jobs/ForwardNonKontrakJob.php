@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Models\TemplatePaketAnalisa;
 use App\Models\QuotationNonKontrak;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
@@ -106,11 +107,14 @@ class ForwardNonKontrakJob extends Job
 
             if (isset($payload->data_pendukung)) {
                 foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
                     $param = $item['parameter'];
                     $exp = explode("-", $item['kategori_1']);
                     $kategori = $exp[0];
                     $vol = 0;
-
+                    $is_paket = $item['is_paket_analisa'];
+                    
+                    
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -129,6 +133,49 @@ class ForwardNonKontrakJob extends Job
 
                     $titik = $item['jumlah_titik'];
 
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item['paket_id'])->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item['regulasi'] &&
+                                $paket['parameter'] == $param && 
+                                $paket['kategori_1'] == $item['kategori_1'] &&
+                                $paket['kategori_2'] == $item['kategori_2']
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    } 
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    
+                    $temp_preparasi = [];
+                    if (isset($item['biaya_preparasi']) && $item['biaya_preparasi'] != null) {
+                        foreach ($item['biaya_preparasi'] as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
+
                     $data_sampling[$i] = [
                         'kategori_1' => $item['kategori_1'],
                         'kategori_2' => $item['kategori_2'],
@@ -137,32 +184,40 @@ class ForwardNonKontrakJob extends Job
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                        'volume' => $vol
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
                     ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item['paket_id'];
+                        $data_sampling[$i]['paket'] = $item['paket'];
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
 
                     switch ($kategori) {
                         case '1':
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_air += $hargaAnalisa;
                             break;
                         case '4':
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_udara += $hargaAnalisa;
                             break;
                         case '5':
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_emisi += $hargaAnalisa;
                             break;
                         case '6':
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_padatan += $hargaAnalisa;
                             break;
                         case '7':
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_swab_test += $hargaAnalisa;
                             break;
                         case '8':
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_tanah += $hargaAnalisa;
                             break;
                         case '9':
-                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_pangan += $hargaAnalisa;
                             break;
                     }
                 }
@@ -194,7 +249,7 @@ class ForwardNonKontrakJob extends Job
             if($this->karyawan == $data_request->created_by){ // JIka yang membuat request qr itu sendiri maka kirim ke atasan juga
                 $message = 'Request QR telah diexport ke request quotation';
                 
-                $getAtasan = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                $getAtasan = GetAtasan::where('id', $this->sales_id)->get()->pluck('id')->toArray();
 
                 Notification::whereIn('id', $getAtasan)
                     ->title('Request QR telah diexport ke request quotation')
@@ -215,6 +270,7 @@ class ForwardNonKontrakJob extends Job
             Log::channel('quotation')->info('ForwardNonKontrakJob: Penawaran berhasil dibuat dengan nomor dokumen ' . $data->no_document);
 
         } catch (\Exception $e) {
+            dd($e);
             DB::rollBack();
             Log::channel('quotation')->info('ForwardNonKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
         }
