@@ -43,7 +43,10 @@ class PurchaseRequestsController extends Controller
     {
         $employee = $request->attributes->get('user')->karyawan;
 
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee']);
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
+            ->where('is_active', true)
+            ->latest();
+
         if ($employee->grade === 'STAFF') {
             $purchaseRequests = $purchaseRequests->where('created_by', $employee->nama_lengkap);
         }
@@ -55,27 +58,35 @@ class PurchaseRequestsController extends Controller
             $purchaseRequests = $purchaseRequests->whereIn('created_by', $creator);
         }
 
-        $purchaseRequests = $purchaseRequests->where('is_active', true)->latest();
-
         return DataTables::of($purchaseRequests)->make(true);
     }
 
-    public function generateCode(Request $request)
+    // public function generateCode(Request $request)
+    // {
+    //     $dataAset = DataAset::where('jenis_aset', $request->item_name)->latest()->first();
+
+    //     if (!$dataAset) {
+    //         $itemName = strtoupper($request->item_name);
+    //         $code = "CS-{$itemName}-001";
+    //     } else {
+    //         [$prefix, $itemName, $sequence] = explode('-', $dataAset->no_cs);
+    //         $sequence = $sequence + 1;
+
+    //         $code = "CS-{$itemName}-" . str_pad($sequence, 3, '0', STR_PAD_LEFT);
+    //     }
+
+    //     return response()->json([
+    //         'data' => $code,
+    //         'message' => 'Code generated successfully'
+    //     ], 201);
+    // }
+
+    public function getCode(Request $request)
     {
         $dataAset = DataAset::where('jenis_aset', $request->item_name)->latest()->first();
 
-        if (!$dataAset) {
-            $itemName = strtoupper($request->item_name);
-            $code = "CS-{$itemName}-001";
-        } else {
-            [$prefix, $itemName, $sequence] = explode('-', $dataAset->no_cs);
-            $sequence = $sequence + 1;
-
-            $code = "CS-{$itemName}-" . str_pad($sequence, 3, '0', STR_PAD_LEFT);
-        }
-
         return response()->json([
-            'data' => $code,
+            'data' => optional($dataAset)->no_cs ?: "",
             'message' => 'Code generated successfully'
         ], 201);
     }
@@ -131,12 +142,12 @@ class PurchaseRequestsController extends Controller
 
             Notification::whereIn('id', json_decode($employee->atasan_langsung))
                 ->title('Permintaan Pembelian Barang!')
-                ->message("Terdapat permintaan pembelian barang baru yang diajukan oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->message("Terdapat Permintaan Pembelian Barang baru yang diajukan oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
                 ->url('/purchase-requests')
                 ->send();
         }
 
-        return response()->json(['message' => 'Saved successfully'], 201);
+        return response()->json(['message' => "Permintaan pembelian barang berhasil " . ($isUpdateMode ? 'diupdate' : 'diajukan')], 201);
     }
 
     public function delete(Request $request)
@@ -153,7 +164,7 @@ class PurchaseRequestsController extends Controller
             'is_active' => false,
         ]);
 
-        return response()->json(['message' => 'Deleted successfully'], 201);
+        return response()->json(['message' => 'Permintaan pembelian barang berhasil divoid'], 201);
     }
 
     public function reopen(Request $request)
@@ -175,7 +186,7 @@ class PurchaseRequestsController extends Controller
 
         Notification::whereIn('id', json_decode($employee->atasan_langsung))
             ->title('Permintaan Pembelian Barang!')
-            ->message("Terdapat permintaan pembelian barang yang direopen oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+            ->message("Terdapat Permintaan Pembelian Barang yang telah direopen oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
             ->url('/purchase-requests')
             ->send();
 
@@ -212,8 +223,10 @@ class PurchaseRequestsController extends Controller
         $approvedCount = $children->whereNotNull('approved_at')->count();
         $rejectedCount = $children->whereNotNull('rejected_at')->count();
 
+        $message = ($request->action === 'approve' ? 'Approved' : 'Rejected') . " successfully";
+
         if (($approvedCount + $rejectedCount) !== $total) { // masih ada yang blm diproses
-            return response()->json(['message' => "{$request->action} successfully"], 201);
+            return response()->json(['message' => "$message successfully"], 201);
         }
 
         $parent = PurchaseRequest::findOrFail($parentId);
@@ -227,8 +240,16 @@ class PurchaseRequestsController extends Controller
 
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Disetujui!')
-                ->message("Permintaan pembelian barang yang anda ajukan telah disetujui oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->message("Permintaan Pembelian Barang yang anda ajukan telah disetujui oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
                 ->url('/purchase-requests')
+                ->send();
+
+            $parent->finance_status = 'Waiting to Delegate';
+
+            Notification::whereIn('id_jabatan', [45, 48])
+                ->title('Permintaan Pembelian Barang Diajukan!')
+                ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$parent->approved_by} pada " . date('d-m-Y'))
+                ->url('/purchases')
                 ->send();
         } elseif ($rejectedCount === $total) {
             $parent->status = 'Rejected';
@@ -238,7 +259,7 @@ class PurchaseRequestsController extends Controller
 
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Ditolak!')
-                ->message("Permintaan pembelian barang yang anda ajukan telah ditolak oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->message("Permintaan Pembelian Barang yang anda ajukan telah ditolak oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . " dengan alasan: " . $request->data['reason'])
                 ->url('/purchase-requests')
                 ->send();
         } else {
@@ -248,13 +269,21 @@ class PurchaseRequestsController extends Controller
 
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Disetujui sebagian!')
-                ->message("Permintaan pembelian barang yang anda ajukan telah disetujui sebagian oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->message("Permintaan Pembelian Barang yang anda ajukan telah disetujui sebagian oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
                 ->url('/purchase-requests')
+                ->send();
+
+            $parent->finance_status = 'Waiting to Delegate';
+
+            Notification::whereIn('id_jabatan', [45, 48])
+                ->title('Permintaan Pembelian Barang Diajukan!')
+                ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$parent->approved_by} pada " . date('d-m-Y'))
+                ->url('/purchases')
                 ->send();
         }
 
         $parent->save();
 
-        return response()->json(['message' => "{$request->action} successfully"], 201);
+        return response()->json(['message' => "Permintaan pembelian barang berhasil di{$request->action}"], 201);
     }
 }
