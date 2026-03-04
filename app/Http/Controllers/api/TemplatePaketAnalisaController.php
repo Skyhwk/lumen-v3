@@ -15,7 +15,15 @@ class TemplatePaketAnalisaController extends Controller
 {
     public function index(Request $request)
     {
-        $data = TemplatePaketAnalisa::where('tipe', 'non_kontrak')->where('is_active', true);
+        $data = TemplatePaketAnalisa::where('is_active', true);
+
+        if(isset($request->kategori) && !empty($request->kategori)){
+            $data->where('kategori', $request->kategori);
+        }
+
+        if(isset($request->sub_kategori) && !empty($request->sub_kategori)){
+            $data->where('sub_kategori', $request->sub_kategori);
+        }
 
         return DataTables::of($data)
             ->editColumn('data_pendukung_sampling', function ($item) {
