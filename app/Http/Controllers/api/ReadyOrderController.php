@@ -2330,14 +2330,24 @@ class ReadyOrderController extends Controller
                     ->orderBy('no_sampel', 'DESC')
                     ->first();
 
-                $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                // $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
                 // dd($no_urut_sample);
-                $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                // $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                if($cek_detail) {
+                    $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                    $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                } else {
+                    $no_urut_sample = 0;
+                    // $no_urut_cfr = 0;
+                }
                 $no = $no_urut_sample;
                 $trigger = 0;
-                $kategori = '';
-                $regulasi = $cek_detail->regulasi ?? [];
-                $parameter = $cek_detail->parameter ?? [];
+                // $kategori = '';
+                // $regulasi = $cek_detail->regulasi ?? [];
+                // $parameter = $cek_detail->parameter ?? [];
+                $kategori = ($cek_detail) ? $cek_detail->kategori_3 : '';
+                $regulasi = ($cek_detail && $cek_detail->regulasi != null) ? json_decode($cek_detail->regulasi) : [];
+                $parameter = ($cek_detail && $cek_detail->parameter != null) ? json_decode($cek_detail->parameter) : [];
                 $oldPeriode = '';
                 $mark = [];
                 foreach ($penambahan_data as $changes) {
@@ -2392,10 +2402,10 @@ class ReadyOrderController extends Controller
                             if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 // dump($cek_detail);
                                 if (
-                                    $cek_detail->kategori_3 != $value->kategori_2 ||
-                                    $cek_detail->regulasi != json_encode($value->regulasi) ||
-                                    $cek_detail->parameter != json_encode($value->parameter) ||
-                                    $cek_detail->periode != $value->periode_kontrak
+                                    $kategori != $value->kategori_2 ||
+                                    json_encode($regulasi) != json_encode($value->regulasi) ||
+                                    json_encode($parameter) != json_encode($value->parameter) ||
+                                    $oldPeriode != $value->periode_kontrak
                                 ) {
                                     $no_urut_cfr++;
                                 }

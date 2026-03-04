@@ -264,7 +264,8 @@ class RenderNonKontrak
             foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
                 $kategori = explode("-", $a->kategori_1);
                 $kategori2 = explode("-", $a->kategori_2);
-                $kategori2Value = isset($kategori2[1]) ? $kategori2[1] : '';
+                $is_paket = $a->is_paket_analisa ?? false;
+                $kategori2Value = (isset($kategori2[1]) ? $kategori2[1] : '') . ($is_paket ? ' - (' . strtoupper($a->paket) . ')' : '');
                 $penamaan_titik = "";
                 if ($a->penamaan_titik != null && $a->penamaan_titik != "") {
                     if (is_array($a->penamaan_titik)) {
@@ -299,8 +300,10 @@ class RenderNonKontrak
                         <hr>"
                 );*/
 
+                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                 $pdf->WriteHTML(
-                    ' <tr>
+                    ' <tr style="' . $rowBg . '">
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
                         <td style="font-size: 13px; padding:5px">
                         <b style="font-size: 13px;">' . $kategori2Value . "</b>

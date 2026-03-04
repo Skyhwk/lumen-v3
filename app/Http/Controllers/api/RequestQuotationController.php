@@ -25,6 +25,7 @@ use App\Models\HargaParameter;
 use App\Models\TemplatePenawaran;
 use App\Models\Parameter;
 use App\Models\Invoice;
+use App\Models\TemplatePaketAnalisa;
 use App\Jobs\RenderPdfPenawaran;
 use App\Services\GeneratePraSampling;
 use App\Services\RenderNonKontrakCopy;
@@ -505,7 +506,6 @@ class RequestQuotationController extends Controller
 
     private function createNonKontrak($payload)
     {
-
         foreach ($payload->data_pendukung as $index => $pengujian) {
             $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
             $penamaanTitik = $pengujian->penamaan_titik ?? [];
@@ -605,14 +605,16 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            // dd($payload->data_pendukung);
             if (isset($payload->data_pendukung)) {
                 foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-
+                    $is_paket = $item->is_paket_analisa;
+                    
+                    
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -652,48 +654,93 @@ class RequestQuotationController extends Controller
                         'total_harga' => array_sum($harga_db)
                     ];
 
-                    if ($harga_pertitik->volume != null) {
-                        $vol += floatval($harga_pertitik->volume);
-                    }
-
                     $titik = $item->jumlah_titik;
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param && 
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    } 
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    
+                    $temp_preparasi = [];
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
-                        'penamaan_titik' => $item->penamaan_titik,
+                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+                        'penamaan_titik' => isset($item->penamaan_titik) ? $item->penamaan_titik : [],
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                        'volume' => $vol
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
                     ];
 
-                    isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
 
-                    // dd($data_sampling[$i]);
                     switch ($kategori) {
                         case '1':
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_air += $hargaAnalisa;
                             break;
                         case '4':
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_udara += $hargaAnalisa;
                             break;
                         case '5':
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_emisi += $hargaAnalisa;
                             break;
                         case '6':
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_padatan += $hargaAnalisa;
                             break;
                         case '7':
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_swab_test += $hargaAnalisa;
                             break;
                         case '8':
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_tanah += $hargaAnalisa;
                             break;
                         case '9':
-                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_pangan += $hargaAnalisa;
                             break;
                     }
                 }
@@ -1516,98 +1563,147 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            foreach ($payload->data_pendukung as $i => $item) {
-                $param = $item->parameter;
-                $exp = explode("-", $item->kategori_1);
-                $kategori = $exp[0];
-                $vol = 0;
+            if (isset($payload->data_pendukung)) {
+                foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
+                    $param = $item->parameter;
+                    $exp = explode("-", $item->kategori_1);
+                    $kategori = $exp[0];
+                    $vol = 0;
+                    $is_paket = $item->is_paket_analisa;
+                    
+                    
+                    $parameter = [];
+                    foreach ($param as $par) {
+                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
+                        array_push($parameter, $cek_par->nama_lab);
+                    }
 
-                $parameter = [];
-                foreach ($param as $par) {
-                    $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                    array_push($parameter, $cek_par->nama_lab);
+                    $harga_db = [];
+                    $volume_db = [];
+                    foreach ($parameter as $param_) {
+                        $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                            ->where('nama_parameter', $param_)
+                            ->orderBy('id', 'ASC')
+                            ->get();
+
+                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
+                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                        }) ?? $ambil_data->first();
+
+                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
+                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
+                        //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
+                        // }) ?? $ambil_data->first();
+
+                        // // fix bug
+                        // if ($cek_harga_parameter) {
+                        //     $harga_db[] = $cek_harga_parameter->harga;
+                        //     $volume_db[] = $cek_harga_parameter->volume;
+                        // } else {
+                        //     $harga_db[] = 0;
+                        //     $volume_db[] = 0;
+                        // }
+                    }
+
+                    $harga_pertitik = (object) [
+                        'volume' => array_sum($volume_db),
+                        'total_harga' => array_sum($harga_db)
+                    ];
+
+                    $titik = $item->jumlah_titik;
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param && 
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    } 
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    
+                    $temp_preparasi = [];
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
+
+                    $data_sampling[$i] = [
+                        'kategori_1' => $item->kategori_1,
+                        'kategori_2' => $item->kategori_2,
+                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+                        'penamaan_titik' => isset($item->penamaan_titik) ? $item->penamaan_titik : [],
+                        'parameter' => $param,
+                        'jumlah_titik' => $titik,
+                        'total_parameter' => count($param),
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
+                    ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
+
+                    switch ($kategori) {
+                        case '1':
+                            $harga_air += $hargaAnalisa;
+                            break;
+                        case '4':
+                            $harga_udara += $hargaAnalisa;
+                            break;
+                        case '5':
+                            $harga_emisi += $hargaAnalisa;
+                            break;
+                        case '6':
+                            $harga_padatan += $hargaAnalisa;
+                            break;
+                        case '7':
+                            $harga_swab_test += $hargaAnalisa;
+                            break;
+                        case '8':
+                            $harga_tanah += $hargaAnalisa;
+                            break;
+                        case '9':
+                            $harga_pangan += $hargaAnalisa;
+                            break;
+                    }
                 }
-
-                $harga_db = [];
-                $volume_db = [];
-                foreach ($parameter as $param_) {
-                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                        ->where('nama_parameter', $param_)
-                        ->orderBy('id', 'ASC')
-                        ->get();
-
-                    $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                    }) ?? $ambil_data->first();
-
-                    $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
-                    // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                    //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
-                    // }) ?? $ambil_data->first();
-
-                    // // fix bug
-                    // if ($cek_harga_parameter) {
-                    //     $harga_db[] = $cek_harga_parameter->harga;
-                    //     $volume_db[] = $cek_harga_parameter->volume;
-                    // } else {
-                    //     $harga_db[] = 0;
-                    //     $volume_db[] = 0;
-                    // }
-                }
-
-                $harga_pertitik = (object) [
-                    'volume' => array_sum($volume_db),
-                    'total_harga' => array_sum($harga_db)
-                ];
-
-                if ($harga_pertitik->volume != null) {
-                    $vol += floatval($harga_pertitik->volume);
-                }
-
-                $titik = $item->jumlah_titik;
-
-                $regulasi = [];
-                if (isset($item->regulasi) && !empty($item->regulasi)) {
-                    $regulasi = $item->regulasi;
-                }
-
-                $data_sampling[$i] = [
-                    'kategori_1' => $item->kategori_1,
-                    'kategori_2' => $item->kategori_2,
-                    'regulasi' => $regulasi,
-                    'penamaan_titik' => $item->penamaan_titik,
-                    'parameter' => $param,
-                    'jumlah_titik' => $titik,
-                    'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                    'volume' => $vol
-                ];
-
-                switch ($kategori) {
-                    case '1':
-                        $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '4':
-                        $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '5':
-                        $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '6':
-                        $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '7':
-                        $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '8':
-                        $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '9':
-                        $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                }
+            } else {
+                $data_sampling = [];
             }
 
             $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
@@ -5998,6 +6094,63 @@ class RequestQuotationController extends Controller
             'message' => 'Success',
             'data' => \explode('/', $data->no_sampel)[1]
         ], 200);
+    }
+
+    public function indexPaket(Request $request)
+    {
+        $query = TemplatePaketAnalisa::where('is_active', true)
+            ->where('kategori', 'like',  $request->kategori . '-%');
+
+        if (!empty($request->sub_kategori) && $request->sub_kategori !== '0') {
+            $query->where('sub_kategori', 'like', $request->sub_kategori . '-%');
+        }
+
+        $data = $query->get();
+
+        return DataTables::of($data)
+            ->editColumn('data_pendukung_sampling', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+
+                if (empty($data) || ! is_array($data)) {
+                    return [];
+                }
+
+                foreach ($data as $i => &$row) {
+                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
+                }
+
+                return $data;
+            })
+            ->addColumn('harga_paket', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+                $harga_paket = 0;
+                if (empty($data) || ! is_array($data)) {
+                    return 0;
+                }
+
+                foreach ($data as $i => &$row) {
+                    $harga_paket += $row['harga_paket'];
+                }
+                return $harga_paket;
+            })
+            ->make(true);
+    }
+
+    public function getKategoriPaket(Request $request)
+    {
+        $data = MasterKategori::where('is_active', true)->select('id', 'nama_kategori')->get();
+
+        $data->prepend((object) [
+            'id' => '0',
+            'nama_kategori' => 'Multi Kategori',
+        ]);
+        return response()->json($data);
+    }
+
+    public function getSubkategoriPaket(Request $request)
+    {
+        $data = MasterSubKategori::where('is_active', true)->where('id_kategori', $request->kategori_id)->select('id', 'nama_sub_kategori', 'id_kategori')->get();
+        return response()->json($data);
     }
 
 }
