@@ -34,6 +34,7 @@ use Illuminate\Support\Facades\Log;
 class SamplingPlanController extends Controller
 {
 
+    /*  */
     public function index(Request $request)
     {
         
@@ -140,8 +141,25 @@ class SamplingPlanController extends Controller
                 $query->where('kategori', 'like', '%' . $keyword . '%');
             })
             // Filter kolom 'sampler' dengan where biasa, karena havingRaw tidak berfungsi di sini
+            // ->filterColumn('sampler', function ($query, $keyword) {
+            //     $query->where('sampler', 'like', '%' . $keyword . '%');
+            // })
             ->filterColumn('sampler', function ($query, $keyword) {
-                $query->where('sampler', 'like', '%' . $keyword . '%');
+                // Dapatkan nama tabel asli secara dinamis (misal: 'jadwals' atau 'jadwal_samplers')
+                $table = $query->getModel()->getTable(); 
+
+                // Gunakan WHERE EXISTS agar outer query tidak membuang row teman-temannya
+                $query->whereExists(function ($subquery) use ($keyword, $table) {
+                    $subquery->select(DB::raw(1))
+                             ->from("$table as sub")
+                             // Hubungkan subquery dengan outer query menggunakan kunci Grouping Anda
+                             // (Pastikan kolom-kolom ini adalah yang mendefinisikan 1 jadwal yang sama)
+                             ->whereColumn("sub.id_sampling", "$table.id_sampling")
+                             ->whereColumn("sub.tanggal", "$table.tanggal")
+                             ->whereColumn("sub.no_quotation", "$table.no_quotation")
+                             // Filter pencarian sampler di sini
+                             ->where('sub.sampler', 'like', '%' . $keyword . '%');
+                });
             })
             ->filterColumn('created_by', function ($query, $keyword) {
                 $query->where(function ($q) use ($keyword) {

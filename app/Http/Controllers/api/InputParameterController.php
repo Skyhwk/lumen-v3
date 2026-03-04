@@ -3203,7 +3203,7 @@ class InputParameterController extends Controller
 				];
 			}
 
-			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 308];
+			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 306, 307, 308];
 			DB::beginTransaction();
 			try {
 				$data = new LingkunganHeader;

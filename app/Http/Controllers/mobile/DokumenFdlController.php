@@ -243,7 +243,7 @@ class DokumenFdlController extends Controller
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
                 ->whereIn('id_jabatan', [41, 42])
                 ->exists();
-
+            
             // Deteksi apakah jenis quotation kontrak (QTC) atau non-kontrak (QT)
             $isKontrak = Str::contains($request->no_quotation, '/QTC/');
 
@@ -262,6 +262,8 @@ class DokumenFdlController extends Controller
             if ($isKontrak) {
                 $data = $data->where('tanggal_sampling', $request->tangal_sampling);
                 // $data->where('tanggal_sampling', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
+            }else{
+                $data = $data->where('tanggal_sampling', $request->tangal_sampling);
             }
 
             // Eksekusi query
@@ -328,7 +330,7 @@ class DokumenFdlController extends Controller
                 $allowPush = false;
                 $samplerTerpilih = $loggedInUser;
 
-                if ($isProgrammer) {
+                if (!$isProgrammer) {
                     // Programmer bisa lihat semua, ambil salah satu sampler
                     $allowPush = true;
 
@@ -373,13 +375,13 @@ class DokumenFdlController extends Controller
                     ];
                 }
             }
-            
+// dd($data);
             $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
                 ->where('no_quotation', $request->no_quotation)
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
                 ->first();
-    
+            
             // Lakukan pencocokan signature per baris data
             if ($persiapan && $persiapan->detail_cs_documents) {
                 $csDocuments = json_decode($persiapan->detail_cs_documents, true);
@@ -457,7 +459,7 @@ class DokumenFdlController extends Controller
     public function updateData(Request $request)
     {
     
-        // dd($request->all());
+        
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
             try {
@@ -586,10 +588,10 @@ class DokumenFdlController extends Controller
                 if (! $nomorQuotation) {
                     return response()->json(['message' => 'Nomor quotation tidak ditemukan'], 400);
                 }
-
+              
                 // PersiapanSampelHeader
                 $persiapanSampel = PersiapanSampelHeader::where('no_quotation', $nomorQuotation)->where('tanggal_sampling', $tanggalSampling)->where('is_active', 1)->orderBy('id', 'desc')->first();
-                // dd($persiapanSampel);
+               
                 if (! $persiapanSampel) {
                     return response()->json(['message'=>'Persiapan Belum Disiapkan Harap Menghubungi Admin Sampling Untuk Melakukan Update Persiapan'],401);
                     // $persiapanSampel = new PersiapanSampelHeader();

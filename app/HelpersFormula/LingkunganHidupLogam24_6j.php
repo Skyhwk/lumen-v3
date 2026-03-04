@@ -62,6 +62,9 @@ class LingkunganHidupLogam24_6j
             $C1 = 0;
         } else {
             foreach($data->ks as $key => $value) {
+                if($data->tipe_data == 'ulk'){
+                    $Vstd = round(($data->average_flow * $data->durasi) / 1000, 1);
+                }
                 $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 
                 $result = round($rawC, 4);
@@ -73,13 +76,21 @@ class LingkunganHidupLogam24_6j
 
         // tipe data = ambient, ulk, volatile
         if($data->tipe_data == 'ulk'){
-            $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+            if($data->parameter == 'Pb (24 Jam)'){
+                $arr_hasil_non_negatif = array_map(function($val){
+                    return $val < 0 ? 0 : $val;
+                }, $arr_hasil);
+                $C15 = count($arr_hasil_non_negatif) > 0 ? round(array_sum($arr_hasil_non_negatif) / count($arr_hasil_non_negatif), 4) : 0;
+                $satuan = 'ug/Nm³';
+            }else {
+                $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+                $satuan = 'mg/m³';
+            }
 
             // if(!is_null($mdl) && $C1 < 0.000013) {
             //     $C1 = '<0.000013';
             // }
 
-            $satuan = 'mg/m³';
         }else if($data->tipe_data == 'ambient') {
             $C = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
 
