@@ -218,7 +218,7 @@ class RequestSamplingPlanRevisiController extends Controller
 
     public function addJadwal(Request $request)
     {
-        // dd($request->all());
+        
         try {
 
             //code...
@@ -246,6 +246,7 @@ class RequestSamplingPlanRevisiController extends Controller
                 "isokinetic" => $request->isokinetic,
                 "pendampingan_k3" => $request->pendampingan_k3
             ];
+            
             $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
 
             $this->updateOrderDetail($ObjectData, $request->tanggal);
