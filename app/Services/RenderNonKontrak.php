@@ -300,7 +300,7 @@ class RenderNonKontrak
                         <hr>"
                 );*/
 
-                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5FF;' : '';
+                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
 
                 $pdf->WriteHTML(
                     ' <tr style="' . $rowBg . '">
