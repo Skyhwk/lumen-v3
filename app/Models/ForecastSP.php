@@ -10,4 +10,10 @@ class ForecastSP extends Sector
 
     public $timestamps = false;
     protected $guarded = [];
+
+
+    public function pelanggan()
+    {
+        return $this->belongsTo(MasterPelanggan::class, 'pelanggan_ID', 'id_pelanggan');
+    }
 }
