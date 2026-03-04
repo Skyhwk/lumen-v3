@@ -1203,15 +1203,18 @@ class JadwalServices
              */
 
             $no_document = $dataAdd->no_document;
+            
             if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
+                
                 $originalNoDocument = substr($no_document, 0, $matches[0][1]);
+                
                 $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
                     ->where('no_document', 'like', "{$originalNoDocument}%")
                     ->where('no_document', '<>', $no_document)
-                    ->where('periode_kontrak',$dataAdd->periode_kontrak)
+                    ->where('periode_kontrak',$dataAdd->periode)
                     ->orderBy('no_quotation')
                     ->pluck('id');
-
+                
                 if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
                     $noQt = explode('/', $dataAdd->no_quotation);
                     $updateQuery = Jadwal::whereIn('id_sampling', $documents);
@@ -1223,7 +1226,7 @@ class JadwalServices
                     $updateQuery->update(['is_active' => false]);
                 }
             }
-
+            
             $wilayah = null;
             if (explode('/', $dataAdd->no_quotation)[1] == 'QTC') {
                 $cek = QuotationKontrakH::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
