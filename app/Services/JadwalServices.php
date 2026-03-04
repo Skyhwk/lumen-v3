@@ -1208,6 +1208,7 @@ class JadwalServices
                 $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
                     ->where('no_document', 'like', "{$originalNoDocument}%")
                     ->where('no_document', '<>', $no_document)
+                    ->where('periode_kontrak',$dataAdd->periode_kontrak)
                     ->orderBy('no_quotation')
                     ->pluck('id');
 
