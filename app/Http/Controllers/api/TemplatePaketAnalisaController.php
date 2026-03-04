@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
@@ -8,7 +9,10 @@ use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\Parameter;
 use App\Models\TemplatePaketAnalisa;
-use App\Services\GetBawahan;use Carbon\Carbon;use Illuminate\Http\Request;use Illuminate\Support\Facades\DB; // Para Master
+use App\Services\GetBawahan;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB; // Para Master
 use Yajra\DataTables\Facades\DataTables;
 
 class TemplatePaketAnalisaController extends Controller
@@ -16,14 +20,6 @@ class TemplatePaketAnalisaController extends Controller
     public function index(Request $request)
     {
         $data = TemplatePaketAnalisa::where('is_active', true);
-
-        if(isset($request->kategori) && !empty($request->kategori)){
-            $data->where('kategori', $request->kategori);
-        }
-
-        if(isset($request->sub_kategori) && !empty($request->sub_kategori)){
-            $data->where('sub_kategori', $request->sub_kategori);
-        }
 
         return DataTables::of($data)
             ->editColumn('data_pendukung_sampling', function ($item) {
@@ -56,7 +52,16 @@ class TemplatePaketAnalisaController extends Controller
 
     public function getKategori(Request $request)
     {
-        $data = MasterKategori::where('is_active', true)->select('id', 'nama_kategori')->get();
+        $data = MasterKategori::where('is_active', true)
+            ->select('id', 'nama_kategori')
+            ->get();
+
+        // Tambahkan Multi Kategori di paling atas
+        $data->prepend([
+            'id' => 0,
+            'nama_kategori' => 'Multi Kategori'
+        ]);
+
         return response()->json($data);
     }
 
@@ -125,7 +130,8 @@ class TemplatePaketAnalisaController extends Controller
         try {
             $data                = new TemplatePaketAnalisa();
             $data->nama_template = $request->nama_template;
-            $data->tipe          = $request->mode;
+            $data->kategori      = $request->kategori;
+            $data->sub_kategori  = $request->sub_kategori;
             $data->created_by    = $this->karyawan;
             $data->created_at    = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
