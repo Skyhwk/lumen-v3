@@ -6101,4 +6101,10 @@ class RequestQuotationController extends Controller
         return response()->json($data);
     }
 
+    public function getSubkategoriPaket(Request $request)
+    {
+        $data = MasterSubKategori::where('is_active', true)->where('id_kategori', $request->kategori_id)->select('id', 'nama_sub_kategori', 'id_kategori')->get();
+        return response()->json($data);
+    }
+
 }
