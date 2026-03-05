@@ -109,6 +109,8 @@ use App\Services\SalesDailyQSD;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use Mpdf;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
 Carbon::setLocale('id');
 
@@ -6031,5 +6033,119 @@ private function detectChangedPoints($oldPoints, $newPoints)
             ->setTemplate($request->template)
             ->setFont($request->font)
             ->generate();
+    }
+
+    public function getDataCustomerQuery()
+    {
+
+        $collectData = [];
+        
+        MasterPelanggan::with([
+            'pic_pelanggan',
+            'kontak_pelanggan',
+            'latestOrder:id,no_order,tanggal_order,id_pelanggan',
+            'latestNonKontrakQuotation:id,pelanggan_ID,no_document,created_at,updated_at',
+            'latestKontrakQuotation:id,pelanggan_ID,no_document,created_at,updated_at,periode_kontrak_akhir',
+            'latestDFUS:id,id_pelanggan,sales_penanggung_jawab,tanggal',
+        ])
+        ->select(
+            'id',
+            'id_pelanggan',
+            'nama_pelanggan',
+            'sales_id',
+            'sales_penanggung_jawab',
+            'is_active'
+        )
+        ->where('is_active', true)
+        ->where('sales_id', '<>', 127)
+        ->whereNotNull('sales_id')
+        ->chunk(2000, function ($customers) use (&$collectData) {
+
+            foreach ($customers as $customer) {
+
+                // ❌ Kalau pernah order → skip
+                if ($customer->latestOrder) {
+                    continue;
+                }
+                
+                // ❌ Kalau tidak punya quotation → skip
+                if (!$customer->latestKontrakQuotation && !$customer->latestNonKontrakQuotation) {
+                    continue;
+                }
+
+                $dfus = $customer->latestDFUS;
+                if (!$dfus || !$dfus->tanggal) {
+                    continue;
+                }
+
+                $tanggal = Carbon::parse($dfus->tanggal);
+
+                $cutOffDate = Carbon::create(2026, 2, 1)->startOfDay();
+
+                if ($tanggal->lt($cutOffDate)) {
+                    $pic = optional($customer->pic_pelanggan->first());
+                    $collectData[] = [
+                        'ID Pelanggan' => $customer->id_pelanggan,
+                        'Nama Perusahaan' => $customer->nama_pelanggan,
+                        'No Telepon Perusahaan' => 
+                            $customer->kontak_pelanggan
+                                ->pluck('no_tlp_perusahaan')
+                                ->filter()
+                                ->implode(', ') ?: '-',
+                        'Nama PIC' => $pic->nama_pic ?? '-',
+                        'Nomor PIC' => $pic->no_tlp_pic ?? '-',
+                        'Jabatan PIC' => $pic->jabatan_pic ?? '-',
+                    ];
+                }
+            }
+        });
+
+        $fileName = 'customer_reassign_januari_2026.xlsx';
+        $directory = public_path('export-excel');
+        $filePath = $directory . '/' . $fileName;
+
+        // pastikan folder ada
+        if (!file_exists($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // ====== HEADER ======
+        $headers = [
+            'ID Pelanggan',
+            'Nama Perusahaan',
+            'No Telepon Perusahaan',
+            'Nama PIC',
+            'Nomor PIC',
+            'Jabatan PIC',
+        ];
+
+        $col = 'A';
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . '1', $header);
+            $col++;
+        }
+
+        // ====== DATA ======
+        $row = 2;
+        foreach ($collectData as $data) {
+            $col = 'A';
+            foreach ($data as $value) {
+                $sheet->setCellValue($col . $row, $value);
+                $col++;
+            }
+            $row++;
+        }
+
+        // Save file
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($filePath);
+
+        return response()->json([
+            'message' => 'Excel berhasil dibuat',
+            'path' => url('export-excel/' . $fileName)
+        ]);
     }
 }
