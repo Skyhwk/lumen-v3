@@ -163,7 +163,8 @@ class SamplingPlanController extends Controller
                             ->whereRaw("(sub.kategori <=> $table.kategori)")
                             ->whereRaw("(sub.status <=> $table.status)")
                             ->whereRaw("(sub.id_cabang <=> $table.id_cabang)")       // NULL-safe
-                            ->whereRaw("(sub.wilayah <=> $table.wilayah)")           // NULL-safe
+                            ->whereRaw("(sub.wilayah <=> $table.wilayah)")          // NULL-safe
+                            ->whereRaw("(sub.is_active <=> $table.is_active)")          // NULL-safe
                             ->where('sub.sampler', 'like', '%' . $keyword . '%');
                 });
             })
