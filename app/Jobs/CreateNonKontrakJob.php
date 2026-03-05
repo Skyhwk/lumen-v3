@@ -100,7 +100,15 @@ class CreateNonKontrakJob extends Job
             $grand_total = 0;
             // $total_diskon = 0;
 
+            $biaya_preparasi_padatan = [];
+            $total_biaya_preparasi = 0;
             if (isset($payload->data_pendukung)) {
+                if (isset($payload->data_pendukung[0]->biaya_preparasi)) {
+                    $biaya_preparasi_padatan = $payload->data_pendukung[0]->biaya_preparasi;
+                    foreach ($payload->data_pendukung[0]->biaya_preparasi as $item) {
+                        $total_biaya_preparasi += $item->harga;
+                    }
+                }
                 foreach ($payload->data_pendukung as $i => $item) {
                     //per kategori
                     $param = $item->parameter;
@@ -157,19 +165,19 @@ class CreateNonKontrakJob extends Job
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
                     
                     $temp_preparasi = [];
-                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
-                        foreach ($item->biaya_preparasi as $pre) {
-                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
-                                $temp_preparasi[] = [
-                                    'Deskripsi' => $pre->desc_preparasi,
-                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
-                                ];
-                            }
-                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
-                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
-                            }
-                        }
-                    }
+                    // if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                    //     foreach ($item->biaya_preparasi as $pre) {
+                    //         if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                    //             $temp_preparasi[] = [
+                    //                 'Deskripsi' => $pre->desc_preparasi,
+                    //                 'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                    //             ];
+                    //         }
+                    //         if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                    //             $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                    //         }
+                    //     }
+                    // }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -223,6 +231,8 @@ class CreateNonKontrakJob extends Job
             $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
             $data->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
 
+            $data->biaya_preparasi_padatan = json_encode($biaya_preparasi_padatan);
+            $data->total_biaya_preparasi = $total_biaya_preparasi;
             $data->harga_air = $harga_air;
             $data->harga_udara = $harga_udara;
             $data->harga_emisi = $harga_emisi;
