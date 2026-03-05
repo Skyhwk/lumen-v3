@@ -145,20 +145,27 @@ class SamplingPlanController extends Controller
             //     $query->where('sampler', 'like', '%' . $keyword . '%');
             // })
             ->filterColumn('sampler', function ($query, $keyword) {
-                // Dapatkan nama tabel asli secara dinamis (misal: 'jadwals' atau 'jadwal_samplers')
-                $table = $query->getModel()->getTable(); 
+                $table = $query->getModel()->getTable();
 
-                // Gunakan WHERE EXISTS agar outer query tidak membuang row teman-temannya
                 $query->whereExists(function ($subquery) use ($keyword, $table) {
                     $subquery->select(DB::raw(1))
-                             ->from("$table as sub")
-                             // Hubungkan subquery dengan outer query menggunakan kunci Grouping Anda
-                             // (Pastikan kolom-kolom ini adalah yang mendefinisikan 1 jadwal yang sama)
-                             ->whereColumn("sub.id_sampling", "$table.id_sampling")
-                             ->whereColumn("sub.tanggal", "$table.tanggal")
-                             ->whereColumn("sub.no_quotation", "$table.no_quotation")
-                             // Filter pencarian sampler di sini
-                             ->where('sub.sampler', 'like', '%' . $keyword . '%');
+                            ->from("$table as sub")
+                            ->whereRaw("(sub.id_sampling <=> $table.id_sampling)")
+                            ->whereRaw("(sub.parsial <=> $table.parsial)")           // NULL-safe
+                            ->whereRaw("(sub.no_quotation <=> $table.no_quotation)")
+                            ->whereRaw("(sub.nama_perusahaan <=> $table.nama_perusahaan)")
+                            ->whereRaw("(sub.tanggal <=> $table.tanggal)")
+                            ->whereRaw("(sub.periode <=> $table.periode)")
+                            ->whereRaw("(sub.jam_mulai <=> $table.jam_mulai)")
+                            ->whereRaw("(sub.jam_selesai <=> $table.jam_selesai)")
+                            ->whereRaw("(sub.durasi <=> $table.durasi)")
+                            ->whereRaw("(sub.driver <=> $table.driver)")             // NULL-safe
+                            ->whereRaw("(sub.kategori <=> $table.kategori)")
+                            ->whereRaw("(sub.status <=> $table.status)")
+                            ->whereRaw("(sub.id_cabang <=> $table.id_cabang)")       // NULL-safe
+                            ->whereRaw("(sub.wilayah <=> $table.wilayah)")          // NULL-safe
+                            ->whereRaw("(sub.is_active <=> $table.is_active)")          // NULL-safe
+                            ->where('sub.sampler', 'like', '%' . $keyword . '%');
                 });
             })
             ->filterColumn('created_by', function ($query, $keyword) {
