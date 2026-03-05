@@ -232,4 +232,28 @@ class PurchasesController extends Controller
 
         return response()->json(['message' => "Berhasil menyimpan progress"], 200);
     }
+
+    public function exportPdf(Request $request)
+    {
+        $purchaseRequest = PurchaseRequest::with(['items' => fn($q) => $q->whereNull('rejected_at'), 'employee'])->findOrFail($request->id);
+
+        $mpdf = new \Mpdf\Mpdf([
+            'format' => 'A4',
+            'orientation' => 'P',
+            'margin_left' => 15,
+            'margin_right' => 15,
+            'margin_top' => 15,
+            'margin_bottom' => 15,
+        ]);
+
+        $html = view('pdf.purchase-request-finance', compact('purchaseRequest'))->render();
+        $mpdf->WriteHTML($html);
+
+        $pdfString = $mpdf->Output('', 'S');
+
+        return response()->json([
+            'data' => base64_encode($pdfString),
+            'message' => 'PDF generated successfully'
+        ], 200);
+    }
 }

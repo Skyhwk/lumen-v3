@@ -8,10 +8,10 @@ use Illuminate\Http\Request;
 
 use DataTables;
 
-use App\Services\Notification;
+use Mpdf;
+use App\Services\{Notification, GetBawahan};
 
 use App\Models\{PurchaseRequest, PurchaseRequestItem, DataAset};
-use App\Services\GetBawahan;
 
 class PurchaseRequestsController extends Controller
 {
@@ -285,5 +285,29 @@ class PurchaseRequestsController extends Controller
         $parent->save();
 
         return response()->json(['message' => "Permintaan pembelian barang berhasil di{$request->action}"], 201);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $purchaseRequest = PurchaseRequest::with(['items', 'employee'])->findOrFail($request->id);
+
+        $mpdf = new \Mpdf\Mpdf([
+            'format' => 'A4',
+            'orientation' => 'P',
+            'margin_left' => 15,
+            'margin_right' => 15,
+            'margin_top' => 15,
+            'margin_bottom' => 15,
+        ]);
+
+        $html = view('pdf.purchase-request', compact('purchaseRequest'))->render();
+        $mpdf->WriteHTML($html);
+
+        $pdfString = $mpdf->Output('', 'S');
+
+        return response()->json([
+            'data' => base64_encode($pdfString),
+            'message' => 'PDF generated successfully'
+        ], 200);
     }
 }
