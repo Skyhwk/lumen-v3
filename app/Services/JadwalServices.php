@@ -1203,7 +1203,7 @@ class JadwalServices
              */
 
             $no_document = $dataAdd->no_document;
-            
+            /* test
             if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
                 
                 $originalNoDocument = substr($no_document, 0, $matches[0][1]);
@@ -1217,6 +1217,37 @@ class JadwalServices
                 
                 if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
                     $noQt = explode('/', $dataAdd->no_quotation);
+                    $updateQuery = Jadwal::whereIn('id_sampling', $documents);
+
+                    if (isset($noQt[1]) && $noQt[1] === 'QT') {
+                        $updateQuery->where('no_quotation', $dataAdd->no_quotation);
+                    }
+
+                    $updateQuery->update(['is_active' => false]);
+                }
+            }
+             */
+            if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
+                $originalNoDocument = substr($no_document, 0, $matches[0][1]);
+                // Hanya cari dokumen ORI saja (tanpa suffix R), bukan semua revisi sebelumnya
+                $documentsQuery = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
+                    ->where('no_document', 'like', "{$originalNoDocument}%") // ← EXACT MATCH, bukan LIKE
+                    ->where('no_document', '<>', $no_document);
+
+                $noQt = explode('/', $dataAdd->no_quotation);
+
+                if (isset($noQt[1]) && $noQt[1] === 'QTC') {
+                    // Kontrak: pastikan periode sama — hanya matikan ori di bulan yang sama
+                    if (empty($dataAdd->periode)) {
+                        throw new Exception("Periode wajib diisi untuk QTC saat revisi dokumen.", 401);
+                    }
+                    $documentsQuery->where('periode_kontrak', $dataAdd->periode);
+                }
+                // QT: tidak perlu filter periode karena memang null semua
+
+                $documents = $documentsQuery->pluck('id');
+
+                if ($documents->isNotEmpty()) {
                     $updateQuery = Jadwal::whereIn('id_sampling', $documents);
 
                     if (isset($noQt[1]) && $noQt[1] === 'QT') {
