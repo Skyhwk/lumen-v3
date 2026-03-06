@@ -2792,8 +2792,8 @@ class RequestQuotationController extends Controller
                         $data_sampling[$i]['is_paket'] = $is_paket;
                         $data_sampling[$i]['kelipatan_titik'] = $kelipatan_titik;
                         $data_sampling[$i]['is_paket_analisa'] = true;
-                        $data_sampling[$i]['paket_id'] = $item->paket_id;
-                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['paket_id'] = $is_paket;
+                        $data_sampling[$i]['paket'] = $dataPaket->nama_template;
                         $data_sampling[$i]['kelipatan_dasar'] = $kelipatan_titik;
                     }
 
@@ -4330,8 +4330,8 @@ class RequestQuotationController extends Controller
                         $data_sampling[$i]['is_paket'] = $is_paket;
                         $data_sampling[$i]['kelipatan_titik'] = $kelipatan_titik;
                         $data_sampling[$i]['is_paket_analisa'] = true;
-                        $data_sampling[$i]['paket_id'] = $item->paket_id;
-                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['paket_id'] = $is_paket;
+                        $data_sampling[$i]['paket'] = $dataPaket->nama_template;
                         $data_sampling[$i]['kelipatan_dasar'] = $kelipatan_titik;
                     }
 
