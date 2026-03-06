@@ -562,6 +562,7 @@ class RequestQrController extends Controller
                 $param = [];
                 $regulasi = '';
                 $periode = '';
+                $is_paket = $data_pendukungH['is_paket_analisa'] ?? false;
 
                 if ($data_pendukungH['parameter'] != null)
                     $param = $data_pendukungH['parameter'];
@@ -595,6 +596,34 @@ class RequestQrController extends Controller
                     $reqtitik = $data_pendukungH['jumlah_titik'];
                 }
 
+                $hargaPaket = 0;
+                $hargaSatuan = 0;
+                $kelipatan = 0;
+                // if($key == 1) dd($data_pendukungH);
+                if($is_paket){
+                    $dataPaket = TemplatePaketAnalisa::where('id', $data_pendukungH['paket_id'])->first();
+                    $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                    foreach ($dataPaketAnalisa as $paket) {
+                        if(
+                            $paket['regulasi'] == $data_pendukungH['regulasi'] &&
+                            $paket['parameter'] == $param && 
+                            $paket['kategori_1'] == $data_pendukungH['kategori_1'] &&
+                            $paket['kategori_2'] == $data_pendukungH['kategori_2']
+                        ) {
+                            $pengali = ($reqtitik / (int)$paket['jumlah_titik']);
+                            $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                            $hargaPaket += $harga_sementara;
+                            $hargaSatuan = $paket['harga_paket'];
+                            $kelipatan = (int)$paket['jumlah_titik'];
+                        } else {
+                            continue;
+                        }
+                    }
+                } 
+
+                $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $reqtitik);
+                $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+
                 $temp_prearasi = [];
                 if ($data_pendukungH['biaya_preparasi'] != null || $data_pendukungH['biaya_preparasi'] != "") {
                     foreach ($data_pendukungH['biaya_preparasi'] as $pre) {
@@ -611,7 +640,7 @@ class RequestQrController extends Controller
                 $grand_total += $harga_total;
                 $total_volume += $vol;
 
-                array_push($data_pendukung_h, (object) [
+                $dataToPush = (object) [
                     'kategori_1' => $data_pendukungH['kategori_1'],
                     'kategori_2' => $data_pendukungH['kategori_2'],
                     'regulasi' => $regulasi,
@@ -619,12 +648,21 @@ class RequestQrController extends Controller
                     'jumlah_titik' => $data_pendukungH['jumlah_titik'],
                     'penamaan_titik' => isset($data_pendukungH['penamaan_titik']) ? $data_pendukungH['penamaan_titik'] : "",
                     'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => $harga_total,
+                    'harga_satuan' => $hargaPerTitik,
+                    'harga_total' => $hargaAnalisa,
                     'volume' => $vol,
                     'periode' => $periode,
                     'biaya_preparasi' => $biaya_preparasi
-                ]);
+                ];
+                
+                if ($is_paket) {
+                    $dataToPush->paket_id = $data_pendukungH['paket_id'];
+                    $dataToPush->paket = $data_pendukungH['paket'];
+                    $dataToPush->kelipatan_dasar = $kelipatan;
+                    $dataToPush->is_paket_analisa = $is_paket;
+                }
+
+                array_push($data_pendukung_h, $dataToPush);
 
                 // Store all periods in the period array
                 if (is_array($data_pendukungH['periode'])) {

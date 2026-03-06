@@ -21,6 +21,14 @@ class TemplatePaketAnalisaController extends Controller
     {
         $data = TemplatePaketAnalisa::where('is_active', true);
 
+        if(isset($request->kategori) && !empty($request->kategori)){
+            $data->where('kategori', $request->kategori);
+        }
+
+        if(isset($request->sub_kategori) && !empty($request->sub_kategori)){
+            $data->where('sub_kategori', $request->sub_kategori);
+        }
+
         return DataTables::of($data)
             ->editColumn('data_pendukung_sampling', function ($item) {
                 $data = json_decode($item->data_pendukung_sampling, true);
