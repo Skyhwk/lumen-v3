@@ -50,6 +50,9 @@ class CreateKontrakJob extends Job
 
                 if (!isset($grouped[$key])) {
                     $grouped[$key] = (object)[
+                        'paket'           => $sampling->paket,
+                        'is_paket'        => $sampling->is_paket,
+                        'kelipatan_titik' => $sampling->kelipatan_titik,
                         'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
                         'penamaan_titik'  => [], // default kosong
