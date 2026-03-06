@@ -2707,6 +2707,8 @@ class RequestQuotationController extends Controller
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
 
                 foreach ($dataPendukungHeader as $i => $item) {
+                    
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : 0;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
@@ -2747,6 +2749,31 @@ class RequestQuotationController extends Controller
 
                     $titik = $item->jumlah_titik;
 
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
@@ -2754,12 +2781,21 @@ class RequestQuotationController extends Controller
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
+                        'harga_satuan' => $is_paket ? $hargaSatuan : $harga_pertitik->total_harga,
+                        'harga_total' => $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $titik,
                         'volume' => $vol,
                         'periode' => $item->periode_kontrak,
                         'biaya_preparasi' => []
                     ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket'] = $is_paket;
+                        $data_sampling[$i]['kelipatan_titik'] = $kelipatan_titik;
+                        $data_sampling[$i]['is_paket_analisa'] = true;
+                        $data_sampling[$i]['paket_id'] = $is_paket;
+                        $data_sampling[$i]['paket'] = $dataPaket->nama_template;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan_titik;
+                    }
 
                     isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
 
@@ -4210,6 +4246,7 @@ class RequestQuotationController extends Controller
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
                 foreach ($dataPendukungHeader as $i => $item) {
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
@@ -4250,6 +4287,31 @@ class RequestQuotationController extends Controller
 
                     $titik = $item->jumlah_titik;
 
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
@@ -4257,12 +4319,21 @@ class RequestQuotationController extends Controller
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
+                        'harga_satuan' => $is_paket ? $hargaSatuan : $harga_pertitik->total_harga,
+                        'harga_total' => $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $titik,
                         'volume' => $vol,
                         'periode' => $item->periode_kontrak,
                         'biaya_preparasi' => []
                     ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket'] = $is_paket;
+                        $data_sampling[$i]['kelipatan_titik'] = $kelipatan_titik;
+                        $data_sampling[$i]['is_paket_analisa'] = true;
+                        $data_sampling[$i]['paket_id'] = $is_paket;
+                        $data_sampling[$i]['paket'] = $dataPaket->nama_template;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan_titik;
+                    }
 
                     isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
 
