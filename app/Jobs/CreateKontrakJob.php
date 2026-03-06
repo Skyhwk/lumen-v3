@@ -8,6 +8,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
+use App\Models\TemplatePaketAnalisa;
 
 class CreateKontrakJob extends Job
 {
@@ -28,11 +29,11 @@ class CreateKontrakJob extends Job
     private function groupDataSampling(array $data)
     {
         $grouped = [];
-    
+
         foreach ($data as $periodeItem) {
             $periode = $periodeItem->periode_kontrak ?? null;
             if (!$periode || empty($periodeItem->data_sampling)) continue;
-    
+
             foreach ($periodeItem->data_sampling as $sampling) {
                 // Buat key unik untuk mengelompokkan
                 $key = md5(json_encode([
@@ -43,10 +44,10 @@ class CreateKontrakJob extends Job
                     'total_parameter' => $sampling->total_parameter,
                     'regulasi'        => $sampling->regulasi,
                 ]));
-    
+
                 // Hapus properti yang tidak diperlukan
                 unset($sampling->harga_satuan, $sampling->harga_total, $sampling->volume);
-    
+
                 if (!isset($grouped[$key])) {
                     $grouped[$key] = (object)[
                         'kategori_1'      => $sampling->kategori_1,
@@ -67,15 +68,15 @@ class CreateKontrakJob extends Job
                 }
             }
         }
-    
+
         return array_values($grouped);
     }
 
     public function handle()
-    { 
+    {
         $payload = $this->data;
         $sales_id = $this->sales_id;
-        
+
         DB::beginTransaction();
         try {
             $tahun_chek = date('y', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit tahun (misal: 25)
@@ -151,6 +152,7 @@ class CreateKontrakJob extends Job
             $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
 
             foreach ($dataPendukungHeader as $i => $item) {
+                $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                 $param = $item->parameter;
                 $exp = explode("-", $item->kategori_1);
                 $kategori = $exp[0];
@@ -177,7 +179,6 @@ class CreateKontrakJob extends Job
 
                     $harga_db[] = $cek_harga_parameter->harga ?? 0;
                     $volume_db[] = $cek_harga_parameter->volume ?? 0;
-
                 }
 
                 $harga_pertitik = (object) [
@@ -191,6 +192,31 @@ class CreateKontrakJob extends Job
 
                 $titik = $item->jumlah_titik;
 
+                $hargaPaket = 0;
+                $hargaSatuan = 0;
+                $kelipatan_titik = 0;
+
+                if ($is_paket) {
+                    $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                    $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                    foreach ($dataPaketAnalisa as $paket) {
+                        if (
+                            $paket['regulasi'] == $item->regulasi &&
+                            $paket['parameter'] == $param &&
+                            $paket['kategori_1'] == $item->kategori_1 &&
+                            $paket['kategori_2'] == $item->kategori_2
+                        ) {
+                            $pengali = ($titik / (int)$paket['jumlah_titik']);
+                            $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                            $hargaPaket += $harga_sementara;
+                            $hargaSatuan = $paket['harga_paket'];
+                            $kelipatan_titik = (int)$paket['jumlah_titik'];
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+
                 $data_sampling[$i] = [
                     'kategori_1' => $item->kategori_1,
                     'kategori_2' => $item->kategori_2,
@@ -198,12 +224,17 @@ class CreateKontrakJob extends Job
                     'parameter' => $param,
                     'jumlah_titik' => $titik,
                     'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
+                    'harga_satuan' => $is_paket ? $hargaSatuan : $harga_pertitik->total_harga,
+                    'harga_total' => $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $titik,
                     'volume' => $vol,
                     'periode' => $item->periode_kontrak,
                     'biaya_preparasi' => []
                 ];
+
+                if ($is_paket) {
+                    $data_sampling[$i]['is_paket'] = $is_paket;
+                    $data_sampling[$i]['kelipatan_titik'] = $kelipatan_titik;
+                }
 
                 isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
 
@@ -217,8 +248,8 @@ class CreateKontrakJob extends Job
             $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
 
             $dataH->save();
-            
-            foreach ($data_pendukung as $x => $pengujian){
+
+            foreach ($data_pendukung as $x => $pengujian) {
                 $dataD = new QuotationKontrakD;
                 $dataD->id_request_quotation_kontrak_h = $dataH->id;
 
@@ -244,7 +275,7 @@ class CreateKontrakJob extends Job
                     $id_kategori = \explode("-", $sampling->kategori_1)[0];
                     $kategori = \explode("-", $sampling->kategori_1)[1];
                     $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
-                    
+
                     $parameters = [];
                     $id_parameter = [];
                     foreach ($sampling->parameter as $item) {
@@ -255,7 +286,7 @@ class CreateKontrakJob extends Job
                             $id_parameter[] = $cek_par->id;
                         }
                     }
-                    
+
                     $harga_parameter = [];
                     $volume_parameter = [];
 
@@ -264,7 +295,7 @@ class CreateKontrakJob extends Job
                             ->where('nama_parameter', $parameter)
                             ->orderBy('id', 'ASC')
                             ->get();
-                        
+
                         if (count($ambil_data) > 1) {
                             $found = false;
                             foreach ($ambil_data as $xc => $zx) {
@@ -303,7 +334,7 @@ class CreateKontrakJob extends Job
 
                     // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                     $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
-                    
+
                     $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                     $pengujian->data_sampling[$i]->regulasi = $regulasi;
                     $pengujian->data_sampling[$i]->harga_satuan = $har_db;
@@ -348,7 +379,7 @@ class CreateKontrakJob extends Job
                     'periode_kontrak' => $pengujian->periode_kontrak,
                     'data_sampling' => $pengujian->data_sampling
                 ];
-                
+
                 $dataD->data_pendukung_sampling = json_encode($data_sampling, JSON_UNESCAPED_UNICODE);
                 // end data sampling
                 $dataD->harga_air = $harga_air;
