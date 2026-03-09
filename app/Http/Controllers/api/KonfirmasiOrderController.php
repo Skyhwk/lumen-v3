@@ -17,6 +17,7 @@ use App\Models\SamplingPlan;
 
 use App\Models\MasterKaryawan;
 use App\Services\SamplingPlanServices;
+use App\Services\QuotationService;
 
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
@@ -200,7 +201,7 @@ class KonfirmasiOrderController extends Controller
 		}
 	}
 
-	public function voidQuotation(Request $request)
+	public function voidQuotation(Request $request, QuotationService $quotationService)
 	{
 		DB::beginTransaction();
 		try {
@@ -215,6 +216,14 @@ class KonfirmasiOrderController extends Controller
 					$data = QuotationKontrakH::where('id', $request->id)->where('is_active', true)->first();
 					$type_doc = 'quotation_kontrak';
 				}
+
+				// Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
+                $check = $quotationService->validateVoidQuotation($data->no_document);
+
+                if (!$check['status']) {
+                    return response()->json($check);
+                }
+				
 				$sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 				$jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 
