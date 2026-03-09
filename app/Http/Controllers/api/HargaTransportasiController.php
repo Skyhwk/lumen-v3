@@ -11,9 +11,10 @@ use Yajra\Datatables\Datatables;
 
 class HargaTransportasiController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $data = HargaTransportasi::withHistory()
+        ->when($request->status, fn($q) => $q->where('master_harga_transportasi.status', $request->status))
         ->where('master_harga_transportasi.is_active', true);
         return Datatables::of($data)->make(true);
         
@@ -96,7 +97,58 @@ class HargaTransportasiController extends Controller
         }
     }
 
+    public function updateGlobal(Request $request)
+    {
+        $required = [
+            'kategori_wilayah' => 'Kategori Wilayah Tidak Boleh Kosong',
+            'kategori_harga'   => 'Kategori Harga Tidak Boleh Kosong',
+            'status'           => 'Status Kenaikan Tidak Boleh Kosong',
+            'persentase'       => 'Persentase Tidak Boleh Kosong',
+        ];
 
+        foreach ($required as $field => $message) {
+            if (!$request->$field) return response()->json(['message' => $message], 401);
+        }
+
+        $field = $request->kategori_harga;
+        
+        $olds = HargaTransportasi::where([
+            'status' => $request->kategori_wilayah,
+            'is_active' => true
+        ])->get();
+
+        foreach ($olds as $old) {
+            // set record baru sebagai data lama yg nonaktif (sbg history)
+            $new = $old->replicate();
+
+            $new->id_hist = $old->id;
+            $new->created_by = $this->karyawan;
+            $new->created_at = date('Y-m-d H:i:s');
+            $new->updated_by = null;
+            $new->updated_at = null;
+            $new->is_active = false;
+
+            $new->save();
+
+            // update data lama pake data baru
+            $value = $old->{$field};
+
+            if ($request->status === 'Naik') {
+                $value += ($value * $request->persentase / 100);
+            } else {
+                $value -= ($value * $request->persentase / 100);
+            }
+
+            $old->{$field} = $value;
+        
+            $old->updated_by = $this->karyawan;
+            $old->updated_at = date('Y-m-d H:i:s');
+
+            $old->save();
+        }
+
+        return response()->json(['message' => 'Harga berhasil diupdate'], 201);
+    }
 }
 
 
