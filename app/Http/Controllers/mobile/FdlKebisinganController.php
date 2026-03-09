@@ -74,7 +74,9 @@ class FdlKebisinganController extends Controller
                 'id_ket'             => explode('-', $order->kategori_3)[0],
                 'id_ket2'            => explode('-', $order->kategori_2)[0],
                 'param'              => $order->parameter,
-                'kategori_pengujian' => $waktu
+                'kategori_pengujian' => $waktu,
+                'min_range'          => floatval(30.0),
+                'max_range'          => floatval(120.0),
             ], 200);
         }
 
