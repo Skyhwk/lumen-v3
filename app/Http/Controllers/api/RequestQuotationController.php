@@ -605,15 +605,7 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            $biaya_preparasi_padatan = [];
-            $total_biaya_preparasi = 0;
             if (isset($payload->data_pendukung)) {
-                if (isset($payload->data_pendukung[0]->biaya_preparasi)) {
-                    $biaya_preparasi_padatan = $payload->data_pendukung[0]->biaya_preparasi;
-                    foreach ($payload->data_pendukung[0]->biaya_preparasi as $item) {
-                        $total_biaya_preparasi += $item->harga;
-                    }
-                }
                 foreach ($payload->data_pendukung as $i => $item) {
                     //per kategori
                     $param = $item->parameter;
@@ -693,19 +685,19 @@ class RequestQuotationController extends Controller
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
                     
                     $temp_preparasi = [];
-                    // if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
-                    //     foreach ($item->biaya_preparasi as $pre) {
-                    //         if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
-                    //             $temp_preparasi[] = [
-                    //                 'Deskripsi' => $pre->desc_preparasi,
-                    //                 'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
-                    //             ];
-                    //         }
-                    //         if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
-                    //             $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
-                    //         }
-                    //     }
-                    // }
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -761,8 +753,6 @@ class RequestQuotationController extends Controller
             // data nama titik masuk
             $data->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
 
-            $data->biaya_preparasi_padatan = json_encode($biaya_preparasi_padatan);
-            $data->total_biaya_preparasi = $total_biaya_preparasi;
             $data->harga_air = $harga_air;
             $data->harga_udara = $harga_udara;
             $data->harga_emisi = $harga_emisi;
@@ -1189,21 +1179,21 @@ class RequestQuotationController extends Controller
             // BIAYA PREPARASI PADATAN
             // name : biaya_preparasi_padatan[select][0][harga]
             // name : biaya_preparasi_padatan[select][0][deskirpsi]
-            // $biaya_preparasi = 0;
-            // if (isset($payload->data_diskon->biaya_preparasi_padatan) && !empty($payload->data_diskon->biaya_preparasi_padatan)) {
-            //     $data->biaya_preparasi_padatan = json_encode(array_map(function ($disc) {
-            //         return (object) [
-            //             'deskripsi' => $disc->deskripsi,
-            //             'harga' => floatval(str_replace(['Rp. ', ',', '.'], '', $disc->harga))
-            //         ];
-            //     }, $payload->data_diskon->biaya_preparasi_padatan));
-            //     foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
-            //         $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
-            //     }
-            // }
-            // $data->total_biaya_preparasi = $biaya_preparasi;
-            // $grand_total += $biaya_preparasi;
-            // $harga_total += $biaya_preparasi;
+            $biaya_preparasi = 0;
+            if (isset($payload->data_diskon->biaya_preparasi_padatan) && !empty($payload->data_diskon->biaya_preparasi_padatan)) {
+                $data->biaya_preparasi_padatan = json_encode(array_map(function ($disc) {
+                    return (object) [
+                        'deskripsi' => $disc->deskripsi,
+                        'harga' => floatval(str_replace(['Rp. ', ',', '.'], '', $disc->harga))
+                    ];
+                }, $payload->data_diskon->biaya_preparasi_padatan));
+                foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
+                    $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
+                }
+            }
+            $data->total_biaya_preparasi = $biaya_preparasi;
+            $grand_total += $biaya_preparasi;
+            $harga_total += $biaya_preparasi;
             // $data->biaya_preparasi_padatan = null;
             // $data->total_biaya_preparasi = 0;
             // $biaya_preparasi = 0;
@@ -1573,15 +1563,7 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            $biaya_preparasi_padatan = [];
-            $total_biaya_preparasi = 0;
             if (isset($payload->data_pendukung)) {
-                if (isset($payload->data_pendukung[0]->biaya_preparasi)) {
-                    $biaya_preparasi_padatan = $payload->data_pendukung[0]->biaya_preparasi;
-                    foreach ($payload->data_pendukung[0]->biaya_preparasi as $item) {
-                        $total_biaya_preparasi += $item->harga;
-                    }
-                }
                 foreach ($payload->data_pendukung as $i => $item) {
                     //per kategori
                     $param = $item->parameter;
@@ -1661,19 +1643,19 @@ class RequestQuotationController extends Controller
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
                     
                     $temp_preparasi = [];
-                    // if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
-                    //     foreach ($item->biaya_preparasi as $pre) {
-                    //         if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
-                    //             $temp_preparasi[] = [
-                    //                 'Deskripsi' => $pre->desc_preparasi,
-                    //                 'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
-                    //             ];
-                    //         }
-                    //         if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
-                    //             $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
-                    //         }
-                    //     }
-                    // }
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -1729,8 +1711,6 @@ class RequestQuotationController extends Controller
             // data nama titik masuk
             $data->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
 
-            $data->biaya_preparasi_padatan = json_encode($biaya_preparasi_padatan);
-            $data->total_biaya_preparasi = $total_biaya_preparasi;
             $data->harga_air = $harga_air;
             $data->harga_udara = $harga_udara;
             $data->harga_emisi = $harga_emisi;
@@ -2141,21 +2121,21 @@ class RequestQuotationController extends Controller
             // BIAYA PREPARASI PADATAN
             // name : biaya_preparasi_padatan[select][0][harga]
             // name : biaya_preparasi_padatan[select][0][deskirpsi]
-            // $biaya_preparasi = 0;
-            // if (isset($payload->data_diskon->biaya_preparasi_padatan) && !empty($payload->data_diskon->biaya_preparasi_padatan)) {
-            //     $data->biaya_preparasi_padatan = json_encode(array_map(function ($disc) {
-            //         return (object) [
-            //             'deskripsi' => $disc->deskripsi,
-            //             'harga' => floatval(str_replace(['Rp. ', ',', '.'], '', $disc->harga))
-            //         ];
-            //     }, $payload->data_diskon->biaya_preparasi_padatan));
-            //     foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
-            //         $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
-            //     }
-            // }
-            // $data->total_biaya_preparasi = $biaya_preparasi;
-            // $grand_total += $biaya_preparasi;
-            // $harga_total += $biaya_preparasi;
+            $biaya_preparasi = 0;
+            if (isset($payload->data_diskon->biaya_preparasi_padatan) && !empty($payload->data_diskon->biaya_preparasi_padatan)) {
+                $data->biaya_preparasi_padatan = json_encode(array_map(function ($disc) {
+                    return (object) [
+                        'deskripsi' => $disc->deskripsi,
+                        'harga' => floatval(str_replace(['Rp. ', ',', '.'], '', $disc->harga))
+                    ];
+                }, $payload->data_diskon->biaya_preparasi_padatan));
+                foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
+                    $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
+                }
+            }
+            $data->total_biaya_preparasi = $biaya_preparasi;
+            $grand_total += $biaya_preparasi;
+            $harga_total += $biaya_preparasi;
             // $data->biaya_preparasi_padatan = null;
             // $data->total_biaya_preparasi = 0;
             // $biaya_preparasi = 0;
