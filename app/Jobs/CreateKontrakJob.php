@@ -282,7 +282,7 @@ class CreateKontrakJob extends Job
 
                 // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                 foreach ($pengujian->data_sampling as $i => $sampling) {
-                    $is_paket = isset($item->is_paket) ? $sampling->is_paket : false;
+                    $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                     $id_kategori = \explode("-", $sampling->kategori_1)[0];
                     $kategori = \explode("-", $sampling->kategori_1)[1];
                     $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -356,7 +356,7 @@ class CreateKontrakJob extends Job
                         foreach ($dataPaketAnalisa as $paket) {
                             if (
                                 $paket['regulasi'] == $sampling->regulasi &&
-                                $paket['parameter'] == $parameters &&
+                                $paket['parameter'] == $sampling->parameter &&
                                 $paket['kategori_1'] == $sampling->kategori_1 &&
                                 $paket['kategori_2'] == $sampling->kategori_2
                             ) {

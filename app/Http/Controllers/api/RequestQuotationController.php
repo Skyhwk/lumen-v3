@@ -2713,13 +2713,11 @@ class RequestQuotationController extends Controller
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
 
                 foreach ($dataPendukungHeader as $i => $item) {
-                    
-                    $is_paket = isset($item->is_paket) ? $item->is_paket : 0;
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -2765,7 +2763,7 @@ class RequestQuotationController extends Controller
                         foreach ($dataPaketAnalisa as $paket) {
                             if (
                                 $paket['regulasi'] == $item->regulasi &&
-                                $paket['parameter'] == $parameter &&
+                                $paket['parameter'] == $param &&
                                 $paket['kategori_1'] == $item->kategori_1 &&
                                 $paket['kategori_2'] == $item->kategori_2
                             ) {
@@ -2920,6 +2918,7 @@ class RequestQuotationController extends Controller
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
+                        $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -2993,7 +2992,7 @@ class RequestQuotationController extends Controller
                             foreach ($dataPaketAnalisa as $paket) {
                                 if(
                                     $paket['regulasi'] == $sampling->regulasi &&
-                                    $paket['parameter'] == $parameters && 
+                                    $paket['parameter'] == $sampling->parameter && 
                                     $paket['kategori_1'] == $sampling->kategori_1 &&
                                     $paket['kategori_2'] == $sampling->kategori_2
                                 ) {
@@ -4340,7 +4339,7 @@ class RequestQuotationController extends Controller
                         foreach ($dataPaketAnalisa as $paket) {
                             if (
                                 $paket['regulasi'] == $item->regulasi &&
-                                $paket['parameter'] == $parameter &&
+                                $paket['parameter'] == $param &&
                                 $paket['kategori_1'] == $item->kategori_1 &&
                                 $paket['kategori_2'] == $item->kategori_2
                             ) {
@@ -4460,6 +4459,7 @@ class RequestQuotationController extends Controller
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
+                        $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -4533,7 +4533,7 @@ class RequestQuotationController extends Controller
                             foreach ($dataPaketAnalisa as $paket) {
                                 if(
                                     $paket['regulasi'] == $sampling->regulasi &&
-                                    $paket['parameter'] == $parameters && 
+                                    $paket['parameter'] == $sampling->parameter && 
                                     $paket['kategori_1'] == $sampling->kategori_1 &&
                                     $paket['kategori_2'] == $sampling->kategori_2
                                 ) {
