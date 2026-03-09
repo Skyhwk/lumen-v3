@@ -1815,7 +1815,11 @@ class RenderKontrak
                         }
                     }
                 }
+                $totalHarga = $a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode));
 
+                if(isset($a->is_paket_analisa) && $a->is_paket_analisa){
+                    $totalHarga = $a->total_harga * count($a->periode);
+                }
                 $pdf->WriteHTML(
                     '<td style="font-size: 8px; text-align:center;">' . (int) $a->jumlah_titik * count($a->periode) . "</td>"
                 );
@@ -1823,7 +1827,7 @@ class RenderKontrak
                     '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan) . "</td>"
                 );
                 $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . "</td>"
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($totalHarga) . "</td>"
                 );
                 $pdf->WriteHTML("</tr>");
                 $x_++;

@@ -334,6 +334,13 @@ trait RenderKontrak
                         number_format($a->volume / 1000, 1) .
                         " L";
                 }
+                $is_paket = isset($a->is_paket_analisa) ? $a->is_paket_analisa : false;
+                $HargaTotal = $a->harga_satuan * ($a->jumlah_titik * count($a->periode));
+                
+                if($is_paket) {
+                    $HargaTotal = $a->harga_total * count($a->periode);
+                }
+
                 $pdf->WriteHTML(
                     " <br>
                     <hr>" . ' <b>
@@ -342,7 +349,7 @@ trait RenderKontrak
                     </td>
                     <td style="vertical-align: middle;text-align:center;font-size: 13px;">' . $a->jumlah_titik * count($a->periode) . '</td>
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan) . '</td>
-                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ($a->jumlah_titik * count($a->periode))) . '</td>
+                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($HargaTotal) . '</td>
                     </tr>'
                 );
             }
