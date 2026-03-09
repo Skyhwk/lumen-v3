@@ -58,7 +58,7 @@ class FeeDriverController extends Controller
 
             MasterFeeDriver::create([
                 'driver_id' => $request->driver_id,
-                'fee' => $request->fee,
+                'fee' => str_replace(',', '.', str_replace('.', '', $request->fee)),
                 'created_by' => $this->karyawan,
                 'created_at' => Carbon::now(),
                 'is_active' => true,
