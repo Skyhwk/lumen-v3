@@ -157,6 +157,8 @@ class GenerateInvoiceController extends Controller
             $data = Invoice::select(
                 'invoice.no_invoice',
                 DB::raw('MAX(invoice.created_by) AS created_by'),
+                DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
+                DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
                 DB::raw('MAX(faktur_pajak) AS faktur_pajak'),
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
                 DB::raw('MAX(jabatan_pj) AS jabatan_pj'),

@@ -4364,6 +4364,12 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailMicrobiologi::class
             
+            ],
+            [
+                "parameter" => "VOC Sebagai NMHC",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class
             ]
         ];
 
