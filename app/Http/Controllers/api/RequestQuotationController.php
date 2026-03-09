@@ -2511,9 +2511,6 @@ class RequestQuotationController extends Controller
 
                 if (!isset($detailGrouped[$key])) {
                     $detailGrouped[$key] = (object)[
-                        'paket'           => $sampling->paket,
-                        'is_paket'        => $sampling->is_paket,
-                        'kelipatan_titik' => $sampling->kelipatan_titik,
                         'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
                         'penamaan_titik'  => [], // default kosong
@@ -2524,6 +2521,12 @@ class RequestQuotationController extends Controller
                         'biaya_preparasi' => [], // default kosong
                         'regulasi'        => $sampling->regulasi,
                     ];
+
+                    if(isset($sampling->paket)){
+                        $detailGrouped[$key]->paket = $sampling->paket;
+                        $detailGrouped[$key]->is_paket = $sampling->is_paket;
+                        $detailGrouped[$key]->kelipatan_titik = $sampling->kelipatan_titik;
+                    }
                 } else {
                     $detailGrouped[$key]->jumlah_titik += (int) $sampling->jumlah_titik;
                 }
@@ -3124,7 +3127,7 @@ class RequestQuotationController extends Controller
                                         $dataD->harga_transportasi_total = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
 
                                         $dataD->harga_personil = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang);
-                                        $dataD->harga_perdiem_personil_total = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
+                                        $dataD->harga_perdiem_personil_total = ((int) $cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * (int)$data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
@@ -3139,7 +3142,7 @@ class RequestQuotationController extends Controller
                                         }
 
                                         $transport = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
-                                        $perdiem = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
+                                        $perdiem = ((int) $cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != ''){
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
                                         }else{
