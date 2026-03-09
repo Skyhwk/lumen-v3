@@ -763,11 +763,16 @@ class RequestQuotationController extends Controller
 
             // kalkulasi harga transportasi
             $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                ->orderBy('id', 'ASC')
+                ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                    }) ?? $ambil_data_transport->first();
+
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -847,7 +852,7 @@ class RequestQuotationController extends Controller
                     $data->jumlah_hari_24jam = $payload->data_wilayah->jumlah_hari_24jam;
 
                     if (isset($payload->data_wilayah->kalkulasi_by_sistem) && $payload->data_wilayah->kalkulasi_by_sistem == 'on') {
-                        $data->kalkukasi_by_sistem = $payload->data_wilayah->kalkukasi_by_sistem;
+                        $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem;
                         $harga_tiket = floatval($cekOperasional->tiket) * $payload->data_wilayah->perdiem_jumlah_orang;
 
                         $harga_transportasi_darat = $cekOperasional->transportasi;
@@ -1376,6 +1381,8 @@ class RequestQuotationController extends Controller
             } else {
                 return response()->json([
                     'message' => 'Update Non Kontrak Failed: ' . $e->getMessage(),
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile(),
                     'status' => 401
                 ], 401);
             }
@@ -1721,11 +1728,16 @@ class RequestQuotationController extends Controller
 
             // kalkulasi harga transportasi
             $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                ->orderBy('id', 'ASC')
+                ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                    }) ?? $ambil_data_transport->first();
+
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
