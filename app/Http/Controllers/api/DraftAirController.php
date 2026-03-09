@@ -683,6 +683,7 @@ class DraftAirController extends Controller
             }
 
             $results[] = [
+                'id' => 3,
                 'name' => $parameterName,
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',
