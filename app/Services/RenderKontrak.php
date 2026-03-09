@@ -447,6 +447,11 @@ class RenderKontrak
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . '</td>
                     </tr>'
                 );*/
+                $totalHarga = $a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode));
+
+                if(isset($a->is_paket_analisa) && $a->is_paket_analisa){
+                    $totalHarga = $a->total_harga * count($a->periode);
+                }
                 $pdf->WriteHTML(
                     " <br>
                     <hr>" . ' <b>
@@ -455,7 +460,7 @@ class RenderKontrak
                     </td>
                     <td style="vertical-align: middle;text-align:center;font-size: 13px;">' . (int) $a->jumlah_titik * count($a->periode) . '</td>
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan) . '</td>
-                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . '</td>
+                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($totalHarga) . '</td>
                     </tr>'
                 );
 
