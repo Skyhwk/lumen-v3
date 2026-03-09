@@ -4558,12 +4558,12 @@ class RequestQuotationController extends Controller
                         $pengujian->data_sampling[$i]->volume = $vol_db;
 
                         if ($is_paket) {
-                            $data_sampling[$i]->is_paket = $is_paket;
-                            $data_sampling[$i]->kelipatan_titik = $kelipatan_titik;
-                            $data_sampling[$i]->is_paket_analisa = true;
-                            $data_sampling[$i]->paket_id = $is_paket;
-                            $data_sampling[$i]->paket = $dataPaket->nama_template;
-                            $data_sampling[$i]->kelipatan_dasar = $kelipatan_titik;
+                            $pengujian->data_sampling[$i]->is_paket = $is_paket;
+                            $pengujian->data_sampling[$i]->kelipatan_titik = $kelipatan_titik;
+                            $pengujian->data_sampling[$i]->is_paket_analisa = true;
+                            $pengujian->data_sampling[$i]->paket_id = $is_paket;
+                            $pengujian->data_sampling[$i]->paket = $dataPaket->nama_template;
+                            $pengujian->data_sampling[$i]->kelipatan_dasar = $kelipatan_titik;
                         }
 
                         if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
