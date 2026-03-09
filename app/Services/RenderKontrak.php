@@ -448,9 +448,8 @@ class RenderKontrak
                     </tr>'
                 );*/
                 $totalHarga = $a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode));
-
                 if(isset($a->is_paket_analisa) && $a->is_paket_analisa){
-                    $totalHarga = $a->total_harga * count($a->periode);
+                    $totalHarga = $a->harga_total * count($a->periode);
                 }
                 $pdf->WriteHTML(
                     " <br>
@@ -1823,7 +1822,7 @@ class RenderKontrak
                 $totalHarga = $a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode));
 
                 if(isset($a->is_paket_analisa) && $a->is_paket_analisa){
-                    $totalHarga = $a->total_harga * count($a->periode);
+                    $totalHarga = $a->harga_total * count($a->periode);
                 }
                 $pdf->WriteHTML(
                     '<td style="font-size: 8px; text-align:center;">' . (int) $a->jumlah_titik * count($a->periode) . "</td>"
