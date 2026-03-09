@@ -409,8 +409,8 @@ class ForwardKontrakJob extends Job
                             'jumlah_titik' => $data_pendukungD['jumlah_titik'],
                             'penamaan_titik' => $penamaan_titik_fixed,
                             'total_parameter' => count($param),
-                            'harga_satuan' => $harga_pertitik->total_harga,
-                            'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
+                            'harga_satuan' => $hargaPerTitik,
+                            'harga_total' => $hargaAnalisa,
                             'volume' => $vol,
                             'biaya_preparasi' => $biaya_preparasi
                         ];
@@ -425,22 +425,22 @@ class ForwardKontrakJob extends Job
                         // kalkulasi harga parameter sesuai titik
                         if ($kategori == 1) { // air
                             // dd('masuk');
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_air += $hargaAnalisa;
 
                         } else if ($kategori == 4) { //  udara
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_udara += $hargaAnalisa;
                         } else if ($kategori == 5) { // emisi
 
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_emisi += $hargaAnalisa;
                         } else if ($kategori == 6) { // padatan
 
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_padatan += $hargaAnalisa;
                         } else if ($kategori == 7) { // swab test
 
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_swab_test += $hargaAnalisa;
                         } else if ($kategori == 8) { // tanah
 
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_tanah += $hargaAnalisa;
                         }
                         // end kalkulasi harga parameter sesuai titik
                     }
