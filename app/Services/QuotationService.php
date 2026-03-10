@@ -15,7 +15,7 @@ class QuotationService
     {
         $baseQuotation = $this->getBaseQuotation($quotationNumber);
 
-        $invoices = Invoice::where('no_quotation', $baseQuotation)
+        $invoices = Invoice::where('no_quotation', 'like', '%' . $baseQuotation . '%')
             ->where('nilai_pelunasan', '>', 0)
             ->get();
 
@@ -25,7 +25,7 @@ class QuotationService
 
             return [
                 'status' => false,
-                'message' => "Tidak dapat melakukan void karena Quotation original {$baseQuotation} sudah memiliki pembayaran pada invoice {$invoiceNumbers}",
+                'message' => "Tidak dapat melakukan void pada quotation {$quotationNumber} karena sudah terdapat pembayaran pada invoice: {$invoiceNumbers}",
             ];
         }
 

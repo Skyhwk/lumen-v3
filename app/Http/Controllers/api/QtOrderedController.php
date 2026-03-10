@@ -567,7 +567,7 @@ class QtOrderedController extends Controller
                 $check = $quotationService->validateVoidQuotation($data->no_document);
 
                 if (!$check['status']) {
-                    return response()->json($check);
+                    return response()->json($check, 401);
                 }
 
                 $order_h = OrderHeader::where('no_document', $data->no_document)->first();

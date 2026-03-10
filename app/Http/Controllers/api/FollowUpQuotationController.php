@@ -594,7 +594,7 @@ class FollowUpQuotationController extends Controller
                 $check = $quotationService->validateVoidQuotation($data->no_document);
 
                 if (!$check['status']) {
-                    return response()->json($check);
+                    return response()->json($check, 401);
                 }
 
                 $sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
