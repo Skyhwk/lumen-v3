@@ -2892,7 +2892,7 @@ class RequestQuotationController extends Controller
                                 $id_parameter[] = $cek_par->id;
                             }
                         }
-
+                        // dd('patah')
                         $harga_parameter = [];
                         $volume_parameter = [];
 
