@@ -30,6 +30,7 @@ class ValidatorHandler extends BaseController
 						$jumlah = count($order);
 						foreach ($order as $key => $value) {
 							$cek_fdl = DataLapanganEmisiKendaraan::where('no_sampel', $value->no_sampel)->where('is_active', true)->first();
+                            if($value->no_sampel == 'BRAI012601/004') dd($cek_fdl);
 							$cek_bakumutu = MasterBakumutu::where('id_regulasi', $value->id_regulasi)->where('is_active', true)->get();
 							$regulasi = MasterRegulasi::where('id', $value->id_regulasi)->where('is_active', true)->first();
 							$status = 'Parameter Tidak di uji';
