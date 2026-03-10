@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Datatables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, ProcessAfterOrder, UseKuotaService};
+use App\Services\{Notification, GetAtasan, ProcessAfterOrder, UseKuotaService, QuotationService};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -275,7 +275,7 @@ class ReadyOrderController extends Controller
         }
     }
 
-    public function voidQuotation(Request $request)
+    public function voidQuotation(Request $request, QuotationService $quotationService)
     {
         DB::beginTransaction();
         try {
@@ -290,6 +290,14 @@ class ReadyOrderController extends Controller
                     $data = QuotationKontrakH::where('id', $request->id)->where('is_active', true)->first();
                     $type_doc = 'quotation_kontrak';
                 }
+
+                // Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
+                $check = $quotationService->validateVoidQuotation($data->no_document);
+
+                if (!$check['status']) {
+                    return response()->json($check, 401);
+                }
+
                 $sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
                 $jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 
