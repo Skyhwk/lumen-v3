@@ -54,7 +54,7 @@ class RekapDataLimbahController extends Controller
             ? Carbon::parse($request->end_date)->endOfDay()
             : Carbon::today()->endOfDay();
 
-        $query = DataLimbah::with(['order', 'karyawan']);
+        $query = DataLimbah::with('order');
 
         if ($request->has('start_date') || $request->has('end_date')) {
             if (!empty($request->start_date) && !empty($request->end_date)) {
