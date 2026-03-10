@@ -24,11 +24,12 @@ class ValidatorHandler extends BaseController
 			try {
                 
 				$data = MasterQr::where('kode', $request->qr)->where('is_active', true)->first();
-                if($request->qr == 'ISL04773347') dd($data);
 				if ($data != null) {
 					if ($data->id_kendaraan != null && $data->status == 1) {
 						$order = DataLapanganEmisiOrder::where('id_qr', $data->id)->where('is_active', true)->get();
 						$kendaraan = MasterKendaraan::where('id', $data->id_kendaraan)->where('is_active', true)->first();
+                        
+                        if($request->qr == 'ISL04773347') dd($order, $kendaraan);
 						$jumlah = count($order);
 						foreach ($order as $key => $value) {
 							$cek_fdl = DataLapanganEmisiKendaraan::where('no_sampel', $value->no_sampel)->where('is_active', true)->first();
