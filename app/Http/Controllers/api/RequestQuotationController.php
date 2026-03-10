@@ -656,6 +656,10 @@ class RequestQuotationController extends Controller
 
                     $titik = $item->jumlah_titik;
 
+                    if ($harga_pertitik->volume != null) {
+                        $vol += floatval($harga_pertitik->volume);
+                    }
+
                     $hargaPaket = 0;
                     $hargaSatuan = 0;
                     $kelipatan = 0;
@@ -1613,6 +1617,10 @@ class RequestQuotationController extends Controller
                     ];
 
                     $titik = $item->jumlah_titik;
+
+                    if ($harga_pertitik->volume != null) {
+                        $vol += floatval($harga_pertitik->volume);
+                    }
 
                     $hargaPaket = 0;
                     $hargaSatuan = 0;

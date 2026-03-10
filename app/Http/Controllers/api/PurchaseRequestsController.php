@@ -83,12 +83,19 @@ class PurchaseRequestsController extends Controller
 
     public function getCode(Request $request)
     {
-        $dataAset = DataAset::where('jenis_aset', $request->item_name)->latest()->first();
+        $dataAsets = DataAset::where('jenis_aset', $request->item_name)->get();
+        
+        $latestAset = $dataAsets->sortByDesc('created_at')->first();
+        
+        $brands = $dataAsets->pluck('merk')->filter()->unique()->values();
 
         return response()->json([
-            'data' => optional($dataAset)->no_cs ?: "",
-            'message' => 'Code generated successfully'
-        ], 201);
+            'data' => [
+                'code' => optional($latestAset)->no_cs ?: "",
+                'brands' => $brands
+            ],
+            'message' => 'Code and brands generated successfully'
+        ], 200);
     }
 
     public function save(Request $request)
