@@ -22,7 +22,9 @@ class ValidatorHandler extends BaseController
 	{
 		if (isset($request->qr) && $request->qr != null) {
 			try {
+                
 				$data = MasterQr::where('kode', $request->qr)->where('is_active', true)->first();
+                if($request->qr == 'ISL04773347') dd($data);
 				if ($data != null) {
 					if ($data->id_kendaraan != null && $data->status == 1) {
 						$order = DataLapanganEmisiOrder::where('id_qr', $data->id)->where('is_active', true)->get();
@@ -30,7 +32,7 @@ class ValidatorHandler extends BaseController
 						$jumlah = count($order);
 						foreach ($order as $key => $value) {
 							$cek_fdl = DataLapanganEmisiKendaraan::where('no_sampel', $value->no_sampel)->where('is_active', true)->first();
-                            if($value->no_sampel == 'BRAI012601/004') dd($cek_fdl);
+                            
 							$cek_bakumutu = MasterBakumutu::where('id_regulasi', $value->id_regulasi)->where('is_active', true)->get();
 							$regulasi = MasterRegulasi::where('id', $value->id_regulasi)->where('is_active', true)->first();
 							$status = 'Parameter Tidak di uji';
