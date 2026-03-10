@@ -58,6 +58,7 @@ class AutomaticApproveService
             $query = $modelClass::query()
                 ->where('created_at', '<=', $threshold)
                 ->where('is_active', true)
+                ->whereNull('notes_reject')
                 ->where($approvedField, false);
 
             foreach ($extraWhere as $column => $value) {
