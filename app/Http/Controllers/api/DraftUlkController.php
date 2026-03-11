@@ -654,7 +654,7 @@ class DraftUlkController extends Controller
                 $data_entry = collect($data_entry)->sortBy([
                     ['tanggal_sampling', 'asc'],
                     ['no_sampel', 'asc'],
-                    // ['parameter', 'asc']
+                    ['parameter', 'asc']
                 ])->values()->toArray();
 
                 // $data_custom = collect($data_custom)->sortBy([
@@ -725,7 +725,7 @@ class DraftUlkController extends Controller
                                 'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
                                 'nama_lab'      => $item->parameter,
                                 'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
-                                'tanggal_sampling'    => $item->order_detail->tanggal_sampling ?? null,
+                                'tanggal_sampling'    => $items->tanggal_sampling ?? null,
                                 'satuan'        => $newQuery->satuan,
                                 'method'        => $newQuery->method,
                                 'status'        => $newQuery->status,
