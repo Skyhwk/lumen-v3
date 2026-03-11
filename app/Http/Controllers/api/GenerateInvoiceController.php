@@ -161,7 +161,6 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
                 DB::raw('MAX(faktur_pajak) AS faktur_pajak'),
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
-                DB::raw('MAX(jabatan_pj) AS jabatan_pj'),
                 DB::raw('MAX(rekening) AS rekening'),
                 DB::raw('MAX(periode) AS periode_kontrak'), //05/02/2025
                 DB::raw('MAX(keterangan) AS keterangan'),
@@ -205,12 +204,15 @@ class GenerateInvoiceController extends Controller
                 ->where('is_emailed', false)
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
-                ->orderBy('invoice.no_invoice', 'DESC')
-                ->get();
+                ->orderBy('invoice.no_invoice', 'DESC');
 
-            return Datatables::of($data)->make(true);
-        } catch (\Throwable $th) {
-            dd($th);
+            return Datatables::of($data)
+            ->filterColumn('nama_customer', function($query, $keyword) {
+                $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
+            })
+            ->make(true);
+        } catch (\Exception $th) {
+            return response()->json(['message' => $th->getMessage()], 400);
         }
     }
 
