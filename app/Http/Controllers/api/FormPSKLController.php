@@ -6,6 +6,8 @@ use App\Models\FormPSKL;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterPelanggan;
+use App\Models\QuotationNonKontrak;
+use App\Models\QuotationKontrakH;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
@@ -54,26 +56,54 @@ class FormPSKLController extends Controller
 
     public function getPelanggan(Request $request)
     {
-        $term = trim($request->term);
-        if (!$term || strlen($term) < 3) return response()->json(['data' => []]);
+        try {
 
-        $query = MasterPelanggan::where('is_active', true)
-            ->where(function ($q) use ($term) {
-                $q->where('id_pelanggan', 'like', "%{$term}%")
-                ->orWhere('nama_pelanggan', 'like', "%{$term}%"); // Tambahkan orWhere agar pencarian lebih user-friendly
-            });
+            $term = trim($request->term);
+            if (!$term || strlen($term) < 3) {
+                return response()->json(['data' => []]);
+            }
 
-        $data = $this->applyJabatanFilter($query, $request)
-            ->select([
-                'id_pelanggan',
-                'nama_pelanggan',
-                'wilayah',
-                'sales_penanggung_jawab'
-            ])
-            ->get();
+            if ($request->mode == 'non-kontrak') {
+                $query = QuotationNonKontrak::with([
+                    'pelanggan:id_pelanggan,nama_pelanggan,wilayah,sales_penanggung_jawab'
+                ]);
+            } elseif ($request->mode == 'kontrak') {
+                $query = QuotationKontrakH::with(['detail',
+                    'pelanggan:id_pelanggan,nama_pelanggan,wilayah,sales_penanggung_jawab'
+                ]);
+            }
 
+            $query->where('no_document', 'like', "%{$term}%");
 
-        return response()->json(['data' => $data]);
+            $data = $this->applyJabatanFilter($query, $request)
+                ->whereHas('pelanggan')
+                ->limit(20)
+                ->get()
+                ->map(function ($item) {
+
+                    if ($item->relationLoaded('detail')) {
+                        $dataPendukung = $item->detail->flatMap(function ($d) {
+                            return json_decode($d->data_pendukung_sampling ?? '[]', true);
+                        });
+                    } else {
+                        $dataPendukung = json_decode($item->data_pendukung_sampling ?? '[]', true);
+                    }
+
+                    return [
+                        'no_quotation' => $item->no_document,
+                        'id_pelanggan' => $item->pelanggan->id_pelanggan,
+                        'nama_pelanggan' => $item->pelanggan->nama_pelanggan,
+                        'wilayah' => $item->pelanggan->wilayah,
+                        'sales_penanggung_jawab' => $item->pelanggan->sales_penanggung_jawab,
+                        'data_pendukung_sampling' => $dataPendukung
+                    ];
+                });
+
+            return response()->json(['data' => $data]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
+        }
     }
 
     // Endpoint baru untuk get No Order berdasarkan ID Pelanggan
@@ -218,20 +248,22 @@ class FormPSKLController extends Controller
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->batch_id = str_replace('.', '', microtime(true));
             }
-
+            $data->jenis_quotation = $request->jenis_quotation == "kontrak" ? "Kontrak" : "Non Kontrak";
             $data->id_pelanggan = $request->id_pelanggan;
             $data->nama_pelanggan = $request->nama_pelanggan;
             $data->sales_penanggung_jawab = $request->sales_penanggung_jawab;
             $data->tanggal_sampling = $request->tanggal_sampling;
-            $data->no_order = $request->no_order;
+            $data->no_quotation = $request->no_quotation;
             $data->wilayah = $request->wilayah;
             $data->periode = $request->periode;
             $data->kategori_sk = $request->kategori_sk;
             $data->jumlah_sk = $request->jumlah_sk;
             $data->is_evaluasi_titik = $request->is_evaluasi_titik;
             $data->is_survey_ulang = $request->is_survey_ulang;
+            $data->is_pelaporan = $request->is_pelaporan;
             $data->catatan = $request->catatan;
             $data->status = $request->status;
+            $data->data_pendukung_sampling = $request->data_pendukung_sampling;
             $data->sales_id = $this->user_id;
             $data->save();
 
