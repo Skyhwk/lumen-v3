@@ -290,13 +290,11 @@ class FdlMethodRulaController extends Controller
 
             // UPDATE ORDER DETAIL
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
-                ->where('parameter', 'LIKE', '%Ergonomi%')
+                ->where('parameter', 'LIKE', '%Ergonomi%')->where('is_active', true)
                 ->first();
 
             if($orderDetail->tanggal_terima == null) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
             
@@ -722,14 +720,14 @@ class FdlMethodRulaController extends Controller
 
             // Respond based on whether the data already exists
             if ($check) {
-                if ($data) {
-                    return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-                } else {
+                // if ($data) {
+                //     return response()->json(['message' => 'No. Sample sudah di input.'], 401);
+                // } else {
                     return response()->json([
                         'message' => 'Successful.',
                         'data' => $fdl
                     ], 200);
-                }
+                // }
             } else {
                 return response()->json(['message' => 'Tidak ada parameter Ergonomi berdasarkan No. Sample tersebut.'], 401);
             }

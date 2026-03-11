@@ -26,7 +26,5 @@ class RenderAndEmailJadwal extends Job
     {
         $email = new EmailJadwal($this->data, $this->value, 'id');
         $email->emailJadwalSampling();
-        $email = new EmailJadwal($this->data, $this->value, 'en');
-        $email->emailJadwalSampling();
     }
 }

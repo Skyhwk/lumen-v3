@@ -37,7 +37,7 @@ class TrackingCustomerController extends Controller
 
     public function followupHistory(Request $request)
     {
-        $dfus = DFUS::where('id_pelanggan', $request->id_pelanggan)->orderByDesc('id');
+        $dfus = DFUS::with('keteranganTambahan')->where('id_pelanggan', $request->id_pelanggan)->orderByDesc('id');
 
         return Datatables::of($dfus)
             ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())

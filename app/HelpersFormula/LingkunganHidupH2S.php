@@ -90,14 +90,6 @@ class LingkunganHidupH2S
         $C15 = round(array_sum($hasil15_array) / count($hasil15_array), 4);
         $C16 = round(array_sum($hasil16_array) / count($hasil16_array), 4);
 
-
-        if (floatval($C) < 1.39)
-            $C = '<1.39';
-        if (floatval($C1) < 0.0022)
-            $C1 = '<0.0022';
-        if (floatval($C2) < 0.0010)
-            $C2 = '<0.0010';
-
         $satuan = 'mg/Nm3';
 
         if(count($hasil1_array) == 4){

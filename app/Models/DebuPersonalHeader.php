@@ -19,12 +19,16 @@ class DebuPersonalHeader extends Sector{
 
     public function ws_value()
     {
-        return $this->belongsTo('App\Models\WsValueLingkungan', 'no_sampel', 'no_sampel');
+        return $this->hasOne(WsValueLingkungan::class, 'debu_personal_header_id', 'id');
     }
 
+    // public function ws_udara()
+    // {
+    //     return $this->belongsTo('App\Models\WsValueUdara', 'no_sampel', 'no_sampel');
+    // }
     public function ws_udara()
     {
-        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_lingkungan_header');
+        return $this->hasOne(WsValueUdara::class, 'id_debu_personal_header', 'id');
     }
 
     public function order_detail()

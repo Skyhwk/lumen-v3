@@ -2,39 +2,53 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganHidup;
-    use \Carbon\Carbon;
+    use Carbon\Carbon;
 
-    $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
-    $tanggal_sampling = '';
-    if($header->status_sampling == 'S24'){
-        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
+    // $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
+    // $tanggal_sampling = '';
+    // if($header->status_sampling == 'S24'){
+    //     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-        $tanggalAwal = $header->tanggal_sampling;
+    //     $tanggalAwal = $header->tanggal_sampling;
 
-        $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
+    //     $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
 
-        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
+    //     $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
 
-        if ($tanggalAwal || $tanggalAkhir) {
-            if ($tanggalAwal == $tanggalAkhir) {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
-            }
+    //     if ($tanggalAwal || $tanggalAkhir) {
+    //         if ($tanggalAwal == $tanggalAkhir) {
+    //             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
+    //         } else {
+    //             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
+    //         }
+    //     } else {
+    //         $tanggal_sampling = '-';
+    //     }
+    // } else {
+    if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
+        if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
+        } elseif ($header->tanggal_sampling_akhir == null) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
         } else {
-            $tanggal_sampling = '-';
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_akhir);
+        }
+    } elseif ($header->tanggal_sampling || $header->tanggal_terima) {
+        if ($header->tanggal_sampling == $header->tanggal_terima) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+        } else {
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
         }
     } else {
-        if ($header->tanggal_sampling || $header->tanggal_terima) {
-            if ($header->tanggal_sampling == $header->tanggal_terima) {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-            }
-        } else {
-            $tanggal_sampling = '-';
-        }
-    }   
+        $tanggal_sampling = '-';
+    }
+    // }
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -65,7 +79,7 @@
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->nama_pelanggan }}</td>
+                        <td class="custom5"><strong>{!! html_entity_decode($header->nama_pelanggan) !!}</strong></td>
                     </tr>
                 </table>
 
@@ -98,17 +112,24 @@
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
                         @php
-                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                            $periode = explode(' - ', $periode_analisa);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
+                            $periode1 = $header->tanggal_analisa_awal ?? '';
+                            $periode2 = $header->tanggal_analisa_akhir ?? '';
                         @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">
+                            @if ($periode2)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                            @elseif ($periode1)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                            @else
+                                -
+                            @endif
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                        <td class="custom5"><strong>{{ $header->deskripsi_titik }}</strong></td>
                     </tr>
                     <tr>
                         <td class="custom5">Titik Koordinat</td>
@@ -116,7 +137,7 @@
                         <td class="custom5">
                             @php
                                 // if ($detailLapangan) {
-                                    echo $header->titik_koordinat;
+                                echo $header->titik_koordinat;
                                 // }
                             @endphp
                         </td>
@@ -243,6 +264,24 @@
                                 @endif
                             @endforeach
                         @endforeach
+                    </table>
+                @endif
+                @php
+                    $isPager = false;
+
+                    foreach ($detail as $v) {
+                        if ($v['hasil_uji'] === '##') {
+                            $isPager = true;
+                            break;
+                        }
+                    }
+                @endphp
+
+                @if($isPager)
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        <tr>
+                            <td class="custom5" colspan="3">(##) Hasil analisa dalam proses di Laboratorium</td>
+                        </tr>
                     </table>
                 @endif
             </td>

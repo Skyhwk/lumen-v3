@@ -14,10 +14,14 @@ use App\Models\MasterKaryawan;
 use App\Models\Ftc;
 use App\Models\Ftct;
 use App\Models\JobTask;
+use App\Models\Invoice;
 use Validator;
 use App\Jobs\RenderPdfPenawaran;
+use App\Jobs\CopyNonKontrakJob;
+use App\Jobs\CopyKontrakJob;
 use App\Services\Notification;
 use App\Services\GetAtasan;
+use App\Services\QuotationService;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
@@ -26,6 +30,13 @@ use App\Services\SamplingPlanServices;
 use App\Jobs\RenderSamplingPlan;
 use Carbon\Carbon;
 
+// TAMBAHAN LIBRARY EXCEL
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 
 class QtOrderedController extends Controller
 {
@@ -40,7 +51,8 @@ class QtOrderedController extends Controller
                     ->where('request_quotation.is_approved', true)
                     ->where('request_quotation.is_emailed', true)
                     ->whereYear('request_quotation.tanggal_penawaran', $request->year)
-                    ->orderBy('request_quotation.tanggal_penawaran', 'desc');
+                    ->orderBy('request_quotation.tanggal_penawaran', 'desc')
+                    ->orderBy('request_quotation.id', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
                     ->select('request_quotation_kontrak_H.*')
@@ -49,7 +61,8 @@ class QtOrderedController extends Controller
                     ->where('request_quotation_kontrak_H.is_approved', true)
                     ->where('request_quotation_kontrak_H.is_emailed', true)
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
-                    ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc');
+                    ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc')
+                    ->orderBy('request_quotation_kontrak_H.id', 'desc');
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -75,22 +88,259 @@ class QtOrderedController extends Controller
                 ->addColumn('count_detail', function ($row) {
                     return $row->detail ? $row->detail->count() : 0;
                 })
-                ->filterColumn('konfirmasi', function ($query, $keyword) {
-                    // dd($query, $keyword);
+                ->addColumn('no_po', function ($row) {
+                    if (is_null($row->konfirmasi)) {
+                        return '-';
+                    }
+                    
+                    if (is_iterable($row->konfirmasi)) {
+                        // konfirmasi is a collection or array
+                        $poList = collect($row->konfirmasi)
+                            ->pluck('no_purchaseorder')
+                            ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                            ->unique()
+                            ->implode(', ');
+                        return $poList ?: '-';
+                    } elseif ($row->konfirmasi && !empty($row->konfirmasi->no_purchaseorder)) {
+                        // single object
+                        $po = $row->konfirmasi->no_purchaseorder;
+                        return (!is_null($po) && trim($po) !== '') ? $po : '-';
+                    } else if ($row->konfirmasi && empty($row->konfirmasi->no_purchaseorder)) {
+                        return $row->konfirmasi->keterangan_approval_order;
+                    } else {
+                        return '-';
+                    }
                 })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {
                         $query->where('no_order', 'like', '%' . $keyword . '%');
                     });
                 })
+                ->filterColumn('no_po', function ($query, $keyword) {
+                    $query->whereHas('konfirmasi', function ($q) use ($keyword) {
+                        $q->whereNotNull('no_purchaseorder')
+                            ->where('no_purchaseorder', '!=', '')
+                            ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
+                        $q->orWhere('keterangan_approval_order', 'like', '%' . $keyword . '%');
+                    });
+                })
                 ->make(true);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
             ], 500);
         }
     }
 
+    public function exportExcel(Request $request)
+    {
+        try {
+            if ($request->mode == 'non_kontrak') {
+                $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                    ->select('request_quotation.*') // tambahkan ini
+                    ->where('request_quotation.id_cabang', $request->cabang)
+                    ->where('request_quotation.flag_status', 'ordered')
+                    ->where('request_quotation.is_approved', true)
+                    ->where('request_quotation.is_emailed', true)
+                    ->whereYear('request_quotation.tanggal_penawaran', $request->year)
+                    ->orderBy('request_quotation.tanggal_penawaran', 'desc')
+                    ->orderBy('request_quotation.id', 'desc');
+            } else if ($request->mode == 'kontrak') {
+                $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                    ->select('request_quotation_kontrak_H.*')
+                    ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
+                    ->where('request_quotation_kontrak_H.flag_status', 'ordered')
+                    ->where('request_quotation_kontrak_H.is_approved', true)
+                    ->where('request_quotation_kontrak_H.is_emailed', true)
+                    ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
+                    ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc')
+                    ->orderBy('request_quotation_kontrak_H.id', 'desc');
+            }
+
+            $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
+            switch ($jabatan) {
+                case 24: // Sales Staff
+                    $data->where('sales_id', $this->user_id);
+                    break;
+                case 21: // Sales Supervisor
+                    $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
+                        ->pluck('id')
+                        ->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('sales_id', $bawahan);
+                    break;
+            }
+
+            $data = $data->get();
+            
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+
+            // --- JUDUL ---
+            $sheet->setCellValue('A1', 'REPORT QUOTATION ORDERED');
+            $sheet->mergeCells('A1:W1'); // Merge sampe W (nambah kolom)
+            $sheet->getStyle('A1')->applyFromArray([
+                'font' => ['bold' => true, 'size' => 16],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+
+            // --- SUB JUDUL ---
+            $sheet->setCellValue('A2', $request->year . ' | ' . strtoupper(str_replace('_', ' ', $request->mode)));
+            $sheet->mergeCells('A2:W2');
+            $sheet->getStyle('A2')->applyFromArray([
+                'font' => ['italic' => true, 'size' => 11],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+
+            // --- HEADER TABEL (Sesuai Frontend) ---
+            $startRow = 4;
+            $headers = [
+                'No', 
+                'Kode Promo', 
+                'ID Pelanggan', 
+                'No Quotation', 
+                'No Order', 
+                'No PO', 
+                'Nama Perusahaan', 
+                'Status', 
+                'Status Sampling', 
+                'Ket Reject SP', 
+                'SP By', 
+                'No Tlp Perusahaan', 
+                'Konsultan', 
+                'PIC Order', 
+                'No Tlp PIC', 
+                'Keterangan',
+                'Total Price', 
+                'Total Discount', 
+                'Nilai PPN', 
+                'Nilai PPh',     // TAMBAHAN
+                'Nilai Tagihan', // TAMBAHAN
+                'Nama Sales', 
+                'Created At'
+            ];
+            
+            $col = 'A';
+            foreach ($headers as $header) {
+                $sheet->setCellValue($col . $startRow, $header);
+                $col++;
+            }
+
+            // Style Header
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2C3E50']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]]
+            ];
+            $sheet->getStyle('A' . $startRow . ':W' . $startRow)->applyFromArray($headerStyle);
+            $sheet->getRowDimension($startRow)->setRowHeight(25);
+
+            // --- ISI DATA ---
+            $rowNum = $startRow + 1;
+            $no = 1;
+
+            foreach ($data as $row) {
+                // Logic No PO
+                $noPO = '-';
+                if (!is_null($row->konfirmasi)) {
+                    if (is_iterable($row->konfirmasi)) {
+                        $poList = collect($row->konfirmasi)
+                            ->pluck('no_purchaseorder')
+                            ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                            ->unique()
+                            ->implode(', ');
+                        $noPO = $poList ?: '-';
+                    } elseif ($row->konfirmasi && !empty($row->konfirmasi->no_purchaseorder)) {
+                        $po = $row->konfirmasi->no_purchaseorder;
+                        $noPO = (!is_null($po) && trim($po) !== '') ? $po : '-';
+                    } else if ($row->konfirmasi && empty($row->konfirmasi->no_purchaseorder)) {
+                        $noPO = $row->konfirmasi->keterangan_approval_order;
+                    }
+                }
+
+                // Format Tanggal Indo
+                $createdAt = $row->created_at 
+                    ? \Carbon\Carbon::parse($row->created_at)->locale('id')->translatedFormat('d F Y H:i') 
+                    : '-';
+
+                $sheet->setCellValue('A' . $rowNum, $no++);
+                $sheet->setCellValue('B' . $rowNum, $row->kode_promo ?? '-');
+                $sheet->setCellValue('C' . $rowNum, $row->pelanggan_ID);
+                $sheet->setCellValue('D' . $rowNum, $row->no_document);
+                $sheet->setCellValue('E' . $rowNum, $row->order->no_order ?? '-');
+                $sheet->setCellValue('F' . $rowNum, $noPO);
+                $sheet->setCellValue('G' . $rowNum, $row->nama_perusahaan);
+                $sheet->setCellValue('H' . $rowNum, $row->flag_status);
+                $sheet->setCellValue('I' . $rowNum, $row->status_sampling ?? '-');
+                $sheet->setCellValue('J' . $rowNum, $row->ket_reject_sp ?? '-');
+                $sheet->setCellValue('K' . $rowNum, $row->sp_by ?? '-');
+                
+                // No Tlp
+                $sheet->setCellValueExplicit('L' . $rowNum, $row->no_tlp_perusahaan ?? '-', DataType::TYPE_STRING);
+                
+                $sheet->setCellValue('M' . $rowNum, $row->konsultan ?? '-');
+                $sheet->setCellValue('N' . $rowNum, $row->nama_pic_order ?? '-');
+                
+                // No Tlp PIC
+                $sheet->setCellValueExplicit('O' . $rowNum, $row->no_tlp_pic_order ?? '-', DataType::TYPE_STRING);
+                
+                $sheet->setCellValue('P' . $rowNum, $row->keterangan ?? '-');
+                
+                // Angka Duit
+                $sheet->setCellValue('Q' . $rowNum, $row->grand_total);
+                $sheet->setCellValue('R' . $rowNum, $row->total_discount);
+                $sheet->setCellValue('S' . $rowNum, $row->total_ppn);
+                $sheet->setCellValue('T' . $rowNum, $row->total_pph); // Masukin PPH
+                $sheet->setCellValue('U' . $rowNum, $row->piutang);   // Masukin Piutang
+                
+                $sheet->setCellValue('V' . $rowNum, $row->sales->nama_lengkap ?? '-');
+                $sheet->setCellValue('W' . $rowNum, $createdAt);
+
+                // Styling Promo
+                if ($row->kode_promo) {
+                    $sheet->getStyle('A' . $rowNum . ':W' . $rowNum)->applyFromArray([
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'BEE5EB']]
+                    ]);
+                }
+
+                $rowNum++;
+            }
+
+            // --- FINISHING ---
+            $lastRow = $rowNum - 1;
+            $sheet->getStyle('A' . $startRow . ':W' . $lastRow)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]]
+            ]);
+
+            // Format Currency (Q sampe U)
+            $sheet->getStyle('Q'.($startRow+1).':U' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+            
+            // Alignment Center
+            $alignCenterCols = ['A', 'C', 'H', 'I', 'W'];
+            foreach ($alignCenterCols as $col) {
+                $sheet->getStyle($col.($startRow+1).':'.$col.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
+
+            // Auto Fit Columns
+            foreach (range('A', 'W') as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+
+            $writer = new Xlsx($spreadsheet);
+            $fileName = 'Report_Qt_Ordered_' . date('YmdHis') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $fileName . '"');
+            header('Cache-Control: max-age=0');
+
+            $writer->save('php://output');
+            exit;
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
 
     public function getCabang(Request $request)
     {
@@ -195,158 +445,34 @@ class QtOrderedController extends Controller
 
     public function copy(Request $request)
     {
-        DB::beginTransaction();
+        // DB::beginTransaction();
         try {
             if ($request->status_quotation == 'non_kontrak' || $request->status_quotation == 'null') {
-                $cek = QuotationNonKontrak::where('id_cabang', $this->idcabang)
-                    ->whereYear('tanggal_penawaran', Carbon::now()->year)
-                    ->where('no_document', 'not like', '%R%')
-                    ->where('no_document', 'like', '%/' . date('y') . '-%')
-                    ->orderBy('no_quotation', 'DESC')
-                    ->first();
-
-                $no_urut = '1';
-
-                if ($cek != null)
-                    $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
-
-                $no_quotation = sprintf('%06d', ($no_urut));
-                $no_document = 'ISL/QT/' . DATE('y') . '-' . self::romawi(DATE('m')) . '/' . $no_quotation;
-
-                $query = QuotationNonKontrak::where('id', $request->id)->firstOrFail();
-
-                $newQuery = $query->replicate();
-                $newQuery->no_quotation = $no_quotation;
-                $newQuery->no_document = $no_document;
-                $newQuery->konsultan = $query->konsultan;
-                $newQuery->flag_status = null;
-                $newQuery->tanggal_penawaran = Carbon::now()->format('Y-m-d');
-                $newQuery->created_by = $this->karyawan;
-                $newQuery->created_at = Carbon::now();
-                $newQuery->updated_by = null;
-                $newQuery->updated_at = null;
-                $newQuery->data_lama = null;
-                $newQuery->keterangan_reject = null;
-                $newQuery->is_approved = 0;
-                $newQuery->approved_by = null;
-                $newQuery->approved_at = null;
-                $newQuery->is_emailed = 0;
-                $newQuery->is_ready_order = 0;
-                $newQuery->emailed_at = null;
-                $newQuery->emailed_by = null;
-                $newQuery->is_generated = 0;
-                $newQuery->generated_at = null;
-                $newQuery->generated_by = null;
-                $newQuery->id_token = null;
-                $newQuery->save();
-
-                JobTask::insert([
-                    'job' => 'RenderPdfPenawaran',
-                    'status' => 'processing',
-                    'no_document' => $newQuery->no_document,
-                    'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-
-                DB::commit();
-
-                $job = new RenderPdfPenawaran($newQuery->id, 'non kontrak');
+                $job = new CopyNonKontrakJob($this->idcabang, $this->karyawan, $request->id);
                 $this->dispatch($job);
 
-                $array_id_user = GetAtasan::where('id', $newQuery->sales_id)->get()->pluck('id')->toArray();
-
-                Notification::whereIn('id', $array_id_user)
-                    ->title('Penawaran telah diperbarui')
-                    ->message('Penawaran dengan nomor ' . $query->no_document . ' telah berhasil di salin ke nomor ' . $newQuery->no_document . '.')
-                    ->url('/quote-request')
-                    ->send();
+                sleep(3);
 
                 return response()->json([
-                    'message' => "Request Quotation number $no_document success created",
-                    'status' => 200
+                    'message' => "Penawaran berhasil dibuat dengan nomor dokumen",
                 ], 200);
             } else {
-                $db = DATE('Y');
-
-                $cek = QuotationKontrakH::where('id_cabang', $this->idcabang)
-                    ->whereYear('tanggal_penawaran', $db)
-                    ->where('no_document', 'not like', '%R%')
-                    ->where('no_document', 'like', '%/' . date('y') . '-%')
-                    ->orderBy('no_quotation', 'DESC')
-                    ->first();
-                $no_urut = '1';
-                if ($cek != null)
-                    $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
-
-                $no_quotation = sprintf('%06d', ($no_urut));
-                $no_document = 'ISL/QTC/' . DATE('y') . '-' . self::romawi(DATE('m')) . '/' . $no_quotation;
-
-                $query = QuotationKontrakH::where('id', $request->id)->firstOrFail();
-
-                $newQuery = $query->replicate();
-                $newQuery->no_quotation = $no_quotation;
-                $newQuery->no_document = $no_document;
-                $newQuery->konsultan = $query->konsultan;
-                $newQuery->flag_status = null;
-                $newQuery->tanggal_penawaran = Carbon::now()->format('Y-m-d');
-                $newQuery->created_by = $this->karyawan;
-                $newQuery->created_at = Carbon::now();
-                $newQuery->updated_by = null;
-                $newQuery->updated_at = null;
-                $newQuery->data_lama = null;
-                $newQuery->is_approved = 0;
-                $newQuery->approved_by = null;
-                $newQuery->approved_at = null;
-                $newQuery->is_emailed = 0;
-                $newQuery->is_ready_order = 0;
-                $newQuery->emailed_at = null;
-                $newQuery->emailed_by = null;
-                $newQuery->is_generated = 0;
-                $newQuery->generated_at = null;
-                $newQuery->generated_by = null;
-                $newQuery->id_token = null;
-                $newQuery->save();
-
-                $query1 = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->id)->get();
-                foreach ($query1 as $value => $a) {
-
-                    $query2 = QuotationKontrakD::where('id', $a->id)->firstOrFail();
-                    $newQuery2 = $query2->replicate();
-                    $newQuery2->id_request_quotation_kontrak_h = $newQuery->id;
-                    $newQuery2->save();
-                }
-
-                JobTask::insert([
-                    'job' => 'RenderPdfPenawaran',
-                    'status' => 'processing',
-                    'no_document' => $newQuery->no_document,
-                    'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-
-                DB::commit();
-
-                $job = new RenderPdfPenawaran($newQuery->id, 'kontrak');
+                $job = new CopyKontrakJob($this->idcabang, $this->karyawan, $request->id);
                 $this->dispatch($job);
 
-                $array_id_user = GetAtasan::where('id', $query->sales_id)->get()->pluck('id')->toArray();
-
-                Notification::whereIn('id', $array_id_user)
-                    ->title('Penawaran telah diperbarui')
-                    ->message('Penawaran dengan nomor ' . $cek->no_document . ' telah berhasil di salin ke nomor ' . $newQuery->no_document . '.')
-                    ->url('/quote-request')
-                    ->send();
-
-                return response()
-                    ->json(['message' => "Request Quotation number $no_document success created", 'status' => 200], 200);
+                sleep(3);
+                return response()->json(['message' => "Penawaran berhasil dibuat dengan nomor dokumen", 'status' => 200], 200);
             }
         } catch (\Throwable $th) {
-            DB::rollback();
+            // DB::rollback();
+            dd($th);
             return response()->json([
                 'message' => $th->getMessage()
             ], 401);
         }
     }
 
-    public function void(Request $request)
+    public function void(Request $request, QuotationService $quotationService)
     {
         /*DB::beginTransaction();
         try {
@@ -437,6 +563,13 @@ class QtOrderedController extends Controller
                     $type_doc = 'quotation_kontrak';
                 }
 
+                // Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
+                $check = $quotationService->validateVoidQuotation($data->no_document);
+
+                if (!$check['status']) {
+                    return response()->json($check, 401);
+                }
+
                 $order_h = OrderHeader::where('no_document', $data->no_document)->first();
                 $order_h->is_active = false;
                 $order_h->is_revisi = true;
@@ -492,6 +625,7 @@ class QtOrderedController extends Controller
                     'message' => 'Success void request Quotation number ' . $data->no_document . '.!',
                     'status' => '200'
                 ], 200);
+
             } else {
                 DB::rollback();
                 return response()->json([

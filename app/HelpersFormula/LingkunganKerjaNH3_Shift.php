@@ -124,14 +124,6 @@ class LingkunganKerjaNH3_Shift
             $C16_average = number_format(array_sum($C16) / count($C16), 4);
         }
 
-
-        if (floatval($C_average) < 0.1419)
-            $C_average = '<0.1419';
-        if (floatval($C1_average) < 0.0005)
-            $C1_average = '<0.0005';
-        if (floatval($C2_average) < 0.0007)
-            $C2_average = '<0.0007';
-
         $data_pershift = [
             'Shift 1' => $C[0],
             'Shift 2' => $C[1] ?? null,

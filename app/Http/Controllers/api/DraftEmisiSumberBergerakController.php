@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\api;
 
 // model
+
+use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom,LinkLhp};
 
 // service
@@ -37,7 +39,7 @@ class DraftEmisiSumberBergerakController extends Controller
             ->where('is_approve', 0)
             ->where('is_active', true)
             ->where('kategori_2', '5-Emisi')
-            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
+            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak','119-Emisi Isokinetik'])
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();
@@ -57,7 +59,7 @@ class DraftEmisiSumberBergerakController extends Controller
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
-        if ($request->category2 == 32 || $request->category2 == 31) {
+        if ($request->category2 == 32 || $request->category2 == 31 || $request->category2 == 116) {
             try {
                 $header = LhpsEmisiHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
                 if (!$header) {
@@ -148,9 +150,8 @@ class DraftEmisiSumberBergerakController extends Controller
                     }
 
                     $idDetail = [];
-                    if ($request->category2 == 31) { // Bensin
+                    if ($request->category2 == 31 || $request->category2 == 116) { // Bensin || GAS
                         foreach ($request->no_sampel_detail as $key => $val) {
-                            // dd('masuk');
                             $detail = LhpsEmisiDetail::insertGetId([
                                 'id_header' => $header->id,
                                 'no_sampel' => $request->no_sampel_detail[$key],
@@ -250,7 +251,17 @@ class DraftEmisiSumberBergerakController extends Controller
                             ->groupBy('page')
                             ->toArray();
 
-                        $view = str_contains($header->sub_kategori, 'Bensin') ? 'DraftEmisiBensin' : 'DraftEmisiSolar';
+                        // $view = str_contains($header->sub_kategori, 'Bensin') ? 'DraftEmisiBensin' : 'DraftEmisiSolar';
+
+                        if (
+                            str_contains($header->sub_kategori, 'Bensin') ||
+                            str_contains($header->sub_kategori, 'Emisi Kendaraan (Gas)')
+                        ) {
+                            $view = 'DraftEmisiBensin';
+                        } else {
+                            $view = 'DraftEmisiSolar';
+                        }
+
 
                         $fileName = LhpTemplate::setDataHeader($header)
                             ->setDataDetail($detail)
@@ -311,12 +322,16 @@ class DraftEmisiSumberBergerakController extends Controller
             $data = Parameter::where('id_kategori', '5')
                 ->where('id', $param)
                 ->get();
-            $resultx = $data->toArray();
+
+            $bakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
+                ->where('is_active', true)
+                ->get();
+            $resultx = $bakumutu->toArray();
             foreach ($resultx as $key => $value) {
-                $result[$key]['id'] = $value['id'];
+                // $result[$key]['id'] = $value['id'];
                 $result[$key]['metode_sampling'] = $value['method'] ?? '';
-                $result[$key]['kategori'] = $value['nama_kategori'];
-                $result[$key]['sub_kategori'] = $subKategori[1];
+                // $result[$key]['kategori'] = $value['nama_kategori'];
+                // $result[$key]['sub_kategori'] = $subKategori[1];
             }
 
             // $result = $resultx;
@@ -335,16 +350,18 @@ class DraftEmisiSumberBergerakController extends Controller
                         if (!empty($missing)) {
                             foreach ($missing as $miss) {
                                 $result[] = [
-                                    'id' => null,
+                                    // 'id' => null,
                                     'metode_sampling' => $miss ?? '',
-                                    'kategori' => $value->kategori,
-                                    'sub_kategori' => $value->sub_kategori,
+                                    // 'kategori' => $value->kategori,
+                                    // 'sub_kategori' => $value->sub_kategori,
                                 ];
                             }
                         }
                     }
                 }
             }
+
+            $result = array_values(array_unique($result, SORT_REGULAR));
 
             return response()->json([
                 'status' => true,
@@ -449,9 +466,6 @@ class DraftEmisiSumberBergerakController extends Controller
                 $data_entry = [];
                 $data_custom = [];
                 $cek_regulasi = [];
-
-
-
 
                 foreach ($cek_lhp as $lhp) {
                     foreach ($lhp->lhpsEmisiDetail->toArray() as $key => $val) {
@@ -559,7 +573,7 @@ class DraftEmisiSumberBergerakController extends Controller
             $no_sampel = $order_details->pluck('no_sampel')->toArray();
 
 
-            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan')
+            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan','detail')
                 ->whereIn('no_sampel', $no_sampel)
                 ->get();
             if ($lapangan->isNotEmpty()) {
@@ -571,9 +585,9 @@ class DraftEmisiSumberBergerakController extends Controller
                         ->get();
                     $hc = $co = $op = '-';
                     foreach ($baku as $xx) {
-                        if (in_array($xx->parameter, ['HC', 'HC (Bensin)']))
+                        if (in_array($xx->parameter, ['HC', 'HC (Bensin)', 'HC (Gas)']))
                             $hc = $xx->baku_mutu;
-                        if (in_array($xx->parameter, ['CO', 'CO (Bensin)']))
+                        if (in_array($xx->parameter, ['CO', 'CO (Bensin)', 'CO (Gas)']))
                             $co = $xx->baku_mutu;
                         if (in_array($xx->parameter, ['Opasitas', 'Opasitas (Solar)']))
                             $op = $xx->baku_mutu;
@@ -583,7 +597,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
                     $mainData[] = [
                         'no_sampel' => $lapangan->no_sampel,
-                        'nama_kendaraan' => $kendaraan->merk_kendaraan ?? '-',
+                        'nama_kendaraan' => $lapangan->detail->keterangan_1 ?? $kendaraan->merk_kendaraan ?? '-',
                         'bobot' => $kendaraan->bobot_kendaraan ?? '-',
                         'tahun' => $kendaraan->tahun_pembuatan ?? '-',
                         'hasil_co' => $lapangan->co,
@@ -869,10 +883,12 @@ class DraftEmisiSumberBergerakController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
+
+                $data->save();
+                // if ($data->count_print < 1) {
+                //     $data->is_printed = 1;
+                //     $data->count_print = $data->count_print + 1;
+                // }
                 // dd($data->id_kategori_2);
 
                 HistoryAppReject::insert([
@@ -895,13 +911,28 @@ class DraftEmisiSumberBergerakController extends Controller
                     $qr->save();
                 }
 
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
-                
-                if($cekLink){
-                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order,$this->karyawan, $periode);
-                        $this->dispatch($job);
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
+
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+                    $this->dispatch($job);
                 }
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $request->cfr,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
+
                 // $servicePrint = new PrintLhp($data->file_lhp);
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
 

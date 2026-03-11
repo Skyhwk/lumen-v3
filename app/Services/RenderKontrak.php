@@ -11,7 +11,7 @@ use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Services\TranslatorService as Translator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -64,7 +64,7 @@ class RenderKontrak
     public function renderHeader($id, $lang)
     {
         try {
-            $data = QuotationKontrakH::with('cabang', 'sales')
+            $data = QuotationKontrakH::with('cabang', 'sales','order')
                 ->where('is_active', true)
                 ->where('id', $id)
                 ->first();
@@ -275,7 +275,7 @@ class RenderKontrak
     {
         app()->setLocale($lang);
         Carbon::setLocale($lang);
-
+        $NoOrder = $data && $data->order ? $data->order->no_order : null;
         try {
             $pdf->WriteHTML(
                 ' <table class="table table-bordered" style="font-size: 8px;">
@@ -298,11 +298,13 @@ class RenderKontrak
                 case "SD":
                     $sampling = strtoupper(__('QTC.status_sampling.SD'));
                     break;
+                case "SP":
+                    $sampling = strtoupper(__('QTC.status_sampling.SP'));
+                    break;
                 default:
                     $sampling = strtoupper(__('QTC.status_sampling.S'));
                     break;
             }
-
             $konsultant = "";
             $jab_pic_or = "";
             $jab_pic_samp = "";
@@ -361,13 +363,17 @@ class RenderKontrak
                             <b style="font-size: 13px;">' . $kategori2[1] . " " . $penamaan_titik . "</b>
                             <hr>"
                 );*/
+
+                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                 $pdf->WriteHTML(
-                    ' <tr>
+                    ' <tr style="' . $rowBg . '">
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                         <td style="font-size: 13px; padding: 5px;">
                             <b style="font-size: 13px;">' . $kategori2[1] . "</b>
                             <hr>"
                 );
+            
                 if ($a->regulasi !== null && count($a->regulasi) > 0 && $a->regulasi[0] != "") {
                     foreach ($a->regulasi as $k => $v) {
                         $reg__ = '';
@@ -531,7 +537,7 @@ class RenderKontrak
             if (!is_null($syarat_ketentuan)) {
                 // if ($syarat_ketentuan->pembayaran != null) { Update by Afryan at 2025-02-04 to handle pembayaran
                 if (isset($syarat_ketentuan->pembayaran) && $syarat_ketentuan->pembayaran != null) {
-                    if ($data->cash_discount_persen != null) {
+                    if ($data->cash_discount_persen != null || $data->cash_discount_persen > 0) {
                         $pdf->WriteHTML(
                             ' <br>
                             <span style="font-size: 10px !important;">' . __('QTC.terms_conditions.payment.cash_discount') . '</span>'
@@ -740,6 +746,16 @@ class RenderKontrak
                     ' <tr>
                         <td style="text-align:center;padding:5px;">' . __('QTC.discount.contract.custom') . '</test>
                         <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_custom_discount) . '</td>
+                    </tr> '
+                );
+            }
+
+            if ($data->total_discount_promo > 0) {
+                $disc_promo = json_decode($data->discount_promo);
+                $pdf->WriteHTML(
+                    ' <tr>
+                        <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'%</td>
+                        <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
                     </tr> '
                 );
             }
@@ -986,6 +1002,9 @@ class RenderKontrak
                         case "SD":
                             $sampling = strtoupper(__('QTC.status_sampling.SD'));
                             break;
+                        case "SP":
+                            $sampling = strtoupper(__('QTC.status_sampling.SP'));
+                            break;
                         default:
                             $sampling = strtoupper(__('QTC.status_sampling.S'));
                             break;
@@ -1020,13 +1039,37 @@ class RenderKontrak
                         <table class="head2" width="100%">
                             <tr>
                                 <td colspan="2">
-                                    <p style="font-size: 10px;line-height:1.5px;">Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '</p>
+                                    <p style="font-size: 10px; line-height:1.5px;">
+                                        Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '
+                                    </p>
                                 </td>
-                                <td style="vertical-align: top; text-align:right;">
-                                    <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . strtoupper(__('QTC.header.contract')) . '</span>
-                                    <span style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-top:5px;" id="status_sampling">' . $sampling . '</span>
+                                <td style="vertical-align: top;">
+                                    <!-- Tabel pembantu dengan text-align right -->
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <tr>
+                                            <td style="text-align: right; padding-bottom: 1.5px;">
+                                                <!-- Kotak Pertama: Contract + Sampling -->
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;">
+                                                    ' . strtoupper(__('QTC.header.contract')) . '
+                                                </span>
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;" id="status_sampling">
+                                                    ' . $sampling . '
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align: right;">
+                                                <!-- Kotak Kedua: No Order -->
+                                                <!-- Tambahkan display: inline-block agar border membungkus teks dengan rapi -->
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;">
+                                                    ' . $NoOrder . '
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </table>
                                 </td>
                             </tr>
+
                             <tr>
                                 <td colspan="2" width="80%">
                                     <h6 style="font-size:9pt; font-weight: bold; white-space: pre-wrap; white-space: -moz-pre-wrap; white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;">' . $konsultant . $perusahaan . '</h6>
@@ -1143,8 +1186,10 @@ class RenderKontrak
                                         <hr>"
                             );*/
 
+                            $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                             $pdf->WriteHTML(
-                                ' <tr>
+                                ' <tr style="' . $rowBg . '">
                                     <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                                     <td style="font-size: 13px; padding: 5px;">
                                         <b style="font-size: 13px;">' . $kategori2[1] . "</b>
@@ -1498,6 +1543,16 @@ class RenderKontrak
                     }
                 }
 
+                if ($v->total_discount_promo > 0) {
+                    $disc_promo = json_decode($v->discount_promo);
+                    $pdf->WriteHTML(
+                        ' <tr>
+                            <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'%</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($v->total_discount_promo) . '</td>
+                        </tr> '
+                    );
+                }
+
                 if ($v->total_dpp != $v->grand_total) {
                     $pdf->WriteHTML(
                         ' <tr>
@@ -1728,7 +1783,6 @@ class RenderKontrak
                         } else {
                             $object = json_decode($values->data_sampling);
                         }
-                        
                         $num_ = self::gabungDataDanJumlahTitik($object);
                         $bollean = false;
                         $periode_found = [];
@@ -2314,6 +2368,26 @@ class RenderKontrak
                 }
                 $pdf->WriteHTML(
                     ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_custom_discount) . "</td></tr>"
+                );
+            }
+
+            // PROMO DISCOUNT
+            if ($data->total_discount_promo > 0) {
+                $disc_promo = json_decode($data->discount_promo);
+                $pdf->WriteHTML(
+                    '<tr>
+                    <td style="text-align:center;font-size: 8px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'%</td>'
+                );
+                $total_discount_promo = 0;
+                foreach ($detail as $key => $value) {
+                    $pdf->WriteHTML(
+                        '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->total_discount_promo) . "</td>"
+                    );
+                    $total_discount_promo += $value->total_discount_promo;
+
+                }
+                $pdf->WriteHTML(
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_discount_promo) . "</td></tr>"
                 );
             }
 

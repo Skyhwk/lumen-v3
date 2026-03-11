@@ -189,53 +189,70 @@ class FdlIklimDinginController extends Controller
 
 
                 if ($getTotalApprove->total + 1 == $totalL) {
-                    
-                    $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
-                    
-                    $data_kalkulasi = AnalystFormula::where('function', $function)
-                        ->where('data', $dataL)
-                        ->where('id_parameter', $parameter->id)
-                        ->process();
+                    // 1. Ambil Formula
+                    $formula = Formula::where('id_parameter', $parameter->id)
+                        ->where('is_active', true)
+                        ->first();
 
-                    if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+                    if (!$formula) {
                         return (object)[
-                            'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+                            'message' => 'Formula tidak ditemukan untuk parameter: ' . $parameter->id,
                             'status' => 404
                         ];
                     }
 
-                    $headUdara = new IklimHeader;
-                    $headUdara->no_sampel = $no_sample;
-                    $headUdara->id_parameter = $parameter->id;
-                    $headUdara->parameter = $parameter->nama_lab;
-                    $headUdara->is_approve = true;
-                    // $headUdara->lhps = true;
-                    $headUdara->rata_suhu = $data_kalkulasi['rataSuhu'];
-                    $headUdara->rata_kecepatan_angin = $data_kalkulasi['rataAngin'];
-                    $headUdara->approved_by = $this->karyawan;
-                    $headUdara->approved_at = Carbon::now();
-                    $headUdara->created_by = $this->karyawan;
-                    $headUdara->created_at = Carbon::now();
-                    $headUdara->save();
+                    // 2. Kalkulasi Data
+                    $data_kalkulasi = AnalystFormula::where('function', $formula->function)
+                        ->where('data', $dataL)
+                        ->where('id_parameter', $parameter->id)
+                        ->process();
 
-                    $ws = new WsValueUdara;
-                    $ws->id_iklim_header = $headUdara->id;
-                    $ws->no_sampel = $no_sample;
-                    $ws->id_po = $po->id;
-                    $ws->hasil1 = $data_kalkulasi['hasil'];
-                    $ws->save();
+                    if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+                        return (object)[
+                            'message' => 'Formula is Coming Soon parameter : ' . $request->parameter,
+                            'status' => 404
+                        ];
+                    }
 
-                    $data->is_approve = true;
-                    $data->approved_by = $this->karyawan;
-                    $data->approved_at = Carbon::now();
-                    $data->save();
-                } else {
+                    // 3. Update atau Create Header (IklimHeader)
+                    // Kita cari berdasarkan no_sampel dan id_parameter agar tidak double row
+                    $headUdara = IklimHeader::updateOrCreate(
+                        [
+                            'no_sampel'    => $no_sample,
+                            'id_parameter' => $parameter->id,
+                        ],
+                        [
+                            'parameter'              => $parameter->nama_lab,
+                            'is_approve'             => true,
+                            'rata_suhu'              => $data_kalkulasi['rataSuhu'],
+                            'rata_kecepatan_angin'   => $data_kalkulasi['rataAngin'],
+                            'approved_by'            => $this->karyawan,
+                            'approved_at'            => Carbon::now(),
+                            'created_by'             => $this->karyawan, // Tetap aman dengan updateOrCreate
+                            'created_at'             => Carbon::now(),
+                        ]
+                    );
 
-                    $data->is_approve = true;
-                    $data->approved_by = $this->karyawan;
-                    $data->approved_at = Carbon::now();
-                    $data->save();
+                    // 4. Update atau Create Value (WsValueUdara)
+                    WsValueUdara::updateOrCreate(
+                        [
+                            'id_iklim_header' => $headUdara->id,
+                            'no_sampel'       => $no_sample,
+                        ],
+                        [
+                            'id_po'  => $po->id,
+                            'hasil1' => $data_kalkulasi['hasil'],
+                        ]
+                    );
+
                 }
+
+                // Bagian ini dijalankan baik di 'if' maupun 'else' (DRY Principle)
+                $data->is_approve = true;
+                $data->approved_by = $this->karyawan;
+                $data->approved_at = Carbon::now();
+                $data->save();
+                
                 DB::commit();
                 return response()->json([
                     'message' => "FDL IKLIM DINGIN dengan No sample $no_sample Telah di Approve oleh $this->karyawan",

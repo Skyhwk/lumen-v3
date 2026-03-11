@@ -10,4 +10,9 @@ class SalesInDetail extends Sector
     public $timestamps = false;
 
     protected $guarded = [];
+
+    public function header()
+    {
+        return $this->belongsTo(SalesIn::class, 'id_header', 'id');
+    }
 }

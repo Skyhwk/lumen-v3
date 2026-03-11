@@ -31,17 +31,34 @@ class EmisiGravimetri
         $C8 = null;
         $C9 = null;
         $C10 = null;
+        /**
+         * C (mg/Nm3) = A / B * 1000
+         * A = ((C2 - C1) + (D2 - D1)) - ((E2 - E1) + (F2 - F1))
+         * 
+         * Inputan Analis
+         * C1 = Bobot konstan sampel Filter awal(gram)
+         * C2 = Bobot konstan sampel filter akhir (gram)
+         * D1 = Bobot konstan sampel Aseton Awal (gram)
+         * D2 = Bobot konstan sampel Aseton Akhir (gram)
+         * E1 = Bobot konstan Blanko Filter Awal (gram)
+         * E2 = Bobot Konstan blanko filter Akhir (gram)
+         * F1 = Bobot konstan Blanko Aseton awal (gram)
+         * F2 = Bobot konstan Blanko Aseton Akhir (gram)
+         */
 
-        $bobot_filter_1 = $data->bobot_filter_1;
-        $bobot_filter_2 = $data->bobot_filter_2;
-        $bobot_aseton_1 = $data->bobot_aseton_1;
-        $bobot_aseton_2 = $data->bobot_aseton_2;
+        $bobot_filter = ($data->bobot_sampel_akhir - $data->bobot_sampel_awal);
+        $bobot_aseton = ($data->bobot_aseton_akhir - $data->bobot_aseton_awal);
+        $blanko_filter = ($data->blanko_filter_akhir - $data->blanko_filter_awal);
+        $blanko_aseton = ($data->blanko_aseton_akhir - $data->blanko_aseton_awal);
 
-        $A = round(($bobot_filter_1 + $bobot_aseton_1) - ($bobot_filter_2 + $bobot_aseton_2), 4);
+        $A = round(($bobot_filter + $bobot_aseton) - ($blanko_filter + $blanko_aseton), 4);
         $B = round($data->volume_gas, 4);
 
-        $C1 = round($A / $B, 4);
+        $C1 = round(($A / $B) * 1000, 4);
         $C = round($C1 * 1000, 4);
+
+        $C3 = $C;
+        $C4 = $C1;
 
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -72,6 +89,8 @@ class EmisiGravimetri
             'C8' => $C8,
             'C9' => $C9,
             'C10' => $C10,
+            'massa_total_partikulat' => $A,
+            'vstd' => $B,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;

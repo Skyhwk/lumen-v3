@@ -13,7 +13,7 @@ class SalesIn extends Sector
 
     public function detail()
     {
-        return $this->hasMany(SalesInDetail::class, 'id_header', 'id');
+        return $this->hasMany(SalesInDetail::class, 'id_header', 'id')->where('is_active', true)->orderByDesc('id');
     }
 
 }

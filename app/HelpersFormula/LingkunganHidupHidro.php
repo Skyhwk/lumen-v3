@@ -62,19 +62,6 @@ class LingkunganHidupHidro
                     $satuan = 'mg/Nm3';
                 }
             }
-        if ($id_parameter == 261) {
-            if (floatval($C) < 38.2)
-                $C = '<38.2';
-            if (floatval($C1) < 0.0382)
-                $C1 = '<0.0382';
-            if (floatval($C2) < 0.0467)
-                $C2 = '<0.0467';
-        } else if ($id_parameter == 256 || $id_parameter == 568) {
-            if (floatval($C) < 138.4)
-                $C = '<138.4';
-            if (floatval($C1) < 0.1384)
-                $C1 = '<0.1384';
-        }
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,

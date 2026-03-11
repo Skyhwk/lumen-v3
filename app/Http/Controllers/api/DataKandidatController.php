@@ -35,6 +35,7 @@ class DataKandidatController extends Controller
 
     public function index(Request $request)
     {
+        // dd($request->all());
         // $searchYear = isset($request->search) ? date('Y', strtotime($request->search)) : date('Y');
 
         // $data = DataKandidat::select(
@@ -60,6 +61,7 @@ class DataKandidatController extends Controller
             ->where('is_active', true)
             ->where('flag', 0)
             ->where('status', 'KANDIDAT')
+            ->whereYear('created_at', $request->year)
             ->distinct();
 
         return Datatables::of($data)

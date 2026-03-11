@@ -447,7 +447,7 @@ class InputParameterTotalController extends Controller
             $n_total = [
                 'NO2-N',
                 'NO2-N (NA)',
-                'NO3-N',
+                'NO3-N', 
                 'NO3-N (APHA-E-23)',
                 'NO3-N (IKM-SP)',
                 'NO3-N (SNI-7-03)',
@@ -459,14 +459,98 @@ class InputParameterTotalController extends Controller
                 'N-Organik',
                 'N-Organik (NA)'
             ];
-            if (in_array($request->parameter_child, $n_total) && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)) {
-                $hitung_otomatis = AutomatedFormula::where('parameter', $request->parameter)
-                    ->where('required_parameter', $n_total)
-                    ->where('no_sampel', $request->no_sample)
-                    ->where('class_calculate', 'N_Total')
-                    ->where('tanggal_terima', $tgl_terima)
-                    ->calculate();
+
+            if (in_array($request->parameter_child, $n_total)) {
+                
+                // Tentukan apakah N-Total atau N-Total (NA) ada
+                $nTotalExists = in_array('N-Total', $filteredParameter) || in_array('N-Total (NA)', $filteredParameter);
+                $tknExists = in_array('TKN', $filteredParameter);
+                
+                // LOGIKA 1: Jika N-Total atau N-Total (NA) ada, tapi TKN tidak ada
+                if ($nTotalExists && !$tknExists) {
+                    // Priority: N-Total > N-Total (NA)
+                    $target_parameter = in_array('N-Total', $filteredParameter) ? 'N-Total' : 'N-Total (NA)';
+                    
+                    $hitung_otomatis = AutomatedFormula::where('parameter', $target_parameter)
+                        ->where('required_parameter', $n_total)
+                        ->where('no_sampel', $request->no_sample) // Fixed: konsistensi variabel
+                        ->where('class_calculate', 'N_Total')
+                        ->where('tanggal_terima', $tgl_terima)
+                        ->calculate();
+                    
+                    // Proses berhenti di sini untuk kasus ini
+                }
+                // LOGIKA 2: Jika ketiga parameter ada (N-Total, N-Total (NA), dan TKN)
+                elseif ($nTotalExists && $tknExists) {
+                    // Priority: N-Total > N-Total (NA)
+                    $target_parameter = in_array('N-Total', $filteredParameter) ? 'N-Total' : 'N-Total (NA)';
+                    
+                    $hitung_otomatis = AutomatedFormula::where('parameter', $target_parameter)
+                        ->where('required_parameter', $n_total)
+                        ->where('no_sampel', $request->no_sample) // Fixed: konsistensi variabel
+                        ->where('class_calculate', 'N_Total')
+                        ->where('tanggal_terima', $tgl_terima)
+                        ->calculate();
+                    
+                    // PROSES KHUSUS UNTUK TKN
+                    if (is_numeric($hitung_otomatis) && $hitung_otomatis !== null) {
+                        $total_numeric = (float) $hitung_otomatis;
+                        $hasil_tkn = $total_numeric * 0.5715;
+                        
+                        // Format hasil
+                        if ($hasil_tkn < 0.5715) {
+                            $hasil = '<0.5715';
+                        } else {
+                            $hasil = number_format($hasil_tkn, 4, '.', '');
+                        }
+                        
+                        // Insert TKN
+                        $insert = new Colorimetri();
+                        $insert->no_sampel = $request->no_sample;
+                        $insert->parameter = 'TKN';
+                        $insert->tanggal_terima = $tgl_terima;
+                        $insert->jenis_pengujian = 'sample';
+                        $insert->template_stp = 76;
+                        $insert->created_by = 'SYSTEM';
+                        $insert->created_at = Carbon::now();
+                        $insert->is_total = false;
+                        $insert->save();
+
+                        $ws_hasil = new WsValueAir();
+                        $ws_hasil->id_colorimetri = $insert->id;
+                        $ws_hasil->no_sampel = $request->no_sample;
+                        $ws_hasil->hasil = $hasil;
+                        $ws_hasil->save();
+                    }
+                }
+                // LOGIKA 3: Jika TKN ada tapi N-Total dan N-Total (NA) tidak ada
+                elseif ($tknExists && !$nTotalExists) {
+                    // TKN dieksekusi langsung tanpa proses khusus
+                    $hitung_otomatis = AutomatedFormula::where('parameter', 'TKN')
+                        ->where('required_parameter', $n_total)
+                        ->where('no_sampel', $request->no_sample)
+                        ->where('class_calculate', 'N_Total')
+                        ->where('tanggal_terima', $tgl_terima)
+                        ->calculate();
+                    
+                    // Tidak masuk ke block khusus TKN
+                }
             }
+
+            // $tkn_parameter = [
+            //     'NO2-N', 'NO2-N (NA)',
+            //     'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
+            //     'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
+            //     'N-Organik', 'N-Organik (NA)'
+            // ];
+            // if(in_array($request->parameter_child, $tkn_parameter) && in_array('TKN', $filteredParameter)){
+            //     $hitung_otomatis = AutomatedFormula::where('parameter', 'TKN')
+            //         ->where('required_parameter', $tkn_parameter)
+            //         ->where('no_sampel', $request->no_sample)
+            //         ->where('class_calculate', 'TKN')
+            //         ->where('tanggal_terima', $tgl_terima)
+            //         ->calculate();
+            // }
 
             $m_nabati = ['OG', 'M.Mineral'];
             if (in_array($request->parameter_child, $m_nabati) && in_array('M.Nabati', $filteredParameter)) {

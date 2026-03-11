@@ -51,11 +51,11 @@ class FdlMethodGotrakController extends Controller
         try {
             $inputs = $request->all();
             $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 7)->first();
-            if ($fdl){
-                return response()->json([
-                    'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
-                ], 401);
-            }
+            // if ($fdl){
+            //     return response()->json([
+            //         'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
+            //     ], 401);
+            // }
             $umum = [];
             $tubuh = [];
 
@@ -165,7 +165,7 @@ class FdlMethodGotrakController extends Controller
             if ($request->aktivitas != '')
                 $data->aktivitas = $request->aktivitas;
             $data->method = 7;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             if ($request->foto_samping_kiri != '')
                 $data->foto_samping_kiri = self::convertImg($request->foto_samping_kiri, 1, $this->user_id);
             if ($request->foto_samping_kanan != '')
@@ -182,13 +182,11 @@ class FdlMethodGotrakController extends Controller
 
             // UPDATE ORDER DETAIL
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
-                ->where('parameter', 'LIKE', '%Ergonomi%')
+                ->where('parameter', 'LIKE', '%Ergonomi%')->where('is_active', true)
                 ->first();
 
             if($orderDetail->tanggal_terima == null) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
@@ -593,14 +591,14 @@ class FdlMethodGotrakController extends Controller
 
             // Respond based on whether the data already exists
             if ($check) {
-                if ($data) {
-                    return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-                } else {
+                // if ($data) {
+                //     return response()->json(['message' => 'No. Sample sudah di input.'], 401);
+                // } else {
                     return response()->json([
                         'message' => 'Successful.',
                         'data' => $fdl
                     ], 200);
-                }
+                // }
             } else {
                 return response()->json(['message' => 'Tidak ada parameter Ergonomi berdasarkan No. Sample tersebut.'], 401);
             }

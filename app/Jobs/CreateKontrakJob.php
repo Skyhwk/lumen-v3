@@ -149,7 +149,7 @@ class CreateKontrakJob extends Job
             $period = [];
 
             $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
-
+            //dd($dataPendukungHeader);
             foreach ($dataPendukungHeader as $i => $item) {
                 $param = $item->parameter;
                 $exp = explode("-", $item->kategori_1);
@@ -381,7 +381,7 @@ class CreateKontrakJob extends Job
             Log::channel('quotation')->info('CreateKontrakJob: ' . $no_document . ' success created');
         } catch (\Exception $e) {
             DB::rollback();
-            Log::channel('quotation')->error('CreateKontrakJob: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine());
+            Log::channel('quotation')->error('CreateKontrakJob: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine() . ' on Data' . json_encode($this->data));
         }
     }
 

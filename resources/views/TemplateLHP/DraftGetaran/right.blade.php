@@ -8,11 +8,13 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="120">No. LHP</td>
-                        <td class="custom" width="200">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP</td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
+                        <td class="custom">Getaran</td>
                         <td class="custom">Getaran</td>
                     </tr>
                 </table>

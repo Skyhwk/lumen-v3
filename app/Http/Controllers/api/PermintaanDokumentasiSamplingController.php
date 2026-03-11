@@ -207,7 +207,9 @@ class PermintaanDokumentasiSamplingController extends Controller
             ->where('is_active', 1)
             ->first();
 
-        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
+        // $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
+        $service = new RenderPermintaanDokumentasiSampling();
+        $service->renderPdf($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode);
 
         return response()->json(['message' => 'Proses rerender telah dimulai'], 200);
     }

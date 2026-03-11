@@ -188,6 +188,8 @@ class FdlCahayaController extends Controller
                 $ws = WsValueUdara::where('no_sampel', $no_sample)->first();
                 if (empty($headCaha)) {
                     $headCaha = new PencahayaanHeader;
+                }
+                if (empty($ws)) {
                     $ws = new WsValueUdara;
                 }
 

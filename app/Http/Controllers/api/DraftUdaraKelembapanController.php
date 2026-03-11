@@ -1612,11 +1612,16 @@ class DraftUdaraKelembapanController extends Controller
                         $qr->save();
                     }
 
-                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                        ->where('is_active', true)
+                        ->first();
 
-                    if($cekLink) {
-                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    $cekLink = LinkLhp::where('no_order', $data->no_order);
+                    if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                    $cekLink = $cekLink->first();
+
+                    if ($cekLink) {
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                         $this->dispatch($job);
                     }
                 } else {
@@ -1815,6 +1820,19 @@ class DraftUdaraKelembapanController extends Controller
                         $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                         $qr->data = json_encode($dataQr);
                         $qr->save();
+                    }
+
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                        ->where('is_active', true)
+                        ->first();
+
+                    $cekLink = LinkLhp::where('no_order', $data->no_order);
+                    if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                    $cekLink = $cekLink->first();
+
+                    if ($cekLink) {
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+                        $this->dispatch($job);
                     }
                 }
                 return response()->json([

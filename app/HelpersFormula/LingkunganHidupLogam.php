@@ -90,12 +90,6 @@ class LingkunganHidupLogam
             } else if ($id_parameter == 305 || $id_parameter == 306 || $id_parameter == 307 || $id_parameter == 308) {
                 $rawC2 = $rawC1 * 24.45 / 207.2;
                 $C2 = \str_replace(",", "", number_format($rawC2, 7));
-                if (floatval($C) < 0.0128)
-                    $C = '<0.0128';
-                if (floatval($C1) < 0.000013)
-                    $C1 = '<0.000013';
-                if (floatval($C2) < 0.0000014)
-                    $C2 = '<0.0000014';
             }
             $vl = $data->vl;
             $st = $data->st;

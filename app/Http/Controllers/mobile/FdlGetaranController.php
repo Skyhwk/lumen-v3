@@ -187,10 +187,10 @@ class FdlGetaranController extends Controller
                     dd($e);
                 }
 
-                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->first();
 
                 if($orderDetail->tanggal_terima == null){
-                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                     $orderDetail->save();
                 }
                 

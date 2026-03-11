@@ -31,7 +31,8 @@ class LhpKebisinganController extends Controller
             ->where('is_approve', 1)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', 'LIKE', '%-Kebisingan%')
+            ->whereIn('kategori_3', ["23-Kebisingan", '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'])
+            ->whereJsonDoesntContain('parameter', '271;Kebisingan (P8J)')
             ->where('status', 3)
             ->groupBy('cfr')
             ->get();
@@ -93,70 +94,76 @@ class LhpKebisinganController extends Controller
     public function rePrint(Request $request) 
     {
         DB::beginTransaction();
-        $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-        $header->count_print = $header->count_print + 1; 
-        $header->save();
-        $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
+        try {
+            $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header->count_print = $header->count_print + 1; 
+            $header->save();
+            $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
 
-        $detail = collect($detail)->sortBy([
-            ['tanggal_sampling', 'asc'],
-            ['no_sampel', 'asc']
-        ])->values()->toArray();
-        $custom = collect(LhpsKebisinganCustom::where('id_header', $header->id)->get())
-            ->groupBy('page')
-            ->toArray();
-
-        foreach ($custom as $idx => $cstm) {
-            $custom[$idx] = collect($cstm)->sortBy([
+            $detail = collect($detail)->sortBy([
                 ['tanggal_sampling', 'asc'],
                 ['no_sampel', 'asc']
             ])->values()->toArray();
-        }
+            $custom = collect(LhpsKebisinganCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
 
-        $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
-        if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
 
-            $master_regulasi = MasterRegulasi::find($id_regulasii);
-            if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+            $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
+            if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+
+                $master_regulasi = MasterRegulasi::find($id_regulasii);
+                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                    $fileName = LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($header)
+                        ->setDataCustom($custom)
+                        ->useLampiran(true)
+                        ->whereView('DraftKebisinganLh')
+                        ->render();
+                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                    $fileName = LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($header)
+                        ->setDataCustom($custom)
+                        ->useLampiran(true)
+                        ->whereView('DraftKebisinganLh24Jam')
+                        ->render();
+                }
+            } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($header)
                     ->setDataCustom($custom)
                     ->useLampiran(true)
-                    ->whereView('DraftKebisinganLh')
-                    ->render();
-            } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($header)
-                    ->setDataCustom($custom)
-                    ->useLampiran(true)
-                    ->whereView('DraftKebisinganLh24Jam')
+                    ->whereView('DraftKebisingan')
                     ->render();
             }
-        } else {
-            $fileName = LhpTemplate::setDataDetail($detail)
-                ->setDataHeader($header)
-                ->setDataCustom($custom)
-                ->useLampiran(true)
-                ->whereView('DraftKebisingan')
-                ->render();
-        }
 
 
-        $header->file_lhp = $fileName;
-        $header->save();
+            $header->file_lhp = $fileName;
+            $header->save();
 
-        $servicePrint = new PrintLhp();
-        $servicePrint->printByFilename($header->file_lhp, $detail);
-        
-        if (!$servicePrint) {
+            $servicePrint = new PrintLhp();
+            $servicePrint->printByFilename($header->file_lhp, $detail, 'KPGI', $header->no_lhp);
+            if (!$servicePrint) {
+                DB::rollBack();
+                return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+            }
+            
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
+            ], 200);
+        } catch (\Throwable $th) {
             DB::rollBack();
-            return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+            return response()->json([
+                'message' => 'Error Reprint Data ' . $th->getMessage(),
+            ], 401);
         }
-        
-        DB::commit();
-
-        return response()->json([
-            'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
-        ], 200);
     }
 }

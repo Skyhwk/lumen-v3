@@ -55,7 +55,7 @@ class TqcGetaranPersonalController extends Controller
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3',[ "17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
-            ->orderBy('max_id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
     }

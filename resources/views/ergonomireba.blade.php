@@ -105,7 +105,6 @@
         .section-header {
             font-weight: bold;
             font-size: 8pt;
-            text-decoration: underline;
             text-align: left;
             margin: 3px 0 2px 0;
             display: block;
@@ -286,8 +285,8 @@
                     <tr class="image-row">
                         <td rowspan="2">1</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_leher.jpg') }}" alt="Posisi Leher"
-                            style="object-fit: contain;">
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_leher.PNG') }}" alt="Posisi Leher"
+                            style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_leher }}</td>
                     </tr>
@@ -299,8 +298,8 @@
                     <tr class="image-row">
                         <td rowspan="2">2</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_badan.jpg') }}" alt="Posisi Badan"
-                            style="object-fit: contain;">
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_badan.PNG') }}" alt="Posisi Badan"
+                            style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_badan }}</td>
                     </tr>
@@ -312,8 +311,8 @@
                     <tr class="image-row">
                         <td rowspan="2">3</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_kaki.jpg') }}" alt="Posisi Kaki"
-                            style="object-fit: contain;">
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_kaki.png') }}" alt="Posisi Kaki"
+                            style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_kaki }}</td>
                     </tr>
@@ -326,7 +325,7 @@
                         <td rowspan="2">4</td>
                         <td>
                             <img src="{{ public_path('dokumen/img_ergo/reba/reba_skor_beban.jpg') }}" alt="Skor Beban"
-                            style="object-fit: contain;" width="17%" height="45px">
+                            style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_beban }}</td>
                     </tr>
@@ -388,8 +387,8 @@
                     <tr class="image-row">
                         <td rowspan="2">5</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_atas.jpg') }}"
-                            alt="Posisi Lengan Atas" style="object-fit: contain;">
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_atas.PNG') }}"
+                            alt="Posisi Lengan Atas" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_lengan_atas }}</td>
                     </tr>
@@ -401,8 +400,8 @@
                     <tr class="image-row">
                         <td rowspan="2">6</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_bawah.jpg') }}"
-                            alt="Posisi Lengan Bawah" style="object-fit: contain;" width="15%" height="45px">
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_bawah.PNG') }}"
+                            alt="Posisi Lengan Bawah" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_lengan_bawah }}</td>
                     </tr>
@@ -414,9 +413,8 @@
                     <tr class="image-row">
                         <td rowspan="2">7</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_pergelangan_tangan.jpg') }}"
-                            alt="Posisi Pergelangan Tangan" style="object-fit: contain;" width="15%"
-                            height="45px">
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_pergelangan_tangan.PNG') }}"
+                            alt="Posisi Pergelangan Tangan" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_pergelangan_tangan }}</td>
                     </tr>
@@ -429,7 +427,7 @@
                         <td rowspan="2">8</td>
                         <td>
                             <img src="{{ public_path('dokumen/img_ergo/reba/reba_kondisi_pegangan.jpg') }}"
-                            alt="Kondisi Pegangan" style="object-fit: contain;" width="15%" height="45px">
+                            alt="Kondisi Pegangan" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_pegangan }}</td>
                     </tr>
@@ -442,7 +440,7 @@
                         <td rowspan="2">9</td>
                         <td>
                             <img src="{{ public_path('dokumen/img_ergo/reba/reba_aktivitas_otot.jpg') }}"
-                            alt="Aktivitas Otot" style="object-fit: contain;" width="15%" height="45px">
+                            alt="Aktivitas Otot" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_aktivitas_otot }}</td>
                     </tr>
@@ -480,7 +478,7 @@
                     <tr>
                         <td>{{ $personal->no_lhp }}</td>
                         <td>{{ $personal->no_sampel }}</td>
-                        <td>{{ $personal->jenis_sampel }} - Reba</td>
+                        <td>ERGONOMI</td>
                     </tr>
                 </table>
                 
@@ -493,23 +491,21 @@
                         <td style="width: 72%; text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                     </tr>
                     <tr>
-                        <td>Alamat / Lokasi Sampling</td>
-                        <td>:</td>
-                        <td>{{ $personal->alamat_pelanggan }}</td>
+                        <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                     </tr>
                 </table>
+
                 <!-- Informasi Sampling -->
+                <div class="section-header">Informasi Sampling</div>
                 <table class="info-table">
                     <tr>
                         <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                         <td style="width: 3%;">:</td>
                         <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                     </tr>
-                    <tr>
-                        <td style="width: 25%; text-align:start;">Periode Analisis</td>
-                        <td style="width: 3%; text-align:start;">:</td>
-                        <td style="width: 72%; text-align:start;">{{ $personal->periode_analisis }}</td>
-                    </tr>
+                    
                     <tr>
                         <td style="width: 25%; text-align:start;">Jenis Analisis</td>
                         <td style="width: 3%; text-align:start;">:</td>
@@ -537,7 +533,7 @@
                     <tr>
                         <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                         <td style="width: 3% ;text-align:start;">:</td>
-                        <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }}</td>
                     </tr>
                 </table>
                 <!-- Tabel Acuan -->
@@ -601,16 +597,23 @@
                         <td style="width: 35%; text-align: center; font-weight: bold; vertical-align: middle; height: 40px;">
                             KESIMPULAN AKHIR KONDISI ERGONOMI BERDASARKAN HASIL PENILAIAN CEPAT SELURUH TUBUH (REBA)
                         </td>
-                        <td style="width: 65%; text-align: justify; vertical-align: top; font-size: 8pt;">
-                            Berdasarkan hasil pengujian REBA, pekerja menunjukkan tingkat risiko TINGGI dengan skor 9. Kondisi ergonomi pekerja memerlukan tindakan perbaikan segera untuk mencegah terjadinya gangguan muskuloskeletal. Postur kerja yang tidak ergonomis dapat menyebabkan cedera dan penurunan produktivitas.
+                        <td style="width: 65%; text-align: justify; vertical-align: top; font-size: 8pt; line-height: 1.2;">
+                            Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor REBA yaitu sebesar {{ $pengukuran->final_skor_reba }}. Hasil skor tersebut masuk dalam tingkat risiko {{ $pengukuran->tingkat_resiko }} yaitu kategori {{ $pengukuran->kategori_resiko }}, sehingga {{ $pengukuran->tindakan }}.
                         </td>
                     </tr>
                     <tr>
                         <td style="text-align: center; font-weight: bold; vertical-align: middle; height: 35px;">
                             DESKRIPSI SINGKAT PEKERJAAN PEKERJA
                         </td>
-                        <td style="text-align: justify; vertical-align: top; font-size: 8pt;">
-                            Pekerja melakukan aktivitas mengangkat dan memindahkan material dengan posisi membungkuk, leher menunduk, dan lengan terangkat. Aktivitas dilakukan berulang selama 6-8 jam per hari dengan beban rata-rata 10-15 kg.
+                        <td style="text-align: justify; vertical-align: top; font-size: 8pt; line-height: 1.2;">
+                            {{$personal->divisi}} : <br>
+                            @if($personal->aktifitas_k3->uraian != null && $personal->aktifitas_k3->uraian != [])
+                                @foreach($personal->aktifitas_k3->uraian as $item)
+                                    <p style="margin: 2px 0;">
+                                        {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
+                                    </p>
+                                @endforeach
+                            @endif
                         </td>
                     </tr>
                 </table>
@@ -623,10 +626,10 @@
                                 <td class="signature-left"></td>
                                 <td class="signature-right">
                                     <div class="signature-date">
-                                        {{ $ttd->tanggal }}
+                                       Tangerang, {{ $ttd->tanggal }}
                                     </div><br>
                                     <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                            <img src="{{ $ttd->qr_path }}" width="50" height="50" alt="ttd">
                                     </div>
                                 </td>
                             </tr>

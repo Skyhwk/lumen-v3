@@ -60,13 +60,6 @@ class LingkunganHidupNH3
 
         $satuan = 'mg/Nm3';
 
-        if (floatval($C) < 3.33)
-            $C = '<3.33';
-        if (floatval($C1) < 0.00333)
-            $C1 = '<0.00333';
-        if (floatval($C2) < 0.00478)
-            $C2 = '<0.00478';
-
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,

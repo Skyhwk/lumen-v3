@@ -22,8 +22,9 @@ class RekapSampelSdController extends Controller
 {
     public function index(Request $request)
     {
+        $kategori = ['SD', 'SP'];
         $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])
-            ->where('kategori_1', 'SD')
+            ->whereIn('kategori_1', $kategori)
             ->where('is_active', 1);
 
         // Filter berdasarkan date range

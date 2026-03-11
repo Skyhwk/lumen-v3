@@ -67,8 +67,8 @@ class ReorderNotifierService
             ]
         ];
 
-        $reorderNotifierService = new PerubahanSampelService();
-        $reorderNotifierService->run($this->no_order, $userid);
+        // $reorderNotifierService = new PerubahanSampelService();
+        // $reorderNotifierService->run($this->no_order, $userid);
 
         $this->notify($result, $bcc);
     }

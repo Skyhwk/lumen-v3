@@ -8,10 +8,12 @@ use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Models\MasterSubKategori;
 use App\Models\PersiapanSampelHeader;
+use App\Models\PersiapanSampelDetail;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 
@@ -225,7 +227,8 @@ class JadwalServices
             return true;
         } catch (Exception $ex) {
             DB::rollBack();
-            throw new Exception($ex->getMessage(), 401);
+            $code = $ex->getCode() ?: 500; 
+            throw new Exception($ex->getMessage(), $code);
         }
     }
 
@@ -624,7 +627,6 @@ class JadwalServices
             //update order
             
             if ($dataUpdate->kategori != null) {
-                
                 $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
                 if ($tipe_qt == 'QTC') {
                     $status_order = QuotationKontrakH::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
@@ -689,50 +691,85 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                
-                if ($orderh && !empty($dataUpdate->kategori)) {
-                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                // 1. Validasi awal (Fail fast)
+                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderh) {
+                    // 2. Bentuk array no_sampel (Data Preparation)
                     $array_no_samples = [];
                     foreach ($dataUpdate->kategori as $kategori) {
-                        $pra_no_sample = explode(" - ", $kategori)[1];
-                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                        $parts = explode(" - ", $kategori);
+                        if (isset($parts[1])) {
+                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
+                        }
                     }
 
-                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    // 3. Query PersiapanSampelHeader (Clean Query)
                     $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function($query) use ($array_no_samples) {
+                        ->where(function ($query) use ($array_no_samples) {
                             foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
                             }
                         })
+                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+                        ->whereNotNull('no_sampel')
                         ->first();
 
+                    // 4. Proses Update jika PSH ditemukan
                     if ($psh) {
-                        // 3. Siapin data sampler yang baru
-                        $newSamplers = [];
-                        foreach ($dataUpdate->sampler as $s) {
-                            // Ambil namanya aja, sesuai format 'id,nama'
-                            $newSamplers[] = explode(',', $s)[1]; 
-                        }
+                        // A. Proses Sampler Baru (Dilakukan sekali saja)
+                        $newSamplers = array_map(function ($s) {
+                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
+                        }, $dataUpdate->sampler);
                         
-                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
-                        $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($newSamplers, $oldSamplers);
-                        // 4. Update field sampler_jadwal dan save
-                        if (count($diff) > 0) {
-                            $psh->no_sampel = json_encode($array_no_samples);
+                        $newSamplerString = implode(',', $newSamplers);
+                        // B. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
+                        if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
-                            $psh->sampler_jadwal = implode(',', $newSamplers);
-                            $psh->updated_by = $dataUpdate->karyawan;
-                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                        } 
+                        // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
+                        $dataParsing =[
+                            "nosampelOld" => json_decode($psh->no_sampel),
+                            "nosampelNew" => $array_no_samples,
+                            "samplerOld" => $psh->sampler_jadwal,
+                            "samplerNew" => $newSamplerString
+                        ];
+                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
+                        if($dirtyPersiapanBoolean){
+                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
+                                $psh->is_active =false;
+                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
+                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
+                            }
+                        }
+                        // D. Set Data yang SELALU diupdate (Apapun kondisinya)
+                         $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->sampler_jadwal = $newSamplerString;
+                        // E. Eksekusi Simpan
+                        Log::info('Debug Dirty Check', [
+                            'no_quotation' => $dataUpdate->no_quotation,
+                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+                            'no_sampel_new' => $psh->no_sampel,
+                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+                            'sampler_new' => $psh->sampler_jadwal,
+                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+                            'tanggal_new' => $psh->tanggal_sampling,
+                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
+                        ]);
+                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
+                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
                             $psh->save();
                         }
                     }
                 }
             } catch (\Throwable $th) {
+                // Tangkap error dengan detail yang cukup
                 DB::rollBack();
-                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+                throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
             DB::commit();
@@ -945,73 +982,6 @@ class JadwalServices
                 $noqt = $dataUpdate->no_quotation;
             }
 
-            /* notif */
-            // if ($tanggal == $tglNow || $tanggal <= $tglBesok) {
-            //     foreach ($samplers as $num => $noc) {
-            //         $jadwals = Jadwal::where('no_quotation', $noqt)
-            //             ->where('tanggal', $tanggal)
-            //             ->where('userid', $noc)
-            //             ->where('is_active', true)
-            //             ->where('notif', 0)
-            //             ->where('flag', 0)
-            //             ->get();
-
-            //         if (!$jadwals->isEmpty()) {
-            //             $txt = "Jadwal anda tanggal <b>$tanggal</b> berubah menjadi : \n \n";
-            //             foreach ($jadwals as $key => $val) {
-            //                 $val->notif = 1;
-            //                 $val->save();
-
-            //                 $tes = $val->no_quotation;
-            //                 $users123 = Jadwal::where('no_quotation', $tes)
-            //                     ->where('kategori', $val->kategori)
-            //                     ->where('tanggal', $val->tanggal)
-            //                     ->where('is_active', true)
-            //                     ->get();
-            //                 foreach ($users123 as $keys => $var) {
-            //                     $user123[$keys] = $var->sampler;
-            //                 }
-
-            //                 $status = 'Sesaat';
-            //                 if ($val->durasi == 1)
-            //                     $status = '8 Jam';
-            //                 if ($val->durasi == 2)
-            //                     $status = '1 x 24 Jam';
-            //                 if ($val->durasi == 3)
-            //                     $status = '2 x 24 Jam';
-            //                 if ($val->durasi == 4)
-            //                     $status = '3 x 24 Jam';
-
-            //                 $no_qt = $val->no_quotation;
-            //                 $pt = $val->nama_perusahaan;
-            //                 $alamat = $val->alamat;
-            //                 $kat = str_replace("[", "", $val->kategori);
-            //                 $kat = str_replace("]", "", $kat);
-            //                 $kat = str_replace('"', "", $kat);
-            //                 $usr = str_replace('[', "", json_encode($user123));
-            //                 $usr = str_replace(']', "", $usr);
-            //                 $usr = str_replace('"', "", $usr);
-
-
-            //                 $txt .= "\n Nomor QT : <b>$no_qt</b>";
-            //                 $txt .= "\n Nama Client : <b>$pt</b>";
-            //                 $txt .= "\n Alamat : <b>$alamat</b>";
-            //                 $txt .= "\n Kategori : <b>$kat</b>";
-            //                 $txt .= "\n Sampler : <b>$usr</b>";
-            //                 $txt .= "\n Durasi : <b>$status</b>";
-
-            //             }
-            //             /* debug on
-            //             $conn_user = new User;
-            //             $u = $conn_user->setConnection($this->db)->where('id', $noc)->first();
-            //             if($u->pin_user!=null){
-            //                 $telegram = new Telegram();
-            //                 $telegram->send($u->pin_user, $txt);
-            //             } */
-            //         }
-            //     }
-            // }
-
             // update
             if ($dataUpdate->kategori != null) {
                 $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
@@ -1085,52 +1055,90 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                
-                if ($orderh && !empty($dataUpdate->kategori)) {
-                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                // 1. Validasi awal (Fail fast)
+                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderh) {
+                    // 2. Bentuk array no_sampel (Data Preparation)
                     $array_no_samples = [];
                     foreach ($dataUpdate->kategori as $kategori) {
-                        $pra_no_sample = explode(" - ", $kategori)[1];
-                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                        $parts = explode(" - ", $kategori);
+                        if (isset($parts[1])) {
+                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
+                        }
                     }
 
-                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    // 3. Query PersiapanSampelHeader (Clean Query)
                     $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function($query) use ($array_no_samples) {
+                        ->where(function ($query) use ($array_no_samples) {
                             foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
                             }
                         })
+                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+                        ->whereNotNull('no_sampel')
                         ->first();
 
+                    // 4. Proses Update jika PSH ditemukan
                     if ($psh) {
-                        // 3. Siapin data sampler yang baru
-                        $newSamplers = [];
-                        foreach ($dataUpdate->sampler as $s) {
-                            // Ambil namanya aja, sesuai format 'id,nama'
-                            $newSamplers[] = explode(',', $s)[1]; 
-                        }
+                        // A. Proses Sampler Baru (Dilakukan sekali saja)
+                        $newSamplers = array_map(function ($s) {
+                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
+                        }, $dataUpdate->sampler);
+                        
+                        $newSamplerString = implode(',', $newSamplers);
 
-                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
-                        $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($newSamplers, $oldSamplers);
-                        // 4. Update field sampler_jadwal dan save
-                        if (count($diff) > 0) {
-                            $psh->no_sampel = json_encode($array_no_samples);
+                        // B. Set Data yang SELALU diupdate (Apapun kondisinya)
+                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->sampler_jadwal = $newSamplerString;
+                        
+                        // C. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
+                        // Jika detail_bas_documents KOSONG (null), berarti belum dikunci/tanda tangan -> Update Tanggal
+                        if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
-                            $psh->sampler_jadwal = implode(',', $newSamplers);
-                            $psh->updated_by = $dataUpdate->karyawan;
-                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                        } 
+
+                        // D logika jika jadwal berubah total tanggal tanpa ada pengurangan no sampel dan sampler
+                        $dataParsing =[
+                            "nosampelOld" => json_decode($psh->no_sampel),
+                            "nosampelNew" => $array_no_samples,
+                            "samplerOld" => $psh->sampler_jadwal,
+                            "samplerNew" => $newSamplers
+                        ];
+                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
+                        if($dirtyPersiapanBoolean){
+                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
+                                $psh->is_active =false;
+                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
+                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
+                            }
+                        }
+                        // E. Eksekusi Simpan
+                        Log::info('Debug Dirty Check', [
+                            'no_quotation' => $dataUpdate->no_quotation,
+                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+                            'no_sampel_new' => $psh->no_sampel,
+                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+                            'sampler_new' => $psh->sampler_jadwal,
+                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+                            'tanggal_new' => $psh->tanggal_sampling,
+                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
+                        ]);
+                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
+                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
                             $psh->save();
                         }
                     }
                 }
             } catch (\Throwable $th) {
+                // Tangkap error dengan detail yang cukup
                 DB::rollBack();
-                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+                throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
-
             DB::commit();
             return true;
         } catch (Exception $ex) {
@@ -1139,212 +1147,6 @@ class JadwalServices
         }
     }
 
-    // tinggal di test 
-    // 28-07-2025
-    // public function addJadwalSP()
-    // { // add jadwal baru
-      
-    //     $dataAdd = $this->addJadwal;
-        
-    //     if (
-    //         $dataAdd->id_sampling == null ||
-    //         $dataAdd->no_quotation == null ||
-    //         $dataAdd->karyawan == null ||
-    //         $dataAdd->no_document == null ||
-    //         $dataAdd->tanggal == null ||
-    //         $dataAdd->sampler == null ||
-    //         $dataAdd->kategori == null ||
-    //         $dataAdd->warna == null ||
-    //         $dataAdd->durasi == null ||
-    //         $dataAdd->status == null ||
-    //         $dataAdd->nama_perusahaan == null ||
-    //         $dataAdd->alamat == null ||
-    //         $dataAdd->driver == null
-    //     ) {
-    //         throw new Exception("Id Sampling, No Quotation, Karyawan, No Document, Tanggal, Sampler, Kategori, Durasi, Status, Nama Perusahaan, Alamat is required when add jadwal", 401);
-    //     }
-    
-
-    //     DB::beginTransaction();
-    //     try {
-    //         /* 
-    //          *step non aktif jadwal sebelumnya jika ada
-    //          *berlaku jika no dokumen sampling plan sudah naik menjadi R
-    //          *berlaku jika no dokumen sampling plan sudah di jadwalkan
-    //          */
-
-    //         $no_document = $dataAdd->no_document;
-             
-    //         if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
-    //             $originalNoDocument = substr($no_document, 0, $matches[0][1]);
-    //             $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
-    //                 ->where('no_document', 'like', "{$originalNoDocument}%")
-    //                 ->where('no_document', '<>', $no_document)
-    //                 ->orderBy('no_quotation')
-    //                 ->pluck('id');
-
-    //             if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
-    //                 $noQt = explode('/', $dataAdd->no_quotation);
-    //                 $updateQuery = Jadwal::whereIn('id_sampling', $documents);
-
-    //                 if (isset($noQt[1]) && $noQt[1] === 'QT') {
-    //                     $updateQuery->where('no_quotation', $dataAdd->no_quotation);
-    //                 }
-
-    //                 $updateQuery->update(['is_active' => false]);
-    //             }
-    //         }
-    //         // $no_document = $dataAdd->no_document;
-    //         // $lastRPosition = strrpos($no_document, 'R');
-
-    //         // if ($lastRPosition !== false) {
-    //         //     $originalNoDocument = substr($no_document, 0, $lastRPosition);
-    //         //     $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
-    //         //         ->where('no_document', 'like', "{$originalNoDocument}%")
-    //         //         ->where('no_document', '<>', $no_document)
-    //         //         ->orderBy('no_quotation')
-    //         //         ->pluck('id');
-
-    //         //     if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
-    //         //         $noQt = explode('/', $dataAdd->no_quotation);
-    //         //         $updateQuery = Jadwal::whereIn('id_sampling', $documents);
-
-    //         //         if (isset($noQt[1]) && $noQt[1] === 'QT') {
-    //         //             $updateQuery->where('no_quotation', $dataAdd->no_quotation);
-    //         //         }
-
-    //         //         $updateQuery->update(['is_active' => false]);
-    //         //     }
-    //         // }
-
-
-    //         $wilayah = null;
-    //         if (explode('/', $dataAdd->no_quotation)[1] == 'QTC') {
-    //             $cek = QuotationKontrakH::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
-    //             $wilayah = explode('-', $cek->wilayah)[1];
-    //         } else if (explode('/', $dataAdd->no_quotation)[1] == 'QT') {
-    //             $cek = QuotationNonKontrak::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
-    //             $wilayah = explode('-', $cek->wilayah)[1];
-    //         }
-
-    //         // bentuk data
-    //         $temBody = [];
-          
-    //         for ($i = 0; $i < count($dataAdd->tanggal); $i++) {
-    //             $temBody[] = [
-    //                 "no_quotation" => $dataAdd->no_quotation,
-    //                 "quotation_id" => $dataAdd->quotation_id,
-    //                 "no_document" => $dataAdd->no_document,
-    //                 "nama_perusahaan" => $dataAdd->nama_perusahaan,
-    //                 "id_sampling" => $dataAdd->id_sampling,
-    //                 'id_cabang' => $dataAdd->id_cabang,
-    //                 "alamat" => $dataAdd->alamat,
-    //                 "tanggal" => Carbon::parse($dataAdd->tanggal[$i])->format("Y-m-d"),
-    //                 "periode" => $dataAdd->periode != "" ? $dataAdd->periode : null,
-    //                 "jam" => $dataAdd->jam_mulai[$i],
-    //                 "jam_mulai" => $dataAdd->jam_mulai[$i],
-    //                 "jam_selesai" => $dataAdd->jam_selesai[$i],
-    //                 "kategori" => json_encode($dataAdd->kategori[$i]),
-    //                 "sampler" => $dataAdd->sampler[$i],
-    //                 "warna" => $dataAdd->warna[$i],
-    //                 "note" => $dataAdd->note[$i],
-    //                 "durasi" => $dataAdd->durasi[$i],
-    //                 "status" => $dataAdd->status[$i],
-    //                 "driver" => $dataAdd->driver ?? null,
-    //                 "created_by" => $dataAdd->karyawan,
-    //                 "created_at" => $this->timestamp,
-    //                 "kendaraan" => $dataAdd->kendaraan[$i] ?? null,
-    //                 "wilayah" => $wilayah,
-    //             ];
-    //         }
-          
-    //         // pengolahan data
-    //         $firstJadwalId = null; // Menyimpan ID untuk referensi parsial jika diperlukan
-    //         foreach ($temBody as $key => $val) {
-    //             $keys=$key;
-    //             if ($key == 0) { // Jika data pertama
-    //                 foreach ($val['sampler'] as $key => $value) {
-    //                     $commonData = [
-    //                         'nama_perusahaan' => $val['nama_perusahaan'],
-    //                         'no_quotation' => $val['no_quotation'],
-    //                         'alamat' => $val['alamat'],
-    //                         'tanggal' => $val['tanggal'],
-    //                         'periode' => $val['periode'],
-    //                         'jam' => $val['jam_mulai'],
-    //                         'jam_mulai' => $val['jam_mulai'],
-    //                         'jam_selesai' => $val['jam_selesai'],
-    //                         'kategori' => $val['kategori'],
-    //                         'warna' => $val['warna'],
-    //                         'durasi' => $val['durasi'],
-    //                         'status' => $val['status'],
-    //                         'created_by' => $val['created_by'],
-    //                         'created_at' => $val['created_at'],
-    //                         'note' => $val['note'],
-    //                         'kendaraan' => $val['kendaraan'],
-    //                         'id_sampling' => $val['id_sampling'],
-    //                         'id_cabang' => $val['id_cabang'][$keys],
-    //                         'wilayah' => $val['wilayah'],
-    //                         'driver' => $val['driver'],
-    //                         'sampler' => explode(',', $value)[1],
-    //                         'userid' => explode(',', $value)[0],
-    //                     ];
-
-    //                     // Menyimpan data pertama langsung ke database
-    //                     $firstJadwalId = Jadwal::insertGetId($commonData);
-    //                 }
-    //             } else { //jika memiliki parsial
-    //                 foreach ($val['sampler'] as $key => $value) {
-
-    //                     $commonData = [
-    //                         'nama_perusahaan' => $val['nama_perusahaan'],
-    //                         'no_quotation' => $val['no_quotation'],
-    //                         'alamat' => $val['alamat'],
-    //                         'tanggal' => $val['tanggal'],
-    //                         'periode' => $val['periode'],
-    //                         'jam' => $val['jam_mulai'],
-    //                         'jam_mulai' => $val['jam_mulai'],
-    //                         'jam_selesai' => $val['jam_selesai'],
-    //                         'kategori' => $val['kategori'],
-    //                         'warna' => $val['warna'],
-    //                         'durasi' => $val['durasi'],
-    //                         'status' => $val['status'],
-    //                         'created_by' => $val['created_by'],
-    //                         'created_at' => $val['created_at'],
-    //                         'note' => $val['note'],
-    //                         'kendaraan' => $val['kendaraan'],
-    //                         'id_sampling' => $val['id_sampling'],
-    //                         'id_cabang' => $val['id_cabang'][$keys],
-    //                         'wilayah' => $val['wilayah'],
-    //                         'driver' => $val['driver'],
-    //                         'sampler' => explode(',', $value)[1],
-    //                         'userid' => explode(',', $value)[0],
-    //                         'parsial' => $firstJadwalId,
-    //                     ];
-    //                     Jadwal::insert($commonData);
-    //                 }
-    //             }
-    //         }
-    //         //update request sampling
-    //         $cek = SamplingPlan::where('id', $dataAdd->id_sampling)->first();
-    //         if (!is_null($cek)) {
-    //             $cek->status = 1;
-    //             $cek->status_jadwal = 'jadwal';
-    //             $cek->save();
-    //         }
-
-    //         /* step notifications */
-    //         $sales = JadwalServices::on('no_quotation', $dataAdd->no_quotation)->getQuotation()->sales_id;
-    //         $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
-    //         $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
-    //         Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
-    //         DB::commit();
-    //         return true;
-    //     } catch (Exception $ex) {
-    //         DB::rollback();
-    //         throw new Exception($ex->getMessage() . ' Line: ' . $ex->getLine() . ' File: ' . $ex->getFile(), 401);
-    //     }
-    // }
-    
     public function addJadwalSP()
     { // add jadwal baru
         $dataAdd = $this->addJadwal;
@@ -1401,14 +1203,18 @@ class JadwalServices
              */
 
             $no_document = $dataAdd->no_document;
+            /* test
             if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
+                
                 $originalNoDocument = substr($no_document, 0, $matches[0][1]);
+                
                 $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
                     ->where('no_document', 'like', "{$originalNoDocument}%")
                     ->where('no_document', '<>', $no_document)
+                    ->where('periode_kontrak',$dataAdd->periode)
                     ->orderBy('no_quotation')
                     ->pluck('id');
-
+                
                 if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
                     $noQt = explode('/', $dataAdd->no_quotation);
                     $updateQuery = Jadwal::whereIn('id_sampling', $documents);
@@ -1420,30 +1226,38 @@ class JadwalServices
                     $updateQuery->update(['is_active' => false]);
                 }
             }
-            // $no_document = $dataAdd->no_document;
-            // $lastRPosition = strrpos($no_document, 'R');
+             */
+            if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
+                $originalNoDocument = substr($no_document, 0, $matches[0][1]);
+                // Hanya cari dokumen ORI saja (tanpa suffix R), bukan semua revisi sebelumnya
+                $documentsQuery = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
+                    ->where('no_document', 'like', "{$originalNoDocument}%") // ← EXACT MATCH, bukan LIKE
+                    ->where('no_document', '<>', $no_document);
 
-            // if ($lastRPosition !== false) {
-            //     $originalNoDocument = substr($no_document, 0, $lastRPosition);
-            //     $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
-            //         ->where('no_document', 'like', "{$originalNoDocument}%")
-            //         ->where('no_document', '<>', $no_document)
-            //         ->orderBy('no_quotation')
-            //         ->pluck('id');
+                $noQt = explode('/', $dataAdd->no_quotation);
 
-            //     if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
-            //         $noQt = explode('/', $dataAdd->no_quotation);
-            //         $updateQuery = Jadwal::whereIn('id_sampling', $documents);
+                if (isset($noQt[1]) && $noQt[1] === 'QTC') {
+                    // Kontrak: pastikan periode sama — hanya matikan ori di bulan yang sama
+                    if (empty($dataAdd->periode)) {
+                        throw new Exception("Periode wajib diisi untuk QTC saat revisi dokumen.", 401);
+                    }
+                    $documentsQuery->where('periode_kontrak', $dataAdd->periode);
+                }
+                // QT: tidak perlu filter periode karena memang null semua
 
-            //         if (isset($noQt[1]) && $noQt[1] === 'QT') {
-            //             $updateQuery->where('no_quotation', $dataAdd->no_quotation);
-            //         }
+                $documents = $documentsQuery->pluck('id');
 
-            //         $updateQuery->update(['is_active' => false]);
-            //     }
-            // }
+                if ($documents->isNotEmpty()) {
+                    $updateQuery = Jadwal::whereIn('id_sampling', $documents);
 
+                    if (isset($noQt[1]) && $noQt[1] === 'QT') {
+                        $updateQuery->where('no_quotation', $dataAdd->no_quotation);
+                    }
 
+                    $updateQuery->update(['is_active' => false]);
+                }
+            }
+            
             $wilayah = null;
             if (explode('/', $dataAdd->no_quotation)[1] == 'QTC') {
                 $cek = QuotationKontrakH::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
@@ -1581,185 +1395,6 @@ class JadwalServices
             throw new Exception($ex->getMessage() . ' Line: ' . $ex->getLine() . ' File: ' . $ex->getFile(), 401);
         }
     }
-    // public function addJadwalSP()
-    // { // add jadwal baru
-    //     $dataAdd = $this->addJadwal;
-
-    //     if (
-    //         $dataAdd->id_sampling == null ||
-    //         $dataAdd->no_quotation == null ||
-    //         $dataAdd->karyawan == null ||
-    //         $dataAdd->no_document == null ||
-    //         $dataAdd->tanggal == null ||
-    //         $dataAdd->sampler == null ||
-    //         $dataAdd->kategori == null ||
-    //         $dataAdd->warna == null ||
-    //         $dataAdd->durasi == null ||
-    //         $dataAdd->status == null ||
-    //         $dataAdd->nama_perusahaan == null ||
-    //         $dataAdd->id_cabang == null ||
-    //         $dataAdd->alamat == null
-    //     ) {
-    //         throw new Exception("Id Sampling, No Quotation, Karyawan, No Document, Tanggal, Cabang ,Sampler, Kategori, Durasi, Status, Nama Perusahaan, Alamat is required when add jadwal", 401);
-    //     }
-
-    //     DB::beginTransaction();
-    //     try {
-    //         /* 
-    //          *step non aktif jadwal sebelumnya jika ada
-    //          *berlaku jika no dokumen sampling plan sudah naik menjadi R
-    //          *berlaku jika no dokumen sampling plan sudah di jadwalkan
-    //          */
-
-    //         $no_document = $dataAdd->no_document;
-    //         if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
-    //             $originalNoDocument = substr($no_document, 0, $matches[0][1]);
-    //             $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
-    //                 ->where('no_document', 'like', "{$originalNoDocument}%")
-    //                 ->where('no_document', '<>', $no_document)
-    //                 ->orderBy('no_quotation')
-    //                 ->pluck('id');
-
-    //             if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
-    //                 $noQt = explode('/', $dataAdd->no_quotation);
-    //                 $updateQuery = Jadwal::whereIn('id_sampling', $documents);
-
-    //                 if (isset($noQt[1]) && $noQt[1] === 'QT') {
-    //                     $updateQuery->where('no_quotation', $dataAdd->no_quotation);
-    //                 }
-
-    //                 $updateQuery->update(['is_active' => false]);
-    //             }
-    //         }
-
-    //         $wilayah = null;
-    //         if (explode('/', $dataAdd->no_quotation)[1] == 'QTC') {
-    //             $cek = QuotationKontrakH::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
-    //             $wilayah = explode('-', $cek->wilayah)[1];
-    //         } else if (explode('/', $dataAdd->no_quotation)[1] == 'QT') {
-    //             $cek = QuotationNonKontrak::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
-    //             $wilayah = explode('-', $cek->wilayah)[1];
-    //         }
-
-
-    //         // bentuk data
-    //         $temBody = [];
-    //         for ($i = 0; $i < count($dataAdd->tanggal); $i++) {
-    //             $temBody[] = [
-    //                 "no_quotation" => $dataAdd->no_quotation,
-    //                 "quotation_id" => $dataAdd->quotation_id,
-    //                 "no_document" => $dataAdd->no_document,
-    //                 "nama_perusahaan" => $dataAdd->nama_perusahaan,
-    //                 "id_sampling" => $dataAdd->id_sampling,
-    //                 "id_cabang" => $dataAdd->id_cabang[$i],
-    //                 "alamat" => $dataAdd->alamat,
-    //                 "tanggal" => Carbon::parse($dataAdd->tanggal[$i])->format("Y-m-d"),
-    //                 "periode" => $dataAdd->periode != "" ? $dataAdd->periode : null,
-    //                 "jam" => $dataAdd->jam_mulai[$i],
-    //                 "jam_mulai" => $dataAdd->jam_mulai[$i],
-    //                 "jam_selesai" => $dataAdd->jam_selesai[$i],
-    //                 "kategori" => json_encode($dataAdd->kategori[$i]),
-    //                 "sampler" => $dataAdd->sampler[$i],
-    //                 "warna" => $dataAdd->warna[$i],
-    //                 // "driver" => $dataAdd->driver[$i] ?? null,
-    //                 "note" => $dataAdd->note[$i],
-    //                 "durasi" => $dataAdd->durasi[$i],
-    //                 "status" => $dataAdd->status[$i],
-    //                 "created_by" => $dataAdd->karyawan,
-    //                 "created_at" => $this->timestamp,
-    //                 "kendaraan" => $dataAdd->kendaraan[$i] ?? null,
-    //                 "wilayah" => $wilayah,
-    //             ];
-    //         }
-
-
-    //         $firstJadwalId = null;
-    //         foreach ($temBody as $key => $val) {
-    //             if ($key == 0) { // Jika data pertama
-
-    //                 foreach ($val['sampler'] as $key => $value) {
-    //                     $commonData = [
-    //                         'nama_perusahaan' => $val['nama_perusahaan'],
-    //                         'no_quotation' => $val['no_quotation'],
-    //                         'alamat' => $val['alamat'],
-    //                         'tanggal' => $val['tanggal'],
-    //                         'id_cabang' => $val['id_cabang'],
-    //                         'periode' => $val['periode'],
-    //                         'jam' => $val['jam_mulai'],
-    //                         'jam_mulai' => $val['jam_mulai'],
-    //                         'jam_selesai' => $val['jam_selesai'],
-    //                         'kategori' => $val['kategori'],
-    //                         'warna' => $val['warna'],
-    //                         // 'driver' => $val['driver'] ?? null,
-    //                         'durasi' => $val['durasi'],
-    //                         'status' => $val['status'],
-    //                         'created_by' => $val['created_by'],
-    //                         'created_at' => $val['created_at'],
-    //                         'note' => $val['note'],
-    //                         'kendaraan' => $val['kendaraan'],
-    //                         'id_sampling' => $val['id_sampling'],
-    //                         'wilayah' => $val['wilayah'],
-    //                         'sampler' => explode(',', $value)[1],
-    //                         'userid' => explode(',', $value)[0],
-    //                     ];
-
-    //                     // Menyimpan data pertama langsung ke database
-    //                     $firstJadwalId = Jadwal::insertGetId($commonData);
-    //                 }
-
-    //             } else { //jika memiliki parsial
-    //                 foreach ($val['sampler'] as $key => $value) {
-
-    //                     $commonData = [
-    //                         'nama_perusahaan' => $val['nama_perusahaan'],
-    //                         'no_quotation' => $val['no_quotation'],
-    //                         'alamat' => $val['alamat'],
-    //                         'tanggal' => $val['tanggal'],
-    //                         'id_cabang' => $val['id_cabang'],
-    //                         'periode' => $val['periode'],
-    //                         'jam' => $val['jam_mulai'],
-    //                         'jam_mulai' => $val['jam_mulai'],
-    //                         'jam_selesai' => $val['jam_selesai'],
-    //                         'kategori' => $val['kategori'],
-    //                         'warna' => $val['warna'],
-    //                         // 'driver' => $val['driver'] ?? null,
-    //                         'durasi' => $val['durasi'],
-    //                         'status' => $val['status'],
-    //                         'created_by' => $val['created_by'],
-    //                         'created_at' => $val['created_at'],
-    //                         'note' => $val['note'],
-    //                         'kendaraan' => $val['kendaraan'],
-    //                         'id_sampling' => $val['id_sampling'],
-    //                         'wilayah' => $val['wilayah'],
-    //                         'sampler' => explode(',', $value)[1],
-    //                         'userid' => explode(',', $value)[0],
-    //                         'parsial' => $firstJadwalId,
-    //                     ];
-    //                     Jadwal::insert($commonData);
-    //                 }
-    //             }
-    //         }
-
-    //         //update request sampling
-    //         $cek = SamplingPlan::where('id', $dataAdd->id_sampling)->first();
-    //         if (!is_null($cek)) {
-    //             $cek->status = 1;
-    //             $cek->status_jadwal = 'jadwal';
-    //             $cek->save();
-    //         }
-
-    //         /* step notifications */
-    //         $sales = JadwalServices::on('no_quotation', $dataAdd->no_quotation)->getQuotation()->sales_id;
-    //         $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
-    //         $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
-    //         Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
-    //         DB::commit();
-    //         return true;
-    //     } catch (Exception $ex) {
-    //         DB::rollback();
-    //         throw new Exception($ex->getMessage() . ' Line: ' . $ex->getLine() . ' File: ' . $ex->getFile(), 401);
-    //     }
-    // }
 
     public function insertParsialKontrak()
     {
@@ -1793,8 +1428,34 @@ class JadwalServices
             $jadw5 = Jadwal::where('id', $dataParsial->id)->whereNotNull('parsial')->where('is_active', true)->first();
             if ($jadw) {
                 if (!$jadw4->isEmpty()) {
-                    $datcek = count($jadw4) + 1;
-                    if ((int) $dataParsial->totkateg == $datcek) {
+                    // $datcek = count($jadw4) + 1;
+                    // if ((int) $dataParsial->totkateg == $datcek) {
+                    //     DB::rollBack();
+                        
+                    //     throw new Exception("Kategori sudah terinput semua.!", 401);
+                    // }
+                    $kategoriTerpakai =[];
+                    // step 1 ambil dari induk
+                    if (!empty($jadw->kategori)) {
+                        $catIndukDB = is_string($jadw->kategori) ? json_decode($jadw->kategori, true) : $jadw->kategori;
+                        if (is_array($catIndukDB)) {
+                            $kategoriTerpakai = array_merge($kategoriTerpakai, $catIndukDB);
+                        }
+                        
+                    }
+                    //step2 Ambil kategori dari Anak-anak yang sudah ada
+                    foreach ($jadw4 as $anak) {
+                        if (!empty($anak->kategori)) {
+                            $catAnak = is_string($anak->kategori) ? json_decode($anak->kategori, true) : $anak->kategori;
+                            if(is_array($catAnak)) {
+                                $kategoriTerpakai = array_merge($kategoriTerpakai, $catAnak);
+                            }
+                        }
+                    }
+                    // Hitung jumlah kategori unik yang sudah tercover
+                    $jumlahTerpakai = count(array_unique($kategoriTerpakai));
+                    $totalHarus = (int) $dataParsial->totkateg;
+                    if ($jumlahTerpakai === $totalHarus) {
                         DB::rollBack();
                         throw new Exception("Kategori sudah terinput semua.!", 401);
                     }
@@ -1804,9 +1465,11 @@ class JadwalServices
                 $datcek = count($jadw6) + 1;
                 if ((int) $dataParsial->totkateg == $datcek) {
                     DB::rollBack();
+                    
                     throw new Exception("Kategori sudah terinput semua.!", 401);
                 }
             }
+            
             if (!$jadw2->isEmpty()) {
                 if (!empty($jadw)) {
                     foreach ($jadw2 as $key => $val) {
@@ -1963,69 +1626,81 @@ class JadwalServices
             $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('id', '!=', $dataParsial->id)->where('is_active', true)->get();
             $jadw4 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
             $jadw5 = Jadwal::where('id', $dataParsial->id)->whereNotNull('parsial')->where('is_active', true)->first();
-            if ($jadw) {
-                if (!$jadw4->isEmpty()) {
-                    $datcek = count($jadw4) + 1;
-                    if ((int) $dataParsial->totkateg == $datcek) {
-                        DB::rollBack();
-                        throw new Exception("Kategori sudah terinput semua.!", 401);
-                    }
+
+            $kategori_terinput = [];
+
+            // Helper kecil untuk normalisasi kategori
+            $normalizeKategori = function ($raw) {
+                $kategori = json_decode($raw, true);
+
+                if (is_null($kategori)) {
+                    return [];
                 }
-            } else if ($jadw5) {
-                $jadw6 = Jadwal::where('parsial', $jadw5->parsial)->where('is_active', true)->get();
-                $datcek = count($jadw6) + 1;
-                if ((int) $dataParsial->totkateg == $datcek) {
-                    DB::rollBack();
-                    throw new Exception("Kategori sudah terinput semua.!", 401);
+
+                if (!is_array($kategori)) {
+                    return [$kategori];
+                }
+
+                return $kategori;
+            };
+
+            // ========== KASUS 1: ini jadwal induk ==========
+            if ($jadw) {
+                // Ambil semua anak2 dari induk ini
+                $jadwalAnak = Jadwal::where('parsial', $dataParsial->id)
+                    ->where('is_active', true)
+                    ->get();
+
+                foreach ($jadwalAnak as $item) {
+                    $kategori_terinput = array_merge(
+                        $kategori_terinput,
+                        $normalizeKategori($item->kategori)
+                    );
+                }
+
+            // ========== KASUS 2: ini jadwal anak ==========
+            } elseif ($jadw5) {
+                // Ambil induknya
+                $induk = Jadwal::where('id', $jadw5->parsial)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($induk) {
+                    $kategori_terinput = array_merge(
+                        $kategori_terinput,
+                        $normalizeKategori($induk->kategori)
+                    );
+                }
+
+                // Ambil saudara anak lain
+                $saudara = Jadwal::where('parsial', $jadw5->parsial)
+                    ->where('id', '!=', $dataParsial->id)
+                    ->where('is_active', true)
+                    ->get();
+
+                foreach ($saudara as $item) {
+                    $kategori_terinput = array_merge(
+                        $kategori_terinput,
+                        $normalizeKategori($item->kategori)
+                    );
                 }
             }
-            if (!$jadw2->isEmpty()) {
-                if (!empty($jadw)) {
-                    foreach ($jadw2 as $key => $val) {
-                        foreach (json_decode($val->kategori) as $x => $y) {
-                            if (in_array($y, $dataParsial->kategori)) {
-                                DB::rollBack();
-                                throw new Exception('Ada input kategori yang sama.! 1', 401);
-                            }
-                        }
-                    }
-                } else {
-                    foreach ($jadw2 as $key => $val) {
-                        $jadw3 = Jadwal::where('id', $val->id)->whereNull('parsial')->where('is_active', true)->first();
-                        if ($jadw3) {
-                            foreach (json_decode($jadw3->kategori) as $x => $y) {
-                                if (in_array($y, $dataParsial->kategori)) {
-                                    DB::rollBack();
-                                    throw new Exception('Ada input kategori yang sama.! 2', 401);
-                                }
-                            }
-                        }
-                        foreach (json_decode($val->kategori) as $x => $y) {
-                            if (in_array($y, $dataParsial->kategori)) {
-                                DB::rollBack();
-                                throw new Exception('Ada input kategori yang sama.! 3', 401);
-                            }
-                        }
-                    }
-                }
-            } else {
-                if (!empty($jadw)) {
-                    foreach (json_decode($jadw->kategori) as $x => $y) {
-                        if (in_array($y, $dataParsial->kategori)) {
-                            DB::rollBack();
-                            throw new Exception('Ada input kategori yang sama.! 4', 401);
-                        }
-                    }
-                } else {
-                    $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
-                    foreach ($jadw2 as $key => $val) {
-                        foreach (json_decode($val->kategori) as $x => $y) {
-                            if (in_array($y, $dataParsial->kategori)) {
-                                DB::rollBack();
-                                throw new Exception('Ada input kategori yang sama.! 5', 401);
-                            }
-                        }
-                    }
+
+            // Hapus duplikat
+            $kategori_terinput = array_unique($kategori_terinput);
+
+
+            // Normalisasi kategori yang mau diinput
+            $kategoriBaru = $dataParsial->kategori;
+            if (!is_array($kategoriBaru)) {
+                $kategoriBaru = [$kategoriBaru];
+            }
+
+            // Cek duplikasi
+            foreach ($kategoriBaru as $kat) {
+                if (in_array($kat, $kategori_terinput)) {
+                    DB::rollBack();
+                    throw new Exception("Kategori {$kat} sudah pernah diinput sebelumnya!", 401);
                 }
             }
 
@@ -2095,5 +1770,27 @@ class JadwalServices
             DB::rollBack();
             throw new Exception($e->getMessage(), 401);
         }
+    }
+
+    private function checkIsIdentical(array $dataParse) : bool
+    {
+        
+        $oldArray = $dataParse['nosampelOld'] ?? [];
+        $newArray = $dataParse['nosampelNew'] ?? [];
+        
+        $oldSampler = $dataParse['samplerOld'] ?? '';
+        $newSampler = $dataParse['samplerNew'] ?? '';
+
+        // --- TAMBAHAN UNTUK SKENARIO 4 ---
+        // Sort array agar urutan A-Z, sehingga ["B", "A"] menjadi ["A", "B"]
+        sort($oldArray);
+        sort($newArray);
+        // ----------------------------------
+
+        // Sekarang bandingkan
+        $isArrayIdentical = ($oldArray === $newArray);
+        $isSamplerIdentical = ($oldSampler === $newSampler);
+
+        return $isArrayIdentical && $isSamplerIdentical;
     }
 }

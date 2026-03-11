@@ -28,6 +28,7 @@ $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'log.request',
 });
 
 $router->post('/api/cekLHP', 'external\LHPHandleController@cekLHP');
+$router->post('/api/newCheckLhp', 'external\LHPHandleController@newCheckLhp');
 
 $router->get('/api/getJadwal', 'external\JadwalHandler@getJadwal');
 $router->get('/api/showDetailJadwal', 'external\JadwalHandler@getDetailJadwalApi');
@@ -37,10 +38,13 @@ $router->get('/api/device_intilab', 'external\MesinAbsenHandler@Sync');
 $router->post('/api/multi-device', 'external\MesinAbsenHandler@handleMultiDevice');
 $router->get('/api/summaryParameter', 'external\SummaryParameterHandler@index');
 
+$router->get('/api/iot-intilab', 'external\MesinAbsenHandler@IotSync');
+
 //custom untuk testing di produksi
 $router->post('/api/custom', 'external\CustomController@handle');
 $router->get('/api/total', 'external\CustomController@total');
 
+$router->get('/api/get-lhp-pak-eko', 'external\GetLhpApiPakEko@getLHP');
 
 $router->group(['middleware' => ['cors']], function () use ($router) {
     $router->get('/api/setWebhook', 'external\TelegramController@setWebhook');

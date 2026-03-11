@@ -279,7 +279,7 @@ class FdlMethodRwlController extends Controller
                 $data->aktivitas = $request->aktivitas;
             $data->method = 5;
             $data->berat_beban = $request->berat_beban;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             $data->frekuensi_jumlah_angkatan = str_replace(',', '.', $request->frek_jml_angkatan);
             $data->kopling_tangan = $request->kopling_tangan;
             $data->jarak_vertikal = $request->jarak_vertikal;
@@ -300,13 +300,11 @@ class FdlMethodRwlController extends Controller
 
             // UPDATE ORDER DETAIL
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
-                ->where('parameter', 'LIKE', '%Ergonomi%')
+                ->where('parameter', 'LIKE', '%Ergonomi%')->where('is_active', true)
                 ->first();
 
             if($orderDetail->tanggal_terima == null) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
@@ -730,14 +728,14 @@ class FdlMethodRwlController extends Controller
 
             // Respond based on whether the data already exists
             if ($check) {
-                if ($data) {
-                    return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-                } else {
+                // if ($data) {
+                //     return response()->json(['message' => 'No. Sample sudah di input.'], 401);
+                // } else {
                     return response()->json([
                         'message' => 'Successful.',
                         'data' => $fdl
                     ], 200);
-                }
+                // }
             } else {
                 return response()->json(['message' => 'Tidak ada parameter Ergonomi berdasarkan No. Sample tersebut.'], 401);
             }

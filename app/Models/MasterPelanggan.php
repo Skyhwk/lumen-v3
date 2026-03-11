@@ -20,6 +20,7 @@ class MasterPelanggan extends Sector
         'wilayah',
         'kategori_pelanggan',
         'sub_kategori',
+        'npwp',
         'bahan_pelanggan',
         'merk_pelanggan',
         'sales_penanggung_jawab',
@@ -74,6 +75,54 @@ class MasterPelanggan extends Sector
 
     public function latestOrder()
     {
-        return $this->hasOne(OrderHeader::class, 'id_pelanggan', 'id_pelanggan')->orderByDesc('tanggal_order');
+        return $this->hasOne(OrderHeader::class, 'id_pelanggan', 'id_pelanggan')->where('is_active', true)->orderByDesc('tanggal_order');
+    }
+
+    public function latestKontrakQuotation()
+    {
+        return $this->hasOne(QuotationKontrakH::class, 'pelanggan_ID', 'id_pelanggan')->where('is_active', true)->orderByDesc('id');
+    }
+
+    public function latestNonKontrakQuotation()
+    {
+        return $this->hasOne(QuotationNonKontrak::class, 'pelanggan_ID', 'id_pelanggan')->where('is_active', true)->orderByDesc('id');
+    }
+
+    public function latestDFUS()
+    {
+        return $this->hasOne(DFUS::class, 'id_pelanggan', 'id_pelanggan')
+            ->orderByDesc('tanggal');
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class, 'pelanggan_id', 'id_pelanggan')
+            ->selectRaw('no_order, no_invoice, MAX(no_quotation) as no_quotation, periode, tgl_invoice, tgl_jatuh_tempo, SUM(nilai_tagihan) as nilai_tagihan, pelanggan_id')
+            ->where('is_active', 1)
+            ->groupBy('no_order', 'no_invoice', 'periode', 'tgl_invoice', 'tgl_jatuh_tempo', 'pelanggan_id')
+            ->orderByDesc('tgl_invoice')
+            ->with(['recordPembayaran' => function($query) {
+                $query->select('no_invoice', 'tgl_pembayaran', 'nilai_pembayaran');
+            }, 'recordWithdraw' => function($query) {
+                $query->select('no_invoice', 'nilai_pembayaran', 'keterangan_pelunasan');
+            }]);
+    }
+
+    public function getLatestDFUSMatchAttribute()
+    {
+        return $this->latestDFUS && 
+            $this->latestDFUS->sales_penanggung_jawab === $this->sales_penanggung_jawab
+            ? $this->latestDFUS
+            : null;
+    }
+
+    public function quotasiNonKontrak()
+    {
+        return $this->hasMany(QuotationNonKontrak::class, 'pelanggan_ID', 'id_pelanggan');
+    }
+
+    public function quotasiKontrak()
+    {
+        return $this->hasMany(QuotationKontrakH::class, 'pelanggan_ID', 'id_pelanggan');
     }
 }

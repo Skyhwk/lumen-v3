@@ -113,23 +113,63 @@ class FdlIklimPanasController extends Controller
 
             $shift_peng = $request->kategori_uji . '-' . $request->shift;
 
+            function formatDesimal($value)
+            {
+                // Jika null atau string kosong → kembalikan null
+                if ($value === null || $value === '') {
+                    return null;
+                }
+
+                // Buang spasi
+                $value = trim($value);
+
+                // Jika berakhir dengan titik → tambah 0
+                if (substr($value, -1) === '.') {
+                    $value .= '0';
+                }
+
+                // Pastikan bisa dibaca sebagai float
+                if (!is_numeric($value)) {
+                    return null; // atau bisa diganti 0
+                }
+
+                // Format ke 1 angka di belakang koma
+                return number_format((float)$value, 1, '.', '');
+            }
+
             $a = count($request->ta_in);
-            $nilai_pengukuran = array();
             for ($i = 0; $i < $a; $i++) {
                 $no = $i + 1;
                 $nilai_pengukuran['Data-' . $no] = [
-                    'tac_in' => $request->ta_in[$i],
-                    'tac_out' => $request->ta_out[$i],
-                    'tgc_in' => $request->tg_in[$i],
-                    'tgc_out' => $request->tg_out[$i],
-                    'rh_in' => $request->rh_in[$i],
-                    'rh_out' => $request->rh_out[$i],
-                    'wbtgc_in' => $request->wbgt_in[$i],
-                    'wbtgc_out' => $request->wbgt_out[$i],
-                    'wb_in' => $request->wb_in[$i],
-                    'wb_out' => $request->wb_out[$i],
+                    'tac_in'     => formatDesimal($request->ta_in[$i]),
+                    'tac_out'    => formatDesimal($request->ta_out[$i]),
+                    'tgc_in'     => formatDesimal($request->tg_in[$i]),
+                    'tgc_out'    => formatDesimal($request->tg_out[$i]),
+                    'rh_in'      => formatDesimal($request->rh_in[$i]),
+                    'rh_out'     => formatDesimal($request->rh_out[$i]),
+                    'wbtgc_in'   => formatDesimal($request->wbgt_in[$i]),
+                    'wbtgc_out'  => formatDesimal($request->wbgt_out[$i]),
+                    'wb_in'      => formatDesimal($request->wb_in[$i]),
+                    'wb_out'     => formatDesimal($request->wb_out[$i]),
                 ];
             }
+            
+            // $nilai_pengukuran = array();
+            // for ($i = 0; $i < $a; $i++) {
+            //     $no = $i + 1;
+            //     $nilai_pengukuran['Data-' . $no] = [
+            //         'tac_in' => $request->ta_in[$i],
+            //         'tac_out' => $request->ta_out[$i],
+            //         'tgc_in' => $request->tg_in[$i],
+            //         'tgc_out' => $request->tg_out[$i],
+            //         'rh_in' => $request->rh_in[$i],
+            //         'rh_out' => $request->rh_out[$i],
+            //         'wbtgc_in' => $request->wbgt_in[$i],
+            //         'wbtgc_out' => $request->wbgt_out[$i],
+            //         'wb_in' => $request->wb_in[$i],
+            //         'wb_out' => $request->wb_out[$i],
+            //     ];
+            // }
 
             $data = new DataLapanganIklimPanas;
             $data->no_sampel                 = strtoupper(trim($request->no_sample));
@@ -162,10 +202,10 @@ class FdlIklimPanasController extends Controller
             $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 

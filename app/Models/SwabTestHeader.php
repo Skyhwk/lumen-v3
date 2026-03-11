@@ -16,4 +16,9 @@ class SwabTestHeader extends Sector{
     {
         return $this->hasOne('App\Models\Ftc'::class, 'no_sample', 'no_sampel');
     }
+
+    public function ws_value()
+    {
+        return $this->hasOne(WsValueUdara::class, 'id_swabtest_header', 'id');
+    }
 }

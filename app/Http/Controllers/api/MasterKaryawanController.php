@@ -647,21 +647,54 @@ class MasterKaryawanController extends Controller
 
     public function nonActive(Request $request)
     {
+        DB::beginTransaction();
+        try {
+            $karyawan = MasterKaryawan::find($request->id);
+
+            $karyawan->effective_date = $request->effective_date;
+            $karyawan->reason_non_active = $request->reason_non_active;
+            $karyawan->notes = $request->notes;
+            $karyawan->updated_by = $this->karyawan;
+            $karyawan->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $karyawan->active = false;
+            $karyawan->is_active = false;
+
+            $karyawan->save();
+
+            $user = User::where('id', $karyawan->user_id)->first();
+            
+            $user->updated_by = $this->karyawan;
+            $user->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $user->is_active = false;
+
+            $user->save();
+
+            DB::connection('intilab_apps')
+                ->table('users')
+                ->where('user_id', $karyawan->id)
+                ->update([
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'is_active' => false
+                ]);
+
+            $job = new NonaktifKaryawanJob($karyawan);
+            $this->dispatch($job);
+
+            DB::commit();
+            return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
+            //throw $th;
+        }
+    }
+
+    public function retry(Request $request)
+    {
         $karyawan = MasterKaryawan::find($request->id);
 
-        $karyawan->effective_date = $request->effective_date;
-        $karyawan->reason_non_active = $request->reason_non_active;
-        $karyawan->notes = $request->notes;
-        $karyawan->updated_by = $this->karyawan;
-        $karyawan->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-        $karyawan->active = false;
-        $karyawan->is_active = false;
-
-        $karyawan->save();
-
-        $job = new NonaktifKaryawanJob($karyawan, $this->karyawan);
+        $job = new NonaktifKaryawanJob($karyawan);
         $this->dispatch($job);
-
-        return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
     }
 }

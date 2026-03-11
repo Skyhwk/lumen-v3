@@ -40,8 +40,8 @@ class AutomatedFormula {
                 return 'Coming Soon';
             }
         } else {
-            if (method_exists($this, $function)) {
-                $result = $this->$function($required_parameter, $parameter, $no_sampel, $tanggal_terima);
+            if (method_exists($this, $class_calculate)) {
+                $result = $this->$class_calculate($required_parameter, $parameter, $no_sampel, $tanggal_terima);
             } else {
                 return 'Coming Soon';
             }

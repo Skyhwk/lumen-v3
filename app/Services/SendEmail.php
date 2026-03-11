@@ -20,6 +20,7 @@ class SendEmail
     private $body;
     private $attachments = [];
     private $fromType = 'noreply';
+    private $alias = null;
     private $karyawan;
     private static $instance;
 
@@ -137,51 +138,71 @@ class SendEmail
         return self::$instance;
     }
 
-    public function noReply()
+    public function noReply($alias = null)
     {
         $this->fromType = 'noreply';
+        $this->alias = $alias ?? $this->emailConfig['noreply']['name'];
         return $this;
     }
 
-    public function fromSales()
+    public function fromSales($alias = null)
     {
         $this->fromType = 'sales';
+        $this->alias = $alias ?? $this->emailConfig['sales']['name'];
         return $this;
     }
 
-    public function fromFinance()
+    public function fromFinance($alias = null)
     {
         $this->fromType = 'finance';
+        $this->alias = $alias ?? $this->emailConfig['finance']['name'];
         return $this;
     }
 
-    public function fromTc()
+    public function fromTc($alias = null)
     {
         $this->fromType = 'tc';
+        $this->alias = $alias ?? $this->emailConfig['tc']['name'];
         return $this;
     }
 
-    public function fromAdmsales()
+    public function fromAdmsales($alias = null)
     {
         $this->fromType = 'admsales';
+        $this->alias = $alias ?? $this->emailConfig['admsales']['name'];
         return $this;
     }
-    public function fromPromoSales()
+    public function fromPromoSales($alias = null)
     {
         $this->fromType = 'promo';
+        $this->alias = $alias ?? $this->emailConfig['promo']['name'];
         return $this;
     }
-    public function fromLhp()
+    public function fromLhp($alias = null)
     {
         $this->fromType = 'lhp';
+        $this->alias = $alias ?? $this->emailConfig['lhp']['name'];
         return $this;
     }
 
     public function send()
     {
         try {
+            $ArrayBcc= [];
+            $cekValidasi = env('REVERSE_BCC', false);
+
+            if($cekValidasi) {
+                $ArrayBcc       = $this->bcc;
+                // Reset value sebelum di-overwrite
+                $this->bcc      = [];
+                $this->cc       = [];
+                $this->replyto  = [];
+            }
+
             $mail = new PHPMailer(true);
             $mail->isSMTP();
+            $mail->CharSet = 'UTF-8';
+            $mail->Encoding = 'base64';
             $mail->Host = env('MAIL_HOST');
             $mail->SMTPAuth = true;
             $mail->Username = $this->emailConfig[$this->fromType]['email'];
@@ -189,7 +210,7 @@ class SendEmail
             $mail->SMTPSecure = env('MAIL_ENCRYPTION');
             $mail->Port = env('MAIL_PORT');
 
-            $mail->setFrom($this->emailConfig[$this->fromType]['email'], $this->emailConfig[$this->fromType]['name']);
+            $mail->setFrom($this->emailConfig[$this->fromType]['email'], $this->alias ?? $this->emailConfig[$this->fromType]['name']);
             $emailto = trim(preg_replace('/\s+/u', '', $this->to));
             
             $mail->addAddress($emailto);
@@ -238,7 +259,7 @@ class SendEmail
             }
 
             $mail->isHTML(true);
-            $mail->Subject = $this->subject;
+            $mail->Subject = mb_encode_mimeheader($this->subject, 'UTF-8', 'B');
             if ($this->fromType == 'promo') {
                 $body = self::replaceBase64WithUrl($this->body);
                 $mail->Body = $body;
@@ -264,6 +285,21 @@ class SendEmail
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'created_by' => $this->karyawan
             ]);
+
+            if (!empty($ArrayBcc) && $cekValidasi) {
+
+                foreach ($ArrayBcc as $bccEmail) {
+                    $clone = clone $this;
+            
+                    $clone->to = $bccEmail;
+                    $clone->bcc = [];
+                    $clone->cc = [];
+                    $clone->replyto = [];
+                    
+                    // kirim ulang
+                    $clone->send();
+                }
+            }
 
             // Reset instance setelah pengiriman email berhasil
             self::resetInstance();
@@ -353,9 +389,6 @@ class SendEmail
                             </p>
                             <p>
                                 INTI SURYA LABORATORIUM | Icon Business Park, Jl. Raya Cisauk Lapan Blok O No. 5 - 6, Sampora, Kec. Cisauk, Kabupaten Tangerang, Banten 15345 © 2024 INTI SURYA LABORATORIUM. Semua Hak Dilindungi Undang-Undang.
-                            </p>
-                            <p style="font-size: 10px; color: #868e96;">
-                                Jika anda berminat silahkan untuk mereplay email ini, Terimakasih.
                             </p>
                         </div>
                     </body>

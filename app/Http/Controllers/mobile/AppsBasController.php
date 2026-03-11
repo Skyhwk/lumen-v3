@@ -61,7 +61,7 @@ use Illuminate\Support\Str;
 
 use App\Services\SendEmail;
 
-use Mpdf\Mpdf;
+use Mpdf;
 
 use DateTime;
 
@@ -919,7 +919,10 @@ class AppsBasController extends Controller
                             'informasi_teknis' => $item['informasi_teknis'] ?? $header->informasi_teknis,
                             'waktu_mulai' => $item['waktu_mulai'] ?? $header->waktu_mulai,
                             'waktu_selesai' => $item['waktu_selesai'] ?? $header->waktu_selesai,
-                            'filename' => str_replace("&#039;", "'", $item['filename_bas'] ?? $header->filename_bas),
+                            'filename' => str_replace(
+                            ['&#039;', '/', ',', '.', '@', '"', '`'],
+                            ["'",       '',  '',  '',  '',  '',  ''],
+                            $item['filename_bas'] ?? $header->filename_bas),
                             // $item['filename_bas'] ?? $header->filename_bas,
                             'no_sampel' => $item['no_sampel'] ?? []
                         ];
@@ -1305,7 +1308,12 @@ class AppsBasController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    // $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                        $status[$sample->no_sample] = 'selesai';
+                    } else {
+                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    }
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
@@ -2328,12 +2336,16 @@ class AppsBasController extends Controller
         $status = 'selesai';
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
-                 if($parameter['category'] == '6-Padatan'){
+                if($parameter['category'] == '6-Padatan'){
                     continue; // Skip Padatan
                 }
                 // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
                 if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
+                }
+
+                if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)'){
+                    continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
                 }
 
                 $verified = $this->verifyStatus($sample->no_sample, $parameter);
@@ -2401,19 +2413,19 @@ class AppsBasController extends Controller
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
 
-        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'], true);
+        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)','Kelembaban','Suhu'], true);
         if (!$hasPMParameter) {
             $model3 = null;
         }
 
-        if ($model3 === null) {
-            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2);
+        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi' ) {  
+            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3);
         } else {
             return $this->handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         }
     }
 
-    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2)
+    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3)
     {
         // Suhu / Kelembaban: kembalikan model instance (first) atau null
         if (in_array($paramName, ['Suhu', 'Kelembaban', 'Laju Ventilasi', 'Laju Ventilasi (8 Jam)'], true)) {
@@ -2459,9 +2471,22 @@ class AppsBasController extends Controller
             }
 
             if ($model2) {
-                return $model2::where('no_sampel', $sample_number)
+                $found = $model2::where('no_sampel', $sample_number)
                     ->whereNotNull($searchColumn)
                     ->first();
+                if ($found) {
+                    return $found;
+                }
+            }
+
+            if ($model3) {
+                $found = $model3::where('no_sampel', $sample_number)
+                    ->whereNotNull($searchColumn)
+                    ->first();
+                
+                if ($found) {
+                    return $found;
+                }
             }
 
             return null;
@@ -3417,7 +3442,8 @@ class AppsBasController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganHidup::class,
-                "model2" => DetailLingkunganKerja::class
+                "model2" => DetailLingkunganKerja::class,
+                "model3" => DetailMicrobiologi::class
             ],
             [
                 "parameter" => "Laju Ventilasi",
@@ -3664,7 +3690,8 @@ class AppsBasController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganHidup::class,
-                "model2" => DetailLingkunganKerja::class
+                "model2" => DetailLingkunganKerja::class,
+                "model3" => DetailMicrobiologi::class
             ],
             [
                 "parameter" => "TSP",
@@ -3717,6 +3744,13 @@ class AppsBasController extends Controller
             ],
             [
                 "parameter" => "Medan Magnit Statis",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DataLapanganMedanLM::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "Medan Magnet",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DataLapanganMedanLM::class,
@@ -4316,6 +4350,26 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailLingkunganHidup::class
+            ],
+            [
+                "parameter" => "Isopropil Alkohol",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailLingkunganKerja::class,
+                "model2" => DetailSenyawaVolatile::class
+            ],
+            [
+                "parameter" => "LEGIONELLA",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailMicrobiologi::class
+            
+            ],
+            [
+                "parameter" => "VOC Sebagai NMHC",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class
             ]
         ];
 

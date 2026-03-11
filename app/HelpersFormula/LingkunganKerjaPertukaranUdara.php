@@ -69,22 +69,39 @@ class LingkunganKerjaPertukaranUdara{
             $avgJumlah_pengukuran = array_sum($values) / count($values);
         }
 
+        $luas_penampang = [];
+        $laju_ventilasi = [];
         if (!empty($hasilGabung['luas_penampang'])) {
             $values = $hasilGabung['luas_penampang'];
-            $avgLuas = array_sum($values) / count($values);
+            $luas_penampang = $values;
         }
 
         if (!empty($hasilGabung['laju_ventilasi'])) {
             $values = $hasilGabung['laju_ventilasi'];
-            $avgLaju_ventilasi = array_sum($values) / count($values);
+            $laju_ventilasi = $values;
         }
 
+        $debitVentilasi = []; // ini array D (D1, D2, ...)
+
+        foreach ($laju_ventilasi as $i => $E) {
+            $F = $luas_penampang[$i] ?? 0; // jaga-jaga kalau index tidak ada
+            $D = $E * $F;
+
+            // format 2 angka di belakang koma
+            $debitVentilasi[] = round($D, 2);
+        }
+        
+        
+        $totalDebit = array_sum($debitVentilasi);
         
         $a= $avgPanjang * $avgLebar * $avgTinggi;
-        $b = $avgJumlah_pengukuran * $avgLaju_ventilasi * $avgLuas;
+        $b = round($totalDebit * 3600, 2);
 
-        $c = $a / $b;
-        $c = number_format($c, 1, '.', '');
+        
+        // $b = $avgJumlah_pengukuran * $avgLaju_ventilasi * $avgLuas;
+
+        $c = $b / $a;
+        $c = number_format($c, 2, '.', '');
 
         return [
             'hasil' => $c,

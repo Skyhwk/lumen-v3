@@ -129,6 +129,20 @@ return [
             'days' => 90,
         ],
 
+        'perubahan_tanggal' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/perubahan_tanggal/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
+        'perubahan_jadwal' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/perubahan_jadwal/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'send_mqtt' => [
             'driver' => 'daily',
             'path' => storage_path('logs/send_mqtt/logs.log'),
@@ -199,11 +213,24 @@ return [
             'days' => 90,
         ],
 
-        'log_request' => [
-            'driver' => 'daily',
-            'path' => storage_path('log_request/request.log'),
+        'forced_update_sampel' => [
+            'driver' => 'daily',  
+            'path' => storage_path('logs/forced_update_sampel/forced_update_sampel.log'),
             'level' => 'info',
-            'days' => 10,
+            'days' => 90,
+        ],
+
+        // 'log_request' => [
+        //     'driver' => 'daily',
+        //     'path' => storage_path('log_request/request.log'),
+        //     'level' => 'info',
+        //     'days' => 10,
+        // ],
+
+        'log_request' => [
+            'driver' => 'custom',
+            'via' => App\Logging\HourlyLogRequest::class,
+            'level' => 'info'
         ],
 
         'papertrail' => [

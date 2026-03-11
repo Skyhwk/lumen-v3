@@ -172,6 +172,13 @@ class FdlSinarUVController extends Controller
 
                 $parameter = Parameter::where('nama_lab', $parameterValue)->first();
 
+                $totalMenit = $data->waktu_pemaparan ?? null;
+                // hitung NAB
+                $nab = null;
+                if ($totalMenit){
+                    $nab = isset($totalMenit) ? $this->getNab($totalMenit) : null;
+                }
+
 
                 $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
                 $calculate = AnalystFormula::where('function', $function)
@@ -202,6 +209,7 @@ class FdlSinarUVController extends Controller
                 $ws->hasil1 = $calculate['hasil1']; // Mata
                 $ws->hasil2 = $calculate['hasil2']; // Siku
                 $ws->hasil3 = $calculate['hasil3']; // Betis
+                $ws->nab = $nab;
                 $ws->save();
 
                 $data->is_approve = true;
@@ -378,5 +386,71 @@ class FdlSinarUVController extends Controller
                 'message' => 'Gagal Approve'
             ], 401);
         }
+    }
+
+    private function getNab($waktu)
+    {
+        // >= 8 Jam
+        if ($waktu >= 480) {
+            return 0.0001;
+        } 
+        // >4 - <8 Jam
+        elseif ($waktu > 240 && $waktu < 480) {
+            return 0.0001;
+        }
+        // >2 - <=4 Jam
+        elseif ($waktu > 120 && $waktu <= 240) {
+            return 0.0002;
+        } 
+        // >1 - <=2 Jam
+        elseif ($waktu > 60 && $waktu <= 120) {
+            return 0.0004;
+        } 
+        // >30 - <60 menit
+        elseif ($waktu > 30 && $waktu <= 60) {
+            return 0.0008;
+        } 
+        // >15 - <30 menit
+        elseif ($waktu > 15 && $waktu <= 30) {
+            return 0.0017;
+        } 
+        // >10 - <=15 menit
+        elseif ($waktu > 10 && $waktu <= 15) {
+            return 0.0033;
+        } 
+        // >5 - <=10 menit
+        elseif ($waktu > 5 && $waktu <= 10) {
+            return 0.005;
+        } 
+        // >1 - <=5 menit
+        elseif ($waktu > 1 && $waktu <= 5) {
+            return 0.01;
+        } 
+        // >30 detik - <1 menit
+        elseif ($waktu > 0.5 && $waktu <= 1) {
+            return 0.05;
+        } 
+        // >10 - <30 detik
+        elseif ($waktu > 0.1667 && $waktu <= 0.5) {
+            return 0.1;
+        }
+        // >1 - <=10 detik
+        elseif ($waktu > 0.0167 && $waktu <= 0.1667) {
+            return 0.3;
+        } 
+        // >0.5 - <=1 detik
+        elseif ($waktu > 0.0083 && $waktu <= 0.0167) {
+            return 3;
+        } 
+        // >0.1 - <=0.5 detik
+        elseif ($waktu > 0.0017 && $waktu <= 0.0083) {
+            return 6;
+        } 
+        // 0.1 detik
+        elseif ($waktu == 0.0017) {
+            return 30;
+        }
+
+        return null;
     }
 }

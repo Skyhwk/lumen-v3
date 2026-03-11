@@ -2,212 +2,242 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\View;
-
+use Throwable;
 use Carbon\Carbon;
 
-Carbon::setLocale('id');
+use Illuminate\Support\Facades\{
+    DB,
+    Log
+};
 
-use Throwable;
-
-use App\Models\MasterKaryawan;
-use App\Models\AksesMenu;
-use App\Models\MasterPelanggan;
-use App\Models\HistoryPerubahanSales;
-use App\Models\QuotationKontrakH;
-use App\Models\QuotationNonKontrak;
-use App\Models\DFUS;
-use App\Models\DFUSBackup;
-use App\Models\LogWebphone;
-use App\Models\LogWebphoneBackup;
-use App\Services\SendEmail;
+use App\Models\{
+    DFUS,
+    AksesMenu,
+    DFUSBackup,
+    LogWebphone,
+    MasterKaryawan,
+    MasterPelanggan,
+    LogWebphoneBackup,
+    HistoryPerubahanSales,
+};
 
 class NonaktifKaryawanService
 {
-    public function nonaktifKaryawan(MasterKaryawan $karyawan, string $updatedBy)
+    private const QUOTA_BANK_DATA = 5000;
+
+    private const JABATAN_SALES = 24;
+    private const JABATAN_CRO = 148;
+
+    private const TARGET_JABATAN_ROTASI = [self::JABATAN_SALES, self::JABATAN_CRO];
+
+    private $karyawan;
+    private $timestamp;
+
+    public function __construct($karyawan)
     {
-        DB::beginTransaction();
+        $this->karyawan = $karyawan;
+        $this->timestamp = Carbon::now();
+    }
+
+    public function nonaktifKaryawan()
+    {
         try {
-            AksesMenu::where('user_id', $karyawan->user_id)->update([
-                'is_active' => false,
-                'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')
-            ]);
+            DB::transaction(function () {
+                AksesMenu::where('user_id', $this->karyawan->user_id)
+                    ->update([
+                        'is_active' => false,
+                        'deleted_at' => $this->timestamp,
+                    ]);
 
-            if ($karyawan->id_jabatan == 24) {
-                $this->reassignCustomer($karyawan);
-                $this->deleteUnOrderedQuotations($karyawan->id, $updatedBy);
-                $this->deleteDfusHistory($karyawan->nama_lengkap);
-                $this->deleteWebphoneLogs($karyawan->id);
-            }
+                if (in_array($this->karyawan->id_jabatan, self::TARGET_JABATAN_ROTASI)) {
+                    $this->handleSalesRotation();
+                    $this->archiveSalesLogs();
+                }
+            });
 
-            DB::commit();
-
-            Log::info("Berhasil menonaktifkan karyawan: {$karyawan->nama_lengkap}");
+            Log::info("Berhasil menonaktifkan karyawan: {$this->karyawan->nama_lengkap}");
         } catch (Throwable $e) {
-            DB::rollBack();
-
-            Log::error("Gagal menonaktifkan karyawan: {$karyawan->nama_lengkap}", [
+            Log::error("Gagal menonaktifkan karyawan: {$this->karyawan->nama_lengkap}", [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            throw $e;
         }
     }
 
-    private function reassignCustomer(MasterKaryawan $karyawan)
+    private function handleSalesRotation()
     {
-        $activeSalesStaff = MasterKaryawan::where('id_jabatan', 24)
-            ->where('is_active', true)
-            ->where('id', '!=', 41)
-            ->get();
+        $salesStaffs = $this->getActiveStaffsByJabatan(self::JABATAN_SALES, true);
+        $croStaffs = $this->getActiveStaffsByJabatan(self::JABATAN_CRO);
 
-        $salesCount = $activeSalesStaff->count();
+        if ($salesStaffs->isEmpty() && $croStaffs->isEmpty()) {
+            Log::warning("Tidak ada staff pengganti tersedia untuk rotasi pelanggan {$this->karyawan->nama_lengkap}");
+            return;
+        }
 
-        $customers = MasterPelanggan::where('sales_id', $karyawan->id)
-            ->where('is_active', true)
-            ->get(['id_pelanggan', 'sales_id']);
+        $currentBankDataCount = MasterPelanggan::whereNull('sales_id')->where('is_active', true)->count();
+        $remainingQuota = max(0, self::QUOTA_BANK_DATA - $currentBankDataCount); // Pake max 0 biar ga negatif
 
-        $now = Carbon::now()->format('Y-m-d H:i:s');
+        if ($remainingQuota > 0) {
+            // 70% dilempar ke bank data
+            $noOrderQuery = MasterPelanggan::where([
+                'sales_id' => $this->karyawan->id,
+                'is_active' => true
+            ])->whereDoesntHave('order_customer');
 
-        $customers = $customers->values()->map(function ($customer, $i) use ($activeSalesStaff, $salesCount, $karyawan, $now) {
-            $newSales = $activeSalesStaff[$i % $salesCount];
+            $totalCount = $noOrderQuery->count();
 
-            return [
-                'customer' => $customer,
-                'newSales' => $newSales,
-                'history' => [
-                    'id_pelanggan' => $customer->id_pelanggan,
-                    'id_sales_lama' => $karyawan->id,
-                    'id_sales_baru' => $newSales->id,
-                    'tanggal_rotasi' => $now,
-                ]
-            ];
-        });
+            if ($totalCount > 0) {
+                $limit70 = min((int) floor($totalCount * 0.7), $remainingQuota);
 
-        HistoryPerubahanSales::insert($customers->pluck('history')->toArray());
+                if ($limit70 > 0) {
+                    $idsToBankData = $noOrderQuery->limit($limit70)->pluck('id_pelanggan')->toArray();
 
-        $customers->groupBy(fn($item) => $item['newSales']->id)
-            ->each(function ($group, $salesId) {
-                $sales = $group->first()['newSales'];
-                $ids = $group->pluck('customer.id_pelanggan');
-
-                MasterPelanggan::whereIn('id_pelanggan', $ids)
-                    ->update([
-                        'sales_id' => $sales->id,
-                        'sales_penanggung_jawab' => $sales->nama_lengkap,
-                    ]);
-            });
-    }
-
-    private function deleteUnOrderedQuotations(int $karyawanId, string $updatedBy)
-    {
-        $newSales = MasterKaryawan::find(783);  // Sisca Wulandari (Sales Executive)
-        $oldSales = MasterKaryawan::find($karyawanId);
-
-        $models = [QuotationKontrakH::class, QuotationNonKontrak::class];
-
-        $qtsWithOrder = collect();
-
-        foreach ($models as $model) {
-            $qts = $model::where('sales_id', $karyawanId)
-                ->where('is_active', true)
-                ->whereNotIn('flag_status', ['rejected', 'void'])
-                ->get();
-
-            foreach ($qts as $qt) {
-                $dataLama = $qt->data_lama ? json_decode($qt->data_lama) : null;
-
-                if ($qt->flag_status == 'ordered' || (isset($dataLama->no_order) && !empty($dataLama->no_order))) {
-                    $qtsWithOrder->push($qt->no_document);
-                    $qt->update([
-                        'sales_id' => $newSales->id,
-                        'sales_penanggung_jawab' => $newSales->nama_lengkap,
-                        // 'updated_by' => $updatedBy,
-                        // 'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    ]);
-                } else {
-                    $qt->update([
-                        'deleted_by' => $updatedBy,
-                        'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'is_active' => false,
-                    ]);
+                    if (!empty($idsToBankData)) $this->releaseCustomersToBankData($idsToBankData);
                 }
-            }
+            };
         }
 
-        // kirim notif ke sales baru
-        if ($qtsWithOrder->isNotEmpty()) {
-            $sales = [
-                'to' => $newSales->email,
-                'new' => $newSales->nama_lengkap,
-                'old' => $oldSales->nama_lengkap
-            ];
-            // Notification::send($newSales, new QuotationNonKontrakNotification($qtsWithOrder));
-        }
+        // sisanya didistribusikan ke sales/CRO lain
+        $this->distributeRemainingCustomers($salesStaffs, $croStaffs);
     }
 
-    private function deleteDfusHistory(string $karyawanName)
+    private function releaseCustomersToBankData($idsToBankData)
     {
-        $dfus = DFUS::where('sales_penanggung_jawab', $karyawanName)->get();
+        $historyData = array_map(fn($customerId) => [
+            'id_pelanggan' => $customerId,
+            'id_sales_lama' => $this->karyawan->id,
+            'id_sales_baru' => null,
+            'tanggal_rotasi' => $this->timestamp,
+        ], $idsToBankData);
 
-        if ($dfus->isNotEmpty()) {
-            $dfus->chunk(500)->each(function ($chunk) {
-                $data = $chunk->map(function ($log) {
-                    $logArr = $log->toArray();
-                    unset($logArr['id']);
+        // Insert batch pake chunk biar ga nabrak limit placeholder database
+        foreach (array_chunk($historyData, 1000) as $chunk) {
+            HistoryPerubahanSales::insert($chunk);
+        }
 
-                    foreach (['created_at', 'updated_at'] as $field) {
-                        if (!empty($logArr[$field])) {
-                            $logArr[$field] = Carbon::parse($logArr[$field])->format('Y-m-d H:i:s');
+        MasterPelanggan::whereIn('id_pelanggan', $idsToBankData)
+            ->update([
+                'sales_id' => null,
+                'sales_penanggung_jawab' => null,
+                'updated_by' => 'System',
+                'updated_at' => $this->timestamp,
+            ]);
+    }
+
+    private function distributeRemainingCustomers($salesStaffs, $croStaffs)
+    {
+        $salesCount = $salesStaffs->count();
+        $croCount = $croStaffs->count();
+
+        $salesIndex = 0;
+        $croIndex = 0;
+
+        MasterPelanggan::with('order_customer')
+            ->where([
+                'sales_id' => $this->karyawan->id,
+                'is_active' => true
+            ])
+            ->chunkById(500, function ($customers, $i) use (
+                $salesStaffs,
+                $croStaffs,
+                $salesCount,
+                $croCount,
+                &$salesIndex,
+                &$croIndex
+            ) {
+                $histories = [];
+                $updatesBySalesId = [];
+
+                foreach ($customers as $customer) {
+                    $assignToCro = $customer->order_customer->isNotEmpty() || $this->karyawan->id_jabatan == self::JABATAN_CRO;
+
+                    $newSales = null;
+                    if ($assignToCro && $croCount > 0) {
+                        $newSales = $croStaffs[$croIndex % $croCount];
+                        $croIndex++;
+                    } elseif ($salesCount > 0) {
+                        $newSales = $salesStaffs[$salesIndex % $salesCount];
+                        $salesIndex++;
+                    } else {
+                        // Fallback logic
+                        $newSales = $croCount > 0 ? $croStaffs[$croIndex++ % $croCount] : null;
+                    }
+
+                    if (!$newSales) continue;
+
+                    $histories[] = [
+                        'id_pelanggan' => $customer->id_pelanggan,
+                        'id_sales_lama' => $this->karyawan->id,
+                        'id_sales_baru' => $newSales->id,
+                        'tanggal_rotasi' => $this->timestamp,
+                    ];
+
+                    $updatesBySalesId[$newSales->id]['name'] = $newSales->nama_lengkap;
+                    $updatesBySalesId[$newSales->id]['ids'][] = $customer->id_pelanggan;
+                }
+
+                if (!empty($histories)) HistoryPerubahanSales::insert($histories);
+
+                foreach ($updatesBySalesId as $salesId => $data) {
+                    MasterPelanggan::whereIn('id_pelanggan', $data['ids'])
+                        ->update([
+                            'sales_id' => $salesId,
+                            'sales_penanggung_jawab' => $data['name'],
+                            'updated_by' => 'System',
+                            'updated_at' => $this->timestamp,
+                        ]);
+                }
+            }, 'id_pelanggan');
+    }
+
+    private function getActiveStaffsByJabatan($jabatanId, $filterSenior = false)
+    {
+        return MasterKaryawan::where('id_jabatan', $jabatanId)
+            ->where('is_active', true)
+            ->when($filterSenior, fn($q) => $q->where('tgl_mulai_kerja', '>', Carbon::now()->subYear()))
+            ->get();
+    }
+
+    private function archiveSalesLogs()
+    {
+        $this->archiveAndCleanupLog(
+            DFUS::query(),
+            DFUSBackup::class,
+            'sales_penanggung_jawab',
+            $this->karyawan->nama_lengkap
+        );
+
+        $this->archiveAndCleanupLog(
+            LogWebphone::query(),
+            LogWebphoneBackup::class,
+            'karyawan_id',
+            $this->karyawan->id
+        );
+    }
+
+    private function archiveAndCleanupLog($queryBuilder, $backupModelClass, $keyField, $keyValue)
+    {
+        $queryBuilder->where($keyField, $keyValue)
+            ->chunkById(500, function ($chunk) use ($backupModelClass) {
+                $backupModelClass::insert($chunk->map(function ($item) {
+                    $arr = $item->toArray();
+                    unset($arr['id']); // Biasakan ID auto-increment baru di tabel backup
+
+                    foreach (['created_at', 'updated_at'] as $dateField) {
+                        if (!empty($arr[$dateField])) {
+                            $arr[$dateField] = Carbon::parse($arr[$dateField])->format('Y-m-d H:i:s');
                         }
                     }
 
-                    return $logArr;
-                })->toArray();
+                    return $arr;
+                })->toArray());
 
-                DFUSBackup::insert($data);
-            });
+                $idsToDelete = $chunk->pluck('id')->toArray();
 
-            DFUS::where('sales_penanggung_jawab', $karyawanName)->delete();
-        }
-    }
-
-    private function deleteWebphoneLogs(int $karyawanId)
-    {
-        $logs = LogWebphone::where('karyawan_id', $karyawanId)->get();
-
-        if ($logs->isNotEmpty()) {
-            $logs->chunk(500)->each(function ($chunk) {
-                $data = $chunk->map(function ($log) {
-                    $logArr = $log->toArray();
-                    unset($logArr['id']);
-
-                    foreach (['created_at'] as $field) {
-                        if (!empty($logArr[$field])) {
-                            $logArr[$field] = Carbon::parse($logArr[$field])->format('Y-m-d H:i:s');
-                        }
-                    }
-
-                    return $logArr;
-                })->toArray();
-
-                LogWebphoneBackup::insert($data);
-            });
-
-            LogWebphone::where('karyawan_id', $karyawanId)->delete();
-        }
-    }
-
-    private function emailNonaktifKaryawan($quotation, $sales, $bcc = [])
-    {
-        // SendEmail::where('to', trim($sales->to))
-        SendEmail::where('to', "ranggamanggala@intilab.com")
-            ->where('subject', "Pengalihan Tanggung Jawab Quotation")
-            ->where('bcc', $bcc)
-            ->where('body', View::make('NonAktifKaryawan', compact('quotation', 'sales'))->render())
-            ->where('karyawan', env('MAIL_NOREPLY_USERNAME'))
-            ->noReply()
-            ->send();
+                $modelClass = get_class($chunk->first());
+                $modelClass::whereIn('id', $idsToDelete)->delete();
+            }, $keyField);
     }
 }

@@ -15,6 +15,7 @@ use App\Models\QuotationNonKontrak;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
+use App\Models\PerbantuanSampler;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
@@ -62,6 +63,15 @@ class RequestSamplingPlanController extends Controller
                         $sub->where('nama_perusahaan', 'like', "%{$keyword}%");
                     })->orWhereHas('quotationKontrak', function ($sub) use ($keyword) {
                         $sub->where('nama_perusahaan', 'like', "%{$keyword}%");
+                    });
+                });
+            })
+            ->filterColumn('wilayah', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->whereHas('quotation', function ($sub) use ($keyword) {
+                        $sub->where('wilayah', 'like', "%{$keyword}%");
+                    })->orWhereHas('quotationKontrak', function ($sub) use ($keyword) {
+                        $sub->where('wilayah', 'like', "%{$keyword}%");
                     });
                 });
             })
@@ -132,20 +142,48 @@ class RequestSamplingPlanController extends Controller
 
     public function getSampler()
     {
+        
         $samplers = MasterKaryawan::with('jabatan')
-            ->whereIn('id_jabatan', [70, 75, 94, 110]) // 'Sampler', 'K3 Staff'
+            ->whereIn('id_jabatan', [94]) // 'Sampler', 'K3 Staff'
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
-        $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('id', [21, 56, 311, 531, 95, 112, 377, 531,171,39])
+        $privateSampler =  PerbantuanSampler::with('users.jabatan')
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
-        $allSamplers = $samplers->merge($privateSampler);
-        $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
-
-
+        
+        $privateSampler->transform(function ($item) {
+            $digitCount = strlen((string)$item->user_id);
+            if ($digitCount > 4) {
+                $item->nama_display = $item->nama_lengkap . ' (freelance)';
+            } else {
+                $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            }
+            // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            unset($item->jabatan);
+            if ($item->users && $item->users->jabatan) {
+                // Kita "copy" objek jabatan dari dalam users ke root item
+                // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
+                $jabatanObj = $item->users->getRelation('jabatan');
+                $item->setRelation('jabatan', $jabatanObj);
+            } else {
+                // Fallback jika data kosong (opsional, biar frontend gak error undefined)
+                $jabatanObj = (object)[
+                    "nama_jabatan" => "Freelance Sampler"
+                ];
+                $item->jabatan = $jabatanObj;
+            }
+            unset($item->users);
+            return $item;
+        });
+        $samplers->transform(function ($item) {
+            $item->nama_display = $item->nama_lengkap;
+            return $item;
+        });
+        $allSamplers = $samplers->concat($privateSampler);
+        $allSamplers = $allSamplers->unique('user_id');
+        $allSamplers = $allSamplers->sortBy('nama_display')->values();
         return response()->json($allSamplers, 200);
     }
 
@@ -163,19 +201,26 @@ class RequestSamplingPlanController extends Controller
             "rejection_reason" => $request->rejection_reason,
             "karyawan" => $this->karyawan,
         ];
-
-        $tipe = explode('/', $request->no_quotation)[1];
-        if ($tipe == 'QTC') {
-            $jadwal = JadwalServices::on('rejectJadwalKontrak', $ObjectData)->rejectJadwalSPKontrak();
-        } else if ($tipe == 'QT') {
-            $jadwal = JadwalServices::on('rejectJadwalNon', $ObjectData)->rejectJadwalSP();
-        }
-
-        if ($jadwal) {
+        try {
+            //code...
+            $tipe = explode('/', $request->no_quotation)[1];
+            if ($tipe == 'QTC') {
+                $jadwal = JadwalServices::on('rejectJadwalKontrak', $ObjectData)->rejectJadwalSPKontrak();
+            } else if ($tipe == 'QT') {
+                $jadwal = JadwalServices::on('rejectJadwalNon', $ObjectData)->rejectJadwalSP();
+            }
+    
+            if ($jadwal) {
+                return response()->json([
+                    "message" => "Berhasil menolak jadwal",
+                    "status" => "success"
+                ], 200);
+            }
+        } catch (\Throwable $e) {
             return response()->json([
-                "message" => "Berhasil menolak jadwal",
-                "status" => "success"
-            ], 200);
+                "message" => $e->getMessage(),
+                "status" => "error"
+            ], $e->getCode() ?: 500);
         }
     }
 
@@ -241,5 +286,19 @@ class RequestSamplingPlanController extends Controller
     {
         $data = MasterDriver::where('is_active', true);
         return Datatables::of($data)->make(true);
+    }
+
+    public function getStatusSampling(Request $request)
+    {
+        
+        try {
+            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
+            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
+            
+            return response()->json(['data'=>$getLabelStatusSampling],200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
     }
 }

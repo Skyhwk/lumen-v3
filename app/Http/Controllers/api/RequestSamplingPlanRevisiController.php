@@ -14,8 +14,12 @@ use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\OrderHeader;
+use App\Models\OrderDetail;
+use App\Models\PerbantuanSampler;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
 
 
@@ -133,18 +137,48 @@ class RequestSamplingPlanRevisiController extends Controller
 
     public function getSampler()
     {
+        $privateUserIds =[21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779,346,96];
         $samplers = MasterKaryawan::with('jabatan')
-            ->whereIn('id_jabatan', [70, 75, 94, 110]) // 'Sampler', 'K3 Staff'
+            ->whereIn('id_jabatan', [94]) // 'Sampler', 'K3 Staff'
+            ->whereNotIn('user_id', $privateUserIds)
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
-        $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('id', [21, 56, 311, 531, 95, 112, 377, 531,171,39])
+        $privateSampler =  PerbantuanSampler::with('users.jabatan')
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
-        $allSamplers = $samplers->merge($privateSampler);
-        $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
+        $privateSampler->transform(function ($item) {
+            $digitCount = strlen((string)$item->user_id);
+            if ($digitCount > 4) {
+                    $item->nama_display = $item->nama_lengkap . ' (freelance)';
+                } else {
+                    $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+                }
+            // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            unset($item->jabatan);
+            if ($item->users && $item->users->jabatan) {
+                // Kita "copy" objek jabatan dari dalam users ke root item
+                // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
+                $jabatanObj = $item->users->getRelation('jabatan');
+                $item->setRelation('jabatan', $jabatanObj);
+            } else {
+                // Fallback jika data kosong (opsional, biar frontend gak error undefined)
+                $jabatanObj = (object)[
+                    "nama_jabatan" => "Freelance Sampler"
+                ];
+                $item->jabatan = $jabatanObj;
+            }
+            unset($item->users);
+            return $item;
+        });
+        $samplers->transform(function ($item) {
+            $item->nama_display = $item->nama_lengkap;
+            return $item;
+        });
+        $allSamplers = $samplers->concat($privateSampler);
+        $allSamplers = $allSamplers->unique('user_id');
+        $allSamplers = $allSamplers->sortBy('nama_display')->values();
 
 
         return response()->json($allSamplers, 200);
@@ -182,9 +216,9 @@ class RequestSamplingPlanRevisiController extends Controller
         }
     }
 
-  public function addJadwal(Request $request)
+    public function addJadwal(Request $request)
     {
-        // dd($request->all());
+        
         try {
 
             //code...
@@ -212,7 +246,11 @@ class RequestSamplingPlanRevisiController extends Controller
                 "isokinetic" => $request->isokinetic,
                 "pendampingan_k3" => $request->pendampingan_k3
             ];
+            
             $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
+
+            $this->updateOrderDetail($ObjectData, $request->tanggal);
+            
             if ($addJadwal) {
                 $type = explode("/", $request->no_quotation)[1];
                 if ($type == 'QTC') {
@@ -242,5 +280,48 @@ class RequestSamplingPlanRevisiController extends Controller
     {
         $data = MasterDriver::where('is_active', true);
         return Datatables::of($data)->make(true);
+    }
+
+    public function chekOrder(Request $request)
+    {
+        $chekNoQty = OrderHeader::where('no_document', $request->no_quotation)->where('is_revisi',0)->first();
+
+        return response()->json([
+            "data" => $chekNoQty ? true : false
+        ], 200);
+    }
+
+    public function getStatusSampling(Request $request)
+    {
+        try {
+            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
+            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
+            
+            return response()->json(['data'=>$getLabelStatusSampling],200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
+    }
+
+    private function updateOrderDetail($data, $tanggal)
+    {
+        $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
+        if ($cekOrder) {
+            $array_no_samples = [];
+            foreach ($data->kategori as $x => $y) {
+                $pra_no_sample = explode(" - ", $y)[1];
+                $no_samples = $cekOrder->no_order . '/' . $pra_no_sample;
+                $array_no_samples[] = $no_samples;
+            }
+
+            $orderDetail = OrderDetail::where('id_order_header', $cekOrder->id)->whereIn('no_sampel', $array_no_samples)->get();
+            foreach ($orderDetail as $od) {
+                $od->tanggal_sampling = $tanggal;
+                $od->save();
+
+                Log::channel('perubahan_tanggal')->info('Order Detail updated: ' . $od->no_sampel . ' -> ' . $tanggal);
+            }
+        }
     }
 }

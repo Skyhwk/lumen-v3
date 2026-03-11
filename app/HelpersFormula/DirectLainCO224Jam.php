@@ -25,14 +25,14 @@ class DirectLainCO224Jam {
         $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = NULL;
         $satuan = NULL;
 
-        $c3 = round($totalNilai / $jumlahElemen, 6);
-        $c2 = (($c3 * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
-        $c1 = $c2 * 1000;
-        $c4 = round($c3 * 1000, 6);
-        $c5 = round($c3 / 10000, 6);
+        $c3 = number_format($totalNilai / $jumlahElemen, 6, '.', '');
+        $c2 = number_format((($c3 * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760), 6, '.', '');
+        $c1 = number_format($c2 * 1000, 6, '.', '');
+        $c4 = number_format($c3 * 1000, 6, '.', '');
+        $c5 = number_format($c3 / 10000, 6, '.', '');
         $c15 = $c3;
-        $c17 = round($c15 * 44.01 / 24.45, 6);
-        $c16 = round($c17 * 1000, 6);
+        $c17 = number_format($c15 * 44.01 / 24.45, 6, '.', '');
+        $c16 = number_format($c17 * 1000, 6, '.', '');
         
         // $c3 = $c3 < 1 ? "<1" : number_format($c3, 1);
         return [

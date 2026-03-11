@@ -1,46 +1,68 @@
 @if (!empty($custom))
-    <div class="left" style="page-break-before: always;">
-        <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
-            <thead>
-                <tr>
-                    <th rowspan="2" width="25" class="pd-5-solid-top-center">NO</th>
-                    <th rowspan="2" width="250" class="pd-5-solid-top-center">PARAMETER</th>
-                    <th colspan="3" class="pd-5-solid-top-center">HASIL UJI</th>
-                    <th rowspan="2" width="75" class="pd-5-solid-top-center">BAKU MUTU</th>
-                    <th rowspan="2" class="pd-5-solid-top-center">SATUAN</th>
-                    <th rowspan="2" class="pd-5-solid-top-center">SPESIFIKASI METODE</th>
-                </tr>
-                <tr>
-                    <th class="pd-5-solid-top-center" width="75">C</th>
-                    <th class="pd-5-solid-top-center" width="75">C1</th>
-                    <th class="pd-5-solid-top-center" width="75">C2</th>
-                </tr>
-            </thead>
-            <tbody>
-                @php $total = count((array) $custom); @endphp
-                @foreach ((array) $custom as $kk => $yy)
-                    @continue(!$yy)
+@php
+    $data = $custom;
 
-                    @php
-                        $p = $kk + 1;
-                        $rowClass = $p == $total ? 'solid' : 'dot';
-                        $akr = !empty($yy['akr']) ? $yy['akr'] : '&nbsp;&nbsp;';
-                    @endphp
-                    <tr>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ $p }}</td>
-                        <td class="pd-5-{{ $rowClass }}-left">{!! $akr !!}&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['C'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['C1'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['C2'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['spesifikasi_metode'] ?? '') }}</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    </div>
+    $hasTerkoreksi = collect($data)->contains(function ($item) {
+        return !empty($item['terkoreksi']) && $item['terkoreksi'] !== '-';
+    });
 
+    $total = count($data);
+@endphp
 
+<div class="left" style="page-break-before: always;">
+    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+        <thead>
+    <tr>
+        <th width="25" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">NO</th>
+        <th width="250" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">PARAMETER</th>
 
+        @if ($hasTerkoreksi)
+            <th colspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">{{$header->header_table[$page] ?? 'Hasil Uji'}}</th>
+        @else
+            <th rowspan="1" class="pd-5-solid-top-center" style="white-space: nowrap;">{{$header->header_table[$page] ?? 'Hasil Uji'}}</th>
+        @endif
+
+        <th width="75" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">BAKU MUTU</th>
+        <th rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SATUAN</th>
+        <th rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SPESIFIKASI METODE</th>
+    </tr>
+
+    @if ($hasTerkoreksi)
+        <tr>
+            <th class="pd-5-solid-top-center" style="white-space: nowrap;">TERUKUR</th>
+            <th class="pd-5-solid-top-center" style="white-space: nowrap;">TERKOREKSI</th>
+        </tr>
+    @endif
+</thead>
+    <tbody>
+        @foreach ($data as $kk => $yy)
+            @continue(!$yy)
+            @php
+                $p = $kk + 1;
+                $rowClass = ($p == $total) ? 'solid' : 'dot';
+                $akr = !empty($yy['akr']) ? $yy['akr'] : '&nbsp;&nbsp;';
+            @endphp
+            <tr>
+                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ $p }}</td>
+                <td class="pd-5-{{ $rowClass }}-left" style="white-space: nowrap;">
+                    {!! $akr !!}&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}
+                </td>
+
+                {{-- hasil ukur --}}
+                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['C'] ?? '' !!}</td>
+
+                {{-- hasil terkoreksi (hanya jika ada koreksi) --}}
+                @if ($hasTerkoreksi)
+                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['terkoreksi'] ?? '' !!}</td>
+                @endif
+
+                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
+                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>
+                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['spesifikasi_metode'] ?? '') }}</td>
+            </tr>
+        @endforeach
+    </tbody>
+
+    </table>
+</div>
 @endif

@@ -15,6 +15,11 @@ class OrderHeader extends Sector
         return $this->hasMany(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
     }
 
+    public function invoice()
+    {
+        return $this->belongsTo(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
+    }
+
     public function all_quote()
     {
         return $this->hasMany(AllQuote::class, 'no_document', 'no_document');
@@ -80,7 +85,7 @@ class OrderHeader extends Sector
 
     public function quotationkontrak()
     {
-        return $this->hashOne(QuotationNonKontrak::class, 'no_document', 'no_document');
+        return $this->hashOne(QuotationKontrakH::class, 'no_document', 'no_document');
     }
 
     public function quotation()
@@ -202,4 +207,18 @@ class OrderHeader extends Sector
         return $this->quotationKontrakH ?? $this->quotationNonKontrak ?? null;
     }
 
+    public function emailLhp()
+    {
+        return $this->hasMany(EmailLhp::class, 'id_pelanggan', 'id_pelanggan');
+    }
+
+    public function sales()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'sales_id', 'id');
+    }
+
+    public function persiapanSampelHeaderFdl()
+    {
+        return $this->hasOne(PersiapanSampelHeader::class, 'no_quotation', 'no_document')->where('is_active', true);
+    }
 }

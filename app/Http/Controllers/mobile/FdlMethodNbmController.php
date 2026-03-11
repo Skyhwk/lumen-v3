@@ -190,22 +190,20 @@ class FdlMethodNbmController extends Controller
             if ($request->permission != '')
                 $data->permission = $request->permission;
             $data->method = 1;
-            $data->sebelum_kerja = json_encode($sebelum);
-            $data->setelah_kerja = json_encode($setelah);
-            $data->pengukuran = json_encode($pengukuran);
+            $data->sebelum_kerja = json_encode($sebelum, JSON_UNESCAPED_UNICODE);
+            $data->setelah_kerja = json_encode($setelah, JSON_UNESCAPED_UNICODE);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
             // UPDATE ORDER DETAIL
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
-                ->where('parameter', 'LIKE', '%Ergonomi%')
+                ->where('parameter', 'LIKE', '%Ergonomi%')->where('is_active', true)
                 ->first();
 
             if($orderDetail->tanggal_terima == null) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
@@ -623,14 +621,14 @@ class FdlMethodNbmController extends Controller
 
             // Respond based on whether the data already exists
             if ($check) {
-                if ($data) {
-                    return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-                } else {
+                // if ($data) {
+                //     return response()->json(['message' => 'No. Sample sudah di input.'], 401);
+                // } else {
                     return response()->json([
                         'message' => 'Successful.',
                         'data' => $fdl
                     ], 200);
-                }
+                // }
             } else {
                 return response()->json(['message' => 'Tidak ada parameter Ergonomi berdasarkan No. Sample tersebut.'], 401);
             }

@@ -35,6 +35,11 @@ class FdlErgonomiController extends Controller
                 ->filterColumn('method', function ($query, $keyword) {
                     $query->where('method', 'like', '%' . $keyword . '%');
                 })
+                ->filterColumn('detail.tanggal_sampling', function ($query, $keyword) {
+                    $query->whereHas('detail', function ($q) use ($keyword) {
+                        $q->where('tanggal_sampling', 'like', '%' . $keyword . '%');
+                    });
+                })
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
                 })
@@ -74,6 +79,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -115,6 +121,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -156,6 +163,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -197,6 +205,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -241,6 +250,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -282,6 +292,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -323,6 +334,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -365,6 +377,7 @@ class FdlErgonomiController extends Controller
                         // **Update jika data sudah ada**
                         $header->id_parameter = $param->id;
                         $header->parameter = $param->nama_lab;
+                        $header->is_approve = 1;
                         $header->approved_by = $this->karyawan;
                         $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     } else {
@@ -1190,9 +1203,10 @@ class FdlErgonomiController extends Controller
 
     public function inputK3(Request $request)
     {
+        
         DB::beginTransaction();
         try {
-            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->first();
+            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->orderBy('id', 'desc')->first();
             $uraians = $request->input('uraian', []);
             $jams = $request->input('jam', []);
             $menits = $request->input('menit', []);
@@ -1203,26 +1217,19 @@ class FdlErgonomiController extends Controller
             for ($i = 0; $i < count($uraians); $i++) {
                 $formattedUraian[] = [
                     'id' => $ids[$i],
-                    'Waktu' => ($jams[$i] ?? '0') . ' Jam, ' . ($menits[$i] ?? '0') . ' Menit',
+                    'jam' => ($jams[$i] ?? '0'),
+                    'menit' => ($menits[$i] ?? '0'),
                     'Uraian' => $uraians[$i] ?? ''
                 ];
             }
-            if ($request->method == 8) {
-                $data->input_k3 = [
-                    'uraian' => $formattedUraian,
-                    'kesimpulan' => $request->kesimpulan ?? null,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $this->karyawan
-                ];
-            } else if ($request->method == 7) {
-                $data->input_k3 = [
-                    'uraian' => $formattedUraian,
-                    'kesimpulan_survey_lanjutan' => $request->kesimpulan_survey_lanjutan ?? null,
-                    'analisis_potensi_bahaya' => $request->analisis_potensi_bahaya ?? null,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $this->karyawan
-                ];
-            }
+            
+            $data->input_k3 = json_encode([
+                'uraian' => $formattedUraian,
+                'kesimpulan_survey_lanjutan' => $request->kesimpulan_survey_lanjutan ?? null,
+                'analisis_potensi_bahaya' => $request->analisis_potensi_bahaya ?? null,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $this->karyawan
+            ]);
 
             $data->save();
             DB::commit();
@@ -1245,7 +1252,7 @@ class FdlErgonomiController extends Controller
     {
         DB::beginTransaction();
         try {
-            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->first();
+            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->orderBy('id', 'desc')->first();
             // dd($data);
             $input_k3 = $data->input_k3;
             DB::commit();

@@ -15,6 +15,14 @@ use App\Jobs\SendMqttAccess;
 
 class MesinAbsenHandler extends BaseController
 {
+    private $array_mode = [
+        'normal' => 0,
+        'open' => 1,
+        'close' => 3,
+        'scan' => 4,
+        'add' => 5,
+    ];
+
     public function index(Request $request)
     {
         if($request->token == 'intilab_jaya'){
@@ -300,6 +308,164 @@ class MesinAbsenHandler extends BaseController
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json('Error : ' . $th->getMessage(), 200);
+        }
+    }
+
+    public function IotSync(Request $request)
+    {
+        try {
+            if($request->token == 'intilab_jaya'){
+                if($request->mode == 'sync'){
+                    $deviceCode = $request->device;
+                    
+                    $mesinAbsen = MesinAbsen::where('kode_mesin', $deviceCode)->first();
+                    
+                    if($mesinAbsen == null){
+                        // Mode Access Door
+                        $data = DB::table('access_door')
+                            ->join('rfid_card', 'access_door.kode_rfid', '=', 'rfid_card.kode_kartu')
+                            ->join('master_karyawan', 'rfid_card.userid', '=', 'master_karyawan.id')
+                            ->where('kode_mesin', $deviceCode)
+                            ->select(
+                                'master_karyawan.id as employee_id',
+                                'rfid_card.kode_kartu as rfid',
+                                'master_karyawan.nama_lengkap as full_name'
+                            )
+                            ->get();
+                        
+                        $devices = DB::table('devices')
+                            ->where('kode_device', $deviceCode)
+                            ->first();
+
+                        $nameDevice = $devices->nama_device ?? 'Unknown Device';
+                        $mode = $devices->mode ? $this->array_mode[$devices->mode] : $this->array_mode['normal'];
+                    } else {
+                        // Mode Attendance
+                        if ($mesinAbsen->id_cabang == 1) {
+                            $nameDevice = 'HEAD OFFICE';
+                        } elseif ($mesinAbsen->id_cabang == 4) {
+                            $nameDevice = 'RO-KARAWANG';
+                        } else {
+                            $nameDevice = 'RO-PEMALANG';
+                        }
+
+                        $mode = $mesinAbsen->mode ? $this->array_mode[strtolower($mesinAbsen->mode)] : $this->array_mode['scan'];
+                        
+                        $data = DB::table('master_karyawan')
+                            ->join('rfid_card', 'master_karyawan.id', '=', 'rfid_card.userid')
+                            ->where('master_karyawan.is_active', 1)
+                            ->where('master_karyawan.id_cabang', $mesinAbsen->id_cabang)
+                            ->select(
+                                'master_karyawan.id as employee_id',
+                                'rfid_card.kode_kartu as rfid',
+                                'master_karyawan.nama_lengkap as full_name'
+                            )
+                            ->get();
+                    }
+
+                    // DEBUG: Log jumlah data
+                    \Log::info("Device: {$deviceCode}, Data count: " . count($data));
+                    
+                    // Cek jika data kosong
+                    if (count($data) == 0) {
+                        \Log::warning("No data found for device: {$deviceCode}");
+                    }
+
+                    // Path folder per device
+                    $deviceFolder = public_path('iot/' . $deviceCode);
+                    
+                    // Pastikan folder device ada
+                    if (!file_exists($deviceFolder)) {
+                        mkdir($deviceFolder, 0755, true);
+                        \Log::info("Created folder: {$deviceFolder}");
+                    }
+                    
+                    // File selalu bernama "access.bin"
+                    $filepath = $deviceFolder . '/access.bin';
+                    
+                    // Generate binary file
+                    $result = $this->generateAccessBin($data, $filepath);
+                    
+        
+                    return response()->json([
+                        'nameDevice' => $nameDevice,
+                        'mode' => $mode,
+                        'path' => "http://apps.intilab.com/v3/public/iot/" . $deviceCode . "/access.bin"
+                    ], 200);
+                }
+            }
+            
+            return response()->json('Invalid request', 400);
+            
+        } catch (\Throwable $th) {
+            \Log::error("IotSync Error: " . $th->getMessage());
+            \Log::error($th->getTraceAsString());
+            return response()->json('Error : ' . $th->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Generate binary file access.bin sesuai format ESP32
+     */
+    private function generateAccessBin($data, $filepath)
+    {
+        try {
+            // Hapus file lama jika ada
+            if (file_exists($filepath)) {
+                unlink($filepath);
+            }
+            
+            $handle = fopen($filepath, 'wb');
+            
+            if (!$handle) {
+                \Log::error("Cannot create file: " . $filepath);
+                throw new \Exception("Cannot create file: " . $filepath);
+            }
+            
+            $recordCount = 0;
+            
+            foreach ($data as $record) {
+                // Pastikan data tidak null
+                $empId = isset($record->employee_id) ? (string)$record->employee_id : '';
+                $rfidCode = isset($record->rfid) ? (string)$record->rfid : '';
+                $name = isset($record->full_name) ? (string)$record->full_name : '';
+                
+                // DEBUG: Log setiap record
+                \Log::debug("Record: EmpID={$empId}, RFID={$rfidCode}, Name={$name}");
+                
+                // employee_id - 16 bytes
+                $employeeId = str_pad(substr($empId, 0, 15), 16, "\0");
+                fwrite($handle, $employeeId);
+                
+                // rfid - 16 bytes
+                $rfid = str_pad(substr($rfidCode, 0, 15), 16, "\0");
+                fwrite($handle, $rfid);
+                
+                // full_name - 32 bytes
+                $fullName = str_pad(substr($name, 0, 31), 32, "\0");
+                fwrite($handle, $fullName);
+                
+                $recordCount++;
+            }
+            
+            fclose($handle);
+            
+            // Verifikasi file
+            $filesize = file_exists($filepath) ? filesize($filepath) : 0;
+            $expectedSize = $recordCount * 64;
+            
+            \Log::info("Generated access.bin: {$filepath}");
+            \Log::info("Records: {$recordCount}, Size: {$filesize} bytes, Expected: {$expectedSize} bytes");
+            
+            if ($filesize != $expectedSize) {
+                \Log::warning("File size mismatch! Expected: {$expectedSize}, Got: {$filesize}");
+            }
+            
+            return true;
+            
+        } catch (\Exception $e) {
+            \Log::error("generateAccessBin Error: " . $e->getMessage());
+            throw $e;
         }
     }
 

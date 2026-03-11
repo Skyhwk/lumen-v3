@@ -15,7 +15,8 @@ return [
         'S24' => 'Sampling 24 Jam',
         'SD' => 'Sample Diantar',
         'S' => 'Sampling',
-        'RS' => 'Re-Sample'
+        'RS' => 'Re-Sample',
+        'SP' => 'Sample Pickup',
     ],
     'table' => [
         'header' => [
@@ -78,7 +79,7 @@ return [
             '4' => "Pembatalan atau penjadwalan ulang oleh pihak pelanggan akan dikenakan biaya transportasi dan/atau perdiem.",
             '5' => "Pekerjaan akan dilaksanakan setelah pihak kami menerima konfirmasi berupa dokumen PO / SPK dari pihak pelanggan.",
             '6' => "Bagi perusahaan yang tidak menerbitkan PO / SPK, dapat menandatangani penawaran harga sebagai bentuk persetujuan pelaksanaan pekerjaan.",
-            '7' => "Laporan Hasil Pengujian akan dikeluarkan dalam jangka waktu 10 hari kerja, terhitung sejak tanggal sampel diterima di laboratorium.",
+            '7' => "Laporan Hasil Pengujian akan dikeluarkan dalam jangka waktu 10 hari kerja, terhitung sejak tanggal sampel diterima di laboratorium (Tidak termasuk parameter khusus).",
             '8' => "Optimal perhari 1 (satu) tim sampling (2 orang) bisa mengerjakan 6 titik udara (Ambient / Lingkungan Kerja).",
             '9' => "Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan.",
             '10' => "Biaya sudah termasuk :costs.",
@@ -111,7 +112,7 @@ return [
         ]
     ],
     'approval' => [
-        'proof' => 'Sebagai tanda persetujuan, agar dapat menandatangani serta mengirimkan kembali kepada pihak kami melalui email : sales@intilab.com',
+        'proof' => 'Mohon Bapak/Ibu dapat meninjau kembali form penawaran ini untuk memastikan seluruh data kebutuhan telah sesuai. Sebagai bentuk persetujuan, mohon menandatangani dan mengirimkan kembali kepada kami melalui email: sales@intilab.com',
         'administration' => 'Administrasi',
         'status' => 'Status',
         'sampling' => 'Tanggal Sampling',

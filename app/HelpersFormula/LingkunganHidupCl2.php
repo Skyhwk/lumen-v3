@@ -10,10 +10,13 @@ class LingkunganHidupCl2
         if($data->use_absorbansi) {
             $ks = array_sum($data->ks[0]) / count($data->ks[0]);
             $kb = array_sum($data->kb[0]) / count($data->kb[0]);
-        }else{
+        }else if(is_array($data->ks) && is_array($data->kb)){
             $ks = array_sum($data->ks) / count($data->ks);
             $kb = array_sum($data->kb) / count($data->kb);
             // dd($data);
+        }else {
+            $ks = floatval($data->ks);
+            $kb = floatval($data->kb);
         }
 
         $Ta = floatval($data->suhu) + 273;
@@ -70,12 +73,6 @@ class LingkunganHidupCl2
 
             $C16 = \str_replace(",", "", number_format($C15 / 1000 , 3));
         }
-        if (floatval($C) < 4.000)
-            $C = '<4.000';
-        if (floatval($C1) < 0.004)
-            $C1 = '<0.004';
-        if (floatval($C2) < 0.0013)
-            $C2 = '<0.0013';
 
         $satuan = 'ug/Nm3';
 

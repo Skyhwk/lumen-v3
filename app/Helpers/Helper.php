@@ -27,37 +27,59 @@ class Helper
             return '-';
         }
     }
+    // public static function waktuPemaparan($waktu)
+    // {
+    //     // Hapus dd() untuk production
+        
+    //     // Pastikan input adalah numerik
+    //     if (!is_numeric($waktu)) {
+    //         return '0 menit';
+    //     }
+        
+    //     // Konversi ke float untuk menangani decimal
+    //     $waktu = (float) $waktu;
+        
+    //     // Jika waktu negatif, kembalikan 0 menit
+    //     if ($waktu < 0) {
+    //         return '0 menit';
+    //     }
+        
+    //     $jam = floor($waktu / 60);
+    //     $menit = $waktu % 60;
+    //     $hasil = '';
+        
+    //     if ($jam > 0) {
+    //         $hasil .= $jam . ' jam';
+    //     }
+        
+    //     if ($menit > 0) {
+    //         $hasil .= ($jam > 0 ? ' ' : '') . $menit . ' menit';
+    //     }
+
+    //     return $hasil ?: '0 menit';
+    // }
+
     public static function waktuPemaparan($waktu)
     {
-        // Hapus dd() untuk production
-        
-        // Pastikan input adalah numerik
         if (!is_numeric($waktu)) {
-            return '0 menit';
-        }
-        
-        // Konversi ke float untuk menangani decimal
-        $waktu = (float) $waktu;
-        
-        // Jika waktu negatif, kembalikan 0 menit
-        if ($waktu < 0) {
-            return '0 menit';
-        }
-        
-        $jam = floor($waktu / 60);
-        $menit = $waktu % 60;
-        $hasil = '';
-        
-        if ($jam > 0) {
-            $hasil .= $jam . ' jam';
-        }
-        
-        if ($menit > 0) {
-            $hasil .= ($jam > 0 ? ' ' : '') . $menit . ' menit';
+            return '0';
         }
 
-        return $hasil ?: '0 menit';
+        $waktu = (float) $waktu;
+
+        if ($waktu <= 0) {
+            return '0';
+        }
+
+        // menit ke jam
+        $jam = $waktu / 60;
+
+        // bulatkan 2 desimal (opsional)
+        $jam = round($jam, 2);
+
+        return $jam;
     }
+
     public static function generateUniqueCode($table, $column = 'kode_uniq', $length = 5)
     {   
         try {
@@ -127,8 +149,17 @@ class Helper
         foreach ($data as $key => $value) {
             // 1. Convert the key to a string (if not already) and apply normalization rules.
             //    Rules: convert to lowercase and remove spaces and hyphens.
-            $newKey = strtolower(str_replace([' ', '-'], '_', (string) $key));
-
+            //$newKey = strtolower(str_replace([' ', '-'], '_', (string) $key));
+            $tempKey = strtolower((string) $key);
+            $replacements = [
+                '°' => '',        // Hapus derajat
+                '>' => '_gt_',    // ganti > jadi gt (greater than) atau bisa '_lebih_'
+                '<' => '_lt_',    // ganti < jadi lt (less than) atau bisa '_kurang_'
+                '=' => '_eq_',    // sama dengan
+            ];
+            $tempKey = strtr($tempKey, $replacements);
+            $tempKey = preg_replace('/[^a-z0-9]+/', '_', $tempKey);
+            $newKey = trim($tempKey, '_');
             // 2. Handle nested arrays recursively.
             if (is_array($value)) {
                 $value = self::normalize_format_key($value,$asObject); // Use 'self::' or 'static::' for static method calls.

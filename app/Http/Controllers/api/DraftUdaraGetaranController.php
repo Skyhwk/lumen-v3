@@ -9,7 +9,8 @@ use App\Models\LhpsGetaranCustom;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
 
-
+use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\OrderHeader;
 use App\Models\LhpsGetaranHeaderHistory;
 use App\Models\LhpsGetaranDetailHistory;
 
@@ -112,95 +113,98 @@ class DraftUdaraGetaranController extends Controller
         }
     }
 
-      public function handleMetodeSampling(Request $request)
-        {
-            try {
-                $subKategori = explode('-', $request->kategori_3);
-                $param = explode(';', (json_decode($request->parameter)[0]))[0];
-                $result = [];
-                // Data utama
-                $data = Parameter::where('id_kategori', '4')
-                    ->where('id', $param)
-                    ->get();
-                $resultx = $data->toArray();
-                foreach ($resultx as $key => $value) {
-                    $result[$key]['id'] = $value['id'];
-                    $result[$key]['metode_sampling'] = $value['method'] ?? '';
-                    $result[$key]['kategori'] = $value['nama_kategori'];
-                    $result[$key]['sub_kategori'] = $subKategori[1];
-                }
+    public function handleMetodeSampling(Request $request)
+    {
+        try {
+            $subKategori = explode('-', $request->kategori_3);
+            $param = explode(';', (json_decode($request->parameter)[0]))[0];
+            $result = [];
+            // Data utama
+            $data = Parameter::where('id_kategori', '4')
+                ->where('id', $param)
+                ->get();
+            $resultx = $data->toArray();
+            foreach ($resultx as $key => $value) {
+                $result[$key]['id'] = $value['id'];
+                $result[$key]['metode_sampling'] = $value['method'] ?? '';
+                $result[$key]['kategori'] = $value['nama_kategori'];
+                $result[$key]['sub_kategori'] = $subKategori[1];
+            }
 
-                // $result = $resultx;
+            // $result = $resultx;
 
-                if ($request->filled('id_lhp')) {
-                    $header = LhpsGetaranHeader::find($request->id_lhp);
+            if ($request->filled('id_lhp')) {
+                $header = LhpsGetaranHeader::find($request->id_lhp);
 
-                    if ($header) {
-                        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                if ($header) {
+                    $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-                        foreach ($data as $key => $value) {
-                            $valueMetode = array_map('trim', explode(',', $value->method));
+                    foreach ($data as $key => $value) {
+                        $valueMetode = array_map('trim', explode(',', $value->method));
 
-                            $missing = array_diff($headerMetode, $valueMetode);
+                        $missing = array_diff($headerMetode, $valueMetode);
 
-                            if (!empty($missing)) {
-                                foreach ($missing as $miss) {
-                                    $result[] = [
-                                        'id' => null,
-                                        'metode_sampling' => $miss ?? '',
-                                        'kategori' => $value->kategori,
-                                        'sub_kategori' => $value->sub_kategori,
-                                    ];
-                                }
+                        if (!empty($missing)) {
+                            foreach ($missing as $miss) {
+                                $result[] = [
+                                    'id' => null,
+                                    'metode_sampling' => $miss ?? '',
+                                    'kategori' => $value->kategori,
+                                    'sub_kategori' => $value->sub_kategori,
+                                ];
                             }
                         }
                     }
                 }
-
-                return response()->json([
-                    'status' => true,
-                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-                    'data' => $result,
-                ], 200);
-
-            } catch (\Exception $e) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                    'line' => $e->getLine(),
-                ], 500);
             }
+
+            return response()->json([
+                'status' => true,
+                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data' => $result,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
         }
+    }
 
-
+    private function cleanArrayKeys($arr)
+    {
+        if (!$arr) return [];
+        $cleanedKeys = array_map(fn($k) => trim($k, " '\""), array_keys($arr));
+        return array_combine($cleanedKeys, array_values($arr));
+    }
 
     public function store(Request $request)
     {
         DB::beginTransaction();
         try {
 
-            // === 1. Ambil header / buat baru ===
-         $header = LhpsGetaranHeader::where([
-            'no_lhp'        => $request->no_lhp,
-            'no_order'      => $request->no_order,
-            'is_active'     => true
-        ])->first();
-        $is_revisi = false;
-        $newCountRevisi = 0;
+            $header = LhpsGetaranHeader::where([
+                'no_lhp'        => $request->no_lhp,
+                'no_order'      => $request->no_order,
+                'is_active'     => true
+            ])->first();
+
+            $is_revisi = false;
+            $newCountRevisi = 0;
+
             if ($header) {
                 $is_revisi = $header->is_revisi == 1 ? true : false;
-                // Backup ke history sebelum update
                 $newCountRevisi = $is_revisi ? $header->count_revisi + 1 : $header->count_revisi;
                 $history = $header->replicate();
                 $history->setTable((new LhpsGetaranHeaderHistory())->getTable());
-                // $history->id = $header->id;
                 $history->created_at = Carbon::now();
                 $history->save();
             } else {
                 $header = new LhpsGetaranHeader();
             }
 
-            // === 2. Validasi tanggal LHP ===
             if (empty($request->tanggal_lhp)) {
                 DB::rollBack();
                 return response()->json([
@@ -216,122 +220,111 @@ class DraftUdaraGetaranController extends Controller
             $nama_perilis = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $jabatan_perilis = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 
-            // === 3. Persiapan data header ===
             $parameter_uji = !empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
             $keterangan    = array_values(array_filter($request->keterangan ?? []));
 
-            $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                return ['page' => (int)$page, 'regulasi' => $item];
-            })->values()->toArray();
-            // === 4. Simpan / update header ===
-
-            $header->fill([
-                'no_order'        => $request->no_order ?: null,
-                'no_sampel' => is_array($request->no_sampel) 
-                    ? implode(', ', $request->no_sampel) 
-                    : ($request->no_sampel ?: null),
-                'no_lhp'          => $request->no_lhp ?: null,
-                'no_qt'           => $request->no_penawaran ?: null,
-                'status_sampling' => $request->type_sampling ?: null,
-                // 'tanggal_sampling'=> $request->tanggal_sampling ?: null,
-                'tanggal_terima'  => $request->tanggal_terima ?: null,
-                'parameter_uji'   => json_encode($parameter_uji),
-                'nama_pelanggan'  => $request->nama_perusahaan ?: null,
-                'alamat_sampling' => $request->alamat_sampling ?: null,
-                'sub_kategori'    => $request->jenis_sampel ?: null,
-                'id_kategori_2'    => 4,
-                'id_kategori_3'    => null,
-                'metode_sampling'=> $request->metode_sampling ? json_encode($request->metode_sampling) : null,
-                'nama_karyawan'   => $nama_perilis,
-                'is_revisi'       => false,
-                'count_revisi'    => $newCountRevisi,
-                'is_generated'    => $is_revisi ? false : $header->is_generated ?? 0,
-                'jabatan_karyawan'=> $jabatan_perilis,
-                'regulasi'        => $request->regulasi ? json_encode($request->regulasi) : null,
-                'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
-                'keterangan'      => $keterangan ? json_encode($keterangan) : null,
-                'tanggal_lhp'     => $request->tanggal_lhp ?: null,
-                'created_by'      => $this->karyawan,
-                'created_at'      => Carbon::now(),
-            ]);
+            $header->no_order         = $request->no_order ?: null;
+            $header->no_sampel        = is_array($request->no_sampel) ? implode(', ', $request->no_sampel) : ($request->no_sampel ?: null);
+            $header->no_lhp           = $request->no_lhp ?: null;
+            $header->no_qt            = $request->no_penawaran ?: null;
+            $header->status_sampling  = $request->type_sampling ?: null;
+            // $header->tanggal_terima   = $request->tanggal_terima ?: null;
+            $header->parameter_uji    = json_encode($parameter_uji);
+            $header->nama_pelanggan   = $request->nama_perusahaan ?: null;
+            $header->alamat_sampling  = $request->alamat_sampling ?: null;
+            $header->sub_kategori     = $request->jenis_sampel ?: null;
+            $header->id_kategori_2    = 4;
+            $header->id_kategori_3    = null;
+            $header->metode_sampling  = $request->metode_sampling ? json_encode($request->metode_sampling) : null;
+            $header->nama_karyawan    = $nama_perilis;
+            $header->is_revisi        = false;
+            $header->count_revisi     = $newCountRevisi;
+            $header->is_generated     = $is_revisi ? false : ($header->is_generated ?? 0);
+            $header->jabatan_karyawan = $jabatan_perilis;
+            $header->regulasi         = $request->regulasi ? json_encode($request->regulasi) : null;
+            $header->regulasi_custom  = $request->regulasi_custom ? json_encode($request->regulasi_custom) : null;
+            $header->keterangan       = $keterangan ? json_encode($keterangan) : null;
+            $header->tanggal_lhp      = $request->tanggal_lhp ?: null;
+            $header->created_by       = $this->karyawan;
+            $header->created_at       = Carbon::now()->format('Y-m-d H:i:s');
+            
             $header->save();
 
-            // === 5. Backup & replace detail ===
             $oldDetails = LhpsGetaranDetail::where('id_header', $header->id)->get();
+
             foreach ($oldDetails as $detail) {
                 $detailHistory = $detail->replicate();
                 $detailHistory->setTable((new LhpsGetaranDetailHistory())->getTable());
-                // $detailHistory->id = $detail->id;
                 $detailHistory->created_by = $this->karyawan;
                 $detailHistory->created_at = Carbon::now();
                 $detailHistory->save();
+
+                LhpsGetaranDetail::where('id_header', $header->id)->delete();
             }
-            LhpsGetaranDetail::where('id_header', $header->id)->delete();
-            $no_sampel = is_string($request->no_sampel) ? explode(',', $request->no_sampel) : $request->no_sampel;
-            foreach ($no_sampel as $key => $val) {
-            //   dd($request->all());
-                if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
-                    $detail = new LhpsGetaranDetail([
-                        'id_header'   => $header->id,
-                        'no_sampel'   => $request->no_sampel[$val] ?? null,
-                        'param'       =>$request->param[$val] ?? null,
-                        'keterangan'  => $request->keterangan_detail[$val] ?? null,
-                        'sumber_get'  =>$request->sumber_get[$val] ?? null,
-                        'w_paparan'   => $request->w_paparan[$val] ?? null,
-                        'hasil'       => $request->hasil[$val] ?? null,
-                        'tipe_getaran'=>$request->tipe_getaran[$val] ?? null,
-                        'nab'         => $request->nab[$val] ?? null,
-                        'tanggal_sampling'         => $request->tanggal_sampling[$val] ?? null,
-                    ]);
-                    $detail->save();
-                } else {
-                    $detail = new LhpsGetaranDetail([
-                        'id_header'   => $header->id,
-                        'no_sampel'   => $val,
-                        'param'       => $request->param[$val] ?? null,
-                        'keterangan'  => $request->keterangan_detail[$val] ?? null,
-                        'percepatan'  => $request->percepatan[$val] ?? null,
-                        'kecepatan'   => $request->kecepatan[$val] ?? null,
-                        'tipe_getaran'=> $request->tipe_getaran[$val] ?? null,
-                        'tanggal_sampling'  => $request->tanggal_sampling[$val] ?? null,
-                    ]);
+
+            $cleaned_noSampel           = $this->cleanArrayKeys($request->no_sampel);
+            $cleaned_param              = $this->cleanArrayKeys($request->param) ?? [];
+            $cleaned_keterangan         = $this->cleanArrayKeys($request->keterangan_detail ?? []);
+            $cleaned_percepatan         = $this->cleanArrayKeys($request->percepatan ?? []);
+            $cleaned_kecepatan         = $this->cleanArrayKeys($request->kecepatan ?? []);
+            $cleaned_tipe_getaran       = $this->cleanArrayKeys($request->tipe_getaran ?? []);
+            $cleaned_tanggal_sampling   = $this->cleanArrayKeys($request->tanggal_sampling ?? []);
+
+            foreach ($request->no_sampel as $key => $val) {
+                if (array_key_exists($val, $cleaned_noSampel)) {
+                    $detail = new LhpsGetaranDetail;
+                    $detail->id_header = $header->id;
+                    $detail->no_sampel = $val;
+                    $detail->param = $cleaned_param[$val] ?? null;
+                    $detail->keterangan = $cleaned_keterangan[$val] ?? null;
+                    $detail->percepatan = $cleaned_percepatan[$val] ?? null;
+                    $detail->kecepatan = $cleaned_kecepatan[$val] ?? null;
+                    $detail->tipe_getaran = $cleaned_tipe_getaran[$val] ?? null;
+                    $detail->tanggal_sampling = $cleaned_tanggal_sampling[$val] ?? null;
                     $detail->save();
                 }
             }
-            // === 6. Handle custom ===
+            
             LhpsGetaranCustom::where('id_header', $header->id)->delete();
 
-            if ($request->custom_no_sampel) {
-                foreach ($request->custom_no_sampel as $page => $sampel) {
-                    foreach ($sampel as $sampel => $hasil) {
-                        LhpsGetaranCustom::create([
-                            'id_header'   => $header->id,
-                            'page'        => $page,
-                            'no_sampel' => $request->custom_no_sampel[$page][$sampel] ?? null,
-                            'keterangan'   =>  $request->custom_keterangan_detail[$page][$sampel],
-                            'hasil'   => $request->custom_hasil[$page][$sampel] ?? null,
-                            'sumber_get'      => $request->custom_sumber_get[$page][$sampel] ?? null,
-                            'w_paparan'      => $request->custom_w_paparan[$page][$sampel] ?? null,
-                            'param'     => $request->custom_parameter[$page][$sampel] ?? null,
-                            'nab'     => $request->custom_nab[$page][$sampel] ?? null,
-                            'tanggal_sampling'     => $request->custom_tanggal_sampling[$page][$sampel] ?? null,
-                            'tipe_getaran'     => $request->custom_tipe_getaran[$page][$sampel] ?? null,
-                            'percepatan'     => $request->custom_percepatan[$page][$sampel] ?? null,
-                            'kecepatan'     => $request->custom_kecepatan[$page][$sampel] ?? null,
-                        ]);
+            $custom = isset($request->regulasi_custom) && !empty($request->regulasi_custom);
+
+            if($custom){
+                foreach ($request->regulasi_custom as $key => $val) {
+                    $custom_cleaned_param      = $this->cleanArrayKeys($request->custom_param[$key] ?? []);
+                    $custom_cleaned_keterangan = $this->cleanArrayKeys($request->custom_keterangan_detail[$key] ?? []);
+                    $custom_cleaned_percepatan = $this->cleanArrayKeys($request->custom_percepatan[$key] ?? []);
+                    $custom_cleaned_kecepatan = $this->cleanArrayKeys($request->custom_kecepatan[$key] ?? []);
+                    $custom_cleaned_tipe_getaran = $this->cleanArrayKeys($request->custom_tipe_getaran[$key] ?? []);
+                    $custom_cleaned_tanggal_sampling = $this->cleanArrayKeys($request->custom_tanggal_sampling[$key] ?? []);
+                    $custom_cleaned_noSampel = $this->cleanArrayKeys($request->custom_no_sampel[$key] ?? []);
+                    
+                    foreach ($request->custom_no_sampel[$key] as $idx => $val) {
+                        if (array_key_exists($val, $custom_cleaned_noSampel)) {
+                            $custom = new LhpsGetaranCustom;
+                            $custom->id_header = $header->id;
+                            $custom->page = number_format($key);
+                            $custom->no_sampel = $custom_cleaned_noSampel[$val] ?? null;
+                            $custom->param = $custom_cleaned_param[$val] ?? null;
+                            $custom->keterangan = $custom_cleaned_keterangan[$val] ?? null;
+                            $custom->percepatan = $custom_cleaned_percepatan[$val] ?? null;
+                            $custom->kecepatan = $custom_cleaned_kecepatan[$val] ?? null;
+                            $custom->tipe_getaran = $custom_cleaned_tipe_getaran[$val] ?? null;
+                            $custom->tanggal_sampling = $custom_cleaned_tanggal_sampling[$val] ?? null;
+                            $custom->save();
+                        }
                     }
                 }
             }
 
-            // === 7. Generate QR & File ===
             if (!$header->file_qr) {
-                
                 $file_qr = new GenerateQrDocumentLhp();
                 if ($path = $file_qr->insert('LHP_Getaran', $header, $this->karyawan)) {
                     $header->file_qr = $path;
                     $header->save();
                 }
             }
+
             $renderDetail = LhpsGetaranDetail::where('id_header', $header->id)->get();
             $renderDetail = collect($renderDetail)->sortBy([
                     ['tanggal_sampling', 'asc'],
@@ -349,36 +342,14 @@ class DraftUdaraGetaranController extends Controller
                 ])->values()->toArray();
             }
 
-            if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
-                $fileName = LhpTemplate::setDataDetail($renderDetail)
-                            ->setDataHeader($header)
-                            // ->useLampiran(true)
-                            ->setDataCustom($groupedByPage)
-                            ->whereView('DraftGetaranPersonal')
-                            ->render('downloadLHPFinal');
-            } else {
-                $fileName = LhpTemplate::setDataDetail($renderDetail)
-                            ->setDataHeader($header)
-                            ->useLampiran(true)
-                            ->setDataCustom($groupedByPage)
-                            ->whereView('DraftGetaran')
-                            ->render('downloadLHPFinal');
-            }
+            $fileName = LhpTemplate::setDataDetail($renderDetail)
+                        ->setDataHeader($header)
+                        ->setDataCustom($groupedByPage)
+                        ->useLampiran(true)
+                        ->whereView('DraftGetaran')
+                        ->render('downloadLHPFinal');
 
-         
             $header->file_lhp = $fileName;
-            // if($newCountRevisi > 2){
-            //     // dd($request->all());
-            //     try {
-            //         $this->handleApprove($request, false);
-            //     } catch (\Throwable $th) {
-            //         DB::rollBack();
-            //         return response()->json([
-            //             'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-            //             'status'  => false,
-            //         ]);
-            //     }
-            // }
             $header->save();
 
             DB::commit();
@@ -548,9 +519,9 @@ class DraftUdaraGetaranController extends Controller
 
                     // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, function ($a, $b) {
-                        return $a['page'] <=> $b['page'];
-                    });
+                    // usort($regulasi_custom, function ($a, $b) {
+                    //     return $a['page'] <=> $b['page'];
+                    // });
 
                     foreach ($regulasi_custom as $item) {
                         if (empty($item['page'])) continue;
@@ -577,9 +548,8 @@ class DraftUdaraGetaranController extends Controller
                         }
                     }
                 }
-                        // dd($data_custom);   
 
-                  $mainData         = [];
+                $mainData         = [];
                 $otherRegulations = [];
 
                 $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
@@ -703,7 +673,8 @@ class DraftUdaraGetaranController extends Controller
             ], 500);
         }
     }
-   private function formatEntry($val)
+
+    private function formatEntry($val)
     {
         $entry = [
             'id'        => $val->id,
@@ -749,8 +720,6 @@ class DraftUdaraGetaranController extends Controller
         ]);
     }
 
-
-
     public function handleApprove(Request $request, $isManual = true)
     {
             try {
@@ -780,9 +749,11 @@ class DraftUdaraGetaranController extends Controller
                 $data = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
                     ->where('is_active', true)
                     ->first();
+
                 $noSampel = is_array($request->no_sampel) 
                     ? ($request->no_sampel ?: null) 
                     : explode(', ', $request->no_sampel);
+                    
                 $no_lhp = $data->no_lhp;
                 $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
@@ -825,30 +796,35 @@ class DraftUdaraGetaranController extends Controller
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
                         $dataQr->Disahkan_Oleh = $data->nama_karyawan;
-                    $dataQr->Jabatan = $data->jabatan_karyawan;
+                        $dataQr->Jabatan = $data->jabatan_karyawan;
                         $qr->data = json_encode($dataQr);
                         $qr->save();
                     }
-                    $data->count_print = $data->count_print + 1; 
-                    $data->save();
 
-                    $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
-            
-                    // $servicePrint = new PrintLhp();
-                    // $servicePrint->printByFilename($data->file_lhp, $detail);
-                    
-                    // if (!$servicePrint) {
-                    //     DB::rollBack();
-                    //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                    // }
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                        ->where('is_active', true)
+                        ->first();
 
-                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                    $cekLink = LinkLhp::where('no_order', $data->no_order);
+                    if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                    $cekLink = $cekLink->first();
 
-                    if($cekLink) {
-                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    if ($cekLink) {
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                         $this->dispatch($job);
                     }
+
+                    $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
+
+                    EmailLhpRilisHelpers::run([
+                        'cfr'              => $data->no_lhp,
+                        'no_order'         => $data->no_order,
+                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                        'nama_perusahaan'  => $data->nama_pelanggan,
+                        'periode'          => $cekDetail->periode,
+                        'karyawan'         => $this->karyawan
+                    ]);
                 } else {
                     DB::rollBack();
                     return response()->json([
@@ -941,7 +917,7 @@ class DraftUdaraGetaranController extends Controller
     }
 
     // Amang
- public function generate(Request $request)
+    public function generate(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -1011,7 +987,7 @@ class DraftUdaraGetaranController extends Controller
     }
 
     // Amang
-     public function getLink(Request $request)
+    public function getLink(Request $request)
     {
         try {
             $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_getaran', 'type' => 'draft'])->first();
@@ -1025,7 +1001,7 @@ class DraftUdaraGetaranController extends Controller
     }
 
     // Amang
-     public function sendEmail(Request $request)
+    public function sendEmail(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -1083,9 +1059,6 @@ class DraftUdaraGetaranController extends Controller
         }
     }
 
-    
-
-    // Amang
     public function encrypt($data)
     {
         $ENCRYPTION_KEY = 'intilab_jaya';

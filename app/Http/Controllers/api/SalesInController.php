@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\SalesIn;
+use App\Models\PembayaranGiro;
 use Carbon\Carbon;
 use DataTables;
 use Illuminate\Support\Facades\DB;
@@ -62,10 +63,26 @@ class SalesInController extends Controller
 
     public function delete(Request $request)
     {
-        $data = SalesIn::find($request->id);
-        $data->is_active = false;
-        $data->save();
-        return response()->json(['message' => 'Data berhasil dihapus']);
+        DB::beginTransaction();
+        try {
+            $data = SalesIn::find($request->id);
+            $data->is_active = false;
+            $data->save();
+
+            $pembayaranGiro = PembayaranGiro::where('batch_id', $data->no_dokumen)->first();
+            if ($pembayaranGiro) {
+                $pembayaranGiro->status = 'Uncleared';
+                $pembayaranGiro->clearing_by = NULL;
+                $pembayaranGiro->clearing_at = NULL;
+                $pembayaranGiro->save();
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'Data berhasil dihapus']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 401);
+        }
     }
 
     public function pemasukan(Request $request)

@@ -56,7 +56,7 @@ class TqcGetaranController extends Controller
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', 'regulasi')
-            ->orderBy('max_id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
     }

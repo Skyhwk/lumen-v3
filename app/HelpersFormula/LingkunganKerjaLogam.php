@@ -308,20 +308,6 @@ class LingkunganKerjaLogam
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                 $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 $C15 = $C16 * 1000;
-
-                // "C (mg/Nm3 dan mg/m3) = <0.000013 mg/Nm3
-                // C (ug/Nm3 dan ug/m3) = <0.0128 ug/Nm3
-                // C (PPM) = <0.00011 PPM
-                // "
-                if ($C1 < 0.000013) {
-                    $C1 = 0.000013;
-                }
-                if ($C < 0.0128) {
-                    $C = 0.0128;
-                }
-                if ($C2 < 0.00011) {
-                    $C2 = 0.00011;
-                }
             }
 
             $C = isset($C) ? number_format($C, 6) : '0.000000';
@@ -335,51 +321,24 @@ class LingkunganKerjaLogam
             // MDL Handler
             if (in_array($data->parameter, ['As', 'Ba'])) {
                 $C1 = number_format($C1, 6);
-                if ($C1 < 0.000022) {
-                    $C1 = "<0.000022";
-                }
             } elseif (in_array($data->parameter, ['Cd'])) {
                 $C1 = number_format($C1, 5);
-                if ($C1 < 0.00005) {
-                    $C1 = "<0.00005";
-                }
 
                 $C = number_format($C, 5);
-                if ($C < 0.05) {
-                    $C = "<0.05";
-                }
 
                 $C2 = number_format($C2, 6);
-                if ($C2 < 0.0000011) {
-                    $C2 = "<0.0000011";
-                }
             } elseif (in_array($data->parameter, ['Co'])) {
                 // "<0,000292 PPM
                 // <0,0078 ug/Nm3"
                 $C = number_format($C, 4);
                 $C2 = number_format($C2, 6);
-                if ($C < 0.0078) {
-                    $C = "<0.0078";
-                }
-                if ($C2 < 0.000292) {
-                    $C2 = "<0.000292";
-                }
             } elseif (in_array($data->parameter, ['Cu'])) {
                 $C1 = number_format($C1, 5);
-                if ($C1 < 0.00004) {
-                    $C1 = "<0.00004";
-                }
             } elseif (in_array($data->parameter, ['Fe'])) {
                 // <0,000038 mg/m3
                 $C1 = number_format($C1, 6);
-                if ($C1 < 0.000038) {
-                    $C1 = "<0.000038";
-                }
             } elseif (in_array($data->parameter, ['Hg', 'Mn'])) {
                 $C1 = number_format($C1, 4);
-                if ($C1 < 0.0001) {
-                    $C1 = "<0.0001";
-                }
             }
 
             $vl = $data->vl;

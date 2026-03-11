@@ -11,7 +11,7 @@ use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Services\TranslatorService as Translator;
 use Carbon\Carbon;
 
@@ -292,6 +292,9 @@ class RenderKontrak
                     break;
                 case "SD":
                     $sampling = strtoupper(__('QTC.status_sampling.SD'));
+                    break;
+                case "SP":
+                    $sampling = strtoupper(__('QTC.status_sampling.SP'));
                     break;
                 default:
                     $sampling = strtoupper(__('QTC.status_sampling.S'));

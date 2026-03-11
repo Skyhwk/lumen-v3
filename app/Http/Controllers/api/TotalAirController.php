@@ -12,6 +12,7 @@ use App\Models\ParameterTotal;
 use App\Models\AnalisParameter;
 use App\Models\TemplateStp;
 use App\Models\OrderDetail;
+use App\Models\WsValueAir;
 use Carbon\Carbon;
 use DB;
 
@@ -23,45 +24,49 @@ class TotalAirController extends Controller
             ->where('is_active', true)
             ->where('is_total', false)
             ->where('template_stp', $request->template_stp)
-            ->select('id','no_sampel','tanggal_terima','created_at','created_by','parameter','jenis_pengujian');
+            ->select('colorimetri.*');
         return Datatables::of($data)
-            ->orderColumn('tanggal_terima', function ($query, $order) {
-                $query->orderBy('tanggal_terima', $order);
+            ->addColumn('tanggal_terima', function ($item) {
+                return $item->order_detail->tanggal_terima ?? '-';
             })
-            ->orderColumn('created_at', function ($query, $order) {
-                $query->orderBy('created_at', $order);
+
+            ->addColumn('kategori_3', function ($item) {
+                return $item->order_detail->kategori_3 ?? '-';
             })
-            ->orderColumn('no_sampel', function ($query, $order) {
-                $query->orderBy('no_sampel', $order);
+
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('tanggal_terima', 'like', "%{$keyword}%");
+                });
             })
+
+            ->filterColumn('kategori_3', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
+
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
+
                     foreach ($columns as $column) {
-                        if (isset($column['search']) && !empty($column['search']['value'])) {
+
+                        if (!empty($column['search']['value'])) {
+
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
-                            
-                            // Skip columns that aren't searchable
-                            if (isset($column['searchable']) && $column['searchable'] === 'false') {
-                                continue;
-                            }
-                            
-                            // Special handling for date fields
-                            if ($columnName === 'tanggal_terima') {
-                                // Assuming the search value is a date or part of a date
-                                $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
-                            } 
-                            // Handle created_at separately if needed
-                            elseif ($columnName === 'created_at') {
-                                $query->whereDate('created_at', 'like', "%{$searchValue}%");
-                            }
-                            // Standard text fields
-                            elseif (in_array($columnName, [
-                                'no_sampel', 'parameter', 'jenis_pengujian'
+
+                            // HANYA BOLEH FILTER KOLOM colorimetri
+                            if (in_array($columnName, [
+                                'parameter',
+                                'jenis_pengujian',
+                                'created_at'
                             ])) {
-                                $query->where($columnName, 'like', "%{$searchValue}%");
+                                $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
                             }
+
                         }
                     }
                 }
@@ -150,6 +155,12 @@ class TotalAirController extends Controller
             $Colorimetri->is_active = false;
             $Colorimetri->save();
 
+            $ws_value = WsValueAir::where('id_colorimetri', $Colorimetri->id)->first();
+            if($ws_value){
+                $ws_value->is_active = false;
+                $ws_value->save();
+            }
+
             $parameter_total = ParameterTotal::where('parameter_name', $Colorimetri->parameter)->where('is_active', 1)->first();
             $children = json_decode($parameter_total->id_child);
             foreach ($children as $child) {
@@ -161,13 +172,22 @@ class TotalAirController extends Controller
                         $graviChild->is_active = false;
                         $graviChild->save();
                     }
+                    $ws_gravi = WsValueAir::where('id_gravimetri', $graviChild->id)->first();
+                    if($ws_gravi){
+                        $ws_gravi->is_active = false;
+                        $ws_gravi->save();
+                    }
                 }else if($stp->name == 'TITRIMETRI' && $stp->category_id == 1){
                     $titriChild = Titrimetri::where('template_stp', $analisParameter->id_stp)->where('no_sampel', $Colorimetri->no_sampel)->where('parameter', $analisParameter->parameter_name)->where('is_active', 1)->where('is_total', 1)->first();
                     if($titriChild){
                         $titriChild->is_active = false;
                         $titriChild->save();
                     }
-                    
+                    $ws_titri = WsValueAir::where('id_titrimetri', $titriChild->id)->first();
+                    if($ws_titri){
+                        $ws_titri->is_active = false;
+                        $ws_titri->save();
+                    }
                 }if (( ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
                 &&
                 $stp->category_id == 1
@@ -176,6 +196,11 @@ class TotalAirController extends Controller
                     if($coloriChild){
                         $coloriChild->is_active = false;
                         $coloriChild->save();
+                    }
+                    $ws_colori = WsValueAir::where('id_colorimetri', $coloriChild->id)->first();
+                    if($ws_colori){
+                        $ws_colori->is_active = false;
+                        $ws_colori->save();
                     }
                 }
             }

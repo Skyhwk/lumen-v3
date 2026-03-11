@@ -10,6 +10,7 @@ use App\Models\DetailSoundMeter;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeviceIntilab;
+use App\Models\DeviceIntilabRunning;
 use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -104,10 +105,10 @@ class SoundMeterController extends Controller
                 ]);
             }
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
@@ -234,5 +235,11 @@ class SoundMeterController extends Controller
                 'success' => false
             ], 401);
         }
+    }
+
+    public function getDeviceRunning(Request $request){
+        $devices = DeviceIntilabRunning::where('is_active', true)->where('type', 'Sound Meter')->where('start_by', $this->karyawan)->get();
+        
+        return response()->json(['data' => $devices], 200);
     }
 }

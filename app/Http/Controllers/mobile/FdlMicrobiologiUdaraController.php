@@ -197,10 +197,10 @@ class FdlMicrobiologiUdaraController extends Controller
 
             $this->resultx = "Data Sampling FDL MICROBIOLOGI Dengan No Sample $request->no_sampel berhasil disimpan oleh $this->karyawan";
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 

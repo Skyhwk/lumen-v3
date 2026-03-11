@@ -144,8 +144,7 @@ class FdlMedanListrikDanMagnetController extends Controller
                     ], 401);
                 }
                 
-                
-                if ($request->selected_parameter == 'Medan Magnit Statis') {
+                if ($request->selected_parameter == 'Medan Magnit Statis' || $request->selected_parameter == 'Medan Magnet') {
                     if ($request->magnet3 != '') {
                         $magnet3 = array();
                         $o = 1;
@@ -330,10 +329,10 @@ class FdlMedanListrikDanMagnetController extends Controller
                     }
                 };
 
-                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
                 if($orderDetail->tanggal_terima == null){
-                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                     $orderDetail->save();
                 }
 

@@ -10,22 +10,25 @@
                     <th width="16%" class="custom">DURASI PAPARAN TERHADAP PEKERJAAN PER JAM</th>
                     <th width="20%" class="custom">TANGGAL SAMPLING</th>
                 </tr>
-               
             </thead>
             <tbody>
+                @php $totdat = count($detail); @endphp
                 @foreach ($detail as $k => $yy)
+                    @php
+                    $i = $k + 1;
+                    @endphp
                 <tr>
-                    <td class="custom">{{ $k + 1 }}</td>
-                    <td class="custom4" width="7%" style="text-align: right; border-right: none;"> 
-                        <sup style=" margin-top: -10px;">{{ $yy['no_sampel'] ?? '' }}</sup> 
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="7%" style="text-align: right; border-right: none;"> 
+                        <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] ?? '' }}</sup> 
                     </td>
-                    <td class="custom4" width="18%" style="border-left: none; text-align: left;"> 
+                    <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="18%" style="border-left: none; text-align: left;"> 
                         {{ $yy['keterangan'] ?? '' }}
                     </td>
-                    <td class="custom">{{ $yy['hasil'] ?? '' }}</td>
-                    <td class="custom">{{ $yy['aktivitas_pekerjaan'] ?? '' }}</td>
-                    <td class="custom">{{ $yy['durasi_paparan'] ?? '' }} Jam</td>
-                    <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['hasil'] ?? '' }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['aktivitas_pekerjaan'] ?? '' }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['durasi_paparan'] ?? '' }} Jam</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                 </tr>
                 @endforeach
             </tbody>

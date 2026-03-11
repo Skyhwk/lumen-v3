@@ -7,7 +7,7 @@
         <tr>
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
-                   <tr>
+                    <tr>
                         <td class="custom" width="33%">No. LHP</td>
                         <td class="custom" width="33%">JENIS SAMPEL</td>
                         <td class="custom" width="33%">PARAMETER UJI</td>

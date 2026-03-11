@@ -8,7 +8,7 @@ use App\Models\{QuotationKontrakH, QuotationKontrakD, QuotationNonKontrak};
 use App\Models\{KontakPelanggan, AlamatPelanggan, PicPelanggan};
 use App\Models\{OrderHeader, OrderDetail};
 use App\Models\{SamplingPlan, Jadwal};
-use App\Models\{Ftc, FtcT};
+use App\Models\{Ftc, FtcT, QrPsikologi};
 use App\Models\{
     MasterCabang,
     MasterKategori,
@@ -25,6 +25,7 @@ use App\Models\HargaParameter;
 use App\Models\TemplatePenawaran;
 use App\Models\Parameter;
 use App\Models\Invoice;
+use App\Models\TemplatePaketAnalisa;
 use App\Jobs\RenderPdfPenawaran;
 use App\Services\GeneratePraSampling;
 use App\Services\RenderNonKontrakCopy;
@@ -36,10 +37,12 @@ use App\Services\GetAtasan;
 use App\Services\GetBawahan;
 use App\Services\RenderInvoice;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 use App\Jobs\CreateNonKontrakJob;
 use App\Jobs\CreateKontrakJob;
+use App\Jobs\ChangeJadwalJob;
 
 class RequestQuotationController extends Controller
 {
@@ -97,6 +100,31 @@ class RequestQuotationController extends Controller
                 return $emailCC;
             })
             ->make(true);
+    }
+
+    public function getStatusQt(Request $request)
+    {
+        $isKontrak = strpos($request->no_qt, '/QTC') !== false;
+        $data = $isKontrak
+            ? QuotationKontrakH::where('no_document', $request->no_qt)->first()
+            : QuotationNonKontrak::where('no_document', $request->no_qt)->first();
+
+        $status = false;
+        if ($data) {
+            if ($data->flag_status == 'ordered') {
+                $status = true;
+            } else {
+                $data_lama = json_decode($data->data_lama);
+                if ($data_lama && !empty($data_lama->id_order)) {
+                    $status = true;
+                }
+            }
+        }
+
+        return response()->json([
+            'status' => $status,
+            'message' => 'Data found'
+        ], 200);
     }
 
     public function approve(Request $request)
@@ -478,7 +506,6 @@ class RequestQuotationController extends Controller
 
     private function createNonKontrak($payload)
     {
-
         foreach ($payload->data_pendukung as $index => $pengujian) {
             $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
             $penamaanTitik = $pengujian->penamaan_titik ?? [];
@@ -548,7 +575,7 @@ class RequestQuotationController extends Controller
                 ->first();
 
             //data customer order     -------------------------------------------------------> save ke master customer parrent
-            // $data->nama_perusahaan = strtoupper(trim($payload->informasi_pelanggan->nama_perusahaan));
+            $data->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
             $data->tanggal_penawaran = $payload->informasi_pelanggan->tgl_penawaran;
             // $data->konsultan = isset($payload->informasi_pelanggan->konsultan) && $payload->informasi_pelanggan->konsultan !== '' ? strtoupper(trim($payload->informasi_pelanggan->konsultan)) : null;
             $data->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
@@ -565,6 +592,7 @@ class RequestQuotationController extends Controller
             $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
             $data->sales_id = $sales_id;
+            $data->use_kuota = $payload->data_diskon->use_kuota;
 
             $data_sampling = [];
             $harga_total = 0;
@@ -577,14 +605,16 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            // dd($payload->data_pendukung);
             if (isset($payload->data_pendukung)) {
                 foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-
+                    $is_paket = $item->is_paket_analisa;
+                    
+                    
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -624,48 +654,97 @@ class RequestQuotationController extends Controller
                         'total_harga' => array_sum($harga_db)
                     ];
 
+                    $titik = $item->jumlah_titik;
+
                     if ($harga_pertitik->volume != null) {
                         $vol += floatval($harga_pertitik->volume);
                     }
 
-                    $titik = $item->jumlah_titik;
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param && 
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    } 
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    
+                    $temp_preparasi = [];
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
-                        'penamaan_titik' => $item->penamaan_titik,
+                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+                        'penamaan_titik' => isset($item->penamaan_titik) ? $item->penamaan_titik : [],
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                        'volume' => $vol
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
                     ];
 
-                    isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
 
-                    // dd($data_sampling[$i]);
                     switch ($kategori) {
                         case '1':
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_air += $hargaAnalisa;
                             break;
                         case '4':
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_udara += $hargaAnalisa;
                             break;
                         case '5':
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_emisi += $hargaAnalisa;
                             break;
                         case '6':
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_padatan += $hargaAnalisa;
                             break;
                         case '7':
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_swab_test += $hargaAnalisa;
                             break;
                         case '8':
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_tanah += $hargaAnalisa;
                             break;
                         case '9':
-                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_pangan += $hargaAnalisa;
                             break;
                     }
                 }
@@ -687,12 +766,22 @@ class RequestQuotationController extends Controller
             $data->harga_pangan = $harga_pangan;
 
             // kalkulasi harga transportasi
-            $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            // $expOp = explode("-", $payload->data_wilayah->wilayah);
+            // $id_wilayah = $expOp[0];
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            // $cekOperasional = HargaTransportasi::where('is_active', true)
+            //     ->where('id', $id_wilayah)
+            //     ->first();
+            $expOp = explode("-", $payload->data_wilayah->wilayah);
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+            ->orderBy('id', 'ASC')
+            ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+            }) ?? $ambil_data_transport->first();
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -772,7 +861,7 @@ class RequestQuotationController extends Controller
                     $data->jumlah_hari_24jam = $payload->data_wilayah->jumlah_hari_24jam;
 
                     if (isset($payload->data_wilayah->kalkulasi_by_sistem) && $payload->data_wilayah->kalkulasi_by_sistem == 'on') {
-                        $data->kalkukasi_by_sistem = $payload->data_wilayah->kalkukasi_by_sistem;
+                        $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem;
                         $harga_tiket = floatval($cekOperasional->tiket) * $payload->data_wilayah->perdiem_jumlah_orang;
 
                         $harga_transportasi_darat = $cekOperasional->transportasi;
@@ -826,6 +915,29 @@ class RequestQuotationController extends Controller
             $data->status_sampling = $payload->data_wilayah->status_sampling;
 
             $total_diskon = 0;
+
+            // ==================== DISKON DENGAN KODE PROMO ===================== //
+            if (!empty($payload->data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
+                $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
+                $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
+                $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->discount_promo = json_encode((object)[
+                    'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
+                    'jumlah_promo_discount' => $payload->data_diskon->jumlah_promo_discount
+                ]);
+                $data->total_discount_promo = floatval($total_discount_promo);
+                $total_diskon += $total_discount_promo;
+                $harga_total -= floatval($total_discount_promo);
+            } else {
+                // $harga_total += 0;
+                // $data->discount_air = null;
+                $data->total_discount_promo = 0;
+                $data->discount_promo = null;
+                $data->kode_promo = null;
+            }
+            // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
             if (floatval($payload->data_diskon->discount_air) > 0) {
                 $data->discount_air = \str_replace("%", "", $payload->data_diskon->discount_air);
@@ -1211,33 +1323,33 @@ class RequestQuotationController extends Controller
             $data_lama = ($data->data_lama != null) ? json_decode($data->data_lama) : null;
 
             if ($data_lama != null) {
-
                 if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                     $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', 1)->first();
                     $no_qt_lama = $cek_order->no_document;
                     $no_qt_baru = $data->no_document;
                     $id_order = $data_lama->id_order;
-
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_lama', $no_qt_lama);
-                    $parse->where('no_qt_baru', $no_qt_baru);
-                    $parse->where('id_order', $id_order);
-                    $parse->save();
-                } else {
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_baru', $data->no_document);
-                    $parse->where('generate', 'new');
-                    $parse->save();
                 }
-            } else {
-                $parse = new GeneratePraSampling;
-                $parse->type('QT');
-                $parse->where('no_qt_baru', $data->no_document);
-                $parse->where('generate', 'new');
-                // dd($parse);
-                $parse->save();
+
+                if($data_lama->status_sp == 'false') {
+                    if ($payload->data_wilayah->status_sampling == 'SD') {
+                        SamplingPlan::where('no_quotation', $data->no_document)
+                            ->update([
+                                'quotation_id' => $data->id,
+                                'status_jadwal' => 'SD',
+                                'is_active' => false
+                            ]);
+
+                        Jadwal::where('no_quotation', $data->no_document)
+                            ->update([
+                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
+                                'is_active' => false,
+                                'canceled_by' => 'system'
+                            ]);
+                    } else {
+                        $jobChangeJadwal = new ChangeJadwalJob([], 'update', $data->no_document, 'non_kontrak');
+                        $this->dispatch($jobChangeJadwal);
+                    }
+                }
             }
 
             JobTask::insert([
@@ -1430,6 +1542,7 @@ class RequestQuotationController extends Controller
             $data->no_document = $payload->informasi_pelanggan->new_no_document;
             $data->pelanggan_ID = $dataOld->pelanggan_ID;
             $data->id_cabang = $this->idcabang;
+            $data->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
             // $data->sales_id = $payload->informasi_pelanggan->sales_id;
 
             //data customer order     -------------------------------------------------------> save ke master customer parrent
@@ -1451,6 +1564,7 @@ class RequestQuotationController extends Controller
             $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
             $data->sales_id = $sales_id;
+            $data->use_kuota = $payload->data_diskon->use_kuota;
 
             $data_sampling = [];
             $harga_total = 0;
@@ -1463,98 +1577,151 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            foreach ($payload->data_pendukung as $i => $item) {
-                $param = $item->parameter;
-                $exp = explode("-", $item->kategori_1);
-                $kategori = $exp[0];
-                $vol = 0;
+            if (isset($payload->data_pendukung)) {
+                foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
+                    $param = $item->parameter;
+                    $exp = explode("-", $item->kategori_1);
+                    $kategori = $exp[0];
+                    $vol = 0;
+                    $is_paket = $item->is_paket_analisa;
+                    
+                    
+                    $parameter = [];
+                    foreach ($param as $par) {
+                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
+                        array_push($parameter, $cek_par->nama_lab);
+                    }
 
-                $parameter = [];
-                foreach ($param as $par) {
-                    $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                    array_push($parameter, $cek_par->nama_lab);
+                    $harga_db = [];
+                    $volume_db = [];
+                    foreach ($parameter as $param_) {
+                        $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                            ->where('nama_parameter', $param_)
+                            ->orderBy('id', 'ASC')
+                            ->get();
+
+                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
+                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                        }) ?? $ambil_data->first();
+
+                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
+                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
+                        //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
+                        // }) ?? $ambil_data->first();
+
+                        // // fix bug
+                        // if ($cek_harga_parameter) {
+                        //     $harga_db[] = $cek_harga_parameter->harga;
+                        //     $volume_db[] = $cek_harga_parameter->volume;
+                        // } else {
+                        //     $harga_db[] = 0;
+                        //     $volume_db[] = 0;
+                        // }
+                    }
+
+                    $harga_pertitik = (object) [
+                        'volume' => array_sum($volume_db),
+                        'total_harga' => array_sum($harga_db)
+                    ];
+
+                    $titik = $item->jumlah_titik;
+
+                    if ($harga_pertitik->volume != null) {
+                        $vol += floatval($harga_pertitik->volume);
+                    }
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param && 
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    } 
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    
+                    $temp_preparasi = [];
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
+
+                    $data_sampling[$i] = [
+                        'kategori_1' => $item->kategori_1,
+                        'kategori_2' => $item->kategori_2,
+                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+                        'penamaan_titik' => isset($item->penamaan_titik) ? $item->penamaan_titik : [],
+                        'parameter' => $param,
+                        'jumlah_titik' => $titik,
+                        'total_parameter' => count($param),
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
+                    ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
+
+                    switch ($kategori) {
+                        case '1':
+                            $harga_air += $hargaAnalisa;
+                            break;
+                        case '4':
+                            $harga_udara += $hargaAnalisa;
+                            break;
+                        case '5':
+                            $harga_emisi += $hargaAnalisa;
+                            break;
+                        case '6':
+                            $harga_padatan += $hargaAnalisa;
+                            break;
+                        case '7':
+                            $harga_swab_test += $hargaAnalisa;
+                            break;
+                        case '8':
+                            $harga_tanah += $hargaAnalisa;
+                            break;
+                        case '9':
+                            $harga_pangan += $hargaAnalisa;
+                            break;
+                    }
                 }
-
-                $harga_db = [];
-                $volume_db = [];
-                foreach ($parameter as $param_) {
-                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                        ->where('nama_parameter', $param_)
-                        ->orderBy('id', 'ASC')
-                        ->get();
-
-                    $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                    }) ?? $ambil_data->first();
-
-                    $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
-                    // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                    //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
-                    // }) ?? $ambil_data->first();
-
-                    // // fix bug
-                    // if ($cek_harga_parameter) {
-                    //     $harga_db[] = $cek_harga_parameter->harga;
-                    //     $volume_db[] = $cek_harga_parameter->volume;
-                    // } else {
-                    //     $harga_db[] = 0;
-                    //     $volume_db[] = 0;
-                    // }
-                }
-
-                $harga_pertitik = (object) [
-                    'volume' => array_sum($volume_db),
-                    'total_harga' => array_sum($harga_db)
-                ];
-
-                if ($harga_pertitik->volume != null) {
-                    $vol += floatval($harga_pertitik->volume);
-                }
-
-                $titik = $item->jumlah_titik;
-
-                $regulasi = [];
-                if (isset($item->regulasi) && !empty($item->regulasi)) {
-                    $regulasi = $item->regulasi;
-                }
-
-                $data_sampling[$i] = [
-                    'kategori_1' => $item->kategori_1,
-                    'kategori_2' => $item->kategori_2,
-                    'regulasi' => $regulasi,
-                    'penamaan_titik' => $item->penamaan_titik,
-                    'parameter' => $param,
-                    'jumlah_titik' => $titik,
-                    'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                    'volume' => $vol
-                ];
-
-                switch ($kategori) {
-                    case '1':
-                        $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '4':
-                        $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '5':
-                        $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '6':
-                        $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '7':
-                        $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '8':
-                        $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '9':
-                        $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                }
+            } else {
+                $data_sampling = [];
             }
 
             $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
@@ -1572,11 +1739,20 @@ class RequestQuotationController extends Controller
 
             // kalkulasi harga transportasi
             $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            // $id_wilayah = $expOp[0];
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            // $cekOperasional = HargaTransportasi::where('is_active', true)
+            //     ->where('id', $id_wilayah)
+            //     ->first();
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                ->orderBy('id', 'ASC')
+                ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+            }) ?? $ambil_data_transport->first();
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -1699,6 +1875,29 @@ class RequestQuotationController extends Controller
             $data->status_sampling = $payload->data_wilayah->status_sampling;
 
             $total_diskon = 0;
+
+            // ==================== DISKON DENGAN KODE PROMO ===================== //
+            if (!empty($payload->data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
+                $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
+                $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
+                $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->discount_promo = json_encode((object)[
+                    'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
+                    'jumlah_promo_discount' => $payload->data_diskon->jumlah_promo_discount
+                ]);
+                $data->total_discount_promo = floatval($total_discount_promo);
+                $total_diskon += $total_discount_promo;
+                $harga_total -= floatval($total_discount_promo);
+            } else {
+                // $harga_total += 0;
+                // $data->discount_air = null;
+                $data->total_discount_promo = 0;
+                $data->discount_promo = null;
+                $data->kode_promo = null;
+            }
+            // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
             if (floatval($payload->data_diskon->discount_air) > 0) {
                 $data->discount_air = $payload->data_diskon->discount_air;
@@ -2116,30 +2315,14 @@ class RequestQuotationController extends Controller
                                 'canceled_by' => 'system'
                             ]);
 
-                        /*Jadwal::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
-                                'is_active' => false
-                            ]);*/
                     } else {
-                        SamplingPlan::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'quotation_id' => $data->id
-                            ]);
+                        $no_qt = [
+                            'new' => $data->no_document,
+                            'old' => $dataOld->no_document,
+                        ];
 
-                        Jadwal::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan)))
-                            ]);
-
-                        /*Jadwal::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan)))
-                            ]);*/
+                        $jobChangeJadwal = new ChangeJadwalJob([], 'revisi', $no_qt, 'non_kontrak');
+                        $this->dispatch($jobChangeJadwal);
                     }
 
                     $message = "Terjadi perubahan quotation $dataOld->no_document menjadi $data->no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $data->no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";
@@ -2150,36 +2333,44 @@ class RequestQuotationController extends Controller
                     $no_qt_lama = $cek_order->no_document;
                     $no_qt_baru = $data->no_document;
                     $id_order = $data_lama->id_order;
-
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_lama', $no_qt_lama);
-                    $parse->where('no_qt_baru', $no_qt_baru);
-                    $parse->where('id_order', $id_order);
-                    $parse->save();
-                } else {
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_baru', $data->no_document);
-                    $parse->where('generate', 'new');
-                    $parse->save();
                 }
-            } else {
-                $parse = new GeneratePraSampling;
-                $parse->type('QT');
-                $parse->where('no_qt_baru', $data->no_document);
-                $parse->where('generate', 'new');
-                $parse->save();
             }
 
             if (isset($data_lama->id_order) && $data_lama->id_order != null) {
+                // Update QR Psikologi Data
+                $qr_psikologi = QrPsikologi::where('id_quotation', $data_lama->id_order)
+                    ->where('is_active', true)
+                    ->orderBy('created_at', 'desc')
+                    ->limit(2)
+                    ->get();
+
+                foreach ($qr_psikologi as $psikologi) {
+
+                    // Decode kolom data JSON ke array
+                    $json = json_decode($psikologi->data, true);
+
+                    if (!is_array($json)) {
+                        continue; // skip jika JSON tidak valid
+                    }
+
+                    // update no document
+                    $json['no_document'] = $data->no_document;
+
+                    // encode kembali ke JSON
+                    $psikologi->data = json_encode($json);
+
+                    $psikologi->save();
+                }
+
                 $invoices = Invoice::where('no_quotation', $dataOld->no_document)
+                    // ->whereNull('nilai_pelunasan')
                     ->where('is_active', true)
                     ->get();
 
                 $invoiceNumbersTobeChecked = [];
                 foreach ($invoices as $invoice) {
-                    if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                    // if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                    if($invoice->nilai_pelunasan == null) {
                         $invoice->is_generate = false;
                         $invoice->is_emailed = false;
 
@@ -2187,9 +2378,6 @@ class RequestQuotationController extends Controller
                     }
                     $invoice->no_quotation = $data->no_document;
                     $invoice->save();
-
-                    // $render = new RenderInvoice();
-                    // $render->renderInvoice($invoice->no_invoice);
                 }
 
                 $invoiceNumbersStr = implode(', ', $invoiceNumbersTobeChecked);
@@ -2457,6 +2645,7 @@ class RequestQuotationController extends Controller
                     ->where('id', $informasi_pelanggan->id)
                     ->first();
 
+                $dataH->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
                 $dataH->tanggal_penawaran = $informasi_pelanggan->tgl_penawaran;
                 if (isset($informasi_pelanggan->alamat_kantor) && $informasi_pelanggan->alamat_kantor != '')
                     $dataH->alamat_kantor = $informasi_pelanggan->alamat_kantor;
@@ -2475,6 +2664,7 @@ class RequestQuotationController extends Controller
 
                 $dataH->data_pendukung_diskon = json_encode($data_diskon);
                 $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
+                $dataH->use_kuota = $data_diskon->use_kuota;
                 // dd($payload);
                 $dataH->ppn = $data_diskon->ppn;
                 $dataH->pph = $data_diskon->pph;
@@ -2526,6 +2716,17 @@ class RequestQuotationController extends Controller
                     $dataH->custom_discount = json_encode($custom_disc);
                 } else {
                     $dataH->custom_discount = null;
+                }
+
+                if(!empty($data_diskon->kode_promo_discount) && $data_diskon->jumlah_promo_discount > 0){
+                    $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
+                    $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
+                        'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                        'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                    ]) : null;
+                }else{
+                    $dataH->kode_promo = null;
+                    $dataH->discount_promo = null;
                 }
 
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
@@ -2718,7 +2919,7 @@ class RequestQuotationController extends Controller
                                 $id_parameter[] = $cek_par->id;
                             }
                         }
-
+                        // dd('patah')
                         $harga_parameter = [];
                         $volume_parameter = [];
 
@@ -2824,8 +3025,17 @@ class RequestQuotationController extends Controller
 
                     // kalkulasi harga
                     $expOp = explode("-", $data_wilayah->wilayah);
-                    $id_wilayah = $expOp[0];
-                    $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    // $id_wilayah = $expOp[0];
+                    // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+                    $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                        ->orderBy('id', 'ASC')
+                        ->get();
+
+                    $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                            }) ?? $ambil_data_transport->first();
 
                     // START FOR
                     $disc_transport = 0;
@@ -2913,25 +3123,25 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_transportasi = $data_wilayah->wilayah_data[$c]->harga_transportasi;
                                         // HARGA TRANSPORTASI TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total !== '')
-                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi);
+                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi_total);
                                         // HARGA SATUAN PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil !== '' ? $dataD->harga_personil = $data_wilayah->wilayah_data[$c]->harga_personil : $dataD->harga_personil = 0;
                                         // HARGA PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total !== '')
-                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_personil);
+                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total);
                                         // HARGA 24 JAM PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil !== '' ? $dataD->harga_24jam_personil = $data_wilayah->wilayah_data[$c]->harga_24jam_personil : $dataD->harga_24jam_personil = 0;
                                         // HARGA 24 JAM PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total !== '')
-                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil);
+                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -3038,12 +3248,12 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -3088,6 +3298,30 @@ class RequestQuotationController extends Controller
                     if (!$isPeriodeDiskonExist) {
                         return response()->json(['message' => 'Periode ' . $periodeNotExist . ' tidak ditemukan pada group diskon', 'status' => '500'], 403);
                     }
+
+                    // ==================== DISKON DENGAN KODE PROMO ===================== //
+                    if (!empty($data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
+                        $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+                        $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
+                        $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                        // $total_diskon += $total_discount_promo;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->discount_promo = json_encode((object)[
+                            'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                            'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                        ]);
+                        $dataD->total_discount_promo = floatval($total_discount_promo);
+                        $total_diskon += $total_discount_promo;
+                        $harga_total -= floatval($total_discount_promo);
+                    } else {
+                        // $harga_total += 0;
+                        // $data->discount_air = null;
+                        $dataD->total_discount_promo = 0;
+                        $dataD->discount_promo = null;
+                        $dataD->kode_promo = null;
+                    }
+                    // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
                     if ($isPeriodeDiskonExist && $data_diskon->discount_data[$indexDataDiskon]->discount_air > 0) {
                         $dataD->discount_air = $data_diskon->discount_data[$indexDataDiskon]->discount_air;
@@ -3252,6 +3486,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $harga_transport += ($transport_ + $perdiem_ + $jam_);
+                    $isDiscountGroupExist = false;
                     // ==================================================END DISKON TRANSPORTASI======================================================================================
                     // =======================================================DISKON GABUNGAN=========================================================================================
                     if ($isPeriodeDiskonExist) {
@@ -3260,6 +3495,7 @@ class RequestQuotationController extends Controller
                             $dataD->total_discount_gabungan = (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
                             $total_diskon += (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
                             $harga_total = $harga_total - (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
+                            $isDiscountGroupExist = true;
                         } else {
                             $dataD->discount_gabungan = null;
                             $dataD->total_discount_gabungan = 0;
@@ -3316,9 +3552,13 @@ class RequestQuotationController extends Controller
                                     $totalTransport -= $jam_;
                                 }
                             }
-                            // if($per == '2025-02') dd($harga_total + $totalTransport);
+                            // if($pengujian->periode_kontrak == '2026-05') dd($harga_total, $totalTransport, $biaya_lain, $harga_total + $totalTransport);
                             $dataD->discount_group = $data_diskon->discount_data[$indexDataDiskon]->discount_group;
-                            $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            if($isDiscountGroupExist){
+                                $diskon_group = (($harga_total + $totalTransport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }else{
+                                $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }
                             $dataD->total_discount_group = $diskon_group;
                             $total_diskon += $diskon_group;
                             $harga_total = $harga_total - $diskon_group;
@@ -3521,6 +3761,7 @@ class RequestQuotationController extends Controller
                                             SUM(total_discount_perdiem) as total_discount_perdiem,
                                             SUM(discount_perdiem_24jam) as discount_perdiem_24jam,
                                             SUM(total_discount_perdiem_24jam) as total_discount_perdiem_24jam,
+                                            SUM(total_discount_promo) as total_discount_promo,
                                             SUM(ppn) as ppn,
                                             SUM(total_ppn) as total_ppn,
                                             SUM(total_pph) as total_pph,
@@ -3607,6 +3848,8 @@ class RequestQuotationController extends Controller
 
                 $editH->total_discount_perdiem_24jam = $Dd[0]->total_discount_perdiem_24jam;
 
+                $editH->total_discount_promo = $Dd[0]->total_discount_promo;
+
                 $editH->total_custom_discount = $Dd[0]->total_custom_discount;
 
                 $editH->total_ppn = $Dd[0]->total_ppn;
@@ -3631,12 +3874,58 @@ class RequestQuotationController extends Controller
                     $data_lama = json_decode($dataH->data_lama);
 
                 if ($data_lama != null) {
-                    if (isset($data_lama->id_order) && $data_lama->id_order != null) {
-                        $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', true)->first();
-                        $no_qt_lama = $cek_order->no_document;
-                        $no_qt_baru = $dataH->no_document;
-                        $id_order = $data_lama->id_order;
+                    // if (isset($data_lama->id_order) && $data_lama->id_order != null) {
+                    //     $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', true)->first();
+                    //     $no_qt_lama = $cek_order->no_document;
+                    //     $no_qt_baru = $dataH->no_document;
+                    //     $id_order = $data_lama->id_order;
+                    // }
+
+                    if ($data_lama->status_sp == 'false') {
+                        $result = [];
+
+                        foreach ($payload->data_wilayah->wilayah_data as $item) {
+                            $status = $item->status_sampling;
+                            $periode = $item->periode;
+
+                            $result[$status] = $periode;
+                        }
+
+                        if(!empty($result)){
+                            foreach ($result as $status => $periode) {
+                                if ($status == 'SD') {
+                                    SamplingPlan::where('no_quotation', $dataH->no_document)
+                                        ->whereIn('periode_kontrak', $periode)
+                                        ->update([
+                                            'no_quotation' => $dataH->no_document,
+                                            'quotation_id' => $dataH->id,
+                                            'status_jadwal' => 'SD',
+                                            'is_active' => false
+                                        ]);
+
+                                    Jadwal::where('no_quotation', $dataH->no_document)
+                                        ->whereIn('periode', $periode)
+                                        ->update([
+                                            'no_quotation' => $dataH->no_document,
+                                            'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($dataH->nama_perusahaan))),
+                                            'is_active' => false,
+                                            'canceled_by' => 'system'
+                                        ]);
+                                }
+                            }
+                        }
+
+                        $perubahan_periode = [];
+                        foreach ($payload->data_pendukung as $item) {
+                            if (isset($item->perubahan_periode)) {
+                                $perubahan_periode[] = $item->perubahan_periode;
+                            }
+                        }
+
+                        $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'update', $dataH->no_document, 'kontrak');
+                        $this->dispatch($jobChangeJadwal);
                     }
+
                 }
 
                 // dd('==========================');
@@ -3703,7 +3992,7 @@ class RequestQuotationController extends Controller
             $data_wilayah = $payload->data_wilayah;
             $syarat_ketentuan = $payload->syarat_ketentuan;
             $data_diskon = $payload->data_diskon;
-
+            
             foreach ($data_pendukung as $item) {
                 foreach ($item->data_sampling as $pengujian) {
                     $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
@@ -3860,6 +4149,7 @@ class RequestQuotationController extends Controller
                 $dataH->no_document = $no_document;
                 $dataH->pelanggan_ID = $dataOld->pelanggan_ID;
                 $dataH->id_cabang = $this->idcabang;
+                $dataH->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
 
                 $dataH->nama_perusahaan = $dataOld->nama_perusahaan;
                 $dataH->konsultan = $dataOld->konsultan;
@@ -3883,6 +4173,7 @@ class RequestQuotationController extends Controller
 
                 $dataH->data_pendukung_diskon = json_encode($data_diskon);
                 $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
+                $dataH->use_kuota = $data_diskon->use_kuota;
                 // dd($payload);
                 $dataH->ppn = $data_diskon->ppn;
                 $dataH->pph = $data_diskon->pph;
@@ -3939,6 +4230,18 @@ class RequestQuotationController extends Controller
                     $dataH->custom_discount = null;
                 }
                 // END CUSTOM DISCOUNT
+                // PROMO DISCOUNT
+                if(!empty($data_diskon->kode_promo_discount) && $data_diskon->jumlah_promo_discount > 0){
+                    $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
+                    $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
+                        'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                        'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                    ]) : null;
+                }else {
+                    $dataH->kode_promo = null;
+                    $dataH->discount_promo = null;
+                }
+                // END PROMO DISCOUNT
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
@@ -4199,8 +4502,13 @@ class RequestQuotationController extends Controller
 
                     // kalkulasi harga
                     $expOp = explode("-", $data_wilayah->wilayah);
-                    $id_wilayah = $expOp[0];
-                    $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    // $id_wilayah = $expOp[0];
+                    // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    $nama_wilayah = implode('-', array_slice($expOp, 1));
+                    $ambil_data_transportasi = HargaTransportasi::where('wilayah', $nama_wilayah)->orderBy('id', 'ASC')->get();
+                    $cekOperasional = $ambil_data_transportasi->first(function ($item) use ($payload) {
+                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                    }) ?? $ambil_data_transportasi->first();
 
                     // START FOR
                     $disc_transport = 0;
@@ -4288,25 +4596,25 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_transportasi = $data_wilayah->wilayah_data[$c]->harga_transportasi;
                                         // HARGA TRANSPORTASI TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total !== '')
-                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi);
+                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi_total);
                                         // HARGA SATUAN PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil !== '' ? $dataD->harga_personil = $data_wilayah->wilayah_data[$c]->harga_personil : $dataD->harga_personil = 0;
                                         // HARGA PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total !== '')
-                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_personil);
+                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total);
                                         // HARGA 24 JAM PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil !== '' ? $dataD->harga_24jam_personil = $data_wilayah->wilayah_data[$c]->harga_24jam_personil : $dataD->harga_24jam_personil = 0;
                                         // HARGA 24 JAM PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total !== '')
-                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil);
+                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4413,12 +4721,12 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4463,6 +4771,30 @@ class RequestQuotationController extends Controller
                     if (!$isPeriodeDiskonExist) {
                         return response()->json(['message' => 'Periode ' . $periodeNotExist . ' tidak ditemukan pada group diskon', 'status' => '500'], 403);
                     }
+
+                    // ==================== DISKON DENGAN KODE PROMO ===================== //
+                    if (!empty($data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
+                        $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+                        $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
+                        $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                        // $total_diskon += $total_discount_promo;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->discount_promo = json_encode((object)[
+                            'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                            'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                        ]);
+                        $dataD->total_discount_promo = floatval($total_discount_promo);
+                        $total_diskon += $total_discount_promo;
+                        $harga_total -= floatval($total_discount_promo);
+                    } else {
+                        // $harga_total += 0;
+                        // $data->discount_air = null;
+                        $dataD->total_discount_promo = 0;
+                        $dataD->discount_promo = null;
+                        $dataD->kode_promo = null;
+                    }
+                    // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
                     if ($isPeriodeDiskonExist && $data_diskon->discount_data[$indexDataDiskon]->discount_air > 0) {
                         $dataD->discount_air = $data_diskon->discount_data[$indexDataDiskon]->discount_air;
@@ -4627,6 +4959,8 @@ class RequestQuotationController extends Controller
                     }
 
                     $harga_transport += ($transport_ + $perdiem_ + $jam_);
+
+                    $isDiscountGroupExist = false;
                     // ==================================================END DISKON TRANSPORTASI======================================================================================
                     // =======================================================DISKON GABUNGAN=========================================================================================
                     if ($isPeriodeDiskonExist) {
@@ -4645,6 +4979,7 @@ class RequestQuotationController extends Controller
                             $dataD->total_discount_consultant = ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
                             $total_diskon += ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
                             $harga_total = $harga_total - ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
+                            $isDiscountGroupExist = true;
                         } else {
                             $dataD->discount_consultant = null;
                             $dataD->total_discount_consultant = 0;
@@ -4691,8 +5026,12 @@ class RequestQuotationController extends Controller
                                     $totalTransport -= $jam_;
                                 }
                             }
-                            // if($per == '2025-02') dd($harga_total + $totalTransport);
-                            $dataD->discount_group = $data_diskon->discount_data[$indexDataDiskon]->discount_group;
+                            // if($pengujian->kontrak == '2026-05') dd($harga_total, $totalTransport, $biaya_lain, $harga_total + $totalTransport);
+                            if($isDiscountGroupExist){
+                                $diskon_group = (($harga_total + $totalTransport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }else{
+                                $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }
                             $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
                             $dataD->total_discount_group = $diskon_group;
                             $total_diskon += $diskon_group;
@@ -4850,6 +5189,36 @@ class RequestQuotationController extends Controller
                     $dataD->biaya_akhir = $biaya_akhir;
                     //==========================END BIAYA DI LUAR PAJAK======================================
                     $dataD->save();
+
+
+                    // =====================UPDATE DATE QR PSIKOLOGI=====================================
+                    $data_lama = $dataH->data_lama ? json_decode($dataH->data_lama) : null;
+                    if(isset($data_lama->id_order) && $data_lama->id_order != null){
+                        $qr_psikologi = QrPsikologi::where('id_quotation', $data_lama->id_order)
+                            ->where('periode', $dataD->periode_kontrak)
+                            ->where('is_active', true)
+                            ->orderBy('created_at', 'desc')
+                            ->limit(2)
+                            ->get();
+
+                        foreach ($qr_psikologi as $psikologi) {
+
+                            // Decode kolom data JSON ke array
+                            $json = json_decode($psikologi->data, true);
+
+                            if (!is_array($json)) {
+                                continue; // skip jika JSON tidak valid
+                            }
+
+                            // update no document
+                            $json['no_document'] = $dataH->no_document;
+
+                            // encode kembali ke JSON
+                            $psikologi->data = json_encode($json);
+
+                            $psikologi->save();
+                        }
+                    }
                 }
                 // =====================END PROSES DETAIL DATA=====================================
 
@@ -4894,6 +5263,7 @@ class RequestQuotationController extends Controller
                                             SUM(total_discount_perdiem) as total_discount_perdiem,
                                             SUM(discount_perdiem_24jam) as discount_perdiem_24jam,
                                             SUM(total_discount_perdiem_24jam) as total_discount_perdiem_24jam,
+                                            SUM(total_discount_promo) as total_discount_promo,
                                             SUM(ppn) as ppn,
                                             SUM(total_ppn) as total_ppn,
                                             SUM(total_pph) as total_pph,
@@ -4981,6 +5351,8 @@ class RequestQuotationController extends Controller
 
                 $editH->total_custom_discount = $Dd[0]->total_custom_discount;
 
+                $editH->total_discount_promo = $Dd[0]->total_discount_promo;
+
                 $editH->total_ppn = $Dd[0]->total_ppn;
                 $editH->total_pph = $Dd[0]->total_pph;
 
@@ -5009,98 +5381,73 @@ class RequestQuotationController extends Controller
                         // Helpers::sendTelegramAtasan($message, $cek->add_by);
                         // Helpers::sendTelegramAtasan($message, '187');
                     } else if ($data_lama->status_sp == 'false') {
-                        //tidak merubah jadwal dalam arti update no doc dalam sp
-                        DB::beginTransaction();
-                        try {
-                            // ========== START Perbaikan SP dan Jadwal By: 565 ==========
-                            // step 1. Menghitung periode kontrak pada dokumen baru
-                            $Arrperiod = [];
-                            foreach ($payload->data_wilayah->wilayah_data as $key => $wilayah_data) {
-                                if ($wilayah_data->status_sampling !== 'SD') {
-                                    foreach ($wilayah_data->periode as $key => $valuePeriode) {
-                                        array_push($Arrperiod, $valuePeriode);
-                                    }
-                                }
-                            }
-                            $Arrperiod = array_values(array_unique($Arrperiod));
+                        $result = [];
 
-                            $detailLama = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataOld->id)->get()->pluck('periode_kontrak')->unique()->toArray();
+                        foreach ($payload->data_wilayah->wilayah_data as $item) {
+                            $status = $item->status_sampling;
+                            $periode = $item->periode;
 
-                            // dd($Arrperiod, $detailLama);
-                            $perubahan_periode = $this->different($dataOld->id, $dataH->id, $detailLama, $Arrperiod, $dataH->no_document);
-
-                            if ($perubahan_periode) {
-                                foreach ($perubahan_periode as $key => $value) {
-                                    SamplingPlan::where('no_quotation', $dataOld->no_document)
-                                        ->where('periode_kontrak', $value['before'])
-                                        ->where('is_active', true)
-                                        ->update(['periode_kontrak' => $value['after']]);
-
-                                    Jadwal::where('no_quotation', $dataOld->no_document)
-                                        ->where('periode', $value['before'])
-                                        ->update(['periode' => $value['after']]);
-                                }
-                            }
-                            // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru
-                            SamplingPlan::where('no_quotation', $dataOld->no_document)
-                                ->update([
-                                    'no_quotation' => $dataH->no_document,
-                                    'quotation_id' => $dataH->id
-                                ]);
-                            Jadwal::where('no_quotation', $dataOld->no_document)
-                                ->update([
-                                    'no_quotation' => $dataH->no_document,
-                                    'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($dataH->nama_perusahaan)))
-                                ]);
-
-                            // step 3. Menonaktifkan sampling plan yang tidak ada di dokumen baru
-                            SamplingPlan::where('no_quotation', $dataH->no_document)
-                                ->whereNotIn('periode_kontrak', $Arrperiod)
-                                ->where('is_active', true)
-                                ->update(['is_active' => false, 'status' => false, 'status_jadwal' => 'cancel']);
-
-                            // step 4. Mengambil id sampling plan yang non-aktif
-                            $resultJadwalNonAktif = SamplingPlan::select('id', 'periode_kontrak')
-                                ->where('no_quotation', $no_document)
-                                ->whereNotIn('periode_kontrak', $Arrperiod)
-                                ->where('is_active', false)
-                                ->get();
-
-                            $periodJadwalId = [];
-                            foreach ($resultJadwalNonAktif as $key => $value) {
-                                array_push($periodJadwalId, $value->id);
-                            }
-
-                            // step 5. Menonaktifkan jadwal yang tidak relevan dengan dokumen baru
-                            Jadwal::where('no_quotation', $no_document)
-                                ->whereIn('id_sampling', $periodJadwalId)
-                                ->where('is_active', true)
-                                ->update(['is_active' => false, 'canceled_by' => 'system']);
-                            // ========== END Perbaikan SP dan Jadwal By: 565 ==========
-
-                            DB::commit();
-                        } catch (\Exception $ex) {
-                            DB::rollback();
-                            $templateMessage = "Error : " . $ex->getMessage() . "\nLine : " . $ex->getLine() . "\nFile : " . $ex->getFile() . "\n pada method writequotKontrakApi";
-                            // Helpers::sendTo(843302196, $templateMessage);
+                            $result[$status] = $periode;
                         }
 
+                        if(!empty($result)){
+                            foreach ($result as $status => $periode) {
+                                if ($status == 'SD') {
+                                    SamplingPlan::where('no_quotation', $dataOld->no_document)
+                                        ->whereIn('periode_kontrak', $periode)
+                                        ->update([
+                                            'no_quotation' => $dataH->no_document,
+                                            'quotation_id' => $dataH->id,
+                                            'status_jadwal' => 'SD',
+                                            'is_active' => false
+                                        ]);
+
+                                    Jadwal::where('no_quotation', $dataOld->no_document)
+                                        ->whereIn('periode', $periode)
+                                        ->update([
+                                            'no_quotation' => $dataH->no_document,
+                                            'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($dataH->nama_perusahaan))),
+                                            'is_active' => false,
+                                            'canceled_by' => 'system'
+                                        ]);
+                                }
+                            }
+                        } 
+
+                        $perubahan_periode = [];
+                        foreach ($payload->data_pendukung as $item) {
+                            if (isset($item->perubahan_periode)) {
+                                $perubahan_periode[] = $item->perubahan_periode;
+                            }
+                        }
+
+                        $qtArray = [
+                            'new' => $dataH->no_document,
+                            'old' => $dataOld->no_document,
+                        ];
+
+                        $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'revisi', $qtArray, 'kontrak');
+                        $this->dispatch($jobChangeJadwal);
+                        
+                        // ========== END Perbaikan SP dan Jadwal By: Dedi ==========
                         $message = "Terjadi perubahan quotation $data_lama->no_qt menjadi $no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";
                     }
 
                     if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                         $invoices = Invoice::where('no_quotation', $dataOld->no_document)
+                            // ->whereNull('nilai_pelunasan')
                             ->where('is_active', true)
                             ->get();
 
                         $invoiceNumbersTobeChecked = [];
                         foreach ($invoices as $invoice) {
-                            if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                            // if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                            if($invoice->nilai_pelunasan == null) {
                                 $invoice->is_generate = false;
                                 $invoice->is_emailed = false;
-
                                 $invoiceNumbersTobeChecked[] = $invoice->no_invoice;
                             }
+
                             $invoice->no_quotation = $no_document;
                             $invoice->save();
                         }
@@ -5373,73 +5720,6 @@ class RequestQuotationController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);
-        }
-    }
-
-    public function different($id_lama, $id_baru, $array_periode_lama, $array_periode_baru, $no_document)
-    {
-        try {
-            $pengurangan_periode_kontrak = array_values(array_diff($array_periode_lama, $array_periode_baru));
-            $penambahan_periode_kontrak = array_values(array_diff($array_periode_baru, $array_periode_lama));
-            // dd($pengurangan_periode_kontrak, $penambahan_periode_kontrak);
-            $qt_lama = QuotationKontrakD::where('id_request_quotation_kontrak_h', $id_lama)
-                ->get();
-            $qt_baru = QuotationKontrakD::where('id_request_quotation_kontrak_h', $id_baru)
-                ->get();
-
-            $perubahan_periode = [];
-            // dd($pengurangan_periode_kontrak, $penambahan_periode_kontrak);
-            if ($pengurangan_periode_kontrak != null) {
-                foreach ($qt_lama as $z => $xx) {
-                    if (in_array($xx->periode_kontrak, $pengurangan_periode_kontrak)) { // cari periode
-
-                        /**
-                         * Apabila periode pengurangan isinya sama dengan periode penambahan
-                         * maka data yang ada di periode pengurangan akan dimasukan ke perubahan periode yang baru
-                         */
-                        $key_pengurangan = array_search($xx->periode_kontrak, $pengurangan_periode_kontrak);
-
-                        $periode_pengganti = $penambahan_periode_kontrak[$key_pengurangan] ?? null;
-
-                        $data_pendukung_sampling_periode_lama = array_values(array_map(function ($item) {
-                            return (array) $item['data_sampling'];
-                        }, json_decode($qt_lama->where('periode_kontrak', $xx->periode_kontrak)->first()->data_pendukung_sampling, true)))[0];
-                        if ($periode_pengganti != null) {
-                            $data_pendukung_sampling_periode_baru = array_values(array_map(function ($item) {
-                                return (array) $item['data_sampling'];
-                            }, json_decode($qt_baru->where('periode_kontrak', $periode_pengganti)->first()->data_pendukung_sampling, true)))[0];
-                        } else {
-                            $data_pendukung_sampling_periode_baru = [];
-                        }
-
-                        // dd($data_pendukung_sampling_periode_lama, $data_pendukung_sampling_periode_baru);
-                        if ($data_pendukung_sampling_periode_lama == $data_pendukung_sampling_periode_baru) {
-                            /**
-                             * Apabila data pendukung samplingnya sama
-                             * maka data yang ada di periode pengurangan akan dimasukan ke perubahan periode yang baru
-                             */
-                            $perubahan_periode[] = [
-                                'before' => $xx->periode_kontrak,
-                                'after' => $periode_pengganti
-                            ];
-
-                            $insert = DB::table('perubahan_periode_quotation')->updateOrInsert(
-                                ['no_quotation' => $no_document], // kondisi pencarian
-                                [
-                                    'periode_awal' => $xx->periode_kontrak,
-                                    'periode_revisi' => $periode_pengganti
-                                ]
-                            );
-                            // unset($penambahan_periode_kontrak[$key_pengurangan]);
-                        }
-                    }
-                }
-            }
-
-            return $perubahan_periode;
-        } catch (\Exception $e) {
-            dd($e);
-            return [];
         }
     }
 
@@ -5842,7 +6122,7 @@ class RequestQuotationController extends Controller
         }
         $data_lama = json_decode($data_lama);
 
-        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first()->no_sampel;
+        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first();
 
         if (!$data) {
             return response()->json([
@@ -5853,8 +6133,65 @@ class RequestQuotationController extends Controller
 
         return response()->json([
             'message' => 'Success',
-            'data' => \explode('/', $data)[1]
+            'data' => \explode('/', $data->no_sampel)[1]
         ], 200);
+    }
+
+    public function indexPaket(Request $request)
+    {
+        $query = TemplatePaketAnalisa::where('is_active', true)
+            ->where('kategori', 'like',  $request->kategori . '-%');
+
+        if (!empty($request->sub_kategori) && $request->sub_kategori !== '0') {
+            $query->where('sub_kategori', 'like', $request->sub_kategori . '-%');
+        }
+
+        $data = $query->get();
+
+        return DataTables::of($data)
+            ->editColumn('data_pendukung_sampling', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+
+                if (empty($data) || ! is_array($data)) {
+                    return [];
+                }
+
+                foreach ($data as $i => &$row) {
+                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
+                }
+
+                return $data;
+            })
+            ->addColumn('harga_paket', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+                $harga_paket = 0;
+                if (empty($data) || ! is_array($data)) {
+                    return 0;
+                }
+
+                foreach ($data as $i => &$row) {
+                    $harga_paket += $row['harga_paket'];
+                }
+                return $harga_paket;
+            })
+            ->make(true);
+    }
+
+    public function getKategoriPaket(Request $request)
+    {
+        $data = MasterKategori::where('is_active', true)->select('id', 'nama_kategori')->get();
+
+        $data->prepend((object) [
+            'id' => '0',
+            'nama_kategori' => 'Multi Kategori',
+        ]);
+        return response()->json($data);
+    }
+
+    public function getSubkategoriPaket(Request $request)
+    {
+        $data = MasterSubKategori::where('is_active', true)->where('id_kategori', $request->kategori_id)->select('id', 'nama_sub_kategori', 'id_kategori')->get();
+        return response()->json($data);
     }
 
 }

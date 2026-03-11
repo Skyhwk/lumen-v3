@@ -20,8 +20,18 @@ use App\Models\MasterPelangganBlacklist;
 use App\Models\PelangganBlacklist;
 use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
+
+use App\Services\GetBawahan;
 use Carbon\Carbon;
 Carbon::setLocale('id');
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\File;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 
 class MasterPelangganController extends Controller
 {
@@ -31,15 +41,41 @@ class MasterPelangganController extends Controller
 
         $user = $request->attributes->get('user');
         if (isset($user->karyawan) && $user->karyawan != null) {
-            $cek_jabatan = DB::table('master_jabatan')->where('id', $user->karyawan->id_jabatan)->first();
-            if ($cek_jabatan->nama_jabatan == 'Sales Staff') {
-                $data->where('sales_penanggung_jawab', $user->karyawan->nama_lengkap);
+            $jabatan = $user->karyawan->id_jabatan;
+
+            if ($jabatan == 24) {
+                $data->where('sales_id', $this->user_id);
             }
 
-            if ($cek_jabatan->nama_jabatan == 'Sales Supervisor') {
-                $cek_bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('nama_lengkap')->toArray();
-                $data->whereIn('sales_penanggung_jawab', $cek_bawahan);
+            if ($jabatan == 21) {
+                $bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
             }
+
+            if ($jabatan == 157) {
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+
+                $karyawanNonAktif = MasterKaryawan::where('is_active', false)->pluck('id')->toArray();
+
+                $bawahan = array_merge($bawahan, $karyawanNonAktif);
+                
+                array_push($bawahan, 14);
+
+                if (!in_array($this->user_id, $bawahan)) {
+                    $bawahan[] = $this->user_id;
+                }
+
+                $data->whereIn('sales_id', $bawahan);
+            }
+
+            if($this->user_id != 127){
+                $data->where('sales_id', '!=', 127);
+            }
+
+
         }
 
         return Datatables::of($data)
@@ -49,6 +85,16 @@ class MasterPelangganController extends Controller
                 } else {
                     $query->whereDoesntHave('order_customer');
                 }
+            })
+            ->filterColumn('telpon', function ($query, $keyword) {
+                $query->whereHas('kontak_pelanggan', function ($q) use ($keyword) {
+                    $q->where('no_tlp_perusahaan', 'like', "%{$keyword}%");
+                });
+            })
+            ->orderColumn('telpon', function ($query, $orderDirection) {
+                $query->with(['kontak_pelanggan' => function($q) use ($orderDirection) {
+                    $q->orderBy('no_tlp_perusahaan', $orderDirection);
+                }]);
             })
             ->make(true);
     }
@@ -60,14 +106,16 @@ class MasterPelangganController extends Controller
 
         $user = $request->attributes->get('user');
         if (isset($user->karyawan) && $user->karyawan != null) {
-            $cek_jabatan = DB::table('master_jabatan')->where('id', $user->karyawan->id_jabatan)->first();
-            if ($cek_jabatan->nama_jabatan == 'Sales Staff') {
-                $data->where('sales_penanggung_jawab', $user->karyawan->nama_lengkap);
+            $jabatan = $user->karyawan->id_jabatan;
+            if ($jabatan == 24) {
+                $data->where('sales_id', $this->user_id);
             }
 
-            if ($cek_jabatan->nama_jabatan == 'Sales Supervisor') {
-                $cek_bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('nama_lengkap')->toArray();
-                $data->whereIn('sales_penanggung_jawab', $cek_bawahan);
+            if ($jabatan == 21) {
+                $bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
             }
         }
 
@@ -149,8 +197,8 @@ class MasterPelangganController extends Controller
             $timestamp = DATE('Y-m-d H:i:s');
 
             if ($request->id != '') {
-                $response = $this->checkForBlacklistedCustomer($request->id, $request->nama_pelanggan, $request->kontak_pelanggan);
-                if ($response) return $response;
+                // $response = $this->checkForBlacklistedCustomer($request->id, $request->nama_pelanggan, $request->kontak_pelanggan);
+                // if ($response) return $response;
 
                 // Update existing customer
                 $pelanggan = MasterPelanggan::find($request->id);
@@ -163,21 +211,46 @@ class MasterPelangganController extends Controller
                     'nama_pelanggan',
                     'wilayah',
                     'sub_kategori',
+                    'npwp',
                     'bahan_pelanggan',
                     'merk_pelanggan',
                     'sales_penanggung_jawab',
                 ]);
 
                 // Tamabahan Patah
-                $sales_id = MasterKaryawan::where('nama_lengkap', $request->sales_penanggung_jawab)->first()->id;
-                $dataPelanggan['sales_id'] = $sales_id;
-                /* Update menambahkan trim by 565 : 2025-05-08*/
+                $sales = MasterKaryawan::where('nama_lengkap', $request->sales_penanggung_jawab)->first();
+                $dataPelanggan['sales_id'] = $sales->id;
+                $dataPelanggan['sales_penanggung_jawab'] = $sales->nama_lengkap;
+                
                 $dataPelanggan['nama_pelanggan'] = trim($dataPelanggan['nama_pelanggan']);
+                $dataPelanggan['npwp'] = trim($dataPelanggan['npwp']);
                 $dataPelanggan['id_cabang'] = $this->idcabang;
                 $dataPelanggan['updated_by'] = $this->karyawan;
                 $dataPelanggan['updated_at'] = $timestamp;
                 if ($request->kategori_pelanggan != '')
                     $dataPelanggan['kategori_pelanggan'] = $request->kategori_pelanggan;
+
+                // ===== cek apakah hanya sales yang berubah =====
+                $original = $pelanggan->only([
+                    'nama_pelanggan',
+                    'wilayah',
+                    'sub_kategori',
+                    'npwp',
+                    'bahan_pelanggan',
+                    'merk_pelanggan',
+                ]);
+
+                $newDataToCompare = $dataPelanggan;
+                unset(
+                    $newDataToCompare['sales_id'],
+                    $newDataToCompare['sales_penanggung_jawab'],
+                    $newDataToCompare['updated_by'],
+                    $newDataToCompare['updated_at'],
+                    $newDataToCompare['id_cabang'],
+                    $newDataToCompare['kategori_pelanggan']
+                );
+
+                $isOnlySalesChanged = $original == $newDataToCompare;
 
                 $pelanggan->update($dataPelanggan);
 
@@ -200,12 +273,24 @@ class MasterPelangganController extends Controller
                             if (substr($noTlp, 0, 2) === "62") { // convert depannya jadi 0
                                 $noTlp = "0" . substr($noTlp, 2);
                             }
-                            // cek noTlp
-                            $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->first();
-                            if ($sameTelNumber && $sameTelNumber->pelanggan_id !== $pelanggan->id) {
-                                DB::rollback();
-                                return response()->json(['message' => 'Nomor telepon perusahaan sudah ada'], 400);
-                            };
+
+                            $currentKontak = null;
+
+                            if (!empty($request->kontak_pelanggan['id'][$index])) {
+                                $currentKontak = KontakPelanggan::find($request->kontak_pelanggan['id'][$index]);
+                            }
+                            
+                            $isNoTlpChanged = !$currentKontak || $currentKontak->no_tlp_perusahaan !== $noTlp;
+
+                            // skip cek nomor kalau cuma sales yang berubah | noTlp tidak berubah
+                            if (!$isOnlySalesChanged || $isNoTlpChanged) {
+                                // cek noTlp
+                                $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->where('is_active', true)->first();
+                                if ($sameTelNumber && $sameTelNumber->pelanggan_id !== $pelanggan->id) {
+                                    DB::rollback();
+                                    return response()->json(['message' => 'Nomor telepon perusahaan sudah ada'], 400);
+                                };
+                            }
 
                             $kontak = [
                                 'pelanggan_id' => $pelanggan->id,
@@ -298,6 +383,7 @@ class MasterPelangganController extends Controller
                         }
                     }
                 }
+
             } else {
                 $response = $this->checkForBlacklistedCustomer(null, $request->nama_pelanggan, $request->kontak_pelanggan);
                 if ($response) return $response;
@@ -312,7 +398,7 @@ class MasterPelangganController extends Controller
                 $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
                     ->whereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
                         $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
-                    })->first();
+                    })->where('is_active', true)->first();
 
                 if ($existingData) {
                     return response()->json([
@@ -325,6 +411,7 @@ class MasterPelangganController extends Controller
                     'nama_pelanggan',
                     'wilayah',
                     'sub_kategori',
+                    'npwp',
                     'bahan_pelanggan',
                     'merk_pelanggan',
                     'sales_penanggung_jawab',
@@ -365,6 +452,7 @@ class MasterPelangganController extends Controller
                     ->whereHas('alamat_pelanggan', function ($query) use ($request) {
                         $query->whereIn('alamat', $request->alamat_pelanggan['alamat']);
                     })
+                    ->where('is_active', true)
                     ->first();
 
                 if ($existingPelanggan) {
@@ -548,5 +636,127 @@ class MasterPelangganController extends Controller
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 500);
         }
+    }
+
+    public function exportExcel()
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $sheet->mergeCells('A1:H1');
+        $sheet->setCellValue('A1', 'MASTER PELANGGAN PT INTI SURYA LABORATORIUM');
+
+        $titleStyle = [
+            'font' => ['bold' => true, 'size' => 14],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+        ];
+        $sheet->getStyle('A1')->applyFromArray($titleStyle);
+        $sheet->getRowDimension(1)->setRowHeight(50);
+
+        $headers = [
+            'No.', 'ID Pelanggan', 'NPWP', 'Nama Pelanggan', 
+            'Kontak Pelanggan', 'Status', 'Wilayah Pelanggan', 'Sales Penanggung Jawab'
+        ];
+        
+        $sheet->fromArray($headers, NULL, 'A2');
+
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '4A4A4A']
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+        ];
+        $sheet->getStyle('A2:H2')->applyFromArray($headerStyle);
+        $sheet->getRowDimension(2)->setRowHeight(25);
+
+        $row = 3; 
+        $no = 1;
+
+        MasterPelanggan::with(['kontak_pelanggan', 'order_customer'])
+            ->where('sales_id', '!=', 127)
+            ->whereNotNull('sales_id')
+            ->where('is_active', true)
+            ->chunk(1000, function ($customers) use ($sheet, &$row, &$no) {
+                foreach ($customers as $customer) {
+                    $contacts = $customer->kontak_pelanggan->pluck('no_tlp_perusahaan')
+                        ->map(function ($item) {
+                            $tel = preg_replace('/[^\d]/', '', $item); // Hapus semua karakter selain angka
+
+                            // Standarisasi ke format '08/02...'
+                            if (substr($tel, 0, 2) === '62') {
+                                $tel = '0' . substr($tel, 2);
+                            } elseif (substr($tel, 0, 1) !== '0') {
+                                $tel = '0' . $tel;
+                            }
+
+                            return $tel;
+                        })
+                        ->filter()
+                        ->implode(', ');
+
+                    $sheet->setCellValue('A' . $row, $no++); 
+                    $sheet->setCellValue('B' . $row, $customer->id_pelanggan);
+                    $sheet->setCellValue('C' . $row, $customer->npwp);
+                    $sheet->setCellValue('D' . $row, trim($customer->nama_pelanggan));
+                    $sheet->setCellValueExplicit('E' . $row, $contacts ?: '', DataType::TYPE_STRING);
+                    $sheet->setCellValue('F' . $row, $customer->order_customer->isNotEmpty() ? 'ORDERED' : 'NEW');
+                    $sheet->setCellValue('G' . $row, $customer->wilayah);
+                    $sheet->setCellValue('H' . $row, $customer->sales_penanggung_jawab);
+
+                    $row++;
+                }
+
+                unset($customers);
+            });
+
+        $lastRow = $row - 1;
+
+        $borderStyle = [
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['argb' => 'FF000000'],
+                ],
+            ],
+        ];
+        $sheet->getStyle('A2:H' . $lastRow)->applyFromArray($borderStyle);
+
+        $sheet->getStyle('A3:B' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('F3:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('A2:H' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+        
+        $sheet->getStyle('E3:E' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+        foreach (range('A', 'H') as $columnID) {
+            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        }
+        
+        $sheet->getColumnDimension('D')->setAutoSize(false)->setWidth(60); 
+        $sheet->getColumnDimension('E')->setAutoSize(false)->setWidth(40);
+        $sheet->getColumnDimension('G')->setAutoSize(false)->setWidth(30);
+
+        $writer = new Xlsx($spreadsheet);
+        $fileName = 'export_pelanggan_' . date('Y-m-d_H-i-s') . '.xlsx';
+        $folderPath = public_path('master_pelanggan');
+
+        if (!File::exists($folderPath)) {
+            File::makeDirectory($folderPath, 0755, true);
+        }
+
+        $fullPath = $folderPath . '/' . $fileName;
+        $writer->save($fullPath);
+
+        return response()->json([
+            'message' => 'Master Pelanggan berhasil diekspor',
+            'data' => $fileName,
+        ], 201);
     }
 }

@@ -27,6 +27,20 @@ class LingkunganHidupLogam24_6j
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C3 = null;
+        $C4 = null;
+        $C5 = null;
+        $C6 = null;
+        $C7 = null;
+        $C8 = null;
+        $C9 = null;
+        $C10 = null;
+        $C11 = null;
+        $C12 = null;
+        $C13 = null;
+        $C14 = null;
+        $C15 = null;
+        $C16 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -48,6 +62,9 @@ class LingkunganHidupLogam24_6j
             $C1 = 0;
         } else {
             foreach($data->ks as $key => $value) {
+                if($data->tipe_data == 'ulk'){
+                    $Vstd = round(($data->average_flow * $data->durasi) / 1000, 1);
+                }
                 $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 
                 $result = round($rawC, 4);
@@ -59,13 +76,21 @@ class LingkunganHidupLogam24_6j
 
         // tipe data = ambient, ulk, volatile
         if($data->tipe_data == 'ulk'){
-            $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+            if($data->parameter == 'Pb (24 Jam)'){
+                $arr_hasil_non_negatif = array_map(function($val){
+                    return $val < 0 ? 0 : $val;
+                }, $arr_hasil);
+                $C15 = count($arr_hasil_non_negatif) > 0 ? round(array_sum($arr_hasil_non_negatif) / count($arr_hasil_non_negatif), 4) : 0;
+                $satuan = 'ug/Nm³';
+            }else {
+                $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+                $satuan = 'mg/m³';
+            }
 
             // if(!is_null($mdl) && $C1 < 0.000013) {
             //     $C1 = '<0.000013';
             // }
 
-            $satuan = 'mg/m³';
         }else if($data->tipe_data == 'ambient') {
             $C = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
 
@@ -73,7 +98,7 @@ class LingkunganHidupLogam24_6j
             //     $C = '<0.0128';
             // }
 
-            $C1 = $C / 1000;
+            $C15 = $C / 1000;
             $satuan = 'ug/Nm³';
         }
 
@@ -90,18 +115,6 @@ class LingkunganHidupLogam24_6j
                 'Shift 3' => $arr_hasil[2] ?? null,
                 'Shift 4' => $arr_hasil[3] ?? null
             ];
-
-            // "C (mg/Nm3 dan mg/m3) = <0.0001 mg/Nm3
-            // C (ug/Nm3 dan ug/m3) = <0.101 ug/Nm3
-            // C (PPM) = <0.00011 PPM
-            // "
-            if($C < 0.101) {
-                $C = '<0.101';
-            }
-
-            if($C1 < 0.0001) {
-                $C1 = '<0.0001';
-            }
 
         }
 
@@ -125,9 +138,23 @@ class LingkunganHidupLogam24_6j
             // 'hasil2' => $C1,
             // 'hasil3' => $C2,
             'satuan' => $satuan,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
+            'C' => isset($C) ? $C : null,
+            'C1' => isset($C1) ? $C1 : null,
+            'C2' => isset($C2) ? $C2 : null,
+            'C3' => isset($C3) ? $C3 : null,
+            'C4' => isset($C4) ? $C4 : null,
+            'C5' => isset($C5) ? $C5 : null,
+            'C6' => isset($C6) ? $C6 : null,
+            'C7' => isset($C7) ? $C7 : null,
+            'C8' => isset($C8) ? $C8 : null,
+            'C9' => isset($C9) ? $C9 : null,
+            'C10' => isset($C10) ? $C10 : null,
+            'C11' => isset($C11) ? $C11 : null,
+            'C12' => isset($C12) ? $C12 : null,
+            'C13' => isset($C13) ? $C13 : null,
+            'C14' => isset($C14) ? $C14 : null,
+            'C15' => isset($C15) ? $C15 : null,
+            'C16' => isset($C16) ? $C16 : null,
             'data_pershift' => $data_pershift,
             'vl' => $vl,
             'st' => $st,

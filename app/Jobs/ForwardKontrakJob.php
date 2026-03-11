@@ -9,6 +9,7 @@ use App\Models\HargaParameter;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\RequestQr;
+use App\Models\TemplatePaketAnalisa;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
@@ -110,6 +111,7 @@ class ForwardKontrakJob extends Job
                 $param = [];
                 $regulasi = '';
                 $periode = '';
+                $is_paket = $data_pendukungH['is_paket_analisa'] ?? false;
 
                 if ($data_pendukungH['parameter'] != null)
                     $param = $data_pendukungH['parameter'];
@@ -123,17 +125,56 @@ class ForwardKontrakJob extends Job
                 $vol = 0;
 
                 // GET PARAMETER NAME FOR CEK HARGA KONTRAK
-                $parameter = [];
+                $parameters = [];
                 foreach ($data_pendukungH['parameter'] as $va) {
                     $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
-                    array_push($parameter, $cek_par->nama_lab);
+                    array_push($parameters, $cek_par->nama_lab);
                 }
 
-                $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                    ->where('is_active', true)
-                    ->whereIn('nama_parameter', $parameter)
-                    ->where('id_kategori', $kategori)
-                    ->first();
+                $harga_parameter = [];
+                $volume_parameter = [];
+
+                foreach ($parameters as $parameter) {
+                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                        ->where('nama_parameter', $parameter)
+                        ->orderBy('id', 'ASC')
+                        ->get();
+
+                    if (count($ambil_data) > 1) {
+                        $found = false;
+                        foreach ($ambil_data as $xc => $zx) {
+                            if (\explode(' ', $zx->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran) {
+                                $harga_parameter[] = $zx->harga;
+                                $volume_parameter[] = $zx->volume;
+                                $found = true;
+                                break;
+                            }
+                            if ((count($ambil_data) - 1) == $xc && !$found) {
+                                $zx = $ambil_data[0];
+                                $harga_parameter[] = $zx->harga;
+                                $volume_parameter[] = $zx->volume;
+                                break;
+                            }
+                        }
+                    } else if (count($ambil_data) == 1) {
+                        foreach ($ambil_data as $zx) {
+                            $harga_parameter[] = $zx->harga;
+                            $volume_parameter[] = $zx->volume;
+                            break;
+                        }
+                    } else {
+                        $harga_parameter[] = 0;
+                        $volume_parameter[] = 0;
+                    }
+                }
+
+                $vol_db = array_sum($volume_parameter);
+                $har_db = array_sum($harga_parameter);
+
+                $harga_pertitik = (object) [
+                    'volume' => $vol_db,
+                    'total_harga' => $har_db
+                ];
 
                 if ($harga_pertitik->volume != null)
                     $vol += floatval($harga_pertitik->volume);
@@ -142,6 +183,34 @@ class ForwardKontrakJob extends Job
                 } else {
                     $reqtitik = $data_pendukungH['jumlah_titik'];
                 }
+
+                $hargaPaket = 0;
+                $hargaSatuan = 0;
+                $kelipatan = 0;
+                // if($key == 1) dd($data_pendukungH);
+                if($is_paket){
+                    $dataPaket = TemplatePaketAnalisa::where('id', $data_pendukungH['paket_id'])->first();
+                    $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                    foreach ($dataPaketAnalisa as $paket) {
+                        if(
+                            $paket['regulasi'] == $data_pendukungH['regulasi'] &&
+                            $paket['parameter'] == $param && 
+                            $paket['kategori_1'] == $data_pendukungH['kategori_1'] &&
+                            $paket['kategori_2'] == $data_pendukungH['kategori_2']
+                        ) {
+                            $pengali = ($reqtitik / (int)$paket['jumlah_titik']);
+                            $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                            $hargaPaket += $harga_sementara;
+                            $hargaSatuan = $paket['harga_paket'];
+                            $kelipatan = (int)$paket['jumlah_titik'];
+                        } else {
+                            continue;
+                        }
+                    }
+                } 
+
+                $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $reqtitik);
+                $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
 
                 $temp_prearasi = [];
                 if ($data_pendukungH['biaya_preparasi'] != null || $data_pendukungH['biaya_preparasi'] != "") {
@@ -152,7 +221,14 @@ class ForwardKontrakJob extends Job
                 }
                 $biaya_preparasi = $temp_prearasi;
 
-                array_push($data_pendukung_h, (object) [
+                // Calculate total price for this item
+                $harga_total = floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+
+                // Add to grand total
+                $grand_total += $harga_total;
+                $total_volume += $vol;
+
+                $dataToPush = (object) [
                     'kategori_1' => $data_pendukungH['kategori_1'],
                     'kategori_2' => $data_pendukungH['kategori_2'],
                     'regulasi' => $regulasi,
@@ -160,12 +236,21 @@ class ForwardKontrakJob extends Job
                     'jumlah_titik' => $data_pendukungH['jumlah_titik'],
                     'penamaan_titik' => isset($data_pendukungH['penamaan_titik']) ? $data_pendukungH['penamaan_titik'] : "",
                     'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
+                    'harga_satuan' => $hargaPerTitik,
+                    'harga_total' => $hargaAnalisa,
                     'volume' => $vol,
                     'periode' => $periode,
                     'biaya_preparasi' => $biaya_preparasi
-                ]);
+                ];
+                
+                if ($is_paket) {
+                    $dataToPush->paket_id = $data_pendukungH['paket_id'];
+                    $dataToPush->paket = $data_pendukungH['paket'];
+                    $dataToPush->kelipatan_dasar = $kelipatan;
+                    $dataToPush->is_paket_analisa = $is_paket;
+                }
+
+                array_push($data_pendukung_h, $dataToPush);
 
                 foreach ($data_pendukungH['periode'] as $key => $v) {
                     array_push($period, $v);
@@ -212,18 +297,50 @@ class ForwardKontrakJob extends Job
                         $kategori = $exp[0];
                         $vol = 0;
 
-                        // GET PARAMETER NAME FOR CEK HARGA KONTRAK
-                        $parameter = [];
-                        foreach ($data_pendukungD['parameter'] as $va) {
-                            $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
-                            array_push($parameter, $cek_par->nama_lab);
+                        $harga_parameter = [];
+                        $volume_parameter = [];
+
+                        foreach ($parameters as $parameter) {
+                            $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                                ->where('nama_parameter', $parameter)
+                                ->orderBy('id', 'ASC')
+                                ->get();
+
+                            if (count($ambil_data) > 1) {
+                                $found = false;
+                                foreach ($ambil_data as $xc => $zx) {
+                                    if (\explode(' ', $zx->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran) {
+                                        $harga_parameter[] = $zx->harga;
+                                        $volume_parameter[] = $zx->volume;
+                                        $found = true;
+                                        break;
+                                    }
+                                    if ((count($ambil_data) - 1) == $xc && !$found) {
+                                        $zx = $ambil_data[0];
+                                        $harga_parameter[] = $zx->harga;
+                                        $volume_parameter[] = $zx->volume;
+                                        break;
+                                    }
+                                }
+                            } else if (count($ambil_data) == 1) {
+                                foreach ($ambil_data as $zx) {
+                                    $harga_parameter[] = $zx->harga;
+                                    $volume_parameter[] = $zx->volume;
+                                    break;
+                                }
+                            } else {
+                                $harga_parameter[] = 0;
+                                $volume_parameter[] = 0;
+                            }
                         }
 
-                        $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                            ->where('is_active', true)
-                            ->whereIn('nama_parameter', $parameter)
-                            ->where('id_kategori', $kategori)
-                            ->first();
+                        $vol_db = array_sum($volume_parameter);
+                        $har_db = array_sum($harga_parameter);
+
+                        $harga_pertitik = (object) [
+                            'volume' => $vol_db,
+                            'total_harga' => $har_db
+                        ];
 
                         if ($harga_pertitik->volume != null)
                             $vol += floatval($harga_pertitik->volume);
@@ -232,6 +349,34 @@ class ForwardKontrakJob extends Job
                         } else {
                             $reqtitik = $data_pendukungD['jumlah_titik'];
                         }
+
+                        $hargaPaket = 0;
+                        $hargaSatuan = 0;
+                        $kelipatan = 0;
+                        // if($key == 1) dd($data_pendukungH);
+                        if($is_paket){
+                            $dataPaket = TemplatePaketAnalisa::where('id', $data_pendukungH['paket_id'])->first();
+                            $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                            foreach ($dataPaketAnalisa as $paket) {
+                                if(
+                                    $paket['regulasi'] == $data_pendukungH['regulasi'] &&
+                                    $paket['parameter'] == $param && 
+                                    $paket['kategori_1'] == $data_pendukungH['kategori_1'] &&
+                                    $paket['kategori_2'] == $data_pendukungH['kategori_2']
+                                ) {
+                                    $pengali = ($reqtitik / (int)$paket['jumlah_titik']);
+                                    $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                    $hargaPaket += $harga_sementara;
+                                    $hargaSatuan = $paket['harga_paket'];
+                                    $kelipatan = (int)$paket['jumlah_titik'];
+                                } else {
+                                    continue;
+                                }
+                            }
+                        } 
+
+                        $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $reqtitik);
+                        $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
 
                         //============= BIAYA PREPARASI ==================
                         $temp_prearasi = [];
@@ -264,31 +409,38 @@ class ForwardKontrakJob extends Job
                             'jumlah_titik' => $data_pendukungD['jumlah_titik'],
                             'penamaan_titik' => $penamaan_titik_fixed,
                             'total_parameter' => count($param),
-                            'harga_satuan' => $harga_pertitik->total_harga,
-                            'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
+                            'harga_satuan' => $hargaPerTitik,
+                            'harga_total' => $hargaAnalisa,
                             'volume' => $vol,
                             'biaya_preparasi' => $biaya_preparasi
                         ];
 
+                        if ($is_paket) {
+                            $data_sampling[$n++]['paket_id'] = $data_pendukungH['paket_id'];
+                            $data_sampling[$n++]['paket'] = $data_pendukungH['paket'];
+                            $data_sampling[$n++]['kelipatan_dasar'] = $kelipatan;
+                            $data_sampling[$n++]['is_paket_analisa'] = $is_paket;
+                        }
+
                         // kalkulasi harga parameter sesuai titik
                         if ($kategori == 1) { // air
                             // dd('masuk');
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_air += $hargaAnalisa;
 
                         } else if ($kategori == 4) { //  udara
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_udara += $hargaAnalisa;
                         } else if ($kategori == 5) { // emisi
 
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_emisi += $hargaAnalisa;
                         } else if ($kategori == 6) { // padatan
 
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_padatan += $hargaAnalisa;
                         } else if ($kategori == 7) { // swab test
 
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_swab_test += $hargaAnalisa;
                         } else if ($kategori == 8) { // tanah
 
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+                            $harga_tanah += $hargaAnalisa;
                         }
                         // end kalkulasi harga parameter sesuai titik
                     }

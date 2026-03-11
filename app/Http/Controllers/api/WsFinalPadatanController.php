@@ -161,6 +161,7 @@ class WsFinalPadatanController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
+		// dd($request->all());
 		DB::beginTransaction();
 		try {
 			if ($request->template_stp == 4) {
@@ -221,7 +222,7 @@ class WsFinalPadatanController extends Controller
 						'message' => 'Gagal Approve'
 					], 401);
 				}
-			} else if ($request->template_stp == 7 || $request->template_stp == 2 || $request->template_stp == 5 || $request->template_stp == 6 || $request->template_stp == 8 || $request->template_stp == 76 || $request->template_stp == 34) {
+			} else if ($request->template_stp == 7 || $request->template_stp == 2 || $request->template_stp == 5 || $request->template_stp == 6 || $request->template_stp == 8 || $request->template_stp == 76 || $request->template_stp == 34 || $request->template_stp == 80) {
 				if ($request->id) {
 					$data = Colorimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('template_stp', empty($request->template_stp) ? null : $request->template_stp)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
 					if ($data) {
@@ -253,40 +254,78 @@ class WsFinalPadatanController extends Controller
 					], 401);
 				}
 			} else {
-				if ($request->id) {
-					$data = Subkontrak::where('parameter', $request->parameter)->where('lhps', 1)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
-					if ($data != null) {
-						$cek = Subkontrak::where('id', $data->id)->first();
-						$cek->lhps = 0;
-						$cek->save();
-						DB::commit();
-						return response()->json([
-							'message' => 'Data has ben Rejected',
-							'status' => 201,
-							'success' => true
-						], 201);
-					} else {
-						$dat = Subkontrak::where('id', $request->id)->where('is_active', 1)->first();
-						$dat->lhps = 1;
-						$dat->save();
-						DB::commit();
-						return response()->json([
-							'message' => 'Data has ben Approved',
-							'status' => 200,
-							'success' => true
-						], 200);
-					}
-				} else {
+				if (! $request->id) {
 					return response()->json([
 						'message' => 'Gagal Approve',
 						'success' => false
 					], 401);
 				}
+
+				$models = [
+					Subkontrak::class,
+					Colorimetri::class,
+					Gravimetri::class,
+					Titrimetri::class,
+				];
+
+				// 1️⃣ cek LHPS aktif
+				foreach ($models as $model) {
+					$active = $model::where('id', $request->id)
+						->where('parameter', $request->parameter)
+						->where('no_sampel', $request->no_sampel)
+						->where('lhps', 1)
+						->where('is_active', 1)
+						->first();
+
+					if ($active) {
+						$active->update(['lhps' => 0]);
+
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has been Rejected',
+							'success' => true,
+							'status' => 201
+						], 201);
+					}
+				}
+
+				// 2️⃣ approve target
+				$approved = null;
+
+				foreach ($models as $model) {
+					$approved = $model::where('id', $request->id)
+						->where('parameter', $request->parameter)
+						->where('no_sampel', $request->no_sampel)
+						->where('is_active', 1)
+						->first();
+
+					if ($approved) {
+						$approved->update(['lhps' => 1]);
+						break;
+					}
+				}
+
+				if (! $approved) {
+					DB::rollBack();
+					return response()->json([
+						'message' => 'Data tidak ditemukan',
+						'success' => false
+					], 404);
+				}
+
+				DB::commit();
+				return response()->json([
+					'message' => 'Data has been Approved',
+					'success' => true,
+					'status' => 200
+				], 200);
+
 			}
 		} catch (\Throwable $th) {
 			DB::rollBack();
 			return response()->json([
 				'message' => 'Gagal Approve because ' . $th->getMessage(),
+				'line' => $th->getLine(),
 				'success' => false,
 				'status' => 401
 			], 401);

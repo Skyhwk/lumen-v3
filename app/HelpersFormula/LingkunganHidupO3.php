@@ -63,7 +63,7 @@ class LingkunganHidupO3
 
                 $C14 = $C2;
                 $Vu_alt = \str_replace(",", "", number_format($value * $data->durasi[$key], 4));
-                $C16 = \str_replace(",", "", number_format(floatval($item_ks[$key]) / floatval($Vu_alt), 5));
+                $C16 = \str_replace(",", "", number_format((floatval($item_ks[$key]) / floatval($Vu_alt)) * 1000, 5));
                 $C15 = $C16;
 
                 $C_value[$key_ks][$key] = $C;
@@ -112,15 +112,6 @@ class LingkunganHidupO3
         $C14 = number_format(array_sum($C14_average) / count($C14_average), 5);
         $C15 = number_format(array_sum($C15_average) / count($C15_average), 5);
         $C16 = number_format(array_sum($C16_average) / count($C16_average), 5);
-
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
-        if (floatval($C1) < 0.00014)
-            $C1 = '<0.00014';
-        if (floatval($C2) < 0.00007)
-            $C2 = '<0.00007';
-
-        // dd($avg_pershift);
 
         $satuan = 'ug/Nm3';
         if($data->tipe_data == 'ulk'){

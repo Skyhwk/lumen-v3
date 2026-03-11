@@ -8,7 +8,7 @@ use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Services\TranslatorService as Translator;
 use Carbon\Carbon;
 
@@ -240,7 +240,8 @@ class RenderNonKontrakCopy
             foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
                 $kategori = explode("-", $a->kategori_1);
                 $kategori2 = explode("-", $a->kategori_2);
-                $kategori2Value = isset($kategori2[1]) ? $kategori2[1] : '';
+                $is_paket = $a->is_paket_analisa ?? false;
+                $kategori2Value = (isset($kategori2[1]) ? strtoupper($kategori2[1]) : '') . ($is_paket ? ' - (' . strtoupper($a->paket) . ')' : '');
                 $penamaan_titik = "";
                 if (!empty($a->penamaan_titik)) {
                     if (is_array($a->penamaan_titik)) {

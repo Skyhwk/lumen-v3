@@ -2,7 +2,7 @@
     $totData = $header->header_table ? count(json_decode($header->header_table)) : 0;
     $colc = '';
     $rowc = 1;
-
+    $detail = $detail->filter(fn($d) => empty($d->hasil_uji_json));
     if ($totData > 1) {
         $colc = 'colspan="' . $totData . '"';
         $rowc = 2;
@@ -33,9 +33,9 @@
                     <tr>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">{!! $akr !!}&nbsp;{{ $v['parameter'] }}</td>
-                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ str_replace('.', ',', $v['hasil_uji']) }}&nbsp;{{ $v['attr'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $v['hasil_uji'] }}&nbsp;{{ $v['attr'] }}</td>
                         @foreach (json_decode($v['baku_mutu'] ?? '[]') as $vv)
-                            <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ str_replace('.', ',', $vv) }}</td>
+                            <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $vv }}</td>
                         @endforeach
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $satuan }}</td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">{{ $v['methode'] }}</td>

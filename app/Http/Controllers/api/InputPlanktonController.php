@@ -8,6 +8,7 @@ use App\Models\AnalystFormula as Formula;
 use App\Services\AnalystFormula;
 use App\Models\Colorimetri;
 use App\Models\Parameter;
+use App\Models\Subkontrak;
 use App\Models\WsValueAir;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Datatables;
@@ -27,10 +28,10 @@ class InputPlanktonController extends Controller
             ->where('is_active', true)
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
-                    ->from('colorimetri')
-                    ->whereColumn('order_detail.no_sampel', 'colorimetri.no_sampel')
-                    ->where('colorimetri.parameter', 'Plankton')
-                    ->where('colorimetri.is_active', true);
+                    ->from('subkontrak')
+                    ->whereColumn('order_detail.no_sampel', 'subkontrak.no_sampel')
+                    ->where('subkontrak.parameter', 'Plankton')
+                    ->where('subkontrak.is_active', true);
             })
             ->orderBy('no_sampel', 'asc');
 
@@ -57,19 +58,19 @@ class InputPlanktonController extends Controller
 
             $order_detail = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
 
-            $header = new Colorimetri();
+            $header = new Subkontrak();
             $header->no_sampel = $request->no_sampel;
+            $header->category_id = explode('-', $order_detail->kategori_2)[0];
             $header->parameter = 'Plankton';
             $header->jenis_pengujian = 'sample';
-            $header->tanggal_terima = $order_detail->tanggal_terima;
             $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $header->created_by = $this->karyawan;
             $header->save();
 
             WsValueAir::insert([
-                'id_colorimetri' => $header->id,
+                'id_subkontrak' => $header->id,
                 'no_sampel' => $request->no_sampel,
-                'hasil' => $data_kalkulasi['result'],
+                'hasil_json' => json_encode($data_kalkulasi['result']),
             ]);
 
             // dd('paham !!');

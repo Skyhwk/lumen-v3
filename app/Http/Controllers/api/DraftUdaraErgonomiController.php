@@ -51,6 +51,8 @@ use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
+use App\Models\LinkLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -1795,6 +1797,19 @@ class DraftUdaraErgonomiController extends Controller
                         $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                         $qr->data = json_encode($dataQr);
                         $qr->save();
+                    }
+                    
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                        ->where('is_active', true)
+                        ->first();
+
+                    $cekLink = LinkLhp::where('no_order', $data->no_order);
+                    if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                    $cekLink = $cekLink->first();
+
+                    if ($cekLink) {
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+                        $this->dispatch($job);
                     }
                 }
                 return response()->json([

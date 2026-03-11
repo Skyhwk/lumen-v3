@@ -104,7 +104,8 @@ class LhpUdaraPencahayaanController extends Controller
                 ->whereView('DraftPencahayaan')
                 ->render();
         $servicePrint = new PrintLhp();
-        $servicePrint->printByFilename($header->file_lhp, $detail);
+        // $servicePrint->printByFilename($header->file_lhp, $detail);
+        $servicePrint->printByFilename($header->file_lhp, $detail, 'KPGI', $header->no_lhp);
 
         if (!$servicePrint) {
             DB::rollBack();

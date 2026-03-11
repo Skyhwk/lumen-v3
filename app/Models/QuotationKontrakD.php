@@ -15,10 +15,10 @@ class QuotationKontrakD extends Sector
 
     public function header()
     {
-        return $this->belongsTo(QuotationKontrakH::class, 'id', 'id_request_quotation_kontrak_h');
+        return $this->belongsTo(QuotationKontrakH::class, 'id_request_quotation_kontrak_h', 'id');
     }
 
-    public function orderHeader() {
-        return $this->header->header(); // bisa shortcut nanti
-    }
+    // public function orderHeader() {
+    //     return $this->header->header(); // bisa shortcut nanti
+    // }
 }

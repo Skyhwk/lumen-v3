@@ -77,7 +77,7 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                     'message' => 'Waktu Pengambilan tidak boleh kosong.'
                 ], 401);
             }
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
             if(!$orderDetail) {
                 return response()->json([
@@ -181,10 +181,10 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
                 if($orderDetail->tanggal_terima == null){
-                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                     $orderDetail->save();
                 }
 

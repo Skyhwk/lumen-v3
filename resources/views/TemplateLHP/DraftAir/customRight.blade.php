@@ -177,9 +177,25 @@
                                 @endif
                             @endforeach
                         @endforeach
-                        @if ($header->status_sampling == 'SD' && $methode_sampling == '******')
+                        @if (($header->status_sampling == 'SD' || $header->status_sampling == 'SP') && $methode_sampling == '******')
                             <tr>
                                 <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
+                            </tr>
+                        @endif
+                        @php
+                            $isPager = false;
+
+                            foreach ($detail as $v) {
+                                if ($v['hasil_uji'] === '##') {
+                                    $isPager = true;
+                                    break;
+                                }
+                            }
+                        @endphp
+
+                        @if($isPager)
+                            <tr>
+                                <td class="custom5" colspan="3">(##) Hasil analisa dalam proses di Laboratorium</td>
                             </tr>
                         @endif
                     </table>

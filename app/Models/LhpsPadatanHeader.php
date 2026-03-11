@@ -12,14 +12,18 @@ class LhpsPadatanHeader extends Sector
 
     protected $guarded = [];
 
-    public function lhpsEmisiDetail()
+    public function lhpsPadatanDetail()
     {
-        return $this->hasMany(LhpsEmisiDetail::class, 'id_header', 'id');
+        return $this->hasMany(LhpsPadatanDetail::class, 'id_header', 'id');
     }
 
+    public function lhpsPadatanCustom()
+    {
+        return $this->hasMany(LhpsPadatanCustom::class, 'id_header', 'id');
+    }
     public function link ()
     {
         return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
-        ->where('quotation_status', 'draft_emisi');
+        ->where('quotation_status', 'draft_padatan');
     }
 }
