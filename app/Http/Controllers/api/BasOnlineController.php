@@ -3214,7 +3214,7 @@ class BasOnlineController extends Controller
             ],
             [
                 "parameter" => "Kebisingan (P8J)",
-                "requiredCount" => 2,
+                "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DataLapanganKebisinganPersonal::class,
                 "model2" => null
