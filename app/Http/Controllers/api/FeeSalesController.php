@@ -39,8 +39,7 @@ class FeeSalesController extends Controller
         $currentUser = $request->attributes->get('user')->karyawan;
 
         $sales = MasterKaryawan::where('is_active', true)
-            ->whereIn('id_jabatan', $this->idJabatanSales)
-            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            ->where(fn($q) => $q->whereIn('id_jabatan', $this->idJabatanSales)->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana'))
             ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
             ->orderBy('nama_lengkap', 'asc')
             ->get();
