@@ -76,7 +76,8 @@ use App\Models\{
     LayoutCertificate,
     JenisFont,
     TemplateBackground,
-    MasterTargetSales
+    MasterTargetSales,
+    TemplatePaketAnalisa
 };
 use App\Services\{
     GetAtasan,
@@ -2634,7 +2635,99 @@ class TestingController extends Controller
                             'error' => $e->getMessage()
                         ], 500);
                     }
+                case 'updateVolumeQuotation':
 
+                    DB::beginTransaction();
+
+                    try {
+
+                        $startDate = $request->start_date . ' 00:00:00';
+                        $endDate   = $request->end_date . ' 23:59:59';
+
+                        $quotations = QuotationNonKontrak::whereBetween('created_at', [
+                            $startDate,
+                            $endDate
+                        ])->get();
+
+                        foreach ($quotations as $quotation) {
+
+                            $data_sampling = [];
+                            $dataPendukungSampling = json_decode($quotation->data_pendukung_sampling, true);
+
+                            $isVolumeEmptyExist = array_filter($dataPendukungSampling, function ($item) {
+                                return $item['volume'] == 0;
+                            });
+                            if (!$dataPendukungSampling || empty($isVolumeEmptyExist) || count($isVolumeEmptyExist) == 0) {
+                                continue;
+                            }
+
+                            foreach ($dataPendukungSampling as $i => $item) {
+
+                                $param = $item['parameter'];
+                                $exp = explode("-", $item['kategori_1']);
+                                $kategori = $exp[0];
+                                $vol = 0;
+
+                                if($item['volume'] > 0){
+                                    continue;
+                                }
+
+                                $parameter = [];
+
+                                foreach ($param as $par) {
+                                    $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
+                                    if ($cek_par) {
+                                        $parameter[] = $cek_par->nama_lab;
+                                    }
+                                }
+
+                                $volume_db = [];
+
+                                foreach ($parameter as $param_) {
+
+                                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                                        ->where('nama_parameter', $param_)
+                                        ->orderBy('id', 'ASC')
+                                        ->get();
+
+                                    $cek_harga_parameter = $ambil_data->first(function ($itemHarga) use ($quotation) {
+                                        return explode(' ', $itemHarga->created_at)[0] > $quotation->tgl_penawaran;
+                                    }) ?? $ambil_data->first();
+
+                                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                                }
+
+                                $vol = array_sum($volume_db);
+
+                                $data_sampling[$i] = $item;
+                                $data_sampling[$i]['volume'] = $vol;
+                            }
+
+                            $quotation->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
+                            $quotation->save();
+                        }
+
+                        DB::commit();
+
+                        return response()->json([
+                            'status' => true,
+                            'message' => 'Volume quotation berhasil dihitung ulang',
+                            'total_updated' => $quotations->count(),
+                            'start_date' => $request->start_date,
+                            'end_date' => $request->end_date
+                        ], 200);
+
+                    } catch (\Exception $th) {
+
+                        DB::rollBack();
+
+                        return response()->json([
+                            'status' => false,
+                            'message' => $th->getMessage(),
+                            'file' => $th->getFile(),
+                            'line' => $th->getLine()
+                        ], 500);
+                    }
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
