@@ -161,7 +161,6 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
                 DB::raw('MAX(faktur_pajak) AS faktur_pajak'),
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
-                DB::raw('MAX(jabatan_pj) AS jabatan_pj'),
                 DB::raw('MAX(rekening) AS rekening'),
                 DB::raw('MAX(periode) AS periode_kontrak'), //05/02/2025
                 DB::raw('MAX(keterangan) AS keterangan'),
@@ -205,10 +204,24 @@ class GenerateInvoiceController extends Controller
                 ->where('is_emailed', false)
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
-                ->orderBy('invoice.no_invoice', 'DESC')
-                ->get();
+                ->orderBy('invoice.no_invoice', 'DESC');
 
-            return Datatables::of($data)->make(true);
+            return Datatables::of($data)
+                ->filterColumn('emailed_at', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_at');
+                    } else {
+                        $data->whereRaw("DATE_FORMAT(emailed_at, '%Y-%m-%d') like ?", ["%$keyword%"]);
+                    }
+                })
+                ->filterColumn('emailed_by', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_by');
+                    } else {
+                        $data->whereRaw("emailed_by like ?", ["%$keyword%"]);
+                    }
+                })
+                ->make(true);
         } catch (\Throwable $th) {
             dd($th);
         }

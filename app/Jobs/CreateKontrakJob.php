@@ -149,7 +149,7 @@ class CreateKontrakJob extends Job
             $period = [];
 
             $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
-
+            //dd($dataPendukungHeader);
             foreach ($dataPendukungHeader as $i => $item) {
                 $param = $item->parameter;
                 $exp = explode("-", $item->kategori_1);

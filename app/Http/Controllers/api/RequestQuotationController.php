@@ -766,12 +766,22 @@ class RequestQuotationController extends Controller
             $data->harga_pangan = $harga_pangan;
 
             // kalkulasi harga transportasi
-            $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            // $expOp = explode("-", $payload->data_wilayah->wilayah);
+            // $id_wilayah = $expOp[0];
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            // $cekOperasional = HargaTransportasi::where('is_active', true)
+            //     ->where('id', $id_wilayah)
+            //     ->first();
+            $expOp = explode("-", $payload->data_wilayah->wilayah);
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+            ->orderBy('id', 'ASC')
+            ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+            }) ?? $ambil_data_transport->first();
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -851,7 +861,7 @@ class RequestQuotationController extends Controller
                     $data->jumlah_hari_24jam = $payload->data_wilayah->jumlah_hari_24jam;
 
                     if (isset($payload->data_wilayah->kalkulasi_by_sistem) && $payload->data_wilayah->kalkulasi_by_sistem == 'on') {
-                        $data->kalkukasi_by_sistem = $payload->data_wilayah->kalkukasi_by_sistem;
+                        $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem;
                         $harga_tiket = floatval($cekOperasional->tiket) * $payload->data_wilayah->perdiem_jumlah_orang;
 
                         $harga_transportasi_darat = $cekOperasional->transportasi;
@@ -1729,11 +1739,20 @@ class RequestQuotationController extends Controller
 
             // kalkulasi harga transportasi
             $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            // $id_wilayah = $expOp[0];
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            // $cekOperasional = HargaTransportasi::where('is_active', true)
+            //     ->where('id', $id_wilayah)
+            //     ->first();
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                ->orderBy('id', 'ASC')
+                ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+            }) ?? $ambil_data_transport->first();
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -2900,7 +2919,7 @@ class RequestQuotationController extends Controller
                                 $id_parameter[] = $cek_par->id;
                             }
                         }
-
+                        // dd('patah')
                         $harga_parameter = [];
                         $volume_parameter = [];
 
@@ -3006,8 +3025,17 @@ class RequestQuotationController extends Controller
 
                     // kalkulasi harga
                     $expOp = explode("-", $data_wilayah->wilayah);
-                    $id_wilayah = $expOp[0];
-                    $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    // $id_wilayah = $expOp[0];
+                    // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+                    $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                        ->orderBy('id', 'ASC')
+                        ->get();
+
+                    $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                            }) ?? $ambil_data_transport->first();
 
                     // START FOR
                     $disc_transport = 0;
@@ -4474,8 +4502,13 @@ class RequestQuotationController extends Controller
 
                     // kalkulasi harga
                     $expOp = explode("-", $data_wilayah->wilayah);
-                    $id_wilayah = $expOp[0];
-                    $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    // $id_wilayah = $expOp[0];
+                    // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    $nama_wilayah = implode('-', array_slice($expOp, 1));
+                    $ambil_data_transportasi = HargaTransportasi::where('wilayah', $nama_wilayah)->orderBy('id', 'ASC')->get();
+                    $cekOperasional = $ambil_data_transportasi->first(function ($item) use ($payload) {
+                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                    }) ?? $ambil_data_transportasi->first();
 
                     // START FOR
                     $disc_transport = 0;
