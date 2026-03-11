@@ -21,7 +21,7 @@ class SaldoFeeSalesController extends Controller
 {
     private $idJabatanSales = [
         24, // Sales Officer
-        148, // Customer Relation Officer
+        21, // Sales Supervisor
     ];
 
     public function getSalesList(Request $request)
