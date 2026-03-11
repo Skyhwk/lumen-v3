@@ -14,12 +14,14 @@ use App\Models\MasterKaryawan;
 use App\Models\Ftc;
 use App\Models\Ftct;
 use App\Models\JobTask;
+use App\Models\Invoice;
 use Validator;
 use App\Jobs\RenderPdfPenawaran;
 use App\Jobs\CopyNonKontrakJob;
 use App\Jobs\CopyKontrakJob;
 use App\Services\Notification;
 use App\Services\GetAtasan;
+use App\Services\QuotationService;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
@@ -470,7 +472,7 @@ class QtOrderedController extends Controller
         }
     }
 
-    public function void(Request $request)
+    public function void(Request $request, QuotationService $quotationService)
     {
         /*DB::beginTransaction();
         try {
@@ -561,6 +563,13 @@ class QtOrderedController extends Controller
                     $type_doc = 'quotation_kontrak';
                 }
 
+                // Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
+                $check = $quotationService->validateVoidQuotation($data->no_document);
+
+                if (!$check['status']) {
+                    return response()->json($check, 401);
+                }
+
                 $order_h = OrderHeader::where('no_document', $data->no_document)->first();
                 $order_h->is_active = false;
                 $order_h->is_revisi = true;
@@ -616,6 +625,7 @@ class QtOrderedController extends Controller
                     'message' => 'Success void request Quotation number ' . $data->no_document . '.!',
                     'status' => '200'
                 ], 200);
+
             } else {
                 DB::rollback();
                 return response()->json([

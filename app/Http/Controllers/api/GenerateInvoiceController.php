@@ -207,12 +207,26 @@ class GenerateInvoiceController extends Controller
                 ->orderBy('invoice.no_invoice', 'DESC');
 
             return Datatables::of($data)
-            ->filterColumn('nama_customer', function($query, $keyword) {
-                $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
-            })
-            ->make(true);
-        } catch (\Exception $th) {
-            return response()->json(['message' => $th->getMessage()], 400);
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                })
+                ->filterColumn('emailed_at', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_at');
+                    } else {
+                        $data->whereRaw("DATE_FORMAT(emailed_at, '%Y-%m-%d') like ?", ["%$keyword%"]);
+                    }
+                })
+                ->filterColumn('emailed_by', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_by');
+                    } else {
+                        $data->whereRaw("emailed_by like ?", ["%$keyword%"]);
+                    }
+                })
+                ->make(true);
+        } catch (\Throwable $th) {
+            dd($th);
         }
     }
 
