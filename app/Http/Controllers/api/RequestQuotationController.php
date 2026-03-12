@@ -6243,7 +6243,7 @@ class RequestQuotationController extends Controller
                 'message' => 'Success',
                 'data' => $data,
                 'is_found' => true,
-                'is_sampled' => $isTanggalTerimaExists->count() == 0
+                'is_sampled' => count($isTanggalTerimaExists) == 0
             ], 200);
         }
     }
