@@ -635,18 +635,6 @@ class RequestQuotationController extends Controller
 
                         $harga_db[] = $cek_harga_parameter->harga ?? 0;
                         $volume_db[] = $cek_harga_parameter->volume ?? 0;
-                        // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                        //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
-                        // }) ?? $ambil_data->first();
-
-                        // // fix bug
-                        // if ($cek_harga_parameter) {
-                        //     $harga_db[] = $cek_harga_parameter->harga;
-                        //     $volume_db[] = $cek_harga_parameter->volume;
-                        // } else {
-                        //     $harga_db[] = 0;
-                        //     $volume_db[] = 0;
-                        // }
                     }
 
                     $harga_pertitik = (object) [
@@ -656,14 +644,14 @@ class RequestQuotationController extends Controller
 
                     $titik = $item->jumlah_titik;
 
-                    if ($harga_pertitik->volume != null) {
+                    if (isset($harga_pertitik->volume) && $harga_pertitik->volume != null) {
                         $vol += floatval($harga_pertitik->volume);
                     }
-
+                    
                     $hargaPaket = 0;
                     $hargaSatuan = 0;
                     $kelipatan = 0;
-
+                    
                     if($is_paket){
                         $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
                         $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
@@ -702,7 +690,7 @@ class RequestQuotationController extends Controller
                             }
                         }
                     }
-
+                    
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
@@ -723,7 +711,7 @@ class RequestQuotationController extends Controller
                         $data_sampling[$i]['paket'] = $item->paket;
                         $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
                     }
-
+                    
                     switch ($kategori) {
                         case '1':
                             $harga_air += $hargaAnalisa;
@@ -765,13 +753,6 @@ class RequestQuotationController extends Controller
             $data->harga_tanah = $harga_tanah;
             $data->harga_pangan = $harga_pangan;
 
-            // kalkulasi harga transportasi
-            // $expOp = explode("-", $payload->data_wilayah->wilayah);
-            // $id_wilayah = $expOp[0];
-
-            // $cekOperasional = HargaTransportasi::where('is_active', true)
-            //     ->where('id', $id_wilayah)
-            //     ->first();
             $expOp = explode("-", $payload->data_wilayah->wilayah);
             $nama_wilayah = implode("-", array_slice($expOp, 1));
 
@@ -1607,18 +1588,6 @@ class RequestQuotationController extends Controller
 
                         $harga_db[] = $cek_harga_parameter->harga ?? 0;
                         $volume_db[] = $cek_harga_parameter->volume ?? 0;
-                        // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                        //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
-                        // }) ?? $ambil_data->first();
-
-                        // // fix bug
-                        // if ($cek_harga_parameter) {
-                        //     $harga_db[] = $cek_harga_parameter->harga;
-                        //     $volume_db[] = $cek_harga_parameter->volume;
-                        // } else {
-                        //     $harga_db[] = 0;
-                        //     $volume_db[] = 0;
-                        // }
                     }
 
                     $harga_pertitik = (object) [
