@@ -237,7 +237,7 @@ class DraftUdaraKebisinganPersonalController extends Controller
             $custom = collect(LhpsKebisinganPersonalCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
-            
+
             if ($header != null) {
 
                 $file_qr = new GenerateQrDocumentLhp();
@@ -258,7 +258,7 @@ class DraftUdaraKebisinganPersonalController extends Controller
                 $header->file_lhp = $fileName;
                 $header->save();
             }
-            
+
             DB::commit();
             return response()->json([
                 'message' => 'Data draft Kebisingan Personal no LHP ' . $request->no_lhp . ' berhasil disimpan',
@@ -401,7 +401,7 @@ class DraftUdaraKebisinganPersonalController extends Controller
             })->values()->toArray();
 
             $jumlah_custom = count($request->regulasi) - 1;
-            
+
             if ($cekLhp) {
                 $detail = LhpsKebisinganPersonalDetail::where('id_header', $cekLhp->id)->get();
                 $custom = LhpsKebisinganPersonalCustom::where('id_header', $cekLhp->id)
@@ -429,7 +429,7 @@ class DraftUdaraKebisinganPersonalController extends Controller
                         $custom[$idx][] = $value;
                     }
                 }
-                
+
                 if (count($custom) < $jumlah_custom) {
                     $custom[] = $detail;
                 }
@@ -553,6 +553,7 @@ class DraftUdaraKebisinganPersonalController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
+                $data->save();
 
                 HistoryAppReject::insert([
                     'no_lhp' => $data->no_lhp,

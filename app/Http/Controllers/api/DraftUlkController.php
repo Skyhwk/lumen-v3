@@ -150,8 +150,8 @@ class DraftUlkController extends Controller
         $parameterAllowed[] = 'Medan Magnit Statis';
         $parameterAllowed[] = 'Power Density';
 
-        
-        
+
+
         $data = OrderDetail::selectRaw('
             max(id) as id,
             max(id_order_header) as id_order_header,
@@ -196,7 +196,7 @@ class DraftUlkController extends Controller
             $partikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $noSampelList)->get();
             $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa)->merge($partikulat);
 
-            
+
             // 3. Hitung min/max created_at
             $minDate = null;
             $maxDate = null;
@@ -256,7 +256,7 @@ class DraftUlkController extends Controller
 
     public function handleMetodeSampling(Request $request)
     {
-        
+
         try {
             $subKategori = explode('-', $request->kategori_3);
             $regulasi = json_decode($request->regulasi, true) ?? [];
@@ -278,7 +278,7 @@ class DraftUlkController extends Controller
             } else {
                 $data = MasterBakumutu::whereIn('id_regulasi', $hasil_regulasi)->where('is_active', true)->select('method as metode_sampling')->distinct()->get();
             }
-            
+
 
             $result = $data->toArray();
 
@@ -455,7 +455,7 @@ class DraftUlkController extends Controller
             }
 
             // dd(LhpsLingDetail::where('id_header', $header->id)->get());
-            
+
             // === 6. Handle custom ===
             LhpsLingCustom::where('id_header', $header->id)->delete();
             // dd($request->data_custom);
@@ -496,7 +496,7 @@ class DraftUlkController extends Controller
                     $header->save();
                 }
             }
-            
+
             $groupedByPage = collect(LhpsLingCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
@@ -507,7 +507,7 @@ class DraftUlkController extends Controller
                 ->useLampiran(true)
                 ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHPFinal');
-            
+
                 // dd($fileName);
             $header->file_lhp = $fileName;
             $header->save();
@@ -725,7 +725,7 @@ class DraftUlkController extends Controller
                                 'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
                                 'nama_lab'      => $item->parameter,
                                 'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
-                                'tanggal_sampling'    => $item->order_detail->tanggal_sampling ?? null,
+                                'tanggal_sampling'    => $items->tanggal_sampling ?? null,
                                 'satuan'        => $newQuery->satuan,
                                 'method'        => $newQuery->method,
                                 'status'        => $newQuery->status,
@@ -740,7 +740,7 @@ class DraftUlkController extends Controller
 
                 $parameters = Parameter::where(['id_kategori' => 4, 'is_active' => true])->whereIn('nama_lab', $listData->pluck('nama_lab'))->get()->map(fn($item) => ['id' => $item->id, 'parameter' => $item->nama_lab]);
                 $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-                
+
                 $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
                     if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
                         $colToSearch = "hasil" . ($index ?: 1);
@@ -780,7 +780,7 @@ class DraftUlkController extends Controller
                     ->whereNotNull('method')->groupBy('method')
                     ->pluck('method')->toArray();
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
-                
+
                 array_push($resultMethods, '-');
 
                 return response()->json([
@@ -981,7 +981,7 @@ class DraftUlkController extends Controller
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
-                
+
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
@@ -1058,7 +1058,7 @@ class DraftUlkController extends Controller
                     $lhps->delete();
                 }
             }
-            
+
             $update = OrderDetail::where('cfr', $request->no_lhp)
                 ->where('is_active', true)
                 ->update([
