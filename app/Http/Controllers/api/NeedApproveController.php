@@ -32,7 +32,8 @@ class NeedApproveController extends Controller
                 ->where('flag_status', $request->flag)
                 ->whereYear('tanggal_penawaran', $request->periode);
         } else if ($request->mode == 'kontrak') {
-            $data = QuotationKontrakH::where('is_active', $request->is_active)
+            $data = QuotationKontrakH::with('detail')
+                ->where('is_active', $request->is_active)
                 ->where('id_cabang', $request->id_cabang)
                 ->where('is_approved', $request->is_approve)
                 ->where('is_active', true)
