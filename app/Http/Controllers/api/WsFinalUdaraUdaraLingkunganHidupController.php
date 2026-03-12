@@ -178,7 +178,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
             $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
             $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-            
+
             $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
                 if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
                     $colToSearch = "hasil" . ($index ?: 1);
@@ -242,10 +242,11 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						return '-';
 					}
 
+					$CIndex = $index == 1 ? '' : $index - 1;
 					// bila index diketahui, cek urutan preferensi khusus index itu
 					$keysToTry = [
 						"f_koreksi_c{$index}", // contoh: f_koreksi_c3
-						"C{$index}",           // contoh: C3
+						"C{$CIndex}",           // contoh: C3
 						"f_koreksi_{$index}",  // contoh: f_koreksi_3
 						"hasil{$index}"
 					];
@@ -273,10 +274,10 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						}
 					} else {
 						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					}
 
@@ -658,7 +659,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						->where('lhps', 1)
 						->where('no_sampel', $request->no_sampel)
 						->first();
-						
+
 					if ($data) {
 						$cek = DustFallHeader::where('id', $data->id)->first();
 						$cek->lhps = 0;
@@ -907,19 +908,19 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				if ($hasil['hasilc1'] < 0.00014) $hasil['hasilc1'] = '<0.00014';
 				if ($hasil['hasilc2'] < 0.00007) $hasil['hasilc2'] = '<0.00007';
 			}
-			
+
 			if ($parameter == 'C O' || $parameter == 'CO' || $parameter == 'CO (8 Jam)' || $parameter == 'CO (24 Jam)' || $parameter == 'CO (6 Jam)') {
 				if ($hasil['hasilc2'] < 0.01) $hasil['hasilc2'] = '<0.01';
 				if ($hasil['hasilc15'] < 11.45) $hasil['hasilc15'] = '<11.45';
 				if ($hasil['hasilc16'] < 0.01145) $hasil['hasilc16'] = '<0.01145';
 			}
-            
+
             if ($parameter == 'SO2' || $parameter == 'SO2 (6 Jam)' || $parameter == 'SO2 (8 Jam)' || $parameter == 'SO2 (24 Jam)') {
 				if ($hasil['hasilc'] < 25.91) $hasil['hasilc'] = '<25.91';
 				if ($hasil['hasilc2'] < 0.00082) $hasil['hasilc2'] = '<0.00082';
 				if ($hasil['hasilc16'] < 0.0259) $hasil['hasilc16'] = '<0.0259';
 			}
-            
+
             if ($parameter == 'NO2' || $parameter == 'NO2 (6 Jam)' || $parameter == 'NO2 (8 Jam)' || $parameter == 'NO2 (24 Jam)') {
 				if ($hasil['hasilc'] < 5.83) $hasil['hasilc'] = '<5.83';
 				if ($hasil['hasilc2'] < 0.00025) $hasil['hasilc2'] = '<0.00025';
