@@ -10,6 +10,10 @@ class TicketTechnicalControl extends Sector{
 
     public $timestamps = false;
 
+    protected $casts = [
+        'dokumentasi' => 'array', // Otomatis mengubah JSON string ke Array PHP
+    ];
+
     // public function previous()
     // {
     //     return $this->belongsTo(YourModel::class, 'previous_id');
