@@ -19,7 +19,7 @@ use App\Http\Controllers\Controller;
 use App\Services\SamplingPlanServices;
 use App\Services\GetBawahan;
 use App\Models\SampelDiantar;
-use App\Services\{Notification, GetAtasan};
+use App\Services\{Notification, GetAtasan, QuotationService};
 use App\Helpers\WorkerOperation;
 use Picqer\Barcode\BarcodeGeneratorPNG as Barcode;
 use App\Jobs\RenderSamplingPlan;
@@ -559,7 +559,7 @@ class FollowUpQuotationController extends Controller
         }
     }
 
-    public function voidQuotation(Request $request)
+    public function voidQuotation(Request $request, QuotationService $quotationService)
     {
         /*switch ($request->mode) {
             case 'kontrak':
@@ -589,6 +589,14 @@ class FollowUpQuotationController extends Controller
                     $data = QuotationKontrakH::where('id', $request->id)->where('is_active', true)->first();
                     $type_doc = 'quotation_kontrak';
                 }
+
+                // Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
+                $check = $quotationService->validateVoidQuotation($data->no_document);
+
+                if (!$check['status']) {
+                    return response()->json($check, 401);
+                }
+
                 $sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
                 $jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 

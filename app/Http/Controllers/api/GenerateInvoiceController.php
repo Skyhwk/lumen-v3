@@ -207,6 +207,9 @@ class GenerateInvoiceController extends Controller
                 ->orderBy('invoice.no_invoice', 'DESC');
 
             return Datatables::of($data)
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                })
                 ->filterColumn('emailed_at', function ($data, $keyword) {
                     if ($keyword == '-') {
                         $data->whereNull('emailed_at');
