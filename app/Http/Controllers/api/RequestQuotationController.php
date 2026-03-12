@@ -6228,7 +6228,7 @@ class RequestQuotationController extends Controller
                 return $header->no_order . '/' . $item;
             }, $request->no_sampel);
             $data = OrderDetail::whereIn('no_sampel', $no_samples)->where('no_quotation', 'like', '%'. $no_document_cropped . '%')->get();
-            if(!$data){
+            if(count($data) == 0){
                 return response()->json([
                     'message' => 'Detail data not found',
                     'data' => 0,
