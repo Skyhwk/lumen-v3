@@ -7,6 +7,9 @@ use App\Models\Sector;
 class TicketRevisiQt extends Sector{
     protected $table = 'ticket_revisi_qt';
     protected $guarded = [];
+    protected $casts = [
+        'attachments' => 'array',
+    ];
 
     public $timestamps = false;
 
