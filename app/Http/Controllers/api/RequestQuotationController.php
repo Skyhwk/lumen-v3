@@ -6304,4 +6304,27 @@ class RequestQuotationController extends Controller
         return response()->json($data);
     }
 
+    // Hapus titik tidak bisa ketika sudah ada tanggal terima (untuk periode tambahin cek invoice)
+    public function checkKontrakSample(Request $request) {
+        $data = QuotationKontrakH::with(['invoices'])->where('no_document', $request->no_document)->first();
+        $order_id = '';
+        $orderDetail = [];
+        if($data->data_lama) {
+            $decodedDataLama = json_decode($data->data_lama);
+            $order_id = $decodedDataLama->id_order;
+        }
+
+        if($order_id && $order_id != '') {
+            $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
+            foreach($dataDetail as $key => $value) {
+                $orderDetail[] = \explode('/', $value['no_sampel'])[1];
+            }
+        }
+
+        return response()->json([
+            'invoice' => $data->invoices,
+            'orderDetail' => $orderDetail
+        ]);
+    }
+
 }
