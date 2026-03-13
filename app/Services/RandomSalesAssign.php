@@ -176,14 +176,14 @@ class RandomSalesAssign
                             );
 
                             return $checkQuotation
-                                && Carbon::parse($checkQuotation)->lt(Carbon::now()->subMonths(6));
+                                ? Carbon::parse($checkQuotation)->lt(Carbon::now()->subMonths(6)) : true;
                         };
 
                         $shouldReassignByDFUS = function () use ($customer, $log) {
                             // $dfus = $customer->latestDFUSMatch;
                             $numbers = $customer->numberContact;
                             
-                            return collect($numbers)->intersect($log)->isNotEmpty();
+                            return !collect($numbers)->intersect($log)->isNotEmpty();
                         };
 
                         // 3. Jika punya order
@@ -213,11 +213,12 @@ class RandomSalesAssign
 
                         // 4. Tidak punya order
                         if ($shouldReassignByQuotation()) {
-                            $customer->reAssignReason = 'Penawaran terakhir lebih dari 6 bulan';
-                            $AssignToSalesNewByCheckingAll[] = $customer;
-                        } elseif ($shouldReassignByDFUS()) {
-                            $customer->reAssignReason = 'Follow up sales terakhir lebih dari 1 minggu';
-                            $AssignToSalesNewByCheckingAll[] = $customer;
+                            if ($shouldReassignByDFUS()) {
+                                $customer->reAssignReason = 'Follow up sales terakhir lebih dari 1 minggu';
+                                $AssignToSalesNewByCheckingAll[] = $customer;
+                            } else {
+                                $NotReAssign[] = $customer;    
+                            }
                         } else {
                             $NotReAssign[] = $customer;
                         }
