@@ -62,6 +62,12 @@ class QuotationKontrakH extends Sector
             ->with('orderDetail');
     }
 
+    public function orderFromNoQuotation()
+    {
+        return $this->hasOne(OrderHeader::class, 'no_quotation', 'no_quotation')
+            ->with('orderDetail');
+    }
+
     public function link()
     {
         return $this->belongsTo('App\Models\GenerateLink', 'id', 'id_quotation')
@@ -142,7 +148,7 @@ class QuotationKontrakH extends Sector
 
     public function invoices()
     {
-        return $this->hasMany(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
+        return $this->hasMany(Invoice::class, 'no_quotation', 'no_document')->where('is_active', true);
     }
 
     public function dailyQsd()

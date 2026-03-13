@@ -2984,7 +2984,7 @@ class RequestQuotationController extends Controller
 
                         $hargaPaket = 0;
                         $hargaSatuan = 0;
-                        $kelipatan = 0;
+                        $kelipatan_titik = 0;
 
                         if($is_paket){
                             $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
@@ -3000,7 +3000,7 @@ class RequestQuotationController extends Controller
                                     $harga_sementara = (int)$paket['harga_paket'] * $pengali;
                                     $hargaPaket += $harga_sementara;
                                     $hargaSatuan = $paket['harga_paket'];
-                                    $kelipatan = (int)$paket['jumlah_titik'];
+                                    $kelipatan_titik = (int)$paket['jumlah_titik'];
                                 } else {
                                     continue;
                                 }
@@ -4525,7 +4525,7 @@ class RequestQuotationController extends Controller
 
                         $hargaPaket = 0;
                         $hargaSatuan = 0;
-                        $kelipatan = 0;
+                        $kelipatan_titik = 0;
 
                         if($is_paket){
                             $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
@@ -4541,7 +4541,7 @@ class RequestQuotationController extends Controller
                                     $harga_sementara = (int)$paket['harga_paket'] * $pengali;
                                     $hargaPaket += $harga_sementara;
                                     $hargaSatuan = $paket['harga_paket'];
-                                    $kelipatan = (int)$paket['jumlah_titik'];
+                                    $kelipatan_titik = (int)$paket['jumlah_titik'];
                                 } else {
                                     continue;
                                 }
