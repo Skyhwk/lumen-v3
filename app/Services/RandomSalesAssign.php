@@ -125,6 +125,8 @@ class RandomSalesAssign
             // dump('customerSpecial', count($customerSpecial));
             $chunkIndex = 1;
 
+            $log = LogWebphone::where('created_at', '>=', Carbon::now()->subMonths(2))->where('created_at', '<', Carbon::now())->get()->pluck('number')->unique()->toArray();
+
             $customerMustBeReassigned = MasterPelanggan::with([
                 'kontak_pelanggan',
                 'latestOrder:id,no_order,tanggal_order,id_pelanggan',
@@ -145,9 +147,10 @@ class RandomSalesAssign
                 ->where('is_active', true)
                 ->whereNotIn('id', $allID)
                 ->where('sales_id', '<>', $customerMasDedi)
+                ->where('created_at', '<', Carbon::now()->subMonths(3))
                 ->whereNotNull('sales_id')
                 ->whereNotIn('sales_id', $excludedSalesIds)
-                ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex) {
+                ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex, &$log) {
                     Log::channel('reassign_customer')->info("== Processing Chunk #{$chunkIndex} ==", [
                         'timestamp' => Carbon::now()->toDateTimeString(),
                         'customer_count' => $customers->count(),
@@ -176,9 +179,11 @@ class RandomSalesAssign
                                 && Carbon::parse($checkQuotation)->lt(Carbon::now()->subMonths(6));
                         };
 
-                        $shouldReassignByDFUS = function () use ($customer) {
-                            $dfus = $customer->latestDFUSMatch;
-                            return $dfus && Carbon::parse($dfus->tanggal)->lt(Carbon::now()->subWeek());
+                        $shouldReassignByDFUS = function () use ($customer, $log) {
+                            // $dfus = $customer->latestDFUSMatch;
+                            $numbers = $customer->numberContact;
+                            
+                            return collect($numbers)->intersect($log)->isNotEmpty();
                         };
 
                         // 3. Jika punya order
