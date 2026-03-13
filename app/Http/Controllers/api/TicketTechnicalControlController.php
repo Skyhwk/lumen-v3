@@ -21,12 +21,13 @@ class TicketTechnicalControlController extends Controller
     {
         try {
             $department = $request->attributes->get('user')->karyawan->id_department;
-            if ($department == 7 && !in_array($this->user_id, [10, 15, 93, 123])) {
+            
+            if ($department == 17) {
                 $data = TicketTechnicalControl::where('is_active', true)
                     ->orderBy('id', 'desc');
                 return Datatables::of($data)
                     ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
+                        $filePath = public_path('ticket_technical_control/' . $row->filename);
                         if (file_exists($filePath) && is_file($filePath)) {
                             return file_get_contents($filePath);
                         } else {
@@ -38,10 +39,10 @@ class TicketTechnicalControlController extends Controller
                 $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
                 $data = TicketTechnicalControl::whereIn('request_by', $getBawahan)
                     ->where('is_active', true)
-                    ->orderBy('id', 'desc');
+                    ->orderBy('id', 'desc')->get();
                 return Datatables::of($data)
                     ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
+                        $filePath = public_path('ticket_technical_control/' . $row->filename);
                         if (file_exists($filePath) && is_file($filePath)) {
                             return file_get_contents($filePath);
                         } else {
@@ -383,20 +384,16 @@ class TicketTechnicalControlController extends Controller
     {
         DB::beginTransaction();
         try {
+            $microtime = str_replace(".", "", microtime(true));
             if (empty($request->id)) { //insert
-                
                 $data = new TicketTechnicalControl();
                 $data->request_by = $this->karyawan;
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now();
                 $data->request_time = Carbon::now();
-
-                
+                $uniq_id = $microtime;
                 if($request->kategori === 'Tanya regulasi'){ 
-                    $microtime = str_replace(".", "", microtime(true));
-                    $uniq_id = $microtime;
                     $filename = $microtime . '.txt';
-                    
                     // Ini HTML mentah dari Summernote
                     $content = $request->details; 
                     $contentDir = 'ticket_technical_control';
@@ -466,45 +463,79 @@ class TicketTechnicalControlController extends Controller
                 }
                 // $data->nama_menu = $request->nama_menu;
                 $data->nomor_ticket = $uniq_id;
-                $data->filename = $filename;
                 $message = 'Ticket Technical Control Telah Ditambahkan';
-            } else {
-                $data = TicketTechnicalControl::find($request->id);
-                if (!$data) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Ticket technical Controll tidak ditemukan'
-                    ], 404);
-                }
+            }else{ //update
+                $data= TicketTechnicalControl::where('id',$request->id)->first();
+                if($request->kategori === 'Tanya regulasi'){ 
+                    $filename = $microtime . '.txt';
+                    // Ini HTML mentah dari Summernote
+                    $content = $request->details; 
+                    $contentDir = 'ticket_technical_control';
 
-                if ($request->hasFile('dokumentasi')) {
-                    $dir_dokumentasi = "ticket";
+                    $dom = new \DOMDocument();
+                    libxml_use_internal_errors(true);
+                    
+                    // Cek apakah content kosong untuk menghindari error DOMDocument
+                    if (!empty($content)) {
+                        $dom->loadHtml($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                        $images = $dom->getElementsByTagName('img');
+                        
+                        if (!file_exists(public_path($contentDir))) {
+                            mkdir(public_path($contentDir), 0777, true);
+                        }
+                        
+                        foreach($images as $k => $img){
+                            $data_img = $img->getAttribute('src');
+                            
+                            // Cek apakah src mengandung base64
+                            if(preg_match('/data:image/', $data_img)){
+                                list($type, $data_img) = explode(';', $data_img);
+                                list(, $data_img)      = explode(',', $data_img);
+                                $data_img = base64_decode($data_img);
 
-                    if (!file_exists(public_path($dir_dokumentasi))) {
-                        mkdir(public_path($dir_dokumentasi), 0777, true);
+                                // Buat nama file unik untuk gambar
+                                $imageName = time() . '_' . $k . '.png';
+                                $path = public_path($contentDir . '/' . $imageName);
+
+                                // Simpan file gambar fisik
+                                file_put_contents($path, $data_img);
+                                
+                                // Ganti atribut src dari base64 menjadi URL gambar
+                                $img->removeAttribute('src');
+                                $img->setAttribute('src', \URL::asset($contentDir . '/' . $imageName));
+                            }
+                        }
+                        // Ambil HTML yang sudah bersih dari base64
+                        $cleanContent = $dom->saveHTML();
+                    } else {
+                        $cleanContent = '';
                     }
 
-                    $file = $request->file('dokumentasi');
-                    $extTicket = $file->getClientOriginalExtension();
-                    $filenameDok = "PROGRAMMING_" . $data->nomor_ticket . '.' . $extTicket;
+                    // KOREKSI: Simpan $cleanContent ke dalam file .txt, BUKAN $content
+                    file_put_contents(public_path($contentDir . '/' . $filename), $cleanContent);
 
-                    // simpan ke folder public/ticket
-                    $file->move(public_path($dir_dokumentasi), $filenameDok);
-                } else {
-                    $data->dokumentasi = null;
+                    // JAWABAN: Susun array untuk disimpan ke dalam kolom JSON 'dokumentasi'
+                    $dokumentasiData = [
+                        'kategori'  => $request->kategori,
+                        'regulasi'  => $request->regulasi,
+                        'file_path' => $contentDir . '/' . $filename, // Path file .txt yang berisi HTML bersih
+                    ];
+                    
+                    // Laravel akan otomatis mengkonversi array ini menjadi JSON 
+                    // (asalkan di Model sudah di-cast: protected $casts = ['dokumentasi' => 'array'];)
+                    $data->dokumentasi = $dokumentasiData;
+                    $message = 'Ticket Technical Control Telah Diupdate';
+                } else { 
+                    // yang sudah berjalan
+                    $dokumentasiData = [
+                        'regulasi'          => $request->regulasi,
+                        'kategori_regulasi' => $request->kategori_regulasi,
+                        'parameter'         => $request->parameter,
+                        'deskripsi'         => $request->deskripsi,
+                    ];
+                    $data->dokumentasi = $dokumentasiData;
+                    $message = 'Ticket Technical Control Telah Diupdate';
                 }
-
-                $data->updated_by = $this->karyawan;
-                $data->updated_at = Carbon::now();
-
-                $contentDir = 'ticket_technical_control';
-                if (!file_exists(public_path($contentDir))) {
-                    mkdir(public_path($contentDir), 0777, true);
-                }
-
-                $content = $request->details;
-                file_put_contents(public_path($contentDir . '/' . $data->filename), $content);
-                $message = 'Ticket Technical Control Telah Diperbarui';
             }
 
             $data->status = 'WAITING PROCESS';
@@ -689,24 +720,79 @@ class TicketTechnicalControlController extends Controller
                     ];
 
                     // Jika parameter ini sudah punya entry di bakumutu → update, belum → create
-                    $existing = MasterBakumutu::where('id_regulasi', $idRegulasi)
-                        ->where('id_parameter', $idParameter)
-                        ->first();
-
-                    if ($existing && in_array($existing->id, $existingBakumutuIds)) {
-                        $existing->update($bakumutuData);
-                    } else {
-                        $bakumutuData['created_by'] = $this->karyawan;
-                        $bakumutuData['created_at'] = $timestamp;
-                        unset($bakumutuData['updated_by'], $bakumutuData['updated_at']);
-                        MasterBakumutu::create($bakumutuData);
-                    }
+                    // $existing = MasterBakumutu::where('id_regulasi', $idRegulasi)
+                    //     ->where('id_parameter', $idParameter)
+                    //     ->first();
+                    $bakumutuData['created_by'] = $this->karyawan;
+                    $bakumutuData['created_at'] = $timestamp;
+                    unset($bakumutuData['updated_by'], $bakumutuData['updated_at']);
+                    MasterBakumutu::create($bakumutuData);    
                 }
 
                 // Update status ticket menjadi PROCESS setelah forward berhasil
-                $ticket->status     = 'PROCESS';
+                $ticket->status     = 'DONE';
                 $ticket->updated_by = $this->karyawan;
                 $ticket->updated_at = $timestamp;
+                $ticket->save();
+            }else{
+                $microtime = str_replace(".", "", microtime(true));
+                $uniq_id = $microtime;
+                $filename = $microtime . '.txt';
+
+                // Ini HTML mentah dari Summernote
+                $content = $request->jawab; 
+                $contentDir = 'ticket_technical_control_jawab';
+
+                $dom = new \DOMDocument();
+                libxml_use_internal_errors(true);
+                
+                // Cek apakah content kosong untuk menghindari error DOMDocument
+                if (!empty($content)) {
+                    $dom->loadHtml($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                    $images = $dom->getElementsByTagName('img');
+                    
+                    if (!file_exists(public_path($contentDir))) {
+                        mkdir(public_path($contentDir), 0777, true);
+                    }
+                    
+                    foreach($images as $k => $img){
+                        $data_img = $img->getAttribute('src');
+                        
+                        // Cek apakah src mengandung base64
+                        if(preg_match('/data:image/', $data_img)){
+                            list($type, $data_img) = explode(';', $data_img);
+                            list(, $data_img)      = explode(',', $data_img);
+                            $data_img = base64_decode($data_img);
+
+                            // Buat nama file unik untuk gambar
+                            $imageName = time() . '_' . $k . '.png';
+                            $path = public_path($contentDir . '/' . $imageName);
+
+                            // Simpan file gambar fisik
+                            file_put_contents($path, $data_img);
+                            
+                            // Ganti atribut src dari base64 menjadi URL gambar
+                            $img->removeAttribute('src');
+                            $img->setAttribute('src', \URL::asset($contentDir . '/' . $imageName));
+                        }
+                    }
+                    // Ambil HTML yang sudah bersih dari base64
+                    $cleanContent = $dom->saveHTML();
+                } else {
+                    $cleanContent = '';
+                }
+
+                // KOREKSI: Simpan $cleanContent ke dalam file .txt, BUKAN $content
+                file_put_contents(public_path($contentDir . '/' . $filename), $cleanContent);
+
+                // JAWABAN: Susun array untuk disimpan ke dalam kolom JSON 'dokumentasi'
+                $ticket = TicketTechnicalControl::find($request->id);
+                $dokumentasiPush = $ticket->dokumentasi;
+                $dokumentasiPush['jawab_path'] = $contentDir . '/' . $filename;
+                $ticket->dokumentasi = $dokumentasiPush;
+                $ticket->status      = 'SOLVE';
+                $ticket->solve_by  = $this->karyawan;
+                $ticket->solve_time  = $timestamp;
                 $ticket->save();
             }
         });
