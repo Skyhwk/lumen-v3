@@ -27,7 +27,7 @@ class AlertSDController extends Controller
             ->where('order_detail.is_active', true)
             ->where('order_detail.kategori_1', 'SD')
             ->whereNull('order_detail.tanggal_terima')
-            ->where('order_detail.tanggal_sampling', '<=', $now)
+            ->whereBetween('order_detail.tanggal_sampling', ['2026-01-01', $now])
             ->where('order_header.sales_id', $this->user_id)
             ->groupBY('order_detail.no_order', 'order_detail.no_quotation', 'order_detail.nama_perusahaan');
 
