@@ -15,12 +15,19 @@ class BenthosController extends Controller
 {
     public function index(Request $request){
         $data = Subkontrak::with('ws_value', 'order_detail')
-            ->where('parameter', 'Benthos')
-            ->where('is_approve', $request->approve)
+            ->leftJoin('order_detail','order_detail.no_sampel','=','subkontrak.no_sampel')
+            ->where('subkontrak.parameter', 'Benthos')
+            ->where('subkontrak.is_approve', $request->approve)
             ->where('subkontrak.is_active', true)
             ->where('subkontrak.is_total', false)
-            ->orderBy('subkontrak.created_at', 'desc')
-            ->select('subkontrak.*');
+            ->select('subkontrak.*')
+            ->orderByRaw("
+                    CASE 
+                        WHEN order_detail.tanggal_terima IS NULL THEN 1
+                        ELSE 0
+                    END,
+                    order_detail.tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->editColumn('hasil_json', function ($item) {
                 $hasil = json_decode($item->ws_value->hasil_json ?? '{}', true);
