@@ -29,7 +29,14 @@ class OthersController extends Controller
             ->where('subkontrak.is_active', true)
             ->where('subkontrak.is_total', false)
             ->orderBy('subkontrak.created_at', 'desc')
-            ->select('subkontrak.*');
+            ->select('subkontrak.*')
+             ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
