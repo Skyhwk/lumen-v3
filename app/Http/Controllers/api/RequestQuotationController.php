@@ -647,11 +647,11 @@ class RequestQuotationController extends Controller
                     if (isset($harga_pertitik->volume) && $harga_pertitik->volume != null) {
                         $vol += floatval($harga_pertitik->volume);
                     }
-                    
+
                     $hargaPaket = 0;
                     $hargaSatuan = 0;
                     $kelipatan = 0;
-                    
+
                     if($is_paket){
                         $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
                         $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
@@ -690,7 +690,7 @@ class RequestQuotationController extends Controller
                             }
                         }
                     }
-                    
+
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
@@ -711,7 +711,7 @@ class RequestQuotationController extends Controller
                         $data_sampling[$i]['paket'] = $item->paket;
                         $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
                     }
-                    
+
                     switch ($kategori) {
                         case '1':
                             $harga_air += $hargaAnalisa;
@@ -6163,57 +6163,28 @@ class RequestQuotationController extends Controller
         return response()->json($data);
     }
 
-    public function checkIfSampled(Request $request){
-        if($request->type == 'spot'){
-
-            // ISL/QT/26-I/000261R1 -> ISL/QT/26-I/000261
-            $no_document_cropped = preg_replace('/R\d+$/', '', $request->no_document);
-            $data = OrderDetail::where('no_sampel', 'like', '%'. $request->no_sampel . '%')->where('no_quotation', 'like', '%'. $no_document_cropped . '%')->first();
-            if(!$data){
-                return response()->json([
-                    'message' => 'Data not found',
-                    'data' => 0,
-                    'is_found' => false
-                ], 404);
-            }
+    public function getSampledData(Request $request){
+        $header = OrderHeader::where('no_document', $request->no_document)->first();
+        if(!$header){
             return response()->json([
-                'message' => 'Success',
-                'data' => $data,
-                'is_found' => true,
-                'is_sampled' => $data->tanggal_terima !== null
-            ], 200);
-        }else if($request->type == 'collection'){
-            // ISL/QT/26-I/000261R1 -> ISL/QT/26-I/000261
-            $no_document_cropped = preg_replace('/R\d+$/', '', $request->no_document);
-            $header = OrderHeader::where('no_document', 'like', '%' . $no_document_cropped . '%')->first();
-            if(!$header){
-                return response()->json([
-                    'message' => 'Header data not found',
-                    'data' => 0,
-                    'is_found' => false
-                ], 404);
-            }
-            $no_samples = array_map(function ($item) use ($header) {
-                return $header->no_order . '/' . $item;
-            }, $request->no_sampel);
-            $data = OrderDetail::whereIn('no_sampel', $no_samples)->where('no_quotation', 'like', '%'. $no_document_cropped . '%')->get();
-            if(count($data) == 0){
-                return response()->json([
-                    'message' => 'Detail data not found',
-                    'data' => 0,
-                    'is_found' => false
-                ], 404);
-            }
-            $data_array = $data->toArray() ?? [];
-            $isTanggalTerimaExists = array_filter($data_array, function ($item) {
-                return $item['tanggal_terima'] !== null;
-            });
-            return response()->json([
-                'message' => 'Success',
-                'data' => $data,
-                'is_found' => true,
-                'is_sampled' => count($isTanggalTerimaExists) == 0
-            ], 200);
+                'message' => 'Header data not found',
+                'data' => 0,
+                'is_found' => false
+            ], 404);
         }
+
+        $data = OrderDetail::where('id_order_header', $header->id)->get();
+        $data_sampled = $data->filter(function ($item) {
+            return $item->tanggal_terima !== null;
+        })->toArray();
+
+        $data_return = array_map(function ($item) {
+            return explode('/',$item['no_sampel'])[1];
+        }, $data_sampled);
+
+        return response()->json([
+            'message' => 'Success',
+            'data' => $data_return
+        ], 200);
     }
 }
