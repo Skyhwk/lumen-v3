@@ -125,6 +125,8 @@ class RandomSalesAssign
             // dump('customerSpecial', count($customerSpecial));
             $chunkIndex = 1;
 
+            $log = LogWebphone::where('created_at', '>=', Carbon::now()->subMonths(2))->where('created_at', '<', Carbon::now())->get()->pluck('number')->unique()->toArray();
+
             $customerMustBeReassigned = MasterPelanggan::with([
                 'kontak_pelanggan',
                 'latestOrder:id,no_order,tanggal_order,id_pelanggan',
@@ -145,9 +147,11 @@ class RandomSalesAssign
                 ->where('is_active', true)
                 ->whereNotIn('id', $allID)
                 ->where('sales_id', '<>', $customerMasDedi)
+                ->where('created_at', '<', Carbon::now()->subMonths(3))
                 ->whereNotNull('sales_id')
+                ->where('id_pelanggan', '=', 'YAPH04') // pelanggan mas dedi
                 ->whereNotIn('sales_id', $excludedSalesIds)
-                ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex) {
+                ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex, &$log) {
                     Log::channel('reassign_customer')->info("== Processing Chunk #{$chunkIndex} ==", [
                         'timestamp' => Carbon::now()->toDateTimeString(),
                         'customer_count' => $customers->count(),
@@ -171,16 +175,16 @@ class RandomSalesAssign
                                 $customer->latestNonKontrakQuotation,
                                 $customer->id
                             );
-
                             return $checkQuotation
-                                && Carbon::parse($checkQuotation)->lt(Carbon::now()->subMonths(6));
+                                ? Carbon::parse($checkQuotation)->lt(Carbon::now()->subMonths(6)) : true;
                         };
 
-                        $shouldReassignByDFUS = function () use ($customer) {
-                            $dfus = $customer->latestDFUSMatch;
-                            return $dfus && Carbon::parse($dfus->tanggal)->lt(Carbon::now()->subWeek());
+                        $shouldReassignByDFUS = function () use ($customer, $log) {
+                            // $dfus = $customer->latestDFUSMatch;
+                            $numbers = $customer->numberContact;
+                            
+                            return !collect($numbers)->intersect($log)->isNotEmpty();
                         };
-
                         // 3. Jika punya order
                         if ($customer->latestOrder) {
 
@@ -205,14 +209,14 @@ class RandomSalesAssign
 
                             continue;
                         }
-
                         // 4. Tidak punya order
                         if ($shouldReassignByQuotation()) {
-                            $customer->reAssignReason = 'Penawaran terakhir lebih dari 6 bulan';
-                            $AssignToSalesNewByCheckingAll[] = $customer;
-                        } elseif ($shouldReassignByDFUS()) {
-                            $customer->reAssignReason = 'Follow up sales terakhir lebih dari 1 minggu';
-                            $AssignToSalesNewByCheckingAll[] = $customer;
+                            if ($shouldReassignByDFUS()) {
+                                $customer->reAssignReason = 'Follow up sales terakhir lebih dari 1 minggu';
+                                $AssignToSalesNewByCheckingAll[] = $customer;
+                            } else {
+                                $NotReAssign[] = $customer;    
+                            }
                         } else {
                             $NotReAssign[] = $customer;
                         }
@@ -343,6 +347,11 @@ class RandomSalesAssign
                 $sales = self::$salesIdNew[$salesIndex];
 
                 $globalIndex++; // Increment global counter
+                
+                 // SKIP jika sales lama sama dengan sales baru
+                if ($pelanggan->sales_id == $sales['id']) {
+                    continue;
+                }
 
                 $updates[$sales['id']][] = $pelanggan->id;
 
@@ -661,7 +670,6 @@ class RandomSalesAssign
     {
         $latestKontrak = null;
         $latestNonKontrak = null;
-
         if ($kontrak && $kontrak->periode_kontrak_akhir != null) {
             // formatnya contoh: "05-2024"
             $periodeAkhir = Carbon::createFromFormat('m-Y', $kontrak->periode_kontrak_akhir)->endOfMonth();
@@ -669,6 +677,8 @@ class RandomSalesAssign
             // kalau periode akhir sudah lewat bulan sekarang
             if ($periodeAkhir->lt(Carbon::now()->startOfMonth())) {
                 $latestKontrak = $kontrak->updated_at ?? $kontrak->created_at;
+            } else {
+                $latestKontrak = $periodeAkhir; // masih dalam kontrak, jadi dianggap tidak ada penawaran kontrak yang valid
             }
         }
 

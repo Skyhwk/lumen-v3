@@ -954,23 +954,25 @@ class GenerateFeeSampling
                 });
 
                 if ($isDriver) {
-                    $driver = MasterKaryawan::where('nama', $item->driver)->where('is_active', 1)->first();
+                    $driver = MasterKaryawan::where('nama_lengkap', $item->driver)->where('is_active', 1)->first();
                     if($driver) {
-                        $feeDriver = MasterFeeDriver::where('id_karyawan', $driver->id)->where('is_active', 1)->first();
+                        $feeDriver = MasterFeeDriver::where('driver_id', $driver->id)->where('is_active', 1)->first();
                         if($feeDriver) {
                             $feeTambahan += $feeDriver->fee;
                             $feeTambahanRincian['driver'] = $feeDriver->fee;
                         } else {
                             // $feeTambahan += 20000;
                             // $feeTambahanRincian['driver'] = 20000;
-                            return response()->json([
-                                'error' => "Driver '{$item->driver}' belum ditetapkan fee drivernya di MasterFeeDriver silahkan hubungi HRD."
-                            ], 401);
+                            return [
+                                'error' => "Driver {$item->driver} belum ditetapkan fee drivernya silahkan hubungi HRD.",
+                                'status' => 401
+                            ];
                         }
                     } else {
-                        return response()->json([
-                            'error' => "Driver '{$item->driver}' tidak ditemukan di MasterKaryawan."
-                        ], 401);
+                        return [
+                            'error' => "Driver '{$item->driver}' tidak ditemukan di MasterKaryawan.",
+                            'status' => 401
+                        ];
                     }
                 }
 

@@ -238,6 +238,10 @@ class FeeSamplingController extends Controller
         $generate = new GenerateFeeSampling();
         $rekap = $generate->rekapFeeSampling($this->user_id, $level->kategori, $request->tanggal);
 
+        if (isset($rekap['error'])) {
+            return response()->json(['message' => $rekap['error']], $rekap['status']);
+        }
+
         return response()->json(['data' => $rekap], 200);
     }
 
