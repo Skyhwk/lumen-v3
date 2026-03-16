@@ -210,6 +210,14 @@ class GenerateInvoiceController extends Controller
                 ->filterColumn('nama_customer', function ($query, $keyword) {
                     $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
                 })
+                ->filterColumn('document', function ($query, $keyword) {
+                    $query->whereExists(function ($q) use ($keyword) {
+                        $q->select(DB::raw(1))
+                            ->from('order_header as oh2')
+                            ->whereColumn('oh2.no_order', 'invoice.no_order')
+                            ->whereRaw('LOWER(oh2.no_document) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                    });
+                })
                 ->filterColumn('emailed_at', function ($data, $keyword) {
                     if ($keyword == '-') {
                         $data->whereNull('emailed_at');
