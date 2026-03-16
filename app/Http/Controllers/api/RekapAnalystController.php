@@ -97,7 +97,7 @@ class RekapAnalystController extends Controller
             }
 
             if($checkOrder->kategori_2 == '1-Air') {
-                $data = WsValueAir::with(['gravimetri', 'titrimetri', 'colorimetri','subkontrak'])
+                $data = WsValueAir::with(['gravimetri.createdByKaryawan', 'titrimetri.createdByKaryawan', 'colorimetri.createdByKaryawan','subkontrak.createdByKaryawan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('status', 0)
                     ->where('is_active', 1);
@@ -141,7 +141,7 @@ class RekapAnalystController extends Controller
                         }
                         return Datatables::of($data)->make(true);
                     } else if ($parameterArray[1] == 'Debu (P8J)') {
-                        $data = DebuPersonalHeader::with('data_lapangan', 'ws_lingkungan')
+                        $data = DebuPersonalHeader::with('data_lapangan', 'ws_lingkungan', 'createdByKaryawan')
                             ->where('no_sampel', $request->no_sampel)
                             ->where('is_approved', true)
                             ->where('is_active', true)
@@ -182,21 +182,19 @@ class RekapAnalystController extends Controller
                         ->addSelect(DB::raw("'direct' as data_type"))
                         ->get();
 
-                    $lingkunganData = LingkunganHeader::with('ws_value_linkungan')
+                    $lingkunganData = LingkunganHeader::with('ws_value_linkungan', 'createdByKaryawan')
                         ->where('no_sampel', $request->no_sampel)
                         ->where('is_approved', 1)
                         ->where('status', 0)
                         ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
                         ->addSelect(DB::raw("'lingkungan' as data_type"))
                         ->get();
-                    $subkontrak = Subkontrak::with(['ws_value_linkungan'])
+                    $subkontrak = Subkontrak::with(['ws_value_linkungan', 'createdByKaryawan'])
                         ->where('no_sampel', $request->no_sampel)
                         ->where('is_approve', 1)
                         ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
                         ->addSelect(DB::raw("'subKontrak' as data_type"))
                         ->get();
-
-
 
                     $combinedData = collect()
                         ->merge($lingkunganData)
@@ -230,14 +228,14 @@ class RekapAnalystController extends Controller
 
                     return Datatables::of($processedData)->make(true);
                 } else if (in_array($checkOrder->kategori_3, $this->categoryLingkunganHidup)) {
-                    $lingkunganData = LingkunganHeader::with('ws_value_linkungan')
+                    $lingkunganData = LingkunganHeader::with('ws_value_linkungan', 'createdByKaryawan')
                         ->where('no_sampel', $request->no_sampel)
                         ->where('is_approved', 1)
                         ->where('status', 0)
                         ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
                         ->addSelect(DB::raw("'lingkungan' as data_type"))
                         ->get();
-                    $subkontrak = Subkontrak::with(['ws_value_linkungan'])
+                    $subkontrak = Subkontrak::with(['ws_value_linkungan', 'createdByKaryawan', 'ws_udara'])
                         ->where('no_sampel', $request->no_sampel)
                         ->where('is_approve', 1)
                         ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
@@ -267,7 +265,7 @@ class RekapAnalystController extends Controller
 
                     return Datatables::of($data)->make(true);
                 } else if (in_array($checkOrder->kategori_3, $this->categoryMicrobio)) {
-                    $data = MicrobioHeader::with(['ws_value'])->where('no_sampel', $request->no_sampel)
+                    $data = MicrobioHeader::with(['ws_value', 'createdByKaryawan'])->where('no_sampel', $request->no_sampel)
                         ->where('is_approved', 1)
                         ->where('status', 0);
                     return Datatables::of($data)->make(true);
@@ -301,8 +299,8 @@ class RekapAnalystController extends Controller
                     ], 404);
                 }
             }else if( $checkOrder->kategori_2 == '5-Emisi'){
-                $data1 = IsokinetikHeader::with(['method1', 'method2', 'method3', 'method4', 'method5', 'method6'])
-                    ->where('is_approve', 1)
+                $data1 = IsokinetikHeader::with(['method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'createdByKaryawan'])
+                    ->where('is_approved', 1)
                     ->where('is_active', 1)
                     ->where('parameter', '!=', 'Iso-ResTime')
                     // ->whereIn('parameter', $paramOrder)
@@ -312,7 +310,7 @@ class RekapAnalystController extends Controller
                         return $item;
                     });
 
-                $data2 = EmisiCerobongHeader::with(['ws_value_cerobong', 'data_lapangan'])
+                $data2 = EmisiCerobongHeader::with(['ws_value_cerobong', 'data_lapangan', 'createdByKaryawan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', 1)
                     // ->whereIn('parameter', $paramOrder)
@@ -352,7 +350,7 @@ class RekapAnalystController extends Controller
                         return $item;
                     });
 
-                $data3 = Subkontrak::with(['ws_value_cerobong'])
+                $data3 = Subkontrak::with(['ws_value_cerobong', 'createdByKaryawan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approve', 1)
                     // ->whereIn('parameter', $paramOrder)

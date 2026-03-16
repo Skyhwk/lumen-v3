@@ -45,4 +45,9 @@ class DebuPersonalHeader extends Sector{
     {
         return $this->belongsTo('App\Models\WsValueLingkungan', 'no_sampel', 'no_sampel');
     }
+
+    public function createdByKaryawan()
+    {
+        return $this->belongsTo('App\Models\MasterKaryawan', 'created_by', 'nama_lengkap');
+    }
 }
