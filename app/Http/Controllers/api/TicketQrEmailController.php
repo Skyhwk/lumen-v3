@@ -449,51 +449,192 @@ class TicketQrEmailController extends Controller
         }
     }
 
+    // punya rangga
+    // public function store(Request $request)
+    // {
+    //     DB::beginTransaction();
+    //     try {
+    //         if (empty($request->id)) {
+    //             $data = new TicketRevisiQt();
+    //             $data->request_by = $this->karyawan;
+    //             $data->created_by = $this->karyawan;
+    //             $data->created_at = Carbon::now();
+    //             $data->request_time = Carbon::now();
+
+    //             $microtime = str_replace(".", "", microtime(true));
+    //             $uniq_id = $microtime;
+    //             $filename = $microtime . '.txt';
+    //             $content = $request->details;
+    //             $contentDir = 'ticket_qr_email';
+
+    //             if (!file_exists(public_path($contentDir))) {
+    //                 mkdir(public_path($contentDir), 0777, true);
+    //             }
+
+    //             file_put_contents(public_path($contentDir . '/' . $filename), $content);
+
+    //             if ($request->hasFile('dokumentasi')) {
+    //                 $dir_dokumentasi = "ticket";
+
+    //                 if (!file_exists(public_path($dir_dokumentasi))) {
+    //                     mkdir(public_path($dir_dokumentasi), 0777, true);
+    //                 }
+
+    //                 $file = $request->file('dokumentasi');
+    //                 $extTicket = $file->getClientOriginalExtension();
+    //                 $filenameDok = "REVISIQT_" . $uniq_id . '.' . $extTicket;
+
+    //                 $file->move(public_path($dir_dokumentasi), $filenameDok);
+    //                 $data->dokumentasi = $filenameDok;
+    //             } else {
+    //                 $data->dokumentasi = null;
+    //             }
+
+    //             $data->no_qt = $request->no_qt;
+    //             $data->nomor_ticket = $uniq_id;
+    //             $data->filename = $filename;
+    //             $message = 'Ticket QR E-Mail Telah Ditambahkan';
+    //         } else {
+    //             $data = TicketRevisiQt::find($request->id);
+    //             if (!$data) {
+    //                 return response()->json([
+    //                     'success' => false,
+    //                     'message' => 'Ticket QR E-Mail tidak ditemukan'
+    //                 ], 404);
+    //             }
+
+    //             if ($request->hasFile('dokumentasi')) {
+    //                 $dir_dokumentasi = "ticket";
+
+    //                 if (!file_exists(public_path($dir_dokumentasi))) {
+    //                     mkdir(public_path($dir_dokumentasi), 0777, true);
+    //                 }
+
+    //                 $file = $request->file('dokumentasi');
+    //                 $extTicket = $file->getClientOriginalExtension();
+    //                 $filenameDok = "REVISIQT_" . $data->nomor_ticket . '.' . $extTicket;
+
+    //                 $file->move(public_path($dir_dokumentasi), $filenameDok);
+    //             } else {
+    //                 $data->dokumentasi = null;
+    //             }
+
+    //             $data->updated_by = $this->karyawan;
+    //             $data->updated_at = Carbon::now();
+
+    //             $contentDir = 'ticket_qr_email';
+    //             if (!file_exists(public_path($contentDir))) {
+    //                 mkdir(public_path($contentDir), 0777, true);
+    //             }
+
+    //             $content = $request->details;
+    //             file_put_contents(public_path($contentDir . '/' . $data->filename), $content);
+    //             $message = 'Ticket QR E-Mail Telah Diperbarui';
+    //         }
+
+    //         $data->jenis_qt = $request->jenis_qt;
+    //         $data->status = 'WAITING TO DELEGATE';
+    //         $data->save();
+
+    //         $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
+    //             ->where('is_active', true)
+    //             ->pluck('id')
+    //             ->toArray();
+
+    //         Notification::whereIn('id', $user_adm_sales)
+    //             ->title('Ticket QR E-Mail !')
+    //             ->message($message . ' Oleh ' . $this->karyawan)
+    //             ->url('/ticket-revisi-qt')
+    //             ->send();
+
+    //         $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
+
+    //         Notification::whereIn('id', $getAtasan)
+    //             ->title('Ticket QR E-Mail !')
+    //             ->message($message . ' Oleh ' . $this->karyawan)
+    //             ->url('/ticket-revisi-qt')
+    //             ->send();
+
+    //         DB::commit();
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => $message
+    //         ], 200);
+    //     } catch (\Exception $e) {
+    //         DB::rollback();
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Gagal Proses Ticket QR E-Mail: ' . $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
     public function store(Request $request)
     {
         DB::beginTransaction();
         try {
+            $baseDir       = 'ticket-qr';
+            $contentDir    = $baseDir . '/content';
+            $attachmentDir = $baseDir . '/attachments';
+
+            foreach ([$baseDir, $contentDir, $attachmentDir] as $dir) {
+                if (!file_exists(public_path($dir))) {
+                    mkdir(public_path($dir), 0777, true);
+                }
+            }
+
+            // Validasi attachment baru dari frontend
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $attachment) {
+                    if ($attachment->getMimeType() !== 'application/pdf') {
+                        DB::rollback();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'File "' . $attachment->getClientOriginalName() . '" bukan PDF.'
+                        ], 422);
+                    }
+                    if ($attachment->getSize() > 2 * 1024 * 1024) {
+                        DB::rollback();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'File "' . $attachment->getClientOriginalName() . '" melebihi batas 2 MB.'
+                        ], 422);
+                    }
+                }
+            }
+
             if (empty($request->id)) {
+                // ── CREATE ──────────────────────────────────────────────
                 $data = new TicketRevisiQt();
-                $data->request_by = $this->karyawan;
-                $data->created_by = $this->karyawan;
-                $data->created_at = Carbon::now();
+                $data->request_by   = $this->karyawan;
+                $data->created_by   = $this->karyawan;
+                $data->created_at   = Carbon::now();
                 $data->request_time = Carbon::now();
 
                 $microtime = str_replace(".", "", microtime(true));
-                $uniq_id = $microtime;
+                $uniq_id   = $microtime;
+
                 $filename = $microtime . '.txt';
-                $content = $request->details;
-                $contentDir = 'ticket_qr_email';
+                file_put_contents(public_path($contentDir . '/' . $filename), $request->details);
 
-                if (!file_exists(public_path($contentDir))) {
-                    mkdir(public_path($contentDir), 0777, true);
-                }
-
-                file_put_contents(public_path($contentDir . '/' . $filename), $content);
-
-                if ($request->hasFile('dokumentasi')) {
-                    $dir_dokumentasi = "ticket";
-
-                    if (!file_exists(public_path($dir_dokumentasi))) {
-                        mkdir(public_path($dir_dokumentasi), 0777, true);
+                $savedAttachments = [];
+                if ($request->hasFile('attachments')) {
+                    foreach ($request->file('attachments') as $attachment) {
+                        $attachmentFilename = $attachment->getClientOriginalName();
+                        $attachment->move(public_path($attachmentDir), $attachmentFilename);
+                        $savedAttachments[] = $attachmentFilename;
                     }
-
-                    $file = $request->file('dokumentasi');
-                    $extTicket = $file->getClientOriginalExtension();
-                    $filenameDok = "REVISIQT_" . $uniq_id . '.' . $extTicket;
-
-                    $file->move(public_path($dir_dokumentasi), $filenameDok);
-                    $data->dokumentasi = $filenameDok;
-                } else {
-                    $data->dokumentasi = null;
                 }
 
-                $data->no_qt = $request->no_qt;
+                $data->attachments  = !empty($savedAttachments) ? $savedAttachments : null;
+                $data->dokumentasi  = null;
+                $data->no_qt        = $request->no_qt;
                 $data->nomor_ticket = $uniq_id;
-                $data->filename = $filename;
+                $data->filename     = $filename;
                 $message = 'Ticket QR E-Mail Telah Ditambahkan';
+
             } else {
+                // ── UPDATE ──────────────────────────────────────────────
                 $data = TicketRevisiQt::find($request->id);
                 if (!$data) {
                     return response()->json([
@@ -501,38 +642,33 @@ class TicketQrEmailController extends Controller
                         'message' => 'Ticket QR E-Mail tidak ditemukan'
                     ], 404);
                 }
+                file_put_contents(public_path($contentDir . '/' . $data->filename), $request->details);
 
-                if ($request->hasFile('dokumentasi')) {
-                    $dir_dokumentasi = "ticket";
+                // Strategi REPLACE:
+                // Hasil akhir = existing_attachments[] yang tersisa (tidak dihapus user)
+                //             + attachments[] file baru yang diupload
+                $existingAttachments = $request->input('existing_attachments', []);
 
-                    if (!file_exists(public_path($dir_dokumentasi))) {
-                        mkdir(public_path($dir_dokumentasi), 0777, true);
+                $newAttachments = [];
+                if ($request->hasFile('attachments')) {
+                    foreach ($request->file('attachments') as $attachment) {
+                        $attachmentFilename = $attachment->getClientOriginalName();
+                        $attachment->move(public_path($attachmentDir), $attachmentFilename);
+                        $newAttachments[] = $attachmentFilename;
                     }
-
-                    $file = $request->file('dokumentasi');
-                    $extTicket = $file->getClientOriginalExtension();
-                    $filenameDok = "REVISIQT_" . $data->nomor_ticket . '.' . $extTicket;
-
-                    $file->move(public_path($dir_dokumentasi), $filenameDok);
-                } else {
-                    $data->dokumentasi = null;
                 }
+
+                // Gabungkan: lama yang tersisa + baru
+                $mergedAttachments = array_merge($existingAttachments, $newAttachments);
+                $data->attachments = !empty($mergedAttachments) ? $mergedAttachments : null;
 
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now();
-
-                $contentDir = 'ticket_qr_email';
-                if (!file_exists(public_path($contentDir))) {
-                    mkdir(public_path($contentDir), 0777, true);
-                }
-
-                $content = $request->details;
-                file_put_contents(public_path($contentDir . '/' . $data->filename), $content);
                 $message = 'Ticket QR E-Mail Telah Diperbarui';
             }
 
             $data->jenis_qt = $request->jenis_qt;
-            $data->status = 'WAITING TO DELEGATE';
+            $data->status   = 'WAITING TO DELEGATE';
             $data->save();
 
             $user_adm_sales = MasterKaryawan::whereIn('id_jabatan', [22, 23, 25])
@@ -559,6 +695,7 @@ class TicketQrEmailController extends Controller
                 'success' => true,
                 'message' => $message
             ], 200);
+
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
