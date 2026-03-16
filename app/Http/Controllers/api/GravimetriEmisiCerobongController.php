@@ -27,7 +27,14 @@ class GravimetriEmisiCerobongController extends Controller
         $data = EmisiCerobongHeader::with('ws_value', 'order_detail')
             ->where('is_approved', $request->approve)
             ->where('emisi_cerobong_header.is_active', true)
-            ->where('template_stp', $request->template_stp);
+            ->where('template_stp', $request->template_stp)
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->orderColumn('tanggal_terima', function ($query, $order) {
                 $query->orderBy('tanggal_terima', $order);
