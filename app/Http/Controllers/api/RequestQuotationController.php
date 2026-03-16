@@ -6306,6 +6306,13 @@ class RequestQuotationController extends Controller
 
     // Hapus titik tidak bisa ketika sudah ada tanggal terima (untuk periode tambahin cek invoice)
     public function checkKontrakSample(Request $request) {
+        if(!$request->no_document) {
+            return response()->json([
+                'message' => 'No Document not found',
+                'invoice' => [],
+                'orderDetail' => []
+            ], 200);
+        }
         $data = QuotationKontrakH::with(['invoices'])->where('no_document', $request->no_document)->first();
         $order_id = '';
         $orderDetail = [];
