@@ -23,7 +23,14 @@ class ColorimeterPadatanController extends Controller
         $data = Colorimetri::with('ws_value', 'order_detail')->where('is_approved', $request->approve)
             ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
-            ->select('colorimetri.*');
+            ->select('colorimetri.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
