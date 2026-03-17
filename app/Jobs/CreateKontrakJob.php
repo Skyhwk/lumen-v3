@@ -59,6 +59,12 @@ class CreateKontrakJob extends Job
                         'biaya_preparasi' => [], // default kosong
                         'regulasi'        => $sampling->regulasi,
                     ];
+
+                    if(isset($sampling->paket)){
+                        $grouped[$key]->paket = $sampling->paket;
+                        $grouped[$key]->is_paket = $sampling->is_paket;
+                        $grouped[$key]->kelipatan_titik = $sampling->kelipatan_titik;
+                    }
                 } else {
                     // Tambahkan periode baru jika belum ada
                     if (!in_array($periode, $grouped[$key]->periode_kontrak)) {
@@ -191,6 +197,31 @@ class CreateKontrakJob extends Job
 
                 $titik = $item->jumlah_titik;
 
+                $hargaPaket = 0;
+                $hargaSatuan = 0;
+                $kelipatan_titik = 0;
+
+                if ($is_paket) {
+                    $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                    $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                    foreach ($dataPaketAnalisa as $paket) {
+                        if (
+                            $paket['regulasi'] == $item->regulasi &&
+                            $paket['parameter'] == $param &&
+                            $paket['kategori_1'] == $item->kategori_1 &&
+                            $paket['kategori_2'] == $item->kategori_2
+                        ) {
+                            $pengali = ($titik / (int)$paket['jumlah_titik']);
+                            $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                            $hargaPaket += $harga_sementara;
+                            $hargaSatuan = $paket['harga_paket'];
+                            $kelipatan_titik = (int)$paket['jumlah_titik'];
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+
                 $data_sampling[$i] = [
                     'kategori_1' => $item->kategori_1,
                     'kategori_2' => $item->kategori_2,
@@ -198,8 +229,8 @@ class CreateKontrakJob extends Job
                     'parameter' => $param,
                     'jumlah_titik' => $titik,
                     'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
+                    'harga_satuan' => $is_paket ? $hargaSatuan : $harga_pertitik->total_harga,
+                    'harga_total' => $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $titik,
                     'volume' => $vol,
                     'periode' => $item->periode_kontrak,
                     'biaya_preparasi' => []
@@ -304,10 +335,35 @@ class CreateKontrakJob extends Job
                     // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                     $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
                     
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $sampling->regulasi &&
+                                $paket['parameter'] == $sampling->parameter &&
+                                $paket['kategori_1'] == $sampling->kategori_1 &&
+                                $paket['kategori_2'] == $sampling->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+
                     $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                     $pengujian->data_sampling[$i]->regulasi = $regulasi;
-                    $pengujian->data_sampling[$i]->harga_satuan = $har_db;
-                    $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
+                    $pengujian->data_sampling[$i]->harga_satuan = $is_paket ? $hargaSatuan : $har_db;
+                    $pengujian->data_sampling[$i]->harga_total = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
                     $pengujian->data_sampling[$i]->volume = $vol_db;
 
                     if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
@@ -317,25 +373,25 @@ class CreateKontrakJob extends Job
                     //bagian untuk di parsing keluar ke variable lain
                     switch ($id_kategori) {
                         case '1':
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_air += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                         case '4':
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_udara += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                         case '5':
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_emisi += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                         case '6':
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_padatan += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                         case '7':
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_swab_test += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                         case '8':
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_tanah += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                         case '9':
-                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_pangan += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                             break;
                     }
                 }
