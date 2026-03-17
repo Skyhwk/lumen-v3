@@ -1,0 +1,25 @@
+<?php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\Sector;
+
+class TicketTechnicalControl extends Sector{
+    protected $table = 'ticket_technical_control';
+    protected $guarded = [];
+
+    public $timestamps = false;
+
+    protected $casts = [
+        'dokumentasi' => 'array', // Otomatis mengubah JSON string ke Array PHP
+    ];
+
+    // public function previous()
+    // {
+    //     return $this->belongsTo(YourModel::class, 'previous_id');
+    // }
+
+    // public function karyawan(){
+    //     return $this->belongsTo(MasterKaryawan::class, 'karyawan_id', 'id');
+    // }
+}
