@@ -29,7 +29,14 @@ class SpektroUvVisUdaraController extends Controller
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
             ->where('template_stp', $request->template_stp)
-            ->select('lingkungan_header.*');
+            ->select('lingkungan_header.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
 
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {

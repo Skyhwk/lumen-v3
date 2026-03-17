@@ -1209,7 +1209,8 @@ class ReadyOrderController extends Controller
                             'HNO3' => 500,
                             'M1000' => 1000,
                             'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10
+                            'BEBAS PYROGEN' => 10,
+                            'Ori-Kaca-3L' => 3000,
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
@@ -1657,7 +1658,8 @@ class ReadyOrderController extends Controller
                             'HNO3' => 500,
                             'M1000' => 1000,
                             'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10
+                            'BEBAS PYROGEN' => 10,
+                            'Ori-Kaca-3L' => 3000,
                         ];
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
@@ -2096,7 +2098,8 @@ class ReadyOrderController extends Controller
                                         'HNO3' => 500,
                                         'M1000' => 1000,
                                         'BENTHOS' => 100,
-                                        'BEBAS PYROGEN' => 10
+                                        'BEBAS PYROGEN' => 10,
+                                        'Ori-Kaca-3L' => 3000,
                                     ];
 
                                     foreach ($botol_volumes as $type => $volume) {
@@ -2547,7 +2550,8 @@ class ReadyOrderController extends Controller
                             'HNO3' => 500,
                             'M1000' => 1000,
                             'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10
+                            'BEBAS PYROGEN' => 10,
+                            'Ori-Kaca-3L' => 3000,
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {

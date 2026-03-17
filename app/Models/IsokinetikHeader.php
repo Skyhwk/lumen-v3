@@ -58,4 +58,9 @@ class IsokinetikHeader extends Sector{
     {
         return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'id', 'id_isokinetik')->where('is_active', true);
     }
+
+    public function createdByKaryawan()
+    {
+        return $this->belongsTo('App\Models\MasterKaryawan', 'created_by', 'nama_lengkap');
+    }
 }

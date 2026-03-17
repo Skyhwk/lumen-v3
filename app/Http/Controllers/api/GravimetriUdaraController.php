@@ -30,18 +30,39 @@ class GravimetriUdaraController extends Controller
             ->where('is_approved', $request->approve)
             ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ")
             ->get();
 
         $dataDustfall = DustFallHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ")
             ->get();
 
         $dataDebu = DebuPersonalHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ")
             ->get();
 
         $data = collect()
@@ -49,7 +70,7 @@ class GravimetriUdaraController extends Controller
             ->concat($dataDustfall)
             ->concat($dataDebu)
             ->values();
-
+            
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;

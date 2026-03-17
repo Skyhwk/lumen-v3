@@ -4,14 +4,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
-class TicketRevisiQt extends Sector{
-    protected $table = 'ticket_revisi_qt';
+class TicketTechnicalControl extends Sector{
+    protected $table = 'ticket_technical_control';
     protected $guarded = [];
-    protected $casts = [
-        'attachments' => 'array',
-    ];
 
     public $timestamps = false;
+
+    protected $casts = [
+        'dokumentasi' => 'array', // Otomatis mengubah JSON string ke Array PHP
+    ];
 
     // public function previous()
     // {

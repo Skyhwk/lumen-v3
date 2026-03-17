@@ -28,7 +28,14 @@ class SpektroUvVisEmisiController extends Controller
         ->where('is_approved', $request->approve)
         ->where('emisi_cerobong_header.is_active', true)
         ->where('template_stp', $request->template_stp)
-        ->select('emisi_cerobong_header.*');
+        ->select('emisi_cerobong_header.*')
+        ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->editColumn('data_analis', function ($data) {
                 return $data->data_analis ? json_decode($data->data_analis, true) : null;

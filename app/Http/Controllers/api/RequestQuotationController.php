@@ -647,11 +647,11 @@ class RequestQuotationController extends Controller
                     if (isset($harga_pertitik->volume) && $harga_pertitik->volume != null) {
                         $vol += floatval($harga_pertitik->volume);
                     }
-                    
+
                     $hargaPaket = 0;
                     $hargaSatuan = 0;
                     $kelipatan = 0;
-                    
+
                     if($is_paket){
                         $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
                         $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
@@ -690,7 +690,7 @@ class RequestQuotationController extends Controller
                             }
                         }
                     }
-                    
+
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
@@ -711,7 +711,7 @@ class RequestQuotationController extends Controller
                         $data_sampling[$i]['paket'] = $item->paket;
                         $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
                     }
-                    
+
                     switch ($kategori) {
                         case '1':
                             $harga_air += $hargaAnalisa;
@@ -2517,6 +2517,12 @@ class RequestQuotationController extends Controller
                         'biaya_preparasi' => [], // default kosong
                         'regulasi'        => $sampling->regulasi,
                     ];
+
+                    if(isset($sampling->paket)){
+                        $detailGrouped[$key]->paket = $sampling->paket;
+                        $detailGrouped[$key]->is_paket = $sampling->is_paket;
+                        $detailGrouped[$key]->kelipatan_titik = $sampling->kelipatan_titik;
+                    }
                 } else {
                     $detailGrouped[$key]->jumlah_titik += (int) $sampling->jumlah_titik;
                 }
@@ -2703,11 +2709,11 @@ class RequestQuotationController extends Controller
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
 
                 foreach ($dataPendukungHeader as $i => $item) {
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -2742,6 +2748,31 @@ class RequestQuotationController extends Controller
                     }
 
                     $titik = $item->jumlah_titik;
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -2874,6 +2905,7 @@ class RequestQuotationController extends Controller
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
+                        $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -2937,11 +2969,48 @@ class RequestQuotationController extends Controller
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
 
+                        $hargaPaket = 0;
+                        $hargaSatuan = 0;
+                        $kelipatan_titik = 0;
+
+                        if($is_paket){
+                            $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
+                            $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                            foreach ($dataPaketAnalisa as $paket) {
+                                if(
+                                    $paket['regulasi'] == $sampling->regulasi &&
+                                    $paket['parameter'] == $sampling->parameter && 
+                                    $paket['kategori_1'] == $sampling->kategori_1 &&
+                                    $paket['kategori_2'] == $sampling->kategori_2
+                                ) {
+                                    $pengali = ($jumlah_titik / (int)$paket['jumlah_titik']);
+                                    $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                    $hargaPaket += $harga_sementara;
+                                    $hargaSatuan = $paket['harga_paket'];
+                                    $kelipatan_titik = (int)$paket['jumlah_titik'];
+                                } else {
+                                    continue;
+                                }
+                            }
+                        } 
+
+                        $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
+                        $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
+
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                         $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
                         $pengujian->data_sampling[$i]->volume = $vol_db;
+
+                        if ($is_paket) {
+                            $pengujian->data_sampling[$i]->is_paket = $is_paket;
+                            $pengujian->data_sampling[$i]->kelipatan_titik = $kelipatan_titik;
+                            $pengujian->data_sampling[$i]->is_paket_analisa = true;
+                            $pengujian->data_sampling[$i]->paket_id = $is_paket;
+                            $pengujian->data_sampling[$i]->paket = $dataPaket->nama_template;
+                            $pengujian->data_sampling[$i]->kelipatan_dasar = $kelipatan_titik;
+                        }
 
                         if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
                             unset($pengujian->data_sampling[$i]->biaya_preparasi);
@@ -3053,7 +3122,7 @@ class RequestQuotationController extends Controller
                                         $dataD->harga_transportasi_total = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
 
                                         $dataD->harga_personil = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang);
-                                        $dataD->harga_perdiem_personil_total = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
+                                        $dataD->harga_perdiem_personil_total = ((int) $cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * (int)$data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
@@ -3068,7 +3137,7 @@ class RequestQuotationController extends Controller
                                         }
 
                                         $transport = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
-                                        $perdiem = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
+                                        $perdiem = ((int) $cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != ''){
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
                                         }else{
@@ -4215,6 +4284,7 @@ class RequestQuotationController extends Controller
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
                 foreach ($dataPendukungHeader as $i => $item) {
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
@@ -4254,6 +4324,31 @@ class RequestQuotationController extends Controller
                     }
 
                     $titik = $item->jumlah_titik;
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -4351,6 +4446,7 @@ class RequestQuotationController extends Controller
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
+                        $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -4414,11 +4510,48 @@ class RequestQuotationController extends Controller
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
 
+                        $hargaPaket = 0;
+                        $hargaSatuan = 0;
+                        $kelipatan_titik = 0;
+
+                        if($is_paket){
+                            $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
+                            $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                            foreach ($dataPaketAnalisa as $paket) {
+                                if(
+                                    $paket['regulasi'] == $sampling->regulasi &&
+                                    $paket['parameter'] == $sampling->parameter && 
+                                    $paket['kategori_1'] == $sampling->kategori_1 &&
+                                    $paket['kategori_2'] == $sampling->kategori_2
+                                ) {
+                                    $pengali = ($jumlah_titik / (int)$paket['jumlah_titik']);
+                                    $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                    $hargaPaket += $harga_sementara;
+                                    $hargaSatuan = $paket['harga_paket'];
+                                    $kelipatan_titik = (int)$paket['jumlah_titik'];
+                                } else {
+                                    continue;
+                                }
+                            }
+                        } 
+
+                        $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
+                        $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
+
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                         $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
                         $pengujian->data_sampling[$i]->volume = $vol_db;
+
+                        if ($is_paket) {
+                            $pengujian->data_sampling[$i]->is_paket = $is_paket;
+                            $pengujian->data_sampling[$i]->kelipatan_titik = $kelipatan_titik;
+                            $pengujian->data_sampling[$i]->is_paket_analisa = true;
+                            $pengujian->data_sampling[$i]->paket_id = $is_paket;
+                            $pengujian->data_sampling[$i]->paket = $dataPaket->nama_template;
+                            $pengujian->data_sampling[$i]->kelipatan_dasar = $kelipatan_titik;
+                        }
 
                         if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
                             unset($pengujian->data_sampling[$i]->biaya_preparasi);
@@ -6163,57 +6296,58 @@ class RequestQuotationController extends Controller
         return response()->json($data);
     }
 
-    public function checkIfSampled(Request $request){
-        if($request->type == 'spot'){
-
-            // ISL/QT/26-I/000261R1 -> ISL/QT/26-I/000261
-            $no_document_cropped = preg_replace('/R\d+$/', '', $request->no_document);
-            $data = OrderDetail::where('no_sampel', 'like', '%'. $request->no_sampel . '%')->where('no_quotation', 'like', '%'. $no_document_cropped . '%')->first();
-            if(!$data){
-                return response()->json([
-                    'message' => 'Data not found',
-                    'data' => 0,
-                    'is_found' => false
-                ], 404);
-            }
+    // Hapus titik tidak bisa ketika sudah ada tanggal terima (untuk periode tambahin cek invoice)
+    public function checkKontrakSample(Request $request) {
+        if(!$request->no_document) {
             return response()->json([
-                'message' => 'Success',
-                'data' => $data,
-                'is_found' => true,
-                'is_sampled' => $data->tanggal_terima !== null
-            ], 200);
-        }else if($request->type == 'collection'){
-            // ISL/QT/26-I/000261R1 -> ISL/QT/26-I/000261
-            $no_document_cropped = preg_replace('/R\d+$/', '', $request->no_document);
-            $header = OrderHeader::where('no_document', 'like', '%' . $no_document_cropped . '%')->first();
-            if(!$header){
-                return response()->json([
-                    'message' => 'Header data not found',
-                    'data' => 0,
-                    'is_found' => false
-                ], 404);
-            }
-            $no_samples = array_map(function ($item) use ($header) {
-                return $header->no_order . '/' . $item;
-            }, $request->no_sampel);
-            $data = OrderDetail::whereIn('no_sampel', $no_samples)->where('no_quotation', 'like', '%'. $no_document_cropped . '%')->get();
-            if(count($data) == 0){
-                return response()->json([
-                    'message' => 'Detail data not found',
-                    'data' => 0,
-                    'is_found' => false
-                ], 404);
-            }
-            $data_array = $data->toArray() ?? [];
-            $isTanggalTerimaExists = array_filter($data_array, function ($item) {
-                return $item['tanggal_terima'] !== null;
-            });
-            return response()->json([
-                'message' => 'Success',
-                'data' => $data,
-                'is_found' => true,
-                'is_sampled' => count($isTanggalTerimaExists) == 0
+                'message' => 'No Document not found',
+                'invoice' => [],
+                'orderDetail' => []
             ], 200);
         }
+        $data = QuotationKontrakH::with(['invoices'])->where('no_document', $request->no_document)->first();
+        $order_id = '';
+        $orderDetail = [];
+        if($data->data_lama) {
+            $decodedDataLama = json_decode($data->data_lama);
+            $order_id = $decodedDataLama->id_order;
+        }
+
+        if($order_id && $order_id != '') {
+            $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
+            foreach($dataDetail as $key => $value) {
+                $orderDetail[] = \explode('/', $value['no_sampel'])[1];
+            }
+        }
+
+        return response()->json([
+            'invoice' => $data->invoices,
+            'orderDetail' => $orderDetail
+        ]);
+    }
+
+    public function getSampledData(Request $request){
+        $header = OrderHeader::where('no_document', $request->no_document)->first();
+        if(!$header){
+            return response()->json([
+                'message' => 'Header data not found',
+                'data' => 0,
+                'is_found' => false
+            ], 404);
+        }
+
+        $data = OrderDetail::where('id_order_header', $header->id)->get();
+        $data_sampled = $data->filter(function ($item) {
+            return $item->tanggal_terima !== null;
+        })->toArray();
+
+        $data_return = array_map(function ($item) {
+            return explode('/',$item['no_sampel'])[1];
+        }, $data_sampled);
+
+        return response()->json([
+            'message' => 'Success',
+            'data' => $data_return
+        ], 200);
     }
 }

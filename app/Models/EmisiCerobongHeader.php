@@ -53,4 +53,9 @@ class EmisiCerobongHeader extends Sector
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 5);
     }
+
+    public function createdByKaryawan()
+    {
+        return $this->belongsTo('App\Models\MasterKaryawan', 'created_by', 'nama_lengkap');
+    }
 }

@@ -1591,7 +1591,7 @@ class DraftUlkErgonomiController extends Controller
 
                     EmailLhpRilisHelpers::run([
                         'cfr'              => $data->no_lhp,
-                        'no_order'         => $data->no_order,
+                        'no_order'         => $cekDetail->no_order,
                         'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
                         'nama_perusahaan'  => $data->nama_pelanggan,
                         'periode'          => $cekDetail->periode,

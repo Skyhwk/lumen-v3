@@ -118,8 +118,13 @@ class AuthController extends BaseController
         // id = 1 ==> Direktur
         // id = 127 ==> Administrator
         // id = 152 ==> Patah
-       
-        $menuList =  MenuFdl::where('is_active', 1)->where('title', '!=', 'Lainnya')->get();
+        $menuList = MenuFdl::where('is_active', 1)
+            ->where('title', '!=', 'Lainnya')
+            ->where(function($q) use ($karyawan) {
+                $q->whereNull('access_restricted')
+                ->orWhereJsonContains('access_restricted', $karyawan->id);
+            })
+            ->get();
         
         $wiseList = MenuFdl::where('is_active', 1)->where('is_wiseList', 1)->get();
 
