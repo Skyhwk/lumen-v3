@@ -46,17 +46,23 @@ class EmailLhpRilisHelpers
             
             $bcc = is_array($bcc) ? $bcc : [];
 
-            $email = SendEmail::where('to', $cekHistory->email_to)
-                ->where('subject', $subject)
-                ->where('body', $fullBody)
-                ->where('cc', $cc)
-                ->where('bcc', $bcc)
-                ->where('replyto', ['adminlhp@intilab.com'])
-                ->where('karyawan', $karyawan)
-                ->fromLhp()
-                ->send();
+            if($subject == "Update Hasil Uji__"){
+                Log::info("EmailLhpRilisHelpers: Subject is empty, skipping email to : {$cekHistory->email_to}");
+                return true;
+            } else {
+                $email = SendEmail::where('to', $cekHistory->email_to)
+                    ->where('subject', $subject)
+                    ->where('body', $fullBody)
+                    ->where('cc', $cc)
+                    ->where('bcc', $bcc)
+                    ->where('replyto', ['adminlhp@intilab.com'])
+                    ->where('karyawan', $karyawan)
+                    ->fromLhp()
+                    ->send();
+    
+                return $email;
+            }
 
-            return $email;
         } catch (\Exception $e) {
             Log::error("EmailLhpRilisHelpers ERROR: " . $e->getMessage());
             return false;
