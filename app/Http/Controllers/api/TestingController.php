@@ -93,7 +93,8 @@ use App\Services\{
     RandomSalesAssign,
     SendEmail,
     GetBawahan,
-    SnapshotPersiapanService
+    SnapshotPersiapanService,
+    GenerateToken
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -2636,6 +2637,11 @@ class TestingController extends Controller
                         ], 500);
                     }
                 case 'updateVolumeQuotation':
+                case 'generatelink':
+                    $generate = new GenerateToken();
+                    $getData = QuotationKontrakH::where('no_document',$request->no_document)->first();
+                    $resultToken = $generate->save('kontrak', $getData, $this->karyawan, 'quotation');
+                    return response()->json(["data"=>$resultToken],200);
 
                     DB::beginTransaction();
 
