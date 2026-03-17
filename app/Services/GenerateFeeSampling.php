@@ -10,6 +10,9 @@ use App\Models\MasterFeeSampling;
 use App\Models\Jadwal;
 use App\Models\LiburPerusahaan;
 use App\Models\MasterWilayahSampling;
+use App\Models\MasterKaryawan;
+use App\Models\MasterFeeDriver;
+
 
 class GenerateFeeSampling
 {
@@ -949,9 +952,28 @@ class GenerateFeeSampling
                     return isset($item->driver, $item->sampler) &&
                         trim(strtolower($item->driver)) === trim(strtolower($item->sampler));
                 });
+
                 if ($isDriver) {
-                    $feeTambahan += 20000;
-                    $feeTambahanRincian['driver'] = 20000;
+                    $driver = MasterKaryawan::where('nama_lengkap', $item->driver)->where('is_active', 1)->first();
+                    if($driver) {
+                        $feeDriver = MasterFeeDriver::where('driver_id', $driver->id)->where('is_active', 1)->first();
+                        if($feeDriver) {
+                            $feeTambahan += $feeDriver->fee;
+                            $feeTambahanRincian['driver'] = $feeDriver->fee;
+                        } else {
+                            // $feeTambahan += 20000;
+                            // $feeTambahanRincian['driver'] = 20000;
+                            return [
+                                'error' => "Driver {$item->driver} belum ditetapkan fee drivernya silahkan hubungi HRD.",
+                                'status' => 401
+                            ];
+                        }
+                    } else {
+                        return [
+                            'error' => "Driver '{$item->driver}' tidak ditemukan di MasterKaryawan.",
+                            'status' => 401
+                        ];
+                    }
                 }
 
                 // === Hari Libur ===

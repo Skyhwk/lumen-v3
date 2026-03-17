@@ -3214,7 +3214,7 @@ class BasOnlineController extends Controller
             ],
             [
                 "parameter" => "Kebisingan (P8J)",
-                "requiredCount" => 2,
+                "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DataLapanganKebisinganPersonal::class,
                 "model2" => null
@@ -4360,7 +4360,7 @@ class BasOnlineController extends Controller
                 "parameter" => "VOC Sebagai NMHC",
                 "requiredCount" => 1,
                 "category" => "5-Emisi",
-                "model" => null,
+                "model" => DataLapanganEmisiCerobong::class,
                 "model2" => null
             ]
         ];

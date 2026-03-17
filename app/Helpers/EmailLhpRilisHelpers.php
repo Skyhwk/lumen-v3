@@ -30,6 +30,12 @@ class EmailLhpRilisHelpers
             $cekHistory = EmailHistory::where('email_subject', 'LIKE', "{$prefix}%")->first();
 
             if (!$cekHistory) {
+                Log::info("EmailLhpRilisHelpers: Email history not found, skipping email to : {$cekHistory->email_to}");
+                return false;
+            }
+
+            if($no_order == null || $no_order == '') {
+                Log::info("EmailLhpRilisHelpers: No. Order is empty, skipping email to : {$cekHistory->email_to}");
                 return false;
             }
 
@@ -38,7 +44,7 @@ class EmailLhpRilisHelpers
             $fullBody = $body . $footer;
 
             if($periode != null) $periode = $periode . '_';
-            
+
             $subject = "Update Hasil Uji_{$no_order}_{$periode}{$company}";
 
             $cc  = $cekHistory->email_cc != null  ? json_decode($cekHistory->email_cc, true)  : [];
@@ -46,17 +52,23 @@ class EmailLhpRilisHelpers
             
             $bcc = is_array($bcc) ? $bcc : [];
 
-            $email = SendEmail::where('to', $cekHistory->email_to)
-                ->where('subject', $subject)
-                ->where('body', $fullBody)
-                ->where('cc', $cc)
-                ->where('bcc', $bcc)
-                ->where('replyto', ['adminlhp@intilab.com'])
-                ->where('karyawan', $karyawan)
-                ->fromLhp()
-                ->send();
+            if($subject == "Update Hasil Uji__"){
+                Log::info("EmailLhpRilisHelpers: Subject is empty, skipping email to : {$cekHistory->email_to}");
+                return false;
+            } else {
+                $email = SendEmail::where('to', $cekHistory->email_to)
+                    ->where('subject', $subject)
+                    ->where('body', $fullBody)
+                    ->where('cc', $cc)
+                    ->where('bcc', $bcc)
+                    ->where('replyto', ['adminlhp@intilab.com'])
+                    ->where('karyawan', $karyawan)
+                    ->fromLhp()
+                    ->send();
+    
+                return $email;
+            }
 
-            return $email;
         } catch (\Exception $e) {
             Log::error("EmailLhpRilisHelpers ERROR: " . $e->getMessage());
             return false;

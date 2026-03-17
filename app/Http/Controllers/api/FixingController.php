@@ -741,103 +741,102 @@ class FixingController extends Controller
         return $parentMap;
     }
 
-    public function exportPelangganBelumOrder(Request $request)
-{
-    ini_set('memory_limit', '512M');
-    set_time_limit(300);
+    // public function exportPelangganBelumOrder(Request $request)
+    // {
+    //     ini_set('memory_limit', '-1');
+    //     set_time_limit(0);
 
-    try {
-        $data = MasterPelanggan::with([
-            'kontak_pelanggan:id,pelanggan_id,no_tlp_perusahaan',
-            'pic_pelanggan:id,pelanggan_id,nama_pic,no_tlp_pic,jabatan_pic',
-            'currentSales:id,nama_lengkap',
-        ])
-        ->whereNotIn('sales_id', [127])
-        ->where('is_active', 1)
-        ->whereDoesntHave('quotasiNonKontrak')
-        ->whereDoesntHave('quotasiKontrak')
-        ->whereDoesntHave('kontak_pelanggan', function ($query) {
-            $query->whereHas('logWebphone', function ($q) {
-                $q->where('created_at', '>=', Carbon::now()->subMonths(3));
-            });
-        })
-        ->get();
+    //     try {
+    //         $data = MasterPelanggan::with([
+    //             'kontak_pelanggan:id,pelanggan_id,no_tlp_perusahaan',
+    //             'pic_pelanggan:id,pelanggan_id,nama_pic,no_tlp_pic,jabatan_pic',
+    //         ])
+    //         ->whereNotIn('sales_id', [127])
+    //         ->whereNotNull('sales_id')
+    //         ->where('is_active', 1)
+    //         ->whereDoesntHave('quotasiNonKontrak')
+    //         ->whereDoesntHave('quotasiKontrak')
+    //         ->whereYear('created_at', Carbon::now()->subYear(1))
+    //         // ->whereDoesntHave('kontak_pelanggan', function ($query) {
+    //         //     $query->whereHas('logWebphone', function ($q) {
+    //         //         $q->where('created_at', '>=', Carbon::now()->subMonths(3));
+    //         //     });
+    //         // })
+    //         ->get();
 
-        // Setup Spreadsheet
-        $spreadsheet = new Spreadsheet();
-        $sheet       = $spreadsheet->getActiveSheet();
+    //         // Setup Spreadsheet
+    //         $spreadsheet = new Spreadsheet();
+    //         $sheet       = $spreadsheet->getActiveSheet();
 
-        $title = "LAPORAN PELANGGAN BELUM KELUAR QUOTATION - " . strtoupper(Carbon::now()->locale('id')->isoFormat('MMMM YYYY'));
+    //         $title = "LAPORAN PELANGGAN BELUM KELUAR QUOTATION - " . strtoupper(Carbon::now()->locale('id')->isoFormat('MMMM YYYY'));
 
-        $sheet->setCellValue('A1', $title);
-        $sheet->mergeCells('A1:H1');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    //         $sheet->setCellValue('A1', $title);
+    //         $sheet->mergeCells('A1:G1'); // 7 kolom A-G
+    //         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+    //         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $headers = [
-            'No',
-            'ID Pelanggan',
-            'Nama Pelanggan',
-            'No. Telp Perusahaan',
-            'Nama PIC',
-            'No. Telp PIC',
-            'Jabatan PIC',
-            'Sales',
-        ];
-        $sheet->fromArray($headers, null, 'A2');
+    //         $headers = [
+    //             'No',
+    //             'ID Pelanggan',
+    //             'Nama Pelanggan',
+    //             'No. Telp Perusahaan',
+    //             'Nama PIC',
+    //             'No. Telp PIC',
+    //             'Jabatan PIC',
+    //         ];
+    //         $sheet->fromArray($headers, null, 'A2');
 
-        $headerStyle = [
-            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '343A40']],
-            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
-        ];
-        $sheet->getStyle('A2:H2')->applyFromArray($headerStyle);
+    //         $headerStyle = [
+    //             'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+    //             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+    //             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '343A40']],
+    //             'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+    //         ];
+    //         $sheet->getStyle('A2:G2')->applyFromArray($headerStyle); // fix: A2:G2
 
-        $row = 3;
-        $no  = 1;
+    //         $row = 3;
+    //         $no  = 1;
 
-        foreach ($data as $item) {
-            $kontak = $item->kontak_pelanggan->first();
-            $pic    = $item->pic_pelanggan->first();
+    //         foreach ($data as $item) {
+    //             $kontak = $item->kontak_pelanggan->first();
+    //             $pic    = $item->pic_pelanggan->first();
 
-            $sheet->setCellValue('A' . $row, $no++);
-            $sheet->setCellValue('B' . $row, $item->id_pelanggan);
-            $sheet->setCellValue('C' . $row, $item->nama_pelanggan);
-            $sheet->setCellValue('D' . $row, $kontak->no_tlp_perusahaan ?? '-');
-            $sheet->setCellValue('E' . $row, $pic->nama_pic ?? '-');
-            $sheet->setCellValue('F' . $row, $pic->no_tlp_pic ?? '-');
-            $sheet->setCellValue('G' . $row, $pic->jabatan_pic ?? '-');
-            $sheet->setCellValue('H' . $row, $item->currentSales->nama_lengkap ?? '-');
+    //             $sheet->setCellValue('A' . $row, $no++);
+    //             $sheet->setCellValue('B' . $row, $item->id_pelanggan);
+    //             $sheet->setCellValue('C' . $row, $item->nama_pelanggan);
+    //             $sheet->setCellValue('D' . $row, $kontak->no_tlp_perusahaan ?? '-');
+    //             $sheet->setCellValue('E' . $row, $pic->nama_pic ?? '-');
+    //             $sheet->setCellValue('F' . $row, $pic->no_tlp_pic ?? '-');
+    //             $sheet->setCellValue('G' . $row, $pic->jabatan_pic ?? '-');
 
-            $row++;
-        }
+    //             $row++;
+    //         }
 
-        $lastRow = $row - 1;
+    //         $lastRow = $row - 1;
 
-        foreach (range('A', 'H') as $columnID) {
-            $sheet->getColumnDimension($columnID)->setAutoSize(true);
-        }
+    //         foreach (range('A', 'G') as $columnID) { // fix: A-G
+    //             $sheet->getColumnDimension($columnID)->setAutoSize(true);
+    //         }
 
-        $sheet->getStyle('A3:H' . $lastRow)->getAlignment()->setWrapText(false);
-        $sheet->getStyle('A3:H' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
-        $sheet->getStyle('A2:H' . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-        $sheet->freezePane('A3');
+    //         $sheet->getStyle('A3:G' . $lastRow)->getAlignment()->setWrapText(false); // fix: A3:G
+    //         $sheet->getStyle('A3:G' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+    //         $sheet->getStyle('A2:G' . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN); // fix: A2:G
+    //         $sheet->freezePane('A3');
 
-        $writer   = new Xlsx($spreadsheet);
-        $fileName = "Pelanggan_Belum_Quotation_" . date('Ymd_His') . ".xlsx";
+    //         $writer   = new Xlsx($spreadsheet);
+    //         $fileName = "Pelanggan_Belum_Quotation_" . date('Ymd_His') . ".xlsx";
 
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment; filename="' . $fileName . '"');
-        header('Cache-Control: max-age=0');
+    //         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    //         header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    //         header('Cache-Control: max-age=0');
 
-        $writer->save('php://output');
-        exit;
+    //         $writer->save('php://output');
+    //         exit;
 
-    } catch (\Exception $e) {
-        dd($e->getMessage(), $e->getLine(), $e->getFile());
-    }
-}
+    //     } catch (\Exception $e) {
+    //         dd($e->getMessage(), $e->getLine(), $e->getFile());
+    //     }
+    // }
     
 
  

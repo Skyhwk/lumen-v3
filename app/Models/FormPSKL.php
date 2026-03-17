@@ -11,8 +11,9 @@ class FormPSKL extends Sector
     protected $guarded = [];
     protected $with = ['order_header.orderDetail'];
     protected $casts = [
-    'kategori_sk' => 'array',
-];
+        'kategori_sk' => 'array',
+        'data_pendukung_sampling' => 'array',
+    ];
 
     public function order_header()
     {

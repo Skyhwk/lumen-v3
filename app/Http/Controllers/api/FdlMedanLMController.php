@@ -160,28 +160,8 @@ class FdlMedanLMController extends Controller
             $no_sample = $data->no_sampel;
             $po = OrderDetail::where('no_sampel', $no_sample)->first();
             if (isset($request->id) && $request->id != null) {
-                if ($po) {
-                    // Decode parameter jika dalam format JSON
-                    $decoded = json_decode($po->parameter, true);
-
-                    // Pastikan JSON ter-decode dengan benar dan berisi data
-                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                        // Ambil elemen pertama dari array hasil decode
-                        $parts = explode(';', $decoded[0] ?? '');
-                        // Pastikan elemen kedua tersedia setelah explode
-                        $parameterValue = $parts[1] ?? 'Data tidak valid';
-
-                        // dd($parameterValue); // Output: "Pencahayaan"
-                    } else {
-                        dd("Parameter tidak valid atau bukan JSON");
-                    }
-
-                } else {
-                    dd("OrderDetail tidak ditemukan");
-                }
                 // Cek di Tabel Parameter
-                $parameter = Parameter::where('nama_lab', $parameterValue)->first();
-
+                $parameter = Parameter::where('nama_lab', $data->parameter)->first();
                 $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
                 $data_parsing = $request->all();
                 $data_parsing = (object) $data_parsing;

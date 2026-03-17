@@ -30,7 +30,14 @@ class ColorimetriController extends Controller
             ->where('colorimetri.is_active', true)
             ->where('colorimetri.is_total', false)
             ->where('template_stp', $request->template_stp)
-            ->select('colorimetri.*');
+            ->select('colorimetri.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
