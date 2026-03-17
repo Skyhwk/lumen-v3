@@ -278,7 +278,7 @@ class DraftUdaraKebisinganController extends Controller
                 }
                 $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
                 $fileName = null;
-                if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382, 1321])) {
+                if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382, 1321, 1672])) {
 
                     $parameter = json_decode($header->parameter_uji)[0];
                     if (strpos($parameter, '24 Jam') !== false) {
