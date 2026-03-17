@@ -36,7 +36,6 @@ class MonitoringJadwalSamplingSalesController extends Controller
                     ->where('is_active', true);
                 }
             ]);
-
         // 🔐 FILTER BERDASARKAN ROLE
         if (! $isProgrammer) {
 
@@ -46,8 +45,7 @@ class MonitoringJadwalSamplingSalesController extends Controller
 
             // ATASAN SALES
             } elseif (in_array($jabatan, [21, 15, 154, 157])) {
-                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('user_id')->toArray();
-
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
                 $bawahan[] = $this->user_id;
 
                 $query->whereIn('sales_id', $bawahan);
