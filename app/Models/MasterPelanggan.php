@@ -101,19 +101,31 @@ class MasterPelanggan extends Sector
             ->where('is_active', 1)
             ->groupBy('no_order', 'no_invoice', 'periode', 'tgl_invoice', 'tgl_jatuh_tempo', 'pelanggan_id')
             ->orderByDesc('tgl_invoice')
-            ->with(['recordPembayaran' => function($query) {
+            ->with(['recordPembayaran' => function ($query) {
                 $query->select('no_invoice', 'tgl_pembayaran', 'nilai_pembayaran');
-            }, 'recordWithdraw' => function($query) {
+            }, 'recordWithdraw' => function ($query) {
                 $query->select('no_invoice', 'nilai_pembayaran', 'keterangan_pelunasan');
             }]);
     }
 
     public function getLatestDFUSMatchAttribute()
     {
-        return $this->latestDFUS && 
+        return $this->latestDFUS &&
             $this->latestDFUS->sales_penanggung_jawab === $this->sales_penanggung_jawab
             ? $this->latestDFUS
             : null;
+    }
+
+    public function getNumberContactAttribute()
+    {
+        return $this->kontak_pelanggan
+            ->pluck('no_tlp_perusahaan')
+            ->merge(
+                $this->pic_pelanggan->pluck('no_tlp_pic')
+            )
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     public function quotasiNonKontrak()
