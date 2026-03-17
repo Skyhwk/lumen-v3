@@ -4284,6 +4284,7 @@ class RequestQuotationController extends Controller
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
                 foreach ($dataPendukungHeader as $i => $item) {
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
