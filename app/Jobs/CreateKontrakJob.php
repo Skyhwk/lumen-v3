@@ -8,7 +8,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
-
+use App\Models\TemplatePaketAnalisa;
 class CreateKontrakJob extends Job
 {
     protected $data;
@@ -157,6 +157,7 @@ class CreateKontrakJob extends Job
             $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
             //dd($dataPendukungHeader);
             foreach ($dataPendukungHeader as $i => $item) {
+                $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                 $param = $item->parameter;
                 $exp = explode("-", $item->kategori_1);
                 $kategori = $exp[0];
@@ -272,6 +273,7 @@ class CreateKontrakJob extends Job
 
                 // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                 foreach ($pengujian->data_sampling as $i => $sampling) {
+                    $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                     $id_kategori = \explode("-", $sampling->kategori_1)[0];
                     $kategori = \explode("-", $sampling->kategori_1)[1];
                     $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
