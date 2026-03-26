@@ -81,6 +81,16 @@ class WsValueUdara extends Sector
         return $this->belongsTo(Subkontrak::class, 'id_subkontrak', 'id');
     }
 
+    public function dustfall()
+    {
+        return $this->belongsTo(DustFallHeader::class, 'id_dustfall_header', 'id');
+    }
+
+    public function debuPersonal()
+    {
+        return $this->belongsTo(DebuPersonalHeader::class, 'id_debu_personal_header', 'id');
+    }
+
     public function getDataAnalyst()
     {
         $relations = [
@@ -96,6 +106,8 @@ class WsValueUdara extends Sector
             'pencahayaan',
             'swab',
             'subkontrak',
+            'dustfall',
+            'debuPersonal'
         ];
 
         foreach ($relations as $relation) {
