@@ -27,10 +27,12 @@ use App\Models\FtcT;
 use App\Models\Ftc;
 use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
+use App\Jobs\RenderInvoiceJob;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
 use App\Models\Invoice;
 use App\Models\HistoryKuotaPengujian;
+use App\Models\JobTask;
 use App\Models\KuotaPengujian;
 use App\Models\LinkRingkasanOrder;
 use App\Models\MasterPelanggan;
@@ -614,7 +616,7 @@ class ReadyOrderController extends Controller
 
             DB::commit();
             
-            // self::generateInvoice($no_order);
+            self::generateInvoice($no_order, $dataQuotation->no_document);
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
@@ -1076,7 +1078,7 @@ class ReadyOrderController extends Controller
 
             DB::commit();
             
-            self::generateInvoice($no_order);
+            self::generateInvoice($no_order, $dataQuotation->no_document);
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
@@ -1485,7 +1487,7 @@ class ReadyOrderController extends Controller
             //     }
             // }
             
-            self::generateInvoice($dataOrderHeader->no_order);
+            self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
 
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
@@ -2505,7 +2507,7 @@ class ReadyOrderController extends Controller
             //     }
             // }
 
-            self::generateInvoice($dataOrderHeader->no_order);
+            self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
 
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
@@ -2707,9 +2709,22 @@ class ReadyOrderController extends Controller
         // dd($dataQr);
     }
 
-    private function generateInvoice($no_order){
+    private function generateInvoice($no_order, $no_document){
         $invoice_numbers = Invoice::where('no_order', $no_order)->where('is_active', 1)->get()->pluck('no_invoice')->toArray();
-        Http::post('http://127.0.0.1:2999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
+
+        // Python::call('render-invoice', ['invoice_numbers' => $invoice_numbers]);
+        // Http::post('http://127.0.0.1:2999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
+
+        // Job Laraval
+        JobTask::insert([
+            'job' => 'RenderInvoice',
+            'status' => 'processing',
+            'no_document' => $no_document,
+            'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $job = new RenderInvoiceJob($invoice_numbers);
+        $this->dispatch($job);
     }
 
     private static function generatePDF($noInvoice)
