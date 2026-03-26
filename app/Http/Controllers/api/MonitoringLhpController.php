@@ -57,7 +57,7 @@ class MonitoringLhpController extends Controller
         if(in_array($jabatan, [21,15, 157])){
             $rekapOrder->whereIn('sales_id', $getBawahan);
         }else if(in_array($jabatan, [24,148])){
-            $rekapOrder->where('sales_id', $this->karyawan);
+            $rekapOrder->where('sales_id', $this->user_id);
         }
 
         /*
