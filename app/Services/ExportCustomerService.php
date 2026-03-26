@@ -26,7 +26,6 @@ class ExportCustomerService
         ini_set('memory_limit', '4096M');
         ini_set('max_execution_time', '300');
     }
-
     public function export($id, $type, $status, $typeQt, $category, $duration)
     {
         Log::info('[ExportCustomer] START', [
@@ -40,7 +39,6 @@ class ExportCustomerService
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
 
-            // 1. SETUP HEADER EXCEL
             $sheet->mergeCells('A1:H1');
             $sheet->setCellValue('A1', 'MASTER PELANGGAN PT INTI SURYA LABORATORIUM');
             $sheet->getStyle('A1')->applyFromArray([
@@ -57,9 +55,10 @@ class ExportCustomerService
             ]);
             $sheet->getRowDimension(2)->setRowHeight(25);
 
-            // 2. THE ULTIMATE DYNAMIC QUERY BUILDER (NO SWITCH-CASE, NO EXTRA METHODS)
             $query = MasterPelanggan::select(['id', 'id_pelanggan', 'npwp', 'nama_pelanggan', 'wilayah', 'sales_penanggung_jawab', 'sales_id'])
                 ->with(['kontak_pelanggan:pelanggan_id,no_tlp_perusahaan'])
+                ->where('sales_id', '!=', 127)
+                ->whereNotNull('sales_id')
                 ->where('is_active', true);
 
             if ($status === 'new') {
@@ -78,7 +77,6 @@ class ExportCustomerService
             if ($status === 'ordered') {
                 $relation = $category === 'non-contract' ? 'quotasiNonKontrak' : 'quotasiKontrak';
 
-                // Ekstrak angka bulan pakai Regex. Keren kan?
                 preg_match('/>=(\d+)/', $type, $matches);
                 $duration = $matches[1] ?? null;
 
@@ -91,14 +89,12 @@ class ExportCustomerService
                         }
                     });
 
-                    // Aturan khusus cuma buat kontrak
                     if ($relation === 'quotasiKontrak') {
                         $q->whereHas('latestDetail', fn($qd) => $qd->where('periode_kontrak', '<', date('Y-m')));
                     }
                 });
             }
 
-            // 3. PROSES CHUNKING & WRITING KE EXCEL
             $row = 3;
             $no = 1;
 
@@ -132,7 +128,6 @@ class ExportCustomerService
 
             Log::info('[ExportCustomer] Finished processing data', ['total_processed' => $no - 1]);
 
-            // 4. STYLING EXCEL
             $lastRow = $row - 1;
             if ($lastRow >= 3) {
                 $sheet->getStyle("A2:H$lastRow")->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FF000000']]]]);
@@ -149,7 +144,6 @@ class ExportCustomerService
                 $sheet->getColumnDimension('G')->setAutoSize(false)->setWidth(30);
             }
 
-            // 5. SAVING FILE
             $fileName = 'export_pelanggan_' . str_replace('>=', '', $type)   . '_' . date('Y-m-d_H-i-s') . '.xlsx';
             $folderPath = public_path('master_pelanggan');
 
