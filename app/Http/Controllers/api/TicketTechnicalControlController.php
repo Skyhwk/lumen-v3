@@ -699,11 +699,15 @@ class TicketTechnicalControlController extends Controller
                 }
 
                 $finalIdRegulasi = null;
-
+                // 1. Cari regulasi di database yang namanya sama persis dan is_active = 1
+                $existingRegulasi = MasterRegulasi::where('peraturan', $inputRegulasi)
+                                                ->where('id_kategori',$request->id_kategori_regulasi)
+                                                ->where('is_active', 1)
+                                                ->first();
                 // CEK LOGIKA: Apakah value berupa angka (termasuk string angka "001") atau bukan?
-                if (is_numeric($inputRegulasi)) {
-                    // Jika angka, berarti itu ID Regulasi existing
-                    $finalIdRegulasi = $inputRegulasi;
+                if ($existingRegulasi) {
+                    // 2a. Jika ADA: Langsung gunakan ID-nya, tidak perlu insert baru
+                    $finalIdRegulasi = $existingRegulasi->id;
                 } else {
                     // Jika bukan angka (berarti teks nama regulasi baru), Insert Regulasi Baru dulu
                     // Note: Sesuaikan 'MasterRegulasi' dan nama kolomnya dengan model di project Anda
