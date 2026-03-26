@@ -2645,6 +2645,24 @@ class InputParameterController extends Controller
                     }
                 }
 
+				//PARAM AUTO APPROVE
+				$paramAutoApprove = [
+					'Bau', 'Angka Bau', 'Angka Bau (NA)', 'AOX',
+					'Kekeruhan', 'Kekeruhan (APHA-B-23-NA)', 'Kekeruhan (APHA-B-23)',
+					'Kekeruhan (IKM-SP-NA)', 'Kekeruhan (IKM-SP)',
+					'TDS', 'TDS (APHA-C-23-NA)', 'TDS (APHA-C-23)',
+					'TDS (IKM-KM-NA)', 'TDS (IKM-KM)',
+					'DO', 'DO (C-03-NA)', 'DO (C-03)', 'DO (G-03-NA)', 'DO (G-03)',
+					'DHL', 'DTL'
+				];
+
+				if (in_array($request->parameter, $paramAutoApprove)) {
+					$data->is_approved = 1;
+					$data->approved_by = 'System'; 
+					$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+					$data->save();
+				}
+
 				DB::commit();
 				return (object)[
 					'message'=> 'Value Parameter berhasil disimpan.!',
@@ -3029,7 +3047,7 @@ class InputParameterController extends Controller
 										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
 										// dd($l25);
 										if ($l25) {
-											$waktu = explode(",", $l25->durasi_pengambilan);
+											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
 											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
 											$durasiFin = ((int)$jam * 60) + (int)$menit;
@@ -3041,7 +3059,7 @@ class InputParameterController extends Controller
 									if (count($lingVolatile) > 0) {
 										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
-											$waktu = explode(",", $l25->durasi_pengambilan);
+											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
 											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
 											$durasiFin = ((int)$jam * 60) + (int)$menit;
@@ -3185,7 +3203,7 @@ class InputParameterController extends Controller
 				];
 			}
 
-			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 308];
+			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 306, 307, 308];
 			DB::beginTransaction();
 			try {
 				$data = new LingkunganHeader;
@@ -3723,6 +3741,11 @@ class InputParameterController extends Controller
 			$data_lapangan = $data_lapangan->toArray();
 			$pemasangan = json_decode($data_lapangan[0]['pengukuran']);
 			$pengambilan = json_decode($data_lapangan[1]['pengukuran']);
+
+			$luas_botol_raw = $pemasangan->luas_botol;
+
+			$luas_botol = (float) preg_replace('/[^0-9.]/', '', $luas_botol_raw);
+
 			
 			$start = Carbon::parse($pemasangan->tanggal_pemasangan . ' ' . $data_lapangan[0]['waktu_pengukuran']);
 			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $data_lapangan[1]['waktu_pengukuran']);
@@ -3743,6 +3766,7 @@ class InputParameterController extends Controller
 			$function = $functionObj->function;
 			$data_parsing = $request->all();
 			$data_parsing = (object)$data_parsing;
+			$data_parsing->luas_botol = $luas_botol;
 			$data_parsing->selisih_hari = $selisih_hari;
 			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
@@ -3766,7 +3790,7 @@ class InputParameterController extends Controller
 					'berat_kosong_dengan_isi_1' => $request->bki1,
 					'berat_kosong_dengan_isi_2' => $request->bki2,
 					'volume_filtrat' => $request->vl,
-					'luas_botol' => (0.25 * 3.14 * pow($request->luas_botol, 2)) / 10000, // dari cm2 ke m2
+					'luas_botol' => $data_parsing->luas_botol,
 					'selisih_hari' => $selisih_hari
 				];
 

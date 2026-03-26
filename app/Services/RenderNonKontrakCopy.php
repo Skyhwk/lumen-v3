@@ -8,7 +8,7 @@ use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Services\TranslatorService as Translator;
 use Carbon\Carbon;
 
@@ -240,30 +240,81 @@ class RenderNonKontrakCopy
             foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
                 $kategori = explode("-", $a->kategori_1);
                 $kategori2 = explode("-", $a->kategori_2);
-                $kategori2Value = isset($kategori2[1]) ? $kategori2[1] : '';
+                $is_paket = $a->is_paket_analisa ?? false;
+                $kategori2Value = (isset($kategori2[1]) ? strtoupper($kategori2[1]) : '') . ($is_paket ? ' - (' . strtoupper($a->paket) . ')' : '');
                 $penamaan_titik = "";
-                if (!empty($a->penamaan_titik)) {
-                    if (is_array($a->penamaan_titik)) {
-                        $filtered_array = array_filter($a->penamaan_titik, function ($item) {
-                            $value = is_object($item) ? current(get_object_vars($item))
-                                : (is_array($item) ? current($item) : $item);
-                            return !empty($value);
-                        });
+                if (is_array($a->penamaan_titik)) {
+                    $penamaan_titik_strings = array_map(function ($item) {
+                        if (is_object($item)) {
+                            $props = get_object_vars($item);
+                            return reset($props);
+                        }
+                        return $item;
+                    }, $a->penamaan_titik);
 
-                        $filtered_array = array_map(function ($item) {
-                            return is_object($item) ? current(get_object_vars($item))
-                                : (is_array($item) ? current($item) : $item);
-                        }, $filtered_array);
-
-                        $penamaan_titik = !empty($filtered_array)
-                            ? "(" . implode(", ", $filtered_array) . ")"
-                            : "";
+                    $penamaan_titik = "(" . implode(", ", $penamaan_titik_strings) . ")";
+                } else {
+                    if (is_object($a->penamaan_titik)) {
+                        $props = get_object_vars($a->penamaan_titik);
+                        $penamaan_titik = "(" . reset($props) . ")";
                     } else {
                         $penamaan_titik = "(" . $a->penamaan_titik . ")";
+                    }
+                }
+
+                if (!empty($a->penamaan_titik)) {
+                    if (is_array($a->penamaan_titik)) {
+                        $filtered_array = array_filter($a->penamaan_titik, function ($value) {
+                            if (is_object($value)) {
+                                $props = get_object_vars($value);
+                                return !empty($props) && trim(reset($props)) !== '' && trim(reset($props)) !== '-';
+                            }
+                            return $value != "" && $value != " " && $value != "-";
+                        });
+
+                        if (!empty($filtered_array)) {
+                            $penamaan_titik_strings = array_map(function ($item) {
+                                if (is_object($item)) {
+                                    $props = get_object_vars($item);
+                                    return reset($props);
+                                }
+                                return $item;
+                            }, $filtered_array);
+
+                            $penamaan_titik = "(" . implode(", ", $penamaan_titik_strings) . ")";
+                        } else {
+                            $penamaan_titik = "";
+                        }
+                    } else {
+                        if (is_object($a->penamaan_titik)) {
+                            $props = get_object_vars($a->penamaan_titik);
+                            $penamaan_titik = "(" . reset($props) . ")";
+                        } else {
+                            $penamaan_titik = "(" . $a->penamaan_titik . ")";
+                        }
                     }
                 } else {
                     $penamaan_titik = "";
                 }
+
+                $filtered = array_filter($a->penamaan_titik, function ($item) {
+                    $props = get_object_vars($item);
+                    $key = key($props);
+                    $value = $props[$key];
+
+                    return !empty($value);
+                });
+
+                $resultParts = array_map(function ($item) {
+                    $props = get_object_vars($item);
+                    $key = key($props);
+                    $value = $props[$key];
+
+                    return $value;
+                }, $filtered);
+
+
+                $penamaan_titik = count($resultParts) > 0 ? "(" . implode(', ', array_unique($resultParts)) . ")" : '';
 
                 // dump($penamaan_titik);
                 // Hidupin untuk tampilkan penamaan titik

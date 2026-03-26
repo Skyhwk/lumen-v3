@@ -14,7 +14,7 @@ use App\Models\{
 
 class FeeSalesController extends Controller
 {
-    private $indonesianMonthStr = [
+    private $indoMonth = [
         '01' => 'januari',
         '02' => 'februari',
         '03' => 'maret',
@@ -31,7 +31,7 @@ class FeeSalesController extends Controller
 
     private $idJabatanSales = [
         24, // Sales Officer
-        148, // Customer Relation Officer
+        21, // Sales Supervisor
     ];
 
     public function getSalesList(Request $request)
@@ -39,8 +39,7 @@ class FeeSalesController extends Controller
         $currentUser = $request->attributes->get('user')->karyawan;
 
         $sales = MasterKaryawan::where('is_active', true)
-            ->whereIn('id_jabatan', $this->idJabatanSales)
-            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            ->where(fn($q) => $q->whereIn('id_jabatan', $this->idJabatanSales)->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana'))
             ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
             ->orderBy('nama_lengkap', 'asc')
             ->get();
@@ -57,14 +56,18 @@ class FeeSalesController extends Controller
             'karyawan_id' => $request->salesId,
             'tahun' => $request->year,
             'is_active' => true
-        ])->whereNotNull($this->indonesianMonthStr[$request->month])->latest()->first();
+        ])->whereNotNull($this->indoMonth[$request->month])->latest()->first();
 
         if (!$targetSales) return response()->json(['message' => 'Target Sales not found'], 404);
 
-        $masterFeeSales = MasterFeeSales::where([
-            'sales_id' => $request->salesId,
-            'period' => $request->year . '-' . $request->month,
-        ])->latest()->first();
+        $masterFeeSales = MasterFeeSales::with('rekap')
+            ->where([
+                'sales_id' => $request->salesId,
+                'period' => $request->year . '-' . $request->month,
+                'is_active' => true
+            ])
+            ->latest()
+            ->first();
 
         return response()->json([
             'targetSales' => $targetSales,

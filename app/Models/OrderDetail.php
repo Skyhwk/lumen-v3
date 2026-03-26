@@ -192,6 +192,11 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsEmisiHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiDetail')->where('is_active', true);
     }
+
+    public function lhps_hygiene_sanitasi()
+    {
+        return $this->belongsTo(LhpsHygieneSanitasiHeader::class, 'cfr', 'no_lhp')->where('is_active', true);
+    }
     public function lhps_emisi_c()
     {
         return $this->belongsTo(LhpsEmisiCHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiCDetail')->where('is_active', true);
@@ -388,6 +393,9 @@ class OrderDetail extends Sector
         }
         if ($this->getaranHeader()->exists()) {
             return $this->GetaranHeader;
+        }
+        if ($this->udaraSubKontrak()->exists()) {
+            return $this->udaraSubKontrak;
         }
         if ($this->kebisinganHeader()->exists()) {
             return $this->KebisinganHeader;

@@ -15,6 +15,6 @@ class MasterFeeDriver extends Sector
 
     public function driver()
     {
-        return $this->belongsTo(MasterDriver::class, 'driver_id', 'id');
+        return $this->belongsTo(MasterDriver::class, 'driver_id', 'user_id');
     }
 }

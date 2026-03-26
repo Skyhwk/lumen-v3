@@ -16,28 +16,32 @@ class SalesDailyQSD
     {
         $now = Carbon::now();
         $currentYear = $now->format('Y');
+        printf("\n[SchaduleUpdateQsd] [%s] Running untuk tahun %d\n", $now->format('Y-m-d H:i:s'), $currentYear);
         self::handle((int)$currentYear);
     }
 
     private static function handle(int $currentYear): bool
     {
-        Log::info('[SalesDailyQSD] Starting QSD data update...');
+        Log::info('[SchaduleUpdateQsd] Starting QSD data update...');
         $arrayYears = self::getYearRange($currentYear);
 
         $rekapOrder = self::buildQueryQsd($arrayYears);
         
         $rekapOrderNonPengujian = self::buildQueryNonPengujian($arrayYears);
-
+        
         $rows = self::streamData($rekapOrder, $rekapOrderNonPengujian);
+        
         // Invoice Mapping
         [$invoiceMap, $spesialInv, $noQTSpesial, $mapedInv, $groupedInvSpesial] = self::buildInvoiceMaps($arrayYears);
         // Buffering
         $buffer = self::bufferMapping($rows, $invoiceMap);
+        
         // First Grouped/Grouped Data
         [$withInvoice, $groupedSpesial, $withoutInvoice, $firstGrouped, $grouped, $result] = self::processGroupings($buffer, $spesialInv, $mapedInv, $groupedInvSpesial, $noQTSpesial);
         // Simpan ke DB
         $totalInserted = 0;
         if ($result->isNotEmpty()) {
+            printf("[SchaduleUpdateQsd] [%s] Inserting data to daily_qsd\n", Carbon::now()->format('Y-m-d H:i:s'));
             DB::disableQueryLog();
             DB::transaction(function () use ($result, $arrayYears, &$totalInserted) {
                 $now = Carbon::now()->subHours(7);
@@ -91,6 +95,9 @@ class SalesDailyQSD
                         ->delete();
                 }
             });
+
+            printf("[SchaduleUpdateQsd] [%s] Updating status_customer\n", Carbon::now()->format('Y-m-d H:i:s'));
+
             DB::statement("
                 UPDATE daily_qsd q
                 JOIN (
@@ -110,27 +117,45 @@ class SalesDailyQSD
             DB::statement("
                 UPDATE daily_qsd
                 SET tanggal_kelompok = CASE 
-                    -- jika tanggal_pembayaran NULL → pakai tanggal_sampling_min
                     WHEN tanggal_pembayaran IS NULL THEN tanggal_sampling_min
-
-                    -- jika tanggal_pembayaran < tanggal_sampling_min → pakai tanggal_pembayaran
-                    WHEN STR_TO_DATE(
-                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
-                            '%Y-%m-%d'
-                        ) < tanggal_sampling_min
-                    THEN STR_TO_DATE(
-                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
-                            '%Y-%m-%d'
-                        )
-
-                    -- selain itu → tetap tanggal_sampling_min
+                    WHEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d') < tanggal_sampling_min
+                        THEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d')
                     ELSE tanggal_sampling_min
                 END
                 WHERE tanggal_kelompok IS NULL
+                OR (
+                        tanggal_pembayaran IS NULL
+                        AND tanggal_kelompok <> tanggal_sampling_min
+                    );
             ");
+
+            DB::statement("
+                UPDATE daily_qsd d
+                JOIN (
+                    SELECT uuid,
+                        STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d') AS tgl_bayar,
+                        STR_TO_DATE(SUBSTRING_INDEX(tanggal_sampling_min, ',', 1), '%Y-%m-%d') AS tgl_sampling
+                    FROM daily_qsd
+                    WHERE tanggal_pembayaran IS NOT NULL
+                ) x ON x.uuid = d.uuid
+                SET d.tanggal_kelompok = LEAST(x.tgl_bayar, x.tgl_sampling)
+            ");
+
+            DB::statement("
+                UPDATE daily_qsd
+                SET is_invoicing = 1
+            ");
+
+            DB::statement("
+                UPDATE daily_qsd dq
+                INNER JOIN order_detail od ON od.no_order = dq.no_order
+                SET dq.is_invoicing = 0
+            ");
+
+            printf("[SchaduleUpdateQsd] [%s] Updating daily_qsd completed", Carbon::now()->format('Y-m-d H:i:s'));
         }
-        Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
-        Log::info('[SalesDailyQSD] Completed successfully');
+        Log::info('[SchaduleUpdateQsd] Inserted ' . $totalInserted . ' rows');
+        Log::info('[SchaduleUpdateQsd] Completed successfully');
         return true;
     }
 
@@ -138,7 +163,7 @@ class SalesDailyQSD
     {
         $nextYear = (int)Carbon::create($currentYear, 12, 1)->addYear(1)->endOfMonth()->format('Y');
         $arrayYears = [];
-        for ($i = ($currentYear - 1); $i <= $nextYear; $i++) {
+        for ($i = 2024; $i <= $nextYear; $i++) {
             $arrayYears[] = $i;
         }
         return $arrayYears;
@@ -146,6 +171,8 @@ class SalesDailyQSD
 
     private static function buildQueryQsd(array $arrayYears)
     {
+        printf("[SchaduleUpdateQsd] [%s] Building query QSD for years %s\n", Carbon::now()->format('Y-m-d H:i:s'), implode(', ', $arrayYears));
+
         $maxDateNextYear = Carbon::create(end($arrayYears), 12, 1)->endOfMonth()->format('Y-m-d');
         $rekapOrder = DB::table('order_detail')
             ->selectRaw('
@@ -218,14 +245,13 @@ class SalesDailyQSD
             order_detail.kontrak, 
             CASE WHEN order_detail.kontrak="C" THEN rqkd.periode_kontrak ELSE NULL END
         ');
+        printf("[SchaduleUpdateQsd] [%s] Query QSD built successfully\n", Carbon::now()->format('Y-m-d H:i:s'));
         return $rekapOrder;
     }
 
-    private static function buildQueryNonPengujian(array $arrayYears)
+    private static function baseNonPengujianQuery(array $arrayYears)
     {
         return DB::table('order_header as oh')
-            ->join('request_quotation as rq', 'oh.no_document', '=', 'rq.no_document')
-            ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
             ->where('oh.is_active', 1)
             ->whereIn(DB::raw('LEFT(oh.tanggal_order, 4)'), $arrayYears)
             ->whereNotIn('oh.id_pelanggan', self::EXCLUDE_CUSTOMERS)
@@ -234,36 +260,107 @@ class SalesDailyQSD
                     ->from('order_detail as od')
                     ->whereRaw('od.id_order_header = oh.id')
                     ->where('od.is_active', 1);
-            })
+            });
+    }
+
+    private static function nonKontrakQuery(array $arrayYears)
+    {
+        return self::baseNonPengujianQuery($arrayYears)
+            ->join('request_quotation as rq', 'oh.no_document', '=', 'rq.no_document')
+            ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
             ->selectRaw('
-                oh.no_order, 
-                oh.no_document AS no_quotation, 
-                0 AS total_cfr, 
-                oh.nama_perusahaan, 
-                oh.konsultan, 
-                "Non Pengujian" AS status_sampling, 
-                NULL AS periode, 
-                "N" AS kontrak, 
-                NULL AS sales_id_kontrak, 
-                NULL AS sales_nama_kontrak, 
-                rq.sales_id AS sales_id_non_kontrak, 
-                mk.nama_lengkap AS sales_nama_non_kontrak, 
-                NULL AS total_discount_kontrak, 
-                NULL AS total_ppn_kontrak, 
-                NULL AS total_pph_kontrak, 
-                NULL AS biaya_akhir_kontrak, 
-                NULL AS grand_total_kontrak, 
-                NULL AS total_revenue_kontrak, 
-                rq.total_discount AS total_discount_non_kontrak, 
-                rq.total_ppn AS total_ppn_non_kontrak, 
-                rq.total_pph AS total_pph_non_kontrak, 
-                rq.biaya_akhir AS biaya_akhir_non_kontrak, 
-                rq.grand_total AS grand_total_non_kontrak, 
-                rq.pelanggan_ID AS pelanggan_id_kontrak, 
-                rq.pelanggan_ID AS pelanggan_id_non_kontrak, 
-                (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0)) AS total_revenue_non_kontrak, 
-                oh.tanggal_order AS tanggal_sampling_min
+                oh.no_order,
+                oh.no_document AS no_quotation,
+                0 AS total_cfr,
+                oh.nama_perusahaan,
+                oh.konsultan,
+                "Non Pengujian" AS status_sampling,
+                NULL AS periode,
+                "N" AS kontrak,
+
+                NULL AS sales_id_kontrak,
+                NULL AS sales_nama_kontrak,
+
+                rq.sales_id AS sales_id_non_kontrak,
+                mk.nama_lengkap AS sales_nama_non_kontrak,
+
+                NULL AS total_discount_kontrak,
+                NULL AS total_ppn_kontrak,
+                NULL AS total_pph_kontrak,
+                NULL AS biaya_akhir_kontrak,
+                NULL AS grand_total_kontrak,
+                NULL AS total_revenue_kontrak,
+
+                rq.total_discount AS total_discount_non_kontrak,
+                rq.total_ppn AS total_ppn_non_kontrak,
+                rq.total_pph AS total_pph_non_kontrak,
+                rq.biaya_akhir AS biaya_akhir_non_kontrak,
+                rq.grand_total AS grand_total_non_kontrak,
+
+                rq.pelanggan_ID AS pelanggan_id_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
+
+                (COALESCE(rq.biaya_akhir,0)
+                    + COALESCE(rq.total_pph,0)
+                    - COALESCE(rq.total_ppn,0)
+                ) AS total_revenue_non_kontrak,
+
+                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min
             ');
+    }
+
+    private static function kontrakQuery(array $arrayYears)
+    {
+        return self::baseNonPengujianQuery($arrayYears)
+            ->join('request_quotation_kontrak_H as rq', 'oh.no_document', '=', 'rq.no_document')
+            ->join('request_quotation_kontrak_D as rqkd', 'rq.id', '=', 'rqkd.id_request_quotation_kontrak_H')
+            ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
+            ->selectRaw('
+                oh.no_order,
+                oh.no_document AS no_quotation,
+                0 AS total_cfr,
+                oh.nama_perusahaan,
+                oh.konsultan,
+                "Non Pengujian" AS status_sampling,
+                rqkd.periode_kontrak AS periode,
+                "C" AS kontrak,
+
+                rq.sales_id AS sales_id_kontrak,
+                mk.nama_lengkap AS sales_nama_kontrak,
+
+                NULL AS sales_id_non_kontrak,
+                NULL AS sales_nama_non_kontrak,
+
+                rqkd.total_discount AS total_discount_kontrak,
+                rqkd.total_ppn AS total_ppn_kontrak,
+                rqkd.total_pph AS total_pph_kontrak,
+                rqkd.biaya_akhir AS biaya_akhir_kontrak,
+                rqkd.grand_total AS grand_total_kontrak,
+
+                (COALESCE(rqkd.biaya_akhir,0)
+                    + COALESCE(rqkd.total_pph,0)
+                    - COALESCE(rqkd.total_ppn,0)
+                ) AS total_revenue_kontrak,
+
+                NULL AS total_discount_non_kontrak,
+                NULL AS total_ppn_non_kontrak,
+                NULL AS total_pph_non_kontrak,
+                NULL AS biaya_akhir_non_kontrak,
+                NULL AS grand_total_non_kontrak,
+
+                rq.pelanggan_ID AS pelanggan_id_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
+
+                NULL AS total_revenue_non_kontrak,
+
+                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min
+            ');
+    }
+
+    private static function buildQueryNonPengujian(array $arrayYears)
+    {
+        return self::nonKontrakQuery($arrayYears)
+            ->unionAll(self::kontrakQuery($arrayYears));
     }
 
     private static function streamData($rekapOrder, $rekapOrderNonPengujian)
@@ -337,6 +434,7 @@ class SalesDailyQSD
 
     private static function bufferMapping($rows, $invoiceMap)
     {
+        printf("[SchaduleUpdateQsd] [%s] Buffering mapping data\n", Carbon::now()->format('Y-m-d H:i:s'));
         $buffer = [];
         foreach ($rows as $row) {
             $keyExact = $row->no_quotation . '|' . $row->periode;
@@ -379,11 +477,13 @@ class SalesDailyQSD
                 'created_at'           => Carbon::now()->subHours(7),
             ];
         }
+        printf("[SchaduleUpdateQsd] [%s] Buffering mapping data completed\n", Carbon::now()->format('Y-m-d H:i:s'));
         return $buffer;
     }
 
     private static function processGroupings($buffer, $spesialInv, $mapedInv, $groupedInvSpesial, $noQTSpesial)
     {
+        printf("[SchaduleUpdateQsd] [%s] Processing groupings\n", Carbon::now()->format('Y-m-d H:i:s'));
         $collection = collect($buffer);
         $withInvoice = $collection->filter(fn ($row) => !empty($row['no_invoice']));
         $withoutInvoice = $collection->filter(fn ($row) => empty($row['no_invoice']));
@@ -481,6 +581,7 @@ class SalesDailyQSD
             ];
         })->values();
         $result = $grouped->merge($firstGrouped)->values();
+        printf("[SchaduleUpdateQsd] [%s] Processing groupings completed\n", Carbon::now()->format('Y-m-d H:i:s'));
         return [$withInvoice, $groupedSpesial, $withoutInvoice, $firstGrouped, $grouped, $result];
     }
 

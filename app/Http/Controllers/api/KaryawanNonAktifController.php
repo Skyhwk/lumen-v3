@@ -8,7 +8,7 @@ use App\Models\MasterCabang;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 
 class KaryawanNonAktifController extends Controller
 {
@@ -17,7 +17,7 @@ class KaryawanNonAktifController extends Controller
         $this->autoNaKaryawan();
 
         $data = MasterKaryawan::with('divisi', 'jabatan', 'cabang')
-            ->where('active', true)
+            ->where('active', false)
             ->where('is_active', false)
             ->where('deleted_by', null)
             ->get();

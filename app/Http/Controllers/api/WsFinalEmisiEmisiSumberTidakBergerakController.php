@@ -28,9 +28,8 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
         	->where('parameter', 'not like', '%Iso-%')
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
-            ->whereMonth('tanggal_terima', explode('-', $request->date)[1])
-            ->whereYear('tanggal_terima', explode('-', $request->date)[0])
-            ->orderByDesc('tanggal_terima');
+            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->orderBy('tanggal_sampling');
 
         return Datatables::of($data)->make(true);
     }
@@ -252,79 +251,96 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
     public function koreksiO2(Request $request)
     {
-        // dd('masuk');
         DB::beginTransaction();
+
         try {
 
             $faktor_koreksi = (float) $request->faktor_koreksi;
-            $dataLapangan   = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
 
-            $order_detail = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
 
-            if ($order_detail != null) {
+            $orderDetail = OrderDetail::where('no_sampel', $request->no_sampel)
+                ->where('is_active', true)
+                ->first();
 
-                // Ambil seluruh data dari model EmisiC
-                $emisiCerobong = EmisiCerobongHeader::where('no_sampel', $request->no_sampel)
-                    ->where('parameter', $request->parameter)
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($emisiCerobong != null) {
-
-                    $ws_value = WsValueEmisiCerobong::where('no_sampel', $request->no_sampel)
-                        ->where('id_emisi_cerobong_header', $emisiCerobong->id)
-                        ->where('is_active', true)
-                        ->first();
-                    if ($request->faktor_koreksi > 0) {
-                        $C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
-                        $hasil    = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
-                        if ($ws_value != null) {
-                            $ws_value->input_koreksi = $request->faktor_koreksi;
-                            $ws_value->nil_koreksi   = number_format((float) $hasil, 4, '.', '');
-                                                                                                               // $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
-                            $keterangan                   = $request->jenis_koreksi;                           // Jenis Koreksi
-                            $keterangan[]                 = 'Angka koreksi ' . $request->faktor_koreksi . '%'; // Menambahkan keterangan angka koreksi
-                            $ws_value->keterangan_koreksi = json_encode($keterangan);
-                            $ws_value->C3_persen          = $dataLapangan->O2;
-                            $ws_value->is_active          = true;
-                            $ws_value->updated_at         = Carbon::now();
-                            $ws_value->updated_by         = $this->karyawan;
-                            // dd($ws_value);
-                            $ws_value->save();
-                        } else {
-                            return response()->json([
-                                'message' => 'Data C1 tidak ditemukan.',
-                                'success' => false,
-                                'status'  => 404,
-                            ], 404);
-                        }
-                    } else {
-                        if ($ws_value != null) {
-                            $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
-                            $ws_value->updated_at         = Carbon::now();
-                            $ws_value->updated_by         = $this->karyawan;
-                            // dd($ws_value);
-                            $ws_value->save();
-                        } else {
-                            return response()->json([
-                                'message' => 'Data C1 tidak ditemukan.',
-                                'success' => false,
-                                'status'  => 404,
-                            ], 404);
-                        }
-                    }
-
-                    DB::commit();
-                    return response()->json(['message' => 'Data berhasil diupdate.', 'success' => true], 200);
-                } else {
-                    return response()->json(['message' => 'Data Subkontrak tidak ditemukan.'], 404);
-                }
-            } else {
-                return response()->json(['message' => 'Data tidak ditemukan di kategori EMISI.'], 404);
+            if (!$orderDetail) {
+                return response()->json([
+                    'message' => 'Data tidak ditemukan di kategori EMISI.'
+                ], 404);
             }
+
+            $emisiCerobong = EmisiCerobongHeader::where([
+                'no_sampel' => $request->no_sampel,
+                'parameter' => $request->parameter,
+                'is_active' => true
+            ])->first();
+
+            $emisiSubkontrak = Subkontrak::where([
+                'no_sampel' => $request->no_sampel,
+                'parameter' => $request->parameter,
+                'is_active' => true
+            ])->first();
+
+            $wsQuery = WsValueEmisiCerobong::where('no_sampel', $request->no_sampel)
+                ->where('is_active', true);
+
+            if ($emisiCerobong) {
+                $wsQuery->where('id_emisi_cerobong_header', $emisiCerobong->id);
+            } elseif ($emisiSubkontrak) {
+                $wsQuery->where('id_subkontrak', $emisiSubkontrak->id);
+            } else {
+                return response()->json([
+                    'message' => 'Data emisi tidak ditemukan.'
+                ], 404);
+            }
+
+            $wsValue = $wsQuery->first();
+
+            if (!$wsValue) {
+                return response()->json([
+                    'message' => 'Data C1 tidak ditemukan.',
+                    'success' => false
+                ], 404);
+            }
+
+            if ($faktor_koreksi > 0) {
+
+                $C1_value = $wsValue->f_koreksi_c1 !== null
+                    ? (float) $wsValue->f_koreksi_c1
+                    : (float) $wsValue->C1;
+
+                $hasil = ((21 - $faktor_koreksi) / (21 - (float) $dataLapangan->O2)) * $C1_value;
+
+                $keterangan = $request->jenis_koreksi ?? [];
+                $keterangan[] = 'Angka koreksi ' . $faktor_koreksi . '%';
+
+                $wsValue->input_koreksi = $faktor_koreksi;
+                $wsValue->nil_koreksi = number_format($hasil, 4, '.', '');
+                $wsValue->keterangan_koreksi = json_encode($keterangan);
+                $wsValue->C3_persen = $dataLapangan->O2;
+            } else {
+                $wsValue->keterangan_koreksi = json_encode($request->jenis_koreksi);
+            }
+
+            $wsValue->is_active = true;
+            $wsValue->updated_at = Carbon::now();
+            $wsValue->updated_by = $this->karyawan;
+            $wsValue->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Data berhasil diupdate.',
+                'success' => true
+            ], 200);
+
         } catch (\Exception $e) {
-            DB::rollback(); // Rollback transaksi jika ada kesalahan
-            return response()->json(['message' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
+
+            DB::rollback();
+
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
         }
     }
 

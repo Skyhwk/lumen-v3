@@ -1,0 +1,381 @@
+<?php
+
+namespace App\Http\Controllers\api;
+
+use App\Models\FormPSKL;
+use App\Models\OrderHeader;
+use App\Models\OrderDetail;
+use App\Models\MasterPelanggan;
+use App\Models\QuotationNonKontrak;
+use App\Models\QuotationKontrakH;
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Yajra\DataTables\Facades\DataTables;
+use App\Services\GetBawahan;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use App\Models\MasterKaryawan;
+use App\Services\Notification;
+
+class FormPSKLController extends Controller
+{
+    /**
+     * Helper untuk memfilter query berdasarkan jabatan
+     */
+    private function applyJabatanFilter($query, $request)
+    {
+        $user = $request->attributes->get('user');
+        $jabatan = $user->karyawan->id_jabatan;
+        $userId = $user->id; 
+
+        if (in_array($jabatan, [24, 86, 148])) {
+            return $query->where($query->getModel()->getTable() . '.sales_id', $userId);
+        } 
+        
+        if (in_array($jabatan, [21, 15, 154, 157])) {
+            $bawahan = GetBawahan::where('id', $userId)->pluck('id')->toArray();
+            $bawahan[] = $userId;
+            return $query->whereIn($query->getModel()->getTable() . '.sales_id', $bawahan);
+        }
+
+        return $query;
+    }
+
+    public function index(Request $request) 
+    {
+        $query = FormPSKL::where('is_active', 1)
+            ->when($request->status == 'atas', 
+                fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED", "REOPEN", "PENDING" , 'SOLVED']),
+                fn($q) => $q->whereIn('status', ['DONE'])
+            );
+        // Panggil helper di sini
+        $data = $this->applyJabatanFilter($query, $request)->get();
+
+        return Datatables::of($data)->make(true);
+    }
+
+    public function getPelanggan(Request $request)
+    {
+        try {
+
+            $term = trim($request->term);
+            if (!$term || strlen($term) < 3) {
+                return response()->json(['data' => []]);
+            }
+
+            if ($request->mode == 'non-kontrak') {
+                $query = QuotationNonKontrak::with([
+                    'pelanggan:id_pelanggan,nama_pelanggan,wilayah,sales_penanggung_jawab'
+                ]);
+            } elseif ($request->mode == 'kontrak') {
+                $query = QuotationKontrakH::with(['detail',
+                    'pelanggan:id_pelanggan,nama_pelanggan,wilayah,sales_penanggung_jawab'
+                ]);
+            }
+
+            $query->where('no_document', 'like', "%{$term}%");
+
+            $data = $this->applyJabatanFilter($query, $request)
+                ->whereHas('pelanggan')
+                ->limit(20)
+                ->get()
+                ->map(function ($item) {
+
+                    if ($item->relationLoaded('detail')) {
+                        $dataPendukung = $item->detail->flatMap(function ($d) {
+                            return json_decode($d->data_pendukung_sampling ?? '[]', true);
+                        });
+                    } else {
+                        $dataPendukung = json_decode($item->data_pendukung_sampling ?? '[]', true);
+                    }
+
+                    return [
+                        'no_quotation' => $item->no_document,
+                        'id_pelanggan' => $item->pelanggan->id_pelanggan,
+                        'nama_pelanggan' => $item->pelanggan->nama_pelanggan,
+                        'wilayah' => $item->pelanggan->wilayah,
+                        'sales_penanggung_jawab' => $item->pelanggan->sales_penanggung_jawab,
+                        'data_pendukung_sampling' => $dataPendukung
+                    ];
+                });
+
+            return response()->json(['data' => $data]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
+        }
+    }
+
+    // Endpoint baru untuk get No Order berdasarkan ID Pelanggan
+    public function getNoOrderByPelanggan(Request $request)
+    {
+        $idPelanggan = $request->id_pelanggan;
+        $term = trim($request->term);
+        
+        if (!$idPelanggan) {
+            return response()->json(['data' => []]);
+        }
+
+        if (!$term || strlen($term) < 3) {
+            return response()->json(['data' => []]);
+        }
+
+        // Query dengan join untuk memastikan hanya ambil order yang punya detail aktif
+        $data = OrderHeader::where('order_header.id_pelanggan', $idPelanggan)
+            ->where('order_header.no_order', 'like', "%{$term}%")
+            ->where('order_header.is_active', true)
+            ->join('order_detail', function($join) {
+                $join->on('order_header.id', '=', 'order_detail.id_order_header')
+                    ->where('order_detail.is_active', true);
+            })
+            ->select([
+                'order_header.id',
+                'order_header.no_order',
+                'order_header.id_pelanggan',
+            ])
+            ->distinct() // Penting untuk menghindari duplikat jika ada multiple details
+            ->get();
+
+        return response()->json(['data' => $data]);
+    }
+
+    // Endpoint untuk get detail Order berdasarkan id_order_header
+    public function getOrderDetail(Request $request)
+    {
+        $idOrderHeader = $request->id_order_header;
+        $noOrder = $request->no_order;
+        
+        if (!$idOrderHeader) {
+            return response()->json(['message' => 'ID Order Header required'], 400);
+        }
+
+        // Query dengan selectRaw untuk ambil min tanggal dan GROUP_CONCAT periode
+        $query = OrderDetail::where('id_order_header', $idOrderHeader)
+            ->where('is_active', true);
+        
+        if ($noOrder) {
+            $query->where('no_order', $noOrder);
+        }
+
+        // Aggregate query - ambil min tanggal_sampling dan semua periode unique
+        $aggregateData = $query->selectRaw('
+                GROUP_CONCAT(DISTINCT 
+                    CASE 
+                        WHEN periode IS NOT NULL AND TRIM(periode) != "" 
+                        THEN periode 
+                    END 
+                    ORDER BY periode ASC 
+                    SEPARATOR ", "
+                ) as periode_string,
+                no_order
+            ')
+            ->groupBy('no_order')
+            ->first();
+
+        if (!$aggregateData) {
+            return response()->json(['message' => 'No Order Tidak Aktif'], 404);
+        }
+
+        // Split periode string menjadi array
+        $periodeList = [];
+        if ($aggregateData->periode_string) {
+            $periodeList = array_filter(
+                array_map('trim', explode(', ', $aggregateData->periode_string)),
+                function($val) {
+                    return $val !== '';
+                }
+            );
+            $periodeList = array_values($periodeList); // Reset index
+        }
+
+        // Ambil data dari OrderHeader
+        $orderHeader = OrderHeader::where('id', $idOrderHeader)->first();
+
+        return response()->json([
+            'data' => [
+                'id_order_header' => $idOrderHeader,
+                'no_order' => $aggregateData->no_order,
+                'tanggal_sampling' => $aggregateData->tanggal_sampling_min, // Tanggal terkecil
+                'periode_list' => $periodeList, // Array untuk select option
+                'has_periode' => !empty($periodeList),
+                'no_invoice' => $orderHeader->invoice->no_invoice ?? null,
+                'no_quotation' => $orderHeader->no_quotation ?? null,
+            ]
+        ]);
+    }
+
+    public function getTanggalSamplingByPeriode(Request $request)
+    {
+        $noOrder = $request->no_order;
+        $periode = $request->periode; // bisa null
+
+        if (!$noOrder) {
+            return response()->json([
+                'message' => 'No Order wajib diisi'
+            ], 400);
+        }
+
+        $query = OrderDetail::where('no_order', $noOrder)
+            ->where('is_active', true);
+
+        if ($periode !== null && $periode !== '') {
+            $query->where('periode', $periode);
+        } else {
+            $query->whereNull('periode');
+        }
+
+        // LANGSUNG ambil nilai MIN
+        $tanggalSampling = $query->min('tanggal_sampling');
+
+        return response()->json([
+            'data' => [
+                'tanggal_sampling' => $tanggalSampling
+            ]
+        ]);
+    }
+
+    public function store (Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            if($request->filled('id')){
+                $data = FormPSKL::where('id', $request->id)->first();
+                $data->updated_by = $this->karyawan;
+                $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            }else{
+                $data = new FormPSKL();
+                $data->created_by = $this->karyawan;
+                $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->batch_id = str_replace('.', '', microtime(true));
+            }
+            $data->jenis_quotation = $request->jenis_quotation == "kontrak" ? "Kontrak" : "Non Kontrak";
+            $data->id_pelanggan = $request->id_pelanggan;
+            $data->nama_pelanggan = $request->nama_pelanggan;
+            $data->sales_penanggung_jawab = $request->sales_penanggung_jawab;
+            $data->tanggal_sampling = $request->tanggal_sampling;
+            $data->no_quotation = $request->no_quotation;
+            $data->wilayah = $request->wilayah;
+            $data->periode = $request->periode;
+            $data->kategori_sk = $request->kategori_sk;
+            $data->jumlah_sk = $request->jumlah_sk;
+            $data->is_evaluasi_titik = $request->is_evaluasi_titik;
+            $data->is_survey_ulang = $request->is_survey_ulang;
+            $data->is_pelaporan = $request->is_pelaporan;
+            $data->catatan = $request->catatan;
+            $data->status = $request->status;
+            $data->data_pendukung_sampling = $request->data_pendukung_sampling;
+            $data->sales_id = $this->user_id;
+            $data->save();
+
+            $message = 'Form PSKL Telah Ditambahkan';
+
+            $user_TC = MasterKaryawan::where('id_department', 17)
+                ->whereNotIn('id', [18, 83])
+                ->where('is_active', true)
+                ->pluck('id')
+                ->toArray();
+
+            Notification::whereIn('id', $user_TC)
+                ->title('Ticket Form PSKL !')
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
+                ->url('/form-pskl')
+                ->send();
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => $th->getMessage()], 400);
+        }
+        
+    }
+
+    public function delete(Request $request) {
+        $data = FormPSKL::where('id', $request->id)->first();
+        $data->deleted_by = $this->karyawan;
+        $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+        $data->is_active = false;
+        $data->save();
+
+        $message = 'Form PSKL telah di hapus';
+
+        Notification::where('nama_lengkap', $data->created_by)
+                ->title('Form PSKL Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/form-pskl')
+                ->send();
+        return response()->json([
+            'success' => true,
+            'message' => $message
+        ], 200);
+    }
+
+    public function reOpen(Request $request) {
+        DB::beginTransaction();
+        try {
+            $data = FormPSKL::where('id', $request->id)->first();
+            $data->status = "REOPEN";
+            $data->reopen_by = $this->karyawan;
+            $data->reopen_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->reopen_notes = $request->alasan_reopen;
+            $data->save();
+            DB::commit();
+
+            $message = 'Form PSKL telah di re-open';
+
+            // 🔑 ambil target notifikasi
+            $targetUser = $data->solved_by;
+
+            if ($targetUser) {
+                Notification::where('nama_lengkap', $targetUser)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    public function done(Request $request) 
+    {
+        DB::beginTransaction();
+        try {
+            $data = FormPSKL::where('id', $request->id)->first();
+            $data->done_by = $this->karyawan;
+            $data->done_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->status = 'DONE';
+            $data->save();
+
+            $message = 'Form PSKL telah di done';
+            Notification::where('nama_lengkap', $data->solved_by)
+                    ->title('Form PSKL Update')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('/form-pskl')
+                    ->send();
+            
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $th->getMessage()], 400);
+        }
+    }
+
+}

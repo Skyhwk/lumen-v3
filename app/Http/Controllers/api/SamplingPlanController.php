@@ -16,6 +16,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\PerbantuanSampler;
+use App\Models\PersiapanSampelHeader;
 use App\Jobs\RenderSamplingPlan;
 use App\Services\JadwalServices;
 use App\Services\GetAtasan;
@@ -33,8 +34,10 @@ use Illuminate\Support\Facades\Log;
 class SamplingPlanController extends Controller
 {
 
+    /*  */
     public function index(Request $request)
     {
+        
         $active = $request->is_active == '' ? true : $request->is_active;
 
         $data = Jadwal::with([
@@ -43,25 +46,53 @@ class SamplingPlanController extends Controller
                 $query->WithTypeModelSub();
             }
         ])
-            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 'created_by', 'created_at', 'updated_at', 'updated_by')
-            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang', 'created_by', 'created_at', 'updated_at', 'updated_by')
+            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 
+            DB::raw('MAX(created_by) as created_by'), 
+            DB::raw('MIN(created_at) as created_at'), // Ambil waktu buat paling awal
+            DB::raw('MAX(updated_at) as updated_at'), // Ambil waktu update paling baru
+            DB::raw('MAX(updated_by) as updated_by') ) // Ambil user update terakhir)
+            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang')
             ->whereNotNull('no_quotation')
             ->where('is_active', $active);
 
         // Filter cabang
-        if ($request->filled('id_cabang_filter')) {
-            $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+        // if ($request->filled('id_cabang_filter')) {
+        //     $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
 
-            $data->where(function ($query) use ($idCabang) {
-                $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
-                if (!empty($filtered)) {
-                    $query->whereIn('id_cabang', $filtered);
-                }
+        //     $data->where(function ($query) use ($idCabang) {
+        //         $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
+        //         if (!empty($filtered)) {
+        //             $query->whereIn('id_cabang', $filtered);
+        //         }
 
-                if (in_array('null', $idCabang, true)) {
-                    $query->orWhereNull('id_cabang');
-                }
-            });
+        //         if (in_array('null', $idCabang, true)) {
+        //             $query->orWhereNull('id_cabang');
+        //         }
+        //     });
+        // }
+        // CEK HIERARKI KLAN (Auth Check)
+        $myPrivileges = $this->privilageCabang;
+        $isOrangPusat = in_array("1", $myPrivileges);
+        if ($isOrangPusat) {
+            if ($request->filled('id_cabang_filter')) {
+                $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+                $data->where(function ($query) use ($idCabang) {
+                    $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
+                    if (!empty($filtered)) {
+                        $query->whereIn('id_cabang', $filtered);
+                    }
+                    if (in_array('null', $idCabang, true)) {
+                        $query->orWhereNull('id_cabang');
+                    }
+                });
+            }
+
+        } else {
+            $data->whereIn('id_cabang', $myPrivileges);
+            if ($request->filled('id_cabang_filter')) {
+                $reqFilter = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+                $data->whereIn('id_cabang', $reqFilter);
+            }
         }
 
         $data->orderBy('tanggal', 'DESC');
@@ -110,8 +141,32 @@ class SamplingPlanController extends Controller
                 $query->where('kategori', 'like', '%' . $keyword . '%');
             })
             // Filter kolom 'sampler' dengan where biasa, karena havingRaw tidak berfungsi di sini
+            // ->filterColumn('sampler', function ($query, $keyword) {
+            //     $query->where('sampler', 'like', '%' . $keyword . '%');
+            // })
             ->filterColumn('sampler', function ($query, $keyword) {
-                $query->where('sampler', 'like', '%' . $keyword . '%');
+                $table = $query->getModel()->getTable();
+
+                $query->whereExists(function ($subquery) use ($keyword, $table) {
+                    $subquery->select(DB::raw(1))
+                            ->from("$table as sub")
+                            ->whereRaw("(sub.id_sampling <=> $table.id_sampling)")
+                            ->whereRaw("(sub.parsial <=> $table.parsial)")           // NULL-safe
+                            ->whereRaw("(sub.no_quotation <=> $table.no_quotation)")
+                            ->whereRaw("(sub.nama_perusahaan <=> $table.nama_perusahaan)")
+                            ->whereRaw("(sub.tanggal <=> $table.tanggal)")
+                            ->whereRaw("(sub.periode <=> $table.periode)")
+                            ->whereRaw("(sub.jam_mulai <=> $table.jam_mulai)")
+                            ->whereRaw("(sub.jam_selesai <=> $table.jam_selesai)")
+                            ->whereRaw("(sub.durasi <=> $table.durasi)")
+                            ->whereRaw("(sub.driver <=> $table.driver)")             // NULL-safe
+                            ->whereRaw("(sub.kategori <=> $table.kategori)")
+                            ->whereRaw("(sub.status <=> $table.status)")
+                            ->whereRaw("(sub.id_cabang <=> $table.id_cabang)")       // NULL-safe
+                            ->whereRaw("(sub.wilayah <=> $table.wilayah)")          // NULL-safe
+                            ->whereRaw("(sub.is_active <=> $table.is_active)")          // NULL-safe
+                            ->where('sub.sampler', 'like', '%' . $keyword . '%');
+                });
             })
             ->filterColumn('created_by', function ($query, $keyword) {
                 $query->where(function ($q) use ($keyword) {
@@ -125,7 +180,29 @@ class SamplingPlanController extends Controller
                         ->orWhere('created_at', 'like', '%' . $keyword . '%');
                 });
             })
+            ->with([
+                'cabang_options' => $this->getBranchOptionsForUser() 
+            ])
             ->make(true);
+    }
+
+    private function getBranchOptionsForUser()
+    {
+        $myPrivileges = $this->privilageCabang;
+        $isOrangPusat = in_array("1", $myPrivileges);
+
+        $query = MasterCabang::select('id', 'nama_cabang'); // Sesuaikan nama kolom
+
+        if (!$isOrangPusat) {
+            $query->whereIn('id', $myPrivileges);
+        }
+        // Ambil datanya
+        return $query->get()->map(function($item) {
+            return [
+                'value' => $item->id,
+                'label' => $item->nama_cabang
+            ];
+        });
     }
 
     public function kantorCabang(Request $request)
@@ -696,6 +773,7 @@ class SamplingPlanController extends Controller
 
     public function cancelJadwal(Request $request)
     {
+        
         DB::beginTransaction();
         try {
             if (!is_array($request->mode['batchId'])) {
@@ -704,7 +782,8 @@ class SamplingPlanController extends Controller
                 $batchId = $request->mode['batchId'];
             }
             $temptMessage = '';
-            if ($request->mode['parsial'] !== null) { //menandakan data yg terpilih adalah partial
+            if ($request->mode['parsial'] !== "") { //menandakan data yg terpilih adalah partial
+              
                 $dataParsial = Jadwal::whereIn('id', $batchId)
                     ->where('is_active', true)
                     ->update([
@@ -742,6 +821,7 @@ class SamplingPlanController extends Controller
                     ], 401);
                 }
             }
+            
             // $message = "No QT :" . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh staff :". $karyawan->karyawan($this->db,$this->karyawan)."\n" . ($temptMessage != '') ? $temptMessage : "";
             $message = "No QT: " . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh " . $this->karyawan . "\n" . (($temptMessage != '') ? $temptMessage : "");
 
@@ -969,6 +1049,52 @@ class SamplingPlanController extends Controller
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
+    }
+
+    public function checkDocumentStatus(Request $request)
+    {
+        try {
+            // 1. Ambil data order
+            $geOrder = OrderHeader::where('no_document', $request->no_quotation)->first(['no_order']);
+            // 2. Siapkan variabel
+            $array_no_samples = [];
+            // Pastikan periode null jika string kosong
+            $periode = ($request->periode == "") ? $request->periode : $request->periode; 
+            $jsonDecodeKategori = json_decode($request->kategori);
+            if ($geOrder && $jsonDecodeKategori) {
+                foreach ($jsonDecodeKategori as $kategori) {
+                    // Pastikan format kategori benar ada " - "
+                    $parts = explode(" - ", $kategori);
+                    if(isset($parts[1])) {
+                        $pra_no_sample = $parts[1];
+                        $array_no_samples[] = $geOrder->no_order . '/' . $pra_no_sample;
+                    }
+                }
+            }
+
+            // 3. Query Database
+            // Perhatikan: $request->tanggal (sesuai kiriman frontend)
+            $checkPreparationSample = PersiapanSampelHeader::where('no_quotation', $request->no_quotation)
+                ->where('periode', $periode)
+                ->where('tanggal_sampling', $request->tanggal) // <--- UBAH INI (sesuai key frontend)
+                ->where(function ($query) use ($array_no_samples) {
+                            foreach ($array_no_samples as $sampel) {
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
+                            }
+                        })
+                ->whereNotNull('detail_bas_documents') // <--- PERBAIKI TYPO (detai -> detail)
+                ->where('is_active', true)
+                ->first();
+                
+            // 4. Return
+            $statusDoc = $checkPreparationSample ? true : false;
+            
+            return response()->json(['status_document' => $statusDoc], 200);
+
+        } catch (\Throwable $th) {
+            // Jangan dd() di API production, return error message
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 }

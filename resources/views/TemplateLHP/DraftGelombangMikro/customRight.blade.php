@@ -141,28 +141,38 @@
                             {{ $header->deskripsi_titik ?? '-' }}
                         </td>
                     </tr>
-                    
+
                 </table>
 
 
                 @if (!empty($header->regulasi))
-
                     @foreach (json_decode($header->regulasi) as $i => $y)
                         @if ($i === $page - 1)
+                            @php
+                                // PERBAIKAN: Gunakan explode dengan limit 2
+                                $parts = explode('-', $y, 2);
+                                $regulasiId = $parts[0] ?? '';
+                                $regulasiName = $parts[1] ?? '';
+                            @endphp
+
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
+                                    <td class="custom5" colspan="3"><strong>{{ $regulasiName }}</strong></td>
                                 </tr>
                             </table>
                         @endif
                     @endforeach
+
                     @php
-                        $regulasiId = explode('-', $y)[0];
-                        $regulasiName = explode('-', $y)[1] ?? '';
+                        $parts = explode('-', $y, 2);
+                        $regulasiId = $parts[0] ?? '';
+                        $regulasiName = $parts[1] ?? '';
+
                         $regulasi = MasterRegulasi::find($regulasiId);
                         $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
                         $table = $tableObj ? $tableObj->konten : '';
                     @endphp
+
                     @if ($table)
                         <table style="padding-top: 5px;" width="100%">
                             <tr>

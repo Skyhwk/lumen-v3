@@ -255,10 +255,10 @@ class ScanBotolController extends Controller
             $fileData = $this->extractBase64FileData($base64File);
 
             if (!$fileData) {
-                return response()->json([
+                return [
                     'success' => false,
                     'message' => 'Format base64 tidak valid.'
-                ], 401);
+                ];
             }
 
             $fileType = $fileData['type'];
@@ -268,10 +268,10 @@ class ScanBotolController extends Controller
             $allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
 
             if (!in_array(strtolower($fileExtension), $allowedExtensions)) {
-                return response()->json([
+                return [
                     'success' => false,
                     'message' => 'Format file tidak didukung. Hanya PDF, JPG, JPEG, dan PNG yang diizinkan.'
-                ], 401);
+                ];
             }
 
             // Generate filename

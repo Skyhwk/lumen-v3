@@ -6,13 +6,15 @@ use App\Services\SendEmail ;
 
 class JobMailling extends Job
 {
+    protected $arrayForm;
     protected $to;
     protected $subject;
     protected $content;
     protected $karyawan;
     protected $attachments;
-    public function __construct(array $to, string $subject, string $content, string $karyawan, array $attachments = [])
+    public function __construct(array $arrayForm, array $to, string $subject, string $content, string $karyawan, array $attachments = [])
     {
+        $this->arrayForm = $arrayForm;
         $this->to = $to;
         $this->subject = $subject;
         $this->content = $content;
@@ -29,6 +31,8 @@ class JobMailling extends Job
     public function handle()
     {
         $to = $this->to;
+        $from = $this->arrayForm['from'];
+        $alias = $this->arrayForm['alias'];
         $subject = $this->subject;
         $content = $this->content;
         $karyawan = $this->karyawan;
@@ -42,10 +46,23 @@ class JobMailling extends Job
             ->where('subject', $subject)
             ->where('body', $content)
             ->where('attachment', $attachments)
-            ->where('karyawan', $karyawan)
-            ->fromPromoSales()
-            // ->noReply()
-            ->send();
+            ->where('karyawan', $karyawan);
+            if($from == 'promo'){
+                $email->fromPromoSales($alias);
+            }elseif($from == 'noreply'){
+                $email->noReply($alias);
+            }elseif($from == 'sales'){
+                $email->fromSales($alias);
+            }elseif($from == 'finance'){
+                $email->fromFinance($alias);
+            }elseif($from == 'tc'){
+                $email->fromTc($alias);
+            }elseif($from == 'admsales'){
+                $email->fromAdmsales($alias);
+            }elseif($from == 'lhp'){
+                $email->fromLhp($alias);
+            }
+            $email->send();
         }
     }
 }

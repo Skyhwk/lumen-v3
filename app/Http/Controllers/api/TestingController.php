@@ -70,7 +70,14 @@ use App\Models\{
     DataPsikologi,
     DetailFlowMeter,
     DetailSoundMeter,
-    DailyQsd
+    DailyQsd,
+    SertifikatWebinarHeader,
+    SertifikatWebinarDetail,
+    LayoutCertificate,
+    JenisFont,
+    TemplateBackground,
+    MasterTargetSales,
+    TemplatePaketAnalisa
 };
 use App\Services\{
     GetAtasan,
@@ -101,7 +108,9 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Services\SalesDailyQSD;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
-use Mpdf\Mpdf;
+use Mpdf;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
 Carbon::setLocale('id');
 
@@ -213,34 +222,459 @@ class TestingController extends Controller
     
         return array_values($roots);
     }
-    
+
     public function show(Request $request)
     { 
         
         try {
-            //code...
-            
             switch ($request->menu) {
-                case 'generateSertificate':
-                    $path = GenerateWebinarSertificate::make('dedi-test.pdf')
-                    ->options([
-                        // 'template' => 'bg-biru.png',
-                        'template' => 'bg-biru-v1.webp',
-                        'layout' => 'layout-1',
-                        // 'font' => [
-                        //     'fontName' => 'greatvibes',
-                        //     'filename' => 'GreatVibes-Regular.ttf'
-                        // ],
-                        'recipientName' => 'Rangga Manggala Yudha Bahtiayar',
-                        'id' => 14527,
-                        'webinarTitle' => 'Kelas Online',
-                        'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
-                        'webinarDate' => '2026-01-14',
-                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expertise)', '<strong>Bima Ghafara</strong> (Technical Expertise)'],
-                        'noSertifikat' => 'ISL012601-0001',
+                case 'contract-order':
+                    // 1. Ambil data Order per Perusahaan
+                    $subTahun = substr($request->year, -2); 
+                    $orders = OrderHeader::select(
+                            'nama_perusahaan',
+                            DB::raw('MAX(wilayah) as wilayah'),
+                            // Menggabungkan no_document menjadi string untuk referensi jika perlu
+                            DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
+                            DB::raw('SUM(total_dpp) as summary')
+                        )
+                        ->where('is_active', 1)
+                        ->where('nama_perusahaan', $request->nama_perusahaan)
+                        ->where('no_document', "LIKE", "%QTC/$subTahun%")
+                        ->groupBy('nama_perusahaan')
+                        ->get();
+
+                        dd($orders);
+
+                    // 2. Ambil semua no_document unik dari perusahaan tersebut untuk ditarik detailnya
+                    // Kita perlu memecah kembali daftar_no_doc jika ada banyak dokumen
+                    $allNoDocs = [];
+                    foreach ($orders as $o) {
+                        $docs = explode(', ', $o->daftar_no_doc);
+                        $allNoDocs = array_merge($allNoDocs, $docs);
+                    }
+                    $allNoDocs = array_unique($allNoDocs);
+
+                    // 3. Tarik semua data Quotation Detail berdasarkan kumpulan no_document tersebut
+                    $allQuotations = QuotationKontrakH::with(['detail' => function($q) use ($request) {
+                            $q->where('periode_kontrak', 'LIKE', '%' . $request->year . '%');
+                        }])
+                        ->whereIn('no_document', $allNoDocs)
+                        ->get()
+                        ->groupBy('no_document');
+
+                    // 4. Inisialisasi Total untuk Footer
+                    $bulanTotals = [
+                        'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+                        'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+                        'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+                    ];
+
+                    // 5. Mapping data Bulanan ke setiap baris Perusahaan
+                    foreach ($orders as $order) {
+                        // Ambil semua dokumen milik perusahaan ini
+                        $myDocs = explode(', ', $order->daftar_no_doc);
+                        
+                        // Kumpulkan semua header quotation yang terkait dengan dokumen-dokumen perusahaan ini
+                        $relatedQuotationHeaders = [];
+                        foreach ($myDocs as $docNo) {
+                            if (isset($allQuotations[$docNo])) {
+                                // allQuotations[$docNo] berisi Collection dari QuotationKontrakH
+                                foreach ($allQuotations[$docNo] as $qHeader) {
+                                    $relatedQuotationHeaders[] = $qHeader;
+                                }
+                            }
+                        }
+
+                        // Proses akumulasi bulanan untuk semua dokumen milik perusahaan ini
+                        $bulanSummary = $this->processDetails($relatedQuotationHeaders);
+                        $order->bulan_summary = $bulanSummary;
+
+                        // Tambahkan ke total footer
+                        foreach ($bulanSummary as $key => $val) {
+                            $bulanTotals[$key] += $val;
+                        }
+                    }
+
+                    // 6. Return Data (Contoh format JSON untuk DataTables)
+                    // Pake datatables dari collection
+                    return response()->json(["data" => $orders],200);
+                    break;
+                case 'getForecast' :
+                    // 1️⃣ Order detail → map no_order => tgl_sampling
+                    $orderSamplingFromDetail = OrderDetail::query()
+                    ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
+                    ->where('order_detail.is_active', 1)
+                    ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
+                    ->selectRaw('
+                        order_detail.no_order,
+                        MIN(order_detail.tanggal_sampling) AS tgl_sampling,
+                        oh.sales_id
+                    ')
+                    ->groupBy('order_detail.no_order', 'oh.sales_id')
+                    ->get()
+                    ->keyBy('no_order')
+                    ->map(function ($row) {
+                        return [
+                            'tgl_sampling' => $row->tgl_sampling,
+                            'sales_id'     => $row->sales_id,
+                        ];
+                    });
+
+                    $orderSamplingFromHeader = OrderHeader::query()
+                    ->whereNotExists(function ($q) {
+                        $q->select(DB::raw(1))
+                        ->from('order_detail as od')
+                        ->whereColumn('od.id_order_header', 'order_header.id')
+                        ->where('od.is_active', 1);
+                    })
+                    ->whereNotNull('no_document')
+                    ->select('no_order', 'sales_id')
+                    ->distinct()
+                    ->get()
+                    ->keyBy('no_order')
+                    ->map(fn ($row) => [
+                        'tgl_sampling' => null,
+                        'sales_id'     => $row->sales_id,
+                    ]);
+
+                    $orderSamplingMap = $orderSamplingFromDetail
+                    ->merge($orderSamplingFromHeader)
+                    ->toArray();
+
+                    // 2️⃣ Ambil pelanggan + invoice + relasi
+                    $invoice = MasterPelanggan::query()
+                    ->with([
+                        'invoices.recordPembayaran',
+                        'invoices.recordWithdraw'
                     ])
-                    ->generate();
-                    dd($path);
+                    ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
+                    ->where('is_active', 1)
+                    ->where('id_pelanggan', 'AATI01')
+                    ->whereHas('invoices')
+                    ->get()
+                    ->map(function ($pelanggan) use ($orderSamplingMap) {
+
+                        $tagihan = $pelanggan->invoices->sum('nilai_tagihan');
+
+                        $invoices = $pelanggan->invoices
+                            ->groupBy('no_invoice')
+                            ->map(function ($group, $noInvoice) use ($orderSamplingMap) {
+                                
+                                $first = $group->first();
+
+                                $nilaiTagihan = $group->sum('nilai_tagihan');
+
+                                $pembayaran = $first->recordPembayaran->sum('nilai_pembayaran');
+                                $withdraw   = $first->recordWithdraw->sum('nilai_pembayaran');
+                                $terbayar   = $pembayaran + $withdraw;
+
+                                $pph = $first->recordWithdraw->sum(function ($item) {
+                                    return $item->keterangan_pelunasan === 'PPH'
+                                        ? $item->nilai_pembayaran
+                                        : 0;
+                                });
+
+                                $periode = $group->pluck('periode')->filter()->unique()->values();
+                                $noOrder = $group->pluck('no_order')->unique()->values();
+
+                                $tglSampling = $noOrder
+                                ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
+                                ->filter()
+                                ->values();
+
+                                $sales_id = $noOrder
+                                ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
+                                ->filter()
+                                ->unique()
+                                ->values();
+                                // ->first(); // biasanya 1 invoice = 1 sales
+                                if($noInvoice == 'ISL/INV/2600413')dd($sales_id, $noOrder);
+                                return [
+                                    'id_pelanggan'   => $first->pelanggan_id,
+                                    'no_quotation'   => $group->pluck('no_quotation')->unique()->implode(','),
+                                    'no_order'       => $noOrder->implode(','),
+                                    'no_invoice'     => $noInvoice,
+                                    'periode'        => $periode->isEmpty() ? null : $periode->implode(','),
+                                    'tgl_sampling'   => $tglSampling->isEmpty() ? null : $tglSampling->implode(','),
+                                    'tgl_invoice'    => $first->tgl_invoice,
+                                    'tgl_jatuh_tempo'=> $first->tgl_jatuh_tempo,
+                                    'nilai_tagihan'  => $nilaiTagihan,
+                                    'terbayar'       => $terbayar,
+                                    'pph'            => $pph,
+                                    'is_complete'    => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
+                                    'sales_id'       => $sales_id
+                                ];
+                            })
+                            ->values();
+
+                        $totalTerbayar = $invoices->sum('terbayar');
+                        $totalPph      = $invoices->sum('pph');
+
+                        return [
+                            'id_pelanggan'            => $pelanggan->id_pelanggan,
+                            'nama_pelanggan'          => $pelanggan->nama_pelanggan,
+                            'sales_penanggung_jawab'  => $pelanggan->sales_penanggung_jawab,
+                            'sales_id'                => $pelanggan->sales_id,
+                            'jumlah_invoice'          => $invoices->count(),
+                            'nilai_tagihan'           => $tagihan,
+                            'terbayar'                => $totalTerbayar,
+                            'total_pph'               => $totalPph,
+                            'is_complete'             => abs($tagihan - $totalTerbayar) <= 10 ? 1 : 0,
+                            'invoices'                => $invoices->toArray(),
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+                    // dd($invoice);
+
+                    // $orderDetail = OrderDetail::query()
+                    //     ->where('is_active', 1)
+                    //     ->whereYear('tanggal_sampling', '>=', '2024')
+                    //     ->selectRaw('no_order, periode, MIN(tanggal_sampling) as tgl_sampling')
+                    //     ->groupBy('no_order', 'periode')
+                    //     ->get()->toArray();
+                    
+                    // $invoice = MasterPelanggan::with(['invoices'])
+                    // ->selectRaw('id_pelanggan, nama_pelanggan, sales_penanggung_jawab, sales_id')
+                    // ->where('is_active', 1)
+                    // ->whereHas('invoices')
+                    // // ->where('id_pelanggan', 'KSDE01')
+                    // ->get()
+                    // ->map(function($q) use ($orderDetail) {
+                    //     $tagihan = $q->invoices->sum('nilai_tagihan');
+
+                    //     $invoices = $q->invoices->groupBy('no_invoice')->map(function($group, $inv) use ($orderDetail) {
+                    //         $nilaiTagihan = $group->sum('nilai_tagihan');
+                    //         $recordPembayaran = $group[0]->recordPembayaran->sum('nilai_pembayaran') ?? 0;
+                    //         $recordWithdraw = $group[0]->recordWithdraw->sum('nilai_pembayaran') ?? 0;
+                    //         $terbayar = $recordPembayaran + $recordWithdraw;
+                    //         $id_pelanggan = $group[0]->pelanggan_id;
+                    //         $no_order = $group->pluck('no_order')->toArray();
+                    //         $no_quotation = $group->pluck('no_quotation')->toArray();
+                    //         $periode = $group->pluck('periode')
+                    //             ->filter(fn ($v) => !is_null($v) && $v !== '')
+                    //             ->values()
+                    //             ->toArray();
+
+                    //         $tgl_sampling = collect($orderDetail)->whereIn('no_order', $no_order)->pluck('tgl_sampling')->values()
+                    //         ->toArray();
+
+                    //         $pph = $group[0]->recordWithdraw->sum(function($item) {
+                    //             return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
+                    //         }) ?? 0;
+                            
+                    //         return [
+                    //             "id_pelanggan" => $id_pelanggan,
+                    //             "no_quotation" => implode(',', $no_quotation),
+                    //             "no_order" => implode(',', $no_order),
+                    //             "no_invoice" => $inv,
+                    //             "periode" => empty($periode) ? null : implode(',', $periode),
+                    //             "tgl_sampling" => empty($tgl_sampling) ? null : implode(',', $tgl_sampling),
+                    //             "tgl_invoice" => $group[0]->tgl_invoice,
+                    //             "tgl_jatuh_tempo" => $group[0]->tgl_jatuh_tempo,
+                    //             "nilai_tagihan" => $nilaiTagihan,
+                    //             "terbayar" => $terbayar,
+                    //             "pph" => $pph,
+                    //             "is_complete" => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
+                    //         ];
+                    //     })->values()->toArray();
+                        
+                    //     $totalPph = collect($invoices)->sum(function($invoice) {
+                    //         return $invoice['pph'] ?? 0;
+                    //     });
+                    //     $terbayar = collect($invoices)->sum(function($invoice) {
+                    //         return $invoice['terbayar'] ?? 0;
+                    //     });
+                    //     $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
+            
+                    //     return [
+                    //         'id_pelanggan' => $q->id_pelanggan,
+                    //         'nama_pelanggan' => $q->nama_pelanggan,
+                    //         'sales_penanggung_jawab' => $q->sales_penanggung_jawab,
+                    //         'sales_id' => $q->sales_id,
+                    //         'jumlah_invoice' => count($invoices),
+                    //         'nilai_tagihan' => $tagihan,
+                    //         'terbayar' => $terbayar,
+                    //         'total_pph' => $totalPph,
+                    //         'is_complete' => abs($tagihan - $terbayar) <= 10 ? 1 : 0,
+                    //         'invoices' => $invoices,
+                    //     ];
+                    // })->values()->toArray();
+                    // dd($invoice);
+                    // $pelanggan = MasterPelanggan::query()
+                    //     ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
+                    //     ->where('is_active', 1)
+                    //     ->whereHas('invoices')
+                    //     ->with([
+                    //         'invoices' => function ($q) {
+                    //             $q->withSum('recordPembayaran as total_bayar', 'nilai_pembayaran')
+                    //             ->withSum('recordWithdraw as total_withdraw', 'nilai_pembayaran')
+                    //             ->withSum([
+                    //                     'recordWithdraw as pph' => function ($q) {
+                    //                         $q->where('keterangan_pelunasan', 'PPH');
+                    //                     }
+                    //                 ], 'nilai_pembayaran');
+                    //         }
+                    //     ])
+                    //     ->get();
+
+                    // /**
+                    //  * Ambil tanggal sampling SEKALI SAJA
+                    //  */
+                    // $samplingMap = OrderDetail::query()
+                    //     ->where('is_active', 1)
+                    //     ->selectRaw("
+                    //         no_order,
+                    //         COALESCE(NULLIF(periode,'null'),'all') as periode,
+                    //         MIN(tanggal_sampling) as tgl_sampling
+                    //     ")
+                    //     ->groupBy('no_order', 'periode')
+                    //     ->get()
+                    //     ->groupBy(fn ($i) => $i->no_order.'|'.$i->periode);
+
+                    // /**
+                    //  * Mapping final
+                    //  */
+                    // $result = $pelanggan->map(function ($q) use ($samplingMap) {
+
+                    //     $totalTagihan = $q->invoices->sum('nilai_tagihan');
+                    //     $totalTerbayar = $q->invoices->sum(fn ($b) => ($b->total_bayar ?? 0) + ($b->total_withdraw ?? 0));
+
+                    //     $invoices = $q->invoices->map(function ($b) use ($samplingMap) {
+
+                    //         $periode = in_array($b->periode, ['all', null, 'null']) ? 'all' : $b->periode;
+                    //         $key = $b->no_order.'|'.$periode;
+
+                    //         $tgl_sampling = optional(
+                    //             optional($samplingMap->get($key))->first()
+                    //         )->tgl_sampling;
+
+                    //         $totalBayar = ($b->total_bayar ?? 0) + ($b->total_withdraw ?? 0);
+
+                    //         return [
+                    //             "id_pelanggan"    => $b->pelanggan_id,
+                    //             "no_quotation"    => $b->no_quotation,
+                    //             "no_order"        => $b->no_order,
+                    //             "no_invoice"      => $b->no_invoice,
+                    //             "periode"         => $b->periode,
+                    //             "tgl_sampling"    => $tgl_sampling,
+                    //             "tgl_invoice"     => $b->tgl_invoice,
+                    //             "tgl_jatuh_tempo" => $b->tgl_jatuh_tempo,
+                    //             "nilai_tagihan"   => $b->nilai_tagihan,
+                    //             "terbayar"        => $totalBayar,
+                    //             "pph"             => $b->pph ?? 0,
+                    //             "is_complete"     => abs($b->nilai_tagihan - $totalBayar) <= 10 ? 1 : 0,
+                    //         ];
+                    //     })->values()->toArray();
+
+                    //     return [
+                    //         'id_pelanggan'            => $q->id_pelanggan,
+                    //         'nama_pelanggan'          => $q->nama_pelanggan,
+                    //         'sales_penanggung_jawab'  => $q->sales_penanggung_jawab,
+                    //         'sales_id'                => $q->sales_id,
+                    //         'jumlah_invoice'          => count($invoices),
+                    //         'nilai_tagihan'           => $totalTagihan,
+                    //         'terbayar'                => $totalTerbayar,
+                    //         'total_pph'               => collect($invoices)->sum('pph'),
+                    //         'is_complete'             => abs($totalTagihan - $totalTerbayar) <= 10 ? 1 : 0,
+                    //         'invoices'                => $invoices,
+                    //     ];
+                    // })->values()->toArray();
+                    
+                    return response()->json([
+                        'success' => true,
+                        'julahData' => count($invoice),
+                        'data' => $invoice
+                    ]);
+
+
+                    $jadwalKontrak = Jadwal::selectRaw('no_quotation, periode, MIN(tanggal) as tanggal')
+                        ->whereYear('tanggal', '2026')
+                        ->where('is_active', 1)
+                        ->whereNotNull('periode')
+                        ->whereNotNull('no_quotation')
+                        ->groupBy('no_quotation', 'periode')
+                        ->get();
+
+                    $jadwalNonKontrak = Jadwal::selectRaw('no_quotation, NULL as periode, MIN(tanggal) as tanggal')
+                        ->whereYear('tanggal', '2026')
+                        ->where('is_active', 1)
+                        ->whereNull('periode')
+                        ->whereNotNull('no_quotation')
+                        ->groupBy('no_quotation')
+                        ->get();
+                    
+                    $order = OrderHeader::where('is_active', 1)
+                        ->where('is_revisi', 0)
+                        ->pluck('no_document')->toArray();
+
+                    $data = $jadwalKontrak
+                        ->concat($jadwalNonKontrak)
+                        ->filter(function($q) use ($order) {
+                            return !in_array($q->no_quotation, $order);
+                        })
+                        ->sortBy('tanggal')
+                        ->values()->toArray();
+                    
+                    dd(count($data));
+
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data
+                    ]);
+                    
+                    break;
+                case 'generateSertificate':
+                    $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', 7)->first();
+                    $getDetail = $getHeader->details;
+                    $layout = LayoutCertificate::where('id', $getHeader->id_layout)->first();
+                    $font = JenisFont::where('id', $getHeader->id_font)->first();
+                    $template = TemplateBackground::where('id', $getHeader->id_template)->first();
+                    foreach ($getDetail as $key => $value) {
+                        /**
+                         * Mulai generate sertifikat satu per satu
+                         */
+
+                        $panelis = collect($getHeader->speakers)->map(function ($speaker) {
+                            unset($speaker['karyawan_id']);
+                            return $speaker;
+                        })->values()->toArray();
+
+                        $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
+                        $filename = $no_sertifikat . '.pdf';
+                        $generate = GenerateWebinarSertificate::make($filename)
+                        ->options([
+                            'layout'            => $layout->nama_file,
+                            'font'              => $font->jenis_font ?? 'roboto',
+                            'template'          => $template->nama_template,
+                            'recipientName'     => $value->name,
+                            'id'                => $value->id,
+                            'webinarTitle'      => $getHeader->title,
+                            'webinarTopic'      => $getHeader->topic,
+                            'webinarSubTopic'   => $getHeader->sub_topic,
+                            'webinarDate'       => $getHeader->date,
+                            'panelis'           => $panelis,
+                            'noSertifikat'      => $no_sertifikat,
+                        ])
+                        ->generate();
+
+                        if($generate instanceof Exception) {
+                            return response()->json([
+                                'message' => 'Gagal menggenerate sertifikat',
+                                'line' => $generate->getLine(),
+                                'status' => '500'
+                            ], 500);
+                        }
+
+                        $value->update([
+                            'filename' => $filename
+                        ]);
+
+                        FacadesLog::info('update ' . $value->id . ' ' . $filename);
+                    }
+                    
+                    dd('done');
                     break;
                 case 'addSubscriber':
                     $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';
@@ -324,116 +758,8 @@ class TestingController extends Controller
                     break;
                 case 'this':
 
-                    $tanggal = $request->tanggal;
-                    // $qt_non_kontrak = OrderHeader::where('no_document', 'like', '%QT/%')
-                    //     ->where('is_active', 1)
-                    //     ->where('tanggal_order', $tanggal)
-                    //     ->pluck('no_document')->toArray();
-
-                    // $dataNonKontrak = DailyQsd::whereIn('no_quotation', $qt_non_kontrak)
-                    //     ->select('sales_id', 'no_quotation', 'total_revenue', 'biaya_akhir')
-                    //     ->get()->toArray();
-
-                    // $dataKontrak = DailyQsd::select('sales_id', 'no_quotation', 'total_revenue', 'biaya_akhir')
-                    //     ->where('tanggal_sampling_min', $tanggal)
-                    //     ->where('no_quotation', 'LIKE', '%QTC/%')
-                    //     ->get()->toArray();
-                    
-                    // $allData = array_merge($dataNonKontrak, $dataKontrak);
-
-                    // dd($allData);
-                    // $result = [];
-                    // foreach ($allData as $row) {
-                    //     $sales_id = $row['sales_id'];
-                    //     if (!isset($result[$sales_id])) {
-                    //         $result[$sales_id] = [
-                    //             'sales_id' => $sales_id,
-                    //             'jumlah_order' => 0,
-                    //             'total_revenue' => 0,
-                    //             'biaya_akhir' => 0,
-                    //         ];
-                    //     }
-                    //     $result[$sales_id]['jumlah_order'] += 1;
-                    //     $result[$sales_id]['total_revenue'] += floatval($row['total_revenue']);
-                    //     $result[$sales_id]['biaya_akhir'] += floatval($row['biaya_akhir']);
-                    // }
-
-                    // $result = array_values($result);
-                    $result = DailyQsd::query()
-                    ->select('sales_id')
-                    ->selectRaw('COUNT(*) as jumlah_order')
-                    ->selectRaw('SUM(total_revenue) as total_revenue')
-                    ->selectRaw('SUM(biaya_akhir) as biaya_akhir')
-                    ->where(function($q) use ($tanggal) {
-                        $q->whereHas('orderHeader', function($qh) use ($tanggal) {
-                            $qh->where('no_document', 'like', '%QT/%')
-                                ->where('is_active', 1)
-                                ->where('tanggal_order', $tanggal);
-                        })
-                        ->orWhere(function($qq) use ($tanggal) {
-                            $qq->where('tanggal_sampling_min', $tanggal)
-                                ->where('no_quotation', 'LIKE', '%QTC/%');
-                        });
-                    })
-                    ->groupBy('sales_id')
-                    ->get()
-                    ->map(function($row) {
-                        return [
-                            'sales_id' => $row->sales_id,
-                            'jumlah_order' => (int) $row->jumlah_order,
-                            'total_revenue' => (float) $row->total_revenue,
-                            'biaya_akhir' => (float) $row->biaya_akhir,
-                        ];
-                    })
-                    ->values()
-                    ->toArray();
-                    dd($result);
-
-                    $dataBawahan = Getbawahan::where('id', 890)
-                        ->get()
-                        ->filter(function($q){
-                            return $q->id != 890;
-                        })
-                        ->map(function($q){
-                            return[
-                                'id' => $q->id,
-                                'nama_lengkap' => $q->nama_lengkap,
-                                'grade' => $q->grade,
-                                'id_jabatan' => $q->id_jabatan,
-                                'atasan_langsung' => $q->atasan_langsung
-                            ];
-                        })->values()->toArray();
-
-                    $strukturSales = $this->buildStrukturSales($dataBawahan);
-
-                    return response()->json([
-                        'strukturSales' => $strukturSales,
-                        'penjualan' => $result
-                    ], 200);
-
-
-                    $cekData = OrderDetail::where('is_active', 1)
-                        ->where('tanggal_sampling', '>=', '2026-01-01')
-                        ->get();
-
-                    foreach ($cekData as $item) {
-                        $no_qt = $item->no_quotation;
-                        $kategori = \explode('-', $item->kategori_3)[1] . ' - ' . \explode('/', $item->no_sampel)[1];
-                        $cekJadwal = Jadwal::where('no_quotation', $no_qt)
-                        ->where('kategori', 'LIKE', '%' . $kategori . '%')
-                        ->where('is_active', 1)->first();
-                        if ($cekJadwal != NULL) {
-                            $tanggalJadwal = $cekJadwal->tanggal;
-                            $tanggalSampling = $item->tanggal_sampling;
-                            if ($tanggalJadwal != $tanggalSampling) {
-                                $item->tanggal_sampling = $tanggalJadwal;
-                                $item->save();
-
-                                FacadesLog::info('Update tanggal sampling: ' . $item->no_sampel . ' dari tanggal awal: ' . $tanggalSampling . ' ke tanggal jadwal: ' . $tanggalJadwal);
-                            }
-                        }
-                    }
-
+                    $data = (new SalesDailyQSD())->run();
+                    dd($data);
                     return response()->json(['message' => 'Berhasil update tanggal sampling'], 200);
                     break;
                 case 'attributes':
@@ -2028,24 +2354,50 @@ class TestingController extends Controller
 
                             foreach ($listPersiapan as $item) {
                                 
-                                $labelParameter = $item['type_botol'] ?? '-';
+                                $labelParameter = $item['type_botol'] ?? $item['parameter'];
 
                                 // Buka baris baru jika counter genap
                                 if ($counter % 2 == 0) {
                                     $pdf->WriteHTML("<tr>");
                                 }
-                                $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+                                // $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+                                $styleContainer = ($counter % 2 == 0) 
+                                ? 'padding: 10px 20px 10px 10px;'  // Kolom Kiri
+                                : 'padding: 10px 10px 10px 20px;'; // Kolom Kanan
 
                                 // Render SATU KOTAK STIKER
                                 // Kita gunakan <div> dengan border-radius di dalam <td>
+                                // $pdf->WriteHTML('
+                                //     <th style="padding: ' . $styleContainer . ';">
+                                //         <table width="100%">
+                                //             <tr>
+                                //                 <td style="text-align: left; width: 40%; padding-left: 10px;">
+                                //                 <img src="' . public_path() . $pathQR . $qrImageFile . '" style="width: 25mm;"> </td>
+                                //                 <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                //             </tr>
+                                //             <tr>
+                                //                 <td colspan="2" style="font-size: 12px; text-align: left; padding-left: 10px; padding-top: 5px;">
+                                //                     ' . $noSampel . '
+                                //                 </td>
+                                //             </tr>
+                                //         </table>
+                                //     </th>
+                                // ');
                                 $pdf->WriteHTML('
-                                    <th style="padding: ' . $padding . ';">
-                                        <table width="100%">
+                                    <th style="' . $styleContainer . '"> 
+                                            <table width="100%">
                                             <tr>
-                                                <td style="text-align: left;"><img src="' . public_path() . $pathQR . $qrImageFile . '"></td>
-                                                <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                                <td style="text-align: left; width: 40%; padding-left: 10px;">
+                                                    <img src="' . public_path() . $pathQR . $qrImageFile . '" style="width: 25mm;"> </td>
+                                                <td style="text-align: center !important; vertical-align: middle;">
+                                                    <span style="font-size: 14px; font-weight: bold;">' . $labelParameter . '</span>
+                                                </td>
                                             </tr>
-                                            <tr><td colspan="2" style="font-size: 12px;">' . $noSampel . '</td></tr>
+                                            <tr>
+                                                <td colspan="2" style="font-size: 12px; text-align: left; padding-left: 10px; padding-top: 5px;">
+                                                    ' . $noSampel . '
+                                                </td>
+                                            </tr>
                                         </table>
                                     </th>
                                 ');
@@ -2215,6 +2567,167 @@ class TestingController extends Controller
                     return response()->json([
                         'diff_summary' => $result
                     ]);
+                case 'getOrderWithSalesIDNull':
+                    try {
+                        DB::beginTransaction();
+
+                        // 1. Ambil order yang perlu diupdate
+                        $orders = OrderHeader::whereNull('sales_id')
+                            ->where('is_active', 1)
+                            ->get(['id','no_document']);
+
+                        if ($orders->isEmpty()) {
+                            DB::commit();
+
+                            return response()->json([
+                                'message' => 'Tidak ada order yang perlu diupdate'
+                            ], 200);
+                        }
+
+                        // 2. Ambil daftar no_document
+                        $docNumbers = $orders->pluck('no_document');
+
+                        // 3. Ambil mapping sales_id
+                        $kontrakMap = QuotationKontrakH::whereIn('no_document', $docNumbers)
+                            ->pluck('sales_id','no_document');
+
+                        $nonKontrakMap = QuotationNonKontrak::whereIn('no_document', $docNumbers)
+                            ->pluck('sales_id','no_document');
+
+                        // 4. Proses update
+                        $updated = 0;
+
+                        foreach ($orders as $order) {
+
+                            if (str_contains($order->no_document,'QTC')) {
+
+                                if (isset($kontrakMap[$order->no_document])) {
+                                    $order->sales_id = $kontrakMap[$order->no_document];
+                                    $order->save();
+                                    $updated++;
+                                }
+
+                            } else {
+
+                                if (isset($nonKontrakMap[$order->no_document])) {
+                                    $order->sales_id = $nonKontrakMap[$order->no_document];
+                                    $order->save();
+                                    $updated++;
+                                }
+
+                            }
+                        }
+
+                        DB::commit();
+
+                        return response()->json([
+                            'documents_processed' => $docNumbers,
+                            'total_diproses' => $orders->count(),
+                            'total_berhasil_update' => $updated
+                        ], 200);
+
+                    } catch (\Exception $e) {
+
+                        DB::rollBack();
+
+                        return response()->json([
+                            'message' => 'Terjadi kesalahan saat update sales_id',
+                            'error' => $e->getMessage()
+                        ], 500);
+                    }
+                case 'updateVolumeQuotation':
+
+                    DB::beginTransaction();
+
+                    try {
+
+                        $startDate = $request->start_date . ' 00:00:00';
+                        $endDate   = $request->end_date . ' 23:59:59';
+
+                        $quotations = QuotationNonKontrak::whereBetween('created_at', [
+                            $startDate,
+                            $endDate
+                        ])->get();
+
+                        foreach ($quotations as $quotation) {
+
+                            $data_sampling = [];
+                            $dataPendukungSampling = json_decode($quotation->data_pendukung_sampling, true);
+
+                            $isVolumeEmptyExist = array_filter($dataPendukungSampling, function ($item) {
+                                return $item['volume'] == 0;
+                            });
+                            if (!$dataPendukungSampling || empty($isVolumeEmptyExist) || count($isVolumeEmptyExist) == 0) {
+                                continue;
+                            }
+
+                            foreach ($dataPendukungSampling as $i => $item) {
+
+                                $param = $item['parameter'];
+                                $exp = explode("-", $item['kategori_1']);
+                                $kategori = $exp[0];
+                                $vol = 0;
+
+                                if($item['volume'] > 0){
+                                    continue;
+                                }
+
+                                $parameter = [];
+
+                                foreach ($param as $par) {
+                                    $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
+                                    if ($cek_par) {
+                                        $parameter[] = $cek_par->nama_lab;
+                                    }
+                                }
+
+                                $volume_db = [];
+
+                                foreach ($parameter as $param_) {
+
+                                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                                        ->where('nama_parameter', $param_)
+                                        ->orderBy('id', 'ASC')
+                                        ->get();
+
+                                    $cek_harga_parameter = $ambil_data->first(function ($itemHarga) use ($quotation) {
+                                        return explode(' ', $itemHarga->created_at)[0] > $quotation->tgl_penawaran;
+                                    }) ?? $ambil_data->first();
+
+                                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                                }
+
+                                $vol = array_sum($volume_db);
+
+                                $data_sampling[$i] = $item;
+                                $data_sampling[$i]['volume'] = $vol;
+                            }
+
+                            $quotation->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
+                            $quotation->save();
+                        }
+
+                        DB::commit();
+
+                        return response()->json([
+                            'status' => true,
+                            'message' => 'Volume quotation berhasil dihitung ulang',
+                            'total_updated' => $quotations->count(),
+                            'start_date' => $request->start_date,
+                            'end_date' => $request->end_date
+                        ], 200);
+
+                    } catch (\Exception $th) {
+
+                        DB::rollBack();
+
+                        return response()->json([
+                            'status' => false,
+                            'message' => $th->getMessage(),
+                            'file' => $th->getFile(),
+                            'line' => $th->getLine()
+                        ], 500);
+                    }
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -2222,6 +2735,39 @@ class TestingController extends Controller
             //throw $th;
             return response()->json(["message" =>$th->getMessage(),"line"=>$th->getLine()],500);
         }
+    }
+
+    private function processDetails($quotationHeaders)
+    {
+        $bulan = [
+            'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
+            'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
+            'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+        ];
+
+        foreach ($quotationHeaders as $value) {
+            if(!$value->detail->isEmpty()){
+                foreach ($value->detail as $detail) {
+                    $bulanStr = explode('-', $detail->periode_kontrak)[1] ?? null;
+                    switch ($bulanStr) {
+                        case '01': $bulan['january'] += $detail->total_dpp; break;
+                        case '02': $bulan['february'] += $detail->total_dpp; break;
+                        case '03': $bulan['march'] += $detail->total_dpp; break;
+                        case '04': $bulan['april'] += $detail->total_dpp; break;
+                        case '05': $bulan['may'] += $detail->total_dpp; break;
+                        case '06': $bulan['june'] += $detail->total_dpp; break;
+                        case '07': $bulan['july'] += $detail->total_dpp; break;
+                        case '08': $bulan['august'] += $detail->total_dpp; break;
+                        case '09': $bulan['september'] += $detail->total_dpp; break;
+                        case '10': $bulan['october'] += $detail->total_dpp; break;
+                        case '11': $bulan['november'] += $detail->total_dpp; break;
+                        case '12': $bulan['december'] += $detail->total_dpp; break;
+                    }
+                }
+            }
+        }
+
+        return $bulan;
     }
     /*=== logic compare === */
    // CONTROLLER CODE - Ambil semua records, bukan first()
@@ -5574,5 +6120,119 @@ private function detectChangedPoints($oldPoints, $newPoints)
             ->setTemplate($request->template)
             ->setFont($request->font)
             ->generate();
+    }
+
+    public function getDataCustomerQuery()
+    {
+
+        $collectData = [];
+        
+        MasterPelanggan::with([
+            'pic_pelanggan',
+            'kontak_pelanggan',
+            'latestOrder:id,no_order,tanggal_order,id_pelanggan',
+            'latestNonKontrakQuotation:id,pelanggan_ID,no_document,created_at,updated_at',
+            'latestKontrakQuotation:id,pelanggan_ID,no_document,created_at,updated_at,periode_kontrak_akhir',
+            'latestDFUS:id,id_pelanggan,sales_penanggung_jawab,tanggal',
+        ])
+        ->select(
+            'id',
+            'id_pelanggan',
+            'nama_pelanggan',
+            'sales_id',
+            'sales_penanggung_jawab',
+            'is_active'
+        )
+        ->where('is_active', true)
+        ->where('sales_id', '<>', 127)
+        ->whereNotNull('sales_id')
+        ->chunk(2000, function ($customers) use (&$collectData) {
+
+            foreach ($customers as $customer) {
+
+                // ❌ Kalau pernah order → skip
+                if ($customer->latestOrder) {
+                    continue;
+                }
+                
+                // ❌ Kalau tidak punya quotation → skip
+                if (!$customer->latestKontrakQuotation && !$customer->latestNonKontrakQuotation) {
+                    continue;
+                }
+
+                $dfus = $customer->latestDFUS;
+                if (!$dfus || !$dfus->tanggal) {
+                    continue;
+                }
+
+                $tanggal = Carbon::parse($dfus->tanggal);
+
+                $cutOffDate = Carbon::create(2026, 2, 1)->startOfDay();
+
+                if ($tanggal->lt($cutOffDate)) {
+                    $pic = optional($customer->pic_pelanggan->first());
+                    $collectData[] = [
+                        'ID Pelanggan' => $customer->id_pelanggan,
+                        'Nama Perusahaan' => $customer->nama_pelanggan,
+                        'No Telepon Perusahaan' => 
+                            $customer->kontak_pelanggan
+                                ->pluck('no_tlp_perusahaan')
+                                ->filter()
+                                ->implode(', ') ?: '-',
+                        'Nama PIC' => $pic->nama_pic ?? '-',
+                        'Nomor PIC' => $pic->no_tlp_pic ?? '-',
+                        'Jabatan PIC' => $pic->jabatan_pic ?? '-',
+                    ];
+                }
+            }
+        });
+
+        $fileName = 'customer_reassign_januari_2026.xlsx';
+        $directory = public_path('export-excel');
+        $filePath = $directory . '/' . $fileName;
+
+        // pastikan folder ada
+        if (!file_exists($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // ====== HEADER ======
+        $headers = [
+            'ID Pelanggan',
+            'Nama Perusahaan',
+            'No Telepon Perusahaan',
+            'Nama PIC',
+            'Nomor PIC',
+            'Jabatan PIC',
+        ];
+
+        $col = 'A';
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . '1', $header);
+            $col++;
+        }
+
+        // ====== DATA ======
+        $row = 2;
+        foreach ($collectData as $data) {
+            $col = 'A';
+            foreach ($data as $value) {
+                $sheet->setCellValue($col . $row, $value);
+                $col++;
+            }
+            $row++;
+        }
+
+        // Save file
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($filePath);
+
+        return response()->json([
+            'message' => 'Excel berhasil dibuat',
+            'path' => url('export-excel/' . $fileName)
+        ]);
     }
 }

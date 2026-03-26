@@ -1211,6 +1211,8 @@ class DraftHygieneController extends Controller
             $file->move($folder, $fileName);
 
             $Lhp->file_lhp = $fileName;
+            $Lhp->created_by = $this->karyawan;
+            $Lhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $Lhp->save();
 
             DB::commit();

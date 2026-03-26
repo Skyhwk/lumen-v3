@@ -34,4 +34,9 @@ class MicrobioHeader extends Sector{
     {
         return $this->hasOne(WsValueUdara::class, 'id_microbiologi_header', 'id');
     }
+
+    public function createdByKaryawan()
+    {
+        return $this->belongsTo('App\Models\MasterKaryawan', 'created_by', 'nama_lengkap');
+    }
 }

@@ -21,7 +21,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\PersiapanSampelHeader;
 use Carbon\Carbon;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Models\DataLapanganAir;
 use App\Models\DataLapanganKebisingan;
 use App\Models\DataLapanganKebisinganPersonal;
@@ -93,7 +93,10 @@ class BasOnlineController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("1", $myPrivileges);
+            $query =OrderDetail::query();
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -105,7 +108,7 @@ class BasOnlineController extends Controller
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true); // Pastikan plan aktif
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
@@ -113,6 +116,9 @@ class BasOnlineController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -168,6 +174,9 @@ class BasOnlineController extends Controller
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -302,7 +311,10 @@ class BasOnlineController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("1", $myPrivileges);
+            $query =OrderDetail::query();
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -314,7 +326,7 @@ class BasOnlineController extends Controller
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true); // Pastikan plan aktif
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
@@ -322,6 +334,9 @@ class BasOnlineController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -380,6 +395,9 @@ class BasOnlineController extends Controller
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -1299,7 +1317,12 @@ class BasOnlineController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    
+                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+                        $status[$sample->no_sample] = 'selesai';
+                    } else {
+                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
+                    }
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
@@ -2226,24 +2249,28 @@ class BasOnlineController extends Controller
 
             $status = 'selesai';
             if (!empty($parameters)) {
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
                 foreach ($parameters as $parameter) {
                     // dump($sample->no_sample);
                     if($parameter['category'] == '6-Padatan'){
                         continue; // Skip Padatan
                     }
-                    if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)' || $parameter['parameter'] == 'Xylene secara personil sampling (SC)') {
+                    if (in_array($parameter['parameter'], $parameterBypass)) {
                         continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                     }
 
-                    if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)'){
+                    if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)'){
                         continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
+                    }
+
+                    if(in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
                     }
 
                     
                     $verified = $this->verifyStatus($sample->no_sample, $parameter);
                     
                     if (!$verified) {
-                        
                         $status = 'belum selesai';
                         break;
                     }
@@ -3187,7 +3214,7 @@ class BasOnlineController extends Controller
             ],
             [
                 "parameter" => "Kebisingan (P8J)",
-                "requiredCount" => 2,
+                "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DataLapanganKebisinganPersonal::class,
                 "model2" => null
@@ -4317,11 +4344,24 @@ class BasOnlineController extends Controller
                 "model2" => DetailLingkunganHidup::class
             ],
             [
+                "parameter" => "LEGIONELLA",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailMicrobiologi::class
+            ],
+            [
                 "parameter" => "Isopropil Alkohol",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailSenyawaVolatile::class
+            ],
+            [
+                "parameter" => "VOC Sebagai NMHC",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class,
+                "model2" => null
             ]
         ];
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];

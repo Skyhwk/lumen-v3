@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Mpdf\Mpdf;
+use Mpdf;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
@@ -138,6 +138,9 @@ class RenderPermintaanDokumentasiSampling
 
     public function renderPdf($permintaanDokumentasiSampling, $qr, $periode = null)
     {
+        ini_set("pcre.backtrack_limit", "10000000");
+        ini_set("pcre.recursion_limit", "10000000");
+
         DB::beginTransaction();
 
         try {

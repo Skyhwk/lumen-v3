@@ -115,12 +115,16 @@
         }
     }
     // Main processing
-    $hasilJson = !empty($value->hasil_uji_json) ? json_decode($value->hasil_uji_json, true) : [];
-    $type = $value['type'] ?? null;
+    $hasilJson = !empty(data_get($value, 'hasil_uji_json')) ? json_decode(data_get($value, 'hasil_uji_json'), true) : [];
+    $type = data_get($value, 'type') ?? null;
 @endphp
 
 @if (!empty($hasilJson))
-    <div class="left" style="page-break-before: always;">
+    <div class="left"
+     @if(!($isJustBiota && $isFirst))
+        style="page-break-before: always;"
+     @endif
+     >
         @php
             $total_data = count($hasilJson);
         @endphp

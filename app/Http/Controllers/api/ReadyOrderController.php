@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Datatables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, UseKuotaService};
+use App\Services\{Notification, GetAtasan, ProcessAfterOrder, UseKuotaService, QuotationService};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -275,7 +275,7 @@ class ReadyOrderController extends Controller
         }
     }
 
-    public function voidQuotation(Request $request)
+    public function voidQuotation(Request $request, QuotationService $quotationService)
     {
         DB::beginTransaction();
         try {
@@ -290,6 +290,14 @@ class ReadyOrderController extends Controller
                     $data = QuotationKontrakH::where('id', $request->id)->where('is_active', true)->first();
                     $type_doc = 'quotation_kontrak';
                 }
+
+                // Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
+                $check = $quotationService->validateVoidQuotation($data->no_document);
+
+                if (!$check['status']) {
+                    return response()->json($check, 401);
+                }
+
                 $sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
                 $jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 
@@ -473,6 +481,7 @@ class ReadyOrderController extends Controller
                 $data->tanggal_order = Carbon::now()->format('Y-m-d H:i:s');
                 $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
                 $data->updated_by = $this->karyawan;
+                $data->sales_id = $dataQuotation->sales_id;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
             } else {
@@ -528,6 +537,7 @@ class ReadyOrderController extends Controller
                     $data->is_revisi = 0;
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->created_by = $this->karyawan;
+                    $data->sales_id = $dataQuotation->sales_id;
                     $data->save();
                 }
             }
@@ -885,6 +895,7 @@ class ReadyOrderController extends Controller
                 $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->sales_id = $dataQuotation->sales_id;
                 $data->save();
             } else {
                 $cek_no_qt = OrderHeader::where('no_document', $dataQuotation->no_document)->where('is_active', 1)->first();
@@ -939,6 +950,7 @@ class ReadyOrderController extends Controller
                     $data->is_revisi = 0;
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->created_by = $this->karyawan;
+                    $data->sales_id = $dataQuotation->sales_id;
                     $data->save();
                 }
             }
@@ -1134,7 +1146,7 @@ class ReadyOrderController extends Controller
                     $DataOrderDetail->kategori_3 = $value->kategori_2;
                     $DataOrderDetail->cfr = $no_cfr;
                     $DataOrderDetail->keterangan_1 = $penamaan_titik;
-                    $DataOrderDetail->parameter = json_encode($value->parameter);
+                    $DataOrderDetail->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);
                     $DataOrderDetail->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $DataOrderDetail->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $DataOrderDetail->created_by = $this->karyawan;
@@ -1197,7 +1209,8 @@ class ReadyOrderController extends Controller
                             'HNO3' => 500,
                             'M1000' => 1000,
                             'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10
+                            'BEBAS PYROGEN' => 10,
+                            'Ori-Kaca-3L' => 3000,
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
@@ -1296,6 +1309,8 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
             DB::commit();
+
+            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
             if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
@@ -1575,7 +1590,7 @@ class ReadyOrderController extends Controller
                     $dataD->kategori_3 = $value->kategori_2;
                     $dataD->cfr = $no_cfr;
                     $dataD->keterangan_1 = $penamaan_titik;
-                    $dataD->parameter = json_encode($value->parameter);
+                    $dataD->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);;
                     $dataD->regulasi = json_encode($value->regulasi);
                     $dataD->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $dataD->created_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -1643,7 +1658,8 @@ class ReadyOrderController extends Controller
                             'HNO3' => 500,
                             'M1000' => 1000,
                             'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10
+                            'BEBAS PYROGEN' => 10,
+                            'Ori-Kaca-3L' => 3000,
                         ];
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
@@ -2025,7 +2041,7 @@ class ReadyOrderController extends Controller
                                 $DataOrderDetail->cfr = $no_cfr;
                                 $DataOrderDetail->keterangan_1 = $penamaan_titik;
                                 $DataOrderDetail->periode = $periode_kontrak;
-                                $DataOrderDetail->parameter = json_encode($value->parameter);
+                                $DataOrderDetail->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);
                                 $DataOrderDetail->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                                 $DataOrderDetail->created_at = Carbon::now()->format('Y-m-d H:i:s');
                                 $DataOrderDetail->created_by = $this->karyawan;
@@ -2082,7 +2098,8 @@ class ReadyOrderController extends Controller
                                         'HNO3' => 500,
                                         'M1000' => 1000,
                                         'BENTHOS' => 100,
-                                        'BEBAS PYROGEN' => 10
+                                        'BEBAS PYROGEN' => 10,
+                                        'Ori-Kaca-3L' => 3000,
                                     ];
 
                                     foreach ($botol_volumes as $type => $volume) {
@@ -2177,6 +2194,8 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
             DB::commit();
+
+            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
 
             if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
@@ -2322,14 +2341,24 @@ class ReadyOrderController extends Controller
                     ->orderBy('no_sampel', 'DESC')
                     ->first();
 
-                $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                // $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
                 // dd($no_urut_sample);
-                $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                // $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                if($cek_detail) {
+                    $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                    $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                } else {
+                    $no_urut_sample = 0;
+                    // $no_urut_cfr = 0;
+                }
                 $no = $no_urut_sample;
                 $trigger = 0;
-                $kategori = '';
-                $regulasi = $cek_detail->regulasi ?? [];
-                $parameter = $cek_detail->parameter ?? [];
+                // $kategori = '';
+                // $regulasi = $cek_detail->regulasi ?? [];
+                // $parameter = $cek_detail->parameter ?? [];
+                $kategori = ($cek_detail) ? $cek_detail->kategori_3 : '';
+                $regulasi = ($cek_detail && $cek_detail->regulasi != null) ? json_decode($cek_detail->regulasi) : [];
+                $parameter = ($cek_detail && $cek_detail->parameter != null) ? json_decode($cek_detail->parameter) : [];
                 $oldPeriode = '';
                 $mark = [];
                 foreach ($penambahan_data as $changes) {
@@ -2384,10 +2413,10 @@ class ReadyOrderController extends Controller
                             if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 // dump($cek_detail);
                                 if (
-                                    $cek_detail->kategori_3 != $value->kategori_2 ||
-                                    $cek_detail->regulasi != json_encode($value->regulasi) ||
-                                    $cek_detail->parameter != json_encode($value->parameter) ||
-                                    $cek_detail->periode != $value->periode_kontrak
+                                    $kategori != $value->kategori_2 ||
+                                    json_encode($regulasi) != json_encode($value->regulasi) ||
+                                    json_encode($parameter) != json_encode($value->parameter) ||
+                                    $oldPeriode != $value->periode_kontrak
                                 ) {
                                     $no_urut_cfr++;
                                 }
@@ -2460,7 +2489,7 @@ class ReadyOrderController extends Controller
                     $DataOrderDetail->kategori_3 = $value->kategori_2;
                     $DataOrderDetail->cfr = $no_cfr;
                     $DataOrderDetail->keterangan_1 = $penamaan_titik;
-                    $DataOrderDetail->parameter = json_encode($value->parameter);
+                    $DataOrderDetail->parameter = json_encode($value->parameter, JSON_UNESCAPED_UNICODE);
                     $DataOrderDetail->regulasi = !empty($value->regulasi) ? json_encode($value->regulasi) : json_encode([]);
                     $DataOrderDetail->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $DataOrderDetail->created_by = $this->karyawan;
@@ -2521,7 +2550,8 @@ class ReadyOrderController extends Controller
                             'HNO3' => 500,
                             'M1000' => 1000,
                             'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10
+                            'BEBAS PYROGEN' => 10,
+                            'Ori-Kaca-3L' => 3000,
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {

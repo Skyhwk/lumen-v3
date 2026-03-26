@@ -45,10 +45,10 @@ class GroupedCfrByLhp
                     "lhps_microbiologi",
                     "lhps_padatan",
                     "lhp_psikologi",
-
                     "wsValueAir",
                     "wsValueUdara",
                     "wsValueEmisiCerobong",
+                    "lhps_hygiene_sanitasi"
                 ])
                 ->withAnyDataLapangan()
                 ->where([
@@ -85,6 +85,7 @@ class GroupedCfrByLhp
                         $item->lhps_microbiologi,
                         $item->lhps_padatan,
                         $item->lhp_psikologi,
+                        $item->lhps_hygiene_sanitasi,
                     ])->first(fn($lhps) => $lhps !== null);
 
                     // $tglSampling = optional($track)->ftc_verifier
@@ -127,7 +128,7 @@ class GroupedCfrByLhp
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
 
-                    $isTglAnalisaEqualTglSampling = in_array($item->kategori_3, $kategori_validation) || str_contains($item->parameter, 'Ergonomi') || str_contains($item->kategori_3, 'Psikologi');
+                    $isTglAnalisaEqualTglSampling = in_array($item->kategori_3, $kategori_validation) || str_contains($item->parameter, 'Ergonomi') || str_contains($item->kategori_3, 'Psikologi') || str_contains(strtolower($item->keterangan_1), 'higiene');
                     if ($isTglAnalisaEqualTglSampling) {
                         $steps['analisa']['date'] = $tglSampling;
                     } else {

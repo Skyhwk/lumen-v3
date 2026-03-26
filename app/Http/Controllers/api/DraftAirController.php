@@ -183,13 +183,21 @@ class DraftAirController extends Controller
             LhpsAirDetail::where('id_header', $header->id)->delete();
 
             foreach (($request->nama_parameter ?? []) as $key => $val) {
+                $exeption = ['Plankton', 'Benthos', 'Necton'];
+                $akr = '';
+                if(in_array($key, $exeption)){
+                    $akreditasi = Parameter::where('nama_lab', $key)->where('id_kategori', 1)->where('is_active', true)->where('status', 'AKREDITASI')->first(); 
+                    if(!$akreditasi){
+                        $akr = 'ẍ';
+                    }
+                }
                 $baku_mutu = [];
                 if (isset($request->baku_mutu[$key]) && is_array($request->baku_mutu[$key])) {
                     $baku_mutu = array_slice($request->baku_mutu[$key], 0, count($table_header));
                 }
                 LhpsAirDetail::create([
                     'id_header'     => $header->id,
-                    'akr'           => $request->akr[$key] ?? '',
+                    'akr'           => $request->akr[$key] ?? $akr ?? '',
                     'parameter_lab' => str_replace("'", '', $key),
                     'parameter'     => $val,
                     'hasil_uji'     => $request->hasil_uji[$key] ?? '',
@@ -227,7 +235,7 @@ class DraftAirController extends Controller
                             'methode'     => $request->custom_methode[$page][$param] ?? '',
                             'baku_mutu'   => json_encode($request->custom_baku_mutu[$page][$param] ?? []),
                             'metode_sampling' => $request->metode_sampling_biota_custom[$page][$param] ?? '',
-                            'kesimpulan' => $request->custom_kesimpulan_biota[$page][$param] ?? null
+                            'kesimpulan' => $request->kesimpulan_biota_custom[$page][$param] ?? null
                         ]);
                     }
                 }
@@ -675,6 +683,7 @@ class DraftAirController extends Controller
             }
 
             $results[] = [
+                'id' => 3,
                 'name' => $parameterName,
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',

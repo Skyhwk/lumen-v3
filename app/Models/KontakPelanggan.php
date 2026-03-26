@@ -26,4 +26,9 @@ class KontakPelanggan extends Sector
     {
         return $this->belongsTo(MasterPelanggan::class, 'pelanggan_id');
     }
+
+    public function logWebphone()
+    {
+        return $this->hasMany(LogWebphone::class, 'number', 'no_tlp_perusahaan');
+    }
 }

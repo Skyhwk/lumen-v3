@@ -28,7 +28,14 @@ class MikrobiologiUdaraController extends Controller
             ->where('is_approved', $request->is_approved)
             ->where('microbio_header.is_active', true)
             ->where('template_stp', $request->template_stp)
-            ->select('microbio_header.*');
+            ->select('microbio_header.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;

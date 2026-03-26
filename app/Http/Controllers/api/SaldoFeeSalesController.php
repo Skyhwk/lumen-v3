@@ -21,7 +21,7 @@ class SaldoFeeSalesController extends Controller
 {
     private $idJabatanSales = [
         24, // Sales Officer
-        148, // Customer Relation Officer
+        21, // Sales Supervisor
     ];
 
     public function getSalesList(Request $request)
@@ -29,8 +29,7 @@ class SaldoFeeSalesController extends Controller
         $currentUser = $request->attributes->get('user')->karyawan;
 
         $sales = MasterKaryawan::where('is_active', true)
-            ->whereIn('id_jabatan', $this->idJabatanSales)
-            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            ->where(fn($q) => $q->whereIn('id_jabatan', $this->idJabatanSales)->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana'))
             ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
             ->orderBy('nama_lengkap', 'asc')
             ->get();
@@ -43,24 +42,23 @@ class SaldoFeeSalesController extends Controller
 
     public function getSaldoFeeSales(Request $request)
     {
-        $saldoFeeSales = SaldoFeeSales::where('sales_id', $request->salesId)->latest()->first();
+        $saldoFeeSales = SaldoFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])->latest()->first();
         if (!$saldoFeeSales) return response()->json(['message' => 'Saldo Fee Sales not found'], 404);
 
         $limit = 0;
-        $limitWithdraw = LimitWithdraw::where('user_id', $request->salesId)->latest()->first();
+        $limitWithdraw = LimitWithdraw::where(['user_id' => $request->salesId, 'is_active' => true])->latest()->first();
         if ($limitWithdraw) {
-            $usedLimit = WithdrawalFeeSales::where('sales_id', $request->salesId)
+            $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
                 ->whereIn('status', ['Pending', 'Approved'])
                 ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
                 ->sum('amount');
             $limit = $limitWithdraw->limit - $usedLimit;
         }
 
-        $pendingWithdrawal = WithdrawalFeeSales::where('sales_id', $request->salesId)->where('status', 'pending');
+        $pendingWithdrawal = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'status' => 'Pending', 'is_active' => true]);
 
-        $mutasiStats = MutasiFeeSales::where('sales_id', $request->salesId)
-            ->whereMonth('created_at', $request->month)
-            ->whereYear('created_at', $request->year)
+        $mutasiStats = MutasiFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
+            ->where('period', $request->year . '-' . $request->month)
             ->selectRaw("SUM(CASE WHEN mutation_type = 'Debit' THEN amount ELSE 0 END) as total_debit")
             ->selectRaw("SUM(CASE WHEN mutation_type = 'Kredit' THEN amount ELSE 0 END) as total_credit")
             ->first();
@@ -81,9 +79,8 @@ class SaldoFeeSalesController extends Controller
 
     public function getMutasiSaldo(Request $request)
     {
-        $mutasiSaldo = MutasiFeeSales::where('sales_id', $request->salesId)
-            ->whereMonth('created_at', $request->month)
-            ->whereYear('created_at', $request->year)
+        $mutasiSaldo = MutasiFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
+            ->where('period', $request->year . '-' . $request->month)
             ->latest();
 
         return DataTables::of($mutasiSaldo)->make(true);
@@ -91,7 +88,7 @@ class SaldoFeeSalesController extends Controller
 
     public function getWithdrawal(Request $request)
     {
-        $withdrawalFeeSales = WithdrawalFeeSales::where('sales_id', $request->salesId)
+        $withdrawalFeeSales = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
             ->whereMonth('created_at', $request->month)
             ->whereYear('created_at', $request->year)
             ->latest();
@@ -101,11 +98,14 @@ class SaldoFeeSalesController extends Controller
 
     public function requestWithdrawal(Request $request)
     {
-        $limitWithdraw = LimitWithdraw::where('user_id', $request->sales_id)->latest()->first();
+        $timestamp = Carbon::now();
+
+        $limitWithdraw = LimitWithdraw::where(['user_id' => $request->sales_id, 'is_active' => true])->latest()->first();
         if (!$limitWithdraw) return response()->json(['message' => 'Limit penarikan belum diatur'], 404);
-        $usedLimit = WithdrawalFeeSales::where('sales_id', $request->sales_id)
+
+        $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->sales_id, 'is_active' => true])
             ->whereIn('status', ['Pending', 'Approved'])
-            ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
+            ->where(fn($q) => $q->whereYear('created_at', $timestamp->year)->whereMonth('created_at', $timestamp->month))
             ->sum('amount');
         $limit = $limitWithdraw->limit - $usedLimit;
 
@@ -119,12 +119,14 @@ class SaldoFeeSalesController extends Controller
         $withdrawalFeeSales->description = $request->description;
         $withdrawalFeeSales->status = 'Pending';
         $withdrawalFeeSales->created_by = $this->karyawan;
-        $withdrawalFeeSales->updated_by = $this->karyawan;
+        $withdrawalFeeSales->created_at = $timestamp;
 
         $withdrawalFeeSales->save();
 
         $saldoFeeSales = SaldoFeeSales::where('sales_id', $withdrawalFeeSales->sales_id)->first();
         $saldoFeeSales->active_balance -= $withdrawalFeeSales->amount;
+        $saldoFeeSales->updated_by = 'System';
+        $saldoFeeSales->updated_at = $timestamp;
         $saldoFeeSales->save();
 
         return response()->json(['message' => 'Withdrawal Fee Sales requested successfully'], 201);

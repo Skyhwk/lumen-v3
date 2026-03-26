@@ -7,6 +7,7 @@ use App\Models\MesinAbsen;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
+use Bluerhinos\phpMQTT;
 
 class MesinAbsenController extends Controller{
     public function index(){
@@ -63,6 +64,19 @@ class MesinAbsenController extends Controller{
         }
     }
     
+    private function send_mqtt_iot($data)
+    {
+        $mqtt = new phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
+
+        if ($mqtt->connect(true, null, '', '')) {
+            $mqtt->publish('/intilab/iot/multidevice', $data, 0);
+            $mqtt->close();
+
+            return true;
+        }
+
+        return false;
+    }
 
     public function updateMesinAbsen(Request $request){
         try {
@@ -103,18 +117,27 @@ class MesinAbsenController extends Controller{
 
     public function modeSwitcher(Request $request){
         $data = MesinAbsen::where('id', $request->id)->first();
-
-        if ($data) {
+        if ($data && $data->status_device == "online") {
             if($data->mode == "ADD"){
                 $data->mode = "SCAN";
                 $data->save();
+                $mqttIot = $this->send_mqtt_iot(json_encode((object) [
+                    'topic' => 'change_mode',
+                    'device' => $data->kode_mesin,
+                    'data' => "scan", // normal, open, close
+                ]));
             } else {
                 $data->mode = "ADD";
                 $data->save();
+                $mqttIot = $this->send_mqtt_iot(json_encode((object) [
+                    'topic' => 'change_mode',
+                    'device' => $data->kode_mesin,
+                    'data' => "add", // normal, open, close
+                ]));
             }
             return response()->json(['message' => 'Mode mesin absen berhasil dirubah!'], 200);
         } else {
-            return response()->json(['message' => 'Mesin absen tidak ditemukan!'], 404);
+            return response()->json(['message' => 'Mesin absen offline!'], 400);
         }
     }
 }

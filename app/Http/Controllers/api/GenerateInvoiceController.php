@@ -157,9 +157,10 @@ class GenerateInvoiceController extends Controller
             $data = Invoice::select(
                 'invoice.no_invoice',
                 DB::raw('MAX(invoice.created_by) AS created_by'),
+                DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
+                DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
                 DB::raw('MAX(faktur_pajak) AS faktur_pajak'),
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
-                DB::raw('MAX(jabatan_pj) AS jabatan_pj'),
                 DB::raw('MAX(rekening) AS rekening'),
                 DB::raw('MAX(periode) AS periode_kontrak'), //05/02/2025
                 DB::raw('MAX(keterangan) AS keterangan'),
@@ -178,6 +179,8 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(no_spk) AS no_spk'),
                 DB::raw('MAX(tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
                 DB::raw('MAX(filename) AS filename'),
+                DB::raw('MAX(file_pph) AS file_pph'),
+                DB::raw('MAX(upload_file) AS upload_file'),
                 DB::raw('MAX(order_header.konsultan) AS consultant'),
                 DB::raw('MAX(order_header.no_document) AS document'),
                 DB::raw('MAX(invoice.created_at) AS created_at'),
@@ -201,10 +204,35 @@ class GenerateInvoiceController extends Controller
                 ->where('is_emailed', false)
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
-                ->orderBy('invoice.no_invoice', 'DESC')
-                ->get();
+                ->orderBy('invoice.no_invoice', 'DESC');
 
-            return Datatables::of($data)->make(true);
+            return Datatables::of($data)
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                })
+                ->filterColumn('document', function ($query, $keyword) {
+                    $query->whereExists(function ($q) use ($keyword) {
+                        $q->select(DB::raw(1))
+                            ->from('order_header as oh2')
+                            ->whereColumn('oh2.no_order', 'invoice.no_order')
+                            ->whereRaw('LOWER(oh2.no_document) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                    });
+                })
+                ->filterColumn('emailed_at', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_at');
+                    } else {
+                        $data->whereRaw("DATE_FORMAT(emailed_at, '%Y-%m-%d') like ?", ["%$keyword%"]);
+                    }
+                })
+                ->filterColumn('emailed_by', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_by');
+                    } else {
+                        $data->whereRaw("emailed_by like ?", ["%$keyword%"]);
+                    }
+                })
+                ->make(true);
         } catch (\Throwable $th) {
             dd($th);
         }
@@ -801,7 +829,19 @@ class GenerateInvoiceController extends Controller
                 $collectionDetail = [];
                 $values = json_decode(json_encode($valSampling));
                 $cekArray = json_decode($values->data_pendukung_sampling);
+                $periode = null;
+                if ($values->periode != null && $values->periode != '' && $values->periode != 'null') {
+                    if ($values->periode === 'all') {
+                        $periode = 'Semua Periode';
+                    } else {
+                        $periode = self::tanggal_indonesia($values->periode, 'period');
+                    }
+                }
                 // dd($cekArray);
+                $allPeriode = false;
+                if ($periode === "Semua Periode") {
+                    $allPeriode = true;
+                }
                 if ($cekArray == []) {
                     $tambah = 0;
 
@@ -938,23 +978,28 @@ class GenerateInvoiceController extends Controller
                     if (isset($values->keterangan_lainnya)) {
                         $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                     }
-                    for ($i = 0; $i < count(array_chunk($cekArray, 30)); $i++) {
-                        foreach (array_chunk($cekArray, 30)[$i] as $keys => $dataSampling) {
+                    $resetData = reset($cekArray);
+                    $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
+                        ? $resetData->data_sampling
+                        : $cekArray;
+                    for ($i = 0; $i < count(array_chunk($usingData, 30)); $i++) {
+                        foreach (array_chunk($usingData, 30)[$i] as $keys => $dataSampling) {
                             if ($keys == 0) {
-                                if ($i == count(array_chunk($cekArray, 30)) - 1) {
-                                    $rowspan = count(array_chunk($cekArray, 30)[$i]) + 1 + $tambah;
+                                if ($i == count(array_chunk($usingData, 30)) - 1) {
+                                    $rowspan = count(array_chunk($usingData, 30)[$i]) + 1 + $tambah;
                                 } else {
-                                    $rowspan = count(array_chunk($cekArray, 30)[$i]) + 1;
+                                    $rowspan = count(array_chunk($usingData, 30)[$i]) + 1;
                                 }
                             }
                             $kategori2 = explode("-", $dataSampling->kategori_2);
                             $split = explode("/", $values->no_document);
+
                             if ($split[1] == 'QTC') {
                                 if (isset($dataSampling->keterangan_pengujian)) {
                                     $total_harga_qtc = self::rupiah($dataSampling->harga_total);
                                     $ket_qtc = $dataSampling->keterangan_pengujian . ' Parameter';
                                 } else {
-                                    $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik * count($dataSampling->periode)));
+                                    $total_harga_qtc = self::rupiah($allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
                                     $ket_qtc = strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . " Parameter";
                                     foreach ($dataSampling->regulasi as $rg => $v) {
                                         $reg = '';
@@ -967,7 +1012,7 @@ class GenerateInvoiceController extends Controller
                                 }
                                 $invoiceDetails = (object) [
                                     'keterangan' => $ket_qtc,
-                                    'titk' => $dataSampling->jumlah_titik * count($dataSampling->periode),
+                                    'titk' => $allPeriode ? $dataSampling->jumlah_titik * count($dataSampling->periode) : $dataSampling->jumlah_titik,
                                     'harga_satuan' => intval(preg_replace('/[^0-9]/', '', $dataSampling->harga_satuan)),
                                     'total_harga' => intval(preg_replace('/[^0-9]/', '', $total_harga_qtc)),
                                 ];
@@ -1000,7 +1045,7 @@ class GenerateInvoiceController extends Controller
 
                             array_push($collectionDetail, $invoiceDetails);
                         }
-                        $isLastElement = $i == count(array_chunk($cekArray, 30)) - 1;
+                        $isLastElement = $i == count(array_chunk($usingData, 30)) - 1;
                         if ($isLastElement) {
                             if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
                                 if (isset($values->keterangan_transportasi)) {
@@ -1365,5 +1410,108 @@ class GenerateInvoiceController extends Controller
             'message' => 'Successfully Approve Invoice',
             'status' => 200
         ], 200);
+    }
+
+    public function uploadFile(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $file = $request->file('file_input');
+
+            // Validasi file
+            if (!$file || $file->getClientOriginalExtension() !== 'pdf') {
+                return response()->json(['error' => 'File tidak valid. Harus .pdf'], 400);
+            }
+
+            $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
+            // Pastikan folder invoice ada
+            $folder = public_path('invoice');
+            if (!file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            // Generate nama file unik
+            $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '_' . 'upload' . '.pdf';
+
+            // Simpan file
+            $file->move($folder, $fileName);
+            $inv->upload_file = $fileName;
+            $inv->save();
+
+            DB::commit();
+            return response()->json([
+                'success'  => 'Sukses menyimpan file upload',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function uploadFilePph(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $file = $request->file('file_input');
+
+            // Validasi file
+            if (!$file || $file->getClientOriginalExtension() !== 'pdf') {
+                return response()->json(['error' => 'File tidak valid. Harus .pdf'], 400);
+            }
+
+            $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
+            // Pastikan folder invoice ada
+            $folder = public_path('invoice-pph');
+            if (!file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            // Generate nama file unik
+            $fileName = 'PPH' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '.pdf';
+
+            // Simpan file
+            $file->move($folder, $fileName);
+            $inv->file_pph = $fileName;
+            $inv->save();
+
+            DB::commit();
+            return response()->json([
+                'success'  => 'Sukses menyimpan file upload',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    protected static function tanggal_indonesia($tanggal, $mode = null)
+    {
+        $bulan = [
+            1 => "Januari",
+            "Februari",
+            "Maret",
+            "April",
+            "Mei",
+            "Juni",
+            "Juli",
+            "Agustus",
+            "September",
+            "Oktober",
+            "November",
+            "Desember",
+        ];
+
+        $var = explode("-", $tanggal);
+        if ($mode == "period") {
+            return $bulan[(int) $var[1]] . " " . $var[0];
+        } else {
+            return $var[2] . " " . $bulan[(int) $var[1]] . " " . $var[0];
+        }
     }
 }

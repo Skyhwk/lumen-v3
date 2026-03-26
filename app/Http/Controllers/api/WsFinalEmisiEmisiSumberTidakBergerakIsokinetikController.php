@@ -34,8 +34,8 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			->where('status', 0)
 			->where('parameter', 'like', '%Iso-%')
 			->whereNotNull('tanggal_terima')
-			->whereMonth('tanggal_terima', explode('-', $request->date)[1])
-			->whereYear('tanggal_terima', explode('-', $request->date)[0]);
+			->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+			->orderBy('tanggal_sampling');
 
 		return Datatables::of($data)->make(true);
 	}
@@ -113,7 +113,20 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 
 		$data = array_merge($data1Arr, $data2Arr, $data3Arr);
 
+		$parameters = collect(json_decode($parameter))->map(fn($item) => [
+			'id' => explode(";", $item)[0], 
+			'parameter' => explode(";", $item)[1]
+		]);
+
 		foreach ($data as &$item) {
+
+			// 1. CEK DAN ISI ID_PARAMETER JIKA KOSONG (UNTUK SUBKONTRAK)
+			if (!isset($item['id_parameter']) || empty($item['id_parameter'])) {
+				// Cari ID dari koleksi $parameters berdasarkan nama parameter yang cocok
+				$match = $parameters->firstWhere('parameter', $item['parameter']);
+				$item['id_parameter'] = $match ? $match['id'] : null;
+			}
+
 			$item['method'] = null;
 			$item['baku_mutu'] = null;
 			$item['satuan'] = null;
@@ -180,7 +193,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 					"kg/tahun" => 10,
 				];
 
-				
 				$satuan = $item['satuan'] ?? '-';
 				
 				$index = $satuanIndexMap[$satuan] ?? null;

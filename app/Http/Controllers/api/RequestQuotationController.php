@@ -25,6 +25,7 @@ use App\Models\HargaParameter;
 use App\Models\TemplatePenawaran;
 use App\Models\Parameter;
 use App\Models\Invoice;
+use App\Models\TemplatePaketAnalisa;
 use App\Jobs\RenderPdfPenawaran;
 use App\Services\GeneratePraSampling;
 use App\Services\RenderNonKontrakCopy;
@@ -505,7 +506,6 @@ class RequestQuotationController extends Controller
 
     private function createNonKontrak($payload)
     {
-
         foreach ($payload->data_pendukung as $index => $pengujian) {
             $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
             $penamaanTitik = $pengujian->penamaan_titik ?? [];
@@ -605,13 +605,15 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            // dd($payload->data_pendukung);
             if (isset($payload->data_pendukung)) {
                 foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
+                    $is_paket = $item->is_paket_analisa;
+
 
                     $parameter = [];
                     foreach ($param as $par) {
@@ -633,18 +635,6 @@ class RequestQuotationController extends Controller
 
                         $harga_db[] = $cek_harga_parameter->harga ?? 0;
                         $volume_db[] = $cek_harga_parameter->volume ?? 0;
-                        // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                        //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
-                        // }) ?? $ambil_data->first();
-
-                        // // fix bug
-                        // if ($cek_harga_parameter) {
-                        //     $harga_db[] = $cek_harga_parameter->harga;
-                        //     $volume_db[] = $cek_harga_parameter->volume;
-                        // } else {
-                        //     $harga_db[] = 0;
-                        //     $volume_db[] = 0;
-                        // }
                     }
 
                     $harga_pertitik = (object) [
@@ -652,48 +642,97 @@ class RequestQuotationController extends Controller
                         'total_harga' => array_sum($harga_db)
                     ];
 
-                    if ($harga_pertitik->volume != null) {
+                    $titik = $item->jumlah_titik;
+
+                    if (isset($harga_pertitik->volume) && $harga_pertitik->volume != null) {
                         $vol += floatval($harga_pertitik->volume);
                     }
 
-                    $titik = $item->jumlah_titik;
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+
+                    $temp_preparasi = [];
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
-                        'penamaan_titik' => $item->penamaan_titik,
+                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+                        'penamaan_titik' => isset($item->penamaan_titik) ? $item->penamaan_titik : [],
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                        'volume' => $vol
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
                     ];
 
-                    isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
 
-                    // dd($data_sampling[$i]);
                     switch ($kategori) {
                         case '1':
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_air += $hargaAnalisa;
                             break;
                         case '4':
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_udara += $hargaAnalisa;
                             break;
                         case '5':
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_emisi += $hargaAnalisa;
                             break;
                         case '6':
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_padatan += $hargaAnalisa;
                             break;
                         case '7':
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_swab_test += $hargaAnalisa;
                             break;
                         case '8':
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_tanah += $hargaAnalisa;
                             break;
                         case '9':
-                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
+                            $harga_pangan += $hargaAnalisa;
                             break;
                     }
                 }
@@ -714,13 +753,16 @@ class RequestQuotationController extends Controller
             $data->harga_tanah = $harga_tanah;
             $data->harga_pangan = $harga_pangan;
 
-            // kalkulasi harga transportasi
             $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+            ->orderBy('id', 'ASC')
+            ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+            }) ?? $ambil_data_transport->first();
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -800,7 +842,7 @@ class RequestQuotationController extends Controller
                     $data->jumlah_hari_24jam = $payload->data_wilayah->jumlah_hari_24jam;
 
                     if (isset($payload->data_wilayah->kalkulasi_by_sistem) && $payload->data_wilayah->kalkulasi_by_sistem == 'on') {
-                        $data->kalkukasi_by_sistem = $payload->data_wilayah->kalkukasi_by_sistem;
+                        $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem;
                         $harga_tiket = floatval($cekOperasional->tiket) * $payload->data_wilayah->perdiem_jumlah_orang;
 
                         $harga_transportasi_darat = $cekOperasional->transportasi;
@@ -860,7 +902,7 @@ class RequestQuotationController extends Controller
                 $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
                 $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
                 $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
-    
+
                 $data->kode_promo = $payload->data_diskon->kode_promo_discount;
                 $data->discount_promo = json_encode((object)[
                     'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
@@ -1516,98 +1558,139 @@ class RequestQuotationController extends Controller
             $harga_pangan = 0;
             $grand_total = 0;
 
-            foreach ($payload->data_pendukung as $i => $item) {
-                $param = $item->parameter;
-                $exp = explode("-", $item->kategori_1);
-                $kategori = $exp[0];
-                $vol = 0;
+            if (isset($payload->data_pendukung)) {
+                foreach ($payload->data_pendukung as $i => $item) {
+                    //per kategori
+                    $param = $item->parameter;
+                    $exp = explode("-", $item->kategori_1);
+                    $kategori = $exp[0];
+                    $vol = 0;
+                    $is_paket = $item->is_paket_analisa;
 
-                $parameter = [];
-                foreach ($param as $par) {
-                    $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                    array_push($parameter, $cek_par->nama_lab);
+
+                    $parameter = [];
+                    foreach ($param as $par) {
+                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
+                        array_push($parameter, $cek_par->nama_lab);
+                    }
+
+                    $harga_db = [];
+                    $volume_db = [];
+                    foreach ($parameter as $param_) {
+                        $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                            ->where('nama_parameter', $param_)
+                            ->orderBy('id', 'ASC')
+                            ->get();
+
+                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
+                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                        }) ?? $ambil_data->first();
+
+                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
+                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                    }
+
+                    $harga_pertitik = (object) [
+                        'volume' => array_sum($volume_db),
+                        'total_harga' => array_sum($harga_db)
+                    ];
+
+                    $titik = $item->jumlah_titik;
+
+                    if ($harga_pertitik->volume != null) {
+                        $vol += floatval($harga_pertitik->volume);
+                    }
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan = 0;
+
+                    if($is_paket){
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->paket_id)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if(
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+
+                    $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
+                    $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+
+                    $temp_preparasi = [];
+                    if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
+                        foreach ($item->biaya_preparasi as $pre) {
+                            if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null) {
+                                $temp_preparasi[] = [
+                                    'Deskripsi' => $pre->desc_preparasi,
+                                    'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))
+                                ];
+                            }
+                            if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "") {
+                                $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+                            }
+                        }
+                    }
+
+                    $data_sampling[$i] = [
+                        'kategori_1' => $item->kategori_1,
+                        'kategori_2' => $item->kategori_2,
+                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+                        'penamaan_titik' => isset($item->penamaan_titik) ? $item->penamaan_titik : [],
+                        'parameter' => $param,
+                        'jumlah_titik' => $titik,
+                        'total_parameter' => count($param),
+                        'harga_satuan' => $hargaPerTitik,
+                        'harga_total' => $hargaAnalisa,
+                        'volume' => $vol,
+                        'biaya_preparasi' => $temp_preparasi,
+                    ];
+
+                    if ($is_paket) {
+                        $data_sampling[$i]['is_paket_analisa'] = $is_paket;
+                        $data_sampling[$i]['paket_id'] = $item->paket_id;
+                        $data_sampling[$i]['paket'] = $item->paket;
+                        $data_sampling[$i]['kelipatan_dasar'] = $kelipatan;
+                    }
+
+                    switch ($kategori) {
+                        case '1':
+                            $harga_air += $hargaAnalisa;
+                            break;
+                        case '4':
+                            $harga_udara += $hargaAnalisa;
+                            break;
+                        case '5':
+                            $harga_emisi += $hargaAnalisa;
+                            break;
+                        case '6':
+                            $harga_padatan += $hargaAnalisa;
+                            break;
+                        case '7':
+                            $harga_swab_test += $hargaAnalisa;
+                            break;
+                        case '8':
+                            $harga_tanah += $hargaAnalisa;
+                            break;
+                        case '9':
+                            $harga_pangan += $hargaAnalisa;
+                            break;
+                    }
                 }
-
-                $harga_db = [];
-                $volume_db = [];
-                foreach ($parameter as $param_) {
-                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                        ->where('nama_parameter', $param_)
-                        ->orderBy('id', 'ASC')
-                        ->get();
-
-                    $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                    }) ?? $ambil_data->first();
-
-                    $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
-                    // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                    //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
-                    // }) ?? $ambil_data->first();
-
-                    // // fix bug
-                    // if ($cek_harga_parameter) {
-                    //     $harga_db[] = $cek_harga_parameter->harga;
-                    //     $volume_db[] = $cek_harga_parameter->volume;
-                    // } else {
-                    //     $harga_db[] = 0;
-                    //     $volume_db[] = 0;
-                    // }
-                }
-
-                $harga_pertitik = (object) [
-                    'volume' => array_sum($volume_db),
-                    'total_harga' => array_sum($harga_db)
-                ];
-
-                if ($harga_pertitik->volume != null) {
-                    $vol += floatval($harga_pertitik->volume);
-                }
-
-                $titik = $item->jumlah_titik;
-
-                $regulasi = [];
-                if (isset($item->regulasi) && !empty($item->regulasi)) {
-                    $regulasi = $item->regulasi;
-                }
-
-                $data_sampling[$i] = [
-                    'kategori_1' => $item->kategori_1,
-                    'kategori_2' => $item->kategori_2,
-                    'regulasi' => $regulasi,
-                    'penamaan_titik' => $item->penamaan_titik,
-                    'parameter' => $param,
-                    'jumlah_titik' => $titik,
-                    'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                    'volume' => $vol
-                ];
-
-                switch ($kategori) {
-                    case '1':
-                        $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '4':
-                        $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '5':
-                        $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '6':
-                        $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '7':
-                        $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '8':
-                        $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                    case '9':
-                        $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                        break;
-                }
+            } else {
+                $data_sampling = [];
             }
 
             $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
@@ -1625,11 +1708,20 @@ class RequestQuotationController extends Controller
 
             // kalkulasi harga transportasi
             $expOp = explode("-", $payload->data_wilayah->wilayah);
-            $id_wilayah = $expOp[0];
+            // $id_wilayah = $expOp[0];
 
-            $cekOperasional = HargaTransportasi::where('is_active', true)
-                ->where('id', $id_wilayah)
-                ->first();
+            // $cekOperasional = HargaTransportasi::where('is_active', true)
+            //     ->where('id', $id_wilayah)
+            //     ->first();
+            $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                ->orderBy('id', 'ASC')
+                ->get();
+
+            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+            }) ?? $ambil_data_transport->first();
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -1758,7 +1850,7 @@ class RequestQuotationController extends Controller
                 $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
                 $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
                 $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
-    
+
                 $data->kode_promo = $payload->data_diskon->kode_promo_discount;
                 $data->discount_promo = json_encode((object)[
                     'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
@@ -2425,6 +2517,12 @@ class RequestQuotationController extends Controller
                         'biaya_preparasi' => [], // default kosong
                         'regulasi'        => $sampling->regulasi,
                     ];
+
+                    if(isset($sampling->paket)){
+                        $detailGrouped[$key]->paket = $sampling->paket;
+                        $detailGrouped[$key]->is_paket = $sampling->is_paket;
+                        $detailGrouped[$key]->kelipatan_titik = $sampling->kelipatan_titik;
+                    }
                 } else {
                     $detailGrouped[$key]->jumlah_titik += (int) $sampling->jumlah_titik;
                 }
@@ -2611,11 +2709,11 @@ class RequestQuotationController extends Controller
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
 
                 foreach ($dataPendukungHeader as $i => $item) {
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -2650,6 +2748,31 @@ class RequestQuotationController extends Controller
                     }
 
                     $titik = $item->jumlah_titik;
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -2782,6 +2905,7 @@ class RequestQuotationController extends Controller
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
+                        $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -2796,7 +2920,7 @@ class RequestQuotationController extends Controller
                                 $id_parameter[] = $cek_par->id;
                             }
                         }
-
+                        // dd('patah')
                         $harga_parameter = [];
                         $volume_parameter = [];
 
@@ -2845,11 +2969,48 @@ class RequestQuotationController extends Controller
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
 
+                        $hargaPaket = 0;
+                        $hargaSatuan = 0;
+                        $kelipatan_titik = 0;
+
+                        if($is_paket){
+                            $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
+                            $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                            foreach ($dataPaketAnalisa as $paket) {
+                                if(
+                                    $paket['regulasi'] == $sampling->regulasi &&
+                                    $paket['parameter'] == $sampling->parameter && 
+                                    $paket['kategori_1'] == $sampling->kategori_1 &&
+                                    $paket['kategori_2'] == $sampling->kategori_2
+                                ) {
+                                    $pengali = ($jumlah_titik / (int)$paket['jumlah_titik']);
+                                    $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                    $hargaPaket += $harga_sementara;
+                                    $hargaSatuan = $paket['harga_paket'];
+                                    $kelipatan_titik = (int)$paket['jumlah_titik'];
+                                } else {
+                                    continue;
+                                }
+                            }
+                        } 
+
+                        $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
+                        $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
+
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                         $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
                         $pengujian->data_sampling[$i]->volume = $vol_db;
+
+                        if ($is_paket) {
+                            $pengujian->data_sampling[$i]->is_paket = $is_paket;
+                            $pengujian->data_sampling[$i]->kelipatan_titik = $kelipatan_titik;
+                            $pengujian->data_sampling[$i]->is_paket_analisa = true;
+                            $pengujian->data_sampling[$i]->paket_id = $is_paket;
+                            $pengujian->data_sampling[$i]->paket = $dataPaket->nama_template;
+                            $pengujian->data_sampling[$i]->kelipatan_dasar = $kelipatan_titik;
+                        }
 
                         if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
                             unset($pengujian->data_sampling[$i]->biaya_preparasi);
@@ -2902,8 +3063,17 @@ class RequestQuotationController extends Controller
 
                     // kalkulasi harga
                     $expOp = explode("-", $data_wilayah->wilayah);
-                    $id_wilayah = $expOp[0];
-                    $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    // $id_wilayah = $expOp[0];
+                    // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    $nama_wilayah = implode("-", array_slice($expOp, 1));
+
+                    $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
+                        ->orderBy('id', 'ASC')
+                        ->get();
+
+                    $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
+                                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                            }) ?? $ambil_data_transport->first();
 
                     // START FOR
                     $disc_transport = 0;
@@ -2952,7 +3122,7 @@ class RequestQuotationController extends Controller
                                         $dataD->harga_transportasi_total = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
 
                                         $dataD->harga_personil = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang);
-                                        $dataD->harga_perdiem_personil_total = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
+                                        $dataD->harga_perdiem_personil_total = ((int) $cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * (int)$data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
@@ -2967,7 +3137,7 @@ class RequestQuotationController extends Controller
                                         }
 
                                         $transport = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
-                                        $perdiem = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
+                                        $perdiem = ((int) $cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != ''){
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
                                         }else{
@@ -3172,8 +3342,8 @@ class RequestQuotationController extends Controller
                         $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
                         $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
-    
-                        $total_diskon += $total_discount_promo;
+
+                        // $total_diskon += $total_discount_promo;
                         $dataD->kode_promo = $data_diskon->kode_promo_discount;
                         $dataD->discount_promo = json_encode((object)[
                             'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
@@ -3354,6 +3524,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $harga_transport += ($transport_ + $perdiem_ + $jam_);
+                    $isDiscountGroupExist = false;
                     // ==================================================END DISKON TRANSPORTASI======================================================================================
                     // =======================================================DISKON GABUNGAN=========================================================================================
                     if ($isPeriodeDiskonExist) {
@@ -3362,6 +3533,7 @@ class RequestQuotationController extends Controller
                             $dataD->total_discount_gabungan = (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
                             $total_diskon += (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
                             $harga_total = $harga_total - (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
+                            $isDiscountGroupExist = true;
                         } else {
                             $dataD->discount_gabungan = null;
                             $dataD->total_discount_gabungan = 0;
@@ -3418,9 +3590,13 @@ class RequestQuotationController extends Controller
                                     $totalTransport -= $jam_;
                                 }
                             }
-                            // if($per == '2025-02') dd($harga_total + $totalTransport);
+                            // if($pengujian->periode_kontrak == '2026-05') dd($harga_total, $totalTransport, $biaya_lain, $harga_total + $totalTransport);
                             $dataD->discount_group = $data_diskon->discount_data[$indexDataDiskon]->discount_group;
-                            $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            if($isDiscountGroupExist){
+                                $diskon_group = (($harga_total + $totalTransport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }else{
+                                $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }
                             $dataD->total_discount_group = $diskon_group;
                             $total_diskon += $diskon_group;
                             $harga_total = $harga_total - $diskon_group;
@@ -3854,7 +4030,7 @@ class RequestQuotationController extends Controller
             $data_wilayah = $payload->data_wilayah;
             $syarat_ketentuan = $payload->syarat_ketentuan;
             $data_diskon = $payload->data_diskon;
-            
+
             foreach ($data_pendukung as $item) {
                 foreach ($item->data_sampling as $pengujian) {
                     $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
@@ -4108,6 +4284,7 @@ class RequestQuotationController extends Controller
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
                 foreach ($dataPendukungHeader as $i => $item) {
+                    $is_paket = isset($item->is_paket) ? $item->is_paket : false;
                     $param = $item->parameter;
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
@@ -4147,6 +4324,31 @@ class RequestQuotationController extends Controller
                     }
 
                     $titik = $item->jumlah_titik;
+
+                    $hargaPaket = 0;
+                    $hargaSatuan = 0;
+                    $kelipatan_titik = 0;
+
+                    if ($is_paket) {
+                        $dataPaket = TemplatePaketAnalisa::where('id', $item->is_paket)->first();
+                        $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                        foreach ($dataPaketAnalisa as $paket) {
+                            if (
+                                $paket['regulasi'] == $item->regulasi &&
+                                $paket['parameter'] == $param &&
+                                $paket['kategori_1'] == $item->kategori_1 &&
+                                $paket['kategori_2'] == $item->kategori_2
+                            ) {
+                                $pengali = ($titik / (int)$paket['jumlah_titik']);
+                                $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                $hargaPaket += $harga_sementara;
+                                $hargaSatuan = $paket['harga_paket'];
+                                $kelipatan_titik = (int)$paket['jumlah_titik'];
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
 
                     $data_sampling[$i] = [
                         'kategori_1' => $item->kategori_1,
@@ -4244,6 +4446,7 @@ class RequestQuotationController extends Controller
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
+                        $is_paket = isset($sampling->is_paket) ? $sampling->is_paket : false;
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
@@ -4307,11 +4510,48 @@ class RequestQuotationController extends Controller
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
 
+                        $hargaPaket = 0;
+                        $hargaSatuan = 0;
+                        $kelipatan_titik = 0;
+
+                        if($is_paket){
+                            $dataPaket = TemplatePaketAnalisa::where('id', $sampling->is_paket)->first();
+                            $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
+                            foreach ($dataPaketAnalisa as $paket) {
+                                if(
+                                    $paket['regulasi'] == $sampling->regulasi &&
+                                    $paket['parameter'] == $sampling->parameter && 
+                                    $paket['kategori_1'] == $sampling->kategori_1 &&
+                                    $paket['kategori_2'] == $sampling->kategori_2
+                                ) {
+                                    $pengali = ($jumlah_titik / (int)$paket['jumlah_titik']);
+                                    $harga_sementara = (int)$paket['harga_paket'] * $pengali;
+                                    $hargaPaket += $harga_sementara;
+                                    $hargaSatuan = $paket['harga_paket'];
+                                    $kelipatan_titik = (int)$paket['jumlah_titik'];
+                                } else {
+                                    continue;
+                                }
+                            }
+                        } 
+
+                        $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
+                        $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
+
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                         $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
                         $pengujian->data_sampling[$i]->volume = $vol_db;
+
+                        if ($is_paket) {
+                            $pengujian->data_sampling[$i]->is_paket = $is_paket;
+                            $pengujian->data_sampling[$i]->kelipatan_titik = $kelipatan_titik;
+                            $pengujian->data_sampling[$i]->is_paket_analisa = true;
+                            $pengujian->data_sampling[$i]->paket_id = $is_paket;
+                            $pengujian->data_sampling[$i]->paket = $dataPaket->nama_template;
+                            $pengujian->data_sampling[$i]->kelipatan_dasar = $kelipatan_titik;
+                        }
 
                         if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
                             unset($pengujian->data_sampling[$i]->biaya_preparasi);
@@ -4364,8 +4604,13 @@ class RequestQuotationController extends Controller
 
                     // kalkulasi harga
                     $expOp = explode("-", $data_wilayah->wilayah);
-                    $id_wilayah = $expOp[0];
-                    $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    // $id_wilayah = $expOp[0];
+                    // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
+                    $nama_wilayah = implode('-', array_slice($expOp, 1));
+                    $ambil_data_transportasi = HargaTransportasi::where('wilayah', $nama_wilayah)->orderBy('id', 'ASC')->get();
+                    $cekOperasional = $ambil_data_transportasi->first(function ($item) use ($payload) {
+                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                    }) ?? $ambil_data_transportasi->first();
 
                     // START FOR
                     $disc_transport = 0;
@@ -4634,8 +4879,8 @@ class RequestQuotationController extends Controller
                         $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
                         $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
-    
-                        $total_diskon += $total_discount_promo;
+
+                        // $total_diskon += $total_discount_promo;
                         $dataD->kode_promo = $data_diskon->kode_promo_discount;
                         $dataD->discount_promo = json_encode((object)[
                             'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
@@ -4816,6 +5061,8 @@ class RequestQuotationController extends Controller
                     }
 
                     $harga_transport += ($transport_ + $perdiem_ + $jam_);
+
+                    $isDiscountGroupExist = false;
                     // ==================================================END DISKON TRANSPORTASI======================================================================================
                     // =======================================================DISKON GABUNGAN=========================================================================================
                     if ($isPeriodeDiskonExist) {
@@ -4834,6 +5081,7 @@ class RequestQuotationController extends Controller
                             $dataD->total_discount_consultant = ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
                             $total_diskon += ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
                             $harga_total = $harga_total - ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
+                            $isDiscountGroupExist = true;
                         } else {
                             $dataD->discount_consultant = null;
                             $dataD->total_discount_consultant = 0;
@@ -4880,8 +5128,12 @@ class RequestQuotationController extends Controller
                                     $totalTransport -= $jam_;
                                 }
                             }
-                            // if($per == '2025-02') dd($harga_total + $totalTransport);
-                            $dataD->discount_group = $data_diskon->discount_data[$indexDataDiskon]->discount_group;
+                            // if($pengujian->kontrak == '2026-05') dd($harga_total, $totalTransport, $biaya_lain, $harga_total + $totalTransport);
+                            if($isDiscountGroupExist){
+                                $diskon_group = (($harga_total + $totalTransport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }else{
+                                $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }
                             $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
                             $dataD->total_discount_group = $diskon_group;
                             $total_diskon += $diskon_group;
@@ -5262,7 +5514,7 @@ class RequestQuotationController extends Controller
                                         ]);
                                 }
                             }
-                        } 
+                        }
 
                         $perubahan_periode = [];
                         foreach ($payload->data_pendukung as $item) {
@@ -5278,7 +5530,7 @@ class RequestQuotationController extends Controller
 
                         $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'revisi', $qtArray, 'kontrak');
                         $this->dispatch($jobChangeJadwal);
-                        
+
                         // ========== END Perbaikan SP dan Jadwal By: Dedi ==========
                         $message = "Terjadi perubahan quotation $data_lama->no_qt menjadi $no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";
                     }
@@ -5972,7 +6224,7 @@ class RequestQuotationController extends Controller
         }
         $data_lama = json_decode($data_lama);
 
-        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first()->no_sampel;
+        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first();
 
         if (!$data) {
             return response()->json([
@@ -5983,8 +6235,119 @@ class RequestQuotationController extends Controller
 
         return response()->json([
             'message' => 'Success',
-            'data' => \explode('/', $data)[1]
+            'data' => \explode('/', $data->no_sampel)[1]
         ], 200);
     }
 
+    public function indexPaket(Request $request)
+    {
+        $query = TemplatePaketAnalisa::where('is_active', true)
+            ->where('kategori', 'like',  $request->kategori . '-%');
+
+        if (!empty($request->sub_kategori) && $request->sub_kategori !== '0') {
+            $query->where('sub_kategori', 'like', $request->sub_kategori . '-%');
+        }
+
+        $data = $query->get();
+
+        return DataTables::of($data)
+            ->editColumn('data_pendukung_sampling', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+
+                if (empty($data) || ! is_array($data)) {
+                    return [];
+                }
+
+                foreach ($data as $i => &$row) {
+                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
+                }
+
+                return $data;
+            })
+            ->addColumn('harga_paket', function ($item) {
+                $data = json_decode($item->data_pendukung_sampling, true);
+                $harga_paket = 0;
+                if (empty($data) || ! is_array($data)) {
+                    return 0;
+                }
+
+                foreach ($data as $i => &$row) {
+                    $harga_paket += $row['harga_paket'];
+                }
+                return $harga_paket;
+            })
+            ->make(true);
+    }
+
+    public function getKategoriPaket(Request $request)
+    {
+        $data = MasterKategori::where('is_active', true)->select('id', 'nama_kategori')->get();
+
+        $data->prepend((object) [
+            'id' => '0',
+            'nama_kategori' => 'Multi Kategori',
+        ]);
+        return response()->json($data);
+    }
+
+    public function getSubkategoriPaket(Request $request)
+    {
+        $data = MasterSubKategori::where('is_active', true)->where('id_kategori', $request->kategori_id)->select('id', 'nama_sub_kategori', 'id_kategori')->get();
+        return response()->json($data);
+    }
+
+    // Hapus titik tidak bisa ketika sudah ada tanggal terima (untuk periode tambahin cek invoice)
+    public function checkKontrakSample(Request $request) {
+        if(!$request->no_document) {
+            return response()->json([
+                'message' => 'No Document not found',
+                'invoice' => [],
+                'orderDetail' => []
+            ], 200);
+        }
+        $data = QuotationKontrakH::with(['invoices'])->where('no_document', $request->no_document)->first();
+        $order_id = '';
+        $orderDetail = [];
+        if($data->data_lama) {
+            $decodedDataLama = json_decode($data->data_lama);
+            $order_id = $decodedDataLama->id_order;
+        }
+
+        if($order_id && $order_id != '') {
+            $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
+            foreach($dataDetail as $key => $value) {
+                $orderDetail[] = \explode('/', $value['no_sampel'])[1];
+            }
+        }
+
+        return response()->json([
+            'invoice' => $data->invoices,
+            'orderDetail' => $orderDetail
+        ]);
+    }
+
+    public function getSampledData(Request $request){
+        $header = OrderHeader::where('no_document', $request->no_document)->first();
+        if(!$header){
+            return response()->json([
+                'message' => 'Header data not found',
+                'data' => 0,
+                'is_found' => false
+            ], 404);
+        }
+
+        $data = OrderDetail::where('id_order_header', $header->id)->get();
+        $data_sampled = $data->filter(function ($item) {
+            return $item->tanggal_terima !== null;
+        })->toArray();
+
+        $data_return = array_map(function ($item) {
+            return explode('/',$item['no_sampel'])[1];
+        }, $data_sampled);
+
+        return response()->json([
+            'message' => 'Success',
+            'data' => $data_return
+        ], 200);
+    }
 }

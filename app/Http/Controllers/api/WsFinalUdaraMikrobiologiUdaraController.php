@@ -45,15 +45,14 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
             ->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman", "27-Udara Lingkungan Kerja", "26-Kualitas Udara Dalam Ruang"])
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
-            ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-            ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
             ->where(function ($query) use ($parameterAllowed) {
                 foreach ($parameterAllowed as $param) {
                     $query->orWhere('parameter', 'LIKE', "%;$param%");
                 }
             })
             ->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-            ->orderBy('tanggal_terima');
+            ->orderBy('tanggal_sampling');
 
         return Datatables::of($data)->make(true);
 

@@ -11,7 +11,7 @@ use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 use App\Services\TranslatorService as Translator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -64,7 +64,7 @@ class RenderKontrak
     public function renderHeader($id, $lang)
     {
         try {
-            $data = QuotationKontrakH::with('cabang', 'sales')
+            $data = QuotationKontrakH::with('cabang', 'sales','order')
                 ->where('is_active', true)
                 ->where('id', $id)
                 ->first();
@@ -275,7 +275,7 @@ class RenderKontrak
     {
         app()->setLocale($lang);
         Carbon::setLocale($lang);
-
+        $NoOrder = $data && $data->order ? $data->order->no_order : null;
         try {
             $pdf->WriteHTML(
                 ' <table class="table table-bordered" style="font-size: 8px;">
@@ -363,13 +363,17 @@ class RenderKontrak
                             <b style="font-size: 13px;">' . $kategori2[1] . " " . $penamaan_titik . "</b>
                             <hr>"
                 );*/
+
+                $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                 $pdf->WriteHTML(
-                    ' <tr>
+                    ' <tr style="' . $rowBg . '">
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                         <td style="font-size: 13px; padding: 5px;">
                             <b style="font-size: 13px;">' . $kategori2[1] . "</b>
                             <hr>"
                 );
+            
                 if ($a->regulasi !== null && count($a->regulasi) > 0 && $a->regulasi[0] != "") {
                     foreach ($a->regulasi as $k => $v) {
                         $reg__ = '';
@@ -443,6 +447,10 @@ class RenderKontrak
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . '</td>
                     </tr>'
                 );*/
+                $totalHarga = $a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode));
+                if(isset($a->is_paket_analisa) && $a->is_paket_analisa){
+                    $totalHarga = $a->harga_total * count($a->periode);
+                }
                 $pdf->WriteHTML(
                     " <br>
                     <hr>" . ' <b>
@@ -451,7 +459,7 @@ class RenderKontrak
                     </td>
                     <td style="vertical-align: middle;text-align:center;font-size: 13px;">' . (int) $a->jumlah_titik * count($a->periode) . '</td>
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan) . '</td>
-                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . '</td>
+                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($totalHarga) . '</td>
                     </tr>'
                 );
 
@@ -1035,13 +1043,37 @@ class RenderKontrak
                         <table class="head2" width="100%">
                             <tr>
                                 <td colspan="2">
-                                    <p style="font-size: 10px;line-height:1.5px;">Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '</p>
+                                    <p style="font-size: 10px; line-height:1.5px;">
+                                        Tangerang, ' . self::tanggal_indonesia($data->tanggal_penawaran) . '
+                                    </p>
                                 </td>
-                                <td style="vertical-align: top; text-align:right;">
-                                    <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . strtoupper(__('QTC.header.contract')) . '</span>
-                                    <span style="font-size:11px; font-weight: bold; border: 1px solid gray;margin-top:5px;" id="status_sampling">' . $sampling . '</span>
+                                <td style="vertical-align: top;">
+                                    <!-- Tabel pembantu dengan text-align right -->
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <tr>
+                                            <td style="text-align: right; padding-bottom: 1.5px;">
+                                                <!-- Kotak Pertama: Contract + Sampling -->
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;">
+                                                    ' . strtoupper(__('QTC.header.contract')) . '
+                                                </span>
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;" id="status_sampling">
+                                                    ' . $sampling . '
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align: right;">
+                                                <!-- Kotak Kedua: No Order -->
+                                                <!-- Tambahkan display: inline-block agar border membungkus teks dengan rapi -->
+                                                <span style="font-size:11px; font-weight: bold; border: 1px solid gray; padding: 2px 5px; display: inline-block;">
+                                                    ' . $NoOrder . '
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </table>
                                 </td>
                             </tr>
+
                             <tr>
                                 <td colspan="2" width="80%">
                                     <h6 style="font-size:9pt; font-weight: bold; white-space: pre-wrap; white-space: -moz-pre-wrap; white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;">' . $konsultant . $perusahaan . '</h6>
@@ -1158,8 +1190,10 @@ class RenderKontrak
                                         <hr>"
                             );*/
 
+                            $rowBg = (!empty($a->is_paket_analisa) && $a->is_paket_analisa) ? ' background-color: #F5F5F5;' : '';
+
                             $pdf->WriteHTML(
-                                ' <tr>
+                                ' <tr style="' . $rowBg . '">
                                     <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                                     <td style="font-size: 13px; padding: 5px;">
                                         <b style="font-size: 13px;">' . $kategori2[1] . "</b>
@@ -1753,7 +1787,6 @@ class RenderKontrak
                         } else {
                             $object = json_decode($values->data_sampling);
                         }
-                        
                         $num_ = self::gabungDataDanJumlahTitik($object);
                         $bollean = false;
                         $periode_found = [];
@@ -1786,7 +1819,11 @@ class RenderKontrak
                         }
                     }
                 }
+                $totalHarga = $a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode));
 
+                if(isset($a->is_paket_analisa) && $a->is_paket_analisa){
+                    $totalHarga = $a->harga_total * count($a->periode);
+                }
                 $pdf->WriteHTML(
                     '<td style="font-size: 8px; text-align:center;">' . (int) $a->jumlah_titik * count($a->periode) . "</td>"
                 );
@@ -1794,7 +1831,7 @@ class RenderKontrak
                     '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan) . "</td>"
                 );
                 $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . "</td>"
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($totalHarga) . "</td>"
                 );
                 $pdf->WriteHTML("</tr>");
                 $x_++;
