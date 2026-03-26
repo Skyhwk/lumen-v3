@@ -165,7 +165,7 @@ class KalenderPerusahaanController extends Controller
                 return !in_array($dateCarbon->format('Y-m-d'), $normalizedEventDates)
                     && !$dateCarbon->isWeekend();
             });
-            
+
             $dataTanggal[$month] = array_values($dataTanggal[$month]);
         }
         $tanggal_tambahan = LiburPerusahaan::select('tanggal')
@@ -173,18 +173,18 @@ class KalenderPerusahaanController extends Controller
             ->where('is_active', true)
             ->where('tipe', 'cuti_bersama_tapi_masuk')
             ->get()
-            ->pluck('tanggal') 
+            ->pluck('tanggal')
             ->map(function ($date) {
-                return Carbon::parse($date)->format('Y-m-d'); 
+                return Carbon::parse($date)->format('Y-m-d');
             })
             ->toArray();
         foreach ($tanggal_tambahan as $tanggal) {
-            $month = Carbon::parse($tanggal)->format('Y-m'); 
-            $dateFormatted = Carbon::parse($tanggal)->format('Y-m-d'); 
+            $month = Carbon::parse($tanggal)->format('Y-m');
+            $dateFormatted = Carbon::parse($tanggal)->format('Y-m-d');
             if (!isset($dataTanggal[$month])) {
                 $dataTanggal[$month] = [];
             }
-            
+
             if (!in_array($dateFormatted, $dataTanggal[$month])) {
                 $dataTanggal[$month][] = $dateFormatted;
                 usort($dataTanggal[$month], function ($a, $b) {
@@ -234,9 +234,16 @@ class KalenderPerusahaanController extends Controller
     public function hariLibur(Request $request)
     {
         try {
-            $response = Http::get('https://hari-libur-api.vercel.app/api?year=' . $request->tahun);
+            $response = Http::get('https://libur.deno.dev/api?year=' . $request->tahun);
+            $data = collect($response->json())->map(function ($item) {
+                return [
+                    'tanggal' => $item['date'],
+                    'keterangan' => $item['name'],
+                ];
+            });
+
             return response()->json([
-                'data' => $response->json(),
+                'data' => $data,
             ], 200);
         } catch (Exception $e) {
             return response()->json([
