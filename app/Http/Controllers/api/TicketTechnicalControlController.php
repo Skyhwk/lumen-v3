@@ -676,6 +676,7 @@ class TicketTechnicalControlController extends Controller
 
     public function forward(Request $request)
     {
+        
         DB::transaction(function () use ($request) {
             $timestamp = DATE('Y-m-d H:i:s');
             if ($request->kategori === 'Minta Regulasi') {
@@ -687,50 +688,71 @@ class TicketTechnicalControlController extends Controller
                 }
 
                 // Parse dokumentasi/deskripsi ticket untuk ambil id regulasi & parameter
-                $ticketDetails = $ticket->dokumentasi;
-                $idRegulasi    = $ticketDetails['regulasi']   ?? null;
-                $parameterIds  = $ticketDetails['parameter']  ?? [];
-                $kategoriRegulasi  = $ticketDetails['kategori_regulasi']  ?? null;
+                $ticketDetails    = $ticket->dokumentasi;
+                $inputRegulasi    = $ticketDetails['regulasi'] ?? null;
+                $parameterIds     = $ticketDetails['parameter'] ?? [];
+                $kategoriRegulasi = $ticketDetails['kategori_regulasi'] ?? null;
 
-                if (!$idRegulasi) {
-                    throw new \Exception('ID Regulasi tidak ditemukan di ticket');
+                // Pastikan inputRegulasi tidak null atau kosong
+                if (empty($inputRegulasi)) {
+                    throw new \Exception('Data Regulasi (ID atau Nama) tidak ditemukan di ticket');
                 }
 
+                $finalIdRegulasi = null;
+
+                // CEK LOGIKA: Apakah value berupa angka (termasuk string angka "001") atau bukan?
+                if (is_numeric($inputRegulasi)) {
+                    // Jika angka, berarti itu ID Regulasi existing
+                    $finalIdRegulasi = $inputRegulasi;
+                } else {
+                    // Jika bukan angka (berarti teks nama regulasi baru), Insert Regulasi Baru dulu
+                    // Note: Sesuaikan 'MasterRegulasi' dan nama kolomnya dengan model di project Anda
+                    $newRegulasi = MasterRegulasi::create([
+                        'peraturan'     => $inputRegulasi, // Value teks tadi dijadikan nama regulasi
+                        'nama_kategori' => $request->nama_kategori_regulasi,
+                        'id_kategori' => $request->id_kategori_regulasi,
+                        'deskripsi' => $request->regulasi_deskripsi,
+                        'created_by'        => $this->karyawan,
+                        'created_at'        => $timestamp,
+                    ]);
+                    
+                    // Dapatkan ID regulasi yang baru saja di-insert
+                    $finalIdRegulasi = $newRegulasi->id; 
+                }
+
+                // --- Dari titik ini ke bawah, gunakan $finalIdRegulasi ---
+
                 // Ambil existing bakumutu berdasarkan regulasi ini
-                $existingBakumutuIds = MasterBakumutu::where('id_regulasi', $idRegulasi)
+                $existingBakumutuIds = MasterBakumutu::where('id_regulasi', $finalIdRegulasi)
                     ->pluck('id')
                     ->toArray();
 
                 // Loop parameter yang dikirim dari forward form
-                // Key dari forward_satuan, forward_method, dll adalah id_parameter
-                foreach ($request->forward_satuan as $idParameter => $satuan) {
-                    $bakumutuData = [
-                        'id_regulasi'         => $idRegulasi,
-                        'id_parameter'        => $idParameter,
-                        'satuan'              => $satuan,
-                        'method'              => $request->forward_method[$idParameter]              ?? null,
-                        'baku_mutu'           => ($request->forward_baku_mutu[$idParameter] ?? '') !== '' 
-                                                    ? $request->forward_baku_mutu[$idParameter] 
-                                                    : null,
-                        'nama_header'         => $request->forward_nama_header[$idParameter]         ?? null,
-                        'durasi_pengukuran'   => $request->forward_durasi_pengukuran[$idParameter]   ?? null,
-                        'akreditasi'          => $request->forward_akreditasi[$idParameter]          ?? null,
-                        'updated_by'          => $this->karyawan,
-                        'updated_at'          => $timestamp,
-                    ];
+                if ($request->has('forward_satuan') && is_array($request->forward_satuan)) {
+                    foreach ($request->forward_satuan as $idParameter => $satuan) {
+                        $bakumutuData = [
+                            'id_regulasi'         => $finalIdRegulasi, // Gunakan ID final
+                            'id_parameter'        => $idParameter,
+                            'satuan'              => $satuan,
+                            'method'              => $request->forward_method[$idParameter] ?? null,
+                            'baku_mutu'           => ($request->forward_baku_mutu[$idParameter] ?? '') !== '' 
+                                                        ? $request->forward_baku_mutu[$idParameter] 
+                                                        : null,
+                            'nama_header'         => $request->forward_nama_header[$idParameter] ?? null,
+                            'durasi_pengukuran'   => $request->forward_durasi_pengukuran[$idParameter] ?? null,
+                            'akreditasi'          => $request->forward_akreditasi[$idParameter] ?? null,
+                        ];
 
-                    // Jika parameter ini sudah punya entry di bakumutu → update, belum → create
-                    // $existing = MasterBakumutu::where('id_regulasi', $idRegulasi)
-                    //     ->where('id_parameter', $idParameter)
-                    //     ->first();
-                    $bakumutuData['created_by'] = $this->karyawan;
-                    $bakumutuData['created_at'] = $timestamp;
-                    unset($bakumutuData['updated_by'], $bakumutuData['updated_at']);
-                    MasterBakumutu::create($bakumutuData);    
+                        // Selalu set created_by dan created_at untuk data baru
+                        $bakumutuData['created_by'] = $this->karyawan;
+                        $bakumutuData['created_at'] = $timestamp;
+                        
+                        MasterBakumutu::create($bakumutuData);    
+                    }
                 }
 
-                // Update status ticket menjadi PROCESS setelah forward berhasil
-                $ticket->status     = 'DONE';
+                // Update status ticket menjadi PROCESS/DONE setelah forward berhasil
+                $ticket->status     = 'SOLVE';
                 $ticket->updated_by = $this->karyawan;
                 $ticket->updated_at = $timestamp;
                 $ticket->save();

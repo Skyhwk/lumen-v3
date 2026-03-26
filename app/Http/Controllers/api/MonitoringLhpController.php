@@ -17,6 +17,9 @@ class MonitoringLhpController extends Controller
 {
     public function index(Request $request)
     {
+        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
+        $id_jabatan = [21,24,157, 15, 148]; // Can't View All
+        $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
         $workDay = Carbon::now()->subWeekdays(10);
 
         $liburPerusahaan = LiburPerusahaan::where('tanggal', '>=', $workDay)->get();
@@ -46,10 +49,16 @@ class MonitoringLhpController extends Controller
             ->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) {
                 $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
             })
+            ->leftJoin('order_header', 'order_detail.no_order', '=', 'order_header.no_order')
             ->where('order_detail.tanggal_sampling','<=', $workDayWithLibur)
             ->where('order_detail.is_active', true)
             ->where('order_detail.is_approve', false)
             ->where('order_detail.status', '<>', 3);
+        if(in_array($jabatan, [21,15, 157])){
+            $rekapOrder->whereIn('sales_id', $getBawahan);
+        }else if(in_array($jabatan, [24,148])){
+            $rekapOrder->where('sales_id', $this->user_id);
+        }
 
         /*
         |--------------------------------------------------------------------------
@@ -143,7 +152,7 @@ class MonitoringLhpController extends Controller
                     return 0;
                 }
 
-                $start = Carbon::parse($data->tanggal_sampling)->addWeekDays(10);
+                $start = Carbon::parse($data->tanggal_sampling);
                 $end   = Carbon::now();
 
                 // hitung weekday
@@ -151,6 +160,7 @@ class MonitoringLhpController extends Controller
 
                 // ambil libur perusahaan di range tanggal
                 $libur = LiburPerusahaan::whereBetween('tanggal', [$start, $end])
+                    ->where('is_active', true)
                     ->get()
                     ->filter(function ($item) {
                         return !Carbon::parse($item->tanggal)->isWeekend();
