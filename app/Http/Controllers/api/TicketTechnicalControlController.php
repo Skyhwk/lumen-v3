@@ -548,8 +548,7 @@ class TicketTechnicalControlController extends Controller
 
             $data->save();
 
-            $user_programmer = MasterKaryawan::where('id_department', 7)
-                ->whereNotIn('id', [10, 15, 93, 123])
+            $user_programmer = MasterKaryawan::where('id_department', 17)
                 ->where('is_active', true)
                 ->pluck('id')
                 ->toArray();
@@ -568,7 +567,6 @@ class TicketTechnicalControlController extends Controller
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
                 ->url('/ticket-technical-control')
                 ->send();
-
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -576,7 +574,6 @@ class TicketTechnicalControlController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollback();
-            dd($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal Proses Ticket technical Controll: ' . $e->getMessage()
@@ -595,10 +592,9 @@ class TicketTechnicalControlController extends Controller
 
             $data->save();
 
-            $message = 'Ticket technical Controll telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim IT';
+            $message = 'Ticket technical Controll telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim TECHNICAL CONTROL';
 
-            $user_programmer = MasterKaryawan::where('id_department', 7)
-                ->whereNotIn('id', [10, 15, 93, 123])
+            $user_programmer = MasterKaryawan::where('id_department', 17)
                 ->where('is_active', true)
                 ->pluck('id')
                 ->toArray();
@@ -734,28 +730,40 @@ class TicketTechnicalControlController extends Controller
     
                     // Loop parameter yang dikirim dari forward form
                     if ($request->has('forward_satuan') && is_array($request->forward_satuan)) {
-                        foreach ($request->forward_satuan as $idParameter => $satuan) {
-                            $bakumutuData = [
-                                'id_regulasi'         => $finalIdRegulasi, // Gunakan ID final
-                                'id_parameter'        => $idParameter,
-                                'satuan'              => $satuan,
-                                'method'              => $request->forward_method[$idParameter] ?? null,
-                                'baku_mutu'           => ($request->forward_baku_mutu[$idParameter] ?? '') !== '' 
-                                                            ? $request->forward_baku_mutu[$idParameter] 
-                                                            : null,
-                                'nama_header'         => $request->forward_nama_header[$idParameter] ?? null,
-                                'durasi_pengukuran'   => $request->forward_durasi_pengukuran[$idParameter] ?? null,
-                                'akreditasi'          => $request->forward_akreditasi[$idParameter] ?? null,
-                            ];
-    
-                            // Selalu set created_by dan created_at untuk data baru
-                            $bakumutuData['created_by'] = $this->karyawan;
-                            $bakumutuData['created_at'] = $timestamp;
-                            
-                            MasterBakumutu::create($bakumutuData);    
+                            foreach ($request->forward_satuan as $idParameter => $satuan) {
+                                
+                                // Data yang digunakan untuk MENCARI (Unique Key)
+                                $searchKey = [
+                                    'id_regulasi'  => $finalIdRegulasi,
+                                    'id_parameter' => $idParameter,
+                                    'is_active'    => 1
+                                ];
+
+                                // Data yang akan di-INSERT atau di-UPDATE
+                                $data = [
+                                    'satuan'            => $satuan,
+                                    'method'            => $request->forward_method[$idParameter] ?? null,
+                                    'baku_mutu'         => ($request->forward_baku_mutu[$idParameter] ?? '') !== '' 
+                                                        ? $request->forward_baku_mutu[$idParameter] : null,
+                                    'nama_header'       => $request->forward_nama_header[$idParameter] ?? null,
+                                    'durasi_pengukuran' => $request->forward_durasi_pengukuran[$idParameter] ?? null,
+                                    'akreditasi'        => $request->forward_akreditasi[$idParameter] ?? null,
+                                    'updated_by'        => $this->karyawan,
+                                    'updated_at'        => $timestamp,
+                                ];
+
+                                // Fungsi ini otomatis Cek: Jika ada maka Update, Jika tidak ada maka Create
+                                $bakumutu = MasterBakumutu::updateOrCreate($searchKey, $data);
+
+                                // Jika ternyata baru dibuat (bukan update), tambahkan info created_by
+                                if ($bakumutu->wasRecentlyCreated) {
+                                    $bakumutu->update([
+                                        'created_by' => $this->karyawan,
+                                        'created_at' => $timestamp
+                                    ]);
+                                }
+                            }
                         }
-                        
-                    }
     
                     // Update status ticket menjadi PROCESS/DONE setelah forward berhasil
 
