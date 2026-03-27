@@ -735,7 +735,7 @@ class StpsController extends Controller
                     } else if ($status === 'SD') {
                         $labelStatusSampling = '<span>Sampling Diantar</span>';
                     } else if ($status === 'RS') {
-                        $labelStatusSampling = '<span>Re-Sample</span>';
+                        $labelStatusSampling = '<span>Re-Sampling</span>';
                     }
                 }
 
@@ -994,7 +994,7 @@ class StpsController extends Controller
                     } else if ($status === 'SD') {
                         $labelStatusSampling = '<span>Sampling Diantar</span>';
                     } else if ($status === 'RS') {
-                        $labelStatusSampling = '<span>Re-Sample</span>';
+                        $labelStatusSampling = '<span>Re-Sampling</span>';
                     }
                 }
 
