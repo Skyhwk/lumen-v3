@@ -676,152 +676,165 @@ class TicketTechnicalControlController extends Controller
 
     public function forward(Request $request)
     {
-        
-        DB::transaction(function () use ($request) {
-            $timestamp = DATE('Y-m-d H:i:s');
-            if ($request->kategori === 'Minta Regulasi') {
-                // Ambil data ticket untuk mendapatkan info regulasi & parameter yang di-request
-                $ticket = TicketTechnicalControl::find($request->id);
-
-                if (!$ticket) {
-                    throw new \Exception('Ticket tidak ditemukan');
-                }
-
-                // Parse dokumentasi/deskripsi ticket untuk ambil id regulasi & parameter
-                $ticketDetails    = $ticket->dokumentasi;
-                $inputRegulasi    = $ticketDetails['regulasi'] ?? null;
-                $parameterIds     = $ticketDetails['parameter'] ?? [];
-                $kategoriRegulasi = $ticketDetails['kategori_regulasi'] ?? null;
-
-                // Pastikan inputRegulasi tidak null atau kosong
-                if (empty($inputRegulasi)) {
-                    throw new \Exception('Data Regulasi (ID atau Nama) tidak ditemukan di ticket');
-                }
-
-                $finalIdRegulasi = null;
-                // 1. Cari regulasi di database yang namanya sama persis dan is_active = 1
-                $existingRegulasi = MasterRegulasi::where('peraturan', $inputRegulasi)
-                                                ->where('id_kategori',$request->id_kategori_regulasi)
-                                                ->where('is_active', 1)
-                                                ->first();
-                // CEK LOGIKA: Apakah value berupa angka (termasuk string angka "001") atau bukan?
-                if ($existingRegulasi) {
-                    // 2a. Jika ADA: Langsung gunakan ID-nya, tidak perlu insert baru
-                    $finalIdRegulasi = $existingRegulasi->id;
-                } else {
-                    // Jika bukan angka (berarti teks nama regulasi baru), Insert Regulasi Baru dulu
-                    // Note: Sesuaikan 'MasterRegulasi' dan nama kolomnya dengan model di project Anda
-                    $newRegulasi = MasterRegulasi::create([
-                        'peraturan'     => $inputRegulasi, // Value teks tadi dijadikan nama regulasi
-                        'nama_kategori' => $request->nama_kategori_regulasi,
-                        'id_kategori' => $request->id_kategori_regulasi,
-                        'deskripsi' => $request->regulasi_deskripsi,
-                        'created_by'        => $this->karyawan,
-                        'created_at'        => $timestamp,
-                    ]);
-                    
-                    // Dapatkan ID regulasi yang baru saja di-insert
-                    $finalIdRegulasi = $newRegulasi->id; 
-                }
-
-                // --- Dari titik ini ke bawah, gunakan $finalIdRegulasi ---
-
-                // Ambil existing bakumutu berdasarkan regulasi ini
-                $existingBakumutuIds = MasterBakumutu::where('id_regulasi', $finalIdRegulasi)
-                    ->pluck('id')
-                    ->toArray();
-
-                // Loop parameter yang dikirim dari forward form
-                if ($request->has('forward_satuan') && is_array($request->forward_satuan)) {
-                    foreach ($request->forward_satuan as $idParameter => $satuan) {
-                        $bakumutuData = [
-                            'id_regulasi'         => $finalIdRegulasi, // Gunakan ID final
-                            'id_parameter'        => $idParameter,
-                            'satuan'              => $satuan,
-                            'method'              => $request->forward_method[$idParameter] ?? null,
-                            'baku_mutu'           => ($request->forward_baku_mutu[$idParameter] ?? '') !== '' 
-                                                        ? $request->forward_baku_mutu[$idParameter] 
-                                                        : null,
-                            'nama_header'         => $request->forward_nama_header[$idParameter] ?? null,
-                            'durasi_pengukuran'   => $request->forward_durasi_pengukuran[$idParameter] ?? null,
-                            'akreditasi'          => $request->forward_akreditasi[$idParameter] ?? null,
-                        ];
-
-                        // Selalu set created_by dan created_at untuk data baru
-                        $bakumutuData['created_by'] = $this->karyawan;
-                        $bakumutuData['created_at'] = $timestamp;
-                        
-                        MasterBakumutu::create($bakumutuData);    
+        try {
+            //code...
+            DB::transaction(function () use ($request) {
+                $timestamp = DATE('Y-m-d H:i:s');
+                if ($request->kategori === 'Minta Regulasi') {
+                    // Ambil data ticket untuk mendapatkan info regulasi & parameter yang di-request
+                    $ticket = TicketTechnicalControl::find($request->id);
+    
+                    if (!$ticket) {
+                        throw new \Exception('Ticket tidak ditemukan');
                     }
-                }
-
-                // Update status ticket menjadi PROCESS/DONE setelah forward berhasil
-                $ticket->status     = 'SOLVE';
-                $ticket->updated_by = $this->karyawan;
-                $ticket->updated_at = $timestamp;
-                $ticket->save();
-            }else{
-                $microtime = str_replace(".", "", microtime(true));
-                $uniq_id = $microtime;
-                $filename = $microtime . '.txt';
-
-                // Ini HTML mentah dari Summernote
-                $content = $request->jawab; 
-                $contentDir = 'ticket_technical_control_jawab';
-
-                $dom = new \DOMDocument();
-                libxml_use_internal_errors(true);
-                
-                // Cek apakah content kosong untuk menghindari error DOMDocument
-                if (!empty($content)) {
-                    $dom->loadHtml($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                    $images = $dom->getElementsByTagName('img');
-                    
-                    if (!file_exists(public_path($contentDir))) {
-                        mkdir(public_path($contentDir), 0777, true);
+    
+                    // Parse dokumentasi/deskripsi ticket untuk ambil id regulasi & parameter
+                    $ticketDetails    = $ticket->dokumentasi;
+                    $inputRegulasi    = $ticketDetails['regulasi'] ?? null;
+                    $parameterIds     = $ticketDetails['parameter'] ?? [];
+                    $kategoriRegulasi = $ticketDetails['kategori_regulasi'] ?? null;
+    
+                    // Pastikan inputRegulasi tidak null atau kosong
+                    if (empty($inputRegulasi)) {
+                        throw new \Exception('Data Regulasi (ID atau Nama) tidak ditemukan di ticket');
                     }
-                    
-                    foreach($images as $k => $img){
-                        $data_img = $img->getAttribute('src');
+    
+                    $finalIdRegulasi = null;
+                    // 1. Cari regulasi di database yang namanya sama persis dan is_active = 1
+                    $existingRegulasi = MasterRegulasi::where('peraturan', $inputRegulasi)
+                                                    ->where('id_kategori',$request->id_kategori_regulasi)
+                                                    ->where('is_active', 1)
+                                                    ->first();
+                    // CEK LOGIKA: Apakah value berupa angka (termasuk string angka "001") atau bukan?
+                    if ($existingRegulasi) {
+                        // 2a. Jika ADA: Langsung gunakan ID-nya, tidak perlu insert baru
+                        $finalIdRegulasi = $existingRegulasi->id;
+                    } else {
+                        // Jika bukan angka (berarti teks nama regulasi baru), Insert Regulasi Baru dulu
+                        // Note: Sesuaikan 'MasterRegulasi' dan nama kolomnya dengan model di project Anda
+                        $newRegulasi = MasterRegulasi::create([
+                            'peraturan'     => $inputRegulasi, // Value teks tadi dijadikan nama regulasi
+                            'nama_kategori' => $request->nama_kategori_regulasi,
+                            'id_kategori' => $request->id_kategori_regulasi,
+                            'deskripsi' => $request->deskripsi,
+                            'created_by'        => $this->karyawan,
+                            'created_at'        => $timestamp,
+                        ]);
                         
-                        // Cek apakah src mengandung base64
-                        if(preg_match('/data:image/', $data_img)){
-                            list($type, $data_img) = explode(';', $data_img);
-                            list(, $data_img)      = explode(',', $data_img);
-                            $data_img = base64_decode($data_img);
-
-                            // Buat nama file unik untuk gambar
-                            $imageName = time() . '_' . $k . '.png';
-                            $path = public_path($contentDir . '/' . $imageName);
-
-                            // Simpan file gambar fisik
-                            file_put_contents($path, $data_img);
+                        // Dapatkan ID regulasi yang baru saja di-insert
+                        $finalIdRegulasi = $newRegulasi->id; 
+                    }
+    
+                    // --- Dari titik ini ke bawah, gunakan $finalIdRegulasi ---
+    
+                    // Ambil existing bakumutu berdasarkan regulasi ini
+                    $existingBakumutuIds = MasterBakumutu::where('id_regulasi', $finalIdRegulasi)
+                        ->pluck('id')
+                        ->toArray();
+    
+                    // Loop parameter yang dikirim dari forward form
+                    if ($request->has('forward_satuan') && is_array($request->forward_satuan)) {
+                        foreach ($request->forward_satuan as $idParameter => $satuan) {
+                            $bakumutuData = [
+                                'id_regulasi'         => $finalIdRegulasi, // Gunakan ID final
+                                'id_parameter'        => $idParameter,
+                                'satuan'              => $satuan,
+                                'method'              => $request->forward_method[$idParameter] ?? null,
+                                'baku_mutu'           => ($request->forward_baku_mutu[$idParameter] ?? '') !== '' 
+                                                            ? $request->forward_baku_mutu[$idParameter] 
+                                                            : null,
+                                'nama_header'         => $request->forward_nama_header[$idParameter] ?? null,
+                                'durasi_pengukuran'   => $request->forward_durasi_pengukuran[$idParameter] ?? null,
+                                'akreditasi'          => $request->forward_akreditasi[$idParameter] ?? null,
+                            ];
+    
+                            // Selalu set created_by dan created_at untuk data baru
+                            $bakumutuData['created_by'] = $this->karyawan;
+                            $bakumutuData['created_at'] = $timestamp;
                             
-                            // Ganti atribut src dari base64 menjadi URL gambar
-                            $img->removeAttribute('src');
-                            $img->setAttribute('src', \URL::asset($contentDir . '/' . $imageName));
+                            MasterBakumutu::create($bakumutuData);    
                         }
+                        
                     }
-                    // Ambil HTML yang sudah bersih dari base64
-                    $cleanContent = $dom->saveHTML();
-                } else {
-                    $cleanContent = '';
+    
+                    // Update status ticket menjadi PROCESS/DONE setelah forward berhasil
+
+                    $ticket->status     = 'SOLVE';
+                    $ticket->updated_by = $this->karyawan;
+                    $ticket->updated_at = $timestamp;
+                    $ticket->save();
+                    
+                }else{
+                    $microtime = str_replace(".", "", microtime(true));
+                    $uniq_id = $microtime;
+                    $filename = $microtime . '.txt';
+    
+                    // Ini HTML mentah dari Summernote
+                    $content = $request->jawab; 
+                    $contentDir = 'ticket_technical_control_jawab';
+    
+                    $dom = new \DOMDocument();
+                    libxml_use_internal_errors(true);
+                    
+                    // Cek apakah content kosong untuk menghindari error DOMDocument
+                    if (!empty($content)) {
+                        $dom->loadHtml($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                        $images = $dom->getElementsByTagName('img');
+                        
+                        if (!file_exists(public_path($contentDir))) {
+                            mkdir(public_path($contentDir), 0777, true);
+                        }
+                        
+                        foreach($images as $k => $img){
+                            $data_img = $img->getAttribute('src');
+                            
+                            // Cek apakah src mengandung base64
+                            if(preg_match('/data:image/', $data_img)){
+                                list($type, $data_img) = explode(';', $data_img);
+                                list(, $data_img)      = explode(',', $data_img);
+                                $data_img = base64_decode($data_img);
+    
+                                // Buat nama file unik untuk gambar
+                                $imageName = time() . '_' . $k . '.png';
+                                $path = public_path($contentDir . '/' . $imageName);
+    
+                                // Simpan file gambar fisik
+                                file_put_contents($path, $data_img);
+                                
+                                // Ganti atribut src dari base64 menjadi URL gambar
+                                $img->removeAttribute('src');
+                                $img->setAttribute('src', \URL::asset($contentDir . '/' . $imageName));
+                            }
+                        }
+                        // Ambil HTML yang sudah bersih dari base64
+                        $cleanContent = $dom->saveHTML();
+                    } else {
+                        $cleanContent = '';
+                    }
+    
+                    // KOREKSI: Simpan $cleanContent ke dalam file .txt, BUKAN $content
+                    file_put_contents(public_path($contentDir . '/' . $filename), $cleanContent);
+    
+                    // JAWABAN: Susun array untuk disimpan ke dalam kolom JSON 'dokumentasi'
+                    $ticket = TicketTechnicalControl::find($request->id);
+                    $dokumentasiPush = $ticket->dokumentasi;
+                    $dokumentasiPush['jawab_path'] = $contentDir . '/' . $filename;
+                    $ticket->dokumentasi = $dokumentasiPush;
+                    $ticket->status      = 'SOLVE';
+                    $ticket->solve_by  = $this->karyawan;
+                    $ticket->solve_time  = $timestamp;
+                    $ticket->save();
                 }
-
-                // KOREKSI: Simpan $cleanContent ke dalam file .txt, BUKAN $content
-                file_put_contents(public_path($contentDir . '/' . $filename), $cleanContent);
-
-                // JAWABAN: Susun array untuk disimpan ke dalam kolom JSON 'dokumentasi'
-                $ticket = TicketTechnicalControl::find($request->id);
-                $dokumentasiPush = $ticket->dokumentasi;
-                $dokumentasiPush['jawab_path'] = $contentDir . '/' . $filename;
-                $ticket->dokumentasi = $dokumentasiPush;
-                $ticket->status      = 'SOLVE';
-                $ticket->solve_by  = $this->karyawan;
-                $ticket->solve_time  = $timestamp;
-                $ticket->save();
-            }
-        });
+            });
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json([
+                'status'  => 'error',
+                'line'  => $th->getLine(),
+                'file'  => $th->getFile(),
+                'message' => 'Gagal memproses ticket: ' . $th->getMessage()
+            ], 500);
+        }
 
         return response()->json(['message' => 'Ticket berhasil di-forward']);
     }
