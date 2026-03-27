@@ -826,6 +826,7 @@ class TicketTechnicalControlController extends Controller
                     $ticket->save();
                 }
             });
+            return response()->json(['message' => 'Ticket berhasil di simpan']);
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json([
@@ -835,7 +836,5 @@ class TicketTechnicalControlController extends Controller
                 'message' => 'Gagal memproses ticket: ' . $th->getMessage()
             ], 500);
         }
-
-        return response()->json(['message' => 'Ticket berhasil di-forward']);
     }
 }
