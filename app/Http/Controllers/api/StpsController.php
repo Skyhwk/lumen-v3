@@ -33,18 +33,18 @@ class StpsController extends Controller
             ->get();
 
             $doneList = [];
-            
+
             // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
-                // PENTING: Pecah nama di sini juga! 
+                // PENTING: Pecah nama di sini juga!
                 $headerSamplers = explode(',', $row->sampler_jadwal ?? '');
                 foreach ($headerSamplers as $name) {
                     $cleanName = strtolower(trim($name));
                     if (empty($cleanName)) continue;
                     // Kuncinya: Order + Tanggal + Nama Orang
-                    $key = sprintf('%s|%s|%s', 
-                        trim($row->no_order), 
-                        trim($row->tanggal_sampling), 
+                    $key = sprintf('%s|%s|%s',
+                        trim($row->no_order),
+                        trim($row->tanggal_sampling),
                         $cleanName
                     );
                     $doneList[$key] =[
@@ -67,8 +67,8 @@ class StpsController extends Controller
             $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
-                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
-                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling', 
+                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document',
+                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling',
                         'no_tlp_pic_sampling', 'jabatan_pic_sampling', 'jabatan_pic_order', 'is_revisi'
                     ]);
                 },
@@ -102,7 +102,7 @@ class StpsController extends Controller
             ];
 
             $groupedData = [];
-             
+
             foreach ($data as $item) {
                 // Early exit jika relasi tidak lengkap
                 if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {continue;}
@@ -113,7 +113,7 @@ class StpsController extends Controller
                 if ($periode) {
                     $targetPlan = $orderHeader->sampling->firstWhere('periode_kontrak', $periode);
                 }
-                
+
                 // Prioritas 2: Jika tidak ada periode spesifik, atau tidak ketemu, ambil yang pertama
                 if (!$targetPlan) {
                     $targetPlan = $orderHeader->sampling->first();
@@ -140,9 +140,9 @@ class StpsController extends Controller
 
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
-                    // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di 
+                    // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di
                     if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
-                        continue; 
+                        continue;
                     }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
@@ -160,9 +160,9 @@ class StpsController extends Controller
                         $cleanTargetName = strtolower(trim($singleSampler));
                         if (empty($cleanTargetName)) continue;
 
-                        $checkKey = sprintf('%s|%s|%s', 
-                            trim($item->no_order), 
-                            trim($schedule->tanggal), 
+                        $checkKey = sprintf('%s|%s|%s',
+                            trim($item->no_order),
+                            trim($schedule->tanggal),
                             $cleanTargetName
                         );
 
@@ -170,14 +170,14 @@ class StpsController extends Controller
                         if (isset($doneList[$checkKey])) {
                             $pendingSamplers[] = trim($singleSampler);
                             $dataDb =$doneList[$checkKey];
-                            $statusRow['is_downloaded_stps']    = $dataDb['is_downloaded_stps']; 
+                            $statusRow['is_downloaded_stps']    = $dataDb['is_downloaded_stps'];
                             $statusRow['is_printed_stps'] = $dataDb['is_printed_stps'];
                         }
                     }
                     // 3. Keputusan Akhir untuk Row Ini
                     // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
                     if (empty($pendingSamplers)) {
-                        continue; 
+                        continue;
                     }
 
                     // 4. Update Tampilan Sampler
@@ -189,9 +189,9 @@ class StpsController extends Controller
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
                     // Key Unik untuk Grouping (Composite Key)
-                    $key = $orderHeader->no_document . '|' . 
-                        $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
+                    $key = $orderHeader->no_document . '|' .
+                        $item->no_order . '|' .
+                        $schedule->tanggal . '|' .
                         $schedule->jam_mulai . '|' .
                         $kategori; // Key dipersingkat agar hash lebih cepat
 
@@ -199,7 +199,7 @@ class StpsController extends Controller
                         // Jika data sudah ada, gabungkan Sampler-nya saja
                         $existingSamplers = explode(',', $groupedData[$key]['sampler']);
                         $newSamplers = explode(',', $schedule->sampler ?? '');
-                        
+
                         // Merge & Unique
                         $merged = array_unique(array_merge($existingSamplers, $newSamplers));
                         $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
@@ -228,7 +228,7 @@ class StpsController extends Controller
                     }
                 }
             }
-           
+
             // 3. Return ke DataTables (Collection Client Side)
             // Karena data sudah berupa Array, kita bungkus dengan collect()
             return DataTables::of(collect(array_values($groupedData)))
@@ -252,18 +252,18 @@ class StpsController extends Controller
             ->get();
 
             $doneList = [];
-            
+
             // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
-                // PENTING: Pecah nama di sini juga! 
+                // PENTING: Pecah nama di sini juga!
                 $headerSamplers = explode(',', $row->sampler_jadwal ?? '');
                 foreach ($headerSamplers as $name) {
                     $cleanName = strtolower(trim($name));
                     if (empty($cleanName)) continue;
                     // Kuncinya: Order + Tanggal + Nama Orang
-                    $key = sprintf('%s|%s|%s', 
-                        trim($row->no_order), 
-                        trim($row->tanggal_sampling), 
+                    $key = sprintf('%s|%s|%s',
+                        trim($row->no_order),
+                        trim($row->tanggal_sampling),
                         $cleanName
                     );
                     $doneList[$key] =[
@@ -280,8 +280,8 @@ class StpsController extends Controller
             $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
-                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
-                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling', 
+                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document',
+                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling',
                         'no_tlp_pic_sampling', 'jabatan_pic_sampling', 'jabatan_pic_order', 'is_revisi'
                     ]);
                 },
@@ -326,7 +326,7 @@ class StpsController extends Controller
                 if ($periode) {
                     $targetPlan = $orderHeader->sampling->firstWhere('periode_kontrak', $periode);
                 }
-                
+
                 // Prioritas 2: Jika tidak ada periode spesifik, atau tidak ketemu, ambil yang pertama
                 if (!$targetPlan) {
                     $targetPlan = $orderHeader->sampling->first();
@@ -354,7 +354,7 @@ class StpsController extends Controller
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
                     if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
-                        continue; 
+                        continue;
                     }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
@@ -372,9 +372,9 @@ class StpsController extends Controller
                         $cleanTargetName = strtolower(trim($singleSampler));
                         if (empty($cleanTargetName)) continue;
 
-                        $checkKey = sprintf('%s|%s|%s', 
-                            trim($item->no_order), 
-                            trim($schedule->tanggal), 
+                        $checkKey = sprintf('%s|%s|%s',
+                            trim($item->no_order),
+                            trim($schedule->tanggal),
                             $cleanTargetName
                         );
 
@@ -382,14 +382,14 @@ class StpsController extends Controller
                         if (isset($doneList[$checkKey])) {
                             $pendingSamplers[] = trim($singleSampler);
                             $dataDb =$doneList[$checkKey];
-                            $statusRow['is_downloaded_stps']    = $dataDb['is_downloaded_stps']; 
+                            $statusRow['is_downloaded_stps']    = $dataDb['is_downloaded_stps'];
                             $statusRow['is_printed_stps'] = $dataDb['is_printed_stps'];
                         }
                     }
                     // 3. Keputusan Akhir untuk Row Ini
                     // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
                     if (empty($pendingSamplers)) {
-                        continue; 
+                        continue;
                     }
 
                     // 4. Update Tampilan Sampler
@@ -401,9 +401,9 @@ class StpsController extends Controller
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
                     // Key Unik untuk Grouping (Composite Key)
-                    $key = $orderHeader->no_document . '|' . 
-                        $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
+                    $key = $orderHeader->no_document . '|' .
+                        $item->no_order . '|' .
+                        $schedule->tanggal . '|' .
                         $schedule->jam_mulai . '|' .
                         $kategori; // Key dipersingkat agar hash lebih cepat
 
@@ -411,7 +411,7 @@ class StpsController extends Controller
                         // Jika data sudah ada, gabungkan Sampler-nya saja
                         $existingSamplers = explode(',', $groupedData[$key]['sampler']);
                         $newSamplers = explode(',', $schedule->sampler ?? '');
-                        
+
                         // Merge & Unique
                         $merged = array_unique(array_merge($existingSamplers, $newSamplers));
                         $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
@@ -715,7 +715,7 @@ class StpsController extends Controller
                 $dataPenawaran = QuotationKontrakH::with(['order', 'sampling', 'detail'])->where('no_document', $request->nomor_quotation)->first();
                 $dataOrder = $dataPenawaran->order;
                 $dataSampling = $dataPenawaran->sampling;
-               
+
                 $unik_kategori = $dataOrder->orderDetail()->where('periode', $request->periode)
                     ->where('is_active', true)->get()->pluck('kategori_3')->unique()->toArray();
 
@@ -734,7 +734,9 @@ class StpsController extends Controller
                         $labelStatusSampling = '<span>Sampling</span>';
                     } else if ($status === 'SD') {
                         $labelStatusSampling = '<span>Sampling Diantar</span>';
-                    } 
+                    } else if ($status === 'RS') {
+                        $labelStatusSampling = '<span>Re-Sample</span>';
+                    }
                 }
 
 
@@ -768,7 +770,7 @@ class StpsController extends Controller
                 $getPeriodeSampling = array_filter($dataSampling->toArray(), function ($item) use ($request) {
                     return $item['periode_kontrak'] == $request->periode;
                 });
-                
+
                 $dataSampling = array_values($getPeriodeSampling)[0]['jadwal'];
                 foreach ($dataSampling as $key => $value) {
                     unset($dataSampling[$key]['id']);
@@ -799,11 +801,11 @@ class StpsController extends Controller
                     unset($dataSampling[$key]['urutan']);
                     unset($dataSampling[$key]['kendaraan']);
                 }
-                 
+
                 $dataSampling = array_values(array_filter(array_unique($dataSampling, SORT_REGULAR), function ($item) {
                     return isset($item['is_active']) && $item['is_active'] == 1;
                 }));
-                
+
                 if (count($dataSampling) > 1) {
                     // jika data jadwalnya parsial
                     $dataOrderDetailPerPeriode = $dataOrder->orderDetail()
@@ -866,11 +868,11 @@ class StpsController extends Controller
                         return $numA <=> $numB; // Ascending order
                     });
                 } else {
-                   
+
                     $data_detail_penawaran = json_decode($dataPenawaran->detail()->where('periode_kontrak', $request->periode)->first()->data_pendukung_sampling, true);
                     $data_detail_penawaran = array_map(function ($item) use ($dataOrder, $pra_no_sample) {
                         $maping = array_map(function ($data_sampling) use ($item, $dataOrder, $pra_no_sample) {
-                            
+
                             $sampleNumbersFromOrder = $dataOrder->orderDetail()
                                 ->where('kategori_1', '!=', 'SD')
                                 ->where('kategori_2', $data_sampling['kategori_1'])
@@ -887,19 +889,19 @@ class StpsController extends Controller
                             foreach ($sampleNumbersFromOrder as $orderDetail) {
                                 $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
                                 $inputParameter = $data_sampling['parameter'];
-                                
+
                                 $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
                                 $totalParameterSame = count($orderParameter) === count($inputParameter);
 
                                 if ($parameterMatch && $totalParameterSame) {
                                     $number = explode('/', $orderDetail->no_sampel)[1];
-    
+
                                     $idRegulasiOrder        = array_map(fn($item) => explode('-', $item)[0], json_decode($orderDetail->regulasi, true) ?? []);
                                     $idRegulasiPenawaran    = !empty($data_sampling['regulasi']) ? array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']) : [];
-    
+
                                     if (!empty($idRegulasiOrder) && !empty($idRegulasiPenawaran)) {
                                         $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
-        
+
                                         if (in_array($number, $penawaran_keys) && $regulasiMatch) {
                                             $sampleNumbers[] = $orderDetail->no_sampel;
                                         }
@@ -909,9 +911,9 @@ class StpsController extends Controller
                                 }
                             }
 
-                            
+
                             if (empty($sampleNumbers)) {
-                                return null; 
+                                return null;
                             }
 
                             $data = [
@@ -965,9 +967,9 @@ class StpsController extends Controller
             } else {
 
                 $dataPenawaran = QuotationNonKontrak::with(['order', 'sampling'])->where('no_document', $request->nomor_quotation)->where('is_active',true)->first();
-                
+
                 $dataOrder = $dataPenawaran->order;
-               
+
 
                 if ($dataOrder->is_revisi == 1) {
                     return response()->json([
@@ -991,6 +993,8 @@ class StpsController extends Controller
                         $labelStatusSampling = '<span>Sampling</span>';
                     } else if ($status === 'SD') {
                         $labelStatusSampling = '<span>Sampling Diantar</span>';
+                    } else if ($status === 'RS') {
+                        $labelStatusSampling = '<span>Re-Sample</span>';
                     }
                 }
 
@@ -1018,7 +1022,7 @@ class StpsController extends Controller
                         }, $kategori_sample);
                     }
                 }
-                
+
                 $dataSampling = array_values($dataSampling->toArray())[0]['jadwal'];
                 // dd($dataSampling);
                 foreach ($dataSampling as $key => $value) {
@@ -1127,10 +1131,10 @@ class StpsController extends Controller
                     });
                     // dd('stop', $dataOrderDetailPerPeriode, $kategori_sample);
                 } else {
-                    
+
                     $data_detail_penawaran = json_decode($dataPenawaran->data_pendukung_sampling, true);
                     // dd($dataPenawaran, 'test');
-                    
+
                     $data_detail_penawaran = array_map(function ($data_sampling) use ($dataOrder, $pra_no_sample) {
                         $sampleNumbersFromOrder = $dataOrder->orderDetail()
                                 ->where('kategori_1', '!=', 'SD')
@@ -1138,7 +1142,7 @@ class StpsController extends Controller
                                 ->where('kategori_3', $data_sampling['kategori_2'])
                                 // ->whereJsonContains('regulasi', $data_sampling['regulasi']) // dipindah ke bawah pengecekana
                                 // ->whereJsonContains('parameter', $data_sampling['parameter']) // dipindah ke bawah pengecekana
-                                
+
                                 ->whereIn('no_sampel', $pra_no_sample)
                                 ->where('is_active', 1)
                                 ->get();
@@ -1147,7 +1151,7 @@ class StpsController extends Controller
                         foreach ($sampleNumbersFromOrder as $orderDetail) {
                             $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
                             $inputParameter = $data_sampling['parameter'];
-                            
+
                             $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
                             $totalParameterSame = count($orderParameter) === count($inputParameter);
 
@@ -1159,7 +1163,7 @@ class StpsController extends Controller
 
                                 if (!empty($idRegulasiOrder) && !empty($idRegulasiPenawaran)) {
                                     $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
-    
+
                                     if (in_array($number, $penawaran_keys) && $regulasiMatch) {
                                         $sampleNumbers[] = $orderDetail->no_sampel;
                                     }
@@ -1223,7 +1227,7 @@ class StpsController extends Controller
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
-            
+
             // dd($psHeader, $request->sampler);
             if (!$psHeader) {
                 $request->no_document = $request->nomor_quotation;
@@ -1233,7 +1237,7 @@ class StpsController extends Controller
 
                 $response = $psController->preview($request);
                 $preview = json_decode($response->getContent(), true);
-               
+
                 $isMustPrepared = false;
                 foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
                     foreach ($preview[$kategori] as $sampel) {
@@ -1308,7 +1312,7 @@ class StpsController extends Controller
                 ->where('type_document', 'surat_tugas_pengambilan_sampel')
                 ->whereJsonContains('data->no_document', $noDocument)
                 ->first();
-            
+
             if ($qr) {
                 $qr_data = json_decode($qr->data, true);
                 if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
@@ -1394,9 +1398,9 @@ class StpsController extends Controller
                                     <td style="text-align: center; font-size: 13px;"><b>' . $dataOrder->no_order . '</b></td>
                                 </tr>
                                 <tr>
-                                    <td style="text-align: center; font-size: 12px;" colspan=2><b>' . $labelStatusSampling . '</b></td>
+                                    <td style="text-align: center; font-size: 12px;" colspan=2><b>' . $labelStatusSampling ?? '' . '</b></td>
                                 </tr>
-                                
+
                             </table>
                         </td>
                     </tr>
@@ -1444,10 +1448,10 @@ class StpsController extends Controller
 
             $i = 1;
             $pe = 0;
-            
+
             foreach ($dataOrderDetailPerPeriode as $key => $value) {
                 $value = (object) $value;
-                
+
                 if(!isset($value->kategori_3)){
                     throw new \Exception("Field 'kategori_3' hilang pada data index ke-$key");
                 }
@@ -1456,7 +1460,7 @@ class StpsController extends Controller
                 if (!empty($value->regulasi) && is_array($value->regulasi)) {
                     $regulasiText = implode(', ', $value->regulasi);
                 }
-                
+
                 $pdf->WriteHTML(
                     '<tr>
                             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -1669,7 +1673,7 @@ class StpsController extends Controller
                 $DB->save();
                 return response()->json(["message"=>"succes","status"=>true],200);
             }
-            
+
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
         }
@@ -1688,7 +1692,7 @@ class StpsController extends Controller
                 $DB->save();
                 return response()->json(["message"=>"succes","status"=>true],200);
             }
-            
+
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
         }
