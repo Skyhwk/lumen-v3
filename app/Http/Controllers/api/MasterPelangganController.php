@@ -14,6 +14,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\OrderHeader;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\ExportCustomerJob;
 use App\Models\AlamatPelangganBlacklist;
 use App\Models\KontakPelangganBlacklist;
 use App\Models\MasterPelangganBlacklist;
@@ -23,6 +24,7 @@ use Yajra\Datatables\Datatables;
 
 use App\Services\GetBawahan;
 use Carbon\Carbon;
+
 Carbon::setLocale('id');
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -31,6 +33,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 
 class MasterPelangganController extends Controller
@@ -61,7 +64,7 @@ class MasterPelangganController extends Controller
                 $karyawanNonAktif = MasterKaryawan::where('is_active', false)->pluck('id')->toArray();
 
                 $bawahan = array_merge($bawahan, $karyawanNonAktif);
-                
+
                 array_push($bawahan, 14);
 
                 if (!in_array($this->user_id, $bawahan)) {
@@ -71,11 +74,9 @@ class MasterPelangganController extends Controller
                 $data->whereIn('sales_id', $bawahan);
             }
 
-            if($this->user_id != 127){
+            if ($this->user_id != 127) {
                 $data->where('sales_id', '!=', 127);
             }
-
-
         }
 
         return Datatables::of($data)
@@ -92,7 +93,7 @@ class MasterPelangganController extends Controller
                 });
             })
             ->orderColumn('telpon', function ($query, $orderDirection) {
-                $query->with(['kontak_pelanggan' => function($q) use ($orderDirection) {
+                $query->with(['kontak_pelanggan' => function ($q) use ($orderDirection) {
                     $q->orderBy('no_tlp_perusahaan', $orderDirection);
                 }]);
             })
@@ -221,7 +222,7 @@ class MasterPelangganController extends Controller
                 $sales = MasterKaryawan::where('nama_lengkap', $request->sales_penanggung_jawab)->first();
                 $dataPelanggan['sales_id'] = $sales->id;
                 $dataPelanggan['sales_penanggung_jawab'] = $sales->nama_lengkap;
-                
+
                 $dataPelanggan['nama_pelanggan'] = trim($dataPelanggan['nama_pelanggan']);
                 $dataPelanggan['npwp'] = trim($dataPelanggan['npwp']);
                 $dataPelanggan['id_cabang'] = $this->idcabang;
@@ -279,7 +280,7 @@ class MasterPelangganController extends Controller
                             if (!empty($request->kontak_pelanggan['id'][$index])) {
                                 $currentKontak = KontakPelanggan::find($request->kontak_pelanggan['id'][$index]);
                             }
-                            
+
                             $isNoTlpChanged = !$currentKontak || $currentKontak->no_tlp_perusahaan !== $noTlp;
 
                             // skip cek nomor kalau cuma sales yang berubah | noTlp tidak berubah
@@ -383,11 +384,10 @@ class MasterPelangganController extends Controller
                         }
                     }
                 }
-
             } else {
                 $response = $this->checkForBlacklistedCustomer(null, $request->nama_pelanggan, $request->kontak_pelanggan);
                 if ($response) return $response;
-                
+
                 // Create new customer
                 $no_tlp_perusahaan = preg_replace("/[^0-9]/", "", $request->no_tlp_perusahaan); // bersihin non-angka
 
@@ -580,7 +580,7 @@ class MasterPelangganController extends Controller
         ], 200);
     }
 
-    public function blacklist(Request $request) 
+    public function blacklist(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -594,7 +594,7 @@ class MasterPelangganController extends Controller
             $blacklist->blacklisted_by = $this->karyawan;
             $blacklist->blacklisted_at = Carbon::now();
             $blacklist->save();
-    
+
             $a = $masterPelanggan->replicate();
             $a->setTable((new MasterPelangganBlacklist())->getTable());
             $a->id = $masterPelanggan->id;
@@ -630,7 +630,7 @@ class MasterPelangganController extends Controller
             $masterPelanggan->delete();
 
             DB::commit();
-    
+
             return response()->json(['message' => 'Pelanggan berhasil diblacklist'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
@@ -638,125 +638,266 @@ class MasterPelangganController extends Controller
         }
     }
 
-    public function exportExcel()
+    // public function exportExcel(Request $request)
+    // {
+    //     Log::info('Mulai');
+    //     $spreadsheet = new Spreadsheet();
+    //     $sheet = $spreadsheet->getActiveSheet();
+
+    //     $sheet->mergeCells('A1:H1');
+    //     $sheet->setCellValue('A1', 'MASTER PELANGGAN PT INTI SURYA LABORATORIUM');
+
+    //     $titleStyle = [
+    //         'font' => ['bold' => true, 'size' => 14],
+    //         'alignment' => [
+    //             'horizontal' => Alignment::HORIZONTAL_CENTER,
+    //             'vertical' => Alignment::VERTICAL_CENTER,
+    //         ],
+    //     ];
+    //     $sheet->getStyle('A1')->applyFromArray($titleStyle);
+    //     $sheet->getRowDimension(1)->setRowHeight(50);
+
+    //     $headers = [
+    //         'No.', 'ID Pelanggan', 'NPWP', 'Nama Pelanggan', 
+    //         'Kontak Pelanggan', 'Status', 'Wilayah Pelanggan', 'Sales Penanggung Jawab'
+    //     ];
+
+    //     $sheet->fromArray($headers, NULL, 'A2');
+
+    //     $headerStyle = [
+    //         'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+    //         'fill' => [
+    //             'fillType' => Fill::FILL_SOLID,
+    //             'startColor' => ['rgb' => '4A4A4A']
+    //         ],
+    //         'alignment' => [
+    //             'horizontal' => Alignment::HORIZONTAL_CENTER,
+    //             'vertical' => Alignment::VERTICAL_CENTER,
+    //         ],
+    //     ];
+    //     $sheet->getStyle('A2:H2')->applyFromArray($headerStyle);
+    //     $sheet->getRowDimension(2)->setRowHeight(25);
+
+    //     $row = 3; 
+    //     $no = 1;
+
+    //     // MasterPelanggan::with(['kontak_pelanggan', 'order_customer'])
+    //     //     ->where('sales_id', '!=', 127)
+    //     //     ->whereNotNull('sales_id')
+    //     //     ->where('is_active', true)
+    //     //     ->chunk(1000, function ($customers) use ($sheet, &$row, &$no) {
+    //     //         foreach ($customers as $customer) {
+    //     //             $contacts = $customer->kontak_pelanggan->pluck('no_tlp_perusahaan')
+    //     //                 ->map(function ($item) {
+    //     //                     $tel = preg_replace('/[^\d]/', '', $item); // Hapus semua karakter selain angka
+
+    //     //                     // Standarisasi ke format '08/02...'
+    //     //                     if (substr($tel, 0, 2) === '62') {
+    //     //                         $tel = '0' . substr($tel, 2);
+    //     //                     } elseif (substr($tel, 0, 1) !== '0') {
+    //     //                         $tel = '0' . $tel;
+    //     //                     }
+
+    //     //                     return $tel;
+    //     //                 })
+    //     //                 ->filter()
+    //     //                 ->implode(', ');
+
+    //     //             $sheet->setCellValue('A' . $row, $no++); 
+    //     //             $sheet->setCellValue('B' . $row, $customer->id_pelanggan);
+    //     //             $sheet->setCellValue('C' . $row, $customer->npwp);
+    //     //             $sheet->setCellValue('D' . $row, trim($customer->nama_pelanggan));
+    //     //             $sheet->setCellValueExplicit('E' . $row, $contacts ?: '', DataType::TYPE_STRING);
+    //     //             $sheet->setCellValue('F' . $row, $customer->order_customer->isNotEmpty() ? 'ORDERED' : 'NEW');
+    //     //             $sheet->setCellValue('G' . $row, $customer->wilayah);
+    //     //             $sheet->setCellValue('H' . $row, $customer->sales_penanggung_jawab);
+
+    //     //             $row++;
+    //     //         }
+
+    //     //         unset($customers);
+    //     //     });
+
+    //     Log::info('Kumpulin query');
+    //     $masterPelanggan = MasterPelanggan::query()
+    //         ->select([
+    //             'id',
+    //             'id_pelanggan',
+    //             'npwp',
+    //             'nama_pelanggan',
+    //             'wilayah',
+    //             'sales_penanggung_jawab',
+    //             'sales_id'
+    //         ])
+    //         ->with(['kontak_pelanggan:pelanggan_id,no_tlp_perusahaan'])
+    //         ->where('sales_id', '!=', 127)
+    //         ->whereNotNull('sales_id')
+    //         ->where('is_active', true);
+
+    //     if ($request->status === 'new') {
+    //         Log::info('New Customer');
+    //         $masterPelanggan = $masterPelanggan->whereDoesntHave('order_customer');
+
+    //         if ($request->type_qt === 'has-qt') {
+    //             Log::info('yg punya qt');
+    //             $masterPelanggan = $masterPelanggan->where(function ($q) {
+    //                 $q->whereHas('quotasiKontrak')->orWhereHas('quotasiNonKontrak');
+    //             });
+    //         }
+
+    //         if ($request->type_qt === 'no-qt') {
+    //             Log::info('yg gapunya qt');
+    //             $masterPelanggan = $masterPelanggan->whereDoesntHave('quotasiKontrak')->whereDoesntHave('quotasiNonKontrak');
+    //         }
+    //     }
+
+    //     if ($request->status === 'ordered') {
+    //         Log::info('Ordered Customer');
+    //         if ($request->duration !== 'all') {
+    //             Log::info("Durasi: {$request->duration}");
+    //             $months = (int) filter_var($request->duration, FILTER_SANITIZE_NUMBER_INT);
+    //             $date = Carbon::now()->subMonths($months)->startOfMonth();
+
+    //             $masterPelanggan->whereHas('order_customer', function ($q) use ($request, $date) {
+    //                 if (str_contains($request->duration, '>=')) {
+    //                     $q->where('tanggal_order', '<=', $date);
+    //                 }
+
+    //                 if (str_contains($request->duration, '<=')) {
+    //                     $q->where('tanggal_order', '>=', $date);
+    //                 }
+    //             });
+    //         }
+
+    //         if ($request->category === 'contract') {
+    //             Log::info('yg kontrak');
+    //             $masterPelanggan->whereHas('quotasiKontrak', function ($q) {
+    //                 $q->whereHas('latestDetail', function ($q) {
+    //                     $q->where('periode_kontrak', '>=', date('Y-m'));
+    //                 });
+    //             });
+    //         }
+
+    //         if ($request->category === 'non-contract') {
+    //             Log::info('yg non kontrak');
+    //             $masterPelanggan = $masterPelanggan->whereHas('quotasiNonKontrak');
+    //         }
+    //     }
+
+    //     Log::info('dapet datanya');
+    //     Log::info('mulai nulis di excel');
+    //     $masterPelanggan->chunkById(1000, function ($customers, $i) use ($request, $sheet, &$row, &$no) {
+    //         Log::info('chunk ke ' . $i);
+    //         foreach ($customers as $customer) {
+    //             Log::info('customer : ' . $customer->nama_pelanggan);
+    //             $contacts = $customer->kontak_pelanggan->pluck('no_tlp_perusahaan')
+    //                 ->map(function ($item) {
+    //                     $tel = preg_replace('/[^\d]/', '', $item); // Hapus semua karakter selain angka
+
+    //                     // Standarisasi ke format '08/02...'
+    //                     if (substr($tel, 0, 2) === '62') {
+    //                         $tel = '0' . substr($tel, 2);
+    //                     } elseif (substr($tel, 0, 1) !== '0') {
+    //                         $tel = '0' . $tel;
+    //                     }
+
+    //                     return $tel;
+    //                 })
+    //                 ->filter()
+    //                 ->implode(', ');
+
+    //             $sheet->setCellValue('A' . $row, $no++); 
+    //             $sheet->setCellValue('B' . $row, $customer->id_pelanggan);
+    //             $sheet->setCellValue('C' . $row, $customer->npwp);
+    //             $sheet->setCellValue('D' . $row, trim($customer->nama_pelanggan));
+    //             $sheet->setCellValueExplicit('E' . $row, $contacts ?: '', DataType::TYPE_STRING);
+    //             $sheet->setCellValue('F' . $row, $request->status === 'ordered' ? 'ORDERED' : 'NEW');
+    //             $sheet->setCellValue('G' . $row, $customer->wilayah);
+    //             $sheet->setCellValue('H' . $row, $customer->sales_penanggung_jawab);
+
+    //             $row++;
+    //         }
+
+    //         unset($customers);
+    //     });
+
+    //     $borderStyle = [
+    //         'borders' => [
+    //             'allBorders' => [
+    //                 'borderStyle' => Border::BORDER_THIN,
+    //                 'color' => ['argb' => 'FF000000'],
+    //             ],
+    //         ],
+    //     ];
+
+    //     $lastRow = $row - 1;
+
+    //     $sheet->getStyle('A2:H' . $lastRow)->applyFromArray($borderStyle);
+
+    //     $sheet->getStyle('A3:B' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    //     $sheet->getStyle('F3:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    //     $sheet->getStyle('A2:H' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+
+    //     $sheet->getStyle('E3:E' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+    //     foreach (range('A', 'H') as $columnID) {
+    //         $sheet->getColumnDimension($columnID)->setAutoSize(true);
+    //     }
+
+    //     $sheet->getColumnDimension('D')->setAutoSize(false)->setWidth(60); 
+    //     $sheet->getColumnDimension('E')->setAutoSize(false)->setWidth(40);
+    //     $sheet->getColumnDimension('G')->setAutoSize(false)->setWidth(30);
+
+    //     $writer = new Xlsx($spreadsheet);
+    //     $fileName = 'export_pelanggan_' . date('Y-m-d_H-i-s') . '.xlsx';
+    //     $folderPath = public_path('master_pelanggan');
+
+    //     if (!File::exists($folderPath)) {
+    //         File::makeDirectory($folderPath, 0777, true);
+    //     }
+
+    //     $fullPath = $folderPath . '/' . $fileName;
+    //     $writer->save($fullPath);
+
+    //     return response()->json([
+    //         'message' => 'Master Pelanggan berhasil diekspor',
+    //         'data' => $fileName,
+    //     ], 201);
+    // }
+
+    public function exportExcel(Request $request)
     {
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
+        $type = $request->status === 'new' ? "new_{$request->type_qt}" : "ordered_{$request->category}_{$request->duration}";
 
-        $sheet->mergeCells('A1:H1');
-        $sheet->setCellValue('A1', 'MASTER PELANGGAN PT INTI SURYA LABORATORIUM');
+        $id = DB::table('export_customers')->insertGetId([
+            'type' => $type,
+            'status' => 'exporting',
+            'exported_by' => $this->karyawan,
+            'exported_at' => date('Y-m-d H:i:s')
+        ]);
 
-        $titleStyle = [
-            'font' => ['bold' => true, 'size' => 14],
-            'alignment' => [
-                'horizontal' => Alignment::HORIZONTAL_CENTER,
-                'vertical' => Alignment::VERTICAL_CENTER,
-            ],
-        ];
-        $sheet->getStyle('A1')->applyFromArray($titleStyle);
-        $sheet->getRowDimension(1)->setRowHeight(50);
+        $job = new ExportCustomerJob($id, $type, $request->status, $request->type_qt, $request->category, $request->duration);
+        $this->dispatch($job);
 
-        $headers = [
-            'No.', 'ID Pelanggan', 'NPWP', 'Nama Pelanggan', 
-            'Kontak Pelanggan', 'Status', 'Wilayah Pelanggan', 'Sales Penanggung Jawab'
-        ];
-        
-        $sheet->fromArray($headers, NULL, 'A2');
+        return response()->json(['message' => 'Memulai proses export Master Pelanggan'], 201);
+    }
 
-        $headerStyle = [
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['rgb' => '4A4A4A']
-            ],
-            'alignment' => [
-                'horizontal' => Alignment::HORIZONTAL_CENTER,
-                'vertical' => Alignment::VERTICAL_CENTER,
-            ],
-        ];
-        $sheet->getStyle('A2:H2')->applyFromArray($headerStyle);
-        $sheet->getRowDimension(2)->setRowHeight(25);
-
-        $row = 3; 
-        $no = 1;
-
-        MasterPelanggan::with(['kontak_pelanggan', 'order_customer'])
-            ->where('sales_id', '!=', 127)
-            ->whereNotNull('sales_id')
-            ->where('is_active', true)
-            ->chunk(1000, function ($customers) use ($sheet, &$row, &$no) {
-                foreach ($customers as $customer) {
-                    $contacts = $customer->kontak_pelanggan->pluck('no_tlp_perusahaan')
-                        ->map(function ($item) {
-                            $tel = preg_replace('/[^\d]/', '', $item); // Hapus semua karakter selain angka
-
-                            // Standarisasi ke format '08/02...'
-                            if (substr($tel, 0, 2) === '62') {
-                                $tel = '0' . substr($tel, 2);
-                            } elseif (substr($tel, 0, 1) !== '0') {
-                                $tel = '0' . $tel;
-                            }
-
-                            return $tel;
-                        })
-                        ->filter()
-                        ->implode(', ');
-
-                    $sheet->setCellValue('A' . $row, $no++); 
-                    $sheet->setCellValue('B' . $row, $customer->id_pelanggan);
-                    $sheet->setCellValue('C' . $row, $customer->npwp);
-                    $sheet->setCellValue('D' . $row, trim($customer->nama_pelanggan));
-                    $sheet->setCellValueExplicit('E' . $row, $contacts ?: '', DataType::TYPE_STRING);
-                    $sheet->setCellValue('F' . $row, $customer->order_customer->isNotEmpty() ? 'ORDERED' : 'NEW');
-                    $sheet->setCellValue('G' . $row, $customer->wilayah);
-                    $sheet->setCellValue('H' . $row, $customer->sales_penanggung_jawab);
-
-                    $row++;
-                }
-
-                unset($customers);
-            });
-
-        $lastRow = $row - 1;
-
-        $borderStyle = [
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => Border::BORDER_THIN,
-                    'color' => ['argb' => 'FF000000'],
-                ],
-            ],
-        ];
-        $sheet->getStyle('A2:H' . $lastRow)->applyFromArray($borderStyle);
-
-        $sheet->getStyle('A3:B' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('F3:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('A2:H' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-        
-        $sheet->getStyle('E3:E' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-
-        foreach (range('A', 'H') as $columnID) {
-            $sheet->getColumnDimension($columnID)->setAutoSize(true);
-        }
-        
-        $sheet->getColumnDimension('D')->setAutoSize(false)->setWidth(60); 
-        $sheet->getColumnDimension('E')->setAutoSize(false)->setWidth(40);
-        $sheet->getColumnDimension('G')->setAutoSize(false)->setWidth(30);
-
-        $writer = new Xlsx($spreadsheet);
-        $fileName = 'export_pelanggan_' . date('Y-m-d_H-i-s') . '.xlsx';
-        $folderPath = public_path('master_pelanggan');
-
-        if (!File::exists($folderPath)) {
-            File::makeDirectory($folderPath, 0755, true);
-        }
-
-        $fullPath = $folderPath . '/' . $fileName;
-        $writer->save($fullPath);
+    public function getExportFiles()
+    {
+        $files = DB::table('export_customers as ec1')
+            ->select('ec1.type', 'ec1.status', 'ec1.filename')
+            ->where('ec1.status', '!=', 'error')
+            ->whereRaw('ec1.id = (
+                SELECT MAX(ec2.id)
+                FROM export_customers ec2
+                WHERE ec2.type = ec1.type
+            )')
+            ->orderByDesc('ec1.id')
+            ->get();
 
         return response()->json([
-            'message' => 'Master Pelanggan berhasil diekspor',
-            'data' => $fileName,
-        ], 201);
+            'data' => $files,
+            'message' => 'Files retrieved successfully',
+        ], 200);
     }
 }

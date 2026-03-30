@@ -160,4 +160,9 @@ class QuotationKontrakH extends Sector
     {
         return $this->hasMany(Jadwal::class, 'no_quotation', 'no_document')->where('is_active', true);
     }
+
+    public function latestDetail()
+    {
+        return $this->hasOne(QuotationKontrakD::class, 'id_request_quotation_kontrak_h', 'id')->ofMany('periode_kontrak', 'max');
+    }
 }
