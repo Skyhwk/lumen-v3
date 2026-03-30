@@ -114,27 +114,27 @@ class TicketTechnicalControlController extends Controller
             $data->void_time = Carbon::now();
             $data->void_notes = $request->notes;
             // $data->is_active = false;
-            $message = 'Ticket technical Controll telah di void';
+            $message = 'Ticket Technical Control telah di void';
 
             $data->save();
 
             if ($this->karyawan == $data->created_by) {
-                $user_programmer = MasterKaryawan::where('id_department', 7)
+                $user_programmer = MasterKaryawan::where('id_department', 17)
                     ->whereNotIn('id', [10, 15, 93, 123])
                     ->where('is_active', true)
                     ->pluck('id')
                     ->toArray();
 
                 Notification::whereIn('id', $user_programmer)
-                    ->title('Ticket technical Controll Update')
+                    ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/ticket-technical-control')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
-                    ->title('Ticket technical Controll Update')
+                    ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/ticket-technical-control')
                     ->send();
             }
 
@@ -146,7 +146,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses void Ticket technical Controll: ' . $th->getMessage()
+                'message' => 'Gagal Proses void Ticket Technical Control: ' . $th->getMessage()
             ], 500);
         }
     }
@@ -162,20 +162,20 @@ class TicketTechnicalControlController extends Controller
             $data->done_by = $this->karyawan;
             $data->done_time = Carbon::now();
             // $data->is_active = false;
-            $message = 'Ticket technical Controll telah dinyatakan selesai';
+            $message = 'Ticket Technical Control telah dinyatakan selesai';
 
             $data->save();
 
-            $user_programming = MasterKaryawan::where('id_department', 7)
+            $user_programming = MasterKaryawan::where('id_department', 17)
                 ->whereNotIn('id', [10, 15, 93, 123])
                 ->where('is_active', true)
                 ->pluck('id')
                 ->toArray();
 
             Notification::whereIn('id', $user_programming)
-                ->title('Ticket technical Controll Update')
+                ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -186,7 +186,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses menyelesaikan Ticket technical Controll: ' . $th->getMessage()
+                'message' => 'Gagal Proses menyelesaikan Ticket Technical Control: ' . $th->getMessage()
             ], 500);
         }
     }
@@ -202,14 +202,14 @@ class TicketTechnicalControlController extends Controller
             $data->solve_by = $this->karyawan;
             $data->solve_time = Carbon::now();
             // $data->is_active = false;
-            $message = 'Ticket technical Controll dinyatakan selesai';
+            $message = 'Ticket Technical Control dinyatakan selesai';
 
             $data->save();
 
             Notification::where('nama_lengkap', $data->created_by)
-                ->title('Ticket technical Controll Update')
+                ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -220,7 +220,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses solve Ticket technical Controll: ' . $th->getMessage()
+                'message' => 'Gagal Proses solve Ticket Technical Control: ' . $th->getMessage()
             ], 500);
         }
     }
@@ -237,14 +237,14 @@ class TicketTechnicalControlController extends Controller
             $data->rejected_time = Carbon::now();
             $data->rejected_notes = $request->notes;
             // $data->is_active = false;
-            $message = 'Ticket technical Controll telah di reject';
+            $message = 'Ticket Technical Control telah di reject';
 
             $data->save();
 
             Notification::where('nama_lengkap', $data->created_by)
-                ->title('Ticket technical Controll Update')
+                ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -255,7 +255,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses reject Ticket technical Controll: ' . $th->getMessage()
+                'message' => 'Gagal Proses reject Ticket Technical Control: ' . $th->getMessage()
             ], 500);
         }
     }
@@ -271,16 +271,16 @@ class TicketTechnicalControlController extends Controller
             $data->reopened_time = Carbon::now();
             $data->reopened_notes = $request->notes;
             // $data->is_active = false;
-            $message = 'Ticket technical Controll telah di re-open';
+            $message = 'Ticket Technical Control telah di re-open';
 
             $data->save();
 
             Notification::where('nama_lengkap', $data->solve_by)
-                ->title('Ticket technical Controll Update')
+                ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
-
+            dd($data->solve_by);
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -289,7 +289,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses reject Ticket technical Controll: ' . $th->getMessage()
+                'message' => 'Gagal Proses reject Ticket Technical Control: ' . $th->getMessage()
             ], 500);
         }
     }
@@ -306,14 +306,14 @@ class TicketTechnicalControlController extends Controller
             $data->pending_time = Carbon::now();
             $data->pending_notes = $request->notes;
             // $data->is_active = false;
-            $message = 'Ticket technical Controll telah di pending';
+            $message = 'Ticket Technical Control telah di pending';
 
             $data->save();
 
             Notification::where('nama_lengkap', $data->created_by)
-                ->title('Ticket technical Controll Update')
+                ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -324,7 +324,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses pending Ticket technical Controll: ' . $th->getMessage()
+                'message' => 'Gagal Proses pending Ticket Technical Control: ' . $th->getMessage()
             ], 500);
         }
     }
@@ -340,29 +340,29 @@ class TicketTechnicalControlController extends Controller
             $data->process_by = $this->karyawan;
             $data->process_time = Carbon::now();
             // $data->is_active = false;
-            $message = 'Ticket technical Controll sedang di process';
+            $message = 'Ticket Technical Control sedang di process';
 
             $data->save();
 
             DB::commit();
 
             if ($this->karyawan == $data->created_by) {
-                $user_programmer = MasterKaryawan::where('id_department', 7)
+                $user_programmer = MasterKaryawan::where('id_department', 17)
                     ->whereNotIn('id', [10, 15, 93, 123])
                     ->where('is_active', true)
                     ->pluck('id')
                     ->toArray();
 
                 Notification::whereIn('id', $user_programmer)
-                    ->title('Ticket technical Controll Update')
+                    ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/ticket-technical-control')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
-                    ->title('Ticket technical Controll Update')
+                    ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/ticket-technical-control')
                     ->send();
             }
 
@@ -373,7 +373,7 @@ class TicketTechnicalControlController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses process Ticket technical Controll: ' . $th->getMessage(),
+                'message' => 'Gagal Proses process Ticket Technical Control: ' . $th->getMessage(),
                 'line' => $th->getLine(),
                 'file' => $th->getFile()
             ], 500);
@@ -563,7 +563,7 @@ class TicketTechnicalControlController extends Controller
 
             $isPerubahanData = $data->kategori == 'Minta Regulasi';
             Notification::whereIn('id', $getAtasan)
-                ->title('Ticket technical Controll !')
+                ->title('Ticket Technical Control !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
                 ->url('/ticket-technical-control')
                 ->send();
@@ -576,7 +576,7 @@ class TicketTechnicalControlController extends Controller
             DB::rollback();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses Ticket technical Controll: ' . $e->getMessage()
+                'message' => 'Gagal Proses Ticket Technical Control: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -592,7 +592,7 @@ class TicketTechnicalControlController extends Controller
 
             $data->save();
 
-            $message = 'Ticket technical Controll telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim TECHNICAL CONTROL';
+            $message = 'Ticket Technical Control telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim TECHNICAL CONTROL';
 
             $user_programmer = MasterKaryawan::where('id_department', 17)
                 ->where('is_active', true)
@@ -600,15 +600,15 @@ class TicketTechnicalControlController extends Controller
                 ->toArray();
 
             Notification::whereIn('id', $user_programmer)
-                ->title('Ticket technical Controll Siap Diproses!')
+                ->title('Ticket Technical Control Siap Diproses!')
                 ->message($message)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
 
             Notification::where('nama_lengkap', $data->created_by)
-                ->title('Ticket technical Controll Update')
+                ->title('Ticket Technical Control Update')
                 ->message($message)
-                ->url('/ticket-programming')
+                ->url('/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -620,7 +620,7 @@ class TicketTechnicalControlController extends Controller
             DB::rollback();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses Ticket technical Controll: ' . $e->getMessage()
+                'message' => 'Gagal Proses Ticket Technical Control: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -816,6 +816,8 @@ class TicketTechnicalControlController extends Controller
                     $ticket->status     = 'SOLVE';
                     $ticket->updated_by = $this->karyawan;
                     $ticket->updated_at = $timestamp;
+                    $ticket->solve_by  = $this->karyawan;
+                    $ticket->solve_time  = $timestamp;
                     $ticket->save();
                     
                 }else{
@@ -880,7 +882,19 @@ class TicketTechnicalControlController extends Controller
                     $ticket->save();
                 }
             });
-            return response()->json(['message' => 'Ticket berhasil di simpan']);
+            // return response()->json(['message' => 'Ticket Technical Control berhasil di simpan']);
+            $message = 'Ticket Technical Control dinyatakan selesai';
+            $data = TicketTechnicalControl::find($request->id);
+            Notification::where('nama_lengkap', $data->created_by)
+                ->title('Ticket Technical Control Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-technical-control')
+                ->send();
+
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json([
