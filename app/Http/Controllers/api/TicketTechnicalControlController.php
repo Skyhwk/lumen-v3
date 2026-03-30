@@ -689,6 +689,7 @@ class TicketTechnicalControlController extends Controller
                     $inputRegulasi    = $ticketDetails['regulasi'] ?? null;
                     $parameterIds     = $ticketDetails['parameter'] ?? [];
                     $kategoriRegulasi = $ticketDetails['kategori_regulasi'] ?? null;
+                    $deskripsiRegulasi = $ticketDetails['deskripsi'] ?? null;
     
                     // Pastikan inputRegulasi tidak null atau kosong
                     if (empty($inputRegulasi)) {
@@ -705,6 +706,10 @@ class TicketTechnicalControlController extends Controller
                     if ($existingRegulasi) {
                         // 2a. Jika ADA: Langsung gunakan ID-nya, tidak perlu insert baru
                         $finalIdRegulasi = $existingRegulasi->id;
+                        if($existingRegulasi->deskripsi == null){
+                            $existingRegulasi->deskripsi = $deskripsiRegulasi;
+                            $existingRegulasi->save();
+                        }
                     } else {
                         // Jika bukan angka (berarti teks nama regulasi baru), Insert Regulasi Baru dulu
                         // Note: Sesuaikan 'MasterRegulasi' dan nama kolomnya dengan model di project Anda
