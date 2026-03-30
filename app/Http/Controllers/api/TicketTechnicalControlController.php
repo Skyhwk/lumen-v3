@@ -625,23 +625,63 @@ class TicketTechnicalControlController extends Controller
         }
     }
 
-   public function getParameter(Request $request)
-    {
+    public function getParameter(Request $request){
         try {
+            // 1. Ambil Master Parameter
             $data = Parameter::with('hargaParameter')
                 ->whereHas('hargaParameter')
                 ->where('is_active', true)
                 ->where('id_kategori', $request->id_kategori)
-                ->select('id', 'nama_lab', 'nama_regulasi', 'nama_lhp', 'method', 'satuan','id_kategori')
+                ->select('id', 'nama_lab', 'nama_regulasi', 'nama_lhp', 'method', 'satuan', 'id_kategori')
                 ->get();
-    
+
+            // 2. Ambil Data Bakumutu yang sudah ada
+            // PENTING: Tambahkan 'id_parameter' di select agar bisa dijodohkan
+            $existingBakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
+                ->whereIn('id_parameter', (array)$request->parameter)
+                ->where('is_active', 1)
+                ->select('id_parameter', 'satuan', 'method', 'baku_mutu', 'nama_header', 'durasi_pengukuran', 'akreditasi')
+                ->get()
+                ->keyBy('id_parameter'); // Kita kunci berdasarkan ID parameter
+
+            // 3. Proses Combine menggunakan map
+            $combinedData = $data->map(function ($item) use ($existingBakumutu) {
+                // Cek apakah parameter ini punya data di tabel bakumutu
+                $bakumutu = $existingBakumutu->get($item->id);
+
+                if ($bakumutu) {
+                    // LOGIKA: Jika di bakumutu ada isinya, timpa (override) data aslinya
+                    // Jika bakumutu->method kosong/null, dia akan tetap pakai item->method (aslinya)
+                    $item->method = $bakumutu->method ?? $item->method;
+                    $item->satuan = $bakumutu->satuan ?? $item->satuan;
+                    
+                    // Tambahkan field tambahan dari bakumutu agar frontend bisa baca (baku_mutu, dsb)
+                    $item->baku_mutu = $bakumutu->baku_mutu;
+                    $item->nama_header = $bakumutu->nama_header;
+                    $item->durasi_pengukuran = $bakumutu->durasi_pengukuran;
+                    $item->akreditasi = $bakumutu->akreditasi;
+                    $item->is_existing = true; // Flag tambahan (opsional) buat pembeda di UI
+                } else {
+                    // Jika tidak ada di bakumutu, set default field tambahan jadi null
+                    $item->baku_mutu = null;
+                    $item->nama_header = null;
+                    $item->is_existing = false;
+                }
+
+                return $item;
+            });
+
             return response()->json([
                 'message' => 'Data Parameter berhasil ditampilkan',
-                'data' => $data
+                'data' => $combinedData // Namanya tetap 'data' sesuai permintaan Anda
             ], 200);
+
         } catch (\Throwable $th) {
-            //throw $th;
-            return response()->json(['line'=>$th->getLine(),'file'=>$th->getFile,'message'=>$th->getMessage()],500);
+            return response()->json([
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+                'message' => $th->getMessage()
+            ], 500);
         }
     }
 
@@ -771,7 +811,8 @@ class TicketTechnicalControlController extends Controller
                         }
     
                     // Update status ticket menjadi PROCESS/DONE setelah forward berhasil
-
+                    $ticketDetails['id_regulasi'] = $finalIdRegulasi;
+                    $ticket->dokumentasi = $ticketDetails;
                     $ticket->status     = 'SOLVE';
                     $ticket->updated_by = $this->karyawan;
                     $ticket->updated_at = $timestamp;
