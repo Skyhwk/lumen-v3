@@ -280,7 +280,7 @@ class TicketTechnicalControlController extends Controller
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/ticket-technical-control')
                 ->send();
-            dd($data->solve_by);
+                
             DB::commit();
             return response()->json([
                 'success' => true,
