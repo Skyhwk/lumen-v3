@@ -12,12 +12,12 @@ class MasterDriver extends Sector
 
     public function fee()
     {
-        return $this->hasOne(MasterFeeDriver::class, 'driver_id', 'id')->where('is_active', true);
+        return $this->hasOne(MasterFeeDriver::class, 'driver_id', 'user_id')->where('is_active', true);
     }
 
     public function Allfee()
     {
-        return $this->hasMany(MasterFeeDriver::class, 'driver_id', 'id')->orderBy('created_at', 'desc');
+        return $this->hasMany(MasterFeeDriver::class, 'driver_id', 'user_id')->orderBy('created_at', 'desc');
     }
 
 }
