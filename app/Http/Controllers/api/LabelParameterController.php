@@ -96,35 +96,43 @@ class LabelParameterController extends Controller
 
     public function generatePdf(Request $request)
     {
-        $parameterDetail = OrderDetail::with('TrackingSatu')
-            ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_laboratory', $request->selectedDate))
-            ->where([
-                'kategori_2' => $request->selectedCategory . "-" . MasterKategori::find($request->selectedCategory)->nama_kategori,
-                'is_active' => true
-            ])
-            ->whereJsonContains('parameter', Parameter::where(['nama_lab' => $request->selectedParameter, 'id_kategori' => $request->selectedCategory, 'is_active' => true])->first()->id . ";" . $request->selectedParameter)
-            ->get();
+        try {
+            $parameterDetail = OrderDetail::with('TrackingSatu')
+                ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_laboratory', $request->selectedDate))
+                ->where([
+                    'kategori_2' => $request->selectedCategory . "-" . MasterKategori::find($request->selectedCategory)->nama_kategori,
+                    'is_active' => true
+                ])
+                ->whereJsonContains('parameter', Parameter::where(['nama_lab' => $request->selectedParameter, 'id_kategori' => $request->selectedCategory, 'is_active' => true])->first()->id . ";" . $request->selectedParameter)
+                ->get();
 
-        $mpdf = new Mpdf([
-            'mode' => 'utf-8',
-            'format' => [50, 15],
-            'margin_left' => 1,
-            'margin_right' => 1,
-            'margin_top' => 0.5,
-            'margin_header' => 0,
-            'margin_bottom' => 0,
-            'margin_footer' => 0,
-        ]);
+            $mpdf = new Mpdf([
+                'mode' => 'utf-8',
+                'format' => [50, 15],
+                'margin_left' => 1,
+                'margin_right' => 1,
+                'margin_top' => 0.5,
+                'margin_header' => 0,
+                'margin_bottom' => 0,
+                'margin_footer' => 0,
+            ]);
 
-        $mpdf->WriteHTML(view('pdf.label_parameter', ['data' => $parameterDetail, 'selectedDate' => $request->selectedDate, 'selectedParameter' => $request->selectedParameter])->render());
+            $mpdf->WriteHTML(view('pdf.label_parameter', ['data' => $parameterDetail, 'selectedDate' => $request->selectedDate, 'selectedParameter' => $request->selectedParameter])->render());
 
-        $filename = 'Label_Parameter_' . urlencode($request->selectedParameter) . '_' . $request->selectedDate . '.pdf';
-        $path = public_path('label_parameter');
+            // $filename = 'Label_Parameter_' . urlencode($request->selectedParameter) . '_' . $request->selectedDate . '.pdf';
+            $parameter = preg_replace('/[^A-Za-z0-9\- ]/', '', $request->selectedParameter);
+            $parameter = str_replace(' ', '_', $parameter);
 
-        if (!file_exists($path)) mkdir($path, 0777, true);
+            $filename = 'Label_Parameter_' . $parameter . '_' . $request->selectedDate . '.pdf';
+            $path = public_path('label_parameter');
 
-        $mpdf->Output($path . '/' . $filename, \Mpdf\Output\Destination::FILE);
+            if (!file_exists($path)) mkdir($path, 0777, true);
 
-        return response()->json(['data' => $filename, 'message' => 'PDF generated successfully'], 200);
+            $mpdf->Output($path . '/' . $filename, \Mpdf\Output\Destination::FILE);
+
+            return response()->json(['data' => $filename, 'message' => 'PDF generated successfully'], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['data' => null, 'message' => 'Failed to generate PDF: ' . $th->getMessage()], 500);
+        }
     }
 }
