@@ -30,10 +30,10 @@ class ForwardNonKontrakJob extends Job
     }
 
     public function handle()
-    { 
+    {
         $payload = $this->data;
         $sales_id = $this->sales_id;
-        
+
         DB::beginTransaction();
 
         try {
@@ -113,8 +113,8 @@ class ForwardNonKontrakJob extends Job
                     $kategori = $exp[0];
                     $vol = 0;
                     $is_paket = $item['is_paket_analisa'];
-                    
-                    
+
+
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
@@ -143,7 +143,7 @@ class ForwardNonKontrakJob extends Job
                         foreach ($dataPaketAnalisa as $paket) {
                             if(
                                 $paket['regulasi'] == $item['regulasi'] &&
-                                $paket['parameter'] == $param && 
+                                $paket['parameter'] == $param &&
                                 $paket['kategori_1'] == $item['kategori_1'] &&
                                 $paket['kategori_2'] == $item['kategori_2']
                             ) {
@@ -156,11 +156,11 @@ class ForwardNonKontrakJob extends Job
                                 continue;
                             }
                         }
-                    } 
+                    }
 
                     $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
-                    
+
                     $temp_preparasi = [];
                     if (isset($item['biaya_preparasi']) && $item['biaya_preparasi'] != null) {
                         foreach ($item['biaya_preparasi'] as $pre) {
@@ -244,11 +244,12 @@ class ForwardNonKontrakJob extends Job
 
             $data_request = RequestQr::where('id', $payload->informasi_pelanggan['id'])->first();
             $data_request->is_active = 0;
+            $data_request->id_quotation = $data->id;
             $data_request->save();
 
             if($this->karyawan == $data_request->created_by){ // JIka yang membuat request qr itu sendiri maka kirim ke atasan juga
                 $message = 'Request QR telah diexport ke request quotation';
-                
+
                 $getAtasan = GetAtasan::where('id', $this->sales_id)->get()->pluck('id')->toArray();
 
                 Notification::whereIn('id', $getAtasan)
@@ -266,7 +267,7 @@ class ForwardNonKontrakJob extends Job
             }
 
             DB::commit();
-            
+
             Log::channel('quotation')->info('ForwardNonKontrakJob: Penawaran berhasil dibuat dengan nomor dokumen ' . $data->no_document);
 
         } catch (\Exception $e) {
