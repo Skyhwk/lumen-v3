@@ -315,7 +315,6 @@ class RandomSalesAssign
             //     ];
             // }
         } catch (\Throwable $th) {
-            dd($th);
             Log::channel('reassign_customer')->error('error', [$th->getMessage(), $th->getLine(), $th->getFile()]);
             throw $th;
         }
