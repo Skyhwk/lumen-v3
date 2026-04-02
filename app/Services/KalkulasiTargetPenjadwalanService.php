@@ -15,9 +15,6 @@ class KalkulasiTargetPenjadwalanService
         9  => 'september', 10 => 'oktober',   11 => 'november', 12 => 'desember',
     ];
 
-    /**
-     * Fungsi Utama: Kalkulasi + Simpan
-     */
     public function execute(): KalkulasiTargetPenjadwalan
     {
         try {
@@ -35,76 +32,91 @@ class KalkulasiTargetPenjadwalanService
         }
     }
 
-    /**
-     * Kalkulasi target bulanan tahun sekarang
-     */
     public function hitungTargetTahunan(): array
     {
-        $tahunSekarang = (string) Carbon::now()->year;
+        $tahun = (int) Carbon::now()->year;
 
-        $targetBulanan = ['tahun' => $tahunSekarang];
+        $raw = $this->querySetahun($tahun);
+
+        // mapping hasil ke array bulan
+        $result = ['tahun' => (string) $tahun];
 
         foreach (self::NAMA_BULAN as $bulanAngka => $namaBulan) {
-            $hasil = $this->queryTotalPerBulan($bulanAngka, (int) $tahunSekarang);
+            $data = $raw->firstWhere('bulan', $bulanAngka);
 
-            $kontrak    = (float) ($hasil->total_kontrak    ?? 0);
-            $nonKontrak = (float) ($hasil->total_non_kontrak ?? 0);
-            $total      = $kontrak + $nonKontrak;
+            $total = $data 
+                ? ((float) $data->total_kontrak + (float) $data->total_non_kontrak)
+                : null;
 
-            $targetBulanan[$namaBulan] = ($kontrak === 0.0 && $nonKontrak === 0.0)
-                ? null
-                : $total;
+            $result[$namaBulan] = $total === 0.0 ? null : $total;
         }
 
-        return $targetBulanan;
+        return $result;
     }
 
     /**
-     * Query total kontrak + non kontrak untuk 1 bulan tertentu
+     * 🔥 CORE QUERY: hitung 1 tahun langsung
      */
-    private function queryTotalPerBulan(int $bulan, int $tahun): object
+    private function querySetahun(int $tahun)
     {
-        $jadwalSub = DB::table('jadwal as j')
+        /**
+         * 1. Ambil FIRST DATE per quotation + periode
+         */
+        $base = DB::table('sampling_plan as sp')
+            ->join('jadwal as j', 'sp.id', '=', 'j.id_sampling')
             ->select([
-                'j.no_quotation',
+                'sp.no_quotation',
+                'j.periode',
                 DB::raw('MIN(j.tanggal) as tanggal_pertama'),
+                DB::raw('MONTH(MIN(j.tanggal)) as bulan'),
+                DB::raw('YEAR(MIN(j.tanggal)) as tahun'),
             ])
+            ->where('sp.is_active', 1)
             ->where('j.is_active', 1)
-            ->whereYear('j.tanggal', $tahun)
-            ->whereMonth('j.tanggal', $bulan)
-            ->groupBy('j.no_quotation')
-            ->havingRaw('MONTH(MIN(j.tanggal)) = ?', [$bulan])
+            ->where('j.status', 1)
+            ->groupBy('sp.no_quotation', 'j.periode')
             ->havingRaw('YEAR(MIN(j.tanggal)) = ?', [$tahun]);
 
-        $kontrakSub = DB::table('request_quotation_kontrak_H as kh')
+        /**
+         * 2. Kontrak (per periode)
+         */
+        $kontrak = DB::table('request_quotation_kontrak_H as kh')
+            ->join('request_quotation_kontrak_D as kd', 'kd.id_request_quotation_kontrak_h', '=', 'kh.id')
             ->select([
                 'kh.no_document',
-                DB::raw('SUM(kd.biaya_akhir) as total_biaya'),
+                'kd.periode_kontrak',
+                DB::raw('SUM(kd.biaya_akhir) as total_kontrak'),
             ])
-            ->join('request_quotation_kontrak_D as kd', 'kd.id_request_quotation_kontrak_h', '=', 'kh.id')
-            ->groupBy('kh.no_document');
+            ->groupBy('kh.no_document', 'kd.periode_kontrak');
 
-        $nonKontrakSub = DB::table('request_quotation as qnk')
+        /**
+         * 3. Non-kontrak
+         */
+        $nonKontrak = DB::table('request_quotation as q')
             ->select([
-                'qnk.no_document',
-                DB::raw('SUM(qnk.biaya_akhir) as total_biaya'),
+                'q.no_document',
+                DB::raw('SUM(q.biaya_akhir) as total_non_kontrak'),
             ])
-            ->groupBy('qnk.no_document');
+            ->groupBy('q.no_document');
 
-        $result = DB::table(DB::raw("({$jadwalSub->toSql()}) as jadwal_bulan"))
-            ->mergeBindings($jadwalSub)
+        /**
+         * 4. Final aggregation per bulan
+         */
+        return DB::table(DB::raw("({$base->toSql()}) as b"))
+            ->mergeBindings($base)
+            ->leftJoinSub($kontrak, 'k', function ($join) {
+                $join->on('k.no_document', '=', 'b.no_quotation')
+                    ->on('k.periode_kontrak', '=', 'b.periode');
+            })
+            ->leftJoinSub($nonKontrak, 'nk', function ($join) {
+                $join->on('nk.no_document', '=', 'b.no_quotation');
+            })
             ->select([
-                DB::raw('COALESCE(SUM(kontrak.total_biaya), 0)     as total_kontrak'),
-                DB::raw('COALESCE(SUM(non_kontrak.total_biaya), 0) as total_non_kontrak'),
+                'b.bulan',
+                DB::raw('COALESCE(SUM(k.total_kontrak), 0) as total_kontrak'),
+                DB::raw('COALESCE(SUM(nk.total_non_kontrak), 0) as total_non_kontrak'),
             ])
-            ->leftJoinSub($kontrakSub, 'kontrak', function ($join) {
-                $join->on('kontrak.no_document', '=', 'jadwal_bulan.no_quotation');
-            })
-            ->leftJoinSub($nonKontrakSub, 'non_kontrak', function ($join) {
-                $join->on('non_kontrak.no_document', '=', 'jadwal_bulan.no_quotation');
-            })
-            ->first();
-
-        return $result ?? (object) ['total_kontrak' => 0, 'total_non_kontrak' => 0];
+            ->groupBy('b.bulan')
+            ->get();
     }
 }
