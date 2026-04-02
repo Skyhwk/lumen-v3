@@ -9,6 +9,7 @@ use App\Models\DasarTargetPenjadwalan;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 use App\Services\KalkulasiTargetPenjadwalanService;
 
@@ -51,7 +52,7 @@ class DasarTargetPenjadwalanController extends Controller
 
     public function delete($id)
     {
-        $data = MasterTargetPenjadwalan::find($id);
+        $data = DasarTargetPenjadwalan::find($id);
         if (!$data) return response()->json(['message' => 'Data Tidak Ditemukan'], 404);
 
         $data->is_active = false;
@@ -62,15 +63,15 @@ class DasarTargetPenjadwalanController extends Controller
         return response()->json(['message' => 'Data Berhasil Dihapus']);
     }
 
-    protected $service;
+    // protected $service;
 
-    public function __construct(KalkulasiTargetPenjadwalanService $service)
-    {
-        $this->service = $service;
-    }
+    // public function __construct(KalkulasiTargetPenjadwalanService $service)
+    // {
+    //     $this->service = $service;
+    // }
 
-    public function test()
-    {
-        return $this->service->execute();
-    }
+    // public function test()
+    // {
+    //     return $this->service->execute();
+    // }
 }
