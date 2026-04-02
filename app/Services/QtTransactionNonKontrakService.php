@@ -298,7 +298,13 @@ class QtTransactionNonKontrakService
         DB::beginTransaction();
         try {
             $validIds = $data->pluck('uuid')->unique()->values()->toArray();
-            $data->chunk(200)->each(function ($chunk) {
+
+            // Load existing data untuk perbandingan
+            $existingData = DB::table('qt_transaction_non_kontrak')
+                ->whereIn('uuid', $validIds)
+                ->pluck('rekap_transactions', 'uuid');
+
+            $data->chunk(200)->each(function ($chunk) use ($existingData) {
                 DB::table('qt_transaction_non_kontrak')->upsert(
                     $chunk->toArray(), ['uuid', 'created_at'], [
                         'id_pelanggan',
@@ -309,15 +315,37 @@ class QtTransactionNonKontrakService
                     ]
                 );
             });
+
             if (!empty($validIds)) {
                 DB::table('qt_transaction_non_kontrak')
                     ->whereNotIn('uuid', $validIds)
                     ->delete();
             }
 
-            DB::table('qt_transaction_non_kontrak')->where('created_at', '!=', self::$todayDate)->update([
-                'updated_at' => self::$todayDate
-            ]);
+            // Hanya update `updated_at` untuk data yang rekap_transactions-nya berubah
+            $changedUuids = $data
+                ->filter(function ($item) use ($existingData) {
+                    $uuid = $item['uuid'];
+
+                    // Jika uuid belum ada di DB (data baru), skip updated_at
+                    if (!isset($existingData[$uuid])) {
+                        return false;
+                    }
+
+                    // Bandingkan rekap_transactions lama vs baru
+                    return $existingData[$uuid] !== $item['rekap_transactions'];
+                })
+                ->pluck('uuid')
+                ->unique()
+                ->values()
+                ->toArray();
+
+            if (!empty($changedUuids)) {
+                DB::table('qt_transaction_non_kontrak')
+                    ->whereIn('uuid', $changedUuids)
+                    ->where('created_at', '!=', self::$todayDate)
+                    ->update(['updated_at' => self::$todayDate]);
+            }
 
             DB::commit();
         } catch (\Throwable $e) {
