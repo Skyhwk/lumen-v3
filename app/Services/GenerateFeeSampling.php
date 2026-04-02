@@ -901,6 +901,7 @@ class GenerateFeeSampling
                 foreach ($ptCampuran as $data) {
                     $totalAirGabungan += $data['air'];
                 }
+                // if($tgl == '2026-05') dd($ptAirOnly, $ptCampuran, $totalAirGabungan, $tgl);
                 // === Hitung titik air ===
                 if (count($ptAirOnly) > 0 && count($ptCampuran) > 0) {
                     if ($totalAirGabungan > 20) {
@@ -977,19 +978,30 @@ class GenerateFeeSampling
                 }
 
                 // === Hari Libur ===
-                $tanggalCarbon = Carbon::parse($tgl);
-                $isLibur = in_array($tgl, $liburKantor) || $tanggalCarbon->isSaturday() || $tanggalCarbon->isSunday();
-                if ($isLibur) {
-                    $feeTambahan += $fee->hari_libur;
-                    $feeTambahanRincian['hari_libur'] += $fee->hari_libur;
-                }
+                // $tanggalCarbon = Carbon::parse($tgl);
+                // $isLibur = in_array($tgl, $liburKantor) || $tanggalCarbon->isSaturday() || $tanggalCarbon->isSunday();
+                // if ($isLibur) {
+                //     $feeTambahan += $fee->hari_libur;
+                //     $feeTambahanRincian['hari_libur'] += $fee->hari_libur;
+                // }
 
-                // === Sampling 24 jam ===
-                $durasiEfektif = max($durasi_tertinggi - 1, 0);
-                if ($durasiEfektif > 0) {
-                    $feeTambahan += $fee->sampling_24jam * $durasiEfektif;
-                    $feeTambahanRincian['sampling_24jam'] += $fee->sampling_24jam * $durasiEfektif;
-                }
+                // // === Sampling 24 jam ===
+                // $durasiEfektif = max($durasi_tertinggi - 1, 0);
+                // if ($durasiEfektif > 0) {
+                //     $feeTambahan += $fee->sampling_24jam * $durasiEfektif;
+                //     $feeTambahanRincian['sampling_24jam'] += $fee->sampling_24jam * $durasiEfektif;
+                // }
+                // === Hari Libur + Sampling 24 jam berbasis durasi ===
+                $hasilLibur24Jam = $this->hitungFeeHariLiburDanSampling24Jam(
+                    $tgl,
+                    $durasi_tertinggi,
+                    $fee,
+                    $liburKantor
+                );
+
+                $feeTambahan += $hasilLibur24Jam['total_fee'];
+                $feeTambahanRincian['hari_libur'] += $hasilLibur24Jam['rincian']['hari_libur'];
+                $feeTambahanRincian['sampling_24jam'] += $hasilLibur24Jam['rincian']['sampling_24jam'];
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
 
@@ -1050,7 +1062,6 @@ class GenerateFeeSampling
         $durasiEfektif = max((int) $durasi - 1, 0); // abaikan hari terakhir jika durasi >= 2
 
         $feeSudahDihitungPadaTanggal = []; // agar 1x per tanggal
-
         for ($i = 0; $i < $durasiEfektif; $i++) {
             $tgl = $tanggalMulai->copy()->addDays($i)->toDateString();
             $carbonTgl = Carbon::parse($tgl);
