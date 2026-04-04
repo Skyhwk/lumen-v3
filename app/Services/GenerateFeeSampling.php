@@ -929,7 +929,6 @@ class GenerateFeeSampling
                 foreach ($ptCampuran as $data) {
                     $totalAirGabungan += $data['air'];
                 }
-                dd($ptAirOnly, $ptCampuran, $totalAirGabungan);
                 // === Hitung titik air ===
                 if (count($ptAirOnly) > 0 && count($ptCampuran) > 0) {
                     if ($totalAirGabungan > 20) {
