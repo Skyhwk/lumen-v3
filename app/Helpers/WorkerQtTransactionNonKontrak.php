@@ -23,7 +23,8 @@ class WorkerQtTransactionNonKontrak
             $second === 0
         ) {
             try {
-                QtTransactionNonKontrakService::run();
+                // QtTransactionNonKontrakService::run();
+                (new QtTransactionNonKontrakService())->run();
             } catch (\Throwable $th) {
                 Log::error('[WorkerQtTransactionNonKontrak] Error: ' . $th->getMessage());
             }

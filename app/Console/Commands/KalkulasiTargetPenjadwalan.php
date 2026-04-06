@@ -10,7 +10,7 @@ use App\Services\KalkulasiTargetPenjadwalanService;
 
 class KalkulasiTargetPenjadwalan extends Command
 {
-    protected $signature = 'kalkulasitargetjadwal';
+    protected $signature = 'schedule:kalkulasi-target-penjadwalan';
     protected $description = 'Calculate target scheduling with detailed logging';
 
     public function handle()

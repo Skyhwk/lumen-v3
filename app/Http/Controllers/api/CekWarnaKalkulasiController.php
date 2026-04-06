@@ -48,7 +48,7 @@ class CekWarnaKalkulasiController extends Controller
 
         // 🔥 cari range yang cocok
         $matched = $dasarTargets->first(function ($item) use ($nilaiPersentase) {
-            return $nilaiPersentase >= (float) $item->persentase_awal &&
+            return $nilaiPersentase > (float) $item->persentase_awal &&
                 $nilaiPersentase <= (float) $item->persentase_akhir;
         });
 
