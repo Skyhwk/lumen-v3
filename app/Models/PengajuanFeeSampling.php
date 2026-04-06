@@ -10,5 +10,9 @@ class PengajuanFeeSampling extends Sector
 
     public $timestamps = false;
     protected $guarded = [];
-   
+
+    public function detail_fee()
+    {
+        return $this->hasMany(PengajuanFeeSamplingDetail::class, 'pengajuan_fee_sampling_id')->where('is_active', 1);
+    }
 }
