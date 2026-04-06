@@ -43,6 +43,6 @@ class KalkulasiTargetPenjadwalan extends Migration
      */
     public function down()
     {
-        //
+        Schema::dropIfExists('kalkulasi_target_penjadwalan');
     }
 }
