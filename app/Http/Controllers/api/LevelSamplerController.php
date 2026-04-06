@@ -6,6 +6,8 @@ use App\Models\MasterFeeSampling;
 use Illuminate\Http\Request;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Models\HistoryLevelSampler;
+use App\Models\MasterFee;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -95,6 +97,14 @@ class LevelSamplerController extends Controller
             ], 404);
         }
 
+        $history = new HistoryLevelSampler();
+
+        $history->user_id = $sampler->id;
+        $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
+        $history->created_by = $this->karyawan;
+        $history->old_warna = $sampler->warna;
+        $history->old_level = MasterFeeSampling::where('warna', $sampler->warna)->first()->kategori;
+
         DB::beginTransaction();
         try {
             $warnaSampler = MasterFeeSampling::where('id', $request->id_label)->first();
@@ -102,6 +112,10 @@ class LevelSamplerController extends Controller
             $sampler->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $sampler->updated_by = $this->karyawan;
             $sampler->save();
+
+            $history->new_warna = $sampler->warna;
+            $history->new_level = $warnaSampler->kategori;
+            $history->save();
 
             DB::commit();
 
