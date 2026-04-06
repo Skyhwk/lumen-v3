@@ -463,6 +463,7 @@ class AppsBasController extends Controller
 
     public function detailData(Request $request)
     {
+        
         try {
 
             // Filter data untuk hanya mendapatkan data yang memiliki 'sampler' sesuai dengan $this->karyawan
@@ -631,8 +632,26 @@ class AppsBasController extends Controller
                     ]);
                 }
             }
-            $filteredResult = array_filter($finalResult, function ($item) use ($request) {
+            /* $filteredResult = array_filter($finalResult, function ($item) use ($request) {
                 return strpos($item['kategori'], $request->kategori) !== false;
+            }); */
+            $kategoriRequest = is_array($request->kategori)
+                ? $request->kategori
+                : explode(',', $request->kategori);
+
+            // Ambil semua kode dari kategori request (misal: "001", "002", dst)
+            $kodeList = array_map(function ($k) {
+                $parts = explode(' - ', trim($k));
+                return trim(end($parts));
+            }, $kategoriRequest);
+
+            $filteredResult = array_filter($finalResult, function ($item) use ($kodeList) {
+                foreach ($kodeList as $kode) {
+                    if (strpos($item['kategori'], $kode) !== false) {
+                        return true;
+                    }
+                }
+                return false;
             });
 
             // Reset index biar mulai dari 0

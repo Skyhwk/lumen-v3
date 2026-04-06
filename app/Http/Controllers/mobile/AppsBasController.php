@@ -621,8 +621,26 @@ class AppsBasController extends Controller
                     ]);
                 }
             }
-            $filteredResult = array_filter($finalResult, function ($item) use ($request) {
-                return strpos($item['kategori'], $request->kategori) !== false;
+            // $filteredResult = array_filter($finalResult, function ($item) use ($request) {
+            //     return strpos($item['kategori'], $request->kategori) !== false;
+            // });
+            $kategoriRequest = is_array($request->kategori)
+                ? $request->kategori
+                : explode(',', $request->kategori);
+
+            // Ambil semua kode dari kategori request (misal: "001", "002", dst)
+            $kodeList = array_map(function ($k) {
+                $parts = explode(' - ', trim($k));
+                return trim(end($parts));
+            }, $kategoriRequest);
+
+            $filteredResult = array_filter($finalResult, function ($item) use ($kodeList) {
+                foreach ($kodeList as $kode) {
+                    if (strpos($item['kategori'], $kode) !== false) {
+                        return true;
+                    }
+                }
+                return false;
             });
 
             // Reset index biar mulai dari 0
@@ -763,7 +781,7 @@ class AppsBasController extends Controller
                         $item['tanda_tangan_bas'] = [];
                     }
                 } else {
-                    dd('sssq');
+                    
                     $item['detail_bas_documents'] = [];
                     $item['catatan'] = '';
                     $item['informasi_teknis'] = '';

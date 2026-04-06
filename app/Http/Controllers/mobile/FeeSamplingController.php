@@ -25,7 +25,8 @@ use App\Models\{
     DataLapanganIklimDingin,
     DataLapanganSwab,
     DataLapanganErgonomi,
-    DataLapanganEmisiKendaraan
+    DataLapanganEmisiKendaraan,
+    PengajuanFeeSamplingDetail
 };
 use App\Services\GenerateFeeSampling;
 use App\Services\InsertActivityFdl;
@@ -91,15 +92,34 @@ class FeeSamplingController extends Controller
 
     public function getTanggalSampling(Request $request)
     {
-        $feeSampling = PengajuanFeeSampling::where('user_id', $this->user_id)
+        // $feeSampling = PengajuanFeeSampling::with('detail_fee')
+        //     ->where('user_id', $this->user_id)
+        //     ->where('is_approve_finance', 0)
+        //     ->where('is_active', true)
+        //     ->get()
+        //     ->pluck('detail_fee')
+        //     ->flatten();
+
+        // $tanggalList = $feeSampling
+        //     ->flatMap(function ($json) {
+        //         dd($json);
+        //         return collect(json_decode($json, true))->pluck('tanggal');
+        //     })
+        //     ->unique()
+        //     ->values();
+        $feeSampling = PengajuanFeeSampling::with('detail_fee')
+            ->where('user_id', $this->user_id)
             ->where('is_approve_finance', 0)
             ->where('is_active', true)
-            ->pluck('detail_fee');
-
+            ->get()
+            ->pluck('detail_fee')
+            ->flatten();
+        
         $tanggalList = $feeSampling
-            ->flatMap(function ($json) {
-                return collect(json_decode($json, true))->pluck('tanggal');
-            })
+            ->where('is_active', true)
+            ->where('is_reject', false)
+            ->pluck('tanggal')
+            ->filter() // optional, buang null
             ->unique()
             ->values();
 
@@ -250,19 +270,48 @@ class FeeSamplingController extends Controller
     {
         DB::beginTransaction();
         try {
+
+            $cekdata = PengajuanFeeSampling::where('user_id', $this->user_id)
+                ->where('is_approve_finance', 0)
+                ->where('tgl_pengajuan', Carbon::now()->format('Y-m-d'))
+                ->where('is_active', true)
+                ->first();
+
+            if ($cekdata) {
+                return response()->json(['message' => 'Anda sudah melakukan pengajuan fee sampling hari ini'], 400);
+            }   
+
             $data = new PengajuanFeeSampling();
             $data->user_id = $this->user_id;
-            $data->total_fee = $request->total_fee;
+            $data->total_fee_request = $request->total_fee;
             $data->periode = json_encode($request->periode);
             $data->metode_transfer = $request->metode_transfer;
             $data->nama_bank = $request->nama_bank;
             $data->no_rekening = $request->no_rekening;
             $data->tgl_pengajuan = Carbon::now()->format('Y-m-d');
             $data->no_telp = $request->no_telpon;
-            $data->detail_fee = json_encode($request->detail_fee);
+            // $data->detail_fee = json_encode($request->detail_fee);
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
+
+            $detailFees = array_map(fn($item) => (object) $item, $request->detail_fee);
+            
+            foreach ($detailFees as $item) {
+                if (!$item->tanggal) continue;
+                PengajuanFeeSamplingDetail::create([
+                    'pengajuan_fee_sampling_id' => $data->id,
+                    'tanggal' => $item->tanggal,
+                    'fee_pokok' => $item->fee_pokok,
+                    'total_fee' => $item->total_fee,
+                    'fee_tambahan' => $item->fee_tambahan,
+                    'jumlah_tempat' => $item->jumlah_tempat,
+                    'rincian_fee_pokok' => $item->rincian_fee_pokok,
+                    'fee_tambahan_rincian' => $item->fee_tambahan_rincian,
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'created_by' => $this->karyawan,
+                ]);
+            }
 
             InsertActivityFdl::by($this->user_id)->action('input')->target("Fee Sampling dengan total fee $request->total_fee")->save();
 
