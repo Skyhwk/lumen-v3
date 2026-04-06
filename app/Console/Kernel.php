@@ -14,6 +14,7 @@ use App\Console\Commands\AssignSales;
 use App\Console\Commands\BillingComand;
 use App\Console\Commands\CalculateFeeSales;
 use App\Console\Commands\SummaryFeeSales;
+use App\Console\Commands\ScheduleQtTransaction;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -31,6 +32,7 @@ class Kernel extends ConsoleKernel
         Commands\ScheduleUpdateForecastSP::class,
         Commands\SchaduleUpdateQsd::class,
         Commands\SchaduleUpdateSummaryQsd::class,
+        Commands\ScheduleQtTransaction::class,
         Commands\AssignSales::class,
         Commands\BillingComand::class,
         Commands\CalculateFeeSales::class,
