@@ -772,7 +772,7 @@ class GenerateFeeSampling
                 ->toArray();
 
             // 3. Ambil semua jadwal sampling
-            $jadwal = Jadwal::with('persiapanHeader')
+            $jadwal = Jadwal::with('persiapanHeader', 'orderDetail') // eager load orderDetail untuk filter no_order
                 ->where('is_active', 1)
                 ->where('userid', $userId)
                 ->whereIn('tanggal', $tanggal)
@@ -823,7 +823,6 @@ class GenerateFeeSampling
 
                 $adaLuarKota = false;
                 $durasiTertinggiLuarKota = 0;
-
                 foreach ($items as $item) {
                     $namaPT = strtolower(trim($item->nama_perusahaan));
                     $kategoriList = json_decode($item->kategori, true);
@@ -836,16 +835,38 @@ class GenerateFeeSampling
 
                     foreach ($kategoriList as $kategori) {
                         $kategoriLower = strtolower($kategori);
-
+                        $no_sampel = $item->persiapanHeader->no_order . "/" . explode(' - ', $kategori)[1];
+                        
                         if (stripos($kategoriLower, 'emisi isokinetik') !== false) {
-                            $hasEmisiIsokinetik = true;
-                        }
+                            // if($no_sampel == $item->orderDetail->no_sampel && $item->orderDetail->tanggal_terima != null) {
+                            //     $hasEmisiIsokinetik = true;
+                            // }
+                            $orderDetails = $item->orderDetail;
 
-                        if (stripos($kategoriLower, 'air') !== false) {
-                            $hasAir = true;
-                            $titikAirPT++;
-                        } else {
-                            $hasNonAir = true;
+                            $isMatch = $orderDetails->contains(function ($detail) use ($no_sampel) {
+                                return $detail->no_sampel === $no_sampel 
+                                    && $detail->tanggal_terima !== null;
+                            });
+
+                            if ($isMatch) {
+                                $hasEmisiIsokinetik = true;
+                            }
+                        }
+                        if (stripos($kategoriLower, 'air') !== false && DataLapanganAir::where('no_sampel', $no_sampel)->exists()) {
+                            // if() {
+                                $hasAir = true;
+                                $titikAirPT++;
+                            // }
+                        } else if (stripos($kategoriLower, 'air') !== true || stripos($kategoriLower, 'emisi isokinetik') !== true) {
+                            $orderDetails = $item->orderDetail;
+
+                            $isMatch = $orderDetails->contains(function ($detail) use ($no_sampel) {
+                                return $detail->no_sampel === $no_sampel 
+                                    && $detail->tanggal_terima !== null;
+                            });
+                            if ($isMatch) {
+                                $hasNonAir = true;
+                            }
                         }
                     }
 
@@ -866,23 +887,30 @@ class GenerateFeeSampling
                         $note = strtolower($item->note);
 
                         // Jika note mengandung "pendampingan"
-                        if (strpos($note, 'pendampingan') !== false) {
+                        if (strpos($note, 'pendampingan') !== false || $item->pendampingan_k3 == true) {
                             if (in_array($userId, $userK3)) {
                                 $feeTambahan += 45000;
                                 $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
                             }
 
                         // Jika mengandung "isokinetik" (tanpa pendampingan) ATAU kategori ada "emisi isokinetik"
-                        } elseif (strpos($note, 'isokinetik') !== false || $hasEmisiIsokinetik || stripos($note, 'iso') !== false) {
+                        } elseif (strpos($note, 'isokinetik') !== false || $hasEmisiIsokinetik || stripos($note, 'iso') !== false || $item->isokinetic == true) {
                             $feeTambahan += $fee->isokinetik;
                             $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
                         }
 
                     } else {
                         // Jika tidak ada note tapi kategori mengandung "emisi isokinetik"
-                        if ($hasEmisiIsokinetik) {
+                        if ($hasEmisiIsokinetik || $item->isokinetic == true) {
                             $feeTambahan += $fee->isokinetik;
                             $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                        }
+
+                        if ($item->pendampingan_k3 == true) {
+                            if (in_array($userId, $userK3)) {
+                                $feeTambahan += 45000;
+                                $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
+                            }
                         }
                     }
 
@@ -901,7 +929,6 @@ class GenerateFeeSampling
                 foreach ($ptCampuran as $data) {
                     $totalAirGabungan += $data['air'];
                 }
-                // if($tgl == '2026-05') dd($ptAirOnly, $ptCampuran, $totalAirGabungan, $tgl);
                 // === Hitung titik air ===
                 if (count($ptAirOnly) > 0 && count($ptCampuran) > 0) {
                     if ($totalAirGabungan > 20) {
