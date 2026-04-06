@@ -24,11 +24,11 @@ class RegistrasiCustomerController extends Controller
     public function index(Request $request)
     {
         $data = Users::get();
-        foreach($data as &$item) {
+        foreach ($data as &$item) {
             // dump(json_decode($item->id_pelanggan));
             // if($item->id_pelanggan && $item->id_pelanggan != 'null') {
 
-                $item->pelanggan = MasterPelanggan::whereIn('id_pelanggan', json_decode($item->id_pelanggan))->get();
+            $item->pelanggan = MasterPelanggan::whereIn('id_pelanggan', json_decode($item->id_pelanggan))->get();
             // }
         };
         // dd($data);
@@ -38,14 +38,46 @@ class RegistrasiCustomerController extends Controller
     // Refactored -
     public function getCustomer(Request $request)
     {
-        $data = MasterPelanggan::where('is_active', true)->select('id_pelanggan', 'nama_pelanggan')->get();
-// dd($data);
-        return response()->json([
-            'message' => 'Customer data displayed successfully',
-            'data' => $data,
-            'status' => 200,
-            'success' => true
-        ], 200);
+        try {
+            $search = trim($request->search ?? '');
+
+            $query = MasterPelanggan::query()
+                ->where('is_active', true)
+                ->select('id_pelanggan', 'nama_pelanggan');
+
+            if (empty($search)) {
+                return response()->json([
+                    'message' => 'Customer data displayed successfully',
+                    'data' => [],
+                    'status' => 200,
+                    'success' => true
+                ], 200);
+            }
+
+            $query->where(function ($q) use ($search) {
+                $q->where('nama_pelanggan', 'like', '%' . $search . '%')
+                    ->orWhere('id_pelanggan', 'like', '%' . $search . '%');
+            });
+
+            $data = $query
+                ->orderBy('nama_pelanggan', 'asc')
+                ->limit(50)
+                ->get();
+
+            return response()->json([
+                'message' => 'Customer data displayed successfully',
+                'data' => $data,
+                'status' => 200,
+                'success' => true
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'data' => [],
+                'status' => 500,
+                'success' => false
+            ], 500);
+        }
     }
 
     public function store(Request $request)
@@ -326,11 +358,11 @@ class RegistrasiCustomerController extends Controller
             // ambil perusahaan
             $tempPerushaan = [];
             // get pelanggan
-            $namaPelanggan =MasterPelanggan::select('id_pelanggan','nama_pelanggan')->whereIn('id_pelanggan', $pelangganId)->get();
+            $namaPelanggan = MasterPelanggan::select('id_pelanggan', 'nama_pelanggan')->whereIn('id_pelanggan', $pelangganId)->get();
             //karywan
-            $pic = MasterKaryawan::select('nama_lengkap','email','no_telpon')->where('nama_lengkap', $header->created_by)->first();
+            $pic = MasterKaryawan::select('nama_lengkap', 'email', 'no_telpon')->where('nama_lengkap', $header->created_by)->first();
             foreach ($namaPelanggan as $key => $value) {
-                $tempPerushaan[] = $value->nama_pelanggan .' ['.$value->id_pelanggan.']';
+                $tempPerushaan[] = $value->nama_pelanggan . ' [' . $value->id_pelanggan . ']';
             }
             $tempResult = array_unique($tempPerushaan);
             $header->perusahaan = $tempResult;
@@ -342,9 +374,9 @@ class RegistrasiCustomerController extends Controller
                         'message' => 'data hasbenn show',
                         'perusahaan' => $header->perusahaan,
                         'is_cheklist' => $header->is_cheklist,
-                        'data_user'=>$header,
-                        'dataaja'=>$header->created_by,
-                        'pic'=>$pic
+                        'data_user' => $header,
+                        'dataaja' => $header->created_by,
+                        'pic' => $pic
                     ],
                     200
                 );
