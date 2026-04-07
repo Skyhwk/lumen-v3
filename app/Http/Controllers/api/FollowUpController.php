@@ -14,6 +14,7 @@ Carbon::setLocale('id');
 use App\Models\DFUS;
 use App\Models\DFUSKeterangan;
 use App\Models\KontakPelangganBlacklist;
+use App\Models\LogWebphone;
 use App\Models\OrderHeader;
 use App\Models\MasterPelanggan;
 use App\Models\MasterKaryawan;
@@ -695,5 +696,11 @@ class FollowUpController extends Controller
             DB::rollBack();
             return  response()->json(['error' => $th], 400);
         }
+    }
+
+    public function getLog(Request $request)
+    {
+        $log = LogWebphone::with('karyawan:id,nama_lengkap')->where('number', $request->number)->get();
+        return response()->json(['data' => $log], 200);
     }
 }
