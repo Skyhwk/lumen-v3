@@ -19,7 +19,7 @@ class KaryawanNonAktifController extends Controller
         $data = MasterKaryawan::with('divisi', 'jabatan', 'cabang')
             ->where('active', false)
             ->where('is_active', false)
-            ->where('deleted_by', null)
+            ->whereNotNull('reason_non_active')
             ->get();
 
         return Datatables::of($data)->make(true);
