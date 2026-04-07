@@ -660,14 +660,15 @@ class MasterKaryawanController extends Controller
             $karyawan->is_active = false;
 
             $karyawan->save();
-
-            $user = User::where('id', $karyawan->user_id)->first();
             
-            $user->updated_by = $this->karyawan;
-            $user->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-            $user->is_active = false;
-
-            $user->save();
+            $user = User::where('id', $karyawan->user_id)->first();
+            if ($user) {
+                $user->updated_by = $this->karyawan;
+                $user->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                $user->is_active = false;
+                
+                $user->save();
+            }
 
             DB::connection('intilab_apps')
                 ->table('users')
@@ -685,6 +686,7 @@ class MasterKaryawanController extends Controller
             return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
+            dd($th);
             return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
             //throw $th;
         }
