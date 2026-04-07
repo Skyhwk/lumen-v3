@@ -33,13 +33,13 @@ class FollowUpController extends Controller
     {
         $pelanggan = MasterPelanggan::with('kontak_pelanggan')->where('is_active', true);
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-        
+
         switch ($jabatan) {
             case 24: // Sales Staff
                 $pelanggan->where('sales_id', $this->user_id);
                 break;
 
-            case 148: 
+            case 148:
                 $pelanggan->where('sales_id', $this->user_id);
                 break;
 
@@ -50,9 +50,9 @@ class FollowUpController extends Controller
                 $pelanggan->whereIn('sales_id', $bawahan);
                 break;
         }
-        
+
         $pelanggan = $pelanggan->orderBy('master_pelanggan.id', 'desc');
-        
+
         return Datatables::of($pelanggan)
             ->filterColumn('kontak_pelanggan', function ($query, $keyword) {
                 $query->whereHas('kontak_pelanggan', function ($q) use ($keyword) {
@@ -229,26 +229,26 @@ class FollowUpController extends Controller
             ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
-            ->filterColumn('keterangan_tambahan', function($query, $value){
+            ->filterColumn('keterangan_tambahan', function ($query, $value) {
                 $data = json_decode($value, true);
                 $kategori = $data['kategori'] ?? null;
                 $keyword  = $data['keyword'] ?? null;
 
-                if(!$keyword) return;
+                if (!$keyword) return;
 
-                $query->whereHas('keteranganTambahan', function($q) use ($kategori, $keyword){
-                    if($kategori){
+                $query->whereHas('keteranganTambahan', function ($q) use ($kategori, $keyword) {
+                    if ($kategori) {
                         return $q->where($kategori, 'like', "%$keyword%");
                     }
 
                     // fallback kalau kategori kosong
-                    $q->where(function($x) use ($keyword){
+                    $q->where(function ($x) use ($keyword) {
                         $x->where('keterangan_perkenalan', 'like', "%$keyword%")
-                        ->orWhere('keterangan_proposal', 'like', "%$keyword%")
-                        ->orWhere('keterangan_review_manager', 'like', "%$keyword%")
-                        ->orWhere('keterangan_negosiasi_harga', 'like', "%$keyword%")
-                        ->orWhere('keterangan_maintain_call', 'like', "%$keyword%")
-                        ->orWhere('proposal', 'like', "%$keyword%");
+                            ->orWhere('keterangan_proposal', 'like', "%$keyword%")
+                            ->orWhere('keterangan_review_manager', 'like', "%$keyword%")
+                            ->orWhere('keterangan_negosiasi_harga', 'like', "%$keyword%")
+                            ->orWhere('keterangan_maintain_call', 'like', "%$keyword%")
+                            ->orWhere('proposal', 'like', "%$keyword%");
                     });
                 });
             })
@@ -491,9 +491,22 @@ class FollowUpController extends Controller
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $headers = [
-            'No', 'Hari', 'Tanggal', 'Jam', 'Nama Pelanggan', 'No. Telepon',
-            'PIC Pelanggan', 'E-Mail PIC', 'No. Telepon PIC', 'Sales Penanggung Jawab',
-            'Call Status', 'Forecast FU', 'Forecast PO', 'Status', 'Status Call', 'Keterangan'
+            'No',
+            'Hari',
+            'Tanggal',
+            'Jam',
+            'Nama Pelanggan',
+            'No. Telepon',
+            'PIC Pelanggan',
+            'E-Mail PIC',
+            'No. Telepon PIC',
+            'Sales Penanggung Jawab',
+            'Call Status',
+            'Forecast FU',
+            'Forecast PO',
+            'Status',
+            'Status Call',
+            'Keterangan'
         ];
 
         // Set header kolom
@@ -518,7 +531,7 @@ class FollowUpController extends Controller
 
         if ($type === 'bulanan') {
             $baseQuery->whereMonth('tanggal', date('m', strtotime($tanggal)))
-                    ->whereYear('tanggal', date('Y', strtotime($tanggal)));
+                ->whereYear('tanggal', date('Y', strtotime($tanggal)));
         } else {
             $baseQuery->whereDate('tanggal', $tanggal);
         }
@@ -542,8 +555,8 @@ class FollowUpController extends Controller
             ->orderBy('tanggal', 'desc')
             ->orderBy('jam')
             ->get();
-        
-            return response()->json(['data' => $dfusData], 200);
+
+        return response()->json(['data' => $dfusData], 200);
         // $rowNumber = 2;
 
         // foreach ($dfusData as $index => $row) {
@@ -669,7 +682,7 @@ class FollowUpController extends Controller
             }
 
             $keterangan->save();
-            return response()->json(['message' => 'Data berhasil disimpan', 'success' => true, 'data'=> $keterangan], 200);
+            return response()->json(['message' => 'Data berhasil disimpan', 'success' => true, 'data' => $keterangan], 200);
         } catch (\Exception $th) {
             return  response()->json(['error' => $th], 400);
         }
@@ -683,7 +696,7 @@ class FollowUpController extends Controller
             $dfus->keterangan = $request->status;
             $dfus->save();
 
-            if($request->status == 'NI'){
+            if ($request->status == 'NI') {
                 $request->id = MasterPelanggan::where('id_pelanggan', $dfus->id_pelanggan)->first()->id;
                 $request->alasan = 'Nomor Invalid';
                 $mpController = new MasterPelangganController($request);
@@ -700,7 +713,11 @@ class FollowUpController extends Controller
 
     public function getLog(Request $request)
     {
-        $log = LogWebphone::with('karyawan:id,nama_lengkap')->where('number', $request->number)->get();
+        $log = LogWebphone::with('karyawan:id,nama_lengkap')
+            ->where('number', $request->number)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return response()->json(['data' => $log], 200);
     }
 }
