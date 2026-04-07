@@ -686,7 +686,6 @@ class MasterKaryawanController extends Controller
             return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
             return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
             //throw $th;
         }
