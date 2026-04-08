@@ -58,7 +58,7 @@ class RequestFeeSamplingController extends Controller
                 $data->is_active = 0;
                 $data->is_reject = true;
                 $data->rejected_by = $this->karyawan;
-                $data->alasan_reject = $request->alasan_reject ?? "";
+                $data->alasan_reject = $request->keterangan;
                 $data->rejected_at = Carbon::now();
                 $data->save();
             }
