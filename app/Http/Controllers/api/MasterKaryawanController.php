@@ -660,14 +660,15 @@ class MasterKaryawanController extends Controller
             $karyawan->is_active = false;
 
             $karyawan->save();
-
-            $user = User::where('id', $karyawan->user_id)->first();
             
-            $user->updated_by = $this->karyawan;
-            $user->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-            $user->is_active = false;
-
-            $user->save();
+            $user = User::where('id', $karyawan->user_id)->first();
+            if ($user) {
+                $user->updated_by = $this->karyawan;
+                $user->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                $user->is_active = false;
+                
+                $user->save();
+            }
 
             DB::connection('intilab_apps')
                 ->table('users')

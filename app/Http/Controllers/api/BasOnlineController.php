@@ -265,6 +265,24 @@ class BasOnlineController extends Controller
             // 3. Return ke DataTables (Collection Client Side)
             // Karena data sudah berupa Array, kita bungkus dengan collect()
             return DataTables::of(collect(array_values($groupedData)))
+                ->filter(function ($collection) use ($request) {
+
+                    $columns = $request->get('columns');
+                    $samplerSearch = strtolower($columns[6]['search']['value'] ?? '');
+
+                    if (!empty($samplerSearch)) {
+
+                        $collection = $collection->filter(function ($item) use ($samplerSearch) {
+
+                            $sampler = strtolower($item['sampler'] ?? '');
+
+                            // 🔥 LIKE '%keyword%'
+                            return strpos($sampler, $samplerSearch) !== false;
+                        });
+                    }
+
+                    return $collection;
+                })
                 ->make(true);
 
         } catch (\Exception $ex) {

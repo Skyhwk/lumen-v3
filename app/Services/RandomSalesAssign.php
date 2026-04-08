@@ -149,7 +149,7 @@ class RandomSalesAssign
                 ->where('sales_id', '<>', $customerMasDedi)
                 ->where('created_at', '<', Carbon::now()->subMonths(3))
                 ->whereNotNull('sales_id')
-                ->where('id_pelanggan', '=', 'YAPH04') // pelanggan mas dedi
+                // ->where('id_pelanggan', '=', 'YAPH04') // pelanggan mas dedi
                 ->whereNotIn('sales_id', $excludedSalesIds)
                 ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex, &$log) {
                     Log::channel('reassign_customer')->info("== Processing Chunk #{$chunkIndex} ==", [
@@ -315,7 +315,6 @@ class RandomSalesAssign
             //     ];
             // }
         } catch (\Throwable $th) {
-            dd($th);
             Log::channel('reassign_customer')->error('error', [$th->getMessage(), $th->getLine(), $th->getFile()]);
             throw $th;
         }
@@ -560,76 +559,76 @@ class RandomSalesAssign
     private static function deleteWebphoneLogsBulk(int $karyawanId, array $numbers): void
     {
 
-        // Ambil semua ID dulu
-        $logIds = LogWebphone::where('karyawan_id', $karyawanId)
-            ->whereIn('number', $numbers)
-            ->pluck('id')
-            ->toArray();
+        // // Ambil semua ID dulu
+        // $logIds = LogWebphone::where('karyawan_id', $karyawanId)
+        //     ->whereIn('number', $numbers)
+        //     ->pluck('id')
+        //     ->toArray();
 
-        Log::channel('reassign_customer')->info("=== Processing Delete Webphone Log for Sales ID " . $karyawanId . " | Total Number " . count($numbers) . " | Total Data " . count($logIds),);
+        // Log::channel('reassign_customer')->info("=== Processing Delete Webphone Log for Sales ID " . $karyawanId . " | Total Number " . count($numbers) . " | Total Data " . count($logIds),);
 
-        if (empty($logIds)) {
-            return;
-        }
+        // if (empty($logIds)) {
+        //     return;
+        // }
 
-        // Backup dan delete per chunk - TAPI DENGAN TRANSACTION SENDIRI
-        collect($logIds)->chunk(1000)->each(function ($chunk) use ($karyawanId) {
-            DB::transaction(function () use ($chunk, $karyawanId) {
-                $logs = LogWebphone::whereIn('id', $chunk->toArray())->get();
+        // // Backup dan delete per chunk - TAPI DENGAN TRANSACTION SENDIRI
+        // collect($logIds)->chunk(1000)->each(function ($chunk) use ($karyawanId) {
+        //     DB::transaction(function () use ($chunk, $karyawanId) {
+        //         $logs = LogWebphone::whereIn('id', $chunk->toArray())->get();
 
-                if ($logs->isNotEmpty()) {
-                    LogWebphoneBackup::insert(
-                        $logs->map(fn($log) => self::prepareBackupData($log, ['created_at']))->toArray()
-                    );
-                    Log::channel('reassign_customer')->info("Success Backup Webphone Log",);
-                }
-                Log::channel('reassign_customer')->info("=== Start Delete Log Webphone Log",);
-                LogWebphone::whereIn('id', $logs->pluck('id')->toArray())->delete();
-                Log::channel('reassign_customer')->info("=== Success Delete Log Webphone Log",);
-            });
-        });
+        //         if ($logs->isNotEmpty()) {
+        //             LogWebphoneBackup::insert(
+        //                 $logs->map(fn($log) => self::prepareBackupData($log, ['created_at']))->toArray()
+        //             );
+        //             Log::channel('reassign_customer')->info("Success Backup Webphone Log",);
+        //         }
+        //         Log::channel('reassign_customer')->info("=== Start Delete Log Webphone Log",);
+        //         LogWebphone::whereIn('id', $logs->pluck('id')->toArray())->delete();
+        //         Log::channel('reassign_customer')->info("=== Success Delete Log Webphone Log",);
+        //     });
+        // });
     }
 
     private static function deleteDfusHistoryBulk(string $karyawanName, array $idPelanggan): void
     {
-        // Ambil semua ID dulu
-        $ids = collect($idPelanggan);
-        $result = collect();
+        // // Ambil semua ID dulu
+        // $ids = collect($idPelanggan);
+        // $result = collect();
 
-        $ids->chunk(500)->each(function ($chunk) use (&$result, $karyawanName) {
-            $data = DFUS::where('sales_penanggung_jawab', $karyawanName)
-                ->whereIn('id_pelanggan', $chunk)
-                ->pluck('id');
+        // $ids->chunk(500)->each(function ($chunk) use (&$result, $karyawanName) {
+        //     $data = DFUS::where('sales_penanggung_jawab', $karyawanName)
+        //         ->whereIn('id_pelanggan', $chunk)
+        //         ->pluck('id');
 
-            $result = $result->merge($data);
-        });
+        //     $result = $result->merge($data);
+        // });
 
-        // $dfusIds = DFUS::where('sales_penanggung_jawab', $karyawanName)
-        //     ->whereIn('id_pelanggan', $idPelanggan)
-        //     ->pluck('id')
-        //     ->toArray();
+        // // $dfusIds = DFUS::where('sales_penanggung_jawab', $karyawanName)
+        // //     ->whereIn('id_pelanggan', $idPelanggan)
+        // //     ->pluck('id')
+        // //     ->toArray();
 
-        Log::channel('reassign_customer')->info("=== Processing Delete DFUS for Sales ID " . $karyawanName . " | Total Pelanggan ID " . count($idPelanggan) . " | Total Data " . count($result),);
+        // Log::channel('reassign_customer')->info("=== Processing Delete DFUS for Sales ID " . $karyawanName . " | Total Pelanggan ID " . count($idPelanggan) . " | Total Data " . count($result),);
 
-        if (empty($result)) {
-            return;
-        }
+        // if (empty($result)) {
+        //     return;
+        // }
 
-        // Backup dan delete per chunk - TAPI DENGAN TRANSACTION SENDIRI
-        collect($result)->chunk(1000)->each(function ($chunk) {
-            DB::transaction(function () use ($chunk) {
-                $dfus = DFUS::whereIn('id', $chunk->toArray())->get();
-                if ($dfus->isNotEmpty()) {
-                    DFUSBackup::insert(
-                        $dfus->map(fn($log) => self::prepareBackupData($log, ['created_at', 'updated_at']))->toArray()
-                    );
-                    Log::channel('reassign_customer')->info("Success Backup DFUS Log",);
-                }
-                Log::channel('reassign_customer')->info("=== Start Delete DFUS Log",);
-                DFUS::whereIn('id', $dfus->pluck('id')->toArray())->delete();
-                Log::channel('reassign_customer')->info("=== Success Delete DFUS Log",);
-            });
-        });
+        // // Backup dan delete per chunk - TAPI DENGAN TRANSACTION SENDIRI
+        // collect($result)->chunk(1000)->each(function ($chunk) {
+        //     DB::transaction(function () use ($chunk) {
+        //         $dfus = DFUS::whereIn('id', $chunk->toArray())->get();
+        //         if ($dfus->isNotEmpty()) {
+        //             DFUSBackup::insert(
+        //                 $dfus->map(fn($log) => self::prepareBackupData($log, ['created_at', 'updated_at']))->toArray()
+        //             );
+        //             Log::channel('reassign_customer')->info("Success Backup DFUS Log",);
+        //         }
+        //         Log::channel('reassign_customer')->info("=== Start Delete DFUS Log",);
+        //         DFUS::whereIn('id', $dfus->pluck('id')->toArray())->delete();
+        //         Log::channel('reassign_customer')->info("=== Success Delete DFUS Log",);
+        //     });
+        // });
     }
 
     // private static function deleteDfusHistoryBulk(string $karyawanName, string $idPelanggan): void

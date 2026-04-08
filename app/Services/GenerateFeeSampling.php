@@ -772,7 +772,7 @@ class GenerateFeeSampling
                 ->toArray();
 
             // 3. Ambil semua jadwal sampling
-            $jadwal = Jadwal::with('persiapanHeader')
+            $jadwal = Jadwal::with('persiapanHeader', 'orderDetail') // eager load orderDetail untuk filter no_order
                 ->where('is_active', 1)
                 ->where('userid', $userId)
                 ->whereIn('tanggal', $tanggal)
@@ -823,7 +823,6 @@ class GenerateFeeSampling
 
                 $adaLuarKota = false;
                 $durasiTertinggiLuarKota = 0;
-
                 foreach ($items as $item) {
                     $namaPT = strtolower(trim($item->nama_perusahaan));
                     $kategoriList = json_decode($item->kategori, true);
@@ -836,16 +835,38 @@ class GenerateFeeSampling
 
                     foreach ($kategoriList as $kategori) {
                         $kategoriLower = strtolower($kategori);
-
+                        $no_sampel = $item->persiapanHeader->no_order . "/" . explode(' - ', $kategori)[1];
+                        
                         if (stripos($kategoriLower, 'emisi isokinetik') !== false) {
-                            $hasEmisiIsokinetik = true;
-                        }
+                            // if($no_sampel == $item->orderDetail->no_sampel && $item->orderDetail->tanggal_terima != null) {
+                            //     $hasEmisiIsokinetik = true;
+                            // }
+                            $orderDetails = $item->orderDetail;
 
-                        if (stripos($kategoriLower, 'air') !== false) {
-                            $hasAir = true;
-                            $titikAirPT++;
-                        } else {
-                            $hasNonAir = true;
+                            $isMatch = $orderDetails->contains(function ($detail) use ($no_sampel) {
+                                return $detail->no_sampel === $no_sampel 
+                                    && $detail->tanggal_terima !== null;
+                            });
+
+                            if ($isMatch) {
+                                $hasEmisiIsokinetik = true;
+                            }
+                        }
+                        if (stripos($kategoriLower, 'air') !== false && DataLapanganAir::where('no_sampel', $no_sampel)->exists()) {
+                            // if() {
+                                $hasAir = true;
+                                $titikAirPT++;
+                            // }
+                        } else if (stripos($kategoriLower, 'air') !== true || stripos($kategoriLower, 'emisi isokinetik') !== true) {
+                            $orderDetails = $item->orderDetail;
+
+                            $isMatch = $orderDetails->contains(function ($detail) use ($no_sampel) {
+                                return $detail->no_sampel === $no_sampel 
+                                    && $detail->tanggal_terima !== null;
+                            });
+                            if ($isMatch) {
+                                $hasNonAir = true;
+                            }
                         }
                     }
 
@@ -866,23 +887,30 @@ class GenerateFeeSampling
                         $note = strtolower($item->note);
 
                         // Jika note mengandung "pendampingan"
-                        if (strpos($note, 'pendampingan') !== false) {
+                        if (strpos($note, 'pendampingan') !== false || $item->pendampingan_k3 == true) {
                             if (in_array($userId, $userK3)) {
                                 $feeTambahan += 45000;
                                 $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
                             }
 
                         // Jika mengandung "isokinetik" (tanpa pendampingan) ATAU kategori ada "emisi isokinetik"
-                        } elseif (strpos($note, 'isokinetik') !== false || $hasEmisiIsokinetik || stripos($note, 'iso') !== false) {
+                        } elseif (strpos($note, 'isokinetik') !== false || $hasEmisiIsokinetik || stripos($note, 'iso') !== false || $item->isokinetic == true) {
                             $feeTambahan += $fee->isokinetik;
                             $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
                         }
 
                     } else {
                         // Jika tidak ada note tapi kategori mengandung "emisi isokinetik"
-                        if ($hasEmisiIsokinetik) {
+                        if ($hasEmisiIsokinetik || $item->isokinetic == true) {
                             $feeTambahan += $fee->isokinetik;
                             $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                        }
+
+                        if ($item->pendampingan_k3 == true) {
+                            if (in_array($userId, $userK3)) {
+                                $feeTambahan += 45000;
+                                $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
+                            }
                         }
                     }
 
@@ -977,19 +1005,30 @@ class GenerateFeeSampling
                 }
 
                 // === Hari Libur ===
-                $tanggalCarbon = Carbon::parse($tgl);
-                $isLibur = in_array($tgl, $liburKantor) || $tanggalCarbon->isSaturday() || $tanggalCarbon->isSunday();
-                if ($isLibur) {
-                    $feeTambahan += $fee->hari_libur;
-                    $feeTambahanRincian['hari_libur'] += $fee->hari_libur;
-                }
+                // $tanggalCarbon = Carbon::parse($tgl);
+                // $isLibur = in_array($tgl, $liburKantor) || $tanggalCarbon->isSaturday() || $tanggalCarbon->isSunday();
+                // if ($isLibur) {
+                //     $feeTambahan += $fee->hari_libur;
+                //     $feeTambahanRincian['hari_libur'] += $fee->hari_libur;
+                // }
 
-                // === Sampling 24 jam ===
-                $durasiEfektif = max($durasi_tertinggi - 1, 0);
-                if ($durasiEfektif > 0) {
-                    $feeTambahan += $fee->sampling_24jam * $durasiEfektif;
-                    $feeTambahanRincian['sampling_24jam'] += $fee->sampling_24jam * $durasiEfektif;
-                }
+                // // === Sampling 24 jam ===
+                // $durasiEfektif = max($durasi_tertinggi - 1, 0);
+                // if ($durasiEfektif > 0) {
+                //     $feeTambahan += $fee->sampling_24jam * $durasiEfektif;
+                //     $feeTambahanRincian['sampling_24jam'] += $fee->sampling_24jam * $durasiEfektif;
+                // }
+                // === Hari Libur + Sampling 24 jam berbasis durasi ===
+                $hasilLibur24Jam = $this->hitungFeeHariLiburDanSampling24Jam(
+                    $tgl,
+                    $durasi_tertinggi,
+                    $fee,
+                    $liburKantor
+                );
+
+                $feeTambahan += $hasilLibur24Jam['total_fee'];
+                $feeTambahanRincian['hari_libur'] += $hasilLibur24Jam['rincian']['hari_libur'];
+                $feeTambahanRincian['sampling_24jam'] += $hasilLibur24Jam['rincian']['sampling_24jam'];
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
 
@@ -1050,7 +1089,6 @@ class GenerateFeeSampling
         $durasiEfektif = max((int) $durasi - 1, 0); // abaikan hari terakhir jika durasi >= 2
 
         $feeSudahDihitungPadaTanggal = []; // agar 1x per tanggal
-
         for ($i = 0; $i < $durasiEfektif; $i++) {
             $tgl = $tanggalMulai->copy()->addDays($i)->toDateString();
             $carbonTgl = Carbon::parse($tgl);
