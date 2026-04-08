@@ -429,16 +429,9 @@ class RenderSD
                 ->where('is_active', true)
                 ->get(['no_sampel','kategori_3']);
                 $periode = ($periode === 'null' || is_null($periode)) ? null : $periode;
-            $detailSampelDatang = SampelDiantarDetail::where('id_header',$data->id)
-                ->first();
-            
+            $detailSampelDatang = SampelDiantarDetail::where('id_header',$data->id)->first();
             // logic
             $no_samples = array_filter($datas->pluck('no_sampel')->toArray(), fn($item) => !is_null($item));
-            // $jenis_sampels = array_filter($datas->pluck('kategori_3')->toArray(), fn($item) => !is_null($item));
-            // $namaJenisSampel = array_map(function ($item) {
-            //     $parts = explode('-', $item, 2);
-            //     return isset($parts[1]) ? trim($parts[1]) : '';
-            // }, $jenis_sampels);
             $namaJenisSampel = $datas->pluck('kategori_3')
             ->filter()
             ->map(fn($item) => isset(explode('-', $item, 2)[1]) ? trim(explode('-', $item, 2)[1]) : '')
@@ -542,25 +535,53 @@ class RenderSD
 
             }
             $jam = $createdAt ? Carbon::parse($createdAt)->format('H:i') : '-';
-            $headerLemabaran='<table class="table" width="100%" border="0" style="margin-bottom: 20px">
-                                <tr class="tr_top">
-                                    <td class="text-left text-wrap" style="border: none;width: 40%">
-                                        <img class="img_0" src="' . public_path() . '/img/isl_logo.png" alt="ISL" />
-                                    </td>
-                                    <td style="border: none;width: 60%; text-align: center">
-                                        <h3 style="text-align: center;">
-                                            LEMBAR TANDA TERIMA DAN INFORMASI SAMPEL<br />DATANG
-                                        </h3>
-                                        <table style="width: 100%" border="0">
-                                            <tr>
-                                                <td style="border: none;width: 33%; font-size: 10px; text-align: right">' . $data->no_document . '</td>
-                                                <td style="border: none;width: 33%; font-size: 10px; text-align: center">' . $dayName . ' / ' . $tanggal . '</td>
-                                                <td style="border: none;width: 33%; font-size: 10px; text-align: left">' . $jam . '</td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>';
+            $headerLemabaran = '
+<table width="100%" border="0" cellpadding="0" cellspacing="0" 
+       style="border-collapse: collapse; margin-bottom: 8px;">
+    <tr>
+        <td style="border: none; 
+                   width: 26%; 
+                   vertical-align: middle; 
+                   padding-right: 8px;">
+            <img src="' . public_path('/img/isl_logo.png') . '" 
+                 alt="ISL" style="width: 110px; height: auto;" />
+        </td>
+
+        <td style="border: none; 
+                   width: 74%; 
+                   vertical-align: middle; 
+                   text-align: right; 
+                   padding-left: 8px;">
+            
+            <p style="margin: 0; padding: 0; 
+                      font-size: 11px; 
+                      font-weight: bold; 
+                      text-align: right; 
+                      line-height: 1.1;">
+                LEMBAR TANDA TERIMA DAN INFORMASI SAMPEL DATANG
+            </p>
+
+            <table align="right" border="0" cellpadding="0" cellspacing="0"
+                   style="margin-top: 2px; border-collapse: collapse;">
+                <tr>
+                    <td style="border: none; text-align: right; 
+                               font-size: 9px; padding-right: 20px;">
+                        ' . ($data->no_document ?? '') . '
+                    </td>
+                    <td style="border: none; text-align: right; 
+                               font-size: 9px; padding-right: 20px;">
+                        ' . $dayName . ' / ' . $tanggal . '
+                    </td>
+                    <td style="border: none; text-align: right; 
+                               font-size: 9px; padding-right: 0;">
+                        ' . $jam . '
+                    </td>
+                </tr>
+            </table>
+
+        </td>
+    </tr>
+</table>';
             $pdf->SetHTMLHeader($headerLemabaran);
             $informasiWadahSampel=null;
 
@@ -586,7 +607,7 @@ class RenderSD
                 $informasiWadahSampel = null;
             }
 
-            // First page content
+            
             $html1 = '<table class="table table-bordered" style="margin-bottom: 20px; width: 100%; table-layout: fixed;">
                                 <tr>
                                     <th colspan="2" class="text-center"><p style="font-size: 9px; word-wrap: break-word;">INFORMASI PELANGGAN</p></th>
@@ -666,94 +687,44 @@ class RenderSD
                         <td style="border: none;width: 30%;text-align: center;"><p><strong></strong>('.$data->nama_penerima.')</p></td>
                     </tr>
                 </table>';
-
-            // Write the first page
-            $pdf->WriteHTML($html1);
-
-            if($mode == 'terima'){
-                $dir = public_path('dokumen/sampelSD/');
-                if (!file_exists($dir)) {
-                    mkdir($dir, 0777, true);
-                }
-                $filePath = public_path('dokumen/sampelSD/' . $fileName);
-                // dd($filePath);
-
-                // The following code is unreachable due to the return statement above
-                try {
-                    $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                } catch (\Exception $e) {
-                    dd("Gagal simpan PDF: " . $e->getMessage());
-                }
-                // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                return $fileName;
-            }
-            // Add a page break
-            $pdf->WriteHTML('<pagebreak />');
-
-            // Set the header for the second page
-            $headerLampirann='<table class="table" width="100%" border="0" style="margin-bottom: 20px">
-                                <tr class="tr_top">
-                                    <td class="text-left text-wrap" style="border: none;width: 40%">
-                                        <img class="img_0" src="' . public_path() . '/img/isl_logo.png" alt="ISL" />
-                                    </td>
-                                    <td style="border: none;width: 60%; text-align: center">
-                                        <h3 style="text-align: center;">
-                                            LAMPIRAN TANDA TERIMA DAN INFORMASI SAMPEL
-                                        </h3>
-                                        <table style="width: 100%" border="0">
-                                            <tr>
-                                                <td style="border: none;width: 33%; font-size: 10px; text-align: right">' . ($data->no_document ?? '') . '</td>
-                                                <td style="border: none;width: 33%; font-size: 10px; text-align: center">' . Carbon::now()->locale('id')->dayName . ' / ' . self::tanggal_indonesia(date('Y-m-d')) . '</td>
-                                                <td style="border: none;width: 33%; font-size: 10px; text-align: left">' . date('H:i') . '</td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>';
-
-            $pdf->SetHTMLHeader($headerLampirann, 'O');
-            // dd($data->kondisi_ubnormal);
-            // Second page content
+            // Set header lampiran (sama seperti halaman ke-2 di mode full)
+            
+            // Render tabel informasi kegiatan sampling (html2)
             $html2 = '<table class="table table-bordered" style="margin-bottom: 20px; width: 100%; table-layout: fixed;">
-                    <tr>
-                        <th colspan="2" class="text-center"><p style="font-size: 9px; word-wrap: break-word;">INFORMASI KEGIATAN SAMPLING</p></th>
-                        <th colspan="2" class="text-center"><p style="font-size: 9px; word-wrap: break-word;"></p></th>
-                    </tr>
-                    <tr>
-                        <td style="width: 25%; word-wrap: break-word;"><p style="font-size: 10px"><strong>Nama Petugas Sampling Pihak Pelanggan</strong></p></td>
-                        <td style="width: 25%; word-wrap: break-word;">' . (($detailSampelDatang != null ) ? $detailSampelDatang->petugas_pengambilan_sampel : '') . '</td>
-                        <td style="width: 25%; word-wrap: break-word;"><p style="font-size: 10px"><strong>Suhu Transportasi sampel</strong></p></td>
-                        <td style="word-wrap: break-word;">'.$data->tercatat.'</td>
-                    </tr>
-                    <tr>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Hari / Tanggal Sampling</strong></p></td>
-                        <td style="word-wrap: break-word;">'.$tanggalSampling.'</td>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Kondisi Abnormal
-                        </strong></p></td>
-                        <td style="word-wrap: break-word;">' . implode(", <br>", isset($data->kondisi_ubnormal) && $data->kondisi_ubnormal !== "null" ? json_decode($data->kondisi_ubnormal, true) : []) . '</td>
-                    </tr>
-                    <tr>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Acuan Metode Pengambilan Sampel</strong></p></td>
-                        <td style="word-wrap: break-word;">'.(($detailSampelDatang != null ) ? $detailSampelDatang->metode_standar : '').'</td>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Waktu Sampling</strong></p></td>
-                        <td style="word-wrap: break-word;">'.$waktuSamplingSampling.'</td>
-                    </tr>
-                    <tr>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Sertifikasi Tenaga Pengambil Sampel</strong></p></td>
-                        <td style="word-wrap: break-word;">'.(($detailSampelDatang != null ) ? $detailSampelDatang->nama_sertifikat : '').'</td>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Teknik Sampling</strong></p></td>
-                        <td style="word-wrap: break-word;">'.(($detailSampelDatang != null ) ? $detailSampelDatang->cara_pengambilan_sample : '').'</td>
-                    </tr>
-                    <tr>
-                        <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Kalibrasi Alat Ukur</strong></p></td>
-                        <td style="word-wrap: break-word;"></td>
-                        <td style="word-wrap: break-word;" colspan=2 ><p style="font-size: 10px"><strong></strong></p></td>
-                    </tr>
-                </table>';
-
-            // Write the information table
-            $pdf->WriteHTML($html2);
-            // Now build and write the data table
+                <tr>
+                    <th colspan="2" class="text-center"><p style="font-size: 9px; word-wrap: break-word;">INFORMASI KEGIATAN SAMPLING</p></th>
+                    <th colspan="2" class="text-center"><p style="font-size: 9px; word-wrap: break-word;"></p></th>
+                </tr>
+                <tr>
+                    <td style="width: 25%; word-wrap: break-word;"><p style="font-size: 10px"><strong>Nama Petugas Sampling Pihak Pelanggan</strong></p></td>
+                    <td style="width: 25%; word-wrap: break-word;">' . (($detailSampelDatang != null) ? $detailSampelDatang->petugas_pengambilan_sampel : '') . '</td>
+                    <td style="width: 25%; word-wrap: break-word;"><p style="font-size: 10px"><strong>Suhu Transportasi sampel</strong></p></td>
+                    <td style="word-wrap: break-word;">' . $data->tercatat . '</td>
+                </tr>
+                <tr>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Hari / Tanggal Sampling</strong></p></td>
+                    <td style="word-wrap: break-word;">' . $tanggalSampling . '</td>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Kondisi Abnormal</strong></p></td>
+                    <td style="word-wrap: break-word;">' . implode(", <br>", isset($data->kondisi_ubnormal) && $data->kondisi_ubnormal !== "null" ? json_decode($data->kondisi_ubnormal, true) : []) . '</td>
+                </tr>
+                <tr>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Acuan Metode Pengambilan Sampel</strong></p></td>
+                    <td style="word-wrap: break-word;">' . (($detailSampelDatang != null) ? $detailSampelDatang->metode_standar : '') . '</td>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Waktu Sampling</strong></p></td>
+                    <td style="word-wrap: break-word;">' . $waktuSamplingSampling . '</td>
+                </tr>
+                <tr>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Sertifikasi Tenaga Pengambil Sampel</strong></p></td>
+                    <td style="word-wrap: break-word;">' . (($detailSampelDatang != null) ? $detailSampelDatang->nama_sertifikat : '') . '</td>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Teknik Sampling</strong></p></td>
+                    <td style="word-wrap: break-word;">' . (($detailSampelDatang != null) ? $detailSampelDatang->cara_pengambilan_sample : '') . '</td>
+                </tr>
+                <tr>
+                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Kalibrasi Alat Ukur</strong></p></td>
+                    <td style="word-wrap: break-word;"></td>
+                    <td style="word-wrap: break-word;" colspan="2"><p style="font-size: 10px"><strong></strong></p></td>
+                </tr>
+            </table>';
             $html3 = '<table class="table table-bordered" style="margin-bottom: 20px; width: 100%; table-layout: fixed; word-wrap: break-word;">
                     <thead>
                     <tr>
@@ -779,89 +750,109 @@ class RenderSD
                     </tr>
                     </thead>
                     <tbody>';
-            if (empty($dataGabungan)) {
-                $html3 .= '<tr><td colspan="12" class="text-center">Tidak ada data</td></tr>';
-            } else {
-                // Body of the table
-                usort($dataGabungan, function($a, $b) {
-                    return strcmp($a['no_sampel'] ?? '', $b['no_sampel'] ?? '');
-                });
-                foreach ($dataGabungan as $row) {
-                    $warna = isset($row['warna']) && is_array($row['warna']) ? $row['warna'] : [];
-                    $eksternal = isset($row['eksternal']) && is_array($row['eksternal']) ? $row['eksternal'] : [];
 
-                    $html3 .= '<tr>
-                        <td class="text-center">' . ($row['no_sampel'] ?? '-') . '</td>
-                        <td class="text-center">' . ($eksternal['deskripsi_titik'] ?? '-') . '</td>
-                        <td class="text-center">' . ($row['jenis_sampel'] ?? '-') . '</td>
-
-                        <td class="text-center">' . ($row['ph'] ?? '-') . '</td>
-                        <td class="text-center">' . ($eksternal['ph'] ?? '-') . '</td>
-
-                        <td class="text-center">' . ($row['dhl'] ?? '-') . '</td>
-                        <td class="text-center">' . ($eksternal['dhl'] ?? '-') . '</td>
-
-                        <td class="text-center">' . (
-                            array_key_exists('suhu', $row) && $row['suhu'] !== null && $row['suhu'] !== ''
-                                ? $row['suhu']
-                                : '-'
-                        ) . '</td>
-                        <td class="text-center">' . (isset($eksternal['suhu']) && $eksternal['suhu'] !== null ? $eksternal['suhu'] : '-') . '</td>';
-                    $html3 .= '<td class="text-center">' . ($row['warna'] ?? '-') . '</td>';
-                    $html3 .= '<td class="text-center">' . ($row['bau'] ?? '-') . '</td>
-                        <td class="text-center">' . ($row['keruh'] ?? '-') . '</td>';
-                    // pengawetan dan blanco
-                    $html3 .='<td class="text-center">' . ($eksternal['pengawetan'] ?? '-') . '</td>
-                        <td class="text-center">' . ($eksternal['deskripsi_blanko_pencucian'] ?? '-') . '</td>';
-                    $html3 .= '</tr>';
+                if (empty($dataGabungan)) {
+                    $html3 .= '<tr><td colspan="14" class="text-center">Tidak ada data</td></tr>';
+                } else {
+                    usort($dataGabungan, fn($a, $b) => strcmp($a['no_sampel'] ?? '', $b['no_sampel'] ?? ''));
+                    foreach ($dataGabungan as $row) {
+                        $ekst = isset($row['eksternal']) && is_array($row['eksternal']) ? $row['eksternal'] : [];
+                        $html3 .= '<tr>
+                            <td class="text-center">' . ($row['no_sampel'] ?? '-') . '</td>
+                            <td class="text-center">' . ($ekst['deskripsi_titik'] ?? '-') . '</td>
+                            <td class="text-center">' . ($row['jenis_sampel'] ?? '-') . '</td>
+                            <td class="text-center">' . ($row['ph'] ?? '-') . '</td>
+                            <td class="text-center">' . ($ekst['ph'] ?? '-') . '</td>
+                            <td class="text-center">' . ($row['dhl'] ?? '-') . '</td>
+                            <td class="text-center">' . ($ekst['dhl'] ?? '-') . '</td>
+                            <td class="text-center">' . (array_key_exists('suhu', $row) && $row['suhu'] !== null && $row['suhu'] !== '' ? $row['suhu'] : '-') . '</td>
+                            <td class="text-center">' . (isset($ekst['suhu']) && $ekst['suhu'] !== null ? $ekst['suhu'] : '-') . '</td>
+                            <td class="text-center">' . ($row['warna'] ?? '-') . '</td>
+                            <td class="text-center">' . ($row['bau'] ?? '-') . '</td>
+                            <td class="text-center">' . ($row['keruh'] ?? '-') . '</td>
+                            <td class="text-center">' . ($ekst['pengawetan'] ?? '-') . '</td>
+                            <td class="text-center">' . ($ekst['deskripsi_blanko_pencucian'] ?? '-') . '</td>
+                        </tr>';
+                    }
                 }
+                $html3 .= '</tbody></table>';
+                // TTD lampiran data (html4)
+                $html4 = '<table class="table" width="100%" style="border: none;margin-top: 20px">
+                    <tr>
+                        <td style="border: none;width: 30%; text-align: center;"><p><strong>Diserahkan Oleh,</strong></p></td>
+                        <td style="border: none;width: 20%; text-align: center;"></td>
+                        <td style="border: none;width: 20%; text-align: center;"></td>
+                        <td style="border: none;width: 30%; text-align: center;"><p><strong>Diterima Oleh,<br>PT INTI SURYA LABORATORIUM</strong></p></td>
+                    </tr>
+                    <tr>
+                        <td style="border: none;width: 30%; text-align: center;height: 80px;"></td>
+                        <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
+                        <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
+                        <td style="border: none;width: 30%; text-align: center;height: 80px;"></td>
+                    </tr>
+                    <tr>
+                        <td style="border: none;width: 30%;text-align: center;"><p><strong>(.......................................)</strong></p></td>
+                        <td style="border: none;width: 20%;text-align: center;"></td>
+                        <td style="border: none;width: 20%;text-align: center;"></td>
+                        <td style="border: none;width: 30%;text-align: center;"><p><strong>(.......................................)</strong></p></td>
+                    </tr>
+                </table>';
+            if($mode == 'terima'){
+                // Write the first page
+                $pdf->WriteHTML($html1);
+                $dir = public_path('dokumen/sampelSD/');
+                if (!file_exists($dir)) {
+                    mkdir($dir, 0777, true);
+                }
+                $filePath = public_path('dokumen/sampelSD/' . $fileName);
+                // dd($filePath);
+
+                // The following code is unreachable due to the return statement above
+                try {
+                    $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
+                } catch (\Exception $e) {
+                    dd("Gagal simpan PDF: " . $e->getMessage());
+                }
+                // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
+                return $fileName;
             }
-
-            // Close the table
-            $html3 .= '</tbody></table>';
-
-            // Write the data table
-            $pdf->WriteHTML($html3);
-
-            // Finally add the signature table
-            $html4 = '<table class="table" width="100%" style="border: none;margin-top: 20px">
-                <tr>
-                    <td style="border: none;width: 30%; text-align: center;"><p><strong>Diserahkan Oleh,</strong></p></td>
-                    <td style="border: none;width: 20%; text-align: center;"></td>
-                    <td style="border: none;width: 20%; text-align: center;"></td>
-                    <td style="border: none;width: 30%; text-align: center;"><p><strong>Diterima Oleh,<br>PT INTI SURYA LABORATORIUM</strong></p></td>
-                </tr>
-                <tr>
-                    <td style="border: none;width: 30%; text-align: center;height: 80px;"></td>
-                    <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
-                    <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
-                    <td style="border: none;width: 30%; text-align: center;height: 80px;"></td>
-                </tr>
-                <tr>
-                    <td style="border: none;width: 30%;text-align: center;"><p><strong>(.......................................)</strong></p></td>
-                    <td style="border: none;width: 20%;text-align: center;"></td>
-                    <td style="border: none;width: 20%;text-align: center;"></td>
-                    <td style="border: none;width: 30%;text-align: center;"><p><strong>(.......................................)</strong></p></td>
-                </tr>
-            </table>';
-            $pdf->WriteHTML($html4);
-            // return $pdf->Output("", "I");
-            // Output the PDF
-            $dir = public_path('dokumen/sampelSD/');
-            if (!file_exists($dir)) {
-                mkdir($dir, 0777, true);
+            if ($mode == 'lampiran_data') {
+                $pdf->WriteHTML($html2);
+                $pdf->WriteHTML($html3);
+                $pdf->WriteHTML($html4);
+                // Simpan dan return
+                $dir = public_path('dokumen/sampelSD/');
+                if (!file_exists($dir)) {
+                    mkdir($dir, 0777, true);
+                }
+                $filePath = public_path('dokumen/sampelSD/' . $fileName);
+                try {
+                    $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
+                } catch (\Exception $e) {
+                    dd("Gagal simpan PDF: " . $e->getMessage());
+                }
+                return $fileName;
             }
-            $filePath = public_path('dokumen/sampelSD/' . $fileName);
-            // dd($filePath);
-
-            // The following code is unreachable due to the return statement above
-            try {
-                $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            } catch (\Exception $e) {
-                dd("Gagal simpan PDF: " . $e->getMessage());
+            if($mode == 'full'){
+                $pdf->WriteHTML($html1);
+                $pdf->WriteHTML('<pagebreak />');
+                $pdf->WriteHTML($html2);
+                $pdf->WriteHTML($html3);
+                $pdf->WriteHTML($html4);
+                // Simpan dan return
+                $dir = public_path('dokumen/sampelSD/');
+                if (!file_exists($dir)) {
+                    mkdir($dir, 0777, true);
+                }
+                $filePath = public_path('dokumen/sampelSD/' . $fileName);
+                try {
+                    $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
+                } catch (\Exception $e) {
+                    dd("Gagal simpan PDF: " . $e->getMessage());
+                }
+                return $fileName;
             }
-            // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            return $fileName;
+           
         } catch (\Exception $e) {
             return response()->json(
                 [
