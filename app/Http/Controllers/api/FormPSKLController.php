@@ -8,6 +8,7 @@ use App\Models\OrderDetail;
 use App\Models\MasterPelanggan;
 use App\Models\QuotationNonKontrak;
 use App\Models\QuotationKontrakH;
+use App\Models\ParameterKategoriSk;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
@@ -74,12 +75,21 @@ class FormPSKLController extends Controller
             }
 
             $query->where('no_document', 'like', "%{$term}%");
+            $kategoriSk = ParameterKategoriSk::where('is_active', true)
+                ->get()
+                ->map(function ($kategori) {
+                    return [
+                        'nama_kategori_sk' => $kategori->nama_kategori,
+                        'kategori_1' => $kategori->kategori,
+                        'parameter' => json_decode($kategori->parameters, true)
+                    ];
+                });
 
             $data = $this->applyJabatanFilter($query, $request)
                 ->whereHas('pelanggan')
                 ->limit(20)
                 ->get()
-                ->map(function ($item) {
+                ->map(function ($item) use ($kategoriSk) {
 
                     if ($item->relationLoaded('detail')) {
                         $dataPendukung = $item->detail->flatMap(function ($d) {
@@ -95,7 +105,8 @@ class FormPSKLController extends Controller
                         'nama_pelanggan' => $item->pelanggan->nama_pelanggan,
                         'wilayah' => $item->pelanggan->wilayah,
                         'sales_penanggung_jawab' => $item->pelanggan->sales_penanggung_jawab,
-                        'data_pendukung_sampling' => $dataPendukung
+                        'data_pendukung_sampling' => $dataPendukung,
+                        'kategori_sk' => $kategoriSk
                     ];
                 });
 
@@ -190,6 +201,8 @@ class FormPSKLController extends Controller
 
         // Ambil data dari OrderHeader
         $orderHeader = OrderHeader::where('id', $idOrderHeader)->first();
+        $kategoriSk = ParameterKategoriSk::where('is_active', true)->get();
+        dd($kategoriSk);
 
         return response()->json([
             'data' => [
@@ -252,7 +265,9 @@ class FormPSKLController extends Controller
             $data->id_pelanggan = $request->id_pelanggan;
             $data->nama_pelanggan = $request->nama_pelanggan;
             $data->sales_penanggung_jawab = $request->sales_penanggung_jawab;
-            $data->tanggal_sampling = $request->tanggal_sampling;
+            $data->tanggal_sampling = $request->filled('tanggal_sampling') 
+                ? $request->tanggal_sampling 
+                : null;
             $data->no_quotation = $request->no_quotation;
             $data->wilayah = $request->wilayah;
             $data->periode = $request->periode;
@@ -264,6 +279,7 @@ class FormPSKLController extends Controller
             $data->catatan = $request->catatan;
             $data->status = $request->status;
             $data->data_pendukung_sampling = $request->data_pendukung_sampling;
+            $data->detail_kategori_sk = $request->detail_kategori_sk;
             $data->sales_id = $this->user_id;
             $data->save();
 

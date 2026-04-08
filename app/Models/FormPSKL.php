@@ -13,6 +13,7 @@ class FormPSKL extends Sector
     protected $casts = [
         'kategori_sk' => 'array',
         'data_pendukung_sampling' => 'array',
+        'detail_kategori_sk' => 'array',
     ];
 
     public function order_header()
