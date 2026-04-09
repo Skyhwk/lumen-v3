@@ -42,7 +42,7 @@ class RenderSD
             } else {
                 $data = SampelDiantar::with('detail')->where('id', $id)->first();
             }
-            
+
             $mpdfConfig = array(
                 'mode' => 'utf-8',
                 'format' => 'A4',
@@ -422,7 +422,7 @@ class RenderSD
 
     protected function renderBody($pdf, $data, $fileName,$periode,$mode)
     {
-        
+
         try {
             $datas = OrderDetail::where('kategori_1', 'SD')
                 ->where('no_order', $data->no_order)
@@ -498,7 +498,7 @@ class RenderSD
                 $waktu =null;
                 $sertfikasi =null;
             }
-           
+
             if($internal){
                 $internalCollec =collect($internal);
                 $jenisWadahSampel = collect($internalCollec)
@@ -536,27 +536,27 @@ class RenderSD
             }
             $jam = $createdAt ? Carbon::parse($createdAt)->format('H:i') : '-';
             $headerLemabaran = '
-<table width="100%" border="0" cellpadding="0" cellspacing="0" 
+<table width="100%" border="0" cellpadding="0" cellspacing="0"
        style="border-collapse: collapse; margin-bottom: 8px;">
     <tr>
-        <td style="border: none; 
-                   width: 26%; 
-                   vertical-align: middle; 
+        <td style="border: none;
+                   width: 26%;
+                   vertical-align: middle;
                    padding-right: 8px;">
-            <img src="' . public_path('/img/isl_logo.png') . '" 
+            <img src="' . public_path('/img/isl_logo.png') . '"
                  alt="ISL" style="width: 110px; height: auto;" />
         </td>
 
-        <td style="border: none; 
-                   width: 74%; 
-                   vertical-align: middle; 
-                   text-align: right; 
+        <td style="border: none;
+                   width: 74%;
+                   vertical-align: middle;
+                   text-align: right;
                    padding-left: 8px;">
-            
-            <p style="margin: 0; padding: 0; 
-                      font-size: 11px; 
-                      font-weight: bold; 
-                      text-align: right; 
+
+            <p style="margin: 0; padding: 0;
+                      font-size: 11px;
+                      font-weight: bold;
+                      text-align: right;
                       line-height: 1.1;">
                 LEMBAR TANDA TERIMA DAN INFORMASI SAMPEL DATANG
             </p>
@@ -564,15 +564,15 @@ class RenderSD
             <table align="right" border="0" cellpadding="0" cellspacing="0"
                    style="margin-top: 2px; border-collapse: collapse;">
                 <tr>
-                    <td style="border: none; text-align: right; 
+                    <td style="border: none; text-align: right;
                                font-size: 9px; padding-right: 20px;">
                         ' . ($data->no_document ?? '') . '
                     </td>
-                    <td style="border: none; text-align: right; 
+                    <td style="border: none; text-align: right;
                                font-size: 9px; padding-right: 20px;">
                         ' . $dayName . ' / ' . $tanggal . '
                     </td>
-                    <td style="border: none; text-align: right; 
+                    <td style="border: none; text-align: right;
                                font-size: 9px; padding-right: 0;">
                         ' . $jam . '
                     </td>
@@ -607,7 +607,7 @@ class RenderSD
                 $informasiWadahSampel = null;
             }
 
-            
+
             $html1 = '<table class="table table-bordered" style="margin-bottom: 20px; width: 100%; table-layout: fixed;">
                                 <tr>
                                     <th colspan="2" class="text-center"><p style="font-size: 9px; word-wrap: break-word;">INFORMASI PELANGGAN</p></th>
@@ -628,7 +628,7 @@ class RenderSD
                                  <tr>
                                     <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Alamat Pelanggan</strong></p></td>
                                     <td style="word-wrap: break-word;">' . ($data->alamat_perusahaan ?? '') . '</td>
-                                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>No Penewaran</strong></p></td>
+                                    <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>No Penawaran</strong></p></td>
                                     <td style="word-wrap: break-word;">' . ($data->no_quotation ?? '') . '</td>
                                 </tr>
                                 <tr>
@@ -643,8 +643,8 @@ class RenderSD
                                     <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong></strong></p></td>
                                     <td style="word-wrap: break-word;"></td>
                                 </tr>
-                               
-                                
+
+
                             </table>';
                 if($data['ttd_pengirim'] !== null){
                     $ttd_pengirim = $this->decodeImageToBase64($data['ttd_pengirim']);
@@ -688,7 +688,7 @@ class RenderSD
                     </tr>
                 </table>';
             // Set header lampiran (sama seperti halaman ke-2 di mode full)
-            
+
             // Render tabel informasi kegiatan sampling (html2)
             $html2 = '<table class="table table-bordered" style="margin-bottom: 20px; width: 100%; table-layout: fixed;">
                 <tr>
@@ -852,7 +852,7 @@ class RenderSD
                 }
                 return $fileName;
             }
-           
+
         } catch (\Exception $e) {
             return response()->json(
                 [
