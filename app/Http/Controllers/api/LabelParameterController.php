@@ -101,8 +101,9 @@ class LabelParameterController extends Controller
                 ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_laboratory', $request->selectedDate))
                 ->where([
                     'kategori_2' => $request->selectedCategory . "-" . MasterKategori::find($request->selectedCategory)->nama_kategori,
-                    'is_active' => true
+                    'is_active' => true,
                 ])
+                ->whereIn('no_sampel', $request->selectedSamples)
                 ->whereJsonContains('parameter', Parameter::where(['nama_lab' => $request->selectedParameter, 'id_kategori' => $request->selectedCategory, 'is_active' => true])->first()->id . ";" . $request->selectedParameter)
                 ->get();
 
