@@ -31,6 +31,51 @@ class PortalSdController extends Controller
                 ->where('is_revisi',0)
                 ->first();
 
+            // logic untuk pra-order:
+            if($search == null){
+                if ($type[1] == 'QTC') {
+
+                }else{
+                    $search = QuotationNonKontrak::where('no_document',$request->no_document)
+                    ->where('is_active',1)
+                    ->first();
+                     if ($search) {
+                        // Generate no_sampel dari penamaan_titik
+                        $pendukung = json_decode($search->data_pendukung_sampling, true) ?? [];
+                        $generatedSampel = [];
+                        foreach ($pendukung as $item) {
+                            foreach ($item['penamaan_titik'] as $titik) {
+                                foreach ($titik as $key => $namaLokasi) {
+                                    // Format: TPTT01****/001
+                                    $noSampel = $search->pelanggan_ID . '****/'. $key;
+                                    $generatedSampel[] = [
+                                        'no_sampel'    => $noSampel,
+                                        'keterangan_1' => $namaLokasi,
+                                        'kategori_2'   => $item['kategori_1'] ?? '',
+                                        'kategori_3'   => $item['kategori_2'] ?? '',
+                                        'parameter'    => json_encode($item['parameter'] ?? []),
+                                         'persiapan'    => json_encode([
+                                            ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
+                                        ]),
+                                        'periode' => null,
+                                        'tanggal_sampling'=>null,
+                                        'no_order'=>null,
+                                        'nama_perusahaan'=> $search->nama_perusahaan,
+                                        'alamat_perusahaan'=> $search->alamat_kantor
+                                    ];
+                                }
+                            }
+                        }
+                    
+                        // Inject sebagai virtual order_detail
+                        $search->order_detail = $generatedSampel;
+                        $search->sampel_diantar = [];
+                        $search->is_pra_order = true;
+                     }
+
+                }
+            }
+
             if ($type[1] == 'QTC') {
                 return response()->json(['type' => 'kontrak', 'data' => $search], 200);
             } else {
