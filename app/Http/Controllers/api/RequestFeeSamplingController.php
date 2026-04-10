@@ -200,7 +200,7 @@ class RequestFeeSamplingController extends Controller
         }
     }
 
-    private function checkAutoApprove($idHeader, $type, $alasan_reject = null){ {
+    private function checkAutoApprove($idHeader, $type, $alasan_reject = null) {
         $header = PengajuanFeeSampling::where('id', $idHeader)->first();
 
         $remaining = PengajuanFeeSamplingDetail::where('is_approve_finance', 0)->where('is_reject_finance', 0)->where('pengajuan_fee_sampling_id', $headerId)->count();
