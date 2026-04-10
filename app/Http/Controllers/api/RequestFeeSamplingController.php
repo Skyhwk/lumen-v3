@@ -64,7 +64,7 @@ class RequestFeeSamplingController extends Controller
                 $data->save();
             }
             
-            self::checkAutoApprove($dataList->first()->pengajuan_fee_sampling_id, 'reject');
+            self::checkAutoApprove($dataList->first()->pengajuan_fee_sampling_id, 'reject', $request->keterangan);
 
             DB::commit();
             return response()->json([
@@ -200,7 +200,7 @@ class RequestFeeSamplingController extends Controller
         }
     }
 
-    private checkAutoApprove($idHeader, $type){
+    private function checkAutoApprove($idHeader, $type, $alasan_reject = null){ {
         $header = PengajuanFeeSampling::where('id', $idHeader)->first();
 
         $remaining = PengajuanFeeSamplingDetail::where('is_approve_finance', 0)->where('is_reject_finance', 0)->where('pengajuan_fee_sampling_id', $headerId)->count();
@@ -208,15 +208,15 @@ class RequestFeeSamplingController extends Controller
         if($remaining == 0){
             if($type =='approve'){
                 $header->is_approve_finance = 1;
-                $data->status_payment = "Approved by finance";
-                $data->alasan_reject_expanse = null;
-                $data->is_reject_expanse = 0;
+                $header->status_payment = "Approved by finance";
+                $header->alasan_reject_expanse = null;
+                $header->is_reject_expanse = 0;
             } else {
-                $data->is_reject_finance = 1;
-                $data->alasan_reject = $request->alasan_reject;
-                $data->status_payment = "Rejected";
-                $data->is_approve_finance = 0;
-                $data->is_active = 0;
+                $header->is_reject_finance = 1;
+                $header->alasan_reject = $alasan_reject;
+                $header->status_payment = "Rejected";
+                $header->is_approve_finance = 0;
+                $header->is_active = 0;
             }
             $header->save();
         }
