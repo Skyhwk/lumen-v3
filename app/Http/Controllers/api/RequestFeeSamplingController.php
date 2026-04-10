@@ -220,5 +220,7 @@ class RequestFeeSamplingController extends Controller
             }
             $header->save();
         }
+
+        return;
     }
 }
