@@ -22,9 +22,10 @@ class RequestFeeSamplingController extends Controller
             ->where('is_active', 1)
             ->get()
             ->map(function ($item) {
-                $item->can_approve = $item->detail_fee->every(function ($detail) {
-                    return $detail->approved_at !== null || $detail->rejected_at !== null;
-                });
+                // $item->can_approve = $item->detail_fee->every(function ($detail) {
+                //     return $detail->approved_at !== null || $detail->rejected_at !== null;
+                // });
+                $item->can_approve = true;
 
                 return $item;
             });
