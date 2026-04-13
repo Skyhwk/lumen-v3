@@ -169,7 +169,7 @@ class PortalCustomerController extends Controller
 
         // Prepare the professional email body with a blue button
         $buttonStyle = 'background-color: #0073e6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;';
-        $loginUrl =  env('PORTALV4').'/customer/login';
+        $loginUrl =  env('PPI_URL').'/customer/login';
         Users::where('email', $user)->update(['password'=> Hash::make($password), 'template'=>$request->template,'is_cheklist' => true]);
         $userApp = Users::where('email', $user)->where('is_cheklist',true)->first();
         $body = '<body style="font-family: Arial, sans-serif; color: #000;">
