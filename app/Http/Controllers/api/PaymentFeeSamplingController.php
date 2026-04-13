@@ -43,7 +43,7 @@ class PaymentFeeSamplingController extends Controller
             }
 
             DB::commit();
-            // app(NotificationFdlService::class)->sendNotification('Pembayaran Fee Sampling', "Pembayaran fee sampling telah dilakukan pada tanggal {$request->transfer_date}", $data->created_by);
+            app(NotificationFdlService::class)->sendNotification('Pembayaran Fee Sampling', "Pembayaran fee sampling telah dilakukan pada tanggal {$request->transfer_date}", $data->created_by);
             return response()->json(['success' => true, 'message' => 'Taggal Transfer berhasil di perbarui', 'status' => 200], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
