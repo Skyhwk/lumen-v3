@@ -19,74 +19,49 @@ class FeeSamplingController extends Controller
             $q->where('is_approve', 1);
         }])
             ->where('is_approve_finance', 1)
-            ->whereIn('status_payment', ["Approved by finance", "Approved by expanse"]);
+            ->whereNotNull('transfer_date')
+            ->where('is_upload_bukti_pembayaran', 0);
 
         return Datatables::of($data)->make(true);
     }
-    public function handleReject(Request $request)
+    
+    public function uploadFile(Request $request)
     {
         DB::beginTransaction();
         try {
-            $data = PengajuanFeeSampling::where('id', $request->id)->first();
-            if ($data) {
-                $data->is_reject_expanse = 1;
-                $data->is_approve_finance = 0;
-                $data->alasan_reject_expanse = $request->alasan_reject;
-                $data->status_payment = "Rejected by expanse";
-                $data->save();
-            } else {
-                return response()->json(['success' => false, 'message' => 'Data tidak ditemukan', 'status' => 400], 400);
+            $file = $request->file('file_input');
+
+            // Validasi file
+            // if (!$file || $file->getClientOriginalExtension() !== 'pdf') {
+            //     return response()->json(['error' => 'File tidak valid. Harus .pdf'], 400);
+            // }
+
+            $claim = PengajuanFeeSampling::find($request->id);
+            // Pastikan folder invoice ada
+            $folder = public_path('bukti_pembayaran_fee_sampling');
+            if (!file_exists($folder)) {
+                mkdir($folder, 0777, true);
             }
 
-            DB::commit();
-            return response()->json(['success' => true, 'message' => 'Data berhasil di reject', 'status' => 200], 200);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => $th->getMessage(), 'status' => 500], 500);
-        }
-    }
+            // Generate nama file unik
+            $fileName = str_replace(".", "", microtime(true)) . '_' . Carbon::now()->format('YmdHis') . '.' . $file->getClientOriginalExtension();
 
-    public function handleApprove(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $data = PengajuanFeeSampling::where('id', $request->id)->first();
-            if ($data) {
-                $data->is_approve_expanse = 1;
-                $data->status_payment = 'Approved by expanse';
-
-                $data->save();
-            } else {
-                return response()->json(['success' => false, 'message' => 'Data tidak ditemukan', 'status' => 400], 400);
-            }
+            // Simpan file
+            $file->move($folder, $fileName);
+            $claim->filename = $fileName;
+            $claim->is_upload_bukti_pembayaran = 1;
+            $claim->save();
 
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Data berhasil di approve', 'status' => 200], 200);
-        } catch (\Throwable $th) {
+            return response()->json([
+                'success'  => 'Sukses menyimpan file upload',
+            ]);
+        } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'message' => $th->getMessage(), 'status' => 500], 500);
-        }
-    }
-    public function handleUpdateTransfer(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $data = PengajuanFeeSampling::where('id', $request->id)->first();
-            if ($data) {
-                $data->transfer_date = $request->transfer_date;
-                $data->transfered_by = $this->karyawan;
-                $data->status_payment = 'PAID';
-
-                $data->save();
-            } else {
-                return response()->json(['success' => false, 'message' => 'Data tidak ditemukan', 'status' => 400], 400);
-            }
-
-            DB::commit();
-            return response()->json(['success' => true, 'message' => 'Taggal Transfer berhasil di perbarui', 'status' => 200], 200);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => $th->getMessage(), 'status' => 500], 500);
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
 }

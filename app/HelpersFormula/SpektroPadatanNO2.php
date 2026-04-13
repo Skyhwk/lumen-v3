@@ -6,10 +6,9 @@ class SpektroPadatanNO2
 {
     public function index($data, $id_parameter, $mdl)
     {
-        $rumus = ($data->hp * 3.2845) * $data->fp;
+        $rumus = number_format(($data->hp * 3.28443) * $data->fp, 4, '.', '');
         if (!is_null($mdl) && $rumus < $mdl)
             $rumus = '<' . $mdl;
-        $rumus = str_replace(",", "", $rumus);
 
         $data = [
             'hasil' => $rumus,

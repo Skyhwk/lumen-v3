@@ -118,12 +118,12 @@ class CustomerPortalController extends Controller
     public function getCompany(Request $request)
     {
         $idPelanggan = $request->id_pelanggan;
-    
+
         // Ambil data pelanggan dulu
         $company = MasterPelanggan::where('id_pelanggan', $idPelanggan)
             ->where('is_active', true)
             ->firstOrFail();
-    
+
         // Ambil total quotations sekaligus
         $quotationKontrak = QuotationKontrakH::selectRaw("
                 SUM(CASE WHEN flag_status NOT IN ('rejected', 'void') THEN 1 ELSE 0 END) AS total_quotation,
@@ -132,7 +132,7 @@ class CustomerPortalController extends Controller
             ->where('pelanggan_ID', $idPelanggan)
             ->where('is_active', true)
             ->first();
-    
+
         $quotationNonKontrak = QuotationNonKontrak::selectRaw("
                 SUM(CASE WHEN flag_status NOT IN ('rejected', 'void') THEN 1 ELSE 0 END) AS total_quotation,
                 SUM(CASE WHEN flag_status = 'ordered' THEN 1 ELSE 0 END) AS total_ordered
@@ -140,10 +140,10 @@ class CustomerPortalController extends Controller
             ->where('pelanggan_ID', $idPelanggan)
             ->where('is_active', true)
             ->first();
-    
+
         $company->totalQuotations = ($quotationKontrak->total_quotation ?? 0) + ($quotationNonKontrak->total_quotation ?? 0);
         $company->totalOrderRecap = ($quotationKontrak->total_ordered ?? 0) + ($quotationNonKontrak->total_ordered ?? 0);
-    
+
         // Total Order dari Order Detail
         $company->totalOrders = OrderDetail::whereHas('orderHeader', function ($query) use ($idPelanggan) {
                 $query->where('id_pelanggan', $idPelanggan)
@@ -151,13 +151,13 @@ class CustomerPortalController extends Controller
             })
             ->where('is_active', true)
             ->count();
-    
+
         // List no_order dalam 1 array
         $noOrders = OrderHeader::where('id_pelanggan', $idPelanggan)
             ->where('is_active', true)
             ->pluck('no_order')
             ->toArray();
-    
+
         // Hitung semua LHPS langsung
         $lhpsTables = [
             'lhps_air_header',
@@ -170,7 +170,7 @@ class CustomerPortalController extends Controller
             'lhps_pencahayaan_header',
             'lhps_sinaruv_header'
         ];
-    
+
         $totalLhps = 0;
         if (!empty($noOrders)) {
             foreach ($lhpsTables as $table) {
@@ -179,26 +179,26 @@ class CustomerPortalController extends Controller
                     ->count();
             }
         }
-    
+
         $company->totalLhps = $totalLhps;
-    
+
         // Total invoice
         $company->totalInvoices = Invoice::where('pelanggan_id', $idPelanggan)
             ->where('rekening', '4976688988')
             ->where('is_active', true)
             ->count();
-    
+
         // Total PO
         $company->totalPurchaseOrders = PurchaseOrder::where('id_pelanggan', $idPelanggan)
             ->where('is_active', true)
             ->count();
-    
+
         return response()->json([
             'status'  => 'success',
             'data'    => $company,
             'message' => 'Company details fetched successfully'
         ], 200);
-    } 
+    }
 
     public function getSingleCompany(Request $request)
     {
@@ -232,7 +232,7 @@ class CustomerPortalController extends Controller
             QuotationNonKontrak::class
         ])->flatMap(
             fn($model) =>
-            $model::with('order')
+            $model::with(['order', 'jadwal_customer'])
                 ->where([
                     'pelanggan_ID' => $request->id_pelanggan,
                     'is_active' => true,

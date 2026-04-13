@@ -6,10 +6,9 @@ class SpektroPadatanAAS
 {
     public function index($data, $id_parameter, $mdl)
     {
-        $rumus = $data->hp * $data->fp;
+        $rumus = number_format($data->hp * $data->fp, 5, '.', '');
         if (!is_null($mdl) && $rumus < $mdl)
             $rumus = '<' . $mdl;
-        $rumus = str_replace(",", "", $rumus);
 
         $data = [
             'hasil' => $rumus,

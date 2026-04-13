@@ -22,43 +22,7 @@ use App\Services\RenderSD;
 
 class SampelDatangController extends Controller
 {
-    /* public function index()
-    {
-        $samples = SampelSD::with('order')->latest()->get();
-
-        return DataTables::of($samples)->make(true);
-    } */
-    /*16062025 public function index()
-    {
-        try {
-            //code...
-            $samples = SampelDiantar::with(['order.orderDetail' => function ($query) {
-                $query->where('is_active', true)
-                      ->where('kategori_1', 'SD');
-            }])->get();
-            $samples->each(function ($sample) {
-                $uniquePeriode = collect();
-                if ($sample->order && $sample->order->orderDetail) {
-                    $uniquePeriode = $sample->order->orderDetail
-                        ->pluck('periode')
-                        ->filter()         // buang null
-                        ->unique()         // hanya yang unik
-                        ->values();        // reset index
-                }
-
-                // Tambahkan properti baru dinamis
-                $sample->setAttribute('unique_periode', $uniquePeriode);
-            });
-            return DataTables::of($samples)
-            ->addColumn('periode', function ($row) {
-                return $row->unique_periode->implode(', '); // atau ->join(', ') tergantung versi
-            })
-            ->make(true);
-        } catch (\Exception $e) {
-            return response()->json(["message"=>$e->getMessage(),"line"=>$e->getLine()],404);
-            //throw $th;
-        }
-    } */
+    
     public function index()
     {
         try {
@@ -256,6 +220,9 @@ class SampelDatangController extends Controller
             else if($request->mode == 'terima'){
                 $render->renderHeader($request->id,$request->periode,$request->mode);
             }else if($request->mode == 'full'){
+                $render->renderHeader($request->id,$request->periode,$request->mode);
+            }else if($request->mode == 'lampiran_data'){
+                
                 $render->renderHeader($request->id,$request->periode,$request->mode);
             }
             // dd($render);
