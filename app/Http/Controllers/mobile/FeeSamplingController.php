@@ -133,136 +133,148 @@ class FeeSamplingController extends Controller
         return response()->json(['data' => $jadwal], 200);
     }
 
-
-
-
     public function rekapFeeSampling(Request $request)
     {
-        // Validasi input
-        if (!is_array($request->tanggal) || empty($request->tanggal)) {
-            return response()->json(['message' => 'Tanggal Tidak Boleh Kosong'], 422);
-        }
+        try {
+            // Validasi input
+            if (!is_array($request->tanggal) || empty($request->tanggal)) {
+                return response()->json(['message' => 'Tanggal Tidak Boleh Kosong'], 422);
+            }
 
-        // Ambil jadwal dengan relasi yang dibutuhkan
-        $jadwals = Jadwal::with('orderDetail')
-            ->where('is_active', true)
-            ->where('userid', $this->user_id)
-            ->whereIn('tanggal', $request->tanggal)
-            ->get()
-            ->filter(function ($jadwal) {
-                return $jadwal->orderDetail->isNotEmpty();
-            });
-
-        if ($jadwals->isEmpty()) {
-            return response()->json(['message' => 'Jadwal Tidak Ditemukan Untuk Tanggal Tersebut'], 404);
-        }
-
-        $categoryMappings = [
-            'Air' => [[DataLapanganAir::class]],
-            'Emisi Sumber Tidak Bergerak' => [[DataLapanganEmisiCerobong::class]],
-            'Emisi Kendaraan' => [[DataLapanganEmisiKendaraan::class]],
-            'Udara Ambient' => [
-                [DataLapanganPartikulatMeter::class],
-                [DataLapanganLingkunganHidup::class, DataLapanganSenyawaVolatile::class]
-            ],
-            'Udara Lingkungan Kerja' => [
-                [DataLapanganPartikulatMeter::class],
-                [DataLapanganLingkunganKerja::class, DataLapanganSenyawaVolatile::class]
-            ],
-            'Udara Angka Kuman' => [
-                [DataLapanganPartikulatMeter::class],
-                [DataLapanganMicrobiologi::class]
-            ],
-            'Kebisingan' => [[DataLapanganKebisingan::class, DataLapanganKebisinganPersonal::class]],
-            'Kebisingan (24 Jam)' => [[DataLapanganKebisingan::class]],
-            'Pencahayaan' => [[DataLapanganCahaya::class]],
-            'Getaran (Mesin)' => [[DataLapanganGetaran::class]],
-            'Getaran (Kejut Bangunan)' => [[DataLapanganGetaran::class]],
-            'Getaran' => [[DataLapanganGetaran::class]],
-            'Getaran (Lengan & Tangan)' => [[DataLapanganGetaranPersonal::class]],
-            'Getaran (Seluruh Tubuh)' => [[DataLapanganGetaranPersonal::class]],
-            'Iklim Kerja' => [[DataLapanganIklimPanas::class, DataLapanganIklimDingin::class]],
-            'Udara Swab Test' => [[DataLapanganSwab::class]],
-            'Ergonomi' => [[DataLapanganErgonomi::class]],
-        ];
-
-        $tanggal_revisi = $jadwals
-            ->filter(fn($jadwal) => empty($jadwal->orderDetail[0]->no_order))
-            ->pluck('tanggal')
-            ->unique()
-            ->values()
-            ->toArray();
-
-
-        if (!empty($tanggal_revisi)) {
-            return response()->json([
-                'message' => 'Terdapat Nomor Penawaran yang Sedang Dalam Tahap Revisi Pada Tanggal ' . implode(', ', $tanggal_revisi),
-            ], 401);
-        }
-
-        $allSamples = [];
-        foreach ($jadwals as $jadwal) {
-            $noOrder = $jadwal->orderDetail->first()->no_order;
-            $kategoriList = json_decode($jadwal->kategori);
-
-            foreach ($kategoriList as $kategori) {
-                if (preg_match('/^(.*?)\s*-\s*(\d{3})$/', $kategori, $matches)) {
-                    $namaKategori = trim($matches[1]);
-                    $kode = $matches[2];
-                    $noSampel = $noOrder . '/' . $kode;
-
-                    $allSamples[] = [
-                        'category' => $namaKategori,
-                        'no_sampel' => $noSampel,
-                        'tanggal' => $jadwal->tanggal
-                    ];
+            // Validasi tanggal tidak boleh kurang dari hari ini
+            $today = '2026-04-13';
+            foreach ($request->tanggal as $tanggal) {
+                if ($tanggal < $today) {
+                    return response()->json(['message' => 'Tanggal Pengajuan Tidak Boleh Kurang Dari ' . $today], 422);
                 }
             }
-        }
 
-        // Group samples by category
-        $samplesByCategory = [];
-        foreach ($allSamples as $sample) {
-            $category = $sample['category'];
-            if (!isset($samplesByCategory[$category])) {
-                $samplesByCategory[$category] = [];
+            // Ambil jadwal dengan relasi yang dibutuhkan
+            $jadwals = Jadwal::with('orderDetail')
+                ->where('is_active', true)
+                ->where('userid', $this->user_id)
+                ->whereIn('tanggal', $request->tanggal)
+                ->get()
+                ->filter(function ($jadwal) {
+                    return $jadwal->orderDetail->isNotEmpty();
+                });
+
+            if ($jadwals->isEmpty()) {
+                return response()->json(['message' => 'Jadwal Tidak Ditemukan Untuk Tanggal Tersebut'], 404);
             }
-            $samplesByCategory[$category][] = $sample;
-        }
 
-        $tanggalApprove = [];
+            $categoryMappings = [
+                'Air' => [[DataLapanganAir::class]],
+                'Emisi Sumber Tidak Bergerak' => [[DataLapanganEmisiCerobong::class]],
+                'Emisi Kendaraan' => [[DataLapanganEmisiKendaraan::class]],
+                'Udara Ambient' => [
+                    [DataLapanganPartikulatMeter::class],
+                    [DataLapanganLingkunganHidup::class, DataLapanganSenyawaVolatile::class]
+                ],
+                'Udara Lingkungan Kerja' => [
+                    [DataLapanganPartikulatMeter::class],
+                    [DataLapanganLingkunganKerja::class, DataLapanganSenyawaVolatile::class]
+                ],
+                'Udara Angka Kuman' => [
+                    [DataLapanganPartikulatMeter::class],
+                    [DataLapanganMicrobiologi::class]
+                ],
+                'Kebisingan' => [[DataLapanganKebisingan::class, DataLapanganKebisinganPersonal::class]],
+                'Kebisingan (24 Jam)' => [[DataLapanganKebisingan::class]],
+                'Pencahayaan' => [[DataLapanganCahaya::class]],
+                'Getaran (Mesin)' => [[DataLapanganGetaran::class]],
+                'Getaran (Kejut Bangunan)' => [[DataLapanganGetaran::class]],
+                'Getaran' => [[DataLapanganGetaran::class]],
+                'Getaran (Lengan & Tangan)' => [[DataLapanganGetaranPersonal::class]],
+                'Getaran (Seluruh Tubuh)' => [[DataLapanganGetaranPersonal::class]],
+                'Iklim Kerja' => [[DataLapanganIklimPanas::class, DataLapanganIklimDingin::class]],
+                'Udara Swab Test' => [[DataLapanganSwab::class]],
+                'Ergonomi' => [[DataLapanganErgonomi::class]],
+            ];
 
-        $tanggalApprove = array_unique($tanggalApprove);
+            $tanggal_revisi = $jadwals
+                ->filter(fn($jadwal) => empty($jadwal->orderDetail[0]->no_order))
+                ->pluck('tanggal')
+                ->unique()
+                ->values()
+                ->toArray();
 
-        if (!empty($tanggalApprove)) {
+
+            if (!empty($tanggal_revisi)) {
+                return response()->json([
+                    'message' => 'Terdapat Nomor Penawaran yang Sedang Dalam Tahap Revisi Pada Tanggal ' . implode(', ', $tanggal_revisi),
+                ], 401);
+            }
+
+            $allSamples = [];
+            foreach ($jadwals as $jadwal) {
+                $noOrder = $jadwal->orderDetail->first()->no_order;
+                $kategoriList = json_decode($jadwal->kategori);
+
+                foreach ($kategoriList as $kategori) {
+                    if (preg_match('/^(.*?)\s*-\s*(\d{3})$/', $kategori, $matches)) {
+                        $namaKategori = trim($matches[1]);
+                        $kode = $matches[2];
+                        $noSampel = $noOrder . '/' . $kode;
+
+                        $allSamples[] = [
+                            'category' => $namaKategori,
+                            'no_sampel' => $noSampel,
+                            'tanggal' => $jadwal->tanggal
+                        ];
+                    }
+                }
+            }
+
+            // Group samples by category
+            $samplesByCategory = [];
+            foreach ($allSamples as $sample) {
+                $category = $sample['category'];
+                if (!isset($samplesByCategory[$category])) {
+                    $samplesByCategory[$category] = [];
+                }
+                $samplesByCategory[$category][] = $sample;
+            }
+
+            $tanggalApprove = [];
+
+            $tanggalApprove = array_unique($tanggalApprove);
+
+            if (!empty($tanggalApprove)) {
+                return response()->json([
+                    'message' => 'Terdapat Data Lapangan Yang Belum Diapprove Pada Tanggal ' . implode(', ', $tanggalApprove),
+                ], 401);
+            }
+
+            // Validasi level sampler
+            $master_karyawan = MasterKaryawan::where('id', $this->user_id)->first();
+            if (!$master_karyawan || $master_karyawan->warna == null) {
+                return response()->json(['message' => 'Level Sampler Belum Ditentukan'], 401);
+            }
+
+            $level = MasterFeeSampling::where('warna', $master_karyawan->warna)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$level) {
+                return response()->json(['message' => 'Level Sampler Tidak Ditemukan'], 404);
+            }
+
+            // Generate rekap
+            $generate = new GenerateFeeSampling();
+            $rekap = $generate->rekapFeeSampling($this->user_id, $level->kategori, $request->tanggal);
+
+            if (isset($rekap['error'])) {
+                return response()->json(['message' => $rekap['error']], $rekap['status']);
+            }
+
+            return response()->json(['data' => $rekap], 200);
+        } catch (\Throwable $th) {
             return response()->json([
-                'message' => 'Terdapat Data Lapangan Yang Belum Diapprove Pada Tanggal ' . implode(', ', $tanggalApprove),
-            ], 401);
+                'message' => 'Terjadi Kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine()
+            ], 500);
         }
-
-        // Validasi level sampler
-        $master_karyawan = MasterKaryawan::where('id', $this->user_id)->first();
-        if (!$master_karyawan || $master_karyawan->warna == null) {
-            return response()->json(['message' => 'Level Sampler Belum Ditentukan'], 401);
-        }
-
-        $level = MasterFeeSampling::where('warna', $master_karyawan->warna)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$level) {
-            return response()->json(['message' => 'Level Sampler Tidak Ditemukan'], 404);
-        }
-
-        // Generate rekap
-        $generate = new GenerateFeeSampling();
-        $rekap = $generate->rekapFeeSampling($this->user_id, $level->kategori, $request->tanggal);
-
-        if (isset($rekap['error'])) {
-            return response()->json(['message' => $rekap['error']], $rekap['status']);
-        }
-
-        return response()->json(['data' => $rekap], 200);
     }
 
 
