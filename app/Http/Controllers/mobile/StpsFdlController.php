@@ -32,8 +32,7 @@ class StpsFdlController extends Controller
     {
         try {
             $periode_awal = Carbon::parse($request->periode_awal); // format dari frontend YYYY-MM
-            $periode_akhir = Carbon::parse($request->periode_akhir)->endOfMonth(); // mengambil tanggal terakhir dari bulan terpilih
-            $interval = $periode_awal->diff($periode_akhir);
+            $periode_akhir = Carbon::parse($request->periode_akhir); // mengambil tanggal terakhir dari bulan terpilih
 
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
                 ->whereIn('id_jabatan', [41, 42])
@@ -44,14 +43,12 @@ class StpsFdlController extends Controller
             $periodeDate = Carbon::parse($request->periode_awal);
             $periode     = $periodeDate->format('Y-m'); // 👉 "2026-01"
 
-            if ($interval->days > 91)
-                return response()->json(['message' => 'Periode tidak boleh lebih dari 1 bulan'], 403);
-
             $data = OrderDetail::with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
-                'orderHeader.persiapanSampelHeaderFdl' => function ($q) use ($periode) {
-                    $q->where('periode', $periode)
-                    ->where('is_active', true);
+                'orderHeader.persiapanSampelHeaderFdl' => function ($q){
+                // 'orderHeader.persiapanSampelHeaderFdl' => function ($q) use ($periode) {
+                    // $q->where('periode', $periode)
+                    $q->where('is_active', true);
                 },
                 'orderHeader.samplingPlan',
                 'orderHeader.samplingPlan.jadwal' => function ($q) {
@@ -62,19 +59,16 @@ class StpsFdlController extends Controller
             ])
                 ->select(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
                 ->where('is_active', true)
-                ->whereBetween('tanggal_sampling', [
-                    $periode_awal->format('Y-m-01'),
-                    $periode_akhir->format('Y-m-t')
-                ])
+                ->whereDate('tanggal_sampling', $periode_awal->format('Y-m-d'))
                 // ->where('no_quotation', 'ISL/QTC/24-I/001924')
                 ->groupBy(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling']);
 
             $data = $data->get()->toArray();
             // dd($data);
             $formattedData = array_reduce($data, function ($carry, $item) use ($isProgrammer, $karyawan, $periode_awal) {
-                if (empty($item['order_header']) || empty($item['order_header']['sampling']))
+                if (empty($item['order_header']) || empty($item['order_header']['sampling'])){
                     return $carry;
-
+                }
                 $samplingPlan = $item['order_header']['sampling'];
                 $periode = $item['periode'] ?? '';
 
@@ -89,10 +83,9 @@ class StpsFdlController extends Controller
                     return $carry;
 
                 $jadwal = $targetPlan['jadwal'] ?? [];
+                $psData = $item['order_header']['persiapan_sampel_header_fdl'] ?? null;
 
-                $ps = $item['order_header']['persiapan_sampel_header_fdl'] ?? null;
-                $rawFilename = $ps ? $ps['filename'] : null;
-
+                $rawFilename = $psData ? $psData['filename'] : null;
                 // replace PS → STPS
                 $filename = $rawFilename
                     ? str_replace('_', '-', str_replace('PS', 'STPS', $rawFilename))
