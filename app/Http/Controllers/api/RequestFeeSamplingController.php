@@ -176,17 +176,21 @@ class RequestFeeSamplingController extends Controller
         try {
             $data = PengajuanFeeSampling::where('id', $request->id)->first();
             if ($data) {
-                $data->is_approve_finance = 1;
-                $data->status_payment = "Approved by finance";
-                $data->alasan_reject_expanse = null;
-                $data->is_reject_expanse = 0;
-                $data->save();
 
-                PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->update([
+                $detail = PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->update([
                     'is_approve' => 1,
                     'approved_by' => $this->karyawan,
                     'approved_at' => Carbon::now()
                 ]);
+
+                $summary = PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->where('is_approve', 1)->sum('total_fee') ?? 0;
+
+                $data->is_approve_finance = 1;
+                $data->status_payment = "Approved by finance";
+                $data->alasan_reject_expanse = null;
+                $data->is_reject_expanse = 0;
+                $data->total_fee_approve = $summary;
+                $data->save();
 
             } else {
                 return response()->json(['success' => false, 'message' => 'Data tidak ditemukan', 'status' => 400], 400);
