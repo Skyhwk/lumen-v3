@@ -26,7 +26,8 @@ use App\Models\{
     DataLapanganSwab,
     DataLapanganErgonomi,
     DataLapanganEmisiKendaraan,
-    PengajuanFeeSamplingDetail
+    PengajuanFeeSamplingDetail,
+    HistoryLevelSampler
 };
 use App\Services\GenerateFeeSampling;
 use App\Services\InsertActivityFdl;
@@ -246,13 +247,75 @@ class FeeSamplingController extends Controller
                 ], 401);
             }
 
-            // Validasi level sampler
+            // // Validasi level sampler
+            // $master_karyawan = MasterKaryawan::where('id', $this->user_id)->first();
+            // if (!$master_karyawan || $master_karyawan->warna == null) {
+            //     return response()->json(['message' => 'Level Sampler Belum Ditentukan'], 401);
+            // } else {
+            //     $historyLevel = HistoryLevelSampler::where('user_id', $master_karyawan->user_id)->orderBy('id', 'desc')->first();
+
+            //     if ($historyLevel) {
+            //         if($historyLevel->created_at > Carbon::now()->subDays(30)) {
+            //             $master_karyawan->warna = $historyLevel->warna;
+            //         }
+            //     }
+            // }
+
+            // $level = MasterFeeSampling::where('warna', $master_karyawan->warna)
+            //     ->where('is_active', true)
+            //     ->first();
+
+            // if (!$level) {
+            //     return response()->json(['message' => 'Level Sampler Tidak Ditemukan'], 404);
+            // }
+
+            // 1. Validasi user
             $master_karyawan = MasterKaryawan::where('id', $this->user_id)->first();
+
             if (!$master_karyawan || $master_karyawan->warna == null) {
                 return response()->json(['message' => 'Level Sampler Belum Ditentukan'], 401);
             }
 
-            $level = MasterFeeSampling::where('warna', $master_karyawan->warna)
+            // 2. Ambil history terakhir
+            $historyLevel = HistoryLevelSampler::where('user_id', $master_karyawan->user_id)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            $warnaFinal = $master_karyawan->warna; // default
+
+            // 3. Kalau ada history → lakukan validasi
+            if ($historyLevel && !empty($request->tanggal)) {
+
+                $changeDate = Carbon::parse($historyLevel->created_at)->startOfDay();
+
+                $before = false;
+                $after = false;
+
+                foreach ($request->tanggal as $tgl) {
+                    $date = Carbon::parse($tgl)->startOfDay();
+
+                    if ($date->lt($changeDate)) {
+                        $before = true;
+                    } else {
+                        $after = true;
+                    }
+                }
+
+                // ❌ reject kalau lintas level
+                if ($before && $after) {
+                    return response()->json([
+                        'message' => 'Tanggal pengajuan tidak boleh melewati perubahan level sampler'
+                    ], 422);
+                }
+
+                // ✅ tentukan warna final
+                $warnaFinal = $before
+                    ? $historyLevel->old_warna
+                    : $historyLevel->new_warna;
+            }
+
+            // 4. Ambil fee berdasarkan warna final
+            $level = MasterFeeSampling::where('warna', $warnaFinal)
                 ->where('is_active', true)
                 ->first();
 
