@@ -5,11 +5,11 @@ namespace App\HelpersFormula;
 class MercuryPadatanHG
 {
     public function index($data, $id_parameter, $mdl){
-        if($id_parameter == 422) {  //MercuryPadatanHG
-			$rumus = number_format($data->hp / 1000, 4);
-        }
+        $rumus = number_format($data->hp / $data->fp, 5, '.', '');
 
-		$rumus = str_replace(",", "", $rumus);
+        if(!is_null($mdl) && $rumus< $mdl){
+            $rumus= '<' . $mdl;
+        }
 
         $data = [
 			'hasil' => $rumus,
