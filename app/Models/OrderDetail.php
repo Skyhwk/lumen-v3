@@ -133,7 +133,7 @@ class OrderDetail extends Sector
     }
     public function dataLapanganErgonomi()
     {
-        return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
+        return $this->hasMany(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
 
     public function lhpp_psikologi()

@@ -113,9 +113,9 @@ class RegistrasiCustomerController extends Controller
                 foreach ($menus as $item) {
                     $parent = explode('-', $item->name);
 
-                    if (count($parent) == 1) {
-                        return response()->json(['message' => 'Menu ' . $item->name . ' tidak memiliki parent.'], 400);
-                    }
+                    // if (count($parent) == 1) {
+                    //     return response()->json(['message' => 'Menu ' . $item->name . ' tidak memiliki parent.'], 400);
+                    // }
 
                     $permissions[] = [
                         'name' => $item->name,
