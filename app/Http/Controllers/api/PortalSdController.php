@@ -34,7 +34,7 @@ class PortalSdController extends Controller
             // logic untuk pra-order:
             if($search == null){
                 if ($type[1] == 'QTC') {
-                    $search = QuotationKontrakH::with(['detail' => function ($q) {
+                    $search = QuotationKontrakH::with(['SampelDiantar','detail' => function ($q) {
                         $q->where('status_sampling', 'SD');
                     }])->where('no_document', $request->no_document)
                     ->where('is_active', 1)
@@ -83,6 +83,7 @@ class PortalSdController extends Controller
                         }
 
                         $search->order_detail  = $generatedSampel;
+                        $search->no_order      = null; // pastikan no_order null untuk pra-order
                         $search->sampel_diantar = [];
                         $search->is_pra_order  = true;
                     }
@@ -120,6 +121,7 @@ class PortalSdController extends Controller
                     
                         // Inject sebagai virtual order_detail
                         $search->order_detail = $generatedSampel;
+                        $search->no_order = null; // pastikan no_order null untuk pra-order
                         $search->sampel_diantar = [];
                         $search->is_pra_order = true;
                      }
@@ -183,6 +185,12 @@ class PortalSdController extends Controller
             return response()->json($formatData, 200);
         } catch (\Exception $ex) {
             //throw $th;
+            \Log::error('belumOrder ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
@@ -322,6 +330,12 @@ class PortalSdController extends Controller
         } catch (\Exception $ex) {
             //throw $th;
             DB::rollback();
+            \Log::error('storeHeader ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 "message" => $ex->getMessage(),
                 "line" => $ex->getLine(),
@@ -384,6 +398,12 @@ class PortalSdController extends Controller
         } catch (\Exception $ex) {
             //throw $th;
             DB::rollback();
+            \Log::error('storeHeaderEksternal ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 "message" => $ex->getMessage(),
                 "line" => $ex->getLine(),
@@ -691,12 +711,41 @@ class PortalSdController extends Controller
                     }
                 }
 
+                // Bersihkan dan index by no_sampel dulu — 0 query
+                $tanggalTerimaMap = collect($request->tanggal_terima ?? [])
+                    ->filter(fn($item) => !empty($item['no_sampel']) && !empty($item['tanggal_terima']))
+                    ->keyBy('no_sampel');
+
+                if ($tanggalTerimaMap->isNotEmpty()) {
+                    // 1 query: ambil semua no_sampel yang masih null sekaligus
+                    $perluDiupdate = OrderDetail::whereIn('no_sampel', $tanggalTerimaMap->keys())
+                        ->whereNull('tanggal_terima')
+                        ->pluck('no_sampel');
+
+                    // Loop hanya untuk yang benar-benar perlu diupdate
+                    if ($perluDiupdate->isNotEmpty()) {
+                        foreach ($perluDiupdate as $noSampel) {
+                            OrderDetail::where('no_sampel', $noSampel)
+                                ->update([
+                                    'tanggal_terima' => $tanggalTerimaMap[$noSampel]['tanggal_terima'],
+                                ]);
+                        }
+                    }
+                }
+                
+
                 return response()->json([
                     'sampeldiantarid' => $dataSave->id,
                     'periode'         => $request->periode,
                 ], 200);
             }
-        } catch (\Exception $e) {
+        } catch (\Exception $ex) {
+            \Log::error('saveStep ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 'error' => true,
                 'message' => $e->getMessage(),
@@ -785,7 +834,6 @@ class PortalSdController extends Controller
                     return response()->json(['type' => 'kontrak', 'data' => $datas, 'sd' => null], 200);
                 }
             } else {
-                
                 if($datas->isEmpty()){
                     $dataQt = QuotationNonKontrak::where('no_document',$request->no_document)
                     ->where('is_active',1)
@@ -836,6 +884,13 @@ class PortalSdController extends Controller
             }
         } catch (\Exception $ex) {
             //throw $th;
+            \Log::error('listSampel ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
+
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
@@ -914,248 +969,251 @@ class PortalSdController extends Controller
 
     public function chekStepSd(Request $request)
     {
-        $mode = $request->mode;
+        try {
+            $mode = $request->mode;
 
-        // 1. Ambil Data Induk
-        $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
-            if ($request->periode && $request->periode !== 'null') {
-                $q->where('periode', $request->periode);
-            } else {
-                $q->whereNull('periode');
-            }
-        }])
-        ->where('no_quotation', $request->no_document)
-        //->where('no_order', $request->no_order)
-        ->where('periode_kontrak', $request->periode)
-        ->first();
-
-        // 2. Cek Mode Terima
-        if ($mode === 'terima') {
-            if ($sampelDiantar && $sampelDiantar->nama_pengantar_sampel != null) {
-                return response()->json(['status' => true], 200);
-            }
-            return response()->json(['status' => false], 200);
-        }
-
-        // 3. Validasi Keberadaan Data
-        if (!in_array($mode, ['internal_data', 'eksternal_data']) || !$sampelDiantar) {
-            return response()->json([
-                'status' => false, 
-                'message' => 'Data sampel diantar tidak ditemukan atau mode tidak valid.'
-            ], 200);
-        }
-
-        // 4. Ambil Detail Spesifik
-        $detailForPeriod = null;
-        if ($sampelDiantar->detail->isNotEmpty()) {
-            $requestedPeriode = ($request->periode === 'null' || !$request->periode) ? null : $request->periode;
-            $detailForPeriod = $sampelDiantar->detail->first(function ($item) use ($requestedPeriode) {
-                return $item->periode == $requestedPeriode;
-            });
-        }
-
-        if (!$detailForPeriod) {
-            return response()->json([
-                'status' => false, 
-                'message' => 'Detail sampel untuk periode yang diminta tidak ditemukan.'
-            ], 200);
-        }
-
-        // 5. Ambil Data Referensi dari OrderDetail
-        $orderDetails = OrderDetail::where('kategori_1', 'SD')
-            ->where('no_order', $request->no_order)
+            // 1. Ambil Data Induk
+            $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
+                if ($request->periode && $request->periode !== 'null') {
+                    $q->where('periode', $request->periode);
+                } else {
+                    $q->whereNull('periode');
+                }
+            }])
             ->where('no_quotation', $request->no_document)
-            ->where('is_active', true)
-            ->where('periode', ($request->periode === 'null' || !$request->periode) ? null : $request->periode)
-            ->get(['no_sampel', 'kategori_3']);
-        if($orderDetails->isEmpty()) {
-            $type = explode('/', $request->no_document);
-            if($type[1] != 'QTC') {
-               $dataQt = QuotationKontrakH::with(['detail' => function ($q) {
+            ->where('periode_kontrak', $request->periode)
+            ->first();
+
+            // 2. Cek Mode Terima
+            if ($mode === 'terima') {
+                if ($sampelDiantar && $sampelDiantar->nama_pengantar_sampel != null) {
+                    return response()->json(['status' => true], 200);
+                }
+                return response()->json(['status' => false], 200);
+            }
+
+            // 3. Validasi Keberadaan Data
+            if (!in_array($mode, ['internal_data', 'eksternal_data']) || !$sampelDiantar) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Data sampel diantar tidak ditemukan atau mode tidak valid.'
+                ], 200);
+            }
+
+            // 4. Ambil Detail Spesifik
+            $detailForPeriod = null;
+            if ($sampelDiantar->detail->isNotEmpty()) {
+                $requestedPeriode = ($request->periode === 'null' || !$request->periode) ? null : $request->periode;
+                $detailForPeriod  = $sampelDiantar->detail->first(function ($item) use ($requestedPeriode) {
+                    return $item->periode == $requestedPeriode;
+                });
+            }
+
+            if (!$detailForPeriod) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Detail sampel untuk periode yang diminta tidak ditemukan.'
+                ], 200);
+            }
+
+            // 5. Ambil Data Referensi dari OrderDetail
+            $orderDetails = OrderDetail::where('kategori_1', 'SD')
+                ->where('no_order', ($request->no_order == 'undefined') ? null : $request->no_order)
+                ->where('no_quotation', $request->no_document)
+                ->where('is_active', true)
+                ->where('periode', ($request->periode === 'null' || !$request->periode) ? null : $request->periode)
+                ->get(['no_sampel', 'kategori_3']);
+
+            if ($orderDetails->isEmpty()) {
+                $type = explode('/', $request->no_document);
+
+                if ($type[1] == 'QTC') {
+                    $dataQt = QuotationKontrakH::with(['detail' => function ($q) {
                         $q->where('status_sampling', 'SD');
                     }])->where('no_document', $request->no_document)
                     ->where('is_active', 1)
-                    ->first(); 
-                if($dataQt != null){
-                    $detailColumn   = $dataQt->detail;
-                    $generatedSampel = [];
-                    $counter         = 1; // nomor urut sampel
+                    ->first();
 
-                    foreach ($detailColumn as $detail) {
-                        $pendukung = json_decode($detail->data_pendukung_sampling, true) ?? [];
+                    if ($dataQt != null) {
+                        $detailColumn    = $dataQt->detail;
+                        $generatedSampel = [];
+                        $counter         = 1;
 
-                        foreach ($pendukung as $periodeKey => $periodeData) {
-                            $periode     = $periodeData['periode_kontrak'] ?? null;
-                            $dataSampling = $periodeData['data_sampling'] ?? [];
+                        foreach ($detailColumn as $detail) {
+                            $pendukung = json_decode($detail->data_pendukung_sampling, true) ?? [];
 
-                            foreach ($dataSampling as $item) {
-                                $jumlahTitik    = (int) ($item['jumlah_titik'] ?? 1);
-                                foreach ($item['penamaan_titik'] as $titik) {
-                                    foreach ($titik as $key => $namaLokasi) {
-                                        // Format: TPTT01****/001
-                                        $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
-                                        $generatedSampel[] = [
-                                            'no_sampel'    => $noSampel,
-                                            'keterangan_1' => $namaLokasi,
-                                            'kategori_2'   => $item['kategori_1'] ?? '',
-                                            'kategori_3'   => $item['kategori_2'] ?? '',
-                                            'parameter'    => json_encode($item['parameter'] ?? []),
-                                            'persiapan'    => json_encode([
-                                                ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
-                                            ]),
-                                            'periode' => $periode,
-                                            'tanggal_sampling'=>null,
-                                            'no_order'=>null,
-                                            'nama_perusahaan'=> $dataQt->nama_perusahaan,
-                                            'alamat_perusahaan'=> $dataQt->alamat_kantor,
-                                            'is_active' => true, // default aktif
-                                            'no_quotation' => $dataQt->no_document,
-                                        ];
+                            foreach ($pendukung as $periodeKey => $periodeData) {
+                                $periode      = $periodeData['periode_kontrak'] ?? null;
+                                $dataSampling = $periodeData['data_sampling'] ?? [];
+
+                                if ($periode != $request->periode) continue;
+
+                                foreach ($dataSampling as $item) {
+                                    $jumlahTitik   = (int) ($item['jumlah_titik'] ?? 1);
+                                    $penamaanTitik = $item['penamaan_titik'] ?? '';
+
+                                    foreach ($penamaanTitik as $titik) {
+                                        foreach ($titik as $key => $namaLokasi) {
+                                            $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
+                                            $generatedSampel[] = [
+                                                'no_sampel'    => $noSampel,
+                                                'keterangan_1' => $namaLokasi,
+                                                'kategori_2'   => $item['kategori_1'] ?? '',
+                                                'kategori_3'   => $item['kategori_2'] ?? '',
+                                                'parameter'    => json_encode($item['parameter'] ?? []),
+                                                'persiapan'    => json_encode([
+                                                    ['volume' => $item['volume'] ?? 0]
+                                                ]),
+                                                'periode' => $periode,
+                                                'tanggal_sampling'=>null,
+                                                'no_order'=>null,
+                                                'nama_perusahaan'=> $dataQt->nama_perusahaan,
+                                                'alamat_perusahaan'=> $dataQt->alamat_kantor,
+                                            ];
+                                        }
                                     }
                                 }
                             }
                         }
+                        $orderDetails = collect($generatedSampel);
                     }
-                    $orderDetails = collect($generatedSampel);
-                }
-            }else{
-                $dataQt = QuotationNonKontrak::where('no_document',$request->no_document)
-                ->where('is_active',1)
-                ->where('status_sampling','SD')
-                ->where('is_active',true)
-                ->first();
-                if($dataQt != null){
-                    $dataPendukung = json_decode($dataQt->data_pendukung_sampling, true) ?? [];
-                    $generatedSampel = [];
-                    foreach ($dataPendukung as $item) {
-                        foreach ($item['penamaan_titik'] as $titik) {
-                            foreach ($titik as $key => $namaLokasi) {
-                                $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
-                                $generatedSampel[] = [
-                                    'no_sampel'    => $noSampel,
-                                    'keterangan_1' => $namaLokasi,
-                                    'kategori_2'   => $item['kategori_1'] ?? '',
-                                    'kategori_3'   => $item['kategori_2'] ?? '',
-                                    'parameter'    => json_encode($item['parameter'] ?? []),
-                                    'persiapan'    => json_encode([
-                                        ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
-                                    ]),
-                                    'periode' => null,
-                                    'tanggal_sampling'=>null,
-                                    'no_order'=>null,
-                                    'nama_perusahaan'=> $dataQt->nama_perusahaan,
-                                    'alamat_perusahaan'=> $dataQt->alamat_kantor
-                                ];
+
+                } else {
+                    $dataQt = QuotationNonKontrak::where('no_document', $request->no_document)
+                        ->where('is_active', 1)
+                        ->where('status_sampling', 'SD')
+                        ->first();
+
+                    if ($dataQt != null) {
+                        $dataPendukung   = json_decode($dataQt->data_pendukung_sampling, true) ?? [];
+                        $generatedSampel = [];
+
+                        foreach ($dataPendukung as $item) {
+                            foreach ($item['penamaan_titik'] as $titik) {
+                                foreach ($titik as $key => $namaLokasi) {
+                                    $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
+                                    $generatedSampel[] = [
+                                        'no_sampel'        => $noSampel,
+                                        'keterangan_1'     => $namaLokasi,
+                                        'kategori_2'       => $item['kategori_1'] ?? '',
+                                        'kategori_3'       => $item['kategori_2'] ?? '',
+                                        'parameter'        => json_encode($item['parameter'] ?? []),
+                                        'persiapan'        => json_encode([['volume' => $item['volume'] ?? 0]]),
+                                        'periode'          => null,
+                                        'tanggal_sampling' => null,
+                                        'no_order'         => null,
+                                        'nama_perusahaan'  => $dataQt->nama_perusahaan,
+                                        'alamat_perusahaan'=> $dataQt->alamat_kantor,
+                                    ];
+                                }
                             }
                         }
+                        $orderDetails = collect($generatedSampel);
                     }
-                    $orderDetails = collect($generatedSampel);
                 }
             }
-        }
 
-        $targetCount = $orderDetails->count();
-        
-        // 6. Persiapan untuk Sanitisasi
-        $orderSampelNumbers = $orderDetails->pluck('no_sampel')->toArray();
-        $orderKategoriRaw = $orderDetails->pluck('kategori_3')->toArray();
-        $cleanedKategori = array_map(fn($item) => explode('-', $item, 2)[1] ?? $item, $orderKategoriRaw);
-        $normalizedKategori = array_map(fn($item) => strtolower(trim($item)), $cleanedKategori);
-        
-        // 7. Ambil & Sanitasi Data untuk Mode yang Diminta
-        $dataField = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
-        $jsonData = json_decode($detailForPeriod->$dataField ?? '[]', true);
-        $jsonDataModified = false;
+            $targetCount        = $orderDetails->count();
+            $orderSampelNumbers = $orderDetails->pluck('no_sampel')->toArray();
+            $orderKategoriRaw   = $orderDetails->pluck('kategori_3')->toArray();
+            $cleanedKategori    = array_map(fn($item) => explode('-', $item, 2)[1] ?? $item, $orderKategoriRaw);
+            $normalizedKategori = array_map(fn($item) => strtolower(trim($item)), $cleanedKategori);
 
-        foreach ($jsonData as &$item) {
-            if (!isset($item['no_sampel'])) continue;
+            $dataField       = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
+            $jsonData        = json_decode($detailForPeriod->$dataField ?? '[]', true);
+            $jsonDataModified = false;
 
-            $notInSampel = !in_array($item['no_sampel'], $orderSampelNumbers);
-            $jenisSampel = strtolower(trim($item['jenis_sampel'] ?? ''));
-            $notInKategori = !in_array($jenisSampel, $normalizedKategori);
-            
-            if ($notInSampel || $notInKategori) {
-                if (($item['is_active'] ?? true) !== false) {
-                    $item['is_active'] = false;
-                    $jsonDataModified = true;
+            foreach ($jsonData as &$item) {
+                if (!isset($item['no_sampel'])) continue;
+                $notInSampel   = !in_array($item['no_sampel'], $orderSampelNumbers);
+                $jenisSampel   = strtolower(trim($item['jenis_sampel'] ?? ''));
+                $notInKategori = !in_array($jenisSampel, $normalizedKategori);
+                if ($notInSampel || $notInKategori) {
+                    if (($item['is_active'] ?? true) !== false) {
+                        $item['is_active'] = false;
+                        $jsonDataModified  = true;
+                    }
                 }
             }
-        }
-        unset($item);
+            unset($item);
 
-        // 8. Simpan jika ada perubahan
-        if ($jsonDataModified) {
-            $detailForPeriod->update([$dataField => json_encode($jsonData)]);
-            $detailForPeriod->$dataField = json_encode($jsonData);
-        }
+            if ($jsonDataModified) {
+                $detailForPeriod->update([$dataField => json_encode($jsonData)]);
+                $detailForPeriod->$dataField = json_encode($jsonData);
+            }
 
-        // 9. Helper: Hitung item aktif dari JSON string
-        $countActiveInJson = function($jsonStr) {
-            $data = json_decode($jsonStr ?? '[]', true);
-            $count = 0;
-            foreach ($data as $d) {
-                if (!isset($d['is_active']) || $d['is_active'] === true) {
-                    $count++;
+            $countActiveInJson = function ($jsonStr) {
+                $data  = json_decode($jsonStr ?? '[]', true);
+                $count = 0;
+                foreach ($data as $d) {
+                    if (!isset($d['is_active']) || $d['is_active'] === true) {
+                        $count++;
+                    }
                 }
-            }
-            return $count;
-        };
+                return $count;
+            };
 
-        // 10. LOGIKA VALIDASI BERTINGKAT
-        $isValid = false;
-        $message = '';
-        $currentActiveCount = $countActiveInJson($detailForPeriod->$dataField);
+            $isValid            = false;
+            $message            = '';
+            $currentActiveCount = $countActiveInJson($detailForPeriod->$dataField);
 
-        if ($mode === 'internal_data') {
-            // ✅ INTERNAL: Cukup cek apakah sudah lengkap
-            if (empty($jsonData) || count($jsonData) === 0) {
-                $isValid = false;
-                $message = 'Data Internal belum diisi sama sekali.';
-            } else {
-                $isValid = ($currentActiveCount === $targetCount);
-                $message = $isValid ? 'Validasi Internal Berhasil.' : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
-            }
-        } 
-        elseif ($mode === 'eksternal_data') {
-            // ✅ EKSTERNAL: CEK INTERNAL DULU!
-            $internalData = json_decode($detailForPeriod->$mode ?? '[]', true);
-            $internalCount = $countActiveInJson($detailForPeriod->$mode);
-            
-            // Cek apakah internal sudah diisi
-            if (empty($internalData) || count($internalData) === 0) {
-                $isValid = false;
-                $message = 'Data Internal belum diisi. Selesaikan Internal Data terlebih dahulu.';
-            } 
-            // Cek apakah internal sudah lengkap
-            elseif ($internalCount !== $targetCount) {
-                $isValid = false;
-                $message = "Data Internal belum lengkap ($internalCount dari $targetCount). Selesaikan Internal Data terlebih dahulu.";
-            } 
-            // Jika internal sudah OK, baru cek eksternal
-            else {
+            if ($mode === 'internal_data') {
                 if (empty($jsonData) || count($jsonData) === 0) {
                     $isValid = false;
-                    $message = 'Data Eksternal belum diisi sama sekali.';
+                    $message = 'Data Internal belum diisi sama sekali.';
                 } else {
                     $isValid = ($currentActiveCount === $targetCount);
-                    $message = $isValid ? 'Validasi Eksternal Berhasil.' : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
+                    $message = $isValid ? 'Validasi Internal Berhasil.' : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
+                }
+            } elseif ($mode === 'eksternal_data') {
+                $internalData  = json_decode($detailForPeriod->internal_data ?? '[]', true);
+                $internalCount = $countActiveInJson($detailForPeriod->internal_data);
+
+                if (empty($internalData) || count($internalData) === 0) {
+                    $isValid = false;
+                    $message = 'Data Internal belum diisi. Selesaikan Internal Data terlebih dahulu.';
+                } elseif ($internalCount !== $targetCount) {
+                    $isValid = false;
+                    $message = "Data Internal belum lengkap ($internalCount dari $targetCount). Selesaikan Internal Data terlebih dahulu.";
+                } else {
+                    if (empty($jsonData) || count($jsonData) === 0) {
+                        $isValid = false;
+                        $message = 'Data Eksternal belum diisi sama sekali.';
+                    } else {
+                        $isValid = ($currentActiveCount === $targetCount);
+                        $message = $isValid ? 'Validasi Eksternal Berhasil.' : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
+                    }
                 }
             }
-        }
 
-        // 11. Override jika sudah finished
-        if (($detailForPeriod->is_finished ?? 0) == 1) {
-            $isValid = true;
-            $message = 'Data sudah selesai (Finished).';
-        }
+            if (($detailForPeriod->is_finished ?? 0) == 1) {
+                $isValid = true;
+                $message = 'Data sudah selesai (Finished).';
+            }
 
-        return response()->json([
-            'status' => $isValid,
-            'message' => $message,
-            'od_count' => $targetCount,
-            'sd_count' => $currentActiveCount,
-            'mode_checked' => $mode
-        ], 200);
+            return response()->json([
+                'status'       => $isValid,
+                'message'      => $message,
+                'od_count'     => $targetCount,
+                'sd_count'     => $currentActiveCount,
+                'mode_checked' => $mode,
+            ], 200);
+
+        } catch (\Exception $ex) {
+            \Log::error('chekStepSd ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan server.',
+                'error'   => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+            ], 500);
+        }
     }
 
     
