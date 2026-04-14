@@ -461,168 +461,159 @@ class CreateInvoiceController extends Controller
     public function getPeriode(Request $request)
     {
         try {
-            // dd($request->all());
+            $splitData = array_map(fn($item) => explode('_', $item), $request->data);
 
-            $splitData = array_map(function($item) {
-                return explode('_', $item);
-            }, $request->data);
-            
-            foreach ($splitData as $item) {
-                $allDocument[] = $item[0]; 
-                $allOrders[] = $item[1]; 
-            }
-            
-            if($request->no_invoice) {
-                $invoice = Invoice::with('orderHeaderQuot')->where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
-                if($invoice->orderHeaderQuot == null) {
-                    $quotation = $invoice->Quotation();
-                    $status = '';
-                    if($quotation) {
-                        if($quotation->flag_status == "sp") {
-                            $status = 'masih di tahap Sampling Plan';
-                        } else if($quotation->flag_status == "draft") {
-                            $status = 'masih di tahap Draft';
-                        } else if($quotation->flag_status == "emailed") {
-                            $status = 'masih di tahap Emailed';
-                        } else {
-                            $status = 'telah di Void';
+            $allDocument = array_column($splitData, 0);
+            $allOrders   = array_column($splitData, 1);
+
+            $noInvoice = $request->no_invoice ?? null;
+            $isKontrak = $request->status === "kontrak";
+
+            // ========================
+            // VALIDASI INVOICE
+            // ========================
+            if ($noInvoice) {
+                $invoice = Invoice::with('orderHeaderQuot')
+                    ->where('no_invoice', $noInvoice)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$invoice || !$invoice->orderHeaderQuot) {
+                    $quotation = $invoice ? $invoice->Quotation() : null;
+
+                    $status = 'telah di Void';
+                    if ($quotation) {
+                        switch ($quotation->flag_status) {
+                            case 'sp': $status = 'masih di tahap Sampling Plan'; break;
+                            case 'draft': $status = 'masih di tahap Draft'; break;
+                            case 'emailed': $status = 'masih di tahap Emailed'; break;
                         }
-                    } else {
-                        $status = 'telah di Void';
                     }
+
                     return response()->json([
                         'message' => 'Quotation ' . $status . '. Silahkan konfirmasi ke divisi Sales.',
                     ], 400);
                 }
 
-                if($invoice->no_quotation != $allDocument[0]) {
+                if ($invoice->no_quotation != $allDocument[0]) {
                     return response()->json([
                         'message' => 'No Quotation Not Match',
                     ], 200);
                 }
-                $data = QuotationKontrakH::select(
-                    'request_quotation_kontrak_H.no_document', 
-                    'request_quotation_kontrak_D.periode_kontrak', 
-                    DB::raw('CEIL(request_quotation_kontrak_D.biaya_akhir - COALESCE(SUM(invoice.nilai_tagihan), 0)) AS biaya_akhir')
-                )
-                ->leftJoin(
-                    'request_quotation_kontrak_D', 
-                    'request_quotation_kontrak_H.id', 
-                    '=', 
-                    'request_quotation_kontrak_D.id_request_quotation_kontrak_H'
-                )
-                ->leftJoin(
-                    'invoice', 
-                    function ($join) use ($request) {
-                        $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
-                            ->on('request_quotation_kontrak_D.periode_kontrak', '=', 'invoice.periode')
-                            ->where('invoice.is_active', true)
-                            ->where('invoice.no_invoice', '!=', $request->no_invoice);
-                    }
-                )
-                ->whereIn('request_quotation_kontrak_H.no_document', (array) $allDocument)
-                ->groupBy('request_quotation_kontrak_H.no_document', 'request_quotation_kontrak_D.periode_kontrak', 'request_quotation_kontrak_D.biaya_akhir')
-                ->get();
-
-                $detailHarga = OrderHeader::leftJoin(DB::raw("
-                    (
-                        SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
-                        FROM invoice
-                        WHERE is_active = true
-                        AND no_invoice != '{$request->no_invoice}'
-                        GROUP BY no_order
-                    ) AS inv
-                "), 'order_header.no_order', '=', 'inv.no_order')
-                ->whereIn('order_header.no_order', $allOrders)
-                ->where('order_header.is_active', true)
-                ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan, 0)) AS total_tertagih'))
-                ->value('total_tertagih');
-            } else {
-                $data = QuotationKontrakH::select(
-                    'request_quotation_kontrak_H.no_document', 
-                    'request_quotation_kontrak_D.periode_kontrak', 
-                    DB::raw('CEIL(request_quotation_kontrak_D.biaya_akhir - COALESCE(SUM(invoice.nilai_tagihan), 0)) AS biaya_akhir')
-                )
-                ->leftJoin(
-                    'request_quotation_kontrak_D', 
-                    'request_quotation_kontrak_H.id', 
-                    '=', 
-                    'request_quotation_kontrak_D.id_request_quotation_kontrak_H'
-                )
-                ->leftJoin(
-                    'invoice', 
-                    function ($join) {
-                        $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
-                            ->on('request_quotation_kontrak_D.periode_kontrak', '=', 'invoice.periode')
-                            ->where('invoice.is_active', true);
-                    }
-                )
-                ->whereIn('request_quotation_kontrak_H.no_document', (array) $allDocument)
-                ->groupBy('request_quotation_kontrak_H.no_document', 'request_quotation_kontrak_D.periode_kontrak', 'request_quotation_kontrak_D.biaya_akhir')
-                ->get();
-
-                $detailHarga = OrderHeader::leftJoin(DB::raw("
-                    (
-                        SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
-                        FROM invoice
-                        WHERE is_active = true
-                        GROUP BY no_order
-                    ) AS inv
-                "), 'order_header.no_order', '=', 'inv.no_order')
-                ->whereIn('order_header.no_order', $allOrders)
-                ->where('order_header.is_active', true)
-                ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan, 0)) AS total_tertagih'))
-                ->value('total_tertagih');
-            }
-             
-            $harga = QuotationKontrakH::select(DB::raw('biaya_akhir, COALESCE(SUM(invoice.nilai_tagihan), 0) AS tertagih'))
-                ->leftJoin('invoice', function ($join){
-                    $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
-                        ->where('invoice.is_active', true);
-                })
-                ->where('request_quotation_kontrak_H.no_document', $allDocument[0])
-                ->groupBy('biaya_akhir')
-                ->first();
-
-            if($harga){
-                $harga->biaya_akhir = CEIL($harga->biaya_akhir - CEIL($harga->tertagih));
             }
 
-            // $detailHarga = OrderHeader::whereIn('no_document', $allDocument)->where('is_active', true)->sum('biaya_akhir');  
+            $invoiceFilter = function ($join) use ($noInvoice) {
+                $join->where('invoice.is_active', true);
 
-            $tlgSampling = OrderDetail::select('tanggal_sampling')
-                ->where('no_order',$allOrders[0])
-                ->orderBy('tanggal_sampling', 'ASC')
-                ->first();
+                if ($noInvoice) {
+                    $join->where('invoice.no_invoice', '!=', $noInvoice);
+                }
+            };
 
-            $getNoInvoice = Invoice::select('no_invoice')
-                ->where('no_order', $allOrders[0])
-                ->where('is_active', true)
-                ->first();
+            // ========================
+            // GET DATA (KONTRAK / NON)
+            // ========================
+            if ($isKontrak) {
 
-            $orderSebelumnya = null;
-
-            if ($getNoInvoice) {
-
-                $orderSebelumnya = DB::table('invoice')
-                    ->select('no_order')
-                    ->where('no_invoice', $getNoInvoice->no_invoice)
-                    ->where('is_active', true)
+                $data = QuotationKontrakH::select(
+                        'request_quotation_kontrak_H.no_document',
+                        'request_quotation_kontrak_D.periode_kontrak',
+                        DB::raw('CEIL(request_quotation_kontrak_D.biaya_akhir - COALESCE(SUM(invoice.nilai_tagihan),0)) AS biaya_akhir')
+                    )
+                    ->leftJoin('request_quotation_kontrak_D', 'request_quotation_kontrak_H.id', '=', 'request_quotation_kontrak_D.id_request_quotation_kontrak_H')
+                    ->leftJoin('invoice', function ($join) use ($invoiceFilter) {
+                        $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
+                            ->on('request_quotation_kontrak_D.periode_kontrak', '=', 'invoice.periode');
+                        $invoiceFilter($join);
+                    })
+                    ->whereIn('request_quotation_kontrak_H.no_document', $allDocument)
+                    ->groupBy(
+                        'request_quotation_kontrak_H.no_document',
+                        'request_quotation_kontrak_D.periode_kontrak',
+                        'request_quotation_kontrak_D.biaya_akhir'
+                    )
                     ->get();
 
+                $harga = QuotationKontrakH::select(DB::raw('biaya_akhir, COALESCE(SUM(invoice.nilai_tagihan),0) AS tertagih'))
+                    ->leftJoin('invoice', function ($join) use ($invoiceFilter) {
+                        $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation');
+                        $invoiceFilter($join);
+                    })
+                    ->where('request_quotation_kontrak_H.no_document', $allDocument[0])
+                    ->groupBy('biaya_akhir')
+                    ->first();
+
+            } else {
+
+                $data = QuotationNonKontrak::select(
+                        'request_quotation.no_document',
+                        DB::raw('NULL AS periode_kontrak'),
+                        DB::raw('CEIL(request_quotation.biaya_akhir - COALESCE(SUM(invoice.nilai_tagihan),0)) AS biaya_akhir')
+                    )
+                    ->leftJoin('invoice', function ($join) use ($invoiceFilter) {
+                        $join->on('request_quotation.no_document', '=', 'invoice.no_quotation');
+                        $invoiceFilter($join);
+                    })
+                    ->whereIn('request_quotation.no_document', $allDocument)
+                    ->groupBy('request_quotation.no_document', 'request_quotation.biaya_akhir')
+                    ->get();
+
+                $harga = QuotationNonKontrak::select(DB::raw('biaya_akhir, COALESCE(SUM(invoice.nilai_tagihan),0) AS tertagih'))
+                    ->leftJoin('invoice', function ($join) use ($invoiceFilter) {
+                        $join->on('request_quotation.no_document', '=', 'invoice.no_quotation');
+                        $invoiceFilter($join);
+                    })
+                    ->whereIn('request_quotation.no_document', $allDocument)
+                    ->groupBy('biaya_akhir')
+                    ->first();
             }
+
+            // ========================
+            // DETAIL HARGA (SHARED)
+            // ========================
+            $detailHarga = OrderHeader::leftJoin(DB::raw("
+                    (
+                        SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
+                        FROM invoice
+                        WHERE is_active = true
+                        " . ($noInvoice ? "AND no_invoice != '{$noInvoice}'" : "") . "
+                        GROUP BY no_order
+                    ) AS inv
+                "), 'order_header.no_order', '=', 'inv.no_order')
+                ->whereIn('order_header.no_order', $allOrders)
+                ->where('order_header.is_active', true)
+                ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan,0)) AS total_tertagih'))
+                ->value('total_tertagih');
+
+            // ========================
+            // TAMBAHAN DATA
+            // ========================
+            $sampling = OrderDetail::where('no_order', $allOrders[0])
+                ->orderBy('tanggal_sampling', 'ASC')
+                ->value('tanggal_sampling');
+
+            $getNoInvoice = Invoice::where('no_order', $allOrders[0])
+                ->where('is_active', true)
+                ->value('no_invoice');
+
+            $orderSebelumnya = $getNoInvoice
+                ? DB::table('invoice')
+                    ->where('no_invoice', $getNoInvoice)
+                    ->where('is_active', true)
+                    ->pluck('no_order')
+                : null;
+
             if ($harga) {
+                $harga->biaya_akhir = CEIL($harga->biaya_akhir - CEIL($harga->tertagih));
                 $harga->biaya_akhir = CEIL($harga->biaya_akhir);
-                $harga->tertagih = CEIL($harga->tertagih);
+                $harga->tertagih    = CEIL($harga->tertagih);
             }
-            
-            $detailHarga = CEIL($detailHarga);
 
             return response()->json([
                 'data' => $data,
                 'harga' => $harga,
-                'detailHarga' => $detailHarga,
-                'sampling' => $tlgSampling,
+                'detailHarga' => CEIL($detailHarga),
+                'sampling' => $sampling,
                 'orderSebelumnya' => $orderSebelumnya,
             ], 200);
 
@@ -630,6 +621,179 @@ class CreateInvoiceController extends Controller
             dd($th);
         }
     }
+
+    // public function getPeriode(Request $request) // dimatikan tgl 13/04/2026
+    // {
+    //     try {
+    //         // dd($request->all());
+
+    //         $splitData = array_map(function($item) {
+    //             return explode('_', $item);
+    //         }, $request->data);
+            
+    //         foreach ($splitData as $item) {
+    //             $allDocument[] = $item[0]; 
+    //             $allOrders[] = $item[1]; 
+    //         }
+            
+    //         if($request->no_invoice) {
+    //             $invoice = Invoice::with('orderHeaderQuot')->where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
+    //             if($invoice->orderHeaderQuot == null) {
+    //                 $quotation = $invoice->Quotation();
+    //                 $status = '';
+    //                 if($quotation) {
+    //                     if($quotation->flag_status == "sp") {
+    //                         $status = 'masih di tahap Sampling Plan';
+    //                     } else if($quotation->flag_status == "draft") {
+    //                         $status = 'masih di tahap Draft';
+    //                     } else if($quotation->flag_status == "emailed") {
+    //                         $status = 'masih di tahap Emailed';
+    //                     } else {
+    //                         $status = 'telah di Void';
+    //                     }
+    //                 } else {
+    //                     $status = 'telah di Void';
+    //                 }
+    //                 return response()->json([
+    //                     'message' => 'Quotation ' . $status . '. Silahkan konfirmasi ke divisi Sales.',
+    //                 ], 400);
+    //             }
+
+    //             if($invoice->no_quotation != $allDocument[0]) {
+    //                 return response()->json([
+    //                     'message' => 'No Quotation Not Match',
+    //                 ], 200);
+    //             }
+    //             $data = QuotationKontrakH::select(
+    //                 'request_quotation_kontrak_H.no_document', 
+    //                 'request_quotation_kontrak_D.periode_kontrak', 
+    //                 DB::raw('CEIL(request_quotation_kontrak_D.biaya_akhir - COALESCE(SUM(invoice.nilai_tagihan), 0)) AS biaya_akhir')
+    //             )
+    //             ->leftJoin(
+    //                 'request_quotation_kontrak_D', 
+    //                 'request_quotation_kontrak_H.id', 
+    //                 '=', 
+    //                 'request_quotation_kontrak_D.id_request_quotation_kontrak_H'
+    //             )
+    //             ->leftJoin(
+    //                 'invoice', 
+    //                 function ($join) use ($request) {
+    //                     $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
+    //                         ->on('request_quotation_kontrak_D.periode_kontrak', '=', 'invoice.periode')
+    //                         ->where('invoice.is_active', true)
+    //                         ->where('invoice.no_invoice', '!=', $request->no_invoice);
+    //                 }
+    //             )
+    //             ->whereIn('request_quotation_kontrak_H.no_document', (array) $allDocument)
+    //             ->groupBy('request_quotation_kontrak_H.no_document', 'request_quotation_kontrak_D.periode_kontrak', 'request_quotation_kontrak_D.biaya_akhir')
+    //             ->get();
+
+    //             $detailHarga = OrderHeader::leftJoin(DB::raw("
+    //                 (
+    //                     SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
+    //                     FROM invoice
+    //                     WHERE is_active = true
+    //                     AND no_invoice != '{$request->no_invoice}'
+    //                     GROUP BY no_order
+    //                 ) AS inv
+    //             "), 'order_header.no_order', '=', 'inv.no_order')
+    //             ->whereIn('order_header.no_order', $allOrders)
+    //             ->where('order_header.is_active', true)
+    //             ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan, 0)) AS total_tertagih'))
+    //             ->value('total_tertagih');
+    //         } else {
+    //             $data = QuotationKontrakH::select(
+    //                 'request_quotation_kontrak_H.no_document', 
+    //                 'request_quotation_kontrak_D.periode_kontrak', 
+    //                 DB::raw('CEIL(request_quotation_kontrak_D.biaya_akhir - COALESCE(SUM(invoice.nilai_tagihan), 0)) AS biaya_akhir')
+    //             )
+    //             ->leftJoin(
+    //                 'request_quotation_kontrak_D', 
+    //                 'request_quotation_kontrak_H.id', 
+    //                 '=', 
+    //                 'request_quotation_kontrak_D.id_request_quotation_kontrak_H'
+    //             )
+    //             ->leftJoin(
+    //                 'invoice', 
+    //                 function ($join) {
+    //                     $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
+    //                         ->on('request_quotation_kontrak_D.periode_kontrak', '=', 'invoice.periode')
+    //                         ->where('invoice.is_active', true);
+    //                 }
+    //             )
+    //             ->whereIn('request_quotation_kontrak_H.no_document', (array) $allDocument)
+    //             ->groupBy('request_quotation_kontrak_H.no_document', 'request_quotation_kontrak_D.periode_kontrak', 'request_quotation_kontrak_D.biaya_akhir')
+    //             ->get();
+
+    //             $detailHarga = OrderHeader::leftJoin(DB::raw("
+    //                 (
+    //                     SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
+    //                     FROM invoice
+    //                     WHERE is_active = true
+    //                     GROUP BY no_order
+    //                 ) AS inv
+    //             "), 'order_header.no_order', '=', 'inv.no_order')
+    //             ->whereIn('order_header.no_order', $allOrders)
+    //             ->where('order_header.is_active', true)
+    //             ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan, 0)) AS total_tertagih'))
+    //             ->value('total_tertagih');
+    //         }
+             
+    //         $harga = QuotationKontrakH::select(DB::raw('biaya_akhir, COALESCE(SUM(invoice.nilai_tagihan), 0) AS tertagih'))
+    //             ->leftJoin('invoice', function ($join){
+    //                 $join->on('request_quotation_kontrak_H.no_document', '=', 'invoice.no_quotation')
+    //                     ->where('invoice.is_active', true);
+    //             })
+    //             ->where('request_quotation_kontrak_H.no_document', $allDocument[0])
+    //             ->groupBy('biaya_akhir')
+    //             ->first();
+
+    //         if($harga){
+    //             $harga->biaya_akhir = CEIL($harga->biaya_akhir - CEIL($harga->tertagih));
+    //         }
+
+    //         // $detailHarga = OrderHeader::whereIn('no_document', $allDocument)->where('is_active', true)->sum('biaya_akhir');  
+
+    //         $tlgSampling = OrderDetail::select('tanggal_sampling')
+    //             ->where('no_order',$allOrders[0])
+    //             ->orderBy('tanggal_sampling', 'ASC')
+    //             ->first();
+
+    //         $getNoInvoice = Invoice::select('no_invoice')
+    //             ->where('no_order', $allOrders[0])
+    //             ->where('is_active', true)
+    //             ->first();
+
+    //         $orderSebelumnya = null;
+
+    //         if ($getNoInvoice) {
+
+    //             $orderSebelumnya = DB::table('invoice')
+    //                 ->select('no_order')
+    //                 ->where('no_invoice', $getNoInvoice->no_invoice)
+    //                 ->where('is_active', true)
+    //                 ->get();
+
+    //         }
+    //         if ($harga) {
+    //             $harga->biaya_akhir = CEIL($harga->biaya_akhir);
+    //             $harga->tertagih = CEIL($harga->tertagih);
+    //         }
+            
+    //         $detailHarga = CEIL($detailHarga);
+
+    //         return response()->json([
+    //             'data' => $data,
+    //             'harga' => $harga,
+    //             'detailHarga' => $detailHarga,
+    //             'sampling' => $tlgSampling,
+    //             'orderSebelumnya' => $orderSebelumnya,
+    //         ], 200);
+
+    //     } catch (\Throwable $th) {
+    //         dd($th);
+    //     }
+    // }
 
     // 05/02/2025 update perhitungan harga
     // public function getPeriode(Request $request)
