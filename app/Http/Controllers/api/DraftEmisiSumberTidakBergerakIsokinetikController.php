@@ -651,7 +651,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
     //     return $entry;
     // }
 
-        public function handleDatadetail(Request $request)
+    public function handleDatadetail(Request $request)
     {
         try {
             $cek_lhp = LhpsEmisiIsokinetikHeader::with('lhpsEmisiIsokinetikDetail', 'lhpsEmisiIsokinetikCustom')->where('no_sampel', $request->no_sampel)->first();
