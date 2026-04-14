@@ -773,7 +773,9 @@ class StpsFdlController extends Controller
                 ->where('no_order', $dataOrder->no_order)
                 ->where('tanggal_sampling', $request->jadwal)
                 ->where('is_active', 1)
-                ->where('sampler_jadwal', $request->sampler);
+                // ->where('sampler_jadwal', $request->sampler);
+                ->whereRaw("FIND_IN_SET(?, sampler_jadwal)", [$request->sampler]);
+                
             // ->whereJsonContains('no_sampel', $pra_no_sample);
 
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
@@ -789,7 +791,7 @@ class StpsFdlController extends Controller
 
                 $response = $psController->preview($request);
                 $preview = json_decode($response->getContent(), true);
-               
+                
                 $isMustPrepared = false;
                 foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
                     foreach ($preview[$kategori] as $sampel) {
@@ -930,13 +932,13 @@ class StpsFdlController extends Controller
             $tanggal = $request->jadwal;
 
             $html = '';
-            if (str_contains($request->sampler, ',')) {
-                $datsa = explode(",", $request->sampler);
+            if (str_contains($psHeader->sampler_jadwal, ',')) {
+                $datsa = explode(",", $psHeader->sampler_jadwal);
                 foreach ($datsa as $s => $dat) {
                     $html .= ($s + 1) . '. ' . $dat . '<br>';
                 }
             } else {
-                $html .= '1. ' . $request->sampler;
+                $html .= '1. ' . $psHeader->sampler_jadwal;
             }
 
             $pdf->SetHTMLHeader('
