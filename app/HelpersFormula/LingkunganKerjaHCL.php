@@ -9,11 +9,11 @@ class LingkunganKerjaHCL
     public function index($data, $id_parameter, $mdl)
     {
         if ($data->use_absorbansi) {
-            $ks = array_sum($data->ks[0]) / count($data->ks[0]);
-            $kb = array_sum($data->kb[0]) / count($data->kb[0]);
+            $ks = round(array_sum($data->ks[0]) / count($data->ks[0]), 3);
+            $kb = round(array_sum($data->kb[0]) / count($data->kb[0]), 3);
         } else {
-            $ks = array_sum($data->ks) / count($data->ks);
-            $kb = array_sum($data->kb) / count($data->kb);
+            $ks = round(array_sum($data->ks) / count($data->ks), 3);
+            $kb = round(array_sum($data->kb) / count($data->kb), 3);
             // dd($data);
         }
 
