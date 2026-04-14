@@ -33,7 +33,7 @@ use App\Models\HistoryKuotaPengujian;
 use App\Models\KuotaPengujian;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
-
+use App\Models\MasterBotol;
 
 class ReadyOrderController extends Controller
 {
@@ -1202,17 +1202,17 @@ class ReadyOrderController extends Controller
                         // Generate botol dan barcode
                         $botol = [];
 
-                        $ketentuan_botol = [
-                            'ORI' => 1000,
-                            'H2SO4' => 1000,
-                            'M100' => 100,
-                            'HNO3' => 500,
-                            'M1000' => 1000,
-                            'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10,
-                            'Ori-Kaca-3L' => 3000,
-                        ];
-
+                        // $ketentuan_botol = [
+                        //     'ORI' => 1000,
+                        //     'H2SO4' => 1000,
+                        //     'M100' => 100,
+                        //     'HNO3' => 500,
+                        //     'M1000' => 1000,
+                        //     'BENTHOS' => 100,
+                        //     'BEBAS PYROGEN' => 10,
+                        //     'Ori-Kaca-3L' => 3000,
+                        // ];
+                        $ketentuan_botol = MasterBotol::pluck('volume', 'nama_botol')->toArray();
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
                                 foreach ($param_map as $p) {
@@ -1651,16 +1651,17 @@ class ReadyOrderController extends Controller
 
                         // Generate botol dan barcode
                         $botol = [];
-                        $ketentuan_botol = [
-                            'ORI' => 1000,
-                            'H2SO4' => 1000,
-                            'M100' => 100,
-                            'HNO3' => 500,
-                            'M1000' => 1000,
-                            'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10,
-                            'Ori-Kaca-3L' => 3000,
-                        ];
+                        // $ketentuan_botol = [
+                        //     'ORI' => 1000,
+                        //     'H2SO4' => 1000,
+                        //     'M100' => 100,
+                        //     'HNO3' => 500,
+                        //     'M1000' => 1000,
+                        //     'BENTHOS' => 100,
+                        //     'BEBAS PYROGEN' => 10,
+                        //     'Ori-Kaca-3L' => 3000,
+                        // ];
+                        $ketentuan_botol = MasterBotol::pluck('volume', 'nama_botol')->toArray();
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
                                 foreach ($param_map as $p) {
@@ -2091,17 +2092,17 @@ class ReadyOrderController extends Controller
 
                                     // Generate botol dan barcode
                                     $botol = [];
-                                    $ketentuan_botol = [
-                                        'ORI' => 1000,
-                                        'H2SO4' => 1000,
-                                        'M100' => 100,
-                                        'HNO3' => 500,
-                                        'M1000' => 1000,
-                                        'BENTHOS' => 100,
-                                        'BEBAS PYROGEN' => 10,
-                                        'Ori-Kaca-3L' => 3000,
-                                    ];
-
+                                    // $ketentuan_botol = [
+                                    //     'ORI' => 1000,
+                                    //     'H2SO4' => 1000,
+                                    //     'M100' => 100,
+                                    //     'HNO3' => 500,
+                                    //     'M1000' => 1000,
+                                    //     'BENTHOS' => 100,
+                                    //     'BEBAS PYROGEN' => 10,
+                                    //     'Ori-Kaca-3L' => 3000,
+                                    // ];
+                                    $ketentuan_botol = MasterBotol::pluck('volume', 'nama_botol')->toArray();
                                     foreach ($botol_volumes as $type => $volume) {
                                         if (empty($type)) {
                                             foreach ($param_map as $p) {
@@ -2543,16 +2544,17 @@ class ReadyOrderController extends Controller
                         // Generate botol dan barcode
                         $botol = [];
 
-                        $ketentuan_botol = [
-                            'ORI' => 1000,
-                            'H2SO4' => 1000,
-                            'M100' => 100,
-                            'HNO3' => 500,
-                            'M1000' => 1000,
-                            'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10,
-                            'Ori-Kaca-3L' => 3000,
-                        ];
+                        // $ketentuan_botol = [
+                        //     'ORI' => 1000,
+                        //     'H2SO4' => 1000,
+                        //     'M100' => 100,
+                        //     'HNO3' => 500,
+                        //     'M1000' => 1000,
+                        //     'BENTHOS' => 100,
+                        //     'BEBAS PYROGEN' => 10,
+                        //     'Ori-Kaca-3L' => 3000,
+                        // ];
+                        $ketentuan_botol = MasterBotol::pluck('volume', 'nama_botol')->toArray();
 
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
