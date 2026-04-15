@@ -157,6 +157,39 @@ class InvoiceController extends Controller
     public function index(Request $request)
     {
         try {
+            $searchNoInvoice = trim((string) $request->no_invoice);
+
+            /*
+        |--------------------------------------------------------------------------
+        | STEP 1: cari kandidat no_invoice dulu dari tabel invoice saja
+        |--------------------------------------------------------------------------
+        | Ini penting biar query berat tidak scan semua invoice.
+        */
+            $candidateInvoices = null;
+
+            if ($searchNoInvoice !== '') {
+                $candidateQuery = Invoice::query()
+                    ->where('invoice.is_active', true)
+                    ->where('invoice.is_emailed', true)
+                    ->where('invoice.is_whitelist', false);
+
+                if (is_numeric($searchNoInvoice)) {
+                    $candidateQuery->where('invoice.no_invoice', 'like', '%' . $searchNoInvoice . '%');
+                } else {
+                    $candidateQuery->where('invoice.no_invoice', 'like', $searchNoInvoice . '%');
+                }
+
+                $candidateInvoices = $candidateQuery
+                    ->distinct()
+                    ->limit(100)
+                    ->pluck('invoice.no_invoice');
+
+                // kalau ga ada kandidat, langsung return kosong. jangan lanjut query berat
+                if ($candidateInvoices->isEmpty()) {
+                    return DataTables::of(collect())->make(true);
+                }
+            }
+
             $withdrawSub = DB::table('withdraw')
                 ->select(
                     'no_invoice',
@@ -165,84 +198,6 @@ class InvoiceController extends Controller
                 ->groupBy('no_invoice');
 
             $data = Invoice::query()
-                ->select([
-                    DB::raw('MAX(invoice.id) AS id'),
-                    'invoice.no_invoice',
-
-                    DB::raw('MAX(invoice.created_by) AS created_by'),
-                    DB::raw('MAX(invoice.faktur_pajak) AS faktur_pajak'),
-
-                    DB::raw('FLOOR(SUM(invoice.nilai_tagihan)) AS total_tagihan'),
-                    DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
-
-                    DB::raw('MAX(invoice.rekening) AS rekening'),
-                    DB::raw('MAX(invoice.keterangan) AS keterangan'),
-
-                    DB::raw('MAX(invoice.nama_pj) AS nama_pj'),
-                    DB::raw('MAX(invoice.jabatan_pj) AS jabatan_pj'),
-
-                    DB::raw('MAX(invoice.tgl_invoice) AS tgl_invoice'),
-                    DB::raw('MAX(invoice.no_faktur) AS no_faktur'),
-
-                    DB::raw('MAX(invoice.alamat_penagihan) AS alamat_penagihan'),
-                    DB::raw('MAX(invoice.nama_pic) AS nama_pic'),
-                    DB::raw('MAX(invoice.no_pic) AS no_pic'),
-                    DB::raw('MAX(invoice.email_pic) AS email_pic'),
-                    DB::raw('MAX(invoice.jabatan_pic) AS jabatan_pic'),
-
-                    DB::raw('MAX(invoice.no_po) AS no_po'),
-                    DB::raw('MAX(invoice.no_spk) AS no_spk'),
-
-                    DB::raw('MAX(invoice.tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
-                    DB::raw('MAX(invoice.filename) AS filename'),
-                    DB::raw('MAX(invoice.upload_file) AS upload_file'),
-                    DB::raw('MAX(invoice.file_pph) AS file_pph'),
-
-                    DB::raw('MAX(order_header.konsultan) AS consultant'),
-                    DB::raw('MAX(order_header.no_document) AS document'),
-                    DB::raw('MAX(order_header.sales_id) AS sales_id'),
-                    DB::raw('MAX(master_karyawan.nama_lengkap) AS sales_penanggung_jawab'),
-
-                    DB::raw('MAX(invoice.created_at) AS created_at'),
-                    DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
-                    DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
-
-                    DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
-                    DB::raw('(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
-                    // DB::raw('MAX(invoice.nilai_pelunasan) AS nilai_pelunasan' + 
-                    //     ' + COALESCE(MAX(w.total_pembayaran), 0) AS nilai_pelunasan'),
-
-                    DB::raw('MAX(invoice.is_generate) AS is_generate'),
-                    DB::raw('MAX(invoice.generated_by) AS generated_by'),
-                    DB::raw('MAX(invoice.generated_at) AS generated_at'),
-                    DB::raw('MAX(invoice.expired) AS expired'),
-
-                    DB::raw('MAX(invoice.pelanggan_id) AS pelanggan_id'),
-                    DB::raw('MAX(invoice.detail_pendukung) AS detail_pendukung'),
-
-                    DB::raw('COALESCE(
-                        MAX(order_header.nama_perusahaan),
-                        MAX(order_header.konsultan)
-                    ) AS nama_customer'),
-
-                    DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
-
-                    DB::raw('GROUP_CONCAT(DISTINCT invoice.no_order) AS no_orders'),
-                    DB::raw("
-                        CASE
-                            WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
-                            WHEN (SUM(invoice.nilai_tagihan)
-                                - (COALESCE(SUM(invoice.nilai_pelunasan),0)
-                                    + COALESCE(MAX(w.total_pembayaran),0))
-                                ) < 0 THEN 'Kelebihan Pembayaran'
-                            WHEN (SUM(invoice.nilai_tagihan)
-                                - (COALESCE(SUM(invoice.nilai_pelunasan),0)
-                                    + COALESCE(MAX(w.total_pembayaran),0))
-                                ) > 0 THEN 'Belum Lunas'
-                            ELSE 'Lunas'
-                        END AS status_lunas
-                    ")
-                ])
                 ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
                 ->leftJoinSub($withdrawSub, 'w', function ($join) {
                     $join->on('invoice.no_invoice', '=', 'w.no_invoice');
@@ -253,47 +208,161 @@ class InvoiceController extends Controller
                     ['invoice.is_emailed', true],
                     ['invoice.is_whitelist', false],
                     ['order_header.is_active', true],
-                ])
-                ->groupBy('invoice.no_invoice');
+                ]);
 
-            // ===== FILTER MANUAL KAREBA SEARCHABLE NYA FALSE =====
-            if ($request->has('keterangan') && $request->keterangan != '') {
-                $status = $request->keterangan;
-                
-                $data->havingRaw("
-                    CASE
-                        WHEN SUM(invoice.nilai_pelunasan) = 0 THEN 'Belum Ada Pembayaran'
-                        WHEN (SUM(invoice.nilai_tagihan)
-                            - (COALESCE(MAX(invoice.nilai_pelunasan),0)
-                                + COALESCE(MAX(w.total_pembayaran),0))
-                            ) < 0 THEN 'Kelebihan Pembayaran'
-                        WHEN (SUM(invoice.nilai_tagihan)
-                            - (COALESCE(MAX(invoice.nilai_pelunasan),0)
-                                + COALESCE(MAX(w.total_pembayaran),0))
-                            ) > 0 THEN 'Belum Lunas'
-                        ELSE 'Lunas'
-                    END = ?
-                ", [$status]);
+            /*
+        |--------------------------------------------------------------------------
+        | STEP 2: batasi query monster ke kandidat hasil step 1
+        |--------------------------------------------------------------------------
+        */
+            if ($candidateInvoices !== null) {
+                $data->whereIn('invoice.no_invoice', $candidateInvoices);
             }
+
+            /*
+        |--------------------------------------------------------------------------
+        | FILTER NON-AGGREGATE
+        |--------------------------------------------------------------------------
+        */
+            if ($request->filled('document')) {
+                $data->where('order_header.no_document', 'like', '%' . trim($request->document) . '%');
+            }
+
+            if ($request->filled('consultant')) {
+                $data->where('order_header.konsultan', 'like', '%' . trim($request->consultant) . '%');
+            }
+
+            if ($request->filled('sales_penanggung_jawab')) {
+                $data->where('master_karyawan.nama_lengkap', 'like', '%' . trim($request->sales_penanggung_jawab) . '%');
+            }
+
             if ($request->filled('no_po')) {
-                $data->havingRaw(
-                    'MAX(invoice.no_po) LIKE ?',
-                    ['%' . $request->no_po . '%']
-                );
+                $data->where('invoice.no_po', 'like', '%' . trim($request->no_po) . '%');
             }
 
             if ($request->filled('no_spk')) {
-                $data->havingRaw(
-                    'MAX(invoice.no_spk) LIKE ?',
-                    ['%' . $request->no_spk . '%']
-                );
+                $data->where('invoice.no_spk', 'like', '%' . trim($request->no_spk) . '%');
+            }
+
+            if ($request->filled('tanggal_pembayaran')) {
+                $data->where('invoice.tgl_pelunasan', 'like', '%' . $request->tanggal_pembayaran . '%');
+            }
+
+            if ($request->filled('tanggal_invoice')) {
+                $data->where('invoice.tgl_invoice',  'like', '%' . $request->tanggal_invoice . '%');
+            }
+
+            if ($request->filled('tanggal_jatuh_tempo')) {
+                $data->where('invoice.tgl_jatuh_tempo',  'like', '%' . $request->tanggal_jatuh_tempo . '%');
+            }
+
+            if ($request->filled('emailed_at')) {
+                $data->where('invoice.emailed_at',  'like', '%' . $request->emailed_at . '%');
+            }
+
+            if ($request->filled('emailed_by')) {
+                $data->where('invoice.emailed_by', 'like', '%' . trim($request->emailed_by) . '%');
+            }
+
+            $data->select([
+                DB::raw('MAX(invoice.id) AS id'),
+                'invoice.no_invoice',
+
+                DB::raw('MAX(invoice.created_by) AS created_by'),
+                DB::raw('MAX(invoice.faktur_pajak) AS faktur_pajak'),
+
+                DB::raw('FLOOR(SUM(invoice.nilai_tagihan)) AS total_tagihan'),
+                DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
+
+                DB::raw('MAX(invoice.rekening) AS rekening'),
+                DB::raw('MAX(invoice.keterangan) AS keterangan'),
+
+                DB::raw('MAX(invoice.nama_pj) AS nama_pj'),
+                DB::raw('MAX(invoice.jabatan_pj) AS jabatan_pj'),
+
+                DB::raw('MAX(invoice.tgl_invoice) AS tgl_invoice'),
+                DB::raw('MAX(invoice.no_faktur) AS no_faktur'),
+
+                DB::raw('MAX(invoice.alamat_penagihan) AS alamat_penagihan'),
+                DB::raw('MAX(invoice.nama_pic) AS nama_pic'),
+                DB::raw('MAX(invoice.no_pic) AS no_pic'),
+                DB::raw('MAX(invoice.email_pic) AS email_pic'),
+                DB::raw('MAX(invoice.jabatan_pic) AS jabatan_pic'),
+
+                DB::raw('MAX(invoice.no_po) AS no_po'),
+                DB::raw('MAX(invoice.no_spk) AS no_spk'),
+
+                DB::raw('MAX(invoice.tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
+                DB::raw('MAX(invoice.filename) AS filename'),
+                DB::raw('MAX(invoice.upload_file) AS upload_file'),
+                DB::raw('MAX(invoice.file_pph) AS file_pph'),
+
+                DB::raw('MAX(order_header.konsultan) AS consultant'),
+                DB::raw('MAX(order_header.no_document) AS document'),
+                DB::raw('MAX(order_header.sales_id) AS sales_id'),
+                DB::raw('MAX(master_karyawan.nama_lengkap) AS sales_penanggung_jawab'),
+
+                DB::raw('MAX(invoice.created_at) AS created_at'),
+                DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
+                DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
+
+                DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
+                DB::raw('(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+
+                DB::raw('MAX(invoice.is_generate) AS is_generate'),
+                DB::raw('MAX(invoice.generated_by) AS generated_by'),
+                DB::raw('MAX(invoice.generated_at) AS generated_at'),
+                DB::raw('MAX(invoice.expired) AS expired'),
+
+                DB::raw('MAX(invoice.pelanggan_id) AS pelanggan_id'),
+                DB::raw('MAX(invoice.detail_pendukung) AS detail_pendukung'),
+
+                DB::raw('COALESCE(MAX(order_header.nama_perusahaan), MAX(order_header.konsultan)) AS nama_customer'),
+                DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
+                DB::raw('GROUP_CONCAT(DISTINCT invoice.no_order) AS no_orders'),
+
+                DB::raw("
+                CASE
+                    WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
+                    WHEN (
+                        SUM(invoice.nilai_tagihan) -
+                        (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                    ) < 0 THEN 'Kelebihan Pembayaran'
+                    WHEN (
+                        SUM(invoice.nilai_tagihan) -
+                        (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                    ) > 0 THEN 'Belum Lunas'
+                    ELSE 'Lunas'
+                END AS status_lunas
+            ")
+            ])->groupBy('invoice.no_invoice');
+
+            /*
+        |--------------------------------------------------------------------------
+        | FILTER AGGREGATE
+        |--------------------------------------------------------------------------
+        */
+            if ($request->filled('keterangan')) {
+                $status = $request->keterangan;
+
+                $data->havingRaw("
+                CASE
+                    WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
+                    WHEN (
+                        SUM(invoice.nilai_tagihan) -
+                        (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                    ) < 0 THEN 'Kelebihan Pembayaran'
+                    WHEN (
+                        SUM(invoice.nilai_tagihan) -
+                        (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                    ) > 0 THEN 'Belum Lunas'
+                    ELSE 'Lunas'
+                END = ?
+            ", [$status]);
             }
 
             if ($request->filled('nilai_invoice')) {
-                $data->havingRaw(
-                    'SUM(invoice.nilai_tagihan) LIKE ?',
-                    ['%' . $request->nilai_invoice . '%']
-                );
+                $data->havingRaw('SUM(invoice.nilai_tagihan) LIKE ?', ['%' . $request->nilai_invoice . '%']);
             }
 
             if ($request->filled('pembayaran')) {
@@ -303,78 +372,23 @@ class InvoiceController extends Controller
                 );
             }
 
-            if ($request->filled('emailed_by')) {
-                $data->havingRaw(
-                    'MAX(invoice.emailed_by) LIKE ?',
-                    ['%' . $request->emailed_by . '%']
-                );
-            }
-
             if ($request->filled('nama_customer')) {
                 $data->havingRaw(
-                    'COALESCE(
-                        MAX(order_header.nama_perusahaan),
-                        MAX(order_header.konsultan)
-                    ) LIKE ?',
+                    'COALESCE(MAX(order_header.nama_perusahaan), MAX(order_header.konsultan)) LIKE ?',
                     ['%' . $request->nama_customer . '%']
                 );
             }
 
-            if ($request->filled('tanggal_pembayaran')) {
-                $data->havingRaw(
-                    'DATE(MAX(invoice.tgl_pelunasan)) LIKE ?',
-                    ['%' . $request->tanggal_pembayaran . '%']
-                );
-            }
-            
-            if ($request->filled('tanggal_invoice')) {
-                $data->havingRaw(
-                    'DATE(MAX(invoice.tgl_invoice)) LIKE ?',
-                    ['%' . $request->tanggal_invoice . '%']
-                );
-            }
-            
-            if ($request->filled('tanggal_jatuh_tempo')) {
-                $data->havingRaw(
-                    'DATE(MAX(invoice.tgl_jatuh_tempo)) LIKE ?',
-                    ['%' . $request->tanggal_jatuh_tempo . '%']
-                );
-            }
-
-            if ($request->filled('emailed_at')) {
-                $data->havingRaw(
-                    'DATE(MAX(invoice.emailed_at)) LIKE ?',
-                    ['%' . $request->emailed_at . '%']
-                );
-            }
-
-            if ($request->filled('no_invoice')) {
-                $data->where('invoice.no_invoice', 'like', '%' . $request->no_invoice . '%');
-            }
-            if ($request->filled('document')) {
-                $data->where('order_header.no_document', 'like', '%' . $request->document . '%');
-            }
-
-            if ($request->filled('consultant')) {
-                $data->where('order_header.konsultan', 'like', '%' . $request->consultant . '%');
-            }
-
-            if ($request->filled('sales_penanggung_jawab')) {
-                $data->where('master_karyawan.nama_lengkap', 'like', '%' . $request->sales_penanggung_jawab . '%');
-            }
-
             $data->orderByDesc('invoice.no_invoice');
 
-
             return DataTables::of($data)
-                /* ================= HISTORY ================= */
                 ->addColumn('history', function ($row) {
                     $record = RecordPembayaranInvoice::with('sales_in_detail.header')
                         ->where('no_invoice', $row->no_invoice)
                         ->where('is_active', true)
                         ->orderByDesc('id')
                         ->get()
-                        ->map(fn ($r) => [
+                        ->map(fn($r) => [
                             'batch_id' => $r->sales_in_detail->header->no_dokumen ?? 'data lama',
                             'type' => 'record',
                             'nilai_pembayaran' => $r->nilai_pembayaran,
@@ -390,7 +404,7 @@ class InvoiceController extends Controller
                         ->where('no_invoice', $row->no_invoice)
                         ->orderByDesc('id')
                         ->get()
-                        ->map(fn ($w) => [
+                        ->map(fn($w) => [
                             'batch_id' => $w->sales_in_detail->header->no_dokumen ?? 'data lama',
                             'type' => 'withdraw',
                             'nilai_pembayaran' => null,
@@ -402,10 +416,9 @@ class InvoiceController extends Controller
                             'created_at' => $w->created_at,
                         ]);
 
-                    return $record->merge($withdraw);
+                    return $record->merge($withdraw)->values();
                 })
                 ->make(true);
-
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => $th->getMessage(),
