@@ -310,6 +310,19 @@ class PortalSdController extends Controller
                 $data->created_at = DATE('Y-m-d H:i:s');
                 $data->save();
                 $getId = $data->id;
+
+                if ($request->no_order !== null) {
+                    // Looping langsung dari data request
+                    foreach ($request->tanggal_sampling as $item) {
+                        OrderDetail::where('no_sampel', $item['no_sampel'])
+                            ->where('kategori_1', 'SD')
+                            ->where('is_active', 1)
+                            ->update([
+                                // Mengambil string tanggalnya saja, bukan array
+                                'tanggal_sampling' => $item['tanggal_sampling'] 
+                            ]);
+                    }
+                }
                 DB::commit();
                 return response()->json(['data' => $getId], 200);
             } else {
@@ -323,6 +336,19 @@ class PortalSdController extends Controller
                 $chek->alamat_perusahaan = $request->alamat_perusahaan;
                 $chek->updated_at = DATE('Y-m-d H:i:s');
                 $chek->save();
+
+                if ($request->no_order !== null) {
+                    // Looping langsung dari data request
+                    foreach ($request->tanggal_sampling as $item) {
+                        OrderDetail::where('no_sampel', $item['no_sampel'])
+                            ->where('kategori_1', 'SD')
+                            ->where('is_active', 1)
+                            ->update([
+                                // Mengambil string tanggalnya saja, bukan array
+                                'tanggal_sampling' => $item['tanggal_sampling'] 
+                            ]);
+                    }
+                }
                 DB::commit();
                 return response()->json(['data' => $chek->id], 200);
             }
@@ -748,9 +774,9 @@ class PortalSdController extends Controller
             ]);
             return response()->json([
                 'error' => true,
-                'message' => $e->getMessage(),
-                'line' =>$e->getLine(),
-                'file' => $e->getFile()
+                'message' => $ex->getMessage(),
+                'line' =>$ex->getLine(),
+                'file' => $ex->getFile()
             ], 500);
         }
     }
