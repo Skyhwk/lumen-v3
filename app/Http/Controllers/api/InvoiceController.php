@@ -245,19 +245,19 @@ class InvoiceController extends Controller
             }
 
             if ($request->filled('tanggal_pembayaran')) {
-                $data->whereDate('invoice.tgl_pelunasan', $request->tanggal_pembayaran);
+                $data->where('invoice.tgl_pelunasan', 'like', '%' . $request->tanggal_pembayaran . '%');
             }
 
             if ($request->filled('tanggal_invoice')) {
-                $data->whereDate('invoice.tgl_invoice', $request->tanggal_invoice);
+                $data->where('invoice.tgl_invoice',  'like', '%' . $request->tanggal_invoice . '%');
             }
 
             if ($request->filled('tanggal_jatuh_tempo')) {
-                $data->whereDate('invoice.tgl_jatuh_tempo', $request->tanggal_jatuh_tempo);
+                $data->where('invoice.tgl_jatuh_tempo',  'like', '%' . $request->tanggal_jatuh_tempo . '%');
             }
 
             if ($request->filled('emailed_at')) {
-                $data->whereDate('invoice.emailed_at', $request->emailed_at);
+                $data->where('invoice.emailed_at',  'like', '%' . $request->emailed_at . '%');
             }
 
             if ($request->filled('emailed_by')) {
