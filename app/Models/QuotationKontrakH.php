@@ -170,4 +170,9 @@ class QuotationKontrakH extends Sector
     {
         return $this->hasOne(QuotationKontrakD::class, 'id_request_quotation_kontrak_h', 'id')->ofMany('periode_kontrak', 'max');
     }
+
+    public function SampelDiantar()
+    {
+        return $this->hasMany(SampelDiantar::class, 'no_quotation', 'no_document')->with(['detail']);
+    }
 }

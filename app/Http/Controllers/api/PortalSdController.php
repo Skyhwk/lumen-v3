@@ -31,6 +31,104 @@ class PortalSdController extends Controller
                 ->where('is_revisi',0)
                 ->first();
 
+            // logic untuk pra-order:
+            if($search == null){
+                if ($type[1] == 'QTC') {
+                    $search = QuotationKontrakH::with(['SampelDiantar','detail' => function ($q) {
+                        $q->where('status_sampling', 'SD');
+                    }])->where('no_document', $request->no_document)
+                    ->where('is_active', 1)
+                    ->first();
+
+                    if ($search) {
+                        $detailColumn   = $search->detail;
+                        $generatedSampel = [];
+                        $counter         = 1; // nomor urut sampel
+
+                        foreach ($detailColumn as $detail) {
+                            // Struktur kontrak: { "8": { periode_kontrak, data_sampling: [...] } }
+                            $pendukung = json_decode($detail->data_pendukung_sampling, true) ?? [];
+
+                            foreach ($pendukung as $periodeKey => $periodeData) {
+                                $periode     = $periodeData['periode_kontrak'] ?? null;
+                                $dataSampling = $periodeData['data_sampling'] ?? [];
+
+                                foreach ($dataSampling as $item) {
+                                    $jumlahTitik    = (int) ($item['jumlah_titik'] ?? 1);
+                                    foreach ($item['penamaan_titik'] as $titik) {
+                                        foreach ($titik as $key => $namaLokasi) {
+                                            // Format: TPTT01****/001
+                                            $noSampel = $search->pelanggan_ID . '****/'. $key;
+                                            $generatedSampel[] = [
+                                                'no_sampel'    => $noSampel,
+                                                'keterangan_1' => $namaLokasi,
+                                                'kategori_2'   => $item['kategori_1'] ?? '',
+                                                'kategori_3'   => $item['kategori_2'] ?? '',
+                                                'parameter'    => json_encode($item['parameter'] ?? []),
+                                                'persiapan'    => json_encode([
+                                                    ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
+                                                ]),
+                                                'periode' => $periode,
+                                                'tanggal_sampling'=>null,
+                                                'no_order'=>null,
+                                                'nama_perusahaan'=> $search->nama_perusahaan,
+                                                'alamat_perusahaan'=> $search->alamat_kantor,
+                                                'is_active' => true, // tambahkan flag is_active untuk pra-order
+                                                'no_quotation' => $search->no_document,
+                                            ];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        $search->order_detail  = $generatedSampel;
+                        $search->no_order      = null; // pastikan no_order null untuk pra-order
+                        $search->sampel_diantar = [];
+                        $search->is_pra_order  = true;
+                    }
+                }else{
+                    $search = QuotationNonKontrak::with(['SampelDiantar'])->where('no_document',$request->no_document)
+                    ->where('is_active',1)
+                    ->first();
+                     if ($search) {
+                        // Generate no_sampel dari penamaan_titik
+                        $pendukung = json_decode($search->data_pendukung_sampling, true) ?? [];
+                        $generatedSampel = [];
+                        foreach ($pendukung as $item) {
+                            foreach ($item['penamaan_titik'] as $titik) {
+                                foreach ($titik as $key => $namaLokasi) {
+                                    // Format: TPTT01****/001
+                                    $noSampel = $search->pelanggan_ID . '****/'. $key;
+                                    $generatedSampel[] = [
+                                        'no_sampel'    => $noSampel,
+                                        'keterangan_1' => $namaLokasi,
+                                        'kategori_2'   => $item['kategori_1'] ?? '',
+                                        'kategori_3'   => $item['kategori_2'] ?? '',
+                                        'parameter'    => json_encode($item['parameter'] ?? []),
+                                         'persiapan'    => json_encode([
+                                            ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
+                                        ]),
+                                        'periode' => null,
+                                        'tanggal_sampling'=>null,
+                                        'no_order'=>null,
+                                        'nama_perusahaan'=> $search->nama_perusahaan,
+                                        'alamat_perusahaan'=> $search->alamat_kantor
+                                    ];
+                                }
+                            }
+                        }
+                    
+                        // Inject sebagai virtual order_detail
+                        $search->order_detail = $generatedSampel;
+                        $search->no_order = null; // pastikan no_order null untuk pra-order
+                        $search->sampel_diantar = [];
+                        $search->is_pra_order = true;
+                     }
+
+                }
+            }
+
             if ($type[1] == 'QTC') {
                 return response()->json(['type' => 'kontrak', 'data' => $search], 200);
             } else {
@@ -87,6 +185,12 @@ class PortalSdController extends Controller
             return response()->json($formatData, 200);
         } catch (\Exception $ex) {
             //throw $th;
+            \Log::error('belumOrder ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
@@ -206,6 +310,19 @@ class PortalSdController extends Controller
                 $data->created_at = DATE('Y-m-d H:i:s');
                 $data->save();
                 $getId = $data->id;
+
+                if ($request->no_order !== null) {
+                    // Looping langsung dari data request
+                    foreach ($request->tanggal_sampling as $item) {
+                        OrderDetail::where('no_sampel', $item['no_sampel'])
+                            ->where('kategori_1', 'SD')
+                            ->where('is_active', 1)
+                            ->update([
+                                // Mengambil string tanggalnya saja, bukan array
+                                'tanggal_sampling' => $item['tanggal_sampling'] 
+                            ]);
+                    }
+                }
                 DB::commit();
                 return response()->json(['data' => $getId], 200);
             } else {
@@ -219,6 +336,19 @@ class PortalSdController extends Controller
                 $chek->alamat_perusahaan = $request->alamat_perusahaan;
                 $chek->updated_at = DATE('Y-m-d H:i:s');
                 $chek->save();
+
+                if ($request->no_order !== null) {
+                    // Looping langsung dari data request
+                    foreach ($request->tanggal_sampling as $item) {
+                        OrderDetail::where('no_sampel', $item['no_sampel'])
+                            ->where('kategori_1', 'SD')
+                            ->where('is_active', 1)
+                            ->update([
+                                // Mengambil string tanggalnya saja, bukan array
+                                'tanggal_sampling' => $item['tanggal_sampling'] 
+                            ]);
+                    }
+                }
                 DB::commit();
                 return response()->json(['data' => $chek->id], 200);
             }
@@ -226,6 +356,12 @@ class PortalSdController extends Controller
         } catch (\Exception $ex) {
             //throw $th;
             DB::rollback();
+            \Log::error('storeHeader ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 "message" => $ex->getMessage(),
                 "line" => $ex->getLine(),
@@ -288,6 +424,12 @@ class PortalSdController extends Controller
         } catch (\Exception $ex) {
             //throw $th;
             DB::rollback();
+            \Log::error('storeHeaderEksternal ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 "message" => $ex->getMessage(),
                 "line" => $ex->getLine(),
@@ -305,229 +447,409 @@ class PortalSdController extends Controller
                     ->where('periode', $request->periode)
                     ->first();
                 $incoming = $request->internal_data;
-                // Pastikan array
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
-                $currentDateTime =date('Y-m-d H:i:s');
+                $currentDateTime = date('Y-m-d H:i:s');
+
                 if ($dataSave !== null) {
-                    if($dataSave->internal_data !== null){
+                    if ($dataSave->internal_data !== null) {
                         $existing = json_decode($dataSave->internal_data);
-                        // Buat index dari existing berdasarkan no_sampel + jenis_sampel
                         $indexed = [];
-                        
+
                         foreach ($existing as $item) {
                             $item = (array) $item;
+                            // pastikan history selalu array (jaga-jaga dari data lama)
+                            if (!isset($item['history']) || !is_array($item['history'])) {
+                                $item['history'] = [];
+                            }
                             $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
                             $indexed[$key] = $item;
                         }
-    
-                        // Sekarang proses incoming data
+
                         foreach ($incoming as $item) {
                             $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-    
+
                             if (!isset($indexed[$key])) {
+                                // Data baru — belum pernah ada
                                 $item['date_time'] = $currentDateTime;
+                                $item['is_active'] = true;
+                                $item['history']   = []; // baru, belum ada perubahan
                             } else {
                                 $existingItem = $indexed[$key];
-                                $isChanged = false;
-    
-                                // 1. Cek Field Sederhana (String/Angka/Null)
-                                // Masukkan 'warna', 'keruh', 'bau' ke sini karena datanya string biasa
+                                $isChanged    = false;
+                                $changedFields = [];
+
+                                // 1. Cek field sederhana
                                 $fieldsToCheck = ['ph', 'dhl', 'sistem_lock', 'jenis_sampel', 'warna', 'keruh', 'bau', 'suhu'];
-                                
                                 foreach ($fieldsToCheck as $field) {
                                     $newValue = $item[$field] ?? null;
                                     $oldValue = $existingItem[$field] ?? null;
-    
-                                    // Bandingkan nilai. Gunakan != agar "4" (string) dianggap sama dengan 4 (int)
                                     if ($newValue != $oldValue) {
                                         $isChanged = true;
-                                        break; // Jika satu beda, sudah dianggap berubah, stop loop field
+                                        $changedFields[$field] = [
+                                            'old' => $oldValue,
+                                            'new' => $newValue,
+                                        ];
                                     }
                                 }
-    
-                                // 2. Cek Field Array (Hanya Jenis Wadah)
-                                // Hanya jalankan jika field sederhana belum ditemukan perubahan
-                                if (!$isChanged) {
-                                    $newWadah = $item['jenis_wadah'] ?? [];
-                                    $oldWadah = $existingItem['jenis_wadah'] ?? [];
-                                    
-                                    // Pastikan format array murni
-                                    if (!is_array($newWadah)) $newWadah = (array)$newWadah;
-                                    if (!is_array($oldWadah)) $oldWadah = (array)$oldWadah;
-    
-                                    // Sort agar urutan tidak mempengaruhi ('A','B' dianggap sama dengan 'B','A')
-                                    sort($newWadah);
-                                    sort($oldWadah);
-    
-                                    if (json_encode($newWadah) !== json_encode($oldWadah)) {
-                                        $isChanged = true;
-                                    }
+
+                                // 2. Cek jenis_wadah
+                                $newWadah = $item['jenis_wadah'] ?? [];
+                                $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                                if (!is_array($newWadah)) $newWadah = (array) $newWadah;
+                                if (!is_array($oldWadah)) $oldWadah = (array) $oldWadah;
+                                sort($newWadah);
+                                sort($oldWadah);
+                                if (json_encode($newWadah) !== json_encode($oldWadah)) {
+                                    $isChanged = true;
+                                    $changedFields['jenis_wadah'] = [
+                                        'old' => $existingItem['jenis_wadah'] ?? [],
+                                        'new' => $item['jenis_wadah'] ?? [],
+                                    ];
                                 }
-    
-                                // Set date_time
-                                // Jika berubah update waktu, jika tidak pakai waktu lama
-                                $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
+
+                                // Ambil history lama
+                                $oldHistory = $existingItem['history'] ?? [];
+                                if (!is_array($oldHistory)) $oldHistory = [];
+
+                                if ($isChanged) {
+                                    // Ada perubahan — append ke history, update date_time
+                                    $oldHistory[] = [
+                                        'changed_at'     => $currentDateTime,
+                                        'changed_fields' => $changedFields,
+                                    ];
+                                    $item['date_time'] = $currentDateTime;
+                                } else {
+                                    // Tidak ada perubahan — pertahankan date_time lama
+                                    $item['date_time'] = $existingItem['date_time'];
+                                }
+
+                                // History selalu dipertahankan, isi atau kosong
+                                $item['history']   = $oldHistory;
+                                $item['is_active'] = $existingItem['is_active'] ?? true;
                             }
-                            
-                            // Update data di indexed untuk disimpan kembali
+
                             $indexed[$key] = $item;
                         }
-    
-                        
-                        // Hasil akhir
-                        $merged = array_values($indexed); // hilangkan key numerik, jadi array kembali
+
+                        $merged = array_values($indexed);
                         $dataToSave = [
-                            'internal_data'   => json_encode($merged)
+                            'internal_data' => json_encode($merged),
+                            'update_at'     => $currentDateTime,
                         ];
-                        // Update existing
-                        $dataToSave['update_at'] = date('Y-m-d H:i:s');
                         SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
                             ->where('periode', $request->periode)
                             ->update($dataToSave);
-                    }else{
-                        // Add periode to array for new insert
+
+                    } else {
+                        // Record ada tapi internal_data masih null — insert pertama kali
+                        foreach ($incoming as &$item) {
+                            $item['date_time'] = $currentDateTime;
+                            $item['is_active'] = true;
+                            $item['history']   = [];
+                        }
+                        unset($item);
+
                         $dataToSave = [
-                            'periode' => $request->periode,
+                            'periode'          => $request->periode,
                             'tanggal_sampling' => date('Y-m-d'),
-                            'update_at' => date('Y-m-d H:i:s'),
-                            'update_by' => 'start Internal',
-                            'internal_data' => json_encode($incoming) // langsung saja
+                            'update_at'        => $currentDateTime,
+                            'update_by'        => 'start Internal',
+                            'internal_data'    => json_encode($incoming),
                         ];
                         SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
                             ->where('periode', $request->periode)
                             ->update($dataToSave);
                     }
                 } else {
-                    // Add periode to array for new insert
+                    // Record belum ada sama sekali — create baru
+                    foreach ($incoming as &$item) {
+                        $item['date_time'] = $currentDateTime;
+                        $item['is_active'] = true;
+                        $item['history']   = [];
+                    }
+                    unset($item);
+
                     $dataToSave = [
-                        'id_header' => $request->idSampelDiantar,
-                        'periode' => $request->periode,
+                        'id_header'        => $request->idSampelDiantar,
+                        'periode'          => $request->periode,
                         'tanggal_sampling' => date('Y-m-d'),
-                        'created_at' => date('Y-m-d H:i:s'),
-                        'internal_data' => json_encode($incoming) // langsung saja
+                        'created_at'       => $currentDateTime,
+                        'internal_data'    => json_encode($incoming),
                     ];
                     SampelDiantarDetail::create($dataToSave);
                 }
 
                 return response()->json([
                     'sampeldiantarid' => $request->idSampelDiantar,
-                    'periode' => $request->periode,
+                    'periode'         => $request->periode,
                 ], 200);
             } else if ($request->mode == 'external') {
                 $dataSave = SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
                     ->where('periode', $request->periode)
                     ->first();
-                if($dataSave == null){
+
+                if ($dataSave == null) {
                     $dataSave = $this->storeHeaderEksternal($request);
                 }
+
                 $incoming = $request->external_data;
-                // Pastikan array
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
                 $merged = $incoming;
+                $currentDateTime = date('Y-m-d H:i:s');
+
                 if ($dataSave !== null) {
-                    // Update existing record
                     $existing = [];
-                    $currentDateTime = date('Y-m-d H:i:s');
-                     // Hanya decode jika eksternal_data bukan null dan string valid JSON
-                    if ( isset($dataSave->eksternal_data) && !empty($dataSave->eksternal_data)) {
+
+                    if (isset($dataSave->eksternal_data) && !empty($dataSave->eksternal_data)) {
                         $existing = json_decode($dataSave->eksternal_data, true) ?? [];
                     }
-                    // Merge jika existing tidak kosong
+
                     if (!empty($existing)) {
                         $indexed = [];
-                        // Index existing by key: no_sampel + jenis_sampel
+
                         foreach ($existing as $item) {
+                            // pastikan history selalu array dari data lama
+                            if (!isset($item['history']) || !is_array($item['history'])) {
+                                $item['history'] = [];
+                            }
                             $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
                             $indexed[$key] = $item;
                         }
-                        // Merge or replace with incoming
+
                         foreach ($incoming as $item) {
                             $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-                            // $indexed[$key] = $item;
+
                             if (!isset($indexed[$key])) {
+                                // Data baru
                                 $item['date_time'] = $currentDateTime;
-                            }else{
-                                $existingItem = $indexed[$key];
-                                $isChanged = false;
-                                $fieldsToCheck = ['ph', 'dhl', 'suhu','is_pengawetan','is_uji_insitu','deskripsi_titik','is_pencucian_wadah','is_blanko_pencucian','cara_pengambilan_sampel','waktu_diambil_pelanggan','deskripsi_blanko_pencucian','tanggal_diambil_oleh_pihak_pelanggan'];
+                                $item['is_active'] = true;
+                                $item['history']   = [];
+                            } else {
+                                $existingItem  = $indexed[$key];
+                                $isChanged     = false;
+                                $changedFields = [];
+
+                                // 1. Cek field sederhana
+                                $fieldsToCheck = [
+                                    'ph', 'dhl', 'suhu', 'is_pengawetan', 'is_uji_insitu',
+                                    'deskripsi_titik', 'is_pencucian_wadah', 'is_blanko_pencucian',
+                                    'cara_pengambilan_sampel', 'waktu_diambil_pelanggan',
+                                    'deskripsi_blanko_pencucian', 'tanggal_diambil_oleh_pihak_pelanggan'
+                                ];
 
                                 foreach ($fieldsToCheck as $field) {
                                     $newValue = $item[$field] ?? null;
                                     $oldValue = $existingItem[$field] ?? null;
                                     if ($newValue != $oldValue) {
                                         $isChanged = true;
-                                        break;
+                                        $changedFields[$field] = [
+                                            'old' => $oldValue,
+                                            'new' => $newValue,
+                                        ];
                                     }
                                 }
-                                $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
+
+                                // 2. Cek jenis_wadah jika ada
+                                if (isset($item['jenis_wadah'])) {
+                                    $newWadah = $item['jenis_wadah'] ?? [];
+                                    $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                                    if (!is_array($newWadah)) $newWadah = (array) $newWadah;
+                                    if (!is_array($oldWadah)) $oldWadah = (array) $oldWadah;
+                                    sort($newWadah);
+                                    sort($oldWadah);
+                                    if (json_encode($newWadah) !== json_encode($oldWadah)) {
+                                        $isChanged = true;
+                                        $changedFields['jenis_wadah'] = [
+                                            'old' => $existingItem['jenis_wadah'] ?? [],
+                                            'new' => $item['jenis_wadah'] ?? [],
+                                        ];
+                                    }
+                                }
+
+                                // Ambil history lama
+                                $oldHistory = $existingItem['history'] ?? [];
+                                if (!is_array($oldHistory)) $oldHistory = [];
+
+                                if ($isChanged) {
+                                    $oldHistory[] = [
+                                        'changed_at'     => $currentDateTime,
+                                        'changed_fields' => $changedFields,
+                                    ];
+                                    $item['date_time'] = $currentDateTime;
+                                } else {
+                                    $item['date_time'] = $existingItem['date_time'];
+                                }
+
+                                $item['history']   = $oldHistory;
+                                $item['is_active'] = $existingItem['is_active'] ?? true;
                             }
+
                             $indexed[$key] = $item;
                         }
+
                         $merged = array_values($indexed);
+
+                    } else {
+                        // existing kosong — data pertama kali masuk
+                        foreach ($incoming as &$item) {
+                            $item['date_time'] = $currentDateTime;
+                            $item['is_active'] = true;
+                            $item['history']   = [];
+                        }
+                        unset($item);
+                        $merged = $incoming;
                     }
-                     // Simpan hasil
-                     if($request->idSampelDiantar != null){
-                         SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
-                         ->where('periode', $request->periode)
-                         ->update([
-                             'eksternal_data' => json_encode($merged),
-                             'petugas_pengambilan_sampel' => $request->sampler,
-                             'update_at' => date('Y-m-d H:i:s'),
-                             'is_ukur_suhu' => $request->is_ukur_suhu,
-                             'tanggal_diambil_oleh_pihak_pelanggan' => $request->tanggal_diambil_oleh_pihak_pelanggan,
-                             'tujuan_pengujian' => json_encode($request->tujuan_pengujian),
-                             'waktu_diambil_pelanggan' => $request->waktu_diambil_pelanggan,
-                             'nama_sertifikat'=>$request->nama_sertifikat,
-                             'metode_standar'=>$request->metode_standar,
-                             'sampler'=>$request->sampler,
-                             'cara_pengambilan_sample'=>$request->cara_pengambilan_sample,
-                         ]);
-                     }else{
-                        $dataCreate =[
-                            'id_header' => $dataSave->id,
-                             'eksternal_data' => json_encode($merged),
-                             'petugas_pengambilan_sampel' => $request->sampler,
-                             'is_ukur_suhu' => $request->is_ukur_suhu,
-                             'tanggal_diambil_oleh_pihak_pelanggan' => $request->tanggal_diambil_oleh_pihak_pelanggan,
-                             'tujuan_pengujian' => json_encode($request->tujuan_pengujian),
-                             'waktu_diambil_pelanggan' => $request->waktu_diambil_pelanggan,
-                             'nama_sertifikat'=>$request->nama_sertifikat,
-                             'metode_standar'=>$request->metode_standar,
-                             'sampler'=>$request->sampler,
-                             'cara_pengambilan_sample'=>$request->cara_pengambilan_sample,
-                             'created_at' => date('Y-m-d H:i:s'),
-                             'created_by' => 'start Eksternal',
-                         ];
-                         SampelDiantarDetail::create($dataCreate);
-                     }
+
+                    // Simpan hasil
+                    if ($request->idSampelDiantar != null) {
+                        SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
+                            ->where('periode', $request->periode)
+                            ->update([
+                                'eksternal_data'                      => json_encode($merged),
+                                'petugas_pengambilan_sampel'          => $request->sampler,
+                                'update_at'                           => $currentDateTime,
+                                'is_ukur_suhu'                        => $request->is_ukur_suhu,
+                                'tanggal_diambil_oleh_pihak_pelanggan'=> $request->tanggal_diambil_oleh_pihak_pelanggan,
+                                'tujuan_pengujian'                    => json_encode($request->tujuan_pengujian),
+                                'waktu_diambil_pelanggan'             => $request->waktu_diambil_pelanggan,
+                                'nama_sertifikat'                     => $request->nama_sertifikat,
+                                'metode_standar'                      => $request->metode_standar,
+                                'sampler'                             => $request->sampler,
+                                'cara_pengambilan_sample'             => $request->cara_pengambilan_sample,
+                            ]);
+                    } else {
+                        $dataCreate = [
+                            'id_header'                           => $dataSave->id,
+                            'eksternal_data'                      => json_encode($merged),
+                            'petugas_pengambilan_sampel'          => $request->sampler,
+                            'is_ukur_suhu'                        => $request->is_ukur_suhu,
+                            'tanggal_diambil_oleh_pihak_pelanggan'=> $request->tanggal_diambil_oleh_pihak_pelanggan,
+                            'tujuan_pengujian'                    => json_encode($request->tujuan_pengujian),
+                            'waktu_diambil_pelanggan'             => $request->waktu_diambil_pelanggan,
+                            'nama_sertifikat'                     => $request->nama_sertifikat,
+                            'metode_standar'                      => $request->metode_standar,
+                            'sampler'                             => $request->sampler,
+                            'cara_pengambilan_sample'             => $request->cara_pengambilan_sample,
+                            'created_at'                          => $currentDateTime,
+                            'created_by'                          => 'start Eksternal',
+                        ];
+                        SampelDiantarDetail::create($dataCreate);
+                    }
                 }
+
+                // Bersihkan dan index by no_sampel dulu — 0 query
+                $tanggalTerimaMap = collect($request->tanggal_terima ?? [])
+                    ->filter(fn($item) => !empty($item['no_sampel']) && !empty($item['tanggal_terima']))
+                    ->keyBy('no_sampel');
+
+                if ($tanggalTerimaMap->isNotEmpty()) {
+                    // 1 query: ambil semua no_sampel yang masih null sekaligus
+                    $perluDiupdate = OrderDetail::whereIn('no_sampel', $tanggalTerimaMap->keys())
+                        ->whereNull('tanggal_terima')
+                        ->pluck('no_sampel');
+
+                    // Loop hanya untuk yang benar-benar perlu diupdate
+                    if ($perluDiupdate->isNotEmpty()) {
+                        foreach ($perluDiupdate as $noSampel) {
+                            OrderDetail::where('no_sampel', $noSampel)
+                                ->update([
+                                    'tanggal_terima' => $tanggalTerimaMap[$noSampel]['tanggal_terima'],
+                                ]);
+                        }
+                    }
+                }
+                
 
                 return response()->json([
                     'sampeldiantarid' => $dataSave->id,
-                    'periode' => $request->periode,
+                    'periode'         => $request->periode,
                 ], 200);
             }
-        } catch (\Exception $e) {
+        } catch (\Exception $ex) {
+            \Log::error('saveStep ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 'error' => true,
-                'message' => $e->getMessage(),
-                'line' =>$e->getLine(),
-                'file' => $e->getFile()
+                'message' => $ex->getMessage(),
+                'line' =>$ex->getLine(),
+                'file' => $ex->getFile()
             ], 500);
         }
     }
     public function listSampel(Request $request)
     {
         try {
+            
             $type = explode('/', $request->no_document);
             $datas = OrderDetail::where('kategori_1', 'SD')
-                ->where('no_order', $request->no_order)
+                ->where('no_order', $request->no_order?: null)
                 ->where('is_active', true)
                 ->where('periode', (isset($request->periode)) ? $request->periode : null)
                 ->get();
+            /**
+             * jika no qt belum order
+             * agar tidak mengganggu flow yang sudah berjalan, tetap pakai variabale $datas untuk menampung data order detail, walaupun sebenarnya data order detail tidak ada karena belum order, tapi dengan cara ini tidak perlu banyak ubahan di frontend, karena frontend tetap bisa mengakses $datas untuk menampilkan data sampel, hanya saja datanya kosong, dan untuk data sampel yang sudah diisi di pra-order tetap bisa ditampilkan karena sudah di merge di function search sebelumnya
+             */
             if ($type[1] == 'QTC') {
+                if($datas->isEmpty()){
+                    $datas = QuotationKontrakH::with(['detail' => function ($q) {
+                        $q->where('status_sampling', 'SD');
+                    }])->where('no_document', $request->no_document)
+                    ->where('is_active', 1)
+                    ->first();
+
+                    if ($datas) {
+                        $detailColumn   = $datas->detail;
+                        $generatedSampel = [];
+                        $counter         = 1; // nomor urut sampel
+
+                        foreach ($detailColumn as $detail) {
+                            // Struktur kontrak: { "8": { periode_kontrak, data_sampling: [...] } }
+                            $pendukung = json_decode($detail->data_pendukung_sampling, true) ?? [];
+
+                            foreach ($pendukung as $periodeKey => $periodeData) {
+                                $periode     = $periodeData['periode_kontrak'] ?? null;
+                                $dataSampling = $periodeData['data_sampling'] ?? [];
+                                if($periode == $request->periode){
+                                    foreach ($dataSampling as $item) {
+                                        $jumlahTitik    = (int) ($item['jumlah_titik'] ?? 1);
+                                        foreach ($item['penamaan_titik'] as $titik) {
+                                            foreach ($titik as $key => $namaLokasi) {
+                                                // Format: TPTT01****/001
+                                                $noSampel = $datas->pelanggan_ID . '****/'. $key;
+                                                $generatedSampel[] = [
+                                                    'no_sampel'    => $noSampel,
+                                                    'keterangan_1' => $namaLokasi,
+                                                    'kategori_2'   => $item['kategori_1'] ?? '',
+                                                    'kategori_3'   => $item['kategori_2'] ?? '',
+                                                    'parameter'    => json_encode($item['parameter'] ?? []),
+                                                    'persiapan'    => json_encode([
+                                                        ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
+                                                    ]),
+                                                    'periode' => $periode,
+                                                    'tanggal_sampling'=>null,
+                                                    'no_order'=>null,
+                                                    'nama_perusahaan'=> $datas->nama_perusahaan,
+                                                    'alamat_perusahaan'=> $datas->alamat_kantor,
+                                                    'is_active' => true, // tambahkan flag is_active untuk pra-order
+                                                    'no_quotation' => $datas->no_document,
+                                                ];
+                                            }
+                                        }
+                                    }   
+                                }
+                            }
+                        }
+
+                        $datas  = collect($generatedSampel);
+                    }
+                }
                 $sampelDiantarID = SampelDiantar::with(['detail' => function ($q) use ($request) {
-                    $q->where('periode', $request->periode);
+                    // $q->where('periode', $request->periode);
                 }])
                 ->where('no_quotation', $request->no_document)
                 ->where('no_order', $request->no_order)
@@ -538,12 +860,48 @@ class PortalSdController extends Controller
                     return response()->json(['type' => 'kontrak', 'data' => $datas, 'sd' => null], 200);
                 }
             } else {
+                if($datas->isEmpty()){
+                    $dataQt = QuotationNonKontrak::where('no_document',$request->no_document)
+                    ->where('is_active',1)
+                    ->where('status_sampling','SD')
+                    ->where('is_active',true)
+                    ->first();
+                    if($dataQt != null){
+                        $dataPendukung = json_decode($dataQt->data_pendukung_sampling, true) ?? [];
+                        $generatedSampel = [];
+                        foreach ($dataPendukung as $item) {
+                            foreach ($item['penamaan_titik'] as $titik) {
+                                foreach ($titik as $key => $namaLokasi) {
+                                    $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
+                                    $generatedSampel[] = [
+                                        'no_sampel'    => $noSampel,
+                                        'keterangan_1' => $namaLokasi,
+                                        'kategori_2'   => $item['kategori_1'] ?? '',
+                                        'kategori_3'   => $item['kategori_2'] ?? '',
+                                        'parameter'    => json_encode($item['parameter'] ?? []),
+                                        'persiapan'    => json_encode([
+                                            ['volume' => $item['volume'] ?? 0]  // ← ambil dari sini
+                                        ]),
+                                        'periode' => null,
+                                        'tanggal_sampling'=>null,
+                                        'no_order'=>null,
+                                        'nama_perusahaan'=> $dataQt->nama_perusahaan,
+                                        'alamat_perusahaan'=> $dataQt->alamat_kantor
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                        // Inject sebagai virtual order_detail
+                    $datas = collect($generatedSampel); // buat collection agar konsisten dengan format sebelumnya
+
+                }
                 $sampelDiantarID = SampelDiantar::with(['detail' => function ($q) use ($request) {
                     $q->where('periode', $request->periode);
                 }])
                 ->where('no_quotation', $request->no_document)
-                ->where('no_order', $request->no_order)
-                ->where('periode_kontrak',$request->periode)->first();
+                ->where('no_order', $request->no_order ?: null)
+                ->where('periode_kontrak',$request->periode ?: null)->first();
                 if ($sampelDiantarID !== null) {
                     return response()->json(['type' => 'non_kontrak', 'data' => $datas, 'sd' => $sampelDiantarID], 200);
                 } else {
@@ -552,6 +910,13 @@ class PortalSdController extends Controller
             }
         } catch (\Exception $ex) {
             //throw $th;
+            \Log::error('listSampel ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
+
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
@@ -605,7 +970,7 @@ class PortalSdController extends Controller
                 $q->where('status_sampling', 'SD');
             }])
                 ->where('id', $request->id)
-                ->where('flag_status', 'ordered')
+                //->where('flag_status', 'ordered')
                 ->where('is_active', true)->first();
 
             if ($chekSD != null) {
@@ -617,7 +982,7 @@ class PortalSdController extends Controller
         } else {
             $chekSD = QuotationNonKontrak::where('id', $request->id)
                 ->where('status_sampling', 'SD')
-                ->where('flag_status', 'ordered')
+                //->where('flag_status', 'ordered')
                 ->where('is_active', true)->first();
             if ($chekSD != null) {
                 return response()->json(["status" => true], 200);
@@ -627,213 +992,254 @@ class PortalSdController extends Controller
         }
     }
 
-    /* public function chekStepSd(Request $request)
-    {
-        // dd($request->all());
-        $type = explode('/', $request->no_document)[1] ?? null;
-        $mode = $request->mode;
-
-        $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
-            $q->where('periode', $request->periode);
-        }])
-        ->where('no_quotation', $request->no_document)
-        ->where('no_order', $request->no_order)
-        ->first();
-
-        if ($mode === 'terima') {
-            return response()->json(['status' => $sampelDiantar !== null], 200);
-        }
-
-        if (!in_array($mode, ['internal_data', 'eksternal_data']) || !$sampelDiantar) {
-            return response()->json(['status' => false], 200);
-        }
-
-        $detail = optional($sampelDiantar->detail);
-
-        $dataField = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
-        $jsonData = json_decode($detail[0]->$dataField ?? '[]', true);
-        $isFinished =$detail[0]->is_finished ?? 0;
-        // dd($detail[0]);
-
-        $orderDetails = OrderDetail::where('kategori_1', 'SD')
-        ->where('no_order', $request->no_order)
-        ->where('no_quotation', $request->no_document)
-        ->where('is_active', true)
-        ->where('periode', $request->periode === 'null' ? null : $request->periode)
-        ->get(['no_sampel','kategori_3']);
-
-        foreach ($jsonData as $key => $value) {
-            # code...
-        }
-
-        $isValid = false;
-        if ($isFinished == 1) {
-            $isValid = true;
-        } else {
-            $isValid = count($orderDetails) === count($jsonData);
-        }
-        return response()->json(['status' => $isValid,'od'=>count($orderDetails),'sd'=>count($jsonData)], 200);
-    } */
 
     public function chekStepSd(Request $request)
     {
-        $mode = $request->mode;
+        try {
+            $mode = $request->mode;
 
-        // 1. Ambil Data Induk
-        $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
-            if ($request->periode && $request->periode !== 'null') {
-                $q->where('periode', $request->periode);
-            } else {
-                $q->whereNull('periode');
-            }
-        }])
-        ->where('no_quotation', $request->no_document)
-        ->where('no_order', $request->no_order)
-        ->where('periode_kontrak', $request->periode)
-        ->first();
-
-        // 2. Cek Mode Terima
-        if ($mode === 'terima') {
-            if ($sampelDiantar && $sampelDiantar->nama_pengantar_sampel != null) {
-                return response()->json(['status' => true], 200);
-            }
-            return response()->json(['status' => false], 200);
-        }
-
-        // 3. Validasi Keberadaan Data
-        if (!in_array($mode, ['internal_data', 'eksternal_data']) || !$sampelDiantar) {
-            return response()->json([
-                'status' => false, 
-                'message' => 'Data sampel diantar tidak ditemukan atau mode tidak valid.'
-            ], 200);
-        }
-
-        // 4. Ambil Detail Spesifik
-        $detailForPeriod = null;
-        if ($sampelDiantar->detail->isNotEmpty()) {
-            $requestedPeriode = ($request->periode === 'null' || !$request->periode) ? null : $request->periode;
-            $detailForPeriod = $sampelDiantar->detail->first(function ($item) use ($requestedPeriode) {
-                return $item->periode == $requestedPeriode;
-            });
-        }
-
-        if (!$detailForPeriod) {
-            return response()->json([
-                'status' => false, 
-                'message' => 'Detail sampel untuk periode yang diminta tidak ditemukan.'
-            ], 200);
-        }
-
-        // 5. Ambil Data Referensi dari OrderDetail
-        $orderDetails = OrderDetail::where('kategori_1', 'SD')
-            ->where('no_order', $request->no_order)
+            // 1. Ambil Data Induk
+            $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
+                if ($request->periode && $request->periode !== 'null') {
+                    $q->where('periode', $request->periode);
+                } else {
+                    $q->whereNull('periode');
+                }
+            }])
             ->where('no_quotation', $request->no_document)
-            ->where('is_active', true)
-            ->where('periode', ($request->periode === 'null' || !$request->periode) ? null : $request->periode)
-            ->get(['no_sampel', 'kategori_3']);
+            ->where('periode_kontrak', $request->periode)
+            ->first();
 
-        $targetCount = $orderDetails->count();
-        
-        // 6. Persiapan untuk Sanitisasi
-        $orderSampelNumbers = $orderDetails->pluck('no_sampel')->toArray();
-        $orderKategoriRaw = $orderDetails->pluck('kategori_3')->toArray();
-        $cleanedKategori = array_map(fn($item) => explode('-', $item, 2)[1] ?? $item, $orderKategoriRaw);
-        $normalizedKategori = array_map(fn($item) => strtolower(trim($item)), $cleanedKategori);
-        
-        // 7. Ambil & Sanitasi Data untuk Mode yang Diminta
-        $dataField = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
-        $jsonData = json_decode($detailForPeriod->$dataField ?? '[]', true);
-        $jsonDataModified = false;
+            // 2. Cek Mode Terima
+            if ($mode === 'terima') {
+                if ($sampelDiantar && $sampelDiantar->nama_pengantar_sampel != null) {
+                    return response()->json(['status' => true], 200);
+                }
+                return response()->json(['status' => false], 200);
+            }
 
-        foreach ($jsonData as &$item) {
-            if (!isset($item['no_sampel'])) continue;
+            // 3. Validasi Keberadaan Data
+            if (!in_array($mode, ['internal_data', 'eksternal_data']) || !$sampelDiantar) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Data sampel diantar tidak ditemukan atau mode tidak valid.'
+                ], 200);
+            }
 
-            $notInSampel = !in_array($item['no_sampel'], $orderSampelNumbers);
-            $jenisSampel = strtolower(trim($item['jenis_sampel'] ?? ''));
-            $notInKategori = !in_array($jenisSampel, $normalizedKategori);
-            
-            if ($notInSampel || $notInKategori) {
-                if (($item['is_active'] ?? true) !== false) {
-                    $item['is_active'] = false;
-                    $jsonDataModified = true;
+            // 4. Ambil Detail Spesifik
+            $detailForPeriod = null;
+            if ($sampelDiantar->detail->isNotEmpty()) {
+                $requestedPeriode = ($request->periode === 'null' || !$request->periode) ? null : $request->periode;
+                $detailForPeriod  = $sampelDiantar->detail->first(function ($item) use ($requestedPeriode) {
+                    return $item->periode == $requestedPeriode;
+                });
+            }
+
+            if (!$detailForPeriod) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Detail sampel untuk periode yang diminta tidak ditemukan.'
+                ], 200);
+            }
+
+            // 5. Ambil Data Referensi dari OrderDetail
+            $orderDetails = OrderDetail::where('kategori_1', 'SD')
+                ->where('no_order', ($request->no_order == 'undefined') ? null : $request->no_order)
+                ->where('no_quotation', $request->no_document)
+                ->where('is_active', true)
+                ->where('periode', ($request->periode === 'null' || !$request->periode) ? null : $request->periode)
+                ->get(['no_sampel', 'kategori_3']);
+
+            if ($orderDetails->isEmpty()) {
+                $type = explode('/', $request->no_document);
+
+                if ($type[1] == 'QTC') {
+                    $dataQt = QuotationKontrakH::with(['detail' => function ($q) {
+                        $q->where('status_sampling', 'SD');
+                    }])->where('no_document', $request->no_document)
+                    ->where('is_active', 1)
+                    ->first();
+
+                    if ($dataQt != null) {
+                        $detailColumn    = $dataQt->detail;
+                        $generatedSampel = [];
+                        $counter         = 1;
+
+                        foreach ($detailColumn as $detail) {
+                            $pendukung = json_decode($detail->data_pendukung_sampling, true) ?? [];
+
+                            foreach ($pendukung as $periodeKey => $periodeData) {
+                                $periode      = $periodeData['periode_kontrak'] ?? null;
+                                $dataSampling = $periodeData['data_sampling'] ?? [];
+
+                                if ($periode != $request->periode) continue;
+
+                                foreach ($dataSampling as $item) {
+                                    $jumlahTitik   = (int) ($item['jumlah_titik'] ?? 1);
+                                    $penamaanTitik = $item['penamaan_titik'] ?? '';
+
+                                    foreach ($penamaanTitik as $titik) {
+                                        foreach ($titik as $key => $namaLokasi) {
+                                            $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
+                                            $generatedSampel[] = [
+                                                'no_sampel'    => $noSampel,
+                                                'keterangan_1' => $namaLokasi,
+                                                'kategori_2'   => $item['kategori_1'] ?? '',
+                                                'kategori_3'   => $item['kategori_2'] ?? '',
+                                                'parameter'    => json_encode($item['parameter'] ?? []),
+                                                'persiapan'    => json_encode([
+                                                    ['volume' => $item['volume'] ?? 0]
+                                                ]),
+                                                'periode' => $periode,
+                                                'tanggal_sampling'=>null,
+                                                'no_order'=>null,
+                                                'nama_perusahaan'=> $dataQt->nama_perusahaan,
+                                                'alamat_perusahaan'=> $dataQt->alamat_kantor,
+                                            ];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        $orderDetails = collect($generatedSampel);
+                    }
+
+                } else {
+                    $dataQt = QuotationNonKontrak::where('no_document', $request->no_document)
+                        ->where('is_active', 1)
+                        ->where('status_sampling', 'SD')
+                        ->first();
+
+                    if ($dataQt != null) {
+                        $dataPendukung   = json_decode($dataQt->data_pendukung_sampling, true) ?? [];
+                        $generatedSampel = [];
+
+                        foreach ($dataPendukung as $item) {
+                            foreach ($item['penamaan_titik'] as $titik) {
+                                foreach ($titik as $key => $namaLokasi) {
+                                    $noSampel = $dataQt->pelanggan_ID . '****/'. $key;
+                                    $generatedSampel[] = [
+                                        'no_sampel'        => $noSampel,
+                                        'keterangan_1'     => $namaLokasi,
+                                        'kategori_2'       => $item['kategori_1'] ?? '',
+                                        'kategori_3'       => $item['kategori_2'] ?? '',
+                                        'parameter'        => json_encode($item['parameter'] ?? []),
+                                        'persiapan'        => json_encode([['volume' => $item['volume'] ?? 0]]),
+                                        'periode'          => null,
+                                        'tanggal_sampling' => null,
+                                        'no_order'         => null,
+                                        'nama_perusahaan'  => $dataQt->nama_perusahaan,
+                                        'alamat_perusahaan'=> $dataQt->alamat_kantor,
+                                    ];
+                                }
+                            }
+                        }
+                        $orderDetails = collect($generatedSampel);
+                    }
                 }
             }
-        }
-        unset($item);
 
-        // 8. Simpan jika ada perubahan
-        if ($jsonDataModified) {
-            $detailForPeriod->update([$dataField => json_encode($jsonData)]);
-            $detailForPeriod->$dataField = json_encode($jsonData);
-        }
+            $targetCount        = $orderDetails->count();
+            $orderSampelNumbers = $orderDetails->pluck('no_sampel')->toArray();
+            $orderKategoriRaw   = $orderDetails->pluck('kategori_3')->toArray();
+            $cleanedKategori    = array_map(fn($item) => explode('-', $item, 2)[1] ?? $item, $orderKategoriRaw);
+            $normalizedKategori = array_map(fn($item) => strtolower(trim($item)), $cleanedKategori);
 
-        // 9. Helper: Hitung item aktif dari JSON string
-        $countActiveInJson = function($jsonStr) {
-            $data = json_decode($jsonStr ?? '[]', true);
-            $count = 0;
-            foreach ($data as $d) {
-                if (!isset($d['is_active']) || $d['is_active'] === true) {
-                    $count++;
+            $dataField       = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
+            $jsonData        = json_decode($detailForPeriod->$dataField ?? '[]', true);
+            $jsonDataModified = false;
+
+            foreach ($jsonData as &$item) {
+                if (!isset($item['no_sampel'])) continue;
+                $notInSampel   = !in_array($item['no_sampel'], $orderSampelNumbers);
+                $jenisSampel   = strtolower(trim($item['jenis_sampel'] ?? ''));
+                $notInKategori = !in_array($jenisSampel, $normalizedKategori);
+                if ($notInSampel || $notInKategori) {
+                    if (($item['is_active'] ?? true) !== false) {
+                        $item['is_active'] = false;
+                        $jsonDataModified  = true;
+                    }
                 }
             }
-            return $count;
-        };
+            unset($item);
 
-        // 10. LOGIKA VALIDASI BERTINGKAT
-        $isValid = false;
-        $message = '';
-        $currentActiveCount = $countActiveInJson($detailForPeriod->$dataField);
-
-        if ($mode === 'internal_data') {
-            // ✅ INTERNAL: Cukup cek apakah sudah lengkap
-            if (empty($jsonData) || count($jsonData) === 0) {
-                $isValid = false;
-                $message = 'Data Internal belum diisi sama sekali.';
-            } else {
-                $isValid = ($currentActiveCount === $targetCount);
-                $message = $isValid ? 'Validasi Internal Berhasil.' : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
+            if ($jsonDataModified) {
+                $detailForPeriod->update([$dataField => json_encode($jsonData)]);
+                $detailForPeriod->$dataField = json_encode($jsonData);
             }
-        } 
-        elseif ($mode === 'eksternal_data') {
-            // ✅ EKSTERNAL: CEK INTERNAL DULU!
-            $internalData = json_decode($detailForPeriod->$mode ?? '[]', true);
-            $internalCount = $countActiveInJson($detailForPeriod->$mode);
-            
-            // Cek apakah internal sudah diisi
-            if (empty($internalData) || count($internalData) === 0) {
-                $isValid = false;
-                $message = 'Data Internal belum diisi. Selesaikan Internal Data terlebih dahulu.';
-            } 
-            // Cek apakah internal sudah lengkap
-            elseif ($internalCount !== $targetCount) {
-                $isValid = false;
-                $message = "Data Internal belum lengkap ($internalCount dari $targetCount). Selesaikan Internal Data terlebih dahulu.";
-            } 
-            // Jika internal sudah OK, baru cek eksternal
-            else {
+
+            $countActiveInJson = function ($jsonStr) {
+                $data  = json_decode($jsonStr ?? '[]', true);
+                $count = 0;
+                foreach ($data as $d) {
+                    if (!isset($d['is_active']) || $d['is_active'] === true) {
+                        $count++;
+                    }
+                }
+                return $count;
+            };
+
+            $isValid            = false;
+            $message            = '';
+            $currentActiveCount = $countActiveInJson($detailForPeriod->$dataField);
+
+            if ($mode === 'internal_data') {
                 if (empty($jsonData) || count($jsonData) === 0) {
                     $isValid = false;
-                    $message = 'Data Eksternal belum diisi sama sekali.';
+                    $message = 'Data Internal belum diisi sama sekali.';
                 } else {
                     $isValid = ($currentActiveCount === $targetCount);
-                    $message = $isValid ? 'Validasi Eksternal Berhasil.' : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
+                    $message = $isValid ? 'Validasi Internal Berhasil.' : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
+                }
+            } elseif ($mode === 'eksternal_data') {
+                $internalData  = json_decode($detailForPeriod->internal_data ?? '[]', true);
+                $internalCount = $countActiveInJson($detailForPeriod->internal_data);
+
+                if (empty($internalData) || count($internalData) === 0) {
+                    $isValid = false;
+                    $message = 'Data Internal belum diisi. Selesaikan Internal Data terlebih dahulu.';
+                } elseif ($internalCount !== $targetCount) {
+                    $isValid = false;
+                    $message = "Data Internal belum lengkap ($internalCount dari $targetCount). Selesaikan Internal Data terlebih dahulu.";
+                } else {
+                    if (empty($jsonData) || count($jsonData) === 0) {
+                        $isValid = false;
+                        $message = 'Data Eksternal belum diisi sama sekali.';
+                    } else {
+                        $isValid = ($currentActiveCount === $targetCount);
+                        $message = $isValid ? 'Validasi Eksternal Berhasil.' : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
+                    }
                 }
             }
-        }
 
-        // 11. Override jika sudah finished
-        if (($detailForPeriod->is_finished ?? 0) == 1) {
-            $isValid = true;
-            $message = 'Data sudah selesai (Finished).';
-        }
+            if (($detailForPeriod->is_finished ?? 0) == 1) {
+                $isValid = true;
+                $message = 'Data sudah selesai (Finished).';
+            }
 
-        return response()->json([
-            'status' => $isValid,
-            'message' => $message,
-            'od_count' => $targetCount,
-            'sd_count' => $currentActiveCount,
-            'mode_checked' => $mode
-        ], 200);
+            return response()->json([
+                'status'       => $isValid,
+                'message'      => $message,
+                'od_count'     => $targetCount,
+                'sd_count'     => $currentActiveCount,
+                'mode_checked' => $mode,
+            ], 200);
+
+        } catch (\Exception $ex) {
+            \Log::error('chekStepSd ERROR', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan server.',
+                'error'   => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+            ], 500);
+        }
     }
 
     
