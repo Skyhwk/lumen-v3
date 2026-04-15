@@ -66,4 +66,14 @@ class NotificationFdlService
         
         dispatch(new SendNotificationFdl($token->fcm_token ?? null, $title, $message, ['title' => $title, 'body' => $message], $user->id));
     }
+
+    public function sendNotification($title, $message, $created_by)
+    {
+        $user = MasterKaryawan::where('nama_lengkap', $created_by)->where('is_active', true)->first();
+        $token = FcmTokenFdl::where('user_id', $user->id)->first();
+        
+        if ($token) {
+            dispatch(new SendNotificationFdl($token->fcm_token ?? null, $title, $message, ['title' => $title, 'body' => $message], $user->id));
+        }
+    }
 }

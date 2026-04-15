@@ -4,10 +4,10 @@ namespace App\Models\customer;
 
 use App\Models\Sector;
 
-class Users extends Sector
+class Teams extends Sector
 {
     protected $connection = "portal_customer";
-    protected $table = "users";
+    protected $table = "teams";
     protected $guarded = ['id'];
 
     public $timestamps = false;

@@ -22,9 +22,10 @@ class RequestFeeSamplingController extends Controller
             ->where('is_active', 1)
             ->get()
             ->map(function ($item) {
-                $item->can_approve = $item->detail_fee->every(function ($detail) {
-                    return $detail->approved_at !== null || $detail->rejected_at !== null;
-                });
+                // $item->can_approve = $item->detail_fee->every(function ($detail) {
+                //     return $detail->approved_at !== null || $detail->rejected_at !== null;
+                // });
+                $item->can_approve = true;
 
                 return $item;
             });
@@ -62,6 +63,8 @@ class RequestFeeSamplingController extends Controller
                 $data->rejected_at = Carbon::now();
                 $data->save();
             }
+            
+            self::checkAutoApprove($dataList->first()->pengajuan_fee_sampling_id, 'reject', $request->keterangan);
 
             DB::commit();
             return response()->json([
@@ -91,6 +94,15 @@ class RequestFeeSamplingController extends Controller
                 $data->is_approve_finance = 0;
                 $data->is_active = 0;
                 $data->save();
+
+                PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->update([
+                    'is_active' => 0,
+                    'is_reject' => true,
+                    'alasan_reject' => $request->alasan_reject,
+                    'rejected_by' => $this->karyawan,
+                    'rejected_at' => Carbon::now()
+                ]);
+
             } else {
                 return response()->json(['success' => false, 'message' => 'Data tidak ditemukan', 'status' => 400], 400);
             }
@@ -140,6 +152,8 @@ class RequestFeeSamplingController extends Controller
                 }
             }
 
+            self::checkAutoApprove($dataList->first()->pengajuan_fee_sampling_id, 'approve');
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -162,11 +176,22 @@ class RequestFeeSamplingController extends Controller
         try {
             $data = PengajuanFeeSampling::where('id', $request->id)->first();
             if ($data) {
+
+                $detail = PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->update([
+                    'is_approve' => 1,
+                    'approved_by' => $this->karyawan,
+                    'approved_at' => Carbon::now()
+                ]);
+
+                $summary = PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->where('is_approve', 1)->sum('total_fee') ?? 0;
+
                 $data->is_approve_finance = 1;
                 $data->status_payment = "Approved by finance";
                 $data->alasan_reject_expanse = null;
                 $data->is_reject_expanse = 0;
+                $data->total_fee_approve = $summary;
                 $data->save();
+
             } else {
                 return response()->json(['success' => false, 'message' => 'Data tidak ditemukan', 'status' => 400], 400);
             }
@@ -176,6 +201,28 @@ class RequestFeeSamplingController extends Controller
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => $th->getMessage(), 'status' => 500], 500);
+        }
+    }
+
+    private function checkAutoApprove($idHeader, $type, $alasan_reject = null) {
+        $header = PengajuanFeeSampling::where('id', $idHeader)->first();
+
+        $remaining = PengajuanFeeSamplingDetail::where('is_approve', 0)->where('is_reject', 0)->where('pengajuan_fee_sampling_id', $idHeader)->count();
+
+        if($remaining == 0){
+            if($type =='approve'){
+                $header->is_approve_finance = 1;
+                $header->status_payment = "Approved by finance";
+                $header->alasan_reject_expanse = null;
+                $header->is_reject_expanse = 0;
+            } else {
+                $header->is_reject_finance = 1;
+                $header->alasan_reject = $alasan_reject;
+                $header->status_payment = "Rejected";
+                $header->is_approve_finance = 0;
+                $header->is_active = 0;
+            }
+            $header->save();
         }
     }
 }

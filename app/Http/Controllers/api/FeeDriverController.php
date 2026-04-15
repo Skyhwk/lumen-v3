@@ -27,7 +27,11 @@ class FeeDriverController extends Controller
     {
         $data = MasterFeeDriver::with('driver')->where('is_active', true)->whereHas('driver');
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)->filterColumn('driver.nama_driver', function ($query, $keyword) {
+            $query->whereHas('driver', function ($q) use ($keyword) {
+                $q->where('nama_driver', 'like', "%{$keyword}%");
+            });
+        })->make(true);
     }
 
     public function getDetails(Request $request)

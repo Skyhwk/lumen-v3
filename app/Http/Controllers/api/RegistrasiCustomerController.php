@@ -4,9 +4,6 @@ namespace App\Http\Controllers\api;
 
 
 use App\Models\Rfid;
-use App\Models\customer\Users;
-use App\Models\customer\Team;
-use App\Models\customer\TeamMember;
 use App\Models\MasterPelanggan;
 use App\Models\GenerateLink;
 use App\Models\{MasterKaryawan};
@@ -18,6 +15,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+
+use App\Models\customer\Users;
+use App\Models\customer\Menus;
+use App\Models\customer\UserPermissions;
+use App\Models\customer\Teams;
+use App\Models\customer\TeamMembers;
 
 class RegistrasiCustomerController extends Controller
 {
@@ -84,28 +87,17 @@ class RegistrasiCustomerController extends Controller
     {
         DB::beginTransaction();
         try {
-            $data = Users::where('id', '!=', $request->id)->where('email', $request->email)->first();
+            if (!$request->id) {
+                $data = Users::where('email', $request->email)->first();
 
-            if ($data) {
-                return response()->json([
-                    'message' => 'Email sudah terdaftar',
-                    'status' => 400,
-                    'success' => false
-                ], 400);
-            }
+                if ($data) {
+                    return response()->json([
+                        'message' => 'Email sudah terdaftar',
+                        'status' => 400,
+                        'success' => false
+                    ], 400);
+                }
 
-            $dataUser = Users::where('id', $request->id)->first();
-
-            if ($dataUser) {
-                $dataUser->update([
-                    'nama_lengkap' => $request->nama_lengkap,
-                    'email' => $request->email,
-                    'id_pelanggan' => json_encode($request->id_pelanggan),
-                    'password' => $request->password ? Hash::make($request->password) : Hash::make('password'),
-                    'updated_by' => $this->karyawan,
-                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
-                ]);
-            } else {
                 $user = new Users();
                 $user->nama_lengkap = $request->nama_lengkap;
                 $user->email = $request->email;
@@ -113,32 +105,65 @@ class RegistrasiCustomerController extends Controller
                 $user->id_pelanggan = json_encode($request->id_pelanggan);
                 $user->created_by = $this->karyawan;
                 $user->created_at = Carbon::now();
+                $user->role_id = 2; // Super Admin
                 $user->save();
 
-                $portalCustomer = DB::connection('portal_customer');
+                $menus = Menus::get();
+                $permissions = [];
+                foreach ($menus as $item) {
+                    $parent = explode('-', $item->name);
 
-                $role = $portalCustomer->table('roles')->where('name', 'admin')->first();
+                    // if (count($parent) == 1) {
+                    //     return response()->json(['message' => 'Menu ' . $item->name . ' tidak memiliki parent.'], 400);
+                    // }
 
-                // assign role
-                $portalCustomer->table('model_has_roles')->insert([
-                    'role_id' => $role->id,
-                    'model_type' => 'App\Models\Customer\User',
-                    'model_id' => $user->id,
-                ]);
+                    $permissions[] = [
+                        'name' => $item->name,
+                        'access' => ["view", "create", "update", "delete", "export", "import", "approve", "reject"],
+                        'parent' => $parent[0],
+                    ];
+                }
+                $permission = new UserPermissions();
+                $permission->user_id = $user->id;
+                $permission->permissions = json_encode($permissions);
+                $permission->copy_access = true;
+                $permission->paste_access = true;
+                $permission->upload_access = true;
+                $permission->download_access = true;
+                $permission->created_at = Carbon::now();
+                $permission->save();
 
-                $team = new Team();
-                $team->nama_tim = explode("@", $request->email)[0];
+                $team = new Teams();
+                $team->team_name = explode("@", $request->email)[0];
                 $team->created_by = $this->karyawan;
                 $team->created_at = Carbon::now();
                 $team->save();
 
-                $teamMember = new TeamMember();
-                $teamMember->setConnection('portal_customer');
+                $teamMember = new TeamMembers();
                 $teamMember->team_id = $team->id;
                 $teamMember->user_id = $user->id;
+                $teamMember->is_owner = true;
                 $teamMember->created_by = $this->karyawan;
                 $teamMember->created_at = Carbon::now();
                 $teamMember->save();
+            } else {
+                $data = Users::where('email', $request->email)->where('id', '!=', $request->id)->first();
+
+                if ($data) {
+                    return response()->json([
+                        'message' => 'Email sudah terdaftar',
+                        'status' => 400,
+                        'success' => false
+                    ], 400);
+                }
+
+                $user = Users::find($request->id);
+                $user->nama_lengkap = $request->nama_lengkap;
+                $user->email = $request->email;
+                $user->id_pelanggan = json_encode($request->id_pelanggan);
+                $user->updated_by = $this->karyawan;
+                $user->updated_at = Carbon::now();
+                $user->save();
             }
 
             DB::commit();
@@ -176,7 +201,7 @@ class RegistrasiCustomerController extends Controller
                     'key' => $gen,
                     'id_quotation' => $header->id,
                     'quotation_status' => "registrasi",
-                    'type' => 'resgistrasi_customer',
+                    'type' => 'registrasi_customer',
                     'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                     // 'fileName_pdf' => $header->file_lhp,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
@@ -197,7 +222,7 @@ class RegistrasiCustomerController extends Controller
             return response()->json([
                 'message' => 'Generate link success!',
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
@@ -222,7 +247,7 @@ class RegistrasiCustomerController extends Controller
                 'status' => 200,
                 'success' => true
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
@@ -275,7 +300,7 @@ class RegistrasiCustomerController extends Controller
     public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'registrasi', 'type' => 'resgistrasi_customer'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'registrasi', 'type' => 'registrasi_customer'])->first();
 
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
@@ -283,7 +308,7 @@ class RegistrasiCustomerController extends Controller
             // return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
             // ganti ke portal.intilab.com
             return response()->json(['link' => 'https://portal.intilab.com/customer/form-online/' . $link->token], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
         }
     }
