@@ -157,13 +157,13 @@ class LhpUdaraPsikologiController extends Controller
             $header->save();
         }
 
-        // $servicePrint = new PrintLhp();
-        // $servicePrint->printByFilename($header->no_dokumen, $detail, 'KPGI', $header->no_cfr);
+        $servicePrint = new PrintLhp();
+        $servicePrint->printByFilename($header->no_dokumen, $detail, 'KPGI', $header->no_cfr);
         
-        // if (!$servicePrint) {
-        //     DB::rollBack();
-        //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-        // }
+        if (!$servicePrint) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+        }
         
         DB::commit();
 
