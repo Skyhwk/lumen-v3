@@ -265,21 +265,30 @@ class DraftGelombangMikroController extends Controller
                     $rata_frekuensi_clean = str_replace(',', '', $rata_frekuensi_raw);
                     $frekuensiHz          = floatval($rata_frekuensi_clean);
                     // $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
-                    if ($val->id_parameter == 236 || $val->id_parameter == 316 || $val->id_parameter == 563) {
+                    if ($val->id_parameter == 236 || $val->id_parameter == 316) {
                         $hasil_uji            = $nilaiDecode['hasil_mwatt'] ?? null;
-                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
+                        $medan_magnet         = $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['medan_magnet'] ?? null;
                         $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
-                        $nab                  = $ws->nab_medan_magnet;
+                        $nab                  = $ws->nab_power_density;
                         $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
                         $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
                         $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 277) {
-                        $hasil_uji            = $nilaiDecode['rata_listrik'] ?? null;
+                        $hasil_uji            = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
                         $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
                         $nab                  = $ws->nab_medan_listrik;
+                        $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
+                        $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
+                        $frekuensi_area       = $frekuensiHz ?? null;
+                    } else if ($val->id_parameter == 563) {
+                        $hasil_uji            = $nilaiDecode['medan_magnet'] ?? null;
+                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
+                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
+                        $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab                  = $ws->nab_medan_magnet;
                         $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
                         $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
                         $frekuensi_area       = $frekuensiHz ?? null;
@@ -306,8 +315,52 @@ class DraftGelombangMikroController extends Controller
                     ];
                 })->toArray();
 
+                // $data_detail = collect($tmpData)->flatMap(function ($item) {
+
+                //     return [
+                //         [
+                //             'no_sampel' => $item['no_sampel'],
+                //             'parameter' => 'Power Density',
+                //             'hasil_uji' => $item['hasil_uji'],
+                //             'nama_lab'  => $item['nama_lab'],
+                //             'bakumutu'  => $item['bakumutu'],
+                //             'satuan'    => 'mW/cm²',
+                //             'methode'   => 'IKM/ISL/7.2.183 (Electromagnetic Field Meter)',
+                //             'akr'       => $item['akr'],
+                //             'nab'       => $item['nab'],
+                //         ],
+                //         [
+                //             'no_sampel' => $item['no_sampel'],
+                //             'parameter' => 'Kekuatan Medan Listrik',
+                //             'hasil_uji' => $item['rata_listrik'],
+                //             'nama_lab'  => $item['nama_lab'],
+                //             'bakumutu'  => $item['bakumutu'],
+                //             'satuan'    => 'V/m',
+                //             'methode'   => 'IKM/ISL/7.2.64 (Elektrometri)',
+                //             'akr'       => $item['akr'],
+                //             'nab'       => $item['nab'],
+                //         ],
+                //         [
+                //             'no_sampel' => $item['no_sampel'],
+                //             'parameter' => 'Kekuatan Medan Magnet',
+                //             'hasil_uji' => $item['medan_magnet'],
+                //             'nama_lab'  => $item['nama_lab'],
+                //             'bakumutu'  => $item['bakumutu'],
+                //             'satuan'    => 'A/m',
+                //             'methode'   => 'IKM/ISL/7.2.62 (Elektrometri)',
+                //             'akr'       => $item['akr'],
+                //             'nab'       => $item['nab'],
+                //         ],
+                //     ];
+                // })->values()->toArray();
+
                 $data_detail = collect($tmpData)->flatMap(function ($item) {
 
+                $namaLab = $item['nama_lab'] ?? '';
+                // dd($namaLab);
+
+                // 🔥 kondisi khusus
+                if (in_array($namaLab, ['Power Density', 'Gelombang Elektro'])) {
                     return [
                         [
                             'no_sampel' => $item['no_sampel'],
@@ -343,7 +396,23 @@ class DraftGelombangMikroController extends Controller
                             'nab'       => $item['nab'],
                         ],
                     ];
-                })->values()->toArray();
+                }
+
+                // 🔥 selain itu → hanya 1 data (tidak dipecah)
+                return [
+                    [
+                        'no_sampel' => $item['no_sampel'],
+                        'parameter' => $item['parameter'] ?? $item['nama_lab'],
+                        'hasil_uji' => $item['hasil_uji'] ?? '-',
+                        'nama_lab'  => $item['nama_lab'],
+                        'bakumutu'  => $item['bakumutu'],
+                        'satuan'    => $item['satuan'] ?? '-',
+                        'methode'   => $item['methode'] ?? '-',
+                        'akr'       => $item['akr'],
+                        'nab'       => $item['nab'],
+                    ]
+                ];
+            })->values()->toArray();
 
                 $informasi_sampling = collect($tmpData)->flatMap(function ($item) {
 
