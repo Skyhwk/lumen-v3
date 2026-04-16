@@ -26,7 +26,7 @@ class RejectFeeSamplingController extends Controller
                     ->orWhere('is_reject_finance', 1);
             })
             ->where('is_checked_by_admin', 0)
-            ->whereIn('status_payment', ["Approved by finance", "Approved by expanse"]);
+            ->whereIn('status_payment', ["Rejected"]);
 
         return Datatables::of($data)->make(true);
     }
