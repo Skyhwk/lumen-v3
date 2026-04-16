@@ -16,6 +16,7 @@ use App\Console\Commands\CalculateFeeSales;
 use App\Console\Commands\SummaryFeeSales;
 use App\Console\Commands\KalkulasiTargetPenjadwalan;
 use App\Console\Commands\ScheduleQtTransaction;
+use App\Console\Commands\CheckOrderActive;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -39,6 +40,7 @@ class Kernel extends ConsoleKernel
         Commands\CalculateFeeSales::class,
         Commands\SummaryFeeSales::class,
         Commands\KalkulasiTargetPenjadwalan::class,
+        Commands\CheckOrderActive::class,
     ];
 
     /**
