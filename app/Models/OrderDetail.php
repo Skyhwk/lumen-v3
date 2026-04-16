@@ -143,9 +143,9 @@ class OrderDetail extends Sector
     }
     public function dataLapanganErgonomi()
     {
-        return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
+        return $this->hasMany(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
-    
+
     public function lhpp_psikologi()
     {
         return $this->belongsTo(LhppUdaraPsikologiHeader::class, 'no_order', 'no_order');
@@ -388,25 +388,27 @@ class OrderDetail extends Sector
 
     public function getAnyHeaderUdara()
     {
+        $result = collect();
         if ($this->pencahayaanHeader()->exists()) {
-            return $this->pencahayaanHeader;
+            $result->push($this->pencahayaanHeader);
         }
         if ($this->getaranHeader()->exists()) {
-            return $this->GetaranHeader;
+            $result->push($this->getaranHeader);
         }
         if ($this->udaraSubKontrak()->exists()) {
-            return $this->udaraSubKontrak;
+            $result->push($this->udaraSubKontrak);
         }
         if ($this->kebisinganHeader()->exists()) {
-            return $this->KebisinganHeader;
+            $result->push($this->kebisinganHeader);
         }
         if ($this->swabTesHeader()->exists()) {
-            return $this->SwabTesHeader;
+            $result->push($this->swabTesHeader);
         }
         if ($this->swabOnMicrobio()->exists()) {
-            return $this->swabOnMicrobio;
+            $result->push($this->swabOnMicrobio);
         }
-        return null;
+
+        return $result->isEmpty() ? null : $result;
     }
     public function getAnyDataLapanganUdara()
     {

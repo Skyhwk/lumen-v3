@@ -2,15 +2,13 @@
 
 namespace App\Models\customer;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
-class Team extends Sector
+class Menus extends Sector
 {
     protected $connection = "portal_customer";
-
-    protected $table = "teams";
-    public $timestamps = false;
-
+    protected $table = 'menus';
     protected $guarded = ['id'];
+    
+    public $timestamps = false;
 }

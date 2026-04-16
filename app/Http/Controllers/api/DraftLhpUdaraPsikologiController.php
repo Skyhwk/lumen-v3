@@ -244,7 +244,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				}
 				// dd('This endpoint is deprecated. Please use the new endpoint for generating LHP PDF.');
 				$render = app(TemplateLhpp::class);
-				$render->lhpp_psikologi($header, $detail, 'downloadLHP', $request->cfr);
+				$render->lhpp_psikologi($header, $detail, 'downloadLHPFinal', $request->cfr);
 				// $job = new RenderLhpp($header, $detail, 'downloadLHP', $request->cfr);
 				// $this->dispatch($job);
 				$fileName = 'LHP-' . str_replace("/", "-", $request->cfr) . '.pdf';

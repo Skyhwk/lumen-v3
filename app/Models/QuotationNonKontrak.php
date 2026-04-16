@@ -93,8 +93,8 @@ class QuotationNonKontrak extends Sector
         return self::with('salesWithAtasan')
             ->leftJoin('order_header as oh', 'request_quotation.pelanggan_ID', '=', 'oh.id_pelanggan')
             ->selectRaw('
-                request_quotation.sales_id, 
-                COUNT(DISTINCT request_quotation.no_document) as total_request_quotation, 
+                request_quotation.sales_id,
+                COUNT(DISTINCT request_quotation.no_document) as total_request_quotation,
                 SUM(DISTINCT request_quotation.biaya_akhir) as total_biaya_akhir,
                 COUNT(DISTINCT CASE WHEN oh.id IS NOT NULL THEN request_quotation.no_document ELSE NULL END) as pelanggan_lama,
                 COUNT(DISTINCT CASE WHEN oh.id IS NULL THEN request_quotation.no_document ELSE NULL END) as pelanggan_baru,
@@ -111,7 +111,7 @@ class QuotationNonKontrak extends Sector
     {
         return $this->belongsTo(OrderHeader::class, 'no_document', 'no_document');
     }
-    
+
     public function orderHeaderWithInvoices()
     {
         return $this->orderHeader()
@@ -138,5 +138,14 @@ class QuotationNonKontrak extends Sector
     public function jadwal()
     {
         return $this->hasMany(Jadwal::class, 'no_quotation', 'no_document')->where('is_active', true);
+    }
+
+    public function jadwal_customer()
+    {
+        return $this->hasOne(SamplingPlan::class, 'no_quotation', 'no_document')->where('is_active', true)->latest();
+    }
+    public function SampelDiantar()
+    {
+        return $this->hasMany(SampelDiantar::class, 'no_quotation', 'no_document')->with(['detail']);
     }
 }

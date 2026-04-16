@@ -149,7 +149,7 @@ class RandomSalesAssign
                 ->where('sales_id', '<>', $customerMasDedi)
                 ->where('created_at', '<', Carbon::now()->subMonths(3))
                 ->whereNotNull('sales_id')
-                ->where('id_pelanggan', '=', 'YAPH04') // pelanggan mas dedi
+                // ->where('id_pelanggan', '=', 'YAPH04') // pelanggan mas dedi
                 ->whereNotIn('sales_id', $excludedSalesIds)
                 ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex, &$log) {
                     Log::channel('reassign_customer')->info("== Processing Chunk #{$chunkIndex} ==", [

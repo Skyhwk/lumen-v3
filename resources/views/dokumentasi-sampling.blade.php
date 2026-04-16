@@ -77,6 +77,13 @@
         @php $no = 1; @endphp
         @foreach ($detail as $item)
             @foreach ($item->any_data_lapangan as $dataLapangan)
+            @php
+                if ($dataLapangan instanceof App\Models\DataLapanganErgonomi) {
+                    if (!$dataLapangan->foto_samping_kiri && !$dataLapangan->foto_samping_kanan && !$dataLapangan->foto_depan && !$dataLapangan->foto_belakang) {
+                        continue;
+                    }
+                }
+            @endphp
                 <tr>
                     <td style="width: 30px;">{{ $no++ }}.</td>
                     <td style="width: 150px;">No. Sampel</td>
