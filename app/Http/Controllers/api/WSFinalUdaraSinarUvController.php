@@ -24,6 +24,8 @@ use App\Models\DataLapanganDebuPersonal;
 use App\Models\MasterKaryawan;
 use App\Models\Subkontrak;
 use App\Models\MasterBakumutu;
+use App\Helpers\HelperSatuan;
+use App\Models\MdlUdara;
 
 use App\Models\LingkunganHeader;
 use App\Models\DirectLainHeader;
@@ -144,7 +146,34 @@ class WSFinalUdaraSinarUvController extends Controller
                     ->get();
                 $method = Parameter::where('id', $idParameter)->first()->method ?? '-';
 
+                $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+                $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+
+                $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                    if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                        $colToSearch = "hasil" . ($index ?: 1);
+                        $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                        if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                            $hasilUji = "<" . $mdlUdara->$colToSearch;
+                        }
+                    }
+
+                    return $hasilUji;
+                };
+
                 return Datatables::of($data)
+                    ->editColumn('ws_udara.hasil1', function ($item) use ($getHasilUji) {
+                        $parameterId = $item->id_parameter;
+                        return $getHasilUji(1, $parameterId, $item->ws_udara->hasil1 ?? null);
+                    })
+                    ->editColumn('ws_udara.hasil2', function ($item) use ($getHasilUji) {
+                        $parameterId = $item->id_parameter;
+                        return $getHasilUji(2, $parameterId, $item->ws_udara->hasil2 ?? null);
+                    })
+                    ->editColumn('ws_udara.hasil3', function ($item) use ($getHasilUji) {
+                        $parameterId = $item->id_parameter;
+                        return $getHasilUji(3, $parameterId, $item->ws_udara->hasil3 ?? null);
+                    })
                     ->addColumn('method', function ($item) use ($method) {
                         return $method;
                     })->make(true);
@@ -1217,7 +1246,7 @@ class WSFinalUdaraSinarUvController extends Controller
                 ->update([
                     'status' => 1,
                 ]);
-                
+
             SinarUvHeader::whereIn('no_sampel', $request->no_sampel_list)
                 ->update([
                     'lhps' => 1,
