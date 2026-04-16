@@ -13,6 +13,6 @@ class PengajuanFeeSampling extends Sector
 
     public function detail_fee()
     {
-        return $this->hasMany(PengajuanFeeSamplingDetail::class, 'pengajuan_fee_sampling_id')->where('is_active', 1);
+        return $this->hasMany(PengajuanFeeSamplingDetail::class, 'pengajuan_fee_sampling_id');
     }
 }
