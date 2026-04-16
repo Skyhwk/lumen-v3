@@ -201,6 +201,10 @@ class DraftGelombangMikroController extends Controller
                 $id_regulasi    = $parts_regulasi[0] ?? null;
                 $nama_regulasi  = $parts_regulasi[1] ?? null;
 
+                $namaLabPowerDensity  = Parameter::whereIn('id', [236, 316])->value('nama_lab') ?? 'Power Density';
+                $namaLabMedanListrik  = Parameter::where('id', 277)->value('nama_lab') ?? 'Kekuatan Medan Listrik';
+                $namaLabMedanMagnet   = Parameter::where('id', 563)->value('nama_lab') ?? 'Kekuatan Medan Magnet';
+
                 if (! $id_regulasi) {
                     continue;
                 }
@@ -267,6 +271,7 @@ class DraftGelombangMikroController extends Controller
                     // $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
                     if ($val->id_parameter == 236 || $val->id_parameter == 316) {
                         $hasil_uji            = $nilaiDecode['hasil_mwatt'] ?? null;
+                        $id_parameter          = $val->id_parameter;
                         $medan_magnet         = $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['medan_magnet'] ?? null;
                         $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
@@ -276,6 +281,7 @@ class DraftGelombangMikroController extends Controller
                         $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 277) {
                         $hasil_uji            = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
+                        $id_parameter          = $val->id_parameter;
                         $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
                         $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
@@ -285,6 +291,7 @@ class DraftGelombangMikroController extends Controller
                         $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 563) {
                         $hasil_uji            = $nilaiDecode['medan_magnet'] ?? null;
+                        $id_parameter          = $val->id_parameter;
                         $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
                         $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
@@ -296,6 +303,7 @@ class DraftGelombangMikroController extends Controller
 
                     return [
                         'no_sampel'            => $val->no_sampel ?? null,
+                        'id_parameter'         => $id_parameter,
                         'parameter'            => $parameterLhp ?? $parameterRegulasi ?? null,
                         'nama_lab'             => $parameterLab ?? null,
                         'bakumutu'             => $bakumutu ? $bakumutu->baku_mutu : '-',
@@ -315,104 +323,45 @@ class DraftGelombangMikroController extends Controller
                     ];
                 })->toArray();
 
-                // $data_detail = collect($tmpData)->flatMap(function ($item) {
+                $data_detail = collect($tmpData)->flatMap(function ($item) use ($namaLabPowerDensity, $namaLabMedanListrik, $namaLabMedanMagnet) {
 
-                //     return [
-                //         [
-                //             'no_sampel' => $item['no_sampel'],
-                //             'parameter' => 'Power Density',
-                //             'hasil_uji' => $item['hasil_uji'],
-                //             'nama_lab'  => $item['nama_lab'],
-                //             'bakumutu'  => $item['bakumutu'],
-                //             'satuan'    => 'mW/cm²',
-                //             'methode'   => 'IKM/ISL/7.2.183 (Electromagnetic Field Meter)',
-                //             'akr'       => $item['akr'],
-                //             'nab'       => $item['nab'],
-                //         ],
-                //         [
-                //             'no_sampel' => $item['no_sampel'],
-                //             'parameter' => 'Kekuatan Medan Listrik',
-                //             'hasil_uji' => $item['rata_listrik'],
-                //             'nama_lab'  => $item['nama_lab'],
-                //             'bakumutu'  => $item['bakumutu'],
-                //             'satuan'    => 'V/m',
-                //             'methode'   => 'IKM/ISL/7.2.64 (Elektrometri)',
-                //             'akr'       => $item['akr'],
-                //             'nab'       => $item['nab'],
-                //         ],
-                //         [
-                //             'no_sampel' => $item['no_sampel'],
-                //             'parameter' => 'Kekuatan Medan Magnet',
-                //             'hasil_uji' => $item['medan_magnet'],
-                //             'nama_lab'  => $item['nama_lab'],
-                //             'bakumutu'  => $item['bakumutu'],
-                //             'satuan'    => 'A/m',
-                //             'methode'   => 'IKM/ISL/7.2.62 (Elektrometri)',
-                //             'akr'       => $item['akr'],
-                //             'nab'       => $item['nab'],
-                //         ],
-                //     ];
-                // })->values()->toArray();
-
-                $data_detail = collect($tmpData)->flatMap(function ($item) {
-
-                $namaLab = $item['nama_lab'] ?? '';
-                // dd($namaLab);
-
-                // 🔥 kondisi khusus
-                if (in_array($namaLab, ['Power Density', 'Gelombang Elektro'])) {
                     return [
                         [
                             'no_sampel' => $item['no_sampel'],
                             'parameter' => 'Power Density',
-                            'hasil_uji' => $item['hasil_uji'],
-                            'nama_lab'  => $item['nama_lab'],
+                            'hasil_uji' => in_array($item['id_parameter'], [236, 316]) ? $item['hasil_uji'] : '-',
+                            'nama_lab'  => $namaLabPowerDensity,
                             'bakumutu'  => $item['bakumutu'],
                             'satuan'    => 'mW/cm²',
                             'methode'   => 'IKM/ISL/7.2.183 (Electromagnetic Field Meter)',
                             'akr'       => $item['akr'],
-                            'nab'       => $item['nab'],
+                            'nab'       => in_array($item['id_parameter'], [236, 316]) ? $item['nab'] : '-',
                         ],
                         [
                             'no_sampel' => $item['no_sampel'],
                             'parameter' => 'Kekuatan Medan Listrik',
-                            'hasil_uji' => $item['rata_listrik'],
-                            'nama_lab'  => $item['nama_lab'],
+                            'hasil_uji' => $item['id_parameter'] == 277 ? $item['hasil_uji'] : $item['rata_listrik'],
+                            'nama_lab'  => $namaLabMedanListrik,
                             'bakumutu'  => $item['bakumutu'],
                             'satuan'    => 'V/m',
                             'methode'   => 'IKM/ISL/7.2.64 (Elektrometri)',
                             'akr'       => $item['akr'],
-                            'nab'       => $item['nab'],
+                            'nab'       => $item['id_parameter'] == 277 ? $item['nab'] : '-',
                         ],
                         [
                             'no_sampel' => $item['no_sampel'],
                             'parameter' => 'Kekuatan Medan Magnet',
-                            'hasil_uji' => $item['medan_magnet'],
-                            'nama_lab'  => $item['nama_lab'],
+                            'hasil_uji' => $item['id_parameter'] == 563 ? $item['hasil_uji'] : $item['medan_magnet'],
+                            'nama_lab'  => $namaLabMedanMagnet,
                             'bakumutu'  => $item['bakumutu'],
                             'satuan'    => 'A/m',
                             'methode'   => 'IKM/ISL/7.2.62 (Elektrometri)',
                             'akr'       => $item['akr'],
-                            'nab'       => $item['nab'],
+                            'nab'       => $item['id_parameter'] == 563 ? $item['nab'] : '-',
                         ],
                     ];
-                }
+                })->values()->toArray();
 
-                // 🔥 selain itu → hanya 1 data (tidak dipecah)
-                return [
-                    [
-                        'no_sampel' => $item['no_sampel'],
-                        'parameter' => $item['parameter'] ?? $item['nama_lab'],
-                        'hasil_uji' => $item['hasil_uji'] ?? '-',
-                        'nama_lab'  => $item['nama_lab'],
-                        'bakumutu'  => $item['bakumutu'],
-                        'satuan'    => $item['satuan'] ?? '-',
-                        'methode'   => $item['methode'] ?? '-',
-                        'akr'       => $item['akr'],
-                        'nab'       => $item['nab'],
-                    ]
-                ];
-            })->values()->toArray();
 
                 $informasi_sampling = collect($tmpData)->flatMap(function ($item) {
 
