@@ -18,16 +18,8 @@ class RejectFeeSamplingController extends Controller
         $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
             $q->where('is_reject', 1);
         }])
-            ->whereHas('detail_fee', function ($q) {
-                $q->where('is_reject', 1);
-            })
-            ->where(function ($q) {
-                $q->where('is_approve_finance', 1)
-                    ->orWhere('is_reject_finance', 1);
-            })
-            ->where('is_checked_by_admin', 0)
-            ->whereIn('status_payment', ["Rejected"]);
-
+            ->where('is_reject_finance', 1)
+            ->where('is_checked_by_admin', 0);
         return Datatables::of($data)->make(true);
     }
 
@@ -36,15 +28,12 @@ class RejectFeeSamplingController extends Controller
         $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
             $q->where('is_reject', 1);
         }])
-            ->whereHas('detail_fee', function ($q) {
-                $q->where('is_reject', 1);
-            })
             ->where(function ($q) {
                 $q->where('is_approve_finance', 1)
                     ->orWhere('is_reject_finance', 1);
             })
             ->where('is_checked_by_admin', 1)
-            ->whereIn('status_payment', ["Approved by finance", "Approved by expanse"]);
+            ->whereIn('status_payment', ["Approved by finance", "Approved by expanse", "Rejected"]);
 
         return Datatables::of($data)->make(true);
     }
