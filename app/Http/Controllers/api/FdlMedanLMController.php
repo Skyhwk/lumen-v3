@@ -172,15 +172,11 @@ class FdlMedanLMController extends Controller
                     ->process();
                     
                 $headuv = MedanLmHeader::where('no_sampel', $no_sample)->where('parameter', $data->parameter)->where('is_active', true)->first();
-                $ws = WsValueUdara::where('no_sampel', $no_sample)->where('id_medan_lm_header', $headuv->id)->where('is_active', true)->first();
+                
                 $dataL = DataLapanganMedanLM::where('id', $request->id)->first();
                 // dd($ws);
                 if (empty($headuv)) {
                     $headuv = new MedanLmHeader;
-                }
-
-                if (empty($ws)) {
-                    $ws = new WsValueUdara;
                 }
 
                 $headuv->no_sampel = $no_sample;
@@ -193,6 +189,11 @@ class FdlMedanLMController extends Controller
                 $headuv->created_by = $this->karyawan;
                 $headuv->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $headuv->save();
+
+                $ws = WsValueUdara::where('no_sampel', $no_sample)->where('id_medan_lm_header', $headuv->id)->where('is_active', true)->first();
+                if (empty($ws)) {
+                    $ws = new WsValueUdara;
+                }
 
                 $ws->id_medan_lm_header = $headuv->id;
                 $ws->no_sampel = $no_sample;
