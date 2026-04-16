@@ -171,8 +171,8 @@ class FdlMedanLMController extends Controller
                     ->where('id_parameter', $parameter->id)
                     ->process();
                     
-                $headuv = MedanLmHeader::where('no_sampel', $no_sample)->where('is_active', true)->first();
-                $ws = WsValueUdara::where('no_sampel', $no_sample)->where('is_active', true)->first();
+                $headuv = MedanLmHeader::where('no_sampel', $no_sample)->where('parameter', $data->parameter)->where('is_active', true)->first();
+                $ws = WsValueUdara::where('no_sampel', $no_sample)->where('id_medan_lm_header', $headuv->id)->where('is_active', true)->first();
                 $dataL = DataLapanganMedanLM::where('id', $request->id)->first();
                 // dd($ws);
                 if (empty($headuv)) {
