@@ -90,7 +90,7 @@ class LingkunganHidupNO2_8J
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
-            'durasi' => $data->durasi,
+            'durasi' => round($data->durasi, 3),
             // 'durasi' => $waktu,
             'tekanan_u' => $data->tekanan,
             'suhu' => $data->suhu,

@@ -279,7 +279,6 @@ class TqcMedanMagnetController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsMedanLmHeader = LhpsMedanLMHeader::where('no_lhp', $request->cfr)->first();
         $data = [];
         foreach ($orderDetails as $orderDetail) {
 
@@ -288,29 +287,54 @@ class TqcMedanMagnetController extends Controller
                 ->pluck('hasil')
                 ->toArray();
 
-            $ws = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first();
-            $header = MedanLmHeader::where('no_sampel', $orderDetail->no_sampel)->first();
-            $hasilWs = json_decode($ws->hasil1, true);
-            $data[] = [
-                'no_sampel' => $orderDetail->no_sampel,
-                'titik' => $orderDetail->keterangan_1,
-                'history' => $lhpsMedanLmDetail,
-                'parameter' => $header->parameter ?? null,
-                'nab' => $ws->nab ?? null,
-                'hasil_mwatt' => $hasilWs['hasil_mwatt'] ?? null,
-                'rata_magnet' => $hasilWs['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null,
-                'rata_listrik' => $hasilWs['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null,
-                'rata_frekuensi' => $hasilWs['rata_frekuensi'] ?? null,
-                'nab_power_density' => $ws->nab_power_density ?? null,
-                'nab_medan_listrik' => $ws->nab_medan_listrik ?? null,
-                'nab_medan_magnet' => $ws->nab_medan_magnet ?? null,
-                'analyst' => optional($lhpsMedanLmHeader)->created_by,
-                'approved_by' => optional($lhpsMedanLmHeader)->approved_by
-            ];
+            $wsAll     = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->get();
+            $headerAll = MedanLmHeader::where('no_sampel', $orderDetail->no_sampel)->get();
+
+            foreach ($headerAll as $header) {
+                // 1. Gunakan first() agar mendapatkan satu objek model, bukan collection
+                // 2. Pastikan perbandingannya menggunakan data yang tepat
+                $ws = $wsAll->where('id_medan_lm_header', $header->id)->first();
+
+                // Jika $ws tidak ditemukan, lanjut ke iterasi berikutnya atau set default
+                if (!$ws) {
+                    // Logika jika data ws tidak ada
+                    $hasilWs = [];
+                } else {
+                    $hasilWs = json_decode($ws->hasil1, true) ?? [];
+                }
+
+                $nilai = null;
+                if ($header->parameter === 'Power Density' || $header->parameter === 'Gelombang Elektro') {
+                    $nilai = $hasilWs['hasil_mwatt'] ?? null;
+                    $rata_listrik = $hasilWs['rata_listrik'] ?? null;
+                    $rata_magnet = $hasilWs['rata_magnet'] ?? null;
+                } elseif ($header->parameter === 'Medan Magnet') {
+                    // Prioritas pengambilan data sesuai ketersediaan key di JSON
+                    $nilai = $hasilWs['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                } elseif ($header->parameter === 'Medan Listrik') {
+                    $nilai = $hasilWs['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                }
+
+                $data[] = [
+                    'no_sampel'         => $orderDetail->no_sampel,
+                    'titik'             => $orderDetail->keterangan_1,
+                    'history'           => $lhpsMedanLmDetail,
+                    'parameter'         => $header->parameter,
+                    'nilai'             => $nilai,
+                    'rata_listrik'      => $rata_listrik ?? null,
+                    'rata_magnet'       => $rata_magnet ?? null,
+                    'nab'               => $ws->nab ?? null,
+                    'nab_power_density' => $ws->nab_power_density ?? null,
+                    'nab_medan_listrik' => $ws->nab_medan_listrik ?? null,
+                    'nab_medan_magnet'  => $ws->nab_medan_magnet ?? null,
+                    'analyst'           => optional($lhpsMedanLmHeader)->created_by,
+                    'approved_by'       => optional($lhpsMedanLmHeader)->approved_by,
+                ];
+            }
         }
 
         return response()->json([
-            'data' => $data,
+            'data'    => $data,
             'message' => 'Data retrieved successfully',
         ], 200);
     }
