@@ -446,6 +446,7 @@ class TemplateLhpp
     public function lhpp_psikologi($data, $data_detail, $mode_download, $cfr)
     {
         // Initialize data
+        
         $data->tanggal_rilis_lhp = Carbon::parse($data->tanggal_rilis_lhp)->format('Y-m-d');
         $pengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $data->tanggal_rilis_lhp)
             ->orderByDesc('berlaku_mulai')
@@ -480,7 +481,6 @@ class TemplateLhpp
         $ttd = $this->buildSignatureSection($mode_download, $qrData, $pengesahanLhp, $data);
         $html .= $ttd;
         // Generate PDF
-        
         return $this->generatePdf($html, $ttd, $cfr, $mode_download, $qrData['qr_img'], $header, $data);
     }
 
@@ -1145,7 +1145,7 @@ class TemplateLhpp
         
         if ($mode_download == 'downloadLHPP') {
             $name = 'LHPP-' . $no_lhp . '.pdf';
-        } elseif ($mode_download == 'downloadLHP') {
+        } elseif ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal') {
             $name = 'LHP-' . $no_lhp . '.pdf';
         } else {
             return null;
