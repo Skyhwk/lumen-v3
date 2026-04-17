@@ -1379,6 +1379,7 @@ class RequestQuotationController extends Controller
 
     private function revisiNonKontrak($payload)
     {
+        
         if (!isset($payload->informasi_pelanggan->tgl_penawaran) || $payload->informasi_pelanggan->tgl_penawaran == null) {
             return response()->json([
                 'message' => 'Mohon isi tanggal penawaran terlebih dahulu.'
@@ -1402,6 +1403,41 @@ class RequestQuotationController extends Controller
                 ], 403);
             }
         }
+
+        if ((int) $payload->data_wilayah->is_generate_data_lab === 0) {
+
+            // Ambil dataOld dulu untuk cek data_lama
+            $dataOldCheck = QuotationNonKontrak::where('is_active', true)
+                ->where('no_document', $payload->informasi_pelanggan->no_document)
+                ->first();
+
+            if ($dataOldCheck && $dataOldCheck->data_lama != null) {
+                $dataLamaCheck = json_decode($dataOldCheck->data_lama);
+
+                if (isset($dataLamaCheck->no_order) && $dataLamaCheck->no_order != null) {
+
+                    // Cek apakah OrderHeader dengan no_order tsb masih ada & aktif
+                    $orderHeader = OrderHeader::where('no_order', $dataLamaCheck->no_order)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if ($orderHeader) {
+                        // Cek apakah ada OrderDetail aktif
+                        $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLamaCheck->no_order)
+                            ->where('is_active', true)
+                            ->exists();
+
+                        if ($adaOrderDetailAktif) {
+                            return response()->json([
+                                'message' => "Revisi ke invoice tidak dapat dilakukan karena order {$dataLamaCheck->no_order} sudah memiliki jadwal aktif. Silakan batalkan order terlebih dahulu sebelum melakukan revisi menjadi invoice.",
+                                'status'  => 403
+                            ], 403);
+                        }
+                    }
+                }
+            }
+        }
+
 
         DB::beginTransaction();
         try {
@@ -6152,7 +6188,7 @@ class RequestQuotationController extends Controller
                     // dd('stop');
                     $processedCount++;
                     DB::commit();
-                } catch (Throwable $e) {
+                } catch (\Throwable $e) {
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
@@ -6172,7 +6208,7 @@ class RequestQuotationController extends Controller
                 'errors' => $errorCount,
                 'total' => $dataList->count()
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return false;
             Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
