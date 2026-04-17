@@ -119,7 +119,7 @@ class RegistrasiCustomerController extends Controller
 
                     $permissions[] = [
                         'name' => $item->name,
-                        'access' => ["view", "create", "update", "delete", "export", "import", "approve", "reject"],
+                        'access' => true,
                         'parent' => $parent[0],
                     ];
                 }
