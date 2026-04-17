@@ -10,6 +10,9 @@ class Controller extends BaseController
 
     protected $user_id;
     protected $nama_lengkap;
+    protected $karyawan;
+    protected $idcabang;
+    protected $department;
     protected $privilageCabang;
     protected $grade;
     protected $db;
