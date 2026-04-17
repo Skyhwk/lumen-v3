@@ -446,6 +446,7 @@ class TemplateLhpp
     public function lhpp_psikologi($data, $data_detail, $mode_download, $cfr)
     {
         // Initialize data
+        
         $data->tanggal_rilis_lhp = Carbon::parse($data->tanggal_rilis_lhp)->format('Y-m-d');
         $pengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $data->tanggal_rilis_lhp)
             ->orderByDesc('berlaku_mulai')
@@ -455,15 +456,14 @@ class TemplateLhpp
         $qrData = $this->prepareQrData($data);
         
         // Build HTML content
-        $header = $this->buildHeader('downloadLHPFinal', false);
+        $header = $this->buildHeader($mode_download, false);
         $html   = $this->buildDataUmum($data, $cfr, $mode_download);
         $html   .= $this->buildPemeriksaanSection($data, $mode_download);
         $html   .= $this->buildPengujianTeknis($data_detail, $mode_download);
         
-        if ($mode_download == 'downloadLHP') {
+        if ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal') {
             $html .= $this->buildKesimpulanLHP();
         }
-        
         $html .= $this->buildMetodePengukuran();
         
         // Build analysis section
@@ -471,16 +471,15 @@ class TemplateLhpp
         $html .= $this->buildAnalysis($divisiCount, $mode_download);
         
         // Build conclusion section
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $kesimpulan = $this->generateKesimpulan($divisiCount);
             $html .= $this->buildKesimpulanSection($kesimpulan);
         }
-        
         // Build signature section
         $ttd = $this->buildSignatureSection($mode_download, $qrData, $pengesahanLhp, $data);
         $html .= $ttd;
         // Generate PDF
-        return $this->generatePdf($html, $ttd, $cfr, $mode_download, $qrData['qr_img'], $header);
+        return $this->generatePdf($html, $ttd, $cfr, $mode_download, $qrData['qr_img'], $header, $data);
     }
 
     // ===============================================
@@ -576,7 +575,7 @@ class TemplateLhpp
             ['b.', 'Alamat', $data['alamat_perusahaan'] ?? '-'],
         ];
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $rows[] = ['c.', 'Pengurus/Penanggungjawab', $data['penanggung_jawab'] ?? '-'];
             $rows[] = ['d.', 'Lokasi Pemeriksaan/Pengujian', $data['lokasi_pemeriksaan'] ?? '-'];
         } else {
@@ -584,7 +583,7 @@ class TemplateLhpp
         }
         
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $rows[] = ['e.', 'Nomor Dokumen Pengujian Sebelumnya', $cfr ?? '-'];
             $rows[] = ['f.', 'Nomor SKP PJK3/Bidang', $data['no_skp_pjk3'] ?? '-'];
             $rows[] = ['g.', 'Nomor SKP Ahli K3', $data['no_skp_ahli_k3'] ?? '-'];
@@ -619,7 +618,7 @@ class TemplateLhpp
         $html .= '<td style="border:none;">' . $tanggal . '</td>';
         $html .= '</tr>';
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $waktu = $data['waktu_pemeriksaan'] ?? '-';
             $html .= '<tr>';
             $html .= '<td style="border:none;">b.</td>';
@@ -644,7 +643,7 @@ class TemplateLhpp
         // Table header
         $html .= '<thead><tr>';
         $html .= '<th>No</th><th>No Titik</th><th>Jenis Pekerjaan</th><th>Kategori Stress</th><th>Nilai</th><th>Kesimpulan</th>';
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $html .= '<th>Tindakan Pengendalian yang Telah Dilakukan</th>';
         }
         $html .= '</tr></thead><tbody>';
@@ -697,7 +696,7 @@ class TemplateLhpp
                         $html .= '<td style="text-align:center;">' . ($value['nilai'] ?? '-') . '</td>';
                         $html .= '<td style="text-align:center;">' . ($value['kesimpulan'] ?? '-') . '</td>';
                         
-                        if ($idx == 0 && $mode_download != 'downloadLHP') {
+                        if ($idx == 0 && $mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
                             $html .= '<td rowspan="' . count($hasil) . '">' . ($item['tindakan'] ?? '-') . '</td>';
                         }
                         
@@ -1002,7 +1001,7 @@ class TemplateLhpp
         
         $html .= '</tbody></table>';
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $html .= '<p><strong>Jumlah rata-rata persentase stres pada analisis pengukuran psikologi bagian ' . $item['divisi'] . ' sebanyak ' . $total . ' orang menunjukkan stres sedang lebih banyak dari stres ringan, dan adanya stres berat.</strong></p>';
         }
         
@@ -1085,7 +1084,7 @@ class TemplateLhpp
         
         if ($mode_download == 'downloadLHPP') {
             $ttd .= $this->buildLHPPSignature($qrData, $pengesahanLhp, $data);
-        } elseif ($mode_download == 'downloadLHP') {
+        } elseif ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal') {
             $ttd .= $this->buildLHPSignature($qrData);
         }
         
@@ -1138,21 +1137,21 @@ class TemplateLhpp
     /**
      * Generate PDF document
      */
-    private function generatePdf($html, $ttd, $cfr, $mode_download, $qr_img, $header)
+    private function generatePdf($html, $ttd, $cfr, $mode_download, $qr_img, $header, $data)
     {
         $no_lhp = str_replace("/", "-", $cfr);
         
         if ($mode_download == 'downloadLHPP') {
             $name = 'LHPP-' . $no_lhp . '.pdf';
-        } elseif ($mode_download == 'downloadLHP') {
+        } elseif ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal') {
             $name = 'LHP-' . $no_lhp . '.pdf';
         } else {
             return null;
         }
-        return self::formatTemplate($html, $name, $ttd, $qr_img, $mode_download, $header);
+        return self::formatTemplate($html, $name, $ttd, $qr_img, $mode_download, $header, $data);
     }
 
-    private function formatTemplate($bodi, $filename, $ttd, $qr_img, $mode_download, $header)
+    private function formatTemplate($bodi, $filename, $ttd, $qr_img, $mode_download, $header, $data)
     {
         $mpdfConfig = array(
             'mode' => 'utf-8',
@@ -1313,7 +1312,7 @@ class TemplateLhpp
                         }
                         .left {
                             float: left;
-                            padding-top: " . ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHP' ? '18px' : '14px') . ";
+                            padding-top: " . ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal' ? '18px' : '14px') . ";
                             width: 59%;
                         }
                         .left2 {
@@ -1322,6 +1321,27 @@ class TemplateLhpp
                         }";
         // $file_qr = public_path('qr_documents/' . $qr_img . '.svg');
         if ($mode_download == 'downloadLHPP' || $mode_download == 'downloadLHP') {
+
+            $cetakanKe = ($mode_download == 'downloadLHP' && $data->count_print > 1) 
+            ? '<strong>Cetakan ke-' . $data->count_print . '</strong><br/>' 
+            : '';
+            
+            if (!is_null($qr_img)) {
+                $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
+            } else {
+                $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
+            }
+            $ketFooter = '<td width="15%" style="vertical-align: bottom;">
+                        <div>PT Inti Surya Laboratorium</div>
+                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                        <div>021-5089-8988/89 contact@intilab.com</div>
+                        </td>
+                        <td width="59%" style="vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;"> ' . $cetakanKe . '
+                        Laporan hasil pengujian ini hanya berlaku bagi sampel yang tercantum di atas. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak Laboratorium.
+                        <br>Halaman {PAGENO} - {nbpg}
+                        </td>';
+            $body = '<body>';
+        } else {
             if (!is_null($qr_img)) {
                 $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
             } else {
@@ -1337,9 +1357,10 @@ class TemplateLhpp
                         <br>Halaman {PAGENO} - {nbpg}
                         </td>';
             $body = '<body>';
+            $pdf->SetWatermarkImage(public_path() . "/logo-watermark.png", -1, "", [110, 35]);
         }
         $pdf->SetHTMLHeader($header);
-        $pdf->SetWatermarkImage(public_path() . "/logo-watermark.png", -1, "", [110, 35]);
+        
         $pdf->showWatermarkImage = true;
         // $pdf->SetHTMLHeader($header, '', TRUE);
         $pdf->WriteHTML($stylesheet, 1);
@@ -1375,13 +1396,20 @@ class TemplateLhpp
         $pdf->WriteHTML('</body>
                 </html>');
         if ($mode_download == 'downloadLHP') {
+            $dir = public_path('dokumen/LHP/');
+            if (!file_exists($dir)) {
+                mkdir($dir, 0777, true);
+            }
+            $pdf->Output($dir . '/' . $filename, \Mpdf\Output\Destination::FILE);
+            return $filename;
+        } else if ($mode_download == 'downloadLHPFinal') {
             $dir = public_path('dokumen/LHP_DOWNLOAD/');
             if (!file_exists($dir)) {
                 mkdir($dir, 0777, true);
             }
             $pdf->Output($dir . '/' . $filename, \Mpdf\Output\Destination::FILE);
             return $filename;
-        } else {
+        }else {
             $dir = public_path('dokumen/LHPP/');
             if (!file_exists($dir)) {
                 mkdir($dir, 0777, true);

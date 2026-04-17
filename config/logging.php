@@ -74,6 +74,13 @@ return [
             'level' => 'critical',
         ],
 
+        'cekorder' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/cekorder/log.log'),
+            'level' => 'info',
+            'days' => 3,
+        ],
+
         'update_kpi_sales' => [
             'driver' => 'daily',
             'path' => storage_path('logs/update_kpi_sales/log.log'),

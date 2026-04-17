@@ -144,4 +144,8 @@ class QuotationNonKontrak extends Sector
     {
         return $this->hasOne(SamplingPlan::class, 'no_quotation', 'no_document')->where('is_active', true)->latest();
     }
+    public function SampelDiantar()
+    {
+        return $this->hasMany(SampelDiantar::class, 'no_quotation', 'no_document')->with(['detail']);
+    }
 }

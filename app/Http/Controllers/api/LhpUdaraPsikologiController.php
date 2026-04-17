@@ -10,6 +10,9 @@ use App\Models\LhpUdaraPsikologiDetail;
 use App\Models\LhpUdaraPsikologiDetailHistory;
 use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\LhpUdaraPsikologiHeaderHistory;
+use App\Services\GenerateQrDocumentLhp;
+use App\Services\TemplateLhpp;
+use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +26,7 @@ class LhpUdaraPsikologiController extends Controller
 {
 
 
-	    public function index(Request $request)
+	public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
@@ -46,9 +49,7 @@ class LhpUdaraPsikologiController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-
-
-	  public function handleReject(Request $request)
+	public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -107,6 +108,68 @@ class LhpUdaraPsikologiController extends Controller
                 'message' => 'Terjadi kesalahan ' . $th->getMessage() . ' On line ' . $th->getLine() . ' On File ' . $th->getFile()
             ], 401);
         }
+    }
+
+    public function handleDownload(Request $request)
+    {
+        $lhps = LhpUdaraPsikologiHeader::where('id', $request->id)
+            ->where('is_active', true)
+            ->first();
+
+        if ($lhps) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Data LHP Psikologi no LHP ' . $lhps->no_lhp . ' berhasil didownload',
+                'data' => $lhps
+            ], 201);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Data LHP Psikologi tidak ditemukan'
+            ], 404);
+        }
+    }
+
+    public function rePrint(Request $request) 
+    {
+        DB::beginTransaction();
+        $header = LhpUdaraPsikologiHeader::where('no_cfr', $request->no_lhp)->where('is_active', true)->first();
+        
+        $header->count_print = $header->count_print + 1; 
+
+        $detail = LhpUdaraPsikologiDetail::where('id_header', $header->id)->get();
+        // $custom = LhpUdaraPsikologiCustom::where('id_header', $header->id)->get();
+
+        if ($header != null) {
+            if ($header->file_qr == null) {
+                $file_qr = new GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
+            }
+
+            $render = app(TemplateLhpp::class);
+            $render->lhpp_psikologi($header, $detail, 'downloadLHP', $request->no_lhp);
+            $fileName = 'LHP-' . str_replace("/", "-", $request->no_lhp) . '.pdf';
+            $header->no_dokumen = $fileName;
+            $header->save();
+        }
+
+        $servicePrint = new PrintLhp();
+        $servicePrint->printByFilename($header->no_dokumen, $detail, 'KPGI', $header->no_cfr);
+        
+        if (!$servicePrint) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+        }
+        
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
+        ], 200);
     }
 
 }

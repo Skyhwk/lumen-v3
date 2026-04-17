@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Helpers;
 
 use App\Services\AutomaticApproveService;
@@ -13,13 +14,14 @@ class WorkerAutomaticApprove
     public static function run()
     {
         $lockKey = 'automatic_approve_running';
+        $throttleKey = 'automatic_approve_throttle';
 
+        // 🔥 skip kalau masih running
         if (Cache::has($lockKey)) {
-            Log::channel('analyst_approve')->info('[WorkerAutomaticApprove] Proses sebelumnya masih berjalan, skip.');
             return;
         }
 
-        $throttleKey = 'automatic_approve_throttle';
+        // 🔥 throttle 30 detik
         if (Cache::has($throttleKey)) {
             return;
         }
@@ -28,8 +30,10 @@ class WorkerAutomaticApprove
 
         try {
             (new AutomaticApproveService())->run();
+
         } catch (\Throwable $th) {
             Log::error('[WorkerAutomaticApprove] Error: ' . $th->getMessage());
+
         } finally {
             Cache::forget($lockKey);
             Cache::put($throttleKey, true, Carbon::now()->addSeconds(self::MIN_INTERVAL_SECONDS));
