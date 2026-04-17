@@ -21,8 +21,11 @@ class WithdrawalFeeSalesController extends Controller
     {
         $withdrawalFeeSales = WithdrawalFeeSales::with('sales')
         ->whereIn('status', $request->status)
-        ->where('is_active', true)
-        ->latest();
+        ->where('is_active', true);
+        if($request->transfer_date){
+            $withdrawalFeeSales->whereNotNull('transfer_date');
+        }
+        $withdrawalFeeSales->latest();
         // $withdrawalFeeSales = WithdrawalFeeSales::with('sales')->where('is_active', true)->latest();
 
         return DataTables::of($withdrawalFeeSales)
