@@ -464,7 +464,6 @@ class TemplateLhpp
         if ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal') {
             $html .= $this->buildKesimpulanLHP();
         }
-        
         $html .= $this->buildMetodePengukuran();
         
         // Build analysis section
@@ -472,11 +471,10 @@ class TemplateLhpp
         $html .= $this->buildAnalysis($divisiCount, $mode_download);
         
         // Build conclusion section
-        if ($mode_download != 'downloadLHP' || $mode_download != 'downloadLHPFinal') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $kesimpulan = $this->generateKesimpulan($divisiCount);
             $html .= $this->buildKesimpulanSection($kesimpulan);
         }
-        
         // Build signature section
         $ttd = $this->buildSignatureSection($mode_download, $qrData, $pengesahanLhp, $data);
         $html .= $ttd;
