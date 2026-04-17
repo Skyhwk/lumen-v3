@@ -575,7 +575,7 @@ class TemplateLhpp
             ['b.', 'Alamat', $data['alamat_perusahaan'] ?? '-'],
         ];
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $rows[] = ['c.', 'Pengurus/Penanggungjawab', $data['penanggung_jawab'] ?? '-'];
             $rows[] = ['d.', 'Lokasi Pemeriksaan/Pengujian', $data['lokasi_pemeriksaan'] ?? '-'];
         } else {
@@ -583,7 +583,7 @@ class TemplateLhpp
         }
         
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $rows[] = ['e.', 'Nomor Dokumen Pengujian Sebelumnya', $cfr ?? '-'];
             $rows[] = ['f.', 'Nomor SKP PJK3/Bidang', $data['no_skp_pjk3'] ?? '-'];
             $rows[] = ['g.', 'Nomor SKP Ahli K3', $data['no_skp_ahli_k3'] ?? '-'];
@@ -618,7 +618,7 @@ class TemplateLhpp
         $html .= '<td style="border:none;">' . $tanggal . '</td>';
         $html .= '</tr>';
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $waktu = $data['waktu_pemeriksaan'] ?? '-';
             $html .= '<tr>';
             $html .= '<td style="border:none;">b.</td>';
@@ -643,7 +643,7 @@ class TemplateLhpp
         // Table header
         $html .= '<thead><tr>';
         $html .= '<th>No</th><th>No Titik</th><th>Jenis Pekerjaan</th><th>Kategori Stress</th><th>Nilai</th><th>Kesimpulan</th>';
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $html .= '<th>Tindakan Pengendalian yang Telah Dilakukan</th>';
         }
         $html .= '</tr></thead><tbody>';
@@ -696,7 +696,7 @@ class TemplateLhpp
                         $html .= '<td style="text-align:center;">' . ($value['nilai'] ?? '-') . '</td>';
                         $html .= '<td style="text-align:center;">' . ($value['kesimpulan'] ?? '-') . '</td>';
                         
-                        if ($idx == 0 && $mode_download != 'downloadLHP') {
+                        if ($idx == 0 && $mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
                             $html .= '<td rowspan="' . count($hasil) . '">' . ($item['tindakan'] ?? '-') . '</td>';
                         }
                         
@@ -1001,7 +1001,7 @@ class TemplateLhpp
         
         $html .= '</tbody></table>';
         
-        if ($mode_download != 'downloadLHP') {
+        if ($mode_download != 'downloadLHP' && $mode_download != 'downloadLHPFinal') {
             $html .= '<p><strong>Jumlah rata-rata persentase stres pada analisis pengukuran psikologi bagian ' . $item['divisi'] . ' sebanyak ' . $total . ' orang menunjukkan stres sedang lebih banyak dari stres ringan, dan adanya stres berat.</strong></p>';
         }
         
@@ -1084,7 +1084,7 @@ class TemplateLhpp
         
         if ($mode_download == 'downloadLHPP') {
             $ttd .= $this->buildLHPPSignature($qrData, $pengesahanLhp, $data);
-        } elseif ($mode_download == 'downloadLHP') {
+        } elseif ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal') {
             $ttd .= $this->buildLHPSignature($qrData);
         }
         
@@ -1312,7 +1312,7 @@ class TemplateLhpp
                         }
                         .left {
                             float: left;
-                            padding-top: " . ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHP' ? '18px' : '14px') . ";
+                            padding-top: " . ($mode_download == 'downloadLHP' || $mode_download == 'downloadLHPFinal' ? '18px' : '14px') . ";
                             width: 59%;
                         }
                         .left2 {
