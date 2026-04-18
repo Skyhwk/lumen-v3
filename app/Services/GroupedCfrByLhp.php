@@ -45,10 +45,10 @@ class GroupedCfrByLhp
                     "lhps_microbiologi",
                     "lhps_padatan",
                     "lhp_psikologi",
-                    "lhps_hygiene_sanitasi"
                     "wsValueAir",
                     "wsValueUdara",
                     "wsValueEmisiCerobong",
+                    "lhps_hygiene_sanitasi"
                 ])
                 ->withAnyDataLapangan()
                 ->where([
