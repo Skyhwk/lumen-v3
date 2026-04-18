@@ -74,9 +74,8 @@ class FlowMeterController extends BaseController
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function updateDevice(Request $request){
-
-        DB::beginTransaction();
+    public function updateDevice(Request $request)
+    {
         try {
             $now = Carbon::now();
             $kode = $request->kode;
@@ -84,91 +83,68 @@ class FlowMeterController extends BaseController
             $ip = $request->ip_address;
             $notification = "";
 
-            // Update mesin_absen jika ada
-            if (DB::table('mesin_absen')->where('kode_mesin', $kode)->exists()) {
-                $affected = DB::table('mesin_absen')->where('kode_mesin', $kode)->update([
-                    'status_device' => $status,
-                    'last_update' => $now,
-                    'ipaddress' => $ip
-                ]);
-                
+            if (strpos($kode, '_') === false) {
+
+                // mesin_absen
+                $affected = DB::table('mesin_absen')
+                    ->where('kode_mesin', $kode)
+                    ->update([
+                        'status_device' => $status,
+                        'last_update' => $now,
+                        'ipaddress' => $ip
+                    ]);
+
                 if ($affected > 0) {
-                    DB::commit();
-                    // Log::info("Device mesin_absen berhasil diperbarui", [
-                    //     'kode' => $kode,
-                    //     'status' => $status,
-                    //     'ip' => $ip
-                    // ]);
-                    
                     return response()->json([
                         'success' => true,
                         'message' => 'Berhasil memperbarui device mesin absen',
-                        'data' => [
-                            'kode' => $kode,
-                            'status' => $status,
-                            'ip_address' => $ip,
-                            'last_update' => $now
-                        ]
+                        'data' => compact('kode', 'status', 'ip') + ['last_update' => $now]
                     ], 200);
                 }
-            }
 
-            // Update devices jika ada
-            if (DB::table('devices')->where('kode_device', $kode)->exists()) {
-                $affected = DB::table('devices')->where('kode_device', $kode)->update([
-                    'status_device' => $status,
-                    'last_update' => $now,
-                    'ip_address' => $ip
-                ]);
-                
+                // devices
+                $affected = DB::table('devices')
+                    ->where('kode_device', $kode)
+                    ->update([
+                        'status_device' => $status,
+                        'last_update' => $now,
+                        'ip_address' => $ip
+                    ]);
+
                 if ($affected > 0) {
-                    DB::commit();
-                    // Log::info("Device berhasil diperbarui", [
-                    //     'kode' => $kode,
-                    //     'status' => $status,
-                    //     'ip' => $ip
-                    // ]);
-                    
                     return response()->json([
                         'success' => true,
                         'message' => 'Berhasil memperbarui device',
-                        'data' => [
-                            'kode' => $kode,
-                            'status' => $status,
-                            'ip_address' => $ip,
-                            'last_update' => $now
-                        ]
+                        'data' => compact('kode', 'status', 'ip') + ['last_update' => $now]
                     ], 200);
                 }
-            }
 
-            // Update DeviceIntilab jika ada
-            $device = DeviceIntilab::where('kode', $kode)->first();
-            if ($device) {
-                $oldStatus = $device->status;
-                $oldIp = $device->ip;
-                
-                // Update data device
-                $device->status = $status;
-                $device->ip = $ip;
-                $device->updated_at = $now;
-                $device->updated_by = "SYSTEM";
-                
-                if ($device->save()) {
-                    // Kirim notifikasi jika status berubah
+                // DeviceIntilab
+                $device = DeviceIntilab::where('kode', $kode)->first();
+
+                if ($device) {
+                    $oldStatus = $device->status;
+                    $oldIp = $device->ip;
+
+                    $device->update([
+                        'status' => $status,
+                        'ip' => $ip,
+                        'updated_at' => $now,
+                        'updated_by' => 'SYSTEM'
+                    ]);
+
                     if ($oldStatus != $status) {
                         try {
-                            $notification = app(NotificationFdlService::class)->deviceIntilab($device->id, $oldStatus, $status);
+                            $notification = app(NotificationFdlService::class)
+                                ->deviceIntilab($device->id, $oldStatus, $status);
                         } catch (\Exception $e) {
-                            Log::warning("Gagal mengirim notifikasi", [
+                            Log::warning("Gagal notifikasi", [
                                 'device_id' => $device->id,
                                 'error' => $e->getMessage()
                             ]);
                         }
                     }
 
-                    DB::commit();
-                    
                     return response()->json([
                         'success' => true,
                         'message' => 'Berhasil memperbarui device intilab',
@@ -185,42 +161,25 @@ class FlowMeterController extends BaseController
                 }
             }
 
-            DB::rollBack();
-            
             return response()->json([
                 'success' => false,
-                'message' => 'Device dengan kode tersebut tidak ditemukan',
-                'data' => [
-                    'kode' => $kode
-                ]
+                'message' => 'Device tidak ditemukan',
+                'data' => ['kode' => $kode]
             ], 404);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            DB::rollBack();
-            Log::error("Validasi gagal pada updateDevice", [
+        } catch (\Exception $e) {
+
+            Log::error("Error updateDevice", [
                 'kode' => $request->kode ?? null,
-                'errors' => $e->errors()
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
             ]);
-            
+
             return response()->json([
                 'success' => false,
-                'message' => 'Data yang dikirim tidak valid',
-                'errors' => $e->errors()
-            ], 422);
-            
-        } catch (\Exception $th) {
-            DB::rollBack();
-            Log::error("Error pada updateDevice", [
-                'kode' => $request->kode ?? null,
-                'error' => $th->getMessage(),
-                'file' => $th->getFile(),
-                'line' => $th->getLine()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan internal server',
-                'error' => config('app.debug') ? $th->getMessage() : 'Internal Server Error'
+                'message' => 'Terjadi kesalahan server',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal Server Error'
             ], 500);
         }
     }

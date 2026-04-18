@@ -10,6 +10,7 @@ use DataTables;
 
 use App\Models\{
     LimitWithdraw,
+    MasterFeeSales,
     MasterKaryawan,
     SaldoFeeSales,
     MutasiFeeSales,
@@ -50,7 +51,7 @@ class SaldoFeeSalesController extends Controller
         if ($limitWithdraw) {
             $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
                 ->whereIn('status', ['Pending', 'Approved'])
-                ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
+                // ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
                 ->sum('amount');
             $limit = $limitWithdraw->limit - $usedLimit;
         }
@@ -58,13 +59,27 @@ class SaldoFeeSalesController extends Controller
         $pendingWithdrawal = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'status' => 'Pending', 'is_active' => true]);
 
         $mutasiStats = MutasiFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
-            ->where('period', $request->year . '-' . $request->month)
+            // ->where('period', $request->year . '-' . $request->month)
             ->selectRaw("SUM(CASE WHEN mutation_type = 'Debit' THEN amount ELSE 0 END) as total_debit")
             ->selectRaw("SUM(CASE WHEN mutation_type = 'Kredit' THEN amount ELSE 0 END) as total_credit")
             ->first();
 
         $saldoFeeSales->total_debit = $mutasiStats->total_debit;
         $saldoFeeSales->total_credit = $mutasiStats->total_credit;
+
+        $estimatedFee = MasterFeeSales::with('rekap')
+            ->where([
+                'sales_id' => $request->salesId,
+                'is_active' => true
+            ])
+            ->get()->sum('estimated_fee');
+
+        $claimedFee = WithdrawalFeeSales::where([
+                'sales_id' => $request->salesId,
+                'is_active' => true,
+                'rejected_by' => null,
+            ])
+            ->get()->sum('amount');
 
         return response()->json([
             'saldoFeeSales' => $saldoFeeSales,
@@ -73,6 +88,11 @@ class SaldoFeeSalesController extends Controller
                 'amount' => $pendingWithdrawal->sum('amount'),
                 'count' => $pendingWithdrawal->count(),
             ],
+            'summary' => [
+                'estimated_fee' => $estimatedFee,
+                'claimed_fee' => $claimedFee,
+                'fee_berjalan' => $estimatedFee - $claimedFee
+            ],
             'message' => 'Saldo Fee Sales retrieved successfully',
         ], 200);
     }
@@ -80,7 +100,7 @@ class SaldoFeeSalesController extends Controller
     public function getMutasiSaldo(Request $request)
     {
         $mutasiSaldo = MutasiFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
-            ->where('period', $request->year . '-' . $request->month)
+            // ->where('period', $request->year . '-' . $request->month)
             ->latest();
 
         return DataTables::of($mutasiSaldo)->make(true);
@@ -89,8 +109,8 @@ class SaldoFeeSalesController extends Controller
     public function getWithdrawal(Request $request)
     {
         $withdrawalFeeSales = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
-            ->whereMonth('created_at', $request->month)
-            ->whereYear('created_at', $request->year)
+            // ->whereMonth('created_at', $request->month)
+            // ->whereYear('created_at', $request->year)
             ->latest();
 
         return DataTables::of($withdrawalFeeSales)->make(true);
@@ -105,7 +125,7 @@ class SaldoFeeSalesController extends Controller
 
         $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->sales_id, 'is_active' => true])
             ->whereIn('status', ['Pending', 'Approved'])
-            ->where(fn($q) => $q->whereYear('created_at', $timestamp->year)->whereMonth('created_at', $timestamp->month))
+            // ->where(fn($q) => $q->whereYear('created_at', $timestamp->year)->whereMonth('created_at', $timestamp->month))
             ->sum('amount');
         $limit = $limitWithdraw->limit - $usedLimit;
 
