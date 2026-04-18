@@ -25,7 +25,7 @@ class GroupedCfrByLhp
     private function getGroupedCFRs($orderHeader, $periode)
     {
         try {
-            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'kategori_1', 'keterangan_1', 'tanggal_sampling', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
+            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'kategori_1', 'keterangan_1', 'tanggal_sampling', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3', 'parameter', 'regulasi')
                 ->with([
                     'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
                     "lhps_air",
@@ -45,8 +45,12 @@ class GroupedCfrByLhp
                     "lhps_microbiologi",
                     "lhps_padatan",
                     "lhp_psikologi",
+                    "wsValueAir",
+                    "wsValueUdara",
+                    "wsValueEmisiCerobong",
                     "lhps_hygiene_sanitasi"
                 ])
+                ->withAnyDataLapangan()
                 ->where([
                     'id_order_header' => $orderHeader->id,
                     'is_active' => true,
@@ -131,9 +135,9 @@ class GroupedCfrByLhp
                         if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
                     }
 
-                    $steps['drafting']['date'] = $lhps->created_at ?? null;
+                    $steps['drafting']['date'] = $tglSampling ? ($lhps->created_at ?? null) : null;
 
-                    $steps['lhp_release']['date'] = $lhps->approved_at ?? null;
+                    $steps['lhp_release']['date'] = $tglSampling ? ($lhps->approved_at ?? null) : null;
 
                     $steps['activeStep'] = $this->detectActiveStep($steps);
 
