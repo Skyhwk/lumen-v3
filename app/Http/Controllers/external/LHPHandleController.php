@@ -16,7 +16,8 @@ use App\Models\{
     MasterBakumutu,
     MdlEmisi,
     MdlUdara,
-    Parameter
+    Parameter,
+    DataLapanganAir
 };
 
 class LHPHandleController extends BaseController
@@ -124,37 +125,53 @@ class LHPHandleController extends BaseController
             $parameters = collect(json_decode($od['parameter'], true));
 
             $ids = collect(json_decode($od['parameter'], true))
-                ->map(function ($item) {
-                    if (strpos($item, ';') !== false) {
-                        [$id, $nama] = explode(';', $item, 2);
-                        return $id;
-                    }
-                    return $item;
-                })
-                ->toArray();
-            
-            $parameterMaster = Parameter::whereIn('id', $ids)->select('id', 'nama_regulasi')->get();
+            ->map(function ($item) {
+                if (strpos($item, ';') !== false) {
+                    [$id, $nama] = explode(';', $item, 2);
+                    return $id;
+                }
+                return $item;
+            })
+            ->toArray();
+        
+            $parameterMaster = Parameter::whereIn('id', $ids)->select('id', 'nama_regulasi', 'nama_lab')->get();
 
             return $parameterMaster->flatMap(function ($paramString) use ($od) {
                 $paramName = $paramString->nama_regulasi;
+                $paramLab = $paramString->nama_lab;
                 $paramId = $paramString->id;
 
-                $result = collect(self::WS_CONFIG)->map(function ($config, $key) use ($od, $paramId, $paramName) {
+                $result = collect(self::WS_CONFIG)->map(function ($config, $key) use ($od, $paramId, $paramName, $paramLab) {
                     $values = collect($od[$key] ?? []);
                     if ($values->isEmpty()) return null;
 
                     // Cari value yang parameternya cocok DAN sudah di-approve
-                    $matchedValue = $values->first(function ($val) use ($config, $paramName) {
-                        return collect($config['headers'])->contains(function ($header) use ($val, $paramName) {
+                    $matchedValue = $values->first(function ($val) use ($config, $paramName, $paramLab) {
+                        return collect($config['headers'])->contains(function ($header) use ($val, $paramName, $paramLab) {
                             $dataHeader = $val[$header] ?? [];
 
                             return isset($dataHeader['parameter'])
-                                && $dataHeader['parameter'] == $paramName
+                                && ($dataHeader['parameter'] == $paramLab || $dataHeader['parameter'] == $paramName)
                                 && (isset($dataHeader['is_approved']) || isset($dataHeader['is_approve']));
                         });
                     });
 
-                    if (!$matchedValue) return null;
+                    if (!$matchedValue) {
+                        if ($config['type'] == 'air' && $od['kategori_1'] != 'SD'){
+                            if(strtolower($paramLab) == 'ph'){
+                                $dataLapangan = DataLapanganAir::where('no_sampel', $od['no_sampel'])->first();
+                                return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $dataLapangan->ph ?? null];
+                            } else if (strtolower($paramLab) == 'suhu'){
+                                $dataLapangan = DataLapanganAir::where('no_sampel', $od['no_sampel'])->first();
+                                return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $dataLapangan->suhu_air ?? null];
+                            } else if (str_contains(strtolower($paramLab), 'debit air')){
+                                $dataLapangan = DataLapanganAir::where('no_sampel', $od['no_sampel'])->first();
+                                return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $dataLapangan->debit_air ?? null];
+                            }
+                        } else {
+                            return null;
+                        }
+                    }
 
                     // Formatting Hasil berdasarkan tipe parameter (Air/Udara/Emisi)
                     if ($config['type'] == 'air') {
@@ -195,12 +212,11 @@ class LHPHandleController extends BaseController
 
                 // --- PRIORITY 2: Cari di Data Lapangan---
                 if (!$result) {
-                    $result = collect(self::LAPANGAN_CONFIG)->map(function ($key) use ($od, $paramId, $paramName) {
+                    $result = collect(self::LAPANGAN_CONFIG)->map(function ($key) use ($od, $paramId, $paramName, $paramLab) {
                         $data = $od[$key] ?? null;
                         if (!$data) return null;
 
                         // Case Khusus: Psikologi (Return array, bukan single object)
-                        // Psikologi return-nya List of Objects (Array Numeric)
                         if ($paramId == self::PARAM_PSIKOLOGI && is_array($data)) {
                             $psikoResults = collect($data)->filter(fn($item) => isset($item['is_approved']) || isset($item['is_approve']))
                                 ->map(function ($item) use ($od, $paramName) {
@@ -229,7 +245,7 @@ class LHPHandleController extends BaseController
                         }
 
                         // Cek Approval Data Lapangan
-                        if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
+                        // if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
 
                         // Case: Ergonomi
                         if ($paramId == self::PARAM_ERGONOMI) {
