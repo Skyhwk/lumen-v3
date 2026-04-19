@@ -94,7 +94,7 @@ class GroupedCfrByLhp
                     //     ?? $item->tanggal_terima;
                     
                     $tglSampling = $item->kategori_1 != 'SD'
-                        ? ($item->kategori_3 !== '118-Psikologi' ? ($item->tanggal_sampling ?? null) : ($item->tanggal_terima ?? null))
+                        ? ($item->kategori_3 !== '118-Psikologi' ? ($item->tanggal_terima ?? null) : ($item->tanggal_sampling ?? null))
                         : ($item->tanggal_terima ?? null);
 
                     $labelSampling = optional($track)->ftc_verifier
