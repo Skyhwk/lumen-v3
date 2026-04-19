@@ -15,7 +15,8 @@ use App\Models\{
     LinkLhp,
     MasterBakumutu,
     MdlEmisi,
-    MdlUdara
+    MdlUdara,
+    Parameter
 };
 
 class LHPHandleController extends BaseController
@@ -122,11 +123,22 @@ class LHPHandleController extends BaseController
         return collect($orderDetails)->flatMap(function ($od) {
             $parameters = collect(json_decode($od['parameter'], true));
 
-            return $parameters->flatMap(function ($paramString) use ($od) {
-                [$paramId, $paramName] = explode(';', $paramString);
+            $ids = collect(json_decode($od['parameter'], true))
+                ->map(function ($item) {
+                    if (strpos($item, ';') !== false) {
+                        [$id, $nama] = explode(';', $item, 2);
+                        return $id;
+                    }
+                    return $item;
+                })
+                ->toArray();
+            
+            $parameterMaster = Parameter::whereIn('id', $ids)->select('id', 'nama_regulasi')->get();
 
-                // --- PRIORITY 1: Cari di Data Lab (Air, Udara, Emisi) ---
-                // Loop konfigurasi WS_CONFIG untuk mencari hasil
+            return $parameterMaster->flatMap(function ($paramString) use ($od) {
+                $paramName = $paramString->nama_regulasi;
+                $paramId = $paramString->id;
+
                 $result = collect(self::WS_CONFIG)->map(function ($config, $key) use ($od, $paramId, $paramName) {
                     $values = collect($od[$key] ?? []);
                     if ($values->isEmpty()) return null;
