@@ -481,52 +481,55 @@ class MesinAbsenHandler extends BaseController
                     $jam = \explode("T", $request->data['datetime'])[1];
                     
                     if($jam > '14:00:00')$shift = "Keluar";
-                    $karyawan = DB::table('rfid_card')->join('master_karyawan', 'rfid_card.userid', '=', 'master_karyawan.id')->select('master_karyawan.nama_lengkap', 'master_karyawan.id')->where('kode_kartu', $request->data['rfid'])->first();
-                    $cekShift = DB::table('shift_karyawan')->where('tanggal', $tanggal)->where('karyawan_id', $karyawan->id)->first();
-
-                    if($cekShift != null){
-                        if($cekShift->shift == 'SHSECURITY2'){
-                            $shift = 'Keluar';
-                            if($jam >= '18:00:00' )$shift = "Masuk";
-                        }
-                        if($cekShift->shift == 'off'){
-                            $minus =  DATE('Y-m-d', strtotime($tanggal. '-1day'));
-                            $cekShift_ = DB::table('shift_karyawan')->where('tanggal', $minus)->where('userid', $karyawan->id)->first();
-                            
-                            if($cekShift_->shift == 'SHSECURITY2'){
-                                if($jam <= '10:00:00' )$shift = "Keluar";
-                            } else {
-                                $shift = 'Masuk';
-                                if($jam >= '14:00:00' )$shift = "Masuk";
+                    $karyawan = DB::table('rfid_card')->join('master_karyawan', 'rfid_card.userid', '=', 'master_karyawan.id')->select('master_karyawan.nama_lengkap', 'master_karyawan.id')->where('kode_kartu', $request->data['rfid'])->first() ?? null;
+                    $cekShift = null;
+                    if($karyawan != null){
+                        $cekShift = DB::table('shift_karyawan')->where('tanggal', $tanggal)->where('karyawan_id', $karyawan->id)->first();
+                        
+                        if($cekShift != null){
+                            if($cekShift->shift == 'SHSECURITY2'){
+                                $shift = 'Keluar';
+                                if($jam >= '18:00:00' )$shift = "Masuk";
+                            }
+                            if($cekShift->shift == 'off'){
+                                $minus =  DATE('Y-m-d', strtotime($tanggal. '-1day'));
+                                $cekShift_ = DB::table('shift_karyawan')->where('tanggal', $minus)->where('userid', $karyawan->id)->first();
+                                
+                                if($cekShift_->shift == 'SHSECURITY2'){
+                                    if($jam <= '10:00:00' )$shift = "Keluar";
+                                } else {
+                                    $shift = 'Masuk';
+                                    if($jam >= '14:00:00' )$shift = "Masuk";
+                                }
                             }
                         }
-                    }
 
-                    DB::beginTransaction();
-                    try {
-                        $insert = new Absensi;
-                        $insert->karyawan_id = $karyawan->id;
-                        $insert->kode_mesin = $request->deviceId;
-                        $insert->kode_kartu = $request->data['rfid'];
-                        $insert->hari = self::hari($tanggal);
-                        $insert->tanggal = $tanggal;
-                        $insert->jam = $jam;
-                        $insert->status = $shift;
-                        $insert->save();
-                        
-                        DB::commit();
+                        DB::beginTransaction();
+                        try {
+                            $insert = new Absensi;
+                            $insert->karyawan_id = $karyawan->id;
+                            $insert->kode_mesin = $request->deviceId;
+                            $insert->kode_kartu = $request->data['rfid'];
+                            $insert->hari = self::hari($tanggal);
+                            $insert->tanggal = $tanggal;
+                            $insert->jam = $jam;
+                            $insert->status = $shift;
+                            $insert->save();
+                            
+                            DB::commit();
 
-                        $return = [
-                            'topic' => 'response',
-                            'device' => $request->deviceId,
-                            'data' => $karyawan->nama_lengkap . '-' . $shift,
-                        ];
+                            $return = [
+                                'topic' => 'response',
+                                'device' => $request->deviceId,
+                                'data' => $karyawan->nama_lengkap . '-' . $shift,
+                            ];
 
-                        $this->send_mqtt(json_encode($return));
-                    } catch (\Throwable $th) {
-                        //throw $th;
-                        DB::rollBack();
-                        Log::error(['Error : ' . $th->getMessage(), $th->getLine(), $th->getFile()]);
+                            $this->send_mqtt(json_encode($return));
+                        } catch (\Throwable $th) {
+                            //throw $th;
+                            DB::rollBack();
+                            Log::error(['Error : ' . $th->getMessage(), $th->getLine(), $th->getFile()]);
+                        }
                     }
 
                 } else if($request->mode == 'ADD'){
