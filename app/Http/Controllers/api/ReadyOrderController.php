@@ -368,18 +368,63 @@ class ReadyOrderController extends Controller
     public function writeOrder(Request $request)
     {
         try {
-            // dd($request->all());
             if ($request->status_quotation == 'kontrak') {
-                $prosess = self::generateOrderKontrak($request);
                 $dataQuotation = QuotationKontrakH::where('no_document', $request->no_document)->where('is_active', true)->first();
+                if($request->is_generate_data_lab === 0){
+                    if($dataQuotation->data_lama && $dataQuotation->data_lama != null){
+                        $dataLama = json_decode($dataQuotation->data_lama);
+                        if(isset($dataLama->no_order) && $dataLama->no_order != null){
+                            $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
+                            ->where('is_active', true)
+                            ->first();
+                            if ($orderHeader) {
+                                // Cek apakah ada OrderDetail aktif
+                                $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
+                                    ->where('is_active', true)
+                                    ->exists();
+
+                                if ($adaOrderDetailAktif) {
+                                    return response()->json([
+                                        'message' => "Penawaran ini tidak dapat dilakukan order untuk invoicing, karena sudah memiliki data lab.",
+                                        'status'  => 403
+                                    ], 403);
+                                }
+                            }
+                        }
+                    }
+                }
+                $prosess = self::generateOrderKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
 
                 Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
-                $prosess = self::generateOrderNonKontrak($request);
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
+                if($request->is_generate_data_lab === 0){
+                    if($dataQuotation->data_lama && $dataQuotation->data_lama != null){
+                        $dataLama = json_decode($dataQuotation->data_lama);
+                        if(isset($dataLama->no_order) && $dataLama->no_order != null){
+                            $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
+                            ->where('is_active', true)
+                            ->first();
+                            if ($orderHeader) {
+                                // Cek apakah ada OrderDetail aktif
+                                $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
+                                    ->where('is_active', true)
+                                    ->exists();
+
+                                if ($adaOrderDetailAktif) {
+                                    return response()->json([
+                                        'message' => "Penawaran ini tidak dapat dilakukan order untuk invoicing, karena sudah memiliki data lab.",
+                                        'status'  => 403
+                                    ], 403);
+                                }
+                            }
+                        }
+                    }
+                }
+                $prosess = self::generateOrderNonKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
                 Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
@@ -2727,19 +2772,19 @@ class ReadyOrderController extends Controller
         $this->dispatch($job);
     }
 
-    private static function generatePDF($noInvoice)
-    {
-        try {
-            $render = new RenderInvoice();
-            $render->renderInvoice($noInvoice);
-            return true; // Jika sukses
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'error' => $e->getMessage(),
-            ];
-        }
-    }
+    // private static function generatePDF($noInvoice)
+    // {
+    //     try {
+    //         $render = new RenderInvoice();
+    //         $render->renderInvoice($noInvoice);
+    //         return true; // Jika sukses
+    //     } catch (\Exception $e) {
+    //         return [
+    //             'success' => false,
+    //             'error' => $e->getMessage(),
+    //         ];
+    //     }
+    // }
 
     public function reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request)
     {

@@ -115,7 +115,7 @@ class LhpErgonomiController extends Controller
             return response()->json([
                 'message' => 'Reject no sampel '.$request->no_sampel.' berhasil!'
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Terjadi kesalahan '.$e->getMessage(),
