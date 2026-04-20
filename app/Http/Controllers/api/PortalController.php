@@ -54,13 +54,12 @@ class PortalController extends Controller
                 $cek = GenerateLink::where('token', $request->token)
                     ->where('key', $request->key)
                     ->first();
-                
                 $uri = env('APP_URL');
                 if ($cek != null) {
                     if ($request->mode == 'GETDATA') {
                         $combi = [];
                         $data = [];
-                        if ($cek->quotation_status == 'non_kontrak') {
+                        if ($cek->quotation_status == 'non_kontrak' && $cek->type == 'quotation') {
 
                             $data = QuotationNonKontrak::with([
                                 'sampling' => function ($q) {
@@ -69,7 +68,9 @@ class PortalController extends Controller
                                 'sampling.jadwal' => function ($q) {
                                     $q->where('is_active', true)->orderBy('tanggal');
                                 },
-                                'link',
+                                'link' => function ($q) {
+                                    $q->where('type', 'quotation');
+                                },
                                 'konfirmasi',
                                 'orderD.orderDetail'
                             ])
@@ -123,7 +124,7 @@ class PortalController extends Controller
                             }
 
                             $uri = env('APP_URL') . '/public/quotation/';
-                        } else if ($cek->quotation_status == 'kontrak') {
+                        } else if ($cek->quotation_status == 'kontrak' && $cek->type == 'quotation') {
                             $data = QuotationKontrakH::with([
                                 'sampling' => function ($q) {
                                     $q->where('is_active', true);
@@ -132,7 +133,9 @@ class PortalController extends Controller
                                     $q->where('is_active', true)->orderBy('tanggal');
                                 },
                                 'detail',
-                                'link',
+                                'link' => function ($q) {
+                                    $q->where('type', 'quotation');
+                                },
                                 'konfirmasi',
                                 'orderD.orderDetail',
                                 'detail:id,id_request_quotation_kontrak_h,periode_kontrak'
@@ -423,11 +426,250 @@ class PortalController extends Controller
                                 $data->filename = $cek->fileName_pdf;
                                 $data->chekjadwal = null;
                             }
+                        } else if ($cek->quotation_status == 'non_kontrak' && $cek->type == 'jadwal') {
+                            $data = QuotationNonKontrak::with([
+                                'sampling' => function ($q) {
+                                    $q->where('is_active', true);
+                                },
+                                'sampling.jadwal' => function ($q) {
+                                    $q->where('is_active', true)->orderBy('tanggal');
+                                },
+                                'link' => function ($q) {
+                                    $q->where('type', 'jadwal');
+                                },
+                                'konfirmasi',
+                                'orderD.orderDetail'
+                            ])
+                                ->select(['no_quotation', 'no_document', 'flag_status', 'id', 'pelanggan_ID', 'konfirmasi_order', 'is_ready_order'])
+                                ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
+                                ->first();
+
+                            if ($data) {
+                                $data->filename = $cek->fileName_pdf;
+                                $data->chekjadwal = $data->sampling->isEmpty();
+                                $data->typquot = 'nonkontrak';
+
+                                $allJadwal = collect();
+                                if ($data && !$data->chekjadwal) {
+                                    foreach ($data->sampling as $sampling) {
+                                        $jadwalAktif = $sampling->jadwal;
+                                        if ($jadwalAktif->isNotEmpty()) {
+                                            $tanggal = $jadwalAktif->pluck('tanggal')->unique()->sort()->values()->toArray();
+                                            $jam_mulai = $jadwalAktif->min('jam_mulai');
+                                            $jam_selesai = $jadwalAktif->max('jam_selesai');
+                                            $id_sampling = $jadwalAktif->pluck('id_sampling')->unique()->values()->toArray();
+                                            $value = [
+                                                'tanggal' => $tanggal,
+                                                'jam_mulai' => $jam_mulai,
+                                                'jam_selesai' => $jam_selesai,
+                                                'id_sampling' => $id_sampling
+                                            ];
+                                            $allJadwal->push($value);
+                                        }
+                                    }
+                                }
+                                $data->jadwal = $allJadwal;
+                            }
+
+                            if ($data && $data->orderD) {
+                                $keteranganList = collect();
+                                $keteranganList = $data->orderD->flatMap(function ($order) {
+                                    return $order->orderDetail->pluck('keterangan_1');
+                                })
+                                    ->map(fn($keterangan) => trim($keterangan))
+                                    ->filter(fn($val) => $val !== '')
+                                    ->unique()
+                                    ->values();
+
+                                $keteranganArray = $keteranganList->toArray();
+
+                                $data->penamaan_titik_sampling = $keteranganArray;
+                            } else {
+                                $data->penamaan_titik_sampling = [];
+                            }
+
+                            $uri = env('APP_URL') . '/public/quotation/';
+                        } else if ($cek->quotation_status == 'kontrak' && $cek->type == 'jadwal') {
+                            $data = QuotationKontrakH::with([
+                                'sampling' => function ($q) {
+                                    $q->where('is_active', true);
+                                },
+                                'sampling.jadwal' => function ($q) {
+                                    $q->where('is_active', true)->orderBy('tanggal');
+                                },
+                                'detail',
+                                'link' => function ($q) {
+                                    $q->where('type', 'jadwal');
+                                },
+                                'konfirmasi',
+                                'orderD.orderDetail',
+                                'detail:id,id_request_quotation_kontrak_h,periode_kontrak'
+                            ])
+                                ->select(['no_quotation', 'no_document', 'flag_status', 'id', 'pelanggan_ID', 'konfirmasi_order', 'is_ready_order'])
+                                ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
+                                ->first();
+
+                            if ($data) {
+                                $data->filename = $cek->fileName_pdf;
+                                $data->chekjadwal = $data->sampling->isEmpty();
+                                $data->typquot = 'kontrak';
+
+                                $allJadwal = [];
+                                $semuaPeriode = collect(); // kumpulan semua periode unik
+
+                                if ($data->detail->isNotEmpty()) {
+                                    $periodeH = $data->detail->pluck('periode_kontrak')->unique();
+                                    $semuaPeriode = $periodeH->values(); // mulai dari periode detail
+                                }
+
+                                if ($data->sampling->isNotEmpty()) {
+                                    $periodeSp = $data->sampling->pluck('periode_kontrak')->unique();
+                                    $semuaPeriode = $semuaPeriode->merge($periodeSp)->unique()->values(); // gabungkan semua periode unik
+
+                                    $mapById = collect();
+
+                                    foreach ($data->sampling as $sampling) {
+                                        $jadwalAktif = $sampling->jadwal->where('is_active', true);
+
+                                        if ($jadwalAktif->isNotEmpty()) {
+                                            // Simpan ke dalam map untuk akses parent parsial
+                                            $mapById = $mapById->merge($jadwalAktif->keyBy('id'));
+
+                                            foreach ($jadwalAktif as $jadwal) {
+                                                // Ambil ID induk: kalau dia parsial, ambil parent-nya; kalau tidak, pakai dirinya
+                                                $indukId = $jadwal->parsial ?? $jadwal->id;
+
+                                                // Ambil periode dari induk
+                                                $periodeInduk = isset($mapById[$jadwal->parsial]) ? $mapById[$jadwal->parsial]->periode : $jadwal->periode;
+
+                                                // Inisialisasi array jika belum ada
+                                                if (!isset($allJadwal[$periodeInduk])) {
+                                                    $allJadwal[$periodeInduk] = [
+                                                        'tanggal' => [],
+                                                        'jam_mulai' => null,
+                                                        'jam_selesai' => null,
+                                                        'id_sampling' => [],
+                                                    ];
+                                                }
+
+                                                // Gabungkan tanggal
+                                                $allJadwal[$periodeInduk]['tanggal'][] = $jadwal->tanggal;
+
+                                                // Ambil jam mulai paling awal dan jam selesai paling akhir
+                                                if (
+                                                    !$allJadwal[$periodeInduk]['jam_mulai'] ||
+                                                    $jadwal->jam_mulai < $allJadwal[$periodeInduk]['jam_mulai']
+                                                ) {
+                                                    $allJadwal[$periodeInduk]['jam_mulai'] = $jadwal->jam_mulai;
+                                                }
+
+                                                if (
+                                                    !$allJadwal[$periodeInduk]['jam_selesai'] ||
+                                                    $jadwal->jam_selesai > $allJadwal[$periodeInduk]['jam_selesai']
+                                                ) {
+                                                    $allJadwal[$periodeInduk]['jam_selesai'] = $jadwal->jam_selesai;
+                                                }
+
+                                                if (!empty($jadwal->id_sampling)) {
+                                                    $allJadwal[$periodeInduk]['id_sampling'] = array_unique(array_merge(
+                                                        $allJadwal[$periodeInduk]['id_sampling'],
+                                                        is_array($jadwal->id_sampling) ? $jadwal->id_sampling : [$jadwal->id_sampling]
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Bersihkan tanggal di setiap group
+                                    foreach ($allJadwal as &$item) {
+                                        $item['tanggal'] = array_values(array_unique($item['tanggal']));
+                                    }
+                                }
+
+                                // Lengkapi semua periode dengan entri kosong jika belum ada
+                                foreach ($semuaPeriode as $periodeItem) {
+                                    if (!isset($allJadwal[$periodeItem])) {
+                                        $allJadwal[$periodeItem] = [
+                                            'tanggal' => [],
+                                            'jam_mulai' => null,
+                                            'jam_selesai' => null,
+                                            'id_sampling' => [],
+                                        ];
+                                    }
+                                }
+                                //sentuhuan terakhir
+                                foreach ($data->sampling as $sampling) {
+                                    $periodeSampling = $sampling->periode_kontrak;
+
+                                    // Pastikan periode itu sudah ada di allJadwal
+                                    if (isset($allJadwal[$periodeSampling])) {
+                                        // Cek jika belum ada id_sampling sama sekali di periode itu
+                                        if (empty($allJadwal[$periodeSampling]['id_sampling'])) {
+                                            $allJadwal[$periodeSampling]['id_sampling'][] = $sampling->id;
+                                        }
+
+                                        // Jika sudah ada, tapi belum termasuk ID ini, tambahkan juga
+                                        elseif (!in_array($sampling->id, $allJadwal[$periodeSampling]['id_sampling'])) {
+                                            $allJadwal[$periodeSampling]['id_sampling'][] = $sampling->id;
+                                        }
+                                    }
+                                }
+                                foreach ($allJadwal as $periode => &$info) {
+                                    if (empty($info['tanggal']) && empty($info['id_sampling'])) {
+                                        $info['status'] = 'baru'; // belum dijadwalkan sama sekali
+                                    } elseif (empty($info['tanggal']) && !empty($info['id_sampling'])) {
+                                        $info['status'] = 'proses'; // sampling sudah ada, tapi belum dijadwalkan
+                                    } else {
+                                        $info['status'] = 'selesai'; // sudah dijadwalkan
+                                    }
+                                }
+                                $data->jadwal = $allJadwal;
+                            }
+
+                            if ($data && $data->orderD) {
+                                $keteranganList = collect();
+                                $keteranganList = $data->orderD->flatMap(function ($order) {
+                                    return $order->orderDetail->pluck('keterangan_1');
+                                })
+                                    ->map(fn($keterangan) => trim($keterangan))
+                                    ->filter(fn($val) => $val !== '')
+                                    ->unique()
+                                    ->values();
+
+                                $periodeBelumKonfirmasi = $data->detail
+                                    ->pluck('periode_kontrak')
+                                    ->diff($data->konfirmasi->pluck('periode'))
+                                    ->values();
+
+                                $periode = $periodeBelumKonfirmasi
+                                    ->map(function ($periodeKontrak) {
+                                        $carbon = Carbon::createFromFormat('Y-m', $periodeKontrak)->locale('id');
+                                        return [
+                                            'id' => $periodeKontrak,
+                                            'nama' => $carbon->translatedFormat('F Y'),
+                                        ];
+                                    })
+                                    ->sortBy('id')
+                                    ->values();
+
+                                $data->penamaan_titik_sampling = $keteranganList->toArray();
+                                $data->periode_kontrak = $periode->toArray();
+                            } else {
+                                $data->penamaan_titik_sampling = [];
+                                $data->periode_kontrak = [];
+                            }
+
+                            $uri = env('APP_URL') . '/public/quotation/';
                         }
+
+                        
 
                         if (DATE('Y-m-d') > $cek->expired) {
                             $link_lama = GenerateLink::where('token', $request->token)
                                 ->first();
+
                             DB::table('expired_link_quotation')
                                 ->insert([
                                     "token" => $link_lama->token,
@@ -449,6 +691,11 @@ class PortalController extends Controller
                             return response()
                                 ->json(['message' => 'link has expired', 'status' => '300'], 200);
                         } else {
+                            return response()->json([
+                                'message' => 'Token found.!',
+                                'status' => 200,
+                                'data' => $data
+                            ], 200);
                             return response()
                                 ->json(
                                     [
