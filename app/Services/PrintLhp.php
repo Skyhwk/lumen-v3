@@ -81,10 +81,10 @@ class PrintLhp
             throw new \Exception('Printer tidak ditemukan');
         }
 
-        Printing::where('pdf', env('APP_URL') . '/public/draft_ergonomi/lhp/' . $header->name_file)
+        Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP_DOWNLOAD/' . $header->name_file)
             ->where('printer', $cek_printer->full_path)
             ->where('karyawan', 'System')
-            ->where('filename', 'draft_ergonomi/lhp/' . $header->name_file)
+            ->where('filename', 'dokumen/LHP_DOWNLOAD/' . $header->name_file)
             ->where('printer_name', $cek_printer->name)
             ->where('destination', $cek_printer->full_path)
             ->print();
