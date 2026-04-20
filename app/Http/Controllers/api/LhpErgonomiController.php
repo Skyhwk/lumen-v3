@@ -58,7 +58,7 @@ class LhpErgonomiController extends Controller
             }
             
             return response()->json([
-                 'file_name' => url('draft_ergonomi/lhp/' . $fileName),
+                 'file_name' => url('dokumen/LHP_DOWNLOAD/' . $fileName),
                 'message' => 'Download file '.$request->no_sampel.' berhasil!'
             ]);
         } catch (\Throwable $th) {
