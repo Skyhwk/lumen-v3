@@ -1648,6 +1648,7 @@ class RenderInvoice
                         <p style="font-size:10px">- Pembayaran baru dianggap sah apabila cek / giro telah dapat dicairkan</p>
                         <p style="font-size:10px">- Bukti Pembayaran agar dapat di e-mail ke : billing@intilab.com</p>
                         <p style="font-size:10px">- Invoice asli ini berlaku juga sebagai kwitansi asli yang sah</p>
+                        ' . ($dataHead->nilai_tagihan < 4999999) ? '<p style="font-size:10px">- Invoice ini diterbitkan secara elektronik dan berlaku sebagai dokumen sah tanpa memerlukan tanda tangan fisik</p>' : '' . '
                         ' . $spk . '
             ');
 
