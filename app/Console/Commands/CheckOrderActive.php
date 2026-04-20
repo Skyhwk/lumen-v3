@@ -63,7 +63,8 @@ class CheckOrderActive extends Command
 
                             $samplingDate = $isSD
                                 ? $d->tanggal_terima
-                                : ($isDirect ? $d->tanggal_terima : $d->tanggal_sampling);
+                                // : ($isDirect ? $d->tanggal_terima : $d->tanggal_sampling);
+                                : ($isDirect ? $d->tanggal_terima : $d->tanggal_terima); // optional sementara
 
                             $steps['sampling'] = [
                                 'label' => $isSD ? 'Sampel Diterima' : ($isDirect ? 'Direct' : 'Sampling'),
