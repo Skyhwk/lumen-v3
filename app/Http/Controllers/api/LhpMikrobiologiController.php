@@ -151,23 +151,22 @@ class LhpMikrobiologiController extends Controller
                     ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftMicrobio1ParamTable')
-                    ->render('downloadLHPFinal');
+                    ->render('downloadLHP');
             } else if ($doubleParam) {
                 $fileName = LhpTemplate::setDataDetail($detailCollection)
                     ->setDataHeader($header)
                     ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftMicrobio2Param')
-                    ->render('downloadLHPFinal');
+                    ->render('downloadLHP');
             } else {
                 $fileName = LhpTemplate::setDataDetail($detailCollection)
                     ->setDataHeader($header)
                     ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftMicrobio1ParamNoTable')
-                    ->render('downloadLHPFinal');
+                    ->render('downloadLHP');
             }
-
             $header->file_lhp = $fileName;
             $header->save();
 
