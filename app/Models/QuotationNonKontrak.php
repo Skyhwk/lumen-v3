@@ -42,7 +42,7 @@ class QuotationNonKontrak extends Sector
             ->with('jadwal')
             ->whereNull('status_quotation')
             ->where('is_active', 1)
-            ->select('id', 'filename', 'quotation_id', 'no_quotation', 'no_document', 'periode_kontrak', 'opsi_1', 'opsi_2', 'tambahan', 'keterangan_lain', 'is_sabtu', 'is_minggu', 'is_malam', 'created_at', 'created_by');
+            ->select('id', 'filename', 'quotation_id', 'no_quotation', 'no_document', 'periode_kontrak', 'opsi_1', 'opsi_2', 'tambahan', 'keterangan_lain', 'is_sabtu', 'is_minggu', 'is_malam', 'created_at', 'created_by', 'is_approved', 'approved_by', 'approved_at');
     }
 
     public function order()
