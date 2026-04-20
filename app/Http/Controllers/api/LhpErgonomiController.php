@@ -58,7 +58,7 @@ class LhpErgonomiController extends Controller
             }
             
             return response()->json([
-                 'file_name' => url('draft_ergonomi/lhp/' . $fileName),
+                 'file_name' => url('dokumen/LHP_DOWNLOAD/' . $fileName),
                 'message' => 'Download file '.$request->no_sampel.' berhasil!'
             ]);
         } catch (\Throwable $th) {
@@ -73,21 +73,31 @@ class LhpErgonomiController extends Controller
     {
         DB::beginTransaction();
         $header = DraftErgonomiFile::where('no_sampel', $request->no_sampel)->first();
-        $header->count_print = $header->count_print + 1; 
-
-        if ($header != null) {
-            $servicePrint = new PrintLhp();
-            $servicePrint->printErgonomi($header);
-            
+        if ($header == null) {
+            return response()->json(['message' => 'Data tidak ditemukan'], 404);
         }
-        
-        $header->save();
-        
-        DB::commit();
+        try {
+            //code...
+            $header->count_print = $header->count_print + 1;
+            $servicePrint = new PrintLhp();
+            $servicePrint->printErgonomi($header); 
+            $header->save();
+            DB::commit();
+            return response()->json([
+                'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
+            ], 200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => $th->getMessage()
+            ], 500);
 
-        return response()->json([
-            'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
-        ], 200);
+        }
+
+       
+
     }
 
     public function handleReject(Request $request) {

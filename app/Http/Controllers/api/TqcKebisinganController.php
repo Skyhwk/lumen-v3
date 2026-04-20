@@ -106,6 +106,11 @@ class TqcKebisinganController extends Controller
     {
         OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 2]);
 
+        KebisinganHeader::whereIn('no_sampel', $request->no_sampel_list)
+            ->update([
+                'lhps' => 1,
+            ]);
+
         return response()->json([
             'message' => 'Data berhasil diapprove.',
             'success' => true,
