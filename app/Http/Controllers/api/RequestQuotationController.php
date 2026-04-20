@@ -4171,7 +4171,6 @@ class RequestQuotationController extends Controller
                         $orderHeader = OrderHeader::where('no_order', $dataLamaCheck->no_order)
                             ->where('is_active', true)
                             ->first();
-
                         if ($orderHeader) {
                             // Cek apakah ada OrderDetail aktif
                             $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLamaCheck->no_order)
@@ -4188,7 +4187,6 @@ class RequestQuotationController extends Controller
                     }
                 }
             }
-            dd('masuk sini');
             DB::BeginTransaction();
             try {
 
