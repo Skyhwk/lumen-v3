@@ -26,4 +26,8 @@ class LhpsAirHeader extends Sector
         return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
         ->where('quotation_status', 'draft_air');
     }
+    public function detail()
+    {
+        return $this->hasMany(LhpsAirDetail::class, 'id_header', 'id');
+    }
 }
