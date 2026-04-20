@@ -194,7 +194,7 @@ class RequestQuotationController extends Controller
                     'status' => '401'
                 ], 401);
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'message' => 'Error: ' . $e->getMessage(),
@@ -543,6 +543,7 @@ class RequestQuotationController extends Controller
 
     private function updateNonKontrak($payload)
     {
+        
         if (!isset($payload->informasi_pelanggan->tgl_penawaran) || $payload->informasi_pelanggan->tgl_penawaran == null) {
             return response()->json([
                 'message' => 'Mohon isi tanggal penawaran terlebih dahulu.'
@@ -565,6 +566,40 @@ class RequestQuotationController extends Controller
                 return response()->json([
                     'message' => "Jumlah titik tidak sesuai dengan jumlah penamaan titik pada pengujian ke-" . ($index + 1),
                 ], 403);
+            }
+        }
+
+        if ((int) $payload->data_wilayah->is_generate_data_lab === 0) {
+
+            // Ambil dataOld dulu untuk cek data_lama
+            $dataOldCheck = QuotationNonKontrak::where('is_active', true)
+                ->where('id', $payload->informasi_pelanggan->id)
+                ->first();
+
+            if ($dataOldCheck && $dataOldCheck->data_lama != null) {
+                $dataLamaCheck = json_decode($dataOldCheck->data_lama);
+
+                if (isset($dataLamaCheck->no_order) && $dataLamaCheck->no_order != null) {
+
+                    // Cek apakah OrderHeader dengan no_order tsb masih ada & aktif
+                    $orderHeader = OrderHeader::where('no_order', $dataLamaCheck->no_order)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if ($orderHeader) {
+                        // Cek apakah ada OrderDetail aktif
+                        $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLamaCheck->no_order)
+                            ->where('is_active', true)
+                            ->exists();
+
+                        if ($adaOrderDetailAktif) {
+                            return response()->json([
+                                'message' => "Revisi ke invoice tidak dapat dilakukan karena order {$dataLamaCheck->no_order} sudah memiliki jadwal aktif. Silakan batalkan order terlebih dahulu sebelum melakukan revisi menjadi invoice.",
+                                'status'  => 403
+                            ], 403);
+                        }
+                    }
+                }
             }
         }
         DB::beginTransaction();
@@ -1379,6 +1414,7 @@ class RequestQuotationController extends Controller
 
     private function revisiNonKontrak($payload)
     {
+        
         if (!isset($payload->informasi_pelanggan->tgl_penawaran) || $payload->informasi_pelanggan->tgl_penawaran == null) {
             return response()->json([
                 'message' => 'Mohon isi tanggal penawaran terlebih dahulu.'
@@ -1403,6 +1439,38 @@ class RequestQuotationController extends Controller
             }
         }
 
+        if ((int) $payload->data_wilayah->is_generate_data_lab === 0) {
+
+            // Ambil dataOld dulu untuk cek data_lama
+            $dataOldCheck = QuotationNonKontrak::where('no_document', $payload->informasi_pelanggan->no_document)
+                ->first();
+
+            if ($dataOldCheck && $dataOldCheck->data_lama != null) {
+                $dataLamaCheck = json_decode($dataOldCheck->data_lama);
+
+                if (isset($dataLamaCheck->no_order) && $dataLamaCheck->no_order != null) {
+
+                    // Cek apakah OrderHeader dengan no_order tsb masih ada & aktif
+                    $orderHeader = OrderHeader::where('no_order', $dataLamaCheck->no_order)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if ($orderHeader) {
+                        // Cek apakah ada OrderDetail aktif
+                        $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLamaCheck->no_order)
+                            ->where('is_active', true)
+                            ->exists();
+
+                        if ($adaOrderDetailAktif) {
+                            return response()->json([
+                                'message' => "Penawaran ini tidak dapat dilakukan revisi untuk invoicing, karena sudah memiliki data lab.",
+                                'status'  => 403
+                            ], 403);
+                        }
+                    }
+                }
+            }
+        }
         DB::beginTransaction();
         try {
             // Update Master Pelanggan by 565 : 01-05-2025
@@ -2612,6 +2680,40 @@ class RequestQuotationController extends Controller
                 return response()->json([
                     'message' => 'Sales penanggung jawab tidak boleh kosong',
                 ], 403);
+            }
+
+            if ((int) $payload->data_wilayah->is_generate_data_lab === 0) {
+
+                // Ambil dataOld dulu untuk cek data_lama
+                $dataOldCheck = QuotationKontrakH::where('is_active', true)
+                    ->where('id', $informasi_pelanggan->id)
+                    ->first();
+
+                if ($dataOldCheck && $dataOldCheck->data_lama != null) {
+                    $dataLamaCheck = json_decode($dataOldCheck->data_lama);
+
+                    if (isset($dataLamaCheck->no_order) && $dataLamaCheck->no_order != null) {
+
+                        // Cek apakah OrderHeader dengan no_order tsb masih ada & aktif
+                        $orderHeader = OrderHeader::where('no_order', $dataLamaCheck->no_order)
+                            ->where('is_active', true)
+                            ->first();
+
+                        if ($orderHeader) {
+                            // Cek apakah ada OrderDetail aktif
+                            $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLamaCheck->no_order)
+                                ->where('is_active', true)
+                                ->exists();
+
+                            if ($adaOrderDetailAktif) {
+                                return response()->json([
+                                    'message' => "Penawaran ini tidak dapat dilakukan revisi untuk invoicing, karena sudah memiliki data lab.",
+                                    'status'  => 403
+                                ], 403);
+                            }
+                        }
+                    }
+                }
             }
 
             DB::BeginTransaction();
@@ -4069,7 +4171,6 @@ class RequestQuotationController extends Controller
                         $orderHeader = OrderHeader::where('no_order', $dataLamaCheck->no_order)
                             ->where('is_active', true)
                             ->first();
-
                         if ($orderHeader) {
                             // Cek apakah ada OrderDetail aktif
                             $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLamaCheck->no_order)
@@ -4086,7 +4187,6 @@ class RequestQuotationController extends Controller
                     }
                 }
             }
-            dd('masuk sini');
             DB::BeginTransaction();
             try {
 
@@ -5672,55 +5772,55 @@ class RequestQuotationController extends Controller
         }
     }
 
-    protected function saveToken($data)
-    {
+    // protected function saveToken($data)
+    // {
 
-        $key = $data['add'] . str_replace('.', '', microtime(true));
-        $gen = MD5($key);
-        $gen_tahun = self::encrypt(DATE('Y-m-d'));
-        $token = self::encrypt($gen . '|' . $gen_tahun);
+    //     $key = $data['add'] . str_replace('.', '', microtime(true));
+    //     $gen = MD5($key);
+    //     $gen_tahun = self::encrypt(DATE('Y-m-d'));
+    //     $token = self::encrypt($gen . '|' . $gen_tahun);
 
-        if ($data['status_quot'] == 'kontrak') {
-            $table = 'request_quotation_kontrak_H';
-        } else if ($data['status_quot'] == 'non_kontrak') {
-            $table = 'request_quotation';
-        }
+    //     if ($data['status_quot'] == 'kontrak') {
+    //         $table = 'request_quotation_kontrak_H';
+    //     } else if ($data['status_quot'] == 'non_kontrak') {
+    //         $table = 'request_quotation';
+    //     }
 
-        $data_body = [
-            'token' => $token,
-            'key' => $gen,
-            'id_quotation' => $data['id'],
-            'quotation_status' => $data['status_quot'],
-            'expired' => $data['expired'],
-            // 'password' => $cek->nama_pic_order[4].DATE('dym', strtotime($cek->add_at)),
-            'created_at' => DATE('Y-m-d'),
-            'created_by' => $data['userid'],
-            // 'fileName' => json_encode($data_file) ,
-            // 'fileName_pdf' => $fileName,
-            'type' => null
-        ];
+    //     $data_body = [
+    //         'token' => $token,
+    //         'key' => $gen,
+    //         'id_quotation' => $data['id'],
+    //         'quotation_status' => $data['status_quot'],
+    //         'expired' => $data['expired'],
+    //         // 'password' => $cek->nama_pic_order[4].DATE('dym', strtotime($cek->add_at)),
+    //         'created_at' => DATE('Y-m-d'),
+    //         'created_by' => $data['userid'],
+    //         // 'fileName' => json_encode($data_file) ,
+    //         // 'fileName_pdf' => $fileName,
+    //         'type' => null
+    //     ];
 
 
-        $insert = DB::table('generate_link_quotation')
-            ->insertGetId($data_body);
+    //     $insert = DB::table('generate_link_quotation')
+    //         ->insertGetId($data_body);
 
-        DB::table($table)->where('id', $data['id'])->update([
-            'id_token' => $insert,
-            'is_generate' => 1,
-            'generate_at' => DATE('Y-m-d H:i:s'),
-            'generate_by' => $data['userid'],
-            'flag_status' => 'draft'
-        ]);
+    //     DB::table($table)->where('id', $data['id'])->update([
+    //         'id_token' => $insert,
+    //         'is_generate' => 1,
+    //         'generate_at' => DATE('Y-m-d H:i:s'),
+    //         'generate_by' => $data['userid'],
+    //         'flag_status' => 'draft'
+    //     ]);
 
-        DB::table('job_task')->insert([
-            'job' => 'GeneratePdfDocument',
-            'status' => 'processing',
-            'no_document' => $data['no_document'],
-            'timestamp' => DATE('Y-m-d H:i:s'),
-        ]);
+    //     DB::table('job_task')->insert([
+    //         'job' => 'GeneratePdfDocument',
+    //         'status' => 'processing',
+    //         'no_document' => $data['no_document'],
+    //         'timestamp' => DATE('Y-m-d H:i:s'),
+    //     ]);
 
-        return $token;
-    }
+    //     return $token;
+    // }
 
     public function tanggal_indonesia($tanggal, $mode = '')
     {
@@ -5843,7 +5943,7 @@ class RequestQuotationController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($request->mode = 'non_kontrak') {
+            if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::find($request->id);
                 $data->update([$request->column => $request->value]);
             } else {
@@ -6186,7 +6286,7 @@ class RequestQuotationController extends Controller
                     // dd('stop');
                     $processedCount++;
                     DB::commit();
-                } catch (Throwable $e) {
+                } catch (\Throwable $e) {
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
@@ -6206,7 +6306,7 @@ class RequestQuotationController extends Controller
                 'errors' => $errorCount,
                 'total' => $dataList->count()
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return false;
             Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
