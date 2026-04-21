@@ -168,7 +168,7 @@ class ValidatorSPController extends Controller
                         'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
                     
-                    $job = new GenerateDocumentJadwalJob('QTC', $chekNotice->id, $this->karyawan);
+                    $job = new GenerateDocumentJadwalJob('QTC', $chekNotice->id, $this->karyawan, $cek->id);
                     $this->dispatch($job);
 
 
@@ -193,15 +193,16 @@ class ValidatorSPController extends Controller
                     ], 401);
                 }
 
-                // GENERATE QR
-                (new GenerateQrDocument())->insert('jadwal_non_kontrak', $chekNotice, $this->karyawan);
-
-                // dd( $mailfilename);
                 $cek->is_approved   = 1;
                 $cek->approved_by   = $this->karyawan;
                 $cek->approved_at   = $timestamp;
                 $cek->status_jadwal = 'jadwal'; /* ['booking','fixed','jadwal','cancel',null] */
                 $cek->save();
+                // GENERATE QR
+                $cek->nama_perusahaan = $chekNotice->nama_perusahaan;
+                (new GenerateQrDocument())->insert('jadwal_non_kontrak', $cek, $this->karyawan);
+                
+                // dd( $mailfilename);
 
                 JobTask::insert([
                     'job'         => 'GenerateDocumentJadwal',
@@ -209,7 +210,7 @@ class ValidatorSPController extends Controller
                     'no_document' => $chekNotice->no_document,
                     'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
                 ]);
-                $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan);
+                $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan, $cek->id);
                 $this->dispatch($job);
 
 

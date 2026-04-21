@@ -27,6 +27,7 @@ class RemailJadwalController extends Controller
     public function index(Request $request)
     {
         try {
+            // dd($request->columns, $request->search);
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'order:no_order,no_document', 'sampling'])
                     ->select('request_quotation.*')
@@ -52,6 +53,7 @@ class RemailJadwalController extends Controller
                     ->where('request_quotation_kontrak_H.is_approved', true)
                     ->where('request_quotation_kontrak_H.is_emailed', true)
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
+                    // ->where('no_document', 'ISL/QTC/25-XI/002146R1')
                     ->whereIn('request_quotation_kontrak_H.id', function ($query) {
                         $query->select('quotation_id')
                             ->from('sampling_plan')
