@@ -247,7 +247,7 @@ class LHPHandleController extends BaseController
                         }
 
                         // Cek Approval Data Lapangan
-                        if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
+                        // if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
 
                         // Case: Ergonomi
                         if ($paramId == self::PARAM_ERGONOMI) {
