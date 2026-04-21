@@ -33,6 +33,7 @@ use App\Jobs\CombineLHPJob;
 use App\Models\KonfirmasiLhp;
 use App\Models\LinkLhp;
 use App\Models\OrderHeader;
+use App\Models\MdlUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -309,7 +310,55 @@ class DraftUlkSinarUvController extends Controller
         }
     }
 
+    // private function formatEntry($val, $regulasiId)
+    // {
+    //     $param = $val->master_parameter;
+    //     $lapangan = $val->datalapangan;
+    //     $ws = $val->ws_udara;
 
+    //     $mata = $siku = $betis = '';
+
+    //     if ($ws && $ws->hasil1) {
+    //         $hasil2 = json_decode($ws->hasil1);
+    //         if (is_object($hasil2)) {
+    //             $mata = $hasil2->Mata ?? '';
+    //             $siku = $hasil2->Siku ?? '';
+    //             $betis = $hasil2->Betis ?? '';
+    //         } else {
+    //             $mata = $ws->hasil1 ?? '';
+    //             $siku = $ws->hasil2 ?? '';
+    //             $betis = $ws->hasil3 ?? '';
+    //         }
+    //     }
+
+    //     $keterangan = '';
+    //     if ($lapangan) {
+    //         if ($lapangan->keterangan_2 === '-') {
+    //             $keterangan = $lapangan->keterangan ?? '';
+    //         } else {
+    //             $keter = strpos($lapangan->keterangan_2, ':') !== false
+    //                 ? explode(":", $lapangan->keterangan_2)
+    //                 : [$lapangan->keterangan_2];
+    //             $keterangan = (isset($keter[1]) ? $keter[1] : $keter[0])
+    //                 . ' - '
+    //                 . ($lapangan->aktivitas_pekerja ?? '');
+    //         }
+    //     }
+    //     return [
+    //         'id' => $val->id,
+    //         'parameter' => $param->nama_lab ?? '',
+    //         'no_sampel' => $val->no_sampel ?? '',
+    //         'keterangan' => $keterangan,
+    //         'aktivitas_pekerjaan' => $lapangan->aktivitas_pekerja ?? '',
+    //         'sumber_radiasi' => $lapangan->sumber_radiasi ?? '',
+    //         'waktu_pemaparan' => $lapangan->waktu_pemaparan ?? '',
+    //         'mata' => $mata,
+    //         'siku' => $siku,
+    //         'betis' => $betis,
+    //         'nab' => $ws->nab ?? null,
+    //         'tanggal_sampling' => $ws->order_detail->tanggal_sampling ?? null,
+    //     ];
+    // }
 
     public function handleDatadetail(Request $request)
     {
@@ -409,12 +458,34 @@ class DraftUlkSinarUvController extends Controller
             } else {
 
                 $mainData = [];
-                $methodsUsed = [];
                 $otherRegulations = [];
+                
+                $parameterIds = SinarUvHeader::whereIn('no_sampel', $noSampel)
+                    ->where('is_approved', 1)
+                    ->where('is_active', true)
+                    ->pluck('id_parameter')
+                    ->filter()
+                    ->unique();
+
+                $mdlUdara = MdlUdara::whereIn('parameter_id', $parameterIds)->get();
+
+                $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                    if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                        $colToSearch = "hasil" . ($index ?: 1);
+                        $found = $mdlUdara->where('parameter_id', $parameterId)
+                            ->whereNotNull($colToSearch)
+                            ->first();
+                        if ($found && (float) $found->$colToSearch > (float) $hasilUji) {
+                            $hasilUji = "<" . $found->$colToSearch;
+                        }
+                    }
+                    return $hasilUji;
+                };
 
                 $models = [
                     SinarUvHeader::class,
                 ];
+
 
                 foreach ($models as $model) {
                     $data = $model::with('ws_udara', 'master_parameter')
@@ -425,12 +496,12 @@ class DraftUlkSinarUvController extends Controller
                         ->get();
 
                     foreach ($data as $val) {
-                        $entry = $this->formatEntry($val, $request->regulasi, $methodsUsed);
+                        $entry = $this->formatEntry($val, $request->regulasi, $getHasilUji); // ✅
                         $mainData[] = $entry;
 
                         if ($request->other_regulasi) {
                             foreach ($request->other_regulasi as $id_regulasi) {
-                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi);
+                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi, $getHasilUji); // ✅
                             }
                         }
                     }
@@ -468,25 +539,34 @@ class DraftUlkSinarUvController extends Controller
             ], 500);
         }
     }
-    private function formatEntry($val, $regulasiId)
+
+    private function formatEntry($val, $regulasiId, $getHasilUji = null)
     {
         $param = $val->master_parameter;
         $lapangan = $val->datalapangan;
         $ws = $val->ws_udara;
+        $parameterId = $val->id_parameter;
 
         $mata = $siku = $betis = '';
 
         if ($ws && $ws->hasil1) {
             $hasil2 = json_decode($ws->hasil1);
             if (is_object($hasil2)) {
-                $mata = $hasil2->Mata ?? '';
-                $siku = $hasil2->Siku ?? '';
+                $mata  = $hasil2->Mata  ?? '';
+                $siku  = $hasil2->Siku  ?? '';
                 $betis = $hasil2->Betis ?? '';
             } else {
-                $mata = $ws->hasil1 ?? '';
-                $siku = $ws->hasil2 ?? '';
+                $mata  = $ws->hasil1 ?? '';
+                $siku  = $ws->hasil2 ?? '';
                 $betis = $ws->hasil3 ?? '';
             }
+        }
+
+        // Proses getHasilUji jika tersedia (hanya untuk case non-JSON / hasil biasa)
+        if ($getHasilUji) {
+            $mata  = $getHasilUji(1, $parameterId, $mata);
+            $siku  = $getHasilUji(2, $parameterId, $siku);
+            $betis = $getHasilUji(3, $parameterId, $betis);
         }
 
         $keterangan = '';
@@ -502,22 +582,22 @@ class DraftUlkSinarUvController extends Controller
                     . ($lapangan->aktivitas_pekerja ?? '');
             }
         }
+
         return [
-            'id' => $val->id,
-            'parameter' => $param->nama_lab ?? '',
-            'no_sampel' => $val->no_sampel ?? '',
-            'keterangan' => $keterangan,
+            'id'                  => $val->id,
+            'parameter'           => $param->nama_lab ?? '',
+            'no_sampel'           => $val->no_sampel ?? '',
+            'keterangan'          => $keterangan,
             'aktivitas_pekerjaan' => $lapangan->aktivitas_pekerja ?? '',
-            'sumber_radiasi' => $lapangan->sumber_radiasi ?? '',
-            'waktu_pemaparan' => $lapangan->waktu_pemaparan ?? '',
-            'mata' => $mata,
-            'siku' => $siku,
-            'betis' => $betis,
-            'nab' => $ws->nab ?? null,
-            'tanggal_sampling' => $ws->order_detail->tanggal_sampling ?? null,
+            'sumber_radiasi'      => $lapangan->sumber_radiasi ?? '',
+            'waktu_pemaparan'     => $lapangan->waktu_pemaparan ?? '',
+            'mata'                => $mata,
+            'siku'                => $siku,
+            'betis'               => $betis,
+            'nab'                 => $ws->nab ?? null,
+            'tanggal_sampling'    => $ws->order_detail->tanggal_sampling ?? null,
         ];
     }
-
 
     public function updateTanggalLhp(Request $request)
     {
