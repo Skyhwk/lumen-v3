@@ -136,6 +136,8 @@ class RemailJadwalController extends Controller
 
             DB::commit();
 
+            sleep(5);
+
             return response()->json([
                 'message' => 'Dokumen jadwal berhasil dibuat',
             ], 200, );
