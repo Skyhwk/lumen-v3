@@ -679,42 +679,78 @@ class GenerateDocumentJadwal
      */
     public static function renderPemberitahuanSalesEmailHtml($quote, string $namaSales): string
     {
-        $lampiranRows = self::lampiranRowsFromJadwal(self::collectJadwalForPemberitahuanEmail($quote));
+        $emailJadwal = self::buildLampiranEmailSections($quote);
 
-        return view('TemplateEmailJadwal.pemberitahuan-validasi-sales', [
-            'namaSales'       => $namaSales,
-            'noQt'            => self::resolveNoQtForEmail($quote),
-            'namaPelanggan'   => self::namaPelangganUntukEmail($quote),
-            'alamatSampling'  => isset($quote->alamat_sampling) ? (string) $quote->alamat_sampling : '',
-            'lampiranRows'    => $lampiranRows,
-            'tanggalCetak'    => self::tanggal_indonesia(date('Y-m-d')),
-            'jamCetak'        => date('G:i'),
-        ])->render();
+        return view('TemplateEmailJadwal.pemberitahuan-validasi-sales', array_merge($emailJadwal, [
+            'namaSales'      => $namaSales,
+            'noQt'           => self::resolveNoQtForEmail($quote),
+            'namaPelanggan'  => self::namaPelangganUntukEmail($quote),
+            'alamatSampling' => isset($quote->alamat_sampling) ? (string) $quote->alamat_sampling : '',
+            'tanggalCetak'   => self::tanggal_indonesia(date('Y-m-d')),
+            'jamCetak'       => date('G:i'),
+        ]))->render();
     }
 
-    private static function collectJadwalForPemberitahuanEmail($quote): iterable
+    /**
+     * Non-kontrak: satu section, satu tabel (tanpa heading periode).
+     * Kontrak: satu section per periode_kontrak (urut naik), masing-masing tabel sendiri + judul periode & no SP.
+     *
+     * @return array{perPeriode: bool, sections: array<int, array{judulPeriode: ?string, noDocumentSp: ?string, rows: array}>}
+     */
+    private static function buildLampiranEmailSections($quote): array
     {
         if ($quote instanceof QuotationNonKontrak) {
             $sp = $quote->sampling->first();
-            if (! $sp || ! $sp->jadwal) {
-                return [];
-            }
+            $rows = ($sp && $sp->jadwal)
+                ? self::lampiranRowsFromJadwal($sp->jadwal)
+                : [];
 
-            return $sp->jadwal;
+            return [
+                'perPeriode' => false,
+                'sections'   => [
+                    [
+                        'judulPeriode' => null,
+                        'noDocumentSp' => null,
+                        'rows'         => $rows,
+                    ],
+                ],
+            ];
         }
 
         if ($quote instanceof QuotationKontrakH) {
-            $coll = collect();
-            foreach ($quote->sampling->where('no_quotation', $quote->no_document) as $sp) {
-                foreach ($sp->jadwal as $j) {
-                    $coll->push($j);
-                }
+            $sections = [];
+            $plans    = $quote->sampling
+                ->where('no_quotation', $quote->no_document)
+                ->sortBy('periode_kontrak')
+                ->values();
+
+            foreach ($plans as $sp) {
+                $rows = ($sp->jadwal)
+                    ? self::lampiranRowsFromJadwal($sp->jadwal)
+                    : [];
+                $sections[] = [
+                    'judulPeriode' => self::tanggal_indonesia($sp->periode_kontrak, 'period'),
+                    'noDocumentSp' => (string) $sp->no_document,
+                    'rows'         => $rows,
+                ];
             }
 
-            return $coll;
+            return [
+                'perPeriode' => true,
+                'sections'   => $sections,
+            ];
         }
 
-        return [];
+        return [
+            'perPeriode' => false,
+            'sections'   => [
+                [
+                    'judulPeriode' => null,
+                    'noDocumentSp' => null,
+                    'rows'         => [],
+                ],
+            ],
+        ];
     }
 
     private static function resolveNoQtForEmail($quote): string
@@ -772,11 +808,13 @@ class GenerateDocumentJadwal
 
             $htmlBody = self::renderPemberitahuanSalesEmailHtml($dataQt, $sales->nama_lengkap);
             $subject  = self::subjectPemberitahuanSalesEmail($dataQt);
+            $cc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
 
             $send = SendEmail::where('to', $emailTo)
                 ->where('subject', $subject)
                 ->where('body', $htmlBody)
                 ->where('bcc', $emailBcc)
+                ->where('cc', $cc)
                 ->noReply()
                 ->send();
             
