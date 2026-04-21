@@ -65,10 +65,11 @@
 
                             <thead>
                                 <tr style="background-color: #f2f2f2;">
-                                    <th align="center" width="8%">No.</th>
-                                    <th align="center" width="28%">Tanggal</th>
-                                    <th align="center" width="18%">Jam</th>
-                                    <th align="left" width="46%">Kategori</th>
+                                    <th align="center" width="6%">No.</th>
+                                    <th align="center" width="22%">Tanggal</th>
+                                    <th align="center" width="14%">Jam</th>
+                                    <th align="center" width="20%">Petugas sampler</th>
+                                    <th align="left" width="38%">Kategori</th>
                                 </tr>
                             </thead>
 
@@ -78,11 +79,12 @@
                                     <td align="center">{{ $row['no'] }}</td>
                                     <td align="center">{{ $row['tanggal'] }}</td>
                                     <td align="center">{{ $row['jam'] }}</td>
+                                    <td align="center">{{ $row['petugas_sampler'] ?? '—' }}</td>
                                     <td>{{ $row['kategori'] }}</td>
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="4" align="center" style="padding: 12px; color: #777;">
+                                    <td colspan="5" align="center" style="padding: 12px; color: #777;">
                                         Belum ada baris jadwal.
                                     </td>
                                 </tr>
