@@ -17,6 +17,9 @@ use App\Http\Controllers\Controller;
 use App\Models\LhpsKebisinganDetail;
 use App\Models\LhpsKebisinganHeader;
 use App\Models\WsValueUdara;
+use App\Models\MasterBakumutu;
+use App\Helpers\HelperSatuan;
+use App\Models\MdlUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -235,6 +238,60 @@ class TqcSinarUvController extends Controller
         }
     }
 
+    // public function getTrend(Request $request)
+    // {
+    //     $orderDetails = OrderDetail::where('cfr', $request->cfr)
+    //         ->where('status', 1)
+    //         ->where('is_active', 1)
+    //         ->get();
+
+    //     $lhpsSinarUvHeader = LhpsSinarUVHeader::where('no_lhp', $request->cfr)->first();
+
+    //     $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+    //         if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+    //             $colToSearch = "hasil" . ($index ?: 1);
+    //             $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+    //             if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+    //                 $hasilUji = "<" . $mdlUdara->$colToSearch;
+    //             }
+    //         }
+
+    //         return $hasilUji;
+    //     };
+    //     $data = [];
+    //     foreach ($orderDetails as $orderDetail) {
+    //         $lhpsSinarUvHeader = LhpsSinarUVHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
+    //         $lhpsSinarUvDetail = LhpsSinarUVDetail::where('keterangan', $orderDetail->keterangan_1)
+    //             ->select('mata', 'siku','betis')->get()
+    //             ->toArray();
+
+    //         $header = SinarUVHeader::where('no_sampel', $orderDetail->no_sampel)->first();
+    //         $lapangan = DataLapanganSinarUV::where('no_sampel', $orderDetail->no_sampel)->first();
+    //         $hasil = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)
+    //             ->orderByDesc('id')
+    //             ->first();
+
+
+    //         $data[] = [
+    //             'no_sampel' => $orderDetail->no_sampel,
+    //             'waktu_pemaparan' => $lapangan->waktu_pemaparan ?? null,
+    //             'nab' => $hasil->nab ?? null,
+    //             'titik' => $orderDetail->keterangan_1,
+    //             'history' => $lhpsSinarUvDetail,
+    //             'mata' => $hasil->hasil1 ?? null,
+    //             'siku' => $hasil->hasil2 ?? null,
+    //             'betis' => $hasil->hasil3 ?? null,
+    //             'analyst' => optional($lhpsSinarUvHeader)->created_by ?? $header->created_by,
+    //             'approved_by' => optional($lhpsSinarUvHeader)->approved_by ?? $header->approved_by
+    //         ];
+    //     }
+
+    //     return response()->json([
+    //         'data' => $data,
+    //         'message' => 'Data retrieved successfully',
+    //     ], 200);
+    // }
+
     public function getTrend(Request $request)
     {
         $orderDetails = OrderDetail::where('cfr', $request->cfr)
@@ -242,12 +299,35 @@ class TqcSinarUvController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsSinarUvHeader = LhpsSinarUVHeader::where('no_lhp', $request->cfr)->first();
+
+        // Ambil semua parameter_id dari order details yang ada
+        $parameterIds = $orderDetails->map(function ($orderDetail) {
+            $parameters = json_decode(html_entity_decode($orderDetail->parameter), true);
+            $parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
+            return isset($parameterArray[0]) ? $parameterArray[0] : null;
+        })->filter()->unique();
+
+        // Load mdlUdara seperti di detail()
+        $mdlUdara = MdlUdara::whereIn('parameter_id', $parameterIds)->get();
+
+        $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+            if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                $colToSearch = "hasil" . ($index ?: 1);
+                $found = $mdlUdara->where('parameter_id', $parameterId)
+                    ->whereNotNull($colToSearch)
+                    ->first();
+                if ($found && (float) $found->$colToSearch > (float) $hasilUji) {
+                    $hasilUji = "<" . $found->$colToSearch;
+                }
+            }
+            return $hasilUji;
+        };
+
         $data = [];
         foreach ($orderDetails as $orderDetail) {
             $lhpsSinarUvHeader = LhpsSinarUVHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
             $lhpsSinarUvDetail = LhpsSinarUVDetail::where('keterangan', $orderDetail->keterangan_1)
-                ->select('mata', 'siku','betis')->get()
+                ->select('mata', 'siku', 'betis')->get()
                 ->toArray();
 
             $header = SinarUVHeader::where('no_sampel', $orderDetail->no_sampel)->first();
@@ -256,23 +336,24 @@ class TqcSinarUvController extends Controller
                 ->orderByDesc('id')
                 ->first();
 
+            $parameterId = $header->id_parameter;
 
             $data[] = [
-                'no_sampel' => $orderDetail->no_sampel,
-                'waktu_pemaparan' => $lapangan->waktu_pemaparan ?? null,
-                'nab' => $hasil->nab ?? null,
-                'titik' => $orderDetail->keterangan_1,
-                'history' => $lhpsSinarUvDetail,
-                'mata' => $hasil->hasil1 ?? null,
-                'siku' => $hasil->hasil2 ?? null,
-                'betis' => $hasil->hasil3 ?? null,
-                'analyst' => optional($lhpsSinarUvHeader)->created_by ?? $header->created_by,
-                'approved_by' => optional($lhpsSinarUvHeader)->approved_by ?? $header->approved_by
+                'no_sampel'        => $orderDetail->no_sampel,
+                'waktu_pemaparan'  => $lapangan->waktu_pemaparan ?? null,
+                'nab'              => $hasil->nab ?? null,
+                'titik'            => $orderDetail->keterangan_1,
+                'history'          => $lhpsSinarUvDetail,
+                'mata'             => $getHasilUji(1, $parameterId, $hasil->hasil1 ?? null),
+                'siku'             => $getHasilUji(2, $parameterId, $hasil->hasil2 ?? null),
+                'betis'            => $getHasilUji(3, $parameterId, $hasil->hasil3 ?? null),
+                'analyst'          => optional($lhpsSinarUvHeader)->created_by ?? $header->created_by,
+                'approved_by'      => optional($lhpsSinarUvHeader)->approved_by ?? $header->approved_by,
             ];
         }
 
         return response()->json([
-            'data' => $data,
+            'data'    => $data,
             'message' => 'Data retrieved successfully',
         ], 200);
     }
