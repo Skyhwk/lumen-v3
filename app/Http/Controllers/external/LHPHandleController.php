@@ -68,6 +68,7 @@ class LHPHandleController extends BaseController
 
     public function newCheckLhp(Request $request)
     {
+        
         // 1. Sanitasi Token: Ganti spasi dengan plus (+) handle URL decoding issue.
         $token = str_replace(' ', '+', $request->token);
         if (!$token) return response()->json(['message' => 'Token is required'], 430);
@@ -92,19 +93,20 @@ class LHPHandleController extends BaseController
         if ($linkLhp->periode && !$invoices->contains('periode', 'all')) {
             $invoices = $invoices->where('periode', $linkLhp->periode)->values();
         }
-
+        
         // 5. Transformasi Data (Core Logic)
         $dataGrouped = collect((new GroupedCfrByLhp($orderHeader, $linkLhp->periode))->get()->toArray())
             ->map(function ($item) {
                 // Build rekap pengujian
-                $item['rekap_pengujian'] = $this->getRekapPengujian($item['order_details']);
+                // return response()->json(['message' => $item], 430);
+                $item['rekap_pengujian'] = $this->getRekapPengujian($item['order_details'] ?? []);
 
                 // Hapus data mentah order_details agar response payload lebih ringan
                 unset($item['order_details']);
 
                 return $item;
             });
-
+        // return response()->json(['data' => $dataGrouped], 200);
         return response()->json([
             'message' => 'LHP data retrieved successfully',
             'data' => $dataGrouped,
@@ -175,7 +177,7 @@ class LHPHandleController extends BaseController
 
                     // Formatting Hasil berdasarkan tipe parameter (Air/Udara/Emisi)
                     if ($config['type'] == 'air') {
-                        return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $matchedValue['hasil']];
+                        return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $matchedValue['hasil'] ?? null];
                     }
                     if ($config['type'] == 'udara') {
                         $satuan = $matchedValue['satuan'] ?? $this->getSatuanFromRegulasi($od, $paramId);
@@ -245,7 +247,7 @@ class LHPHandleController extends BaseController
                         }
 
                         // Cek Approval Data Lapangan
-                        // if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
+                        if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
 
                         // Case: Ergonomi
                         if ($paramId == self::PARAM_ERGONOMI) {
