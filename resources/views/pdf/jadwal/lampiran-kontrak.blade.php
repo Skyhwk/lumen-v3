@@ -1,4 +1,4 @@
-{{-- Lampiran: header sama seperti dokumen jadwal kontrak; tabel ringkas No, Tanggal, Jam, Kategori --}}
+{{-- Lampiran: tabel ringkas No, Tanggal, Jam, Petugas sampler, Kategori --}}
                 <table class="tabel" width="100%">
                     <tr class="tr_top">
                         <td class="text-left text-wrap" style="width: 33.33%;"><img class="img_0"
@@ -29,10 +29,11 @@
                 <table class="table table-bordered" style="font-size: 8px; margin-top:10px;" width="100%">
                     <thead class="text-center">
                         <tr>
-                            <th width="6%" style="padding: 5px !important;">NO</th>
-                            <th width="28%">Tanggal</th>
-                            <th width="18%">Jam</th>
-                            <th width="48%">Kategori</th>
+                            <th width="5%" style="padding: 5px !important;">NO</th>
+                            <th width="22%">Tanggal</th>
+                            <th width="12%">Jam</th>
+                            <th width="20%">Petugas sampler</th>
+                            <th width="41%">Kategori</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -41,6 +42,7 @@
                             <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['no'] }}</td>
                             <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['tanggal'] }}</td>
                             <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['jam'] }}</td>
+                            <td style="vertical-align: middle; text-align:center; font-size: 10px; padding: 4px;">{{ $row['petugas_sampler'] ?? '—' }}</td>
                             <td style="vertical-align: middle; font-size: 11px; padding: 5px;">{{ $row['kategori'] }}</td>
                         </tr>
 @endforeach
