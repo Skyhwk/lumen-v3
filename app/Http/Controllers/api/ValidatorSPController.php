@@ -211,7 +211,6 @@ class ValidatorSPController extends Controller
 
                 $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan, true);
                 $this->dispatch($job);
-                dd('stop');
             }
 
             DB::commit();
