@@ -97,13 +97,19 @@ class GroupedCfrByLhp
                         ? ($item->kategori_3 !== '118-Psikologi' ? ($item->tanggal_terima ?? null) : ($item->tanggal_sampling ?? null))
                         : ($item->tanggal_terima ?? null);
 
-                    $labelSampling = optional($track)->ftc_verifier
-                        ? 'Sampling'
-                        : (optional($track)->ftc_sd
-                            ? 'Sampel Diterima'
-                            : (($lhps->created_at ?? null)
-                                ? 'Direct'
-                                : ($item->tanggal_terima ? 'Sampling' : null)));
+                    if($item->kategori_3 == '118-Psikologi') {
+                        $tglSampling = ($tglSampling >= Carbon::now()->format('Y-m-d')) ? null : $tglSampling;
+                    }
+
+                    if (optional($track)->ftc_verifier) {
+                        $labelSampling = 'Sampling';
+                    } elseif (optional($track)->ftc_sd) {
+                        $labelSampling = 'Sampel Diterima';
+                    } elseif ($item->tanggal_terima) {
+                        $labelSampling = 'Sampling';
+                    } else {
+                        $labelSampling = 'Sampling';
+                    }
 
                     $kategori_validation = 
                     [
@@ -122,9 +128,9 @@ class GroupedCfrByLhp
                         "28-Pencahayaan"
                     ];
 
-                    $labelSampling = $item->kategori_3 == '118-Psikologi' ? 'Direct' : $labelSampling;
-
-                    if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
+                    $labelSampling = str_contains($item->kategori_3, 'Psikologi') ? 'Direct' : $labelSampling;
+                    
+                    $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
 
@@ -134,6 +140,10 @@ class GroupedCfrByLhp
                     } else {
                         if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
                     }
+
+                    $labelAnalisa = $item->kategori_3 == '118-Psikologi' ? 'Direct' : 'Analisa';
+                    
+                    $steps['analisa']['label'] = $labelAnalisa;
 
                     $steps['drafting']['date'] = $tglSampling ? ($lhps->created_at ?? null) : null;
 
@@ -147,9 +157,11 @@ class GroupedCfrByLhp
                 });
 
                 $tanggal_order = Carbon::parse($orderHeader->created_at)->format('Y-m-d');
+
                 $stepsByCFR = $this->initializeSteps($tanggal_order);
+
                 foreach (['sampling', 'analisa', 'drafting', 'lhp_release'] as $step) {
-                    // Cek SEMUA detail sudah punya tanggal untuk step ini
+                    
                     $allCompleted = $mappedDetails->every(function ($detail) use ($step) {
                         return !empty($detail->steps[$step]['date']);
                     });
@@ -159,6 +171,10 @@ class GroupedCfrByLhp
                         $earliestDate = $mappedDetails->pluck("steps.{$step}.date")->filter()->min();
                         $label = $mappedDetails->first()->steps[$step]['label']; // Ambil label dari item pertama
                         $stepsByCFR[$step] = ['label' => $label, 'date' => $earliestDate];
+                    } else {
+                        // untuk ambil label dari detail
+                        $label = $mappedDetails->first()->steps[$step]['label'];
+                        $stepsByCFR[$step] = ['label' => $label, 'date' => null];
                     }
                 }
 
