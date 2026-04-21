@@ -5,15 +5,11 @@ use App\Models\GenerateLink;
 use App\Models\JobTask;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
-<<<<<<< HEAD
-use App\Models\SamplingPlan;
-=======
 use App\Models\MasterKaryawan;
 
 use App\Services\GetAtasan;
 use App\Services\SendEmail;
 
->>>>>>> ec4149e67c08f924a6b918cde7324ada8054877d
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,21 +20,13 @@ class GenerateDocumentJadwal
     private $data;
     private $dataSampling;
 
-<<<<<<< HEAD
-    public static function onKontrak($id, $spId)
-=======
     /** @var string|null */
-    private $karyawan;
-
-    /** @var bool */
     private $email = false;
 
     public static function onKontrak($id)
->>>>>>> ec4149e67c08f924a6b918cde7324ada8054877d
     {
         $data = QuotationKontrakH::with('detail', 'sampling')->where('id', $id)->first();
         $dataSampling = SamplingPlan::where('id', $spId)->where('quotation_id', $id)->where('is_active', 1)->first();
-        // dd(json_decode($data->data_pendukung_sampling)->toArray());
         // dd($data->sampling->where('periode_kontrak','2025-02')->first()->jadwal()->where('periode' ,'2025-02')->get()->toArray());
         $self       = new self();
         $self->data = $data;
