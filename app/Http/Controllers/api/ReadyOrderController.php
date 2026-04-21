@@ -567,7 +567,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) 
             {
                 self::createInvoice($data, $dataQuotation, $request);
-                if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
+                if (floatval($dataQuotation->biaya_akhir) > floatval($request->tagihan_awal)) {
                     self::createInvoice($data, $dataQuotation, $request, false);
                 }
             }
@@ -1030,7 +1030,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
             self::createInvoice($data, $dataQuotation, $request);
-            if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
+            if (floatval($dataQuotation->biaya_akhir) > floatval($request->tagihan_awal)) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
 
@@ -1426,7 +1426,7 @@ class ReadyOrderController extends Controller
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
             self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-            if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
+            if (floatval($dataQuotation->biaya_akhir) > floatval($request->tagihan_awal)) {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
             }
 
@@ -2441,13 +2441,13 @@ class ReadyOrderController extends Controller
                 $periode = $dataQuotation->detail->pluck('periode_kontrak')->toArray();
                 foreach ($periode as $key => $value) {
                     self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, true, $key == 0);
-                    if($key == 0 && float_val($dataQuotation->detail[0]->biaya_akhir) > float_val($request->tagihan_awal)){
+                    if($key == 0 && floatval($dataQuotation->detail[0]->biaya_akhir) > floatval($request->tagihan_awal)){
                         self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, false, true);
                     }
                 }
             } else {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-                if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
+                if (floatval($dataQuotation->biaya_akhir) > floatval($request->tagihan_awal)) {
                     self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
                 }
             }
@@ -2567,7 +2567,7 @@ class ReadyOrderController extends Controller
         $total_diskon = $dataQuotation->total_diskon;
         $nilai_tagihan = str_replace(',', '', $request->tagihan_awal);
 
-        $nilai_tagihan = $first ? float_val($nilai_tagihan) : (float_val($dataQuotation->biaya_akhir) - float_val($nilai_tagihan));
+        $nilai_tagihan = $first ? floatval($nilai_tagihan) : (floatval($dataQuotation->biaya_akhir) - floatval($nilai_tagihan));
 
         if($nilai_tagihan <= 10) return;
 
@@ -2646,7 +2646,7 @@ class ReadyOrderController extends Controller
         $total_diskon = $detail->total_diskon;
         $tagihan_awal = $firstPeriode ? str_replace(',', '', $request->tagihan_awal) : $detail->biaya_akhir;
 
-        $nilai_tagihan = $first ? $tagihan_awal : (float_val($detail->biaya_akhir) - float_val($tagihan_awal));
+        $nilai_tagihan = $first ? $tagihan_awal : (floatval($detail->biaya_akhir) - floatval($tagihan_awal));
 
         if($nilai_tagihan <= 10) return;
 
