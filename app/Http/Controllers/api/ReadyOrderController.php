@@ -567,7 +567,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) 
             {
                 self::createInvoice($data, $dataQuotation, $request);
-                if ((int)$dataQuotation->biaya_akhir > (int)$request->tagihan_awal) {
+                if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
                     self::createInvoice($data, $dataQuotation, $request, false);
                 }
             }
@@ -1030,7 +1030,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
             self::createInvoice($data, $dataQuotation, $request);
-            if ((int)$dataQuotation->biaya_akhir > (int)$request->tagihan_awal) {
+            if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
 
@@ -1426,7 +1426,7 @@ class ReadyOrderController extends Controller
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
             self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-            if ((int)str_replace(',', '', $dataQuotation->biaya_akhir) > (int)str_replace(',', '', $request->tagihan_awal)) {
+            if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
             }
 
@@ -2441,13 +2441,13 @@ class ReadyOrderController extends Controller
                 $periode = $dataQuotation->detail->pluck('periode_kontrak')->toArray();
                 foreach ($periode as $key => $value) {
                     self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, true, $key == 0);
-                    if($key == 0 && (int)$dataQuotation->detail[0]->biaya_akhir > (int)str_replace(',', '', $request->tagihan_awal)){
+                    if($key == 0 && float_val($dataQuotation->detail[0]->biaya_akhir) > float_val($request->tagihan_awal)){
                         self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, false, true);
                     }
                 }
             } else {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-                if ((int)$dataQuotation->biaya_akhir > (int)str_replace(',', '', $request->tagihan_awal)) {
+                if (float_val($dataQuotation->biaya_akhir) > float_val($request->tagihan_awal)) {
                     self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
                 }
             }
@@ -2528,12 +2528,14 @@ class ReadyOrderController extends Controller
     {
         $rekening = ($dataQuotation->total_ppn != null || $dataQuotation->total_ppn != 0) ? 'ppn' : 'non-ppn';
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->orderBy('tanggal', 'asc')->first();
+
         if (empty($jadwal)) {
             $jadwal = Carbon::now()->format('Y-m-d');
         } else {
             $jadwal = $jadwal->tanggal;
         }
-        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(30)->format('Y-m-d');
+
+        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(90)->format('Y-m-d');
         $cek_rekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
 
         $invoiceYear = Carbon::now()->format('Y');
@@ -2547,11 +2549,7 @@ class ReadyOrderController extends Controller
 
         $prefix = $rekening == 'ppn' ? 'INV' : 'IV';
 
-        if ($invoiceYear == '2024') {
-            $defaultNo = $rekening == 'ppn' ? '06767' : '00531';
-        } else {
-            $defaultNo = '00001';
-        }
+        $defaultNo = '00001';
 
         $no = $lastInvoice ? str_pad(intval(substr($lastInvoice, -5)) + 1, 5, "0", STR_PAD_LEFT) : $defaultNo;
         $noInvoice = "ISL/{$prefix}/{$shortYear}{$no}";
@@ -2565,8 +2563,14 @@ class ReadyOrderController extends Controller
         } else {
             $periode = null;
         }
+
         $total_diskon = $dataQuotation->total_diskon;
         $nilai_tagihan = str_replace(',', '', $request->tagihan_awal);
+
+        $nilai_tagihan = $first ? float_val($nilai_tagihan) : (float_val($dataQuotation->biaya_akhir) - float_val($nilai_tagihan));
+
+        if($nilai_tagihan <= 10) return;
+
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
             'periode' => $periode,
@@ -2582,7 +2586,7 @@ class ReadyOrderController extends Controller
             'keterangan_tambahan' => null,
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
-            'nilai_tagihan' => $first ? $nilai_tagihan : $dataQuotation->biaya_akhir - $nilai_tagihan,
+            'nilai_tagihan' => $nilai_tagihan,
             'total_tagihan' => $first ? $dataQuotation->biaya_akhir : $dataQuotation->biaya_akhir - $nilai_tagihan,
             'rekening' => $cek_rekening,
             'nama_pj' => 'Yulia Agustina',
@@ -2595,7 +2599,7 @@ class ReadyOrderController extends Controller
             'jabatan_pic' => $dataOrderHeader->jabatan_pic_order,
             'ppnbm' => $total_diskon,
             'ppn' => $dataQuotation->total_ppn,
-            'piutang' => $first ? $dataQuotation->biaya_akhir : $dataQuotation->biaya_akhir - $nilai_tagihan,
+            'piutang' => $nilai_tagihan,
             'created_by' => 'System',
             'created_at' => DATE('Y-m-d H:i:s'),
             'is_emailed' => 0,
@@ -2610,6 +2614,7 @@ class ReadyOrderController extends Controller
     {
         $detail = $dataQuotation->detail()->where('periode_kontrak', $periode)->first();
         $rekening = ($detail->total_ppn != null || $detail->total_ppn != 0) ? 'ppn' : 'non-ppn';
+
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->where('periode', $periode)->orderBy('tanggal', 'asc')->first();
         if (empty($jadwal)) {
             $jadwal = Carbon::now()->format('Y-m-d');
@@ -2617,7 +2622,7 @@ class ReadyOrderController extends Controller
             $jadwal = $jadwal->tanggal;
         }
 
-        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(30)->format('Y-m-d');
+        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(90)->format('Y-m-d');
         $cek_rekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
 
         $invoiceYear = Carbon::now()->format('Y');
@@ -2629,13 +2634,9 @@ class ReadyOrderController extends Controller
             ->orderBy('no_invoice', 'desc')
             ->value('no_invoice');
 
-        $prefix = $rekening == 'ppn' ? 'INV' : 'IV';
+        $prefix = ($rekening == 'ppn') ? 'INV' : 'IV';
 
-        if ($invoiceYear == '2024') {
-            $defaultNo = $rekening == 'ppn' ? '06767' : '00531';
-        } else {
-            $defaultNo = '00001';
-        }
+        $defaultNo = '00001';
 
         $no = $lastInvoice ? str_pad(intval(substr($lastInvoice, -5)) + 1, 5, "0", STR_PAD_LEFT) : $defaultNo;
         $noInvoice = "ISL/{$prefix}/{$shortYear}{$no}";
@@ -2644,6 +2645,11 @@ class ReadyOrderController extends Controller
 
         $total_diskon = $detail->total_diskon;
         $tagihan_awal = $firstPeriode ? str_replace(',', '', $request->tagihan_awal) : $detail->biaya_akhir;
+
+        $nilai_tagihan = $first ? $tagihan_awal : (float_val($detail->biaya_akhir) - float_val($tagihan_awal));
+
+        if($nilai_tagihan <= 10) return;
+
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
             'periode' => $periode,
@@ -2659,7 +2665,7 @@ class ReadyOrderController extends Controller
             'keterangan_tambahan' => null,
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
-            'nilai_tagihan' => $first ? $tagihan_awal : $detail->biaya_akhir - $tagihan_awal,
+            'nilai_tagihan' => $nilai_tagihan,
             'total_tagihan' => $first ? $detail->biaya_akhir : $detail->biaya_akhir - $tagihan_awal,
             'rekening' => $cek_rekening,
             'nama_pj' => 'Yulia Agustina',
