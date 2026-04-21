@@ -459,8 +459,8 @@ class GenerateDocumentJadwal
     }
 
     /**
-     * Baris lampiran PDF (No, Tanggal, Jam, Kategori) dari koleksi jadwal.
-     * Baris digabung bila tanggal, jam (mulai–selesai), dan kategori sama.
+     * Baris lampiran / email (No, Tanggal, Jam, Petugas sampler, Kategori) dari koleksi jadwal.
+     * Baris digabung bila tanggal, jam (mulai–selesai), dan kategori sama; nama petugas digabung unik.
      */
     public static function lampiranRowsFromJadwal($jadwalIterable): array
     {
@@ -479,14 +479,19 @@ class GenerateDocumentJadwal
                 $kategoriText = (string) $jadwal->kategori;
             }
 
+            $samplerName = trim((string) $jadwal->sampler);
+
             $groupKey = $tanggalKey . "\0" . $jam . "\0" . $kategoriText;
             if (! isset($groups[$groupKey])) {
                 $groups[$groupKey] = [
-                    'tanggal'  => self::tanggal_indonesia($tanggalKey),
-                    'jam'      => $jam,
-                    'kategori' => $kategoriText,
+                    'tanggal'   => self::tanggal_indonesia($tanggalKey),
+                    'jam'       => $jam,
+                    'kategori'  => $kategoriText,
+                    '_samplers' => ($samplerName !== '') ? [$samplerName] : [],
                 ];
                 $orderKeys[] = $groupKey;
+            } elseif ($samplerName !== '' && ! in_array($samplerName, $groups[$groupKey]['_samplers'], true)) {
+                $groups[$groupKey]['_samplers'][] = $samplerName;
             }
         }
 
@@ -508,10 +513,15 @@ class GenerateDocumentJadwal
         $rows = [];
         $no   = 1;
         foreach ($orderKeys as $groupKey) {
-            $rows[] = array_merge(
-                ['no' => $no++],
-                $groups[$groupKey]
-            );
+            $g        = $groups[$groupKey];
+            $samplerT = implode(', ', $g['_samplers']);
+            $rows[]   = [
+                'no'               => $no++,
+                'tanggal'          => $g['tanggal'],
+                'jam'              => $g['jam'],
+                'petugas_sampler'  => $samplerT !== '' ? $samplerT : '—',
+                'kategori'         => $g['kategori'],
+            ];
         }
 
         return $rows;
