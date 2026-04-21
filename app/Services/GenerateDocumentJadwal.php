@@ -2,10 +2,14 @@
 namespace App\Services;
 
 use App\Models\GenerateLink;
-use App\Models\Jadwal;
 use App\Models\JobTask;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\MasterKaryawan;
+
+use App\Services\GetAtasan;
+use App\Services\SendEmail;
+
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,6 +18,12 @@ use Mpdf\Mpdf;
 class GenerateDocumentJadwal
 {
     private $data;
+
+    /** @var string|null */
+    private $karyawan;
+
+    /** @var bool */
+    private $email = false;
 
     public static function onKontrak($id)
     {
@@ -39,6 +49,12 @@ class GenerateDocumentJadwal
     public function setKaryawan($karyawan)
     {
         $this->karyawan = $karyawan;
+        return $this;
+    }
+
+    public function setEmail(bool $email = false)
+    {
+        $this->email = $email;
         return $this;
     }
 
@@ -83,6 +99,9 @@ class GenerateDocumentJadwal
                 'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
             DB::commit();
+
+            $this->emailJadwalSampling($this->email, $quote);
+            
             return true;
         } catch (\Throwable $th) {
             DB::rollback();
@@ -139,6 +158,9 @@ class GenerateDocumentJadwal
                 'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
             DB::commit();
+
+            $this->emailJadwalSampling($this->email, $quote);
+
             return true;
         } catch (\Throwable $th) {
             DB::rollback();
@@ -640,5 +662,130 @@ class GenerateDocumentJadwal
         $EncryptedText        = openssl_encrypt($data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
         $return               = base64_encode($EncryptedText . '::' . $InitializationVector);
         return $return;
+    }
+
+    /**
+     * Subjek email pemberitahuan ke sales (bisa dipakai service pengirim).
+     */
+    public static function subjectPemberitahuanSalesEmail($quote): string
+    {
+        $no = self::resolveNoQtForEmail($quote);
+
+        return 'Pemberitahuan: Jadwal ' . $no . ' telah divalidasi';
+    }
+
+    /**
+     * HTML body email untuk sales: QT telah divalidasi + tabel ringkas (sama struktur lampiran jadwal).
+     */
+    public static function renderPemberitahuanSalesEmailHtml($quote, string $namaSales): string
+    {
+        $lampiranRows = self::lampiranRowsFromJadwal(self::collectJadwalForPemberitahuanEmail($quote));
+
+        return view('TemplateEmailJadwal.pemberitahuan-validasi-sales', [
+            'namaSales'       => $namaSales,
+            'noQt'            => self::resolveNoQtForEmail($quote),
+            'namaPelanggan'   => self::namaPelangganUntukEmail($quote),
+            'alamatSampling'  => isset($quote->alamat_sampling) ? (string) $quote->alamat_sampling : '',
+            'lampiranRows'    => $lampiranRows,
+            'tanggalCetak'    => self::tanggal_indonesia(date('Y-m-d')),
+            'jamCetak'        => date('G:i'),
+        ])->render();
+    }
+
+    private static function collectJadwalForPemberitahuanEmail($quote): iterable
+    {
+        if ($quote instanceof QuotationNonKontrak) {
+            $sp = $quote->sampling->first();
+            if (! $sp || ! $sp->jadwal) {
+                return [];
+            }
+
+            return $sp->jadwal;
+        }
+
+        if ($quote instanceof QuotationKontrakH) {
+            $coll = collect();
+            foreach ($quote->sampling->where('no_quotation', $quote->no_document) as $sp) {
+                foreach ($sp->jadwal as $j) {
+                    $coll->push($j);
+                }
+            }
+
+            return $coll;
+        }
+
+        return [];
+    }
+
+    private static function resolveNoQtForEmail($quote): string
+    {
+        $first = $quote->sampling->first();
+
+        return ($first && ! empty($first->no_quotation))
+            ? (string) $first->no_quotation
+            : (string) $quote->no_document;
+    }
+
+    private static function namaPelangganUntukEmail($quote): string
+    {
+        if (isset($quote->konsultan) && $quote->konsultan != '') {
+            return strtoupper($quote->konsultan) . ' ( ' . $quote->nama_perusahaan . ' ) ';
+        }
+
+        return (string) $quote->nama_perusahaan;
+    }
+
+    /**
+     * Siapkan penerima & body HTML; pengiriman dilakukan oleh service email terpisah.
+     */
+    private function emailJadwalSampling($isEmail, $dataQt)
+    {
+        if (! $isEmail) {
+            return;
+        }
+
+        try {
+            $sales = MasterKaryawan::where('id', $dataQt->sales_id)->first();
+            if (! $sales || empty($sales->email)) {
+                return;
+            }
+
+            $admSales = null;
+            if (! empty($dataQt->updated_by)) {
+                $admSales = MasterKaryawan::where('nama_lengkap', $dataQt->updated_by)->first();
+            }
+
+            $atasanSales = GetAtasan::where('id', $dataQt->sales_id)->get();
+            $emailAtasanSales = [];
+            if ($atasanSales->count() > 0) {
+                $emailAtasanSales = $atasanSales->pluck('email')->toArray();
+            }
+
+            $emailSales = $sales->email;
+            $emailAtasanSales = array_values(array_filter($emailAtasanSales, function ($email) use ($emailSales) {
+                return $email && $email !== $emailSales;
+            }));
+
+            $emailAdmSales = ($admSales && ! empty($admSales->email)) ? $admSales->email : null;
+            $emailBcc      = array_merge($emailAtasanSales, array_filter([$emailAdmSales]));
+            $emailTo       = $emailSales;
+
+            $htmlBody = self::renderPemberitahuanSalesEmailHtml($dataQt, $sales->nama_lengkap);
+            $subject  = self::subjectPemberitahuanSalesEmail($dataQt);
+
+            $send = SendEmail::where('to', $emailTo)
+                ->where('subject', $subject)
+                ->where('body', $htmlBody)
+                ->where('bcc', $emailBcc)
+                ->noReply()
+                ->send();
+            
+            return $send;
+
+        } catch (\Throwable $e) {
+            Log::error([
+                'emailJadwalSampling: ' . $e->getMessage() . ' — ' . $e->getFile() . ':' . $e->getLine(),
+            ]);
+        }
     }
 }
