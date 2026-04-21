@@ -599,12 +599,13 @@ class ReadyOrderController extends Controller
                             PT. Inti Surya Laboratorium
                         </p>
                     ";
-        
+                    $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                    $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $data->sales_id)->get()->pluck('email')->toArray());
                     SendEmail::where('to', $data->email_pic_order)
                         ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
                         ->where('body', $emailBody)
                         ->where('cc', json_decode($dataQuotation->email_cc, true))
-                        ->where('bcc', GetAtasan::where('user_id', $data->sales_id)->get()->pluck('email')->toArray())
+                        ->where('bcc', $emailbcc)
                         ->noReply()
                         ->send();
         
@@ -1455,11 +1456,13 @@ class ReadyOrderController extends Controller
                     </p>
                 ";
     
+                $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
                 SendEmail::where('to', $dataOrderHeader->email_pic_order)
                     ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
                     ->where('body', $emailBody)
                     ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', GetAtasan::where('user_id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray())
+                    ->where('bcc', $emailbcc)
                     ->noReply()
                     ->send();
     
@@ -2475,11 +2478,13 @@ class ReadyOrderController extends Controller
                     </p>
                 ";
 
+                $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
                 SendEmail::where('to', $dataOrderHeader->email_pic_order)
                     ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
                     ->where('body', $emailBody)
                     ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', GetAtasan::where('user_id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray())
+                    ->where('bcc', $emailbcc)
                     ->noReply()
                     ->send();
 
