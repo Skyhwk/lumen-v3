@@ -49,9 +49,19 @@
                             @endif
                         </table>
 
-                        <!-- TABLE DATA -->
-                        <table role="presentation" cellpadding="6" cellspacing="0" border="1" width="100%" 
-                               style="border-collapse: collapse; border-color: #ccc; font-size: 13px;">
+                        <!-- TABLE DATA: non-kontrak = satu tabel; kontrak = satu tabel per periode -->
+                        @foreach ($sections as $sectionIndex => $section)
+                        @if (!empty($perPeriode) && !empty($section['judulPeriode']))
+                        <p style="margin: {{ $sectionIndex === 0 ? '0' : '20px' }} 0 8px; font-size: 13px; color: #333;">
+                            <strong>Periode {{ $section['judulPeriode'] }}</strong>
+                            @if (!empty($section['noDocumentSp']))
+                            <span style="color: #555;"> — No. SP: <strong>{{ $section['noDocumentSp'] }}</strong></span>
+                            @endif
+                        </p>
+                        @endif
+
+                        <table role="presentation" cellpadding="6" cellspacing="0" border="1" width="100%"
+                               style="border-collapse: collapse; border-color: #ccc; font-size: 13px; margin-bottom: {{ (!empty($perPeriode) && $sectionIndex < count($sections) - 1) ? '20px' : '0' }};">
 
                             <thead>
                                 <tr style="background-color: #f2f2f2;">
@@ -63,14 +73,12 @@
                             </thead>
 
                             <tbody>
-                                @forelse ($lampiranRows as $row)
+                                @forelse ($section['rows'] as $row)
                                 <tr>
                                     <td align="center">{{ $row['no'] }}</td>
                                     <td align="center">{{ $row['tanggal'] }}</td>
                                     <td align="center">{{ $row['jam'] }}</td>
-                                    <td>
-                                        {{ $row['kategori'] }}
-                                    </td>
+                                    <td>{{ $row['kategori'] }}</td>
                                 </tr>
                                 @empty
                                 <tr>
@@ -81,6 +89,7 @@
                                 @endforelse
                             </tbody>
                         </table>
+                        @endforeach
 
                         <!-- FOOTER -->
                         <p style="margin: 20px 0 0; font-size: 12px; color: #666;">
