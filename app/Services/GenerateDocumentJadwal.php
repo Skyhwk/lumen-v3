@@ -4,7 +4,6 @@ namespace App\Services;
 use App\Models\GenerateLink;
 use App\Models\Jadwal;
 use App\Models\JobTask;
-use App\Models\Parameter;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use Carbon\Carbon;
@@ -233,216 +232,24 @@ class GenerateDocumentJadwal
 
             $fileName = preg_replace('/\\//', '-', 'JADWAL-SAMPLING-' . $data->no_document) . '.pdf';
 
-            $pdf->SetHTMLHeader('
-            <table class="tabel" width="100%">
-                <tr class="tr_top">
-                    <td class="text-left text-wrap" style="width: 33.33%;"><img class="img_0" src="' . public_path() . '/img/isl_logo.png" alt="ISL"></td>
-                    <td style="width: 33.33%; text-align: center;">
-                        <h5 style="text-align:center; font-size:14px;"><b><u>SAMPLING PLAN</u></b></h5>
-                        <p style="font-size: 10px;text-align:center;margin-top: -10px;">' . $periode_ . '</p>
-                    </td>
-                    <td style="text-align: right;">
-                        <p style="font-size: 9px; text-align:right;">' . self::tanggal_indonesia(date('Y-m-d')) . ' - ' . date('G:i') . '</p> <br>
-                        <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . $status_kontrak . '</span> <span style="font-size:11px; font-weight: bold; border: 1px solid gray;" id="status_sampling">' . $sampling . '</span>
-                    </td>
-                </tr>
-            </table>
-            <table class="table table-bordered" width="100%">
-                <tr>
-                    <td colspan="2" style="font-size: 12px; padding: 5px;"><h6 style="font-size:12px; font-weight: bold;" id="nama_customer">' . preg_replace('/&AMP;+/', '&', $perusahaan) . '</h6></td>
-                    <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;" id="no_document">' . $sampling_plan->no_quotation . '</span></td>
-                </tr>
-                <tr>
-                    <td colspan="2" style="font-size: 12px; padding: 5px;"><span style="font-size:12px;" id="alamat_customer">' . $data->alamat_sampling . '</span></td>
-                    <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;" id="no_document_sp">' . $sampling_plan->no_document . '</span></td>
-                </tr>
-            </table>
-        ');
+            $commonView = [
+                'data'                 => $data,
+                'sampling_plan'        => $sampling_plan,
+                'periode_'             => $periode_,
+                'status_kontrak'       => $status_kontrak,
+                'sampling'             => $sampling,
+                'perusahaan'           => preg_replace('/&AMP;+/', '&', $perusahaan),
+                'tanggalCetak'         => self::tanggal_indonesia(date('Y-m-d')),
+                'jamCetak'             => date('G:i'),
+                'isQtc'                => explode('/', $sampling_plan->no_quotation)[1] == 'QTC',
+                'jadwalSection'        => self::buildJadwalSamplingSection($sampling_plan),
+                'jadwalTableMarginTop' => '5px',
+            ];
 
-            // Jika ada parsial, skip tabel keterangan pengujian
-            $pdf->WriteHTML('
-                <table class="table table-bordered" style="font-size: 8px;">
-                    <thead class="text-center">
-                        <tr>
-                            <th width="2%" style="padding: 5px !important;">NO</th>
-                            <th width="85%">KETERANGAN PENGUJIAN</th>
-                            <th width="13%">TITIK</th>
-                        </tr>
-                    </thead>
-                    <tbody>');
+            $pdf->SetHTMLHeader(view('pdf.jadwal.non-kontrak', array_merge($commonView, ['part' => 'header']))->render());
+            $pdf->WriteHTML(view('pdf.jadwal.non-kontrak', array_merge($commonView, ['part' => 'body']))->render());
 
-            $i = 1;
-            if (explode("/", $sampling_plan->no_quotation)[1] == 'QTC') {
-                foreach (json_decode($data->data_pendukung_sampling) as $key => $y) {
-
-                    if (! in_array($sampling_plan->periode_kontrak, $y->periode)) {
-                        continue;
-                    }
-
-                    $kategori  = explode("-", $y->kategori_1);
-                    $kategori2 = explode("-", $y->kategori_2);
-                    $regulasi  = ($y->regulasi[0] != '') ? explode('-', $y->regulasi[0])[1] : '';
-                    $pdf->WriteHTML(
-                        '<tr>
-                        <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
-                        <td style="font-size: 12px; padding: 5px;"><b style="font-size: 12px;">' . $kategori2[1] . ' - ' . $regulasi . ' - ' . $y->total_parameter . ' Parameter</b>'
-                    );
-
-                    foreach ($y->parameter as $keys => $valuess) {
-                        $dParam = explode(';', $valuess);
-                        $d      = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
-                        if ($keys == 0) {
-                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
-                        } else {
-                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
-                        }
-                    }
-
-                    $pdf->WriteHTML(
-                        '<td style="font-size: 13px; padding: 5px;text-align:center;">' . $y->jumlah_titik . '</td></tr>'
-                    );
-                }
-
-                $pdf->WriteHTML('</tbody></table>');
-            } else {
-
-                foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
-                    $kategori  = explode("-", $a->kategori_1);
-                    $kategori2 = explode("-", $a->kategori_2);
-                    $regulasi  = '';
-
-                    if (is_array($a->regulasi) && count($a->regulasi) > 0) {
-                        $cleanedRegulasi = array_map(function ($peraturan) {
-                            $parts = explode("-", $peraturan, 2);
-                            return $parts[1] ?? $peraturan;
-                        }, $a->regulasi);
-                        $regulasi = implode(', ', $cleanedRegulasi);
-                    }
-
-                    $pdf->WriteHTML(
-                        '<tr>
-                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
-                            <td style="font-size: 12px; padding: 5px;"><b style="font-size: 12px;">' . $kategori2[1] . ' - ' . $regulasi . ' - ' . $a->total_parameter . ' Parameter</b>'
-                    );
-
-                    foreach ($a->parameter as $keys => $valuess) {
-                        $dParam = explode(';', $valuess);
-                        $d      = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
-                        if (! $d) {
-                            continue;
-                        }
-
-                        if ($keys == 0) {
-                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
-                        } else {
-                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
-                        }
-                    }
-
-                    $pdf->WriteHTML(
-                        '<td style="font-size: 13px; padding: 5px;text-align:center;">' . $a->jumlah_titik . '</td></tr>'
-                    );
-                }
-
-                $pdf->WriteHTML('</tbody></table>');
-            }
-
-            // Bagian PENGAMBILAN SAMPLING & PENJADWALAN - Ditampilkan untuk semua kondisi
-            $groupedKategori   = [];
-            $groupedSampler    = [];
-            $groupedDate       = [];
-            $groupedJamMulai   = [];
-            $groupedJamSelesai = [];
-
-            foreach ($sampling_plan->jadwal as $item) {
-                array_push($groupedKategori, json_decode($item->kategori));
-                array_push($groupedSampler, $item->sampler);
-                array_push($groupedDate, $item->tanggal);
-                array_push($groupedJamMulai, $item->jam_mulai);
-                array_push($groupedJamSelesai, $item->jam_selesai);
-            }
-
-            $kategories = collect($groupedKategori)->flatten()->unique()->values()->toArray();
-            $samplers   = array_unique($groupedSampler);
-            $dates      = array_unique($groupedDate);
-            $jamMulai   = array_unique($groupedJamMulai);
-            $jamSelesai = array_unique($groupedJamSelesai);
-
-            $groupedData = [];
-            foreach ($kategories as $item) {
-                $parts    = explode(" - ", $item);
-                $kategori = $parts[0];
-
-                if (array_key_exists($kategori, $groupedData)) {
-                    $groupedData[$kategori]++;
-                } else {
-                    $groupedData[$kategori] = 1;
-                }
-            }
-
-            if (is_array($groupedData) && count($groupedData) > 0) {
-
-                // Tabel Penjadwalan Sampling - Per Baris dengan pengelompokan tanggal yang sama
-                $pdf->WriteHTML('
-                <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
-                    <thead class="text-center">
-                        <tr>
-                            <th colspan="4" style="text-align:center;">JADWAL SAMPLING</th>
-                        </tr>
-                        <tr>
-                            <th class="text-center" width="25%">Tanggal</th>
-                            <th class="text-center" width="15%">Jam Mulai</th>
-                            <th class="text-center" width="15%">Jam Selesai</th>
-                            <th class="text-center" width="45%">Sampler</th>
-                        </tr>
-                    </thead>
-                    <tbody>');
-
-                // Kelompokkan jadwal berdasarkan tanggal
-                $jadwalGrouped = [];
-                foreach ($sampling_plan->jadwal as $jadwal) {
-                    $tanggal = $jadwal->tanggal;
-                    if (! isset($jadwalGrouped[$tanggal])) {
-                        $jadwalGrouped[$tanggal] = [];
-                    }
-                    $jadwalGrouped[$tanggal][] = $jadwal;
-                }
-
-                // Tampilkan per tanggal
-                foreach ($jadwalGrouped as $tanggal => $jadwals) {
-                    $samplerList   = [];
-                    $minJamMulai   = '23:59:59';
-                    $maxJamSelesai = '00:00:00';
-
-                    foreach ($jadwals as $jadwal) {
-                        if (! in_array($jadwal->sampler, $samplerList)) {
-                            $samplerList[] = $jadwal->sampler;
-                        }
-                        if ($jadwal->jam_mulai < $minJamMulai) {
-                            $minJamMulai = $jadwal->jam_mulai;
-                        }
-                        if ($jadwal->jam_selesai > $maxJamSelesai) {
-                            $maxJamSelesai = $jadwal->jam_selesai;
-                        }
-                    }
-
-                    $pdf->WriteHTML('
-                    <tr>
-                        <td style="text-align:center; vertical-align: middle;">' . self::tanggal_indonesia(date("Y-m-d", strtotime($tanggal))) . '</td>
-                        <td style="text-align:center; vertical-align: middle;">' . substr($minJamMulai, 0, 5) . '</td>
-                        <td style="text-align:center; vertical-align: middle;">' . substr($maxJamSelesai, 0, 5) . '</td>
-                        <td style="text-align:center; vertical-align: middle;">' . implode(", ", $samplerList) . '</td>
-                    </tr>');
-                }
-
-                $pdf->WriteHTML('</tbody></table>');
-
-                // Tambahkan catatan di bawah tabel penjadwalan
-                $pdf->WriteHTML('
-                <p style="font-size: 9px; font-style: italic; margin-top: 5px; text-align: left;">
-                    <b>Catatan:</b> Sampler dapat berubah sewaktu-waktu sesuai dengan kondisi lapangan.
-                </p>');
-            }
+            $this->writeJadwalLampiranPage($pdf, 'pdf.jadwal.lampiran-non-kontrak', $commonView, $sampling_plan, true);
 
             $dir = public_path('quotation/');
 
@@ -460,7 +267,7 @@ class GenerateDocumentJadwal
         }
     }
 
-    public function renderKontrak()
+    public function renderKontrak($quote = null)
     {
         try {
             $sampling = '';
@@ -576,178 +383,24 @@ class GenerateDocumentJadwal
                     $periode_       = self::tanggal_indonesia($sampling_plan->periode_kontrak, 'period');
                 }
 
-                // Set header untuk setiap periode
-               $pdf->WriteHTML('
-                <table class="tabel" width="100%">
-                    <tr class="tr_top">
-                        <td class="text-left text-wrap" style="width: 33.33%;"><img class="img_0"
-                                src="' . public_path() . '/img/isl_logo.png" alt="ISL" width="80">
-                        </td>
-                        <td style="width: 33.33%; text-align: center;">
-                            <h5 style="text-align:center; font-size:14px;"><b><u>SAMPLING PLAN</u></b></h5>
-                            <p style="font-size: 10px;text-align:center;margin-top: -10px;">' . $periode_ . '</p>
-                        </td>
-                        <td style="text-align: right;">
-                            <p style="font-size: 9px; text-align:right;">' . self::tanggal_indonesia(date('Y-m-d')) . ' - ' . date('G:i') . '</p> <br>
-                            <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . $status_kontrak . '</span> 
-                            <span style="font-size:11px; font-weight: bold; border: 1px solid gray;">' . $sampling . '</span>
-                        </td>
-                    </tr>
-                </table>
-                <table class="table table-bordered" width="100%">
-                    <tr>
-                        <td colspan="2" style="font-size: 12px; padding: 5px;"><h6 style="font-size:12px; font-weight: bold;">' . preg_replace('/&AMP;+/', '&', $perusahaan) . '</h6></td>
-                        <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;">' . $sampling_plan->no_quotation . '</span></td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="font-size: 12px; padding: 5px;"><span style="font-size:12px;">' . $data->alamat_sampling . '</span></td>
-                        <td style="font-size: 12px; padding: 5px;"><span style="font-size:12px; font-weight: bold;">' . $sampling_plan->no_document . '</span></td>
-                    </tr>
-                </table>
-                ');
+                $commonView = [
+                    'data'                 => $data,
+                    'sampling_plan'        => $sampling_plan,
+                    'periode_'             => $periode_,
+                    'status_kontrak'       => $status_kontrak,
+                    'sampling'             => $sampling,
+                    'perusahaan'           => preg_replace('/&AMP;+/', '&', $perusahaan),
+                    'tanggalCetak'         => self::tanggal_indonesia(date('Y-m-d')),
+                    'jamCetak'             => date('G:i'),
+                    'isQtc'                => explode('/', $sampling_plan->no_quotation)[1] == 'QTC',
+                    'jadwalSection'        => self::buildJadwalSamplingSection($sampling_plan),
+                    'jadwalTableMarginTop' => '30px',
+                ];
 
-                // Tabel Keterangan Pengujian
-                $pdf->WriteHTML('
-                <table class="table table-bordered" style="font-size: 8px;">
-                    <thead class="text-center">
-                        <tr>
-                            <th width="2%" style="padding: 5px !important;">NO</th>
-                            <th width="85%">KETERANGAN PENGUJIAN</th>
-                            <th width="13%">TITIK</th>
-                        </tr>
-                    </thead>
-                    <tbody>');
+                $pdf->WriteHTML(view('pdf.jadwal.kontrak', array_merge($commonView, ['part' => 'header']))->render());
+                $pdf->WriteHTML(view('pdf.jadwal.kontrak', array_merge($commonView, ['part' => 'body']))->render());
 
-                $i = 1;
-
-                if (explode("/", $sampling_plan->no_quotation)[1] == 'QTC') {
-                    foreach (json_decode($data->data_pendukung_sampling) as $key2 => $y) {
-                        if (! in_array($sampling_plan->periode_kontrak, $y->periode)) {
-                            continue;
-                        }
-
-                        $kategori  = explode("-", $y->kategori_1);
-                        $kategori2 = explode("-", $y->kategori_2);
-                        $regulasi  = ($y->regulasi && $y->regulasi[0] != '') ? explode('-', $y->regulasi[0])[1] : '';
-                        $pdf->WriteHTML(
-                            '<tr>
-                        <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
-                        <td style="font-size: 12px; padding: 5px;"><b style="font-size: 12px;">' . $kategori2[1] . ' - ' . $regulasi . ' - ' . $y->total_parameter . ' Parameter</b>'
-                        );
-
-                        foreach ($y->parameter as $keys => $valuess) {
-                            $dParam = explode(';', $valuess);
-                            $d      = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
-                            if ($keys == 0) {
-                                $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
-                            } else {
-                                $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
-                            }
-                        }
-
-                        $pdf->WriteHTML(
-                            '<td style="font-size: 13px; padding: 5px;text-align:center;">' . $y->jumlah_titik . '</td></tr>'
-                        );
-                    }
-
-                    $pdf->WriteHTML('</tbody></table>');
-                }
-
-                // Bagian PENGAMBILAN PENJADWALAN
-                $groupedKategori   = [];
-                $groupedSampler    = [];
-                $groupedDate       = [];
-                $groupedJamMulai   = [];
-                $groupedJamSelesai = [];
-
-                foreach ($sampling_plan->jadwal as $item) {
-                    array_push($groupedKategori, json_decode($item->kategori));
-                    array_push($groupedSampler, $item->sampler);
-                    array_push($groupedDate, $item->tanggal);
-                    array_push($groupedJamMulai, $item->jam_mulai);
-                    array_push($groupedJamSelesai, $item->jam_selesai);
-                }
-
-                $kategories = collect($groupedKategori)->flatten()->unique()->values()->toArray();
-                $samplers   = array_unique($groupedSampler);
-                $dates      = array_unique($groupedDate);
-                $jamMulai   = array_unique($groupedJamMulai);
-                $jamSelesai = array_unique($groupedJamSelesai);
-
-                $groupedData = [];
-                foreach ($kategories as $item) {
-                    $parts    = explode(" - ", $item);
-                    $kategori = $parts[0];
-
-                    if (array_key_exists($kategori, $groupedData)) {
-                        $groupedData[$kategori]++;
-                    } else {
-                        $groupedData[$kategori] = 1;
-                    }
-                }
-
-                if (is_array($groupedData) && count($groupedData) > 0) {
-                    // Tabel Penjadwalan Sampling
-                    $pdf->WriteHTML('
-                <table class="table table-bordered" style="font-size: 8px; margin-top:30px;" width="100%">
-                    <thead class="text-center">
-                        <tr>
-                            <th colspan="4" style="text-align:center;">JADWAL SAMPLING</th>
-                        </tr>
-                        <tr>
-                            <th class="text-center" width="25%">Tanggal</th>
-                            <th class="text-center" width="15%">Jam Mulai</th>
-                            <th class="text-center" width="15%">Jam Selesai</th>
-                            <th class="text-center" width="45%">Sampler</th>
-                        </tr>
-                    </thead>
-                    <tbody>');
-
-                    // Kelompokkan jadwal berdasarkan tanggal
-                    $jadwalGrouped = [];
-                    foreach ($sampling_plan->jadwal as $jadwal) {
-                        $tanggal = $jadwal->tanggal;
-                        if (! isset($jadwalGrouped[$tanggal])) {
-                            $jadwalGrouped[$tanggal] = [];
-                        }
-                        $jadwalGrouped[$tanggal][] = $jadwal;
-                    }
-
-                    // Tampilkan per tanggal
-                    foreach ($jadwalGrouped as $tanggal => $jadwals) {
-                        $samplerList   = [];
-                        $minJamMulai   = '23:59:59';
-                        $maxJamSelesai = '00:00:00';
-
-                        foreach ($jadwals as $jadwal) {
-                            if (! in_array($jadwal->sampler, $samplerList)) {
-                                $samplerList[] = $jadwal->sampler;
-                            }
-                            if ($jadwal->jam_mulai < $minJamMulai) {
-                                $minJamMulai = $jadwal->jam_mulai;
-                            }
-                            if ($jadwal->jam_selesai > $maxJamSelesai) {
-                                $maxJamSelesai = $jadwal->jam_selesai;
-                            }
-                        }
-
-                        $pdf->WriteHTML('
-                    <tr>
-                        <td style="text-align:center; vertical-align: middle;">' . self::tanggal_indonesia(date("Y-m-d", strtotime($tanggal))) . '</td>
-                        <td style="text-align:center; vertical-align: middle;">' . substr($minJamMulai, 0, 5) . '</td>
-                        <td style="text-align:center; vertical-align: middle;">' . substr($maxJamSelesai, 0, 5) . '</td>
-                        <td style="text-align:center; vertical-align: middle;">' . implode(", ", $samplerList) . '</td>
-                    </tr>');
-                    }
-
-                    $pdf->WriteHTML('</tbody></table>');
-
-                    // Catatan di bawah tabel
-                    $pdf->WriteHTML('
-                <p style="font-size: 9px; font-style: italic; margin-top: 5px; text-align: left;">
-                    <b>Catatan:</b> Sampler dapat berubah sewaktu-waktu sesuai dengan kondisi lapangan.
-                </p>');
-                }
+                $this->writeJadwalLampiranPage($pdf, 'pdf.jadwal.lampiran-kontrak', $commonView, $sampling_plan, false);
 
             } // End foreach sampling_plans
 
@@ -769,7 +422,165 @@ class GenerateDocumentJadwal
         }
     }
 
-    private function tanggal_indonesia($tanggal, $mode = '')
+    /**
+     * Satu halaman lampiran (ringkas) digabung ke PDF; header HTML dokumen dinonaktifkan bila $clearHtmlHeader (non-kontrak).
+     */
+    private function writeJadwalLampiranPage(Mpdf $pdf, string $viewName, array $commonView, $sampling_plan, bool $clearHtmlHeader): void
+    {
+        if ($clearHtmlHeader) {
+            $pdf->SetHTMLHeader('');
+        }
+        $pdf->addPage();
+        $pdf->WriteHTML(view($viewName, array_merge($commonView, [
+            'lampiranRows' => self::lampiranRowsFromJadwal($sampling_plan->jadwal),
+        ]))->render());
+    }
+
+    /**
+     * Baris lampiran PDF (No, Tanggal, Jam, Kategori) dari koleksi jadwal.
+     * Baris digabung bila tanggal, jam (mulai–selesai), dan kategori sama.
+     */
+    public static function lampiranRowsFromJadwal($jadwalIterable): array
+    {
+        $groups    = [];
+        $orderKeys = [];
+
+        foreach ($jadwalIterable as $jadwal) {
+            $tanggalKey = date('Y-m-d', strtotime($jadwal->tanggal));
+            $jam        = substr($jadwal->jam_mulai, 0, 5) . ' - ' . substr($jadwal->jam_selesai, 0, 5);
+            $decoded    = json_decode($jadwal->kategori, true);
+            if (is_array($decoded)) {
+                $sorted       = array_map('strval', $decoded);
+                sort($sorted);
+                $kategoriText = implode(', ', $sorted);
+            } else {
+                $kategoriText = (string) $jadwal->kategori;
+            }
+
+            $groupKey = $tanggalKey . "\0" . $jam . "\0" . $kategoriText;
+            if (! isset($groups[$groupKey])) {
+                $groups[$groupKey] = [
+                    'tanggal'  => self::tanggal_indonesia($tanggalKey),
+                    'jam'      => $jam,
+                    'kategori' => $kategoriText,
+                ];
+                $orderKeys[] = $groupKey;
+            }
+        }
+
+        usort($orderKeys, function ($ka, $kb) {
+            $a = explode("\0", $ka, 3);
+            $b = explode("\0", $kb, 3);
+            $cmp = strcmp($a[0], $b[0]);
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            $cmp = strcmp($a[1], $b[1]);
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp($a[2] ?? '', $b[2] ?? '');
+        });
+
+        $rows = [];
+        $no   = 1;
+        foreach ($orderKeys as $groupKey) {
+            $rows[] = array_merge(
+                ['no' => $no++],
+                $groups[$groupKey]
+            );
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Data tabel JADWAL SAMPLING (sama logika pengelompokan tanggal seperti sebelumnya).
+     */
+    private static function buildJadwalSamplingSection($sampling_plan): array
+    {
+        $groupedKategori   = [];
+        $groupedSampler    = [];
+        $groupedDate       = [];
+        $groupedJamMulai   = [];
+        $groupedJamSelesai = [];
+
+        foreach ($sampling_plan->jadwal as $item) {
+            array_push($groupedKategori, json_decode($item->kategori));
+            array_push($groupedSampler, $item->sampler);
+            array_push($groupedDate, $item->tanggal);
+            array_push($groupedJamMulai, $item->jam_mulai);
+            array_push($groupedJamSelesai, $item->jam_selesai);
+        }
+
+        $kategories = collect($groupedKategori)->flatten()->unique()->values()->toArray();
+        $samplers   = array_unique($groupedSampler);
+        $dates      = array_unique($groupedDate);
+        $jamMulai   = array_unique($groupedJamMulai);
+        $jamSelesai = array_unique($groupedJamSelesai);
+
+        $groupedData = [];
+        foreach ($kategories as $item) {
+            $parts    = explode(' - ', $item);
+            $kategori = $parts[0];
+
+            if (array_key_exists($kategori, $groupedData)) {
+                $groupedData[$kategori]++;
+            } else {
+                $groupedData[$kategori] = 1;
+            }
+        }
+
+        if (! is_array($groupedData) || count($groupedData) == 0) {
+            return ['show' => false, 'rows' => []];
+        }
+
+        $jadwalGrouped = [];
+        foreach ($sampling_plan->jadwal as $jadwal) {
+            $tanggal = $jadwal->tanggal;
+            if (! isset($jadwalGrouped[$tanggal])) {
+                $jadwalGrouped[$tanggal] = [];
+            }
+            $jadwalGrouped[$tanggal][] = $jadwal;
+        }
+
+        $tanggalKeys = array_keys($jadwalGrouped);
+        usort($tanggalKeys, function ($a, $b) {
+            return strtotime($a) <=> strtotime($b);
+        });
+
+        $rows = [];
+        foreach ($tanggalKeys as $tanggal) {
+            $jadwals = $jadwalGrouped[$tanggal];
+            $samplerList   = [];
+            $minJamMulai   = '23:59:59';
+            $maxJamSelesai = '00:00:00';
+
+            foreach ($jadwals as $jadwal) {
+                if (! in_array($jadwal->sampler, $samplerList)) {
+                    $samplerList[] = $jadwal->sampler;
+                }
+                if ($jadwal->jam_mulai < $minJamMulai) {
+                    $minJamMulai = $jadwal->jam_mulai;
+                }
+                if ($jadwal->jam_selesai > $maxJamSelesai) {
+                    $maxJamSelesai = $jadwal->jam_selesai;
+                }
+            }
+
+            $rows[] = [
+                'tanggal'     => self::tanggal_indonesia(date('Y-m-d', strtotime($tanggal))),
+                'jam_mulai'   => substr($minJamMulai, 0, 5),
+                'jam_selesai' => substr($maxJamSelesai, 0, 5),
+                'samplers'    => implode(', ', $samplerList),
+            ];
+        }
+
+        return ['show' => true, 'rows' => $rows];
+    }
+
+    public static function tanggal_indonesia($tanggal, $mode = '')
     {
         $bulan = [
             1 => 'Januari',
