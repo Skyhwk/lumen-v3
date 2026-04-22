@@ -22,7 +22,7 @@ class SalesDailyQSD
 
     private static function handle(int $currentYear): bool
     {
-        Log::info('[SchaduleUpdateQsd] Starting QSD data update...');
+        // Log::info('[SchaduleUpdateQsd] Starting QSD data update...');
         $arrayYears = self::getYearRange($currentYear);
 
         $rekapOrder = self::buildQueryQsd($arrayYears);
@@ -154,8 +154,8 @@ class SalesDailyQSD
 
             printf("[SchaduleUpdateQsd] [%s] Updating daily_qsd completed", Carbon::now()->format('Y-m-d H:i:s'));
         }
-        Log::info('[SchaduleUpdateQsd] Inserted ' . $totalInserted . ' rows');
-        Log::info('[SchaduleUpdateQsd] Completed successfully');
+        // Log::info('[SchaduleUpdateQsd] Inserted ' . $totalInserted . ' rows');
+        // Log::info('[SchaduleUpdateQsd] Completed successfully');
         return true;
     }
 
