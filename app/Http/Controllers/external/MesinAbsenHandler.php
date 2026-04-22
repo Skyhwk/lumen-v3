@@ -364,7 +364,7 @@ class MesinAbsenHandler extends BaseController
                     }
 
                     // DEBUG: Log jumlah data
-                    \Log::info("Device: {$deviceCode}, Data count: " . count($data));
+                    // \Log::info("Device: {$deviceCode}, Data count: " . count($data));
                     
                     // Cek jika data kosong
                     if (count($data) == 0) {
@@ -431,7 +431,7 @@ class MesinAbsenHandler extends BaseController
                 $name = isset($record->full_name) ? (string)$record->full_name : '';
                 
                 // DEBUG: Log setiap record
-                \Log::debug("Record: EmpID={$empId}, RFID={$rfidCode}, Name={$name}");
+                // \Log::debug("Record: EmpID={$empId}, RFID={$rfidCode}, Name={$name}");
                 
                 // employee_id - 16 bytes
                 $employeeId = str_pad(substr($empId, 0, 15), 16, "\0");
@@ -454,8 +454,8 @@ class MesinAbsenHandler extends BaseController
             $filesize = file_exists($filepath) ? filesize($filepath) : 0;
             $expectedSize = $recordCount * 64;
             
-            \Log::info("Generated access.bin: {$filepath}");
-            \Log::info("Records: {$recordCount}, Size: {$filesize} bytes, Expected: {$expectedSize} bytes");
+            // \Log::info("Generated access.bin: {$filepath}");
+            // \Log::info("Records: {$recordCount}, Size: {$filesize} bytes, Expected: {$expectedSize} bytes");
             
             if ($filesize != $expectedSize) {
                 \Log::warning("File size mismatch! Expected: {$expectedSize}, Got: {$filesize}");
