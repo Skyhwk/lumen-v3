@@ -87,7 +87,7 @@ class GenerateFeeSampling
                 $adaLuarKota = false;
                 $durasiTertinggiLuarKota = 0;
                 foreach ($items as $item) {
-                    $alamatSampling = strtolower(trim($item->alamat));
+                    $alamatSampling = strtolower(trim($item->nama_perusahaan));
                     $AllAlamatSampling[] = $alamatSampling;
                     $kategoriList = json_decode($item->kategori, true);
                     if (!is_array($kategoriList)) $kategoriList = [];
