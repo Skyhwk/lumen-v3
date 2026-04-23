@@ -226,7 +226,7 @@ class GenerateFeeSampling
 
                 // === Fee luar kota (1x per hari) ===
                 if ($adaLuarKota) {
-                    if ($durasiTertinggiLuarKota >= 3) {
+                    if ($durasiTertinggiLuarKota >= 2) {
                         $feeTambahan += $fee->sampling_luar_kota_24jam;
                         $feeTambahanRincian['luar_kota_24jam'] += $fee->sampling_luar_kota_24jam;
                     } else {
