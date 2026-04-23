@@ -680,8 +680,8 @@ class GenerateDocumentJadwal
     public static function subjectPemberitahuanSalesEmail($quote): string
     {
         $no = self::resolveNoQtForEmail($quote);
-
-        return 'Pemberitahuan: Jadwal ' . $no . ' telah divalidasi';
+        $namaPerusahaan = self::namaPelangganUntukEmail($quote);
+        return 'Pemberitahuan: Jadwal ' . $no . ' - ' . $namaPerusahaan . ' telah divalidasi';
     }
 
     /**
