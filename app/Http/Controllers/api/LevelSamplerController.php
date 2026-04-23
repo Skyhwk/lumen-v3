@@ -127,7 +127,6 @@ class LevelSamplerController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'message' => 'Failed to update level sampler: ' . $th->getMessage(),
                 'status' => '500'
