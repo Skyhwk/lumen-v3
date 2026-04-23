@@ -277,7 +277,7 @@ class GenerateInvoiceController extends Controller
     {
         $invoice = Invoice::with('orderHeaderQuot')->where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
         if (explode('/', $invoice->no_invoice)[1] == 'INV') {
-            if ($invoice->created_at > '2025-04-27 00:00:00' && !$invoice->file_faktur) {
+            if ($invoice->created_at > '2026-04-27 00:00:00' && !$invoice->file_faktur) {
                 return response()->json([
                     'message' => 'File Faktur belum di upload, silahkan koordinasi dengan tim Tax!',
                 ], 400);

@@ -88,7 +88,7 @@ class UploadFakturPajakController extends Controller
                 ->groupBy('invoice.no_invoice')
                 ->where('is_emailed', false)
                 ->where('no_invoice', 'LIKE', '%INV/%')
-                ->where('invoice.created_at', '>', '2025-04-27 00:00:00')
+                ->where('invoice.created_at', '>', '2026-04-27 00:00:00')
                 ->whereNull('file_faktur')
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
