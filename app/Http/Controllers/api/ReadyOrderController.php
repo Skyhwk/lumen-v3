@@ -27,6 +27,7 @@ use App\Models\FtcT;
 use App\Models\Ftc;
 use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
+use App\Jobs\CreateInvoiceJob;
 use App\Jobs\RenderInvoiceJob;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
@@ -564,13 +565,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->save();
             
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
-            if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) 
-            {
-                self::createInvoice($data, $dataQuotation, $request);
-                if ((int)$dataQuotation->biaya_akhir > (int)$request->tagihan_awal) {
-                    self::createInvoice($data, $dataQuotation, $request, false);
-                }
-            }
+            $shouldCreateInvoice = $dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null);
 
             $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->first();
 
@@ -616,7 +611,10 @@ class ReadyOrderController extends Controller
 
             DB::commit();
             
-            self::generateInvoice($no_order, $dataQuotation->no_document);
+            if ($shouldCreateInvoice) {
+                $this->dispatchCreateInvoiceJob($data, $dataQuotation, $request, 'non_kontrak');
+            }
+
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
@@ -1028,10 +1026,6 @@ class ReadyOrderController extends Controller
 
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
-            self::createInvoice($data, $dataQuotation, $request);
-            if ((int)$dataQuotation->biaya_akhir > (int)$request->tagihan_awal) {
-                self::createInvoice($data, $dataQuotation, $request, false);
-            }
 
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
             
@@ -1078,7 +1072,8 @@ class ReadyOrderController extends Controller
 
             DB::commit();
             
-            self::generateInvoice($no_order, $dataQuotation->no_document);
+            $this->dispatchCreateInvoiceJob($data, $dataQuotation, $request, 'non_kontrak');
+
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
@@ -1424,10 +1419,6 @@ class ReadyOrderController extends Controller
             $dataQuotation->save();
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
-            self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-            if ((int)str_replace(',', '', $dataQuotation->biaya_akhir) > (int)str_replace(',', '', $request->tagihan_awal)) {
-                self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
-            }
 
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, false, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
@@ -1487,7 +1478,7 @@ class ReadyOrderController extends Controller
             //     }
             // }
             
-            self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
+            $this->dispatchCreateInvoiceJob($dataOrderHeader, $dataQuotation, $request, 'non_kontrak');
 
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
@@ -2434,20 +2425,6 @@ class ReadyOrderController extends Controller
 
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
-            if ($request->jenis_tagihan == 'periode') {
-                $periode = $dataQuotation->detail->pluck('periode_kontrak')->toArray();
-                foreach ($periode as $key => $value) {
-                    self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, true, $key == 0);
-                    if($key == 0 && (int)$dataQuotation->detail[0]->biaya_akhir > (int)str_replace(',', '', $request->tagihan_awal)){
-                        self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, false, true);
-                    }
-                }
-            } else {
-                self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-                if ((int)$dataQuotation->biaya_akhir > (int)str_replace(',', '', $request->tagihan_awal)) {
-                    self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
-                }
-            }
 
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, false, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
@@ -2507,7 +2484,7 @@ class ReadyOrderController extends Controller
             //     }
             // }
 
-            self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
+            $this->dispatchCreateInvoiceJob($dataOrderHeader, $dataQuotation, $request, 'kontrak');
 
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
@@ -2517,6 +2494,29 @@ class ReadyOrderController extends Controller
             DB::rollBack();
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
+    }
+
+    private function dispatchCreateInvoiceJob($dataOrderHeader, $dataQuotation, $request, $quotationType)
+    {
+        JobTask::insert([
+            'job' => 'CreateInvoice',
+            'status' => 'processing',
+            'no_document' => $dataQuotation->no_document,
+            'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $job = new CreateInvoiceJob(
+            $dataOrderHeader->id,
+            $quotationType === 'kontrak' ? 'kontrak' : 'non_kontrak',
+            $dataQuotation->id,
+            [
+                'tagihan_awal' => $request->tagihan_awal,
+                'keterangan_tagihan' => $request->keterangan_tagihan,
+                'jenis_tagihan' => $request->jenis_tagihan,
+            ]
+        );
+
+        $this->dispatch($job);
     }
 
     public function createInvoice($dataOrderHeader, $dataQuotation, $request, $first = true)
@@ -2562,11 +2562,17 @@ class ReadyOrderController extends Controller
         }
         $total_diskon = $dataQuotation->total_diskon;
         $nilai_tagihan = str_replace(',', '', $request->tagihan_awal);
+        $namaPerusahaan = '-';
+        if($dataQuotation->konsultan != null){
+            $namaPerusahaan = $dataQuotation->konsultan . ' (' . $dataQuotation->nama_perusahaan . ')';
+        } else {
+            $namaPerusahaan = $dataQuotation->nama_perusahaan;
+        }
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
             'periode' => $periode,
             'no_order' => $dataOrderHeader->no_order,
-            'nama_perusahaan' => $dataQuotation->nama_perusahaan,
+            'nama_perusahaan' => $namaPerusahaan,
             'pelanggan_id' => $dataQuotation->pelanggan_ID,
             'no_invoice' => $noInvoice,
             'faktur_pajak' => null,
@@ -2639,11 +2645,16 @@ class ReadyOrderController extends Controller
 
         $total_diskon = $detail->total_diskon;
         $tagihan_awal = $firstPeriode ? str_replace(',', '', $request->tagihan_awal) : $detail->biaya_akhir;
+        if($dataQuotation->konsultan != null){
+            $namaPerusahaan = $dataQuotation->konsultan . ' (' . $dataQuotation->nama_perusahaan . ')';
+        } else {
+            $namaPerusahaan = $dataQuotation->nama_perusahaan;
+        }
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
             'periode' => $periode,
             'no_order' => $dataOrderHeader->no_order,
-            'nama_perusahaan' => $dataQuotation->nama_perusahaan,
+            'nama_perusahaan' => $namaPerusahaan,
             'pelanggan_id' => $dataQuotation->pelanggan_ID,
             'no_invoice' => $noInvoice,
             'faktur_pajak' => null,
