@@ -44,11 +44,7 @@ class FormPSKLController extends Controller
 
     public function index(Request $request) 
     {
-        $query = FormPSKL::where('is_active', 1)
-            ->when($request->status == 'atas', 
-                fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED", "REOPEN", "PENDING" , 'SOLVED']),
-                fn($q) => $q->whereIn('status', ['DONE'])
-            );
+        $query = FormPSKL::where('is_active', 1);
         // Panggil helper di sini
         $data = $this->applyJabatanFilter($query, $request)->get();
 
@@ -252,6 +248,7 @@ class FormPSKLController extends Controller
         DB::beginTransaction();
         try {
             if($request->filled('id')){
+                dd($request->all());
                 $data = FormPSKL::where('id', $request->id)->first();
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
