@@ -12,7 +12,7 @@ class KebisinganHeader extends Sector{
 
     protected $guarded = [];
     public function ws_udara() {
-        return $this->belongsTo('App\Models\WsValueUdara', 'no_sampel', 'no_sampel');
+        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_kebisingan_header');
     }
 
     public function data_lapangan() {

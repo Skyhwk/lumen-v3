@@ -17,6 +17,8 @@ use App\Console\Commands\SummaryFeeSales;
 use App\Console\Commands\KalkulasiTargetPenjadwalan;
 use App\Console\Commands\ScheduleQtTransaction;
 use App\Console\Commands\CheckOrderActive;
+use App\Console\Commands\SummaryInvoice;
+use App\Console\Commands\CalculatePoinCustomer;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -41,6 +43,8 @@ class Kernel extends ConsoleKernel
         Commands\SummaryFeeSales::class,
         Commands\KalkulasiTargetPenjadwalan::class,
         Commands\CheckOrderActive::class,
+        Commands\SummaryInvoice::class,
+        Commands\CalculatePoinCustomer::class,
     ];
 
     /**

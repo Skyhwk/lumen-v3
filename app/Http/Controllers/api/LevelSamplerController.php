@@ -19,42 +19,40 @@ class LevelSamplerController extends Controller
     public function getsamplerApi(Request $request)
     {
         try {
-            $samplers = MasterKaryawan::with('jabatan');
-            if ($request->mode == 'add') {
-                $samplers->whereIn('id_jabatan', [94]); // 'Sampler'
-            } else {
-                $samplers->whereIn('id_jabatan', [70, 75, 94, 110]); // 'Sampler', 'K3 Staff','Technical Assurance Staff','Sampling Admin Staff'
-            }
+            // $samplers = MasterKaryawan::with('jabatan');
+            // if ($request->mode == 'add') {
+            //     $samplers->whereIn('id_jabatan', [94]); // 'Sampler'
+            // } else {
+            //     $samplers->whereIn('id_jabatan', [70, 75, 94, 110]); // 'Sampler', 'K3 Staff','Technical Assurance Staff','Sampling Admin Staff'
+            // }
 
-            $samplers = $samplers->where('is_active', true)
-                ->orderBy('nama_lengkap')
-                ->whereNotNull('warna')
-                ->get();
+            // $samplers = $samplers->where('is_active', true)
+            //     ->orderBy('nama_lengkap')
+            //     ->whereNotNull('warna')
+            //     ->get();
 
-            $privateSampler = MasterKaryawan::with('jabatan')
-                ->whereIn('id', [21, 56, 311, 531, 39, 95, 112, 377, 531, 35])
-                ->where('is_active', true)
-                ->whereNotNull('warna')
-                ->orderBy('nama_lengkap')
-                ->get();
+            // $privateSampler = MasterKaryawan::with('jabatan')
+            //     ->whereIn('id', [21, 56, 311, 531, 39, 95, 112, 377, 531, 35])
+            //     ->where('is_active', true)
+            //     ->whereNotNull('warna')
+            //     ->orderBy('nama_lengkap')
+            //     ->get();
 
-            // Ambil semua warna unik dari samplers
-            $warnaArray = $samplers->pluck('warna')->unique()->filter();
+            // // Ambil semua warna unik dari samplers
+            
+            $allSamplers = MasterKaryawan::whereNotNull('warna')->where('is_active', true)->get();
+            
+            $warnaArray = $allSamplers->pluck('warna')->unique()->filter();
             $label = MasterFeeSampling::whereIn('warna', $warnaArray)
                 ->pluck('kategori', 'warna');
 
-            // Ambil semua warna unik dari privateSampler
-            $warnaPrivateArray = $privateSampler->pluck('warna')->unique()->filter();
-            $labelPrivate = MasterFeeSampling::whereIn('warna', $warnaPrivateArray)
-                ->pluck('kategori', 'warna');
+            // // Merge kedua label
+            $allLabels = $label;
 
-            // Merge kedua label
-            $allLabels = $label->merge($labelPrivate);
+            // $allSamplers = $samplers->merge($privateSampler);
+            // $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
 
-            $allSamplers = $samplers->merge($privateSampler);
-            $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
-
-            // Tambahkan label ke setiap sampler
+            // // Tambahkan label ke setiap sampler
             $allSamplers->transform(function ($sampler) use ($allLabels) {
                 $sampler->kategori_label = $allLabels->get($sampler->warna, 'Tidak ada kategori');
                 return $sampler;
@@ -85,6 +83,11 @@ class LevelSamplerController extends Controller
             ->orderBy('nama_lengkap')
             ->get();
 
+        $perbantuan_sampler = DB::table('perbantuan_sampler')->where('is_active', true)->get()->pluck('user_id');
+        $sampler_perbantuan = MasterKaryawan::whereIn('id', $perbantuan_sampler)->whereNull('warna')->where('is_active', true)->get();
+
+        $samplers = $samplers->merge($sampler_perbantuan)->values();
+
         return response()->json(['data' => $samplers], 200);
     }
 
@@ -96,14 +99,14 @@ class LevelSamplerController extends Controller
                 'message' => 'Sampler not found',
             ], 404);
         }
-
+        
         $history = new HistoryLevelSampler();
 
         $history->user_id = $sampler->id;
         $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
         $history->created_by = $this->karyawan;
         $history->old_warna = $sampler->warna;
-        $history->old_level = MasterFeeSampling::where('warna', $sampler->warna)->first()->kategori;
+        $history->old_level = MasterFeeSampling::where('warna', $sampler->warna)->first()->kategori ?? null;
 
         DB::beginTransaction();
         try {

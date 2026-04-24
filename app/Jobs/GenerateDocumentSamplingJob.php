@@ -34,13 +34,17 @@ class GenerateDocumentSamplingJob extends Job
         if ($this->type === 'QT') {
             GenerateDocumentSampling::onNonKontrak($this->quotationId)->save();
             GenerateDocumentJadwal::onNonKontrak($this->quotationId)
-            ->setKaryawan($this->karyawan)
-            ->save();
+            ->setKaryawan($this->karyawan)->setEmail(false)->save();
+            // GenerateDocumentJadwal::onNonKontrak($this->quotationId)
+            // ->setKaryawan($this->karyawan)
+            // ->save();
         } else {
             GenerateDocumentSampling::onKontrak($this->quotationId)->onPeriode($this->periode)->saveKontrak();
             GenerateDocumentJadwal::onKontrak($this->quotationId)
-            ->setKaryawan($this->karyawan)
-            ->saveKontrak();           
+            ->setKaryawan($this->karyawan)->setEmail(false)->saveKontrak();
+            // GenerateDocumentJadwal::onKontrak($this->quotationId)
+            // ->setKaryawan($this->karyawan)
+            // ->saveKontrak();           
         }
     }
 }

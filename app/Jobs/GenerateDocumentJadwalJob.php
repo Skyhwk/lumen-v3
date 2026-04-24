@@ -16,25 +16,27 @@ class GenerateDocumentJadwalJob extends Job
     protected string $type;
     protected int $quotationId;
     protected string $karyawan;
+    protected bool $email;
 
     public $timeout = 300; // PDF berat
     public $tries = 3;
 
-    public function __construct(string $type, int $quotationId, ?string $karyawan = null)
+    public function __construct(string $type, int $quotationId, ?string $karyawan = null, bool $email = false)
     {
         $this->type        = $type;
         $this->quotationId = $quotationId;
         $this->karyawan    = $karyawan;
+        $this->email       = $email;
     }
 
     public function handle()
     {
         if ($this->type === 'QT') {
             GenerateDocumentJadwal::onNonKontrak($this->quotationId)
-            ->setKaryawan($this->karyawan)->save();
+            ->setKaryawan($this->karyawan)->setEmail($this->email)->save();
         } else {
             GenerateDocumentJadwal::onKontrak($this->quotationId)
-            ->setKaryawan($this->karyawan)->saveKontrak();
+            ->setKaryawan($this->karyawan)->setEmail($this->email)->saveKontrak();
                 
         }
     }

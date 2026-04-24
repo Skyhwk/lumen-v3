@@ -165,12 +165,11 @@ class ValidatorSPController extends Controller
                         'job'         => 'GenerateDocumentJadwal',
                         'status'      => 'processing',
                         'no_document' => $chekNotice->no_document,
-                        'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                        'timestamp'   => Carbon::now()->format('Y-m-d H:i:s')
                     ]);
                     
-                    $job = new GenerateDocumentJadwalJob('QTC', $chekNotice->id, $this->karyawan);
+                    $job = new GenerateDocumentJadwalJob('QTC', $chekNotice->id, $this->karyawan, true);
                     $this->dispatch($job);
-
 
                 } else {
                     $response = response()->json([
@@ -207,12 +206,11 @@ class ValidatorSPController extends Controller
                     'job'         => 'GenerateDocumentJadwal',
                     'status'      => 'processing',
                     'no_document' => $chekNotice->no_document,
-                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s')
                 ]);
-                $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan);
+
+                $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan, true);
                 $this->dispatch($job);
-
-
             }
 
             DB::commit();

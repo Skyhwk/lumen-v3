@@ -56,7 +56,7 @@ class RequestFeeSamplingController extends Controller
             $dataList = PengajuanFeeSamplingDetail::whereIn('id', $ids)->get();
 
             foreach ($dataList as $data) {
-                $data->is_active = 0;
+                $data->is_active = 1;
                 $data->is_reject = true;
                 $data->rejected_by = $this->karyawan;
                 $data->alasan_reject = $request->keterangan;
@@ -92,11 +92,11 @@ class RequestFeeSamplingController extends Controller
                 $data->alasan_reject = $request->alasan_reject;
                 $data->status_payment = "Rejected";
                 $data->is_approve_finance = 0;
-                $data->is_active = 0;
+                $data->is_active = 1;
                 $data->save();
 
                 PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $data->id)->update([
-                    'is_active' => 0,
+                    'is_active' => 1,
                     'is_reject' => true,
                     'alasan_reject' => $request->alasan_reject,
                     'rejected_by' => $this->karyawan,

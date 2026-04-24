@@ -108,28 +108,49 @@ class FeeSamplingController extends Controller
         //     })
         //     ->unique()
         //     ->values();
-        $feeSampling = PengajuanFeeSampling::with('detail_fee')
-            ->where('user_id', $this->user_id)
-            ->where('is_approve_finance', 0)
-            ->where('is_active', true)
-            ->get()
-            ->pluck('detail_fee')
-            ->flatten();
+        // $feeSampling = PengajuanFeeSampling::with('detail_fee')
+        //     ->where('user_id', $this->user_id)
+        //     ->where('is_approve_finance', 0)
+        //     ->where('is_active', true)
+        //     ->get()
+        //     ->pluck('detail_fee')
+        //     ->flatten();
         
-        $tanggalList = $feeSampling
-            ->where('is_active', true)
-            ->where('is_reject', false)
-            ->pluck('tanggal')
-            ->filter() // optional, buang null
-            ->unique()
-            ->values();
+        // $tanggalList = $feeSampling
+        //     ->where('is_active', true)
+        //     ->where('is_reject', false)
+        //     ->pluck('tanggal')
+        //     ->filter() // optional, buang null
+        //     ->unique()
+        //     ->values();
+
+        // $jadwal = Jadwal::where('userid', $this->user_id)
+        //     ->where('is_active', true)
+        //     ->whereDate('tanggal', '<', Carbon::today())
+        //     ->whereNotIn('tanggal', $tanggalList)
+        //     ->distinct()
+        //     ->pluck('tanggal');
+
+        $tanggalBlocked = PengajuanFeeSamplingDetail::select('tanggal')
+        ->whereHas('pengajuan', function ($q) {
+            $q->where('user_id', $this->user_id)
+            ->where(function ($q2) {
+                $q2->where('is_approve_finance', 1) // approved
+                    ->orWhere(function ($q3) {
+                        $q3->where('is_approve_finance', 0)
+                            ->where('is_reject_finance', 0); // pending
+                    });
+            });
+        })
+        ->where('is_reject', false) // exclude detail yang reject
+        ->distinct()
+        ->pluck('tanggal');
 
         $jadwal = Jadwal::where('userid', $this->user_id)
-            ->where('is_active', true)
-            ->whereDate('tanggal', '<', Carbon::today())
-            ->whereNotIn('tanggal', $tanggalList)
-            ->distinct()
-            ->pluck('tanggal');
+        ->whereDate('tanggal', '<', Carbon::today())
+        ->whereNotIn('tanggal', $tanggalBlocked)
+        ->distinct()
+        ->pluck('tanggal');
 
         return response()->json(['data' => $jadwal], 200);
     }

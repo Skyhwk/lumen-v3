@@ -2503,6 +2503,13 @@ class BasOnlineController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "Asam Asetat (8 jam)",
+                "requiredCount" => 2,
+                "category" => "4-Udara",
+                "model" => DataLapanganIklimPanas::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "Karbon Hitam (8 jam)",
                 "requiredCount" => 3,
                 "category" => "4-Udara",

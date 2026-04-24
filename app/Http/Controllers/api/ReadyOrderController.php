@@ -369,18 +369,63 @@ class ReadyOrderController extends Controller
     public function writeOrder(Request $request)
     {
         try {
-            // dd($request->all());
             if ($request->status_quotation == 'kontrak') {
-                $prosess = self::generateOrderKontrak($request);
                 $dataQuotation = QuotationKontrakH::where('no_document', $request->no_document)->where('is_active', true)->first();
+                if($request->is_generate_data_lab === 0){
+                    if($dataQuotation->data_lama && $dataQuotation->data_lama != null){
+                        $dataLama = json_decode($dataQuotation->data_lama);
+                        if(isset($dataLama->no_order) && $dataLama->no_order != null){
+                            $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
+                            ->where('is_active', true)
+                            ->first();
+                            if ($orderHeader) {
+                                // Cek apakah ada OrderDetail aktif
+                                $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
+                                    ->where('is_active', true)
+                                    ->exists();
+
+                                if ($adaOrderDetailAktif) {
+                                    return response()->json([
+                                        'message' => "Penawaran ini tidak dapat dilakukan order untuk invoicing, karena sudah memiliki data lab.",
+                                        'status'  => 403
+                                    ], 403);
+                                }
+                            }
+                        }
+                    }
+                }
+                $prosess = self::generateOrderKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
 
                 Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
-                $prosess = self::generateOrderNonKontrak($request);
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
+                if($request->is_generate_data_lab === 0){
+                    if($dataQuotation->data_lama && $dataQuotation->data_lama != null){
+                        $dataLama = json_decode($dataQuotation->data_lama);
+                        if(isset($dataLama->no_order) && $dataLama->no_order != null){
+                            $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
+                            ->where('is_active', true)
+                            ->first();
+                            if ($orderHeader) {
+                                // Cek apakah ada OrderDetail aktif
+                                $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
+                                    ->where('is_active', true)
+                                    ->exists();
+
+                                if ($adaOrderDetailAktif) {
+                                    return response()->json([
+                                        'message' => "Penawaran ini tidak dapat dilakukan order untuk invoicing, karena sudah memiliki data lab.",
+                                        'status'  => 403
+                                    ], 403);
+                                }
+                            }
+                        }
+                    }
+                }
+                $prosess = self::generateOrderNonKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
                 Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
@@ -594,12 +639,13 @@ class ReadyOrderController extends Controller
                             PT. Inti Surya Laboratorium
                         </p>
                     ";
-        
+                    $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                    $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $data->sales_id)->get()->pluck('email')->toArray());
                     SendEmail::where('to', $data->email_pic_order)
                         ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
                         ->where('body', $emailBody)
                         ->where('cc', json_decode($dataQuotation->email_cc, true))
-                        ->where('bcc', GetAtasan::where('user_id', $data->sales_id)->get()->pluck('email')->toArray())
+                        ->where('bcc', $emailbcc)
                         ->noReply()
                         ->send();
         
@@ -1446,11 +1492,13 @@ class ReadyOrderController extends Controller
                     </p>
                 ";
     
+                $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
                 SendEmail::where('to', $dataOrderHeader->email_pic_order)
                     ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
                     ->where('body', $emailBody)
                     ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', GetAtasan::where('user_id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray())
+                    ->where('bcc', $emailbcc)
                     ->noReply()
                     ->send();
     
@@ -2452,11 +2500,13 @@ class ReadyOrderController extends Controller
                     </p>
                 ";
 
+                $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
                 SendEmail::where('to', $dataOrderHeader->email_pic_order)
                     ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
                     ->where('body', $emailBody)
                     ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', GetAtasan::where('user_id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray())
+                    ->where('bcc', $emailbcc)
                     ->noReply()
                     ->send();
 
@@ -2523,12 +2573,14 @@ class ReadyOrderController extends Controller
     {
         $rekening = ($dataQuotation->total_ppn != null || $dataQuotation->total_ppn != 0) ? 'ppn' : 'non-ppn';
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->orderBy('tanggal', 'asc')->first();
+
         if (empty($jadwal)) {
             $jadwal = Carbon::now()->format('Y-m-d');
         } else {
             $jadwal = $jadwal->tanggal;
         }
-        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(30)->format('Y-m-d');
+
+        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(90)->format('Y-m-d');
         $cek_rekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
 
         $invoiceYear = Carbon::now()->format('Y');
@@ -2542,11 +2594,7 @@ class ReadyOrderController extends Controller
 
         $prefix = $rekening == 'ppn' ? 'INV' : 'IV';
 
-        if ($invoiceYear == '2024') {
-            $defaultNo = $rekening == 'ppn' ? '06767' : '00531';
-        } else {
-            $defaultNo = '00001';
-        }
+        $defaultNo = '00001';
 
         $no = $lastInvoice ? str_pad(intval(substr($lastInvoice, -5)) + 1, 5, "0", STR_PAD_LEFT) : $defaultNo;
         $noInvoice = "ISL/{$prefix}/{$shortYear}{$no}";
@@ -2560,6 +2608,7 @@ class ReadyOrderController extends Controller
         } else {
             $periode = null;
         }
+
         $total_diskon = $dataQuotation->total_diskon;
         $nilai_tagihan = str_replace(',', '', $request->tagihan_awal);
         $namaPerusahaan = '-';
@@ -2583,7 +2632,7 @@ class ReadyOrderController extends Controller
             'keterangan_tambahan' => null,
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
-            'nilai_tagihan' => $first ? $nilai_tagihan : $dataQuotation->biaya_akhir - $nilai_tagihan,
+            'nilai_tagihan' => $nilai_tagihan,
             'total_tagihan' => $first ? $dataQuotation->biaya_akhir : $dataQuotation->biaya_akhir - $nilai_tagihan,
             'rekening' => $cek_rekening,
             'nama_pj' => 'Yulia Agustina',
@@ -2596,7 +2645,7 @@ class ReadyOrderController extends Controller
             'jabatan_pic' => $dataOrderHeader->jabatan_pic_order,
             'ppnbm' => $total_diskon,
             'ppn' => $dataQuotation->total_ppn,
-            'piutang' => $first ? $dataQuotation->biaya_akhir : $dataQuotation->biaya_akhir - $nilai_tagihan,
+            'piutang' => $nilai_tagihan,
             'created_by' => 'System',
             'created_at' => DATE('Y-m-d H:i:s'),
             'is_emailed' => 0,
@@ -2611,6 +2660,7 @@ class ReadyOrderController extends Controller
     {
         $detail = $dataQuotation->detail()->where('periode_kontrak', $periode)->first();
         $rekening = ($detail->total_ppn != null || $detail->total_ppn != 0) ? 'ppn' : 'non-ppn';
+
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->where('periode', $periode)->orderBy('tanggal', 'asc')->first();
         if (empty($jadwal)) {
             $jadwal = Carbon::now()->format('Y-m-d');
@@ -2618,7 +2668,7 @@ class ReadyOrderController extends Controller
             $jadwal = $jadwal->tanggal;
         }
 
-        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(30)->format('Y-m-d');
+        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(90)->format('Y-m-d');
         $cek_rekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
 
         $invoiceYear = Carbon::now()->format('Y');
@@ -2630,13 +2680,9 @@ class ReadyOrderController extends Controller
             ->orderBy('no_invoice', 'desc')
             ->value('no_invoice');
 
-        $prefix = $rekening == 'ppn' ? 'INV' : 'IV';
+        $prefix = ($rekening == 'ppn') ? 'INV' : 'IV';
 
-        if ($invoiceYear == '2024') {
-            $defaultNo = $rekening == 'ppn' ? '06767' : '00531';
-        } else {
-            $defaultNo = '00001';
-        }
+        $defaultNo = '00001';
 
         $no = $lastInvoice ? str_pad(intval(substr($lastInvoice, -5)) + 1, 5, "0", STR_PAD_LEFT) : $defaultNo;
         $noInvoice = "ISL/{$prefix}/{$shortYear}{$no}";
@@ -2665,7 +2711,7 @@ class ReadyOrderController extends Controller
             'keterangan_tambahan' => null,
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
-            'nilai_tagihan' => $first ? $tagihan_awal : $detail->biaya_akhir - $tagihan_awal,
+            'nilai_tagihan' => $nilai_tagihan,
             'total_tagihan' => $first ? $detail->biaya_akhir : $detail->biaya_akhir - $tagihan_awal,
             'rekening' => $cek_rekening,
             'nama_pj' => 'Yulia Agustina',
@@ -2738,19 +2784,19 @@ class ReadyOrderController extends Controller
         $this->dispatch($job);
     }
 
-    private static function generatePDF($noInvoice)
-    {
-        try {
-            $render = new RenderInvoice();
-            $render->renderInvoice($noInvoice);
-            return true; // Jika sukses
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'error' => $e->getMessage(),
-            ];
-        }
-    }
+    // private static function generatePDF($noInvoice)
+    // {
+    //     try {
+    //         $render = new RenderInvoice();
+    //         $render->renderInvoice($noInvoice);
+    //         return true; // Jika sukses
+    //     } catch (\Exception $e) {
+    //         return [
+    //             'success' => false,
+    //             'error' => $e->getMessage(),
+    //         ];
+    //     }
+    // }
 
     public function reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request)
     {

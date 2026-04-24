@@ -74,6 +74,13 @@ return [
             'level' => 'critical',
         ],
 
+        'afterOrder' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/afterOrder/log.log'),
+            'level' => 'info',
+            'days' => 10,
+        ],
+
         'cekorder' => [
             'driver' => 'daily',
             'path' => storage_path('logs/cekorder/log.log'),
