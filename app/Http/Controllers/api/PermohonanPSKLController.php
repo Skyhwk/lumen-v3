@@ -15,11 +15,7 @@ class PermohonanPsklController extends Controller
 {
     public function index(Request $request)
     {
-        $query = FormPSKL::where('is_active', 1)
-            ->when($request->status == 'atas', 
-                    fn($q) => $q->whereIn('status', ['WAITING PROCESS', 'PROCESSED', "REJECTED", "REOPEN", "PENDING" , 'SOLVED']),
-                    fn($q) => $q->whereIn('status', ['DONE'])
-            );
+        $query = FormPSKL::where('is_active', 1);
 
         return Datatables::of($query)->make(true);
     }
