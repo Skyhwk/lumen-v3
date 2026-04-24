@@ -133,7 +133,7 @@ class SummaryInvoice extends Command
 
                 $record = collect($records[$row->no_invoice] ?? [])
                     ->map(function ($item) {
-                        $item = is_array($item) ? $item : (array) $item;
+                        $item = $item->toArray();
 
                         return [
                             'batch_id' => $item['sales_in_detail']['header']['no_dokumen'] ?? 'data lama',
@@ -150,7 +150,7 @@ class SummaryInvoice extends Command
 
                 $withdraw = collect($withdraws[$row->no_invoice] ?? [])
                     ->map(function ($item) {
-                        $item = is_array($item) ? $item : (array) $item;
+                        $item = $item->toArray();
 
                         return [
                             'batch_id' => $item['sales_in_detail']['header']['no_dokumen'] ?? 'data lama',
