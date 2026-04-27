@@ -224,17 +224,6 @@ class GenerateFeeSampling
                 // Total titik (maks 3) atau paksa menjadi 3 walaupun bisa lebih
                 $tempat = min(3, $lokasiSampling);
 
-                // === Fee luar kota (1x per hari) ===
-                if ($adaLuarKota) {
-                    if ($durasiTertinggiLuarKota >= 2) {
-                        $feeTambahan += $fee->sampling_luar_kota_24jam;
-                        $feeTambahanRincian['luar_kota_24jam'] += $fee->sampling_luar_kota_24jam;
-                    } else {
-                        $feeTambahan += $fee->sampling_luar_kota;
-                        $feeTambahanRincian['luar_kota'] += $fee->sampling_luar_kota;
-                    }
-                }
-
                 // === Cek driver ===
                 $isDriver = collect($items)->contains(function ($item) {
                     return isset($item->driver, $item->sampler) &&
@@ -286,9 +275,27 @@ class GenerateFeeSampling
                     $liburKantor
                 );
 
-                $feeTambahan += $hasilLibur24Jam['total_fee'];
+                $feeTambahan += $hasilLibur24Jam['total_fee_hari_libur']; // ← pisahkan: ambil libur saja dulu
                 $feeTambahanRincian['hari_libur'] += $hasilLibur24Jam['rincian']['hari_libur'];
-                $feeTambahanRincian['sampling_24jam'] += $hasilLibur24Jam['rincian']['sampling_24jam'];
+
+                // === Fee luar kota & 24 jam (saling eksklusif) ===
+                if ($adaLuarKota) {
+                    if ($durasiTertinggiLuarKota >= 2) {
+                        // Luar kota 24jam sudah mencakup fee menginap, TIDAK tambah sampling_24jam
+                        $feeTambahan += $fee->sampling_luar_kota_24jam;
+                        $feeTambahanRincian['luar_kota_24jam'] += $fee->sampling_luar_kota_24jam;
+                    } else {
+                        $feeTambahan += $fee->sampling_luar_kota;
+                        $feeTambahanRincian['luar_kota'] += $fee->sampling_luar_kota;
+                        
+                        // Tetap hitung 24jam jika durasi > 1 meski luar kota biasa
+                        // (sesuaikan dengan kebijakan bisnis)
+                    }
+                } else {
+                    // Dalam kota: hitung sampling_24jam normal
+                    $feeTambahan += $hasilLibur24Jam['total_fee_sampling_24jam'];
+                    $feeTambahanRincian['sampling_24jam'] += $hasilLibur24Jam['rincian']['sampling_24jam'];
+                }
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
 
@@ -387,7 +394,9 @@ class GenerateFeeSampling
         }
 
         return [
-            'total_fee' => $totalFee,
+            'total_fee_hari_libur'    => $totalFeeLibur,    // hanya fee libur
+            'total_fee_sampling_24jam' => $totalFee24Jam,   // hanya fee 24jam
+            'total_fee'               => $totalFeeLibur + $totalFee24Jam,
             'rincian' => $feeRincian
         ];
     }
