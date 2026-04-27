@@ -682,7 +682,7 @@ class SamplingPlanController extends Controller
             // Jika hanya tanggal/sampler yang berubah, ini sudah aman.
             $dataAfter = JadwalServices::getSnapshotData($request->no_quotation, $request->tanggal, $request->tipe_parsial);
 
-            JadwalServices::notifperubahan($dataBefore, $dataAfter);
+            JadwalServices::notifperubahan($dataBefore, $dataAfter,$request->boolean('notify_sales'));
 
             switch ($type) {
                 case 'QT':
