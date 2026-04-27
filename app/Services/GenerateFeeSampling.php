@@ -87,7 +87,7 @@ class GenerateFeeSampling
                 $adaLuarKota = false;
                 $durasiTertinggiLuarKota = 0;
                 foreach ($items as $item) {
-                    $alamatSampling = strtolower(trim($item->alamat));
+                    $alamatSampling = strtolower(trim($item->nama_perusahaan));
                     $AllAlamatSampling[] = $alamatSampling;
                     $kategoriList = json_decode($item->kategori, true);
                     if (!is_array($kategoriList)) $kategoriList = [];
@@ -226,7 +226,7 @@ class GenerateFeeSampling
 
                 // === Fee luar kota (1x per hari) ===
                 if ($adaLuarKota) {
-                    if ($durasiTertinggiLuarKota >= 3) {
+                    if ($durasiTertinggiLuarKota >= 2) {
                         $feeTambahan += $fee->sampling_luar_kota_24jam;
                         $feeTambahanRincian['luar_kota_24jam'] += $fee->sampling_luar_kota_24jam;
                     } else {

@@ -26,7 +26,10 @@ class SummaryInvoice extends Command
 
             $data = Invoice::query()
                 ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
-                ->leftJoinSub($withdrawSub, 'w', fn($join) =>
+                ->leftJoinSub(
+                    $withdrawSub,
+                    'w',
+                    fn($join) =>
                     $join->on('invoice.no_invoice', '=', 'w.no_invoice')
                 )
                 ->leftJoin('master_karyawan', 'order_header.sales_id', '=', 'master_karyawan.id')
@@ -128,8 +131,39 @@ class SummaryInvoice extends Command
 
             $data = $data->map(function ($row) use ($records, $withdraws) {
 
-                $record = collect($records[$row->no_invoice] ?? []);
-                $withdraw = collect($withdraws[$row->no_invoice] ?? []);
+                $record = collect($records[$row->no_invoice] ?? [])
+                    ->map(function ($item) {
+                        $item = $item->toArray();
+
+                        return [
+                            'batch_id' => $item['sales_in_detail']['header']['no_dokumen'] ?? 'data lama',
+                            'type' => 'record',
+                            'nilai_pembayaran' => $item['nilai_pembayaran'] ?? null,
+                            'nilai_pengurangan' => null,
+                            'jenis_pengurangan' => null,
+                            'tgl_pembayaran' => $item['tgl_pembayaran'] ?? null,
+                            'keterangan' => $item['keterangan'] ?? null,
+                            'created_by' => $item['created_by'] ?? null,
+                            'created_at' => $item['created_at'] ?? null,
+                        ];
+                    });
+
+                $withdraw = collect($withdraws[$row->no_invoice] ?? [])
+                    ->map(function ($item) {
+                        $item = $item->toArray();
+
+                        return [
+                            'batch_id' => $item['sales_in_detail']['header']['no_dokumen'] ?? 'data lama',
+                            'type' => 'withdraw',
+                            'nilai_pembayaran' => null,
+                            'nilai_pengurangan' => $item['nilai_pembayaran'] ?? null,
+                            'jenis_pengurangan' => $item['keterangan_pelunasan'] ?? null,
+                            'tgl_pembayaran' => $item['created_at'] ?? null,
+                            'keterangan' => $item['keterangan_tambahan'] ?? null,
+                            'created_by' => $item['created_by'] ?? null,
+                            'created_at' => $item['created_at'] ?? null,
+                        ];
+                    });
 
                 return [
                     "no_invoice" => $row->no_invoice,
@@ -185,41 +219,73 @@ class SummaryInvoice extends Command
             $newInvoiceNumbers = array_column($data, 'no_invoice');
 
             collect($data)
-            ->chunk(50)
-            ->each(function ($chunk, $index) {
+                ->chunk(50)
+                ->each(function ($chunk, $index) {
 
-                printf("\n[SummaryInvoice] [%s] Upsert chunk ke-%d size:%d", Carbon::now(), $index + 1, count($chunk));
+                    printf("\n[SummaryInvoice] [%s] Upsert chunk ke-%d size:%d", Carbon::now(), $index + 1, count($chunk));
 
-                DB::table('summary_invoice')->upsert(
-                    $chunk->toArray(),
-                    ['no_invoice'],
-                    [
-                        "created_by","faktur_pajak","total_tagihan","nilai_tagihan",
-                        "rekening","keterangan","nama_pj","jabatan_pj","tgl_invoice",
-                        "no_faktur","alamat_penagihan","nama_pic","no_pic","email_pic",
-                        "jabatan_pic","no_po","no_spk","tgl_jatuh_tempo","filename",
-                        "upload_file","file_pph","consultant","document","sales_id",
-                        "sales_penanggung_jawab","created_at","emailed_at","emailed_by",
-                        "tgl_pelunasan","nilai_pelunasan","is_generate","generated_by",
-                        "generated_at","expired","pelanggan_id","detail_pendukung",
-                        "nama_customer","is_revisi","no_orders","status_lunas","history","updated_at"
-                    ]
-                );
-            });
+                    DB::table('summary_invoice')->upsert(
+                        $chunk->toArray(),
+                        ['no_invoice'],
+                        [
+                            "created_by",
+                            "faktur_pajak",
+                            "total_tagihan",
+                            "nilai_tagihan",
+                            "rekening",
+                            "keterangan",
+                            "nama_pj",
+                            "jabatan_pj",
+                            "tgl_invoice",
+                            "no_faktur",
+                            "alamat_penagihan",
+                            "nama_pic",
+                            "no_pic",
+                            "email_pic",
+                            "jabatan_pic",
+                            "no_po",
+                            "no_spk",
+                            "tgl_jatuh_tempo",
+                            "filename",
+                            "upload_file",
+                            "file_pph",
+                            "consultant",
+                            "document",
+                            "sales_id",
+                            "sales_penanggung_jawab",
+                            "created_at",
+                            "emailed_at",
+                            "emailed_by",
+                            "tgl_pelunasan",
+                            "nilai_pelunasan",
+                            "is_generate",
+                            "generated_by",
+                            "generated_at",
+                            "expired",
+                            "pelanggan_id",
+                            "detail_pendukung",
+                            "nama_customer",
+                            "is_revisi",
+                            "no_orders",
+                            "status_lunas",
+                            "history",
+                            "updated_at"
+                        ]
+                    );
+                });
 
-        printf("\n[SummaryInvoice] [%s] Upsert selesai", Carbon::now());
+            printf("\n[SummaryInvoice] [%s] Upsert selesai", Carbon::now());
 
-        // 🔥 DELETE (tetap pakai sekali, tapi aman karena data sudah masuk bertahap)
-        $newInvoiceNumbers = array_column($data, 'no_invoice');
+            // 🔥 DELETE (tetap pakai sekali, tapi aman karena data sudah masuk bertahap)
+            $newInvoiceNumbers = array_column($data, 'no_invoice');
 
-        DB::table('summary_invoice')
-            ->whereNotIn('no_invoice', $newInvoiceNumbers)
-            ->delete();
+            DB::table('summary_invoice')
+                ->whereNotIn('no_invoice', $newInvoiceNumbers)
+                ->delete();
 
-        DB::commit();
+            DB::commit();
 
-        printf("\n[SummaryInvoice] [%s] DONE total: %d", Carbon::now(), count($data));
-
+            printf("\n[SummaryInvoice] [%s] DONE total: %d", Carbon::now(), count($data));
         } catch (\Throwable $th) {
             DB::rollBack();
             dd($th->getMessage(), $th->getLine(), $th->getFile());

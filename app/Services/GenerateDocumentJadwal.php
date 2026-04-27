@@ -84,10 +84,10 @@ class GenerateDocumentJadwal
                 ];
                 $dataLink              = GenerateLink::insert($data);
                 $quote->expired        = Carbon::parse($quote->expired)->addMonths(1)->format('Y-m-d');
-                $quote->generated_at   = $timestamp;
-                $quote->generated_by   = $this->karyawan;
+                // $quote->generated_at   = $timestamp;
+                // $quote->generated_by   = $this->karyawan;
                 $quote->jadwalfile     = $filename;
-                $quote->is_generated   = true;
+                // $quote->is_generated   = true;
                 $quote->is_ready_order = 1;
                 $quote->save();
             }
@@ -143,10 +143,10 @@ class GenerateDocumentJadwal
                 ];
                 $dataLink              = GenerateLink::insert($data);
                 $quote->expired        = Carbon::parse($quote->expired)->addMonths(1)->format('Y-m-d');
-                $quote->generated_at   = $timestamp;
-                $quote->generated_by   = $this->karyawan;
+                // $quote->generated_at   = $timestamp;
+                // $quote->generated_by   = $this->karyawan;
                 $quote->jadwalfile     = $filename;
-                $quote->is_generated   = true;
+                // $quote->is_generated   = true;
                 $quote->is_ready_order = 1;
                 $quote->save();
             }
@@ -680,8 +680,8 @@ class GenerateDocumentJadwal
     public static function subjectPemberitahuanSalesEmail($quote): string
     {
         $no = self::resolveNoQtForEmail($quote);
-
-        return 'Pemberitahuan: Jadwal ' . $no . ' telah divalidasi';
+        $namaPerusahaan = self::namaPelangganUntukEmail($quote);
+        return 'Pemberitahuan: Jadwal ' . $no . ' - ' . $namaPerusahaan . ' telah divalidasi';
     }
 
     /**

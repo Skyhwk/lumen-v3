@@ -74,7 +74,7 @@ class PrintLhp
         // Hapus DB::beginTransaction() di sini, sudah dihandle di rePrint()
         // $id_printer = 67; // Default printer ID
                 // $id_printer = 68; // kan
-        $id_printer = 67;
+        $id_printer = 108;
         $cek_printer = Printers::where('id', $id_printer)->first();
         
         if (!$cek_printer) {
