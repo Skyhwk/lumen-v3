@@ -267,7 +267,7 @@ class StpsFdlController extends Controller
                 $dataPenawaran = QuotationKontrakH::with(['order', 'sampling', 'detail'])->where('no_document', $request->nomor_quotation)->first();
                 $dataOrder = $dataPenawaran->order;
                 $dataSampling = $dataPenawaran->sampling;
-               
+
                 $unik_kategori = $dataOrder->orderDetail()->where('periode', $request->periode)
                     ->where('is_active', true)->get()->pluck('kategori_3')->unique()->toArray();
 
@@ -353,7 +353,7 @@ class StpsFdlController extends Controller
                     unset($dataSampling[$key]['urutan']);
                     unset($dataSampling[$key]['kendaraan']);
                 }
-                 
+                
                 $dataSampling = array_values(array_filter(array_unique($dataSampling, SORT_REGULAR), function ($item) {
                     return isset($item['is_active']) && $item['is_active'] == 1;
                 }));
@@ -420,7 +420,6 @@ class StpsFdlController extends Controller
                         return $numA <=> $numB; // Ascending order
                     });
                 } else {
-                   
                     $data_detail_penawaran = json_decode($dataPenawaran->detail()->where('periode_kontrak', $request->periode)->first()->data_pendukung_sampling, true);
                     $data_detail_penawaran = array_map(function ($item) use ($dataOrder, $pra_no_sample) {
                         $maping = array_map(function ($data_sampling) use ($item, $dataOrder, $pra_no_sample) {
@@ -521,7 +520,6 @@ class StpsFdlController extends Controller
                 $dataPenawaran = QuotationNonKontrak::with(['order', 'sampling'])->where('no_document', $request->nomor_quotation)->where('is_active',true)->first();
                 
                 $dataOrder = $dataPenawaran->order;
-               
 
                 if ($dataOrder->is_revisi == 1) {
                     return response()->json([
@@ -802,7 +800,7 @@ class StpsFdlController extends Controller
                     }
                 }
 
-                if ($isMustPrepared) {
+                if (!$isMustPrepared) {
                     return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!'], 401);
                 } else {
                     $requestPsData = new Request([
