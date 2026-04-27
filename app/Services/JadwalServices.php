@@ -58,6 +58,71 @@ class JadwalServices
         echo "Static method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n";
     }
 
+    public static function getSnapshotData($no_quotation, $tanggal, $parsial,$batch_id = null)
+    {
+        return Jadwal::with([
+                'samplingPlan:id,created_at,filename,is_active',
+                'samplingPlan' => function ($query) {
+                    $query->WithTypeModelSub(); 
+                },
+            ])
+            ->select(
+                'id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 
+                'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 
+                'note', 'urutan', 'driver', 'id_cabang', 'wilayah', 
+                DB::raw('group_concat(sampler) as sampler'), 
+                DB::raw('group_concat(id) as batch_id'), 
+                DB::raw('group_concat(userid) as batch_user')
+            )
+            ->where('no_quotation', $no_quotation)
+            ->where('tanggal', $tanggal)
+            ->when($batch_id, function ($q, $batch_id) {
+                $arrayBatchId = is_array($batch_id) ? $batch_id : explode(',', $batch_id);
+                $q->whereIn('id', $arrayBatchId);
+            })
+            ->where('is_active', 1)
+            ->groupBy(
+                'id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan', 
+                'isokinetic', 'pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 
+                'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang'
+            )
+            ->first();
+    }
+
+    public static function notifperubahan($dataBefore, $dataAfter)
+    {
+        if (!$dataBefore && !$dataAfter) return;
+
+        // Fungsi bantuan (Helper) untuk merapikan format satu baris
+        $formatData = function($data) {
+            if (!$data) return 'Data Tidak Ditemukan';
+            
+            return [
+                'Wilayah'         => $data->wilayah ?? '-',
+                'No Quotation'    => $data->no_quotation ?? '-',
+                'Nama Perusahaan' => $data->nama_perusahaan ?? '-',
+                'Tanggal'         => $data->tanggal ?? '-',
+                'Waktu'           => ($data->jam_mulai ?? '-') . ' s/d ' . ($data->jam_selesai ?? '-'),
+                'Kategori'        => $data->kategori ?? '-', 
+                'Status'          => $data->status ?? '-',
+                
+                // INI ADALAH HASIL GROUP_CONCAT DARI QUERY
+                'Sampler'         => $data->sampler ?? 'Belum ada sampler', 
+                
+                'Kendaraan/Driver'=> ($data->kendaraan ?? '-') . ' / ' . ($data->driver ?? '-'),
+            ];
+        };
+
+        $logData = [
+            'WAKTU_UPDATE' => \Carbon\Carbon::now()->format('Y-m-d H:i:s'),
+            'QUOTATION'    => $dataAfter ? $dataAfter->no_quotation : ($dataBefore->no_quotation ?? 'UNKNOWN'),
+            '--- BEFORE ---' => $formatData($dataBefore),
+            '--- AFTER ---'  => $formatData($dataAfter),
+        ];
+
+        Log::info("=== NOTIFIKASI PERUBAHAN JADWAL ===", $logData);
+    }
+
     public static function on($field, $value)
     {
         if (!self::$instance) {
