@@ -2614,13 +2614,20 @@ class ReadyOrderController extends Controller
 
         $nilai_tagihan = $first ? floatval($nilai_tagihan) : (floatval($dataQuotation->biaya_akhir) - floatval($nilai_tagihan));
 
+        $namaPerusahaan = '-';
+        if($dataQuotation->konsultan != null){
+            $namaPerusahaan = $dataQuotation->konsultan . ' (' . $dataQuotation->nama_perusahaan . ')';
+        } else {
+            $namaPerusahaan = $dataQuotation->nama_perusahaan;
+        }
+
         if($nilai_tagihan <= 10) return;
 
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
             'periode' => $periode,
             'no_order' => $dataOrderHeader->no_order,
-            'nama_perusahaan' => $dataQuotation->nama_perusahaan,
+            'nama_perusahaan' => $namaPerusahaan,
             'pelanggan_id' => $dataQuotation->pelanggan_ID,
             'no_invoice' => $noInvoice,
             'faktur_pajak' => null,
@@ -2693,13 +2700,20 @@ class ReadyOrderController extends Controller
 
         $nilai_tagihan = $first ? $tagihan_awal : (floatval($detail->biaya_akhir) - floatval($tagihan_awal));
 
+        $namaPerusahaan = '-';
+        if($dataQuotation->konsultan != null){
+            $namaPerusahaan = $dataQuotation->konsultan . ' (' . $dataQuotation->nama_perusahaan . ')';
+        } else {
+            $namaPerusahaan = $dataQuotation->nama_perusahaan;
+        }
+
         if($nilai_tagihan <= 10) return;
 
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
             'periode' => $periode,
             'no_order' => $dataOrderHeader->no_order,
-            'nama_perusahaan' => $dataQuotation->nama_perusahaan,
+            'nama_perusahaan' => $namaPerusahaan,
             'pelanggan_id' => $dataQuotation->pelanggan_ID,
             'no_invoice' => $noInvoice,
             'faktur_pajak' => null,

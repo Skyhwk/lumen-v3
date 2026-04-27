@@ -18,6 +18,7 @@ use App\Console\Commands\KalkulasiTargetPenjadwalan;
 use App\Console\Commands\ScheduleQtTransaction;
 use App\Console\Commands\CheckOrderActive;
 use App\Console\Commands\SummaryInvoice;
+use App\Console\Commands\CalculatePoinCustomer;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -44,6 +45,7 @@ class Kernel extends ConsoleKernel
         Commands\CheckOrderActive::class,
         Commands\SummaryInvoice::class,
         Commands\AuditPersiapanCommand::class,
+        Commands\CalculatePoinCustomer::class,
     ];
 
     /**

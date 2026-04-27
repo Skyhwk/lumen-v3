@@ -812,7 +812,7 @@ class JadwalServices
                             }
                         }
                         // D. Set Data yang SELALU diupdate (Apapun kondisinya)
-                         $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
                         $psh->sampler_jadwal = $newSamplerString;
                         // E. Eksekusi Simpan
                         Log::info('Debug Dirty Check', [

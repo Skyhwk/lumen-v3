@@ -8,6 +8,9 @@ class DailyQsd extends Model
 {
     protected $table = 'daily_qsd';
     protected $guarded = [];
+    protected $primaryKey = 'uuid';
+    protected $keyType = 'string';
+    public $incrementing = false;
     public $timestamps = false;
 
     public function invoice()

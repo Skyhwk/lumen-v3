@@ -15,5 +15,8 @@ class PengajuanFeeSamplingDetail extends Sector
         'rincian_fee_pokok' => 'array',
         'fee_tambahan_rincian' => 'array',
     ];
-   
+
+    public function pengajuan(){
+        return $this->belongsTo(PengajuanFeeSampling::class, 'pengajuan_fee_sampling_id');
+    }
 }

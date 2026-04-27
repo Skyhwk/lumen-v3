@@ -6241,4 +6241,81 @@ private function detectChangedPoints($oldPoints, $newPoints)
             'path' => url('export-excel/' . $fileName)
         ]);
     }
+
+    public function generateQrInvoice(Request $request){
+        DB::beginTransaction();
+        try {
+            $filename = \str_replace("/", "_", $request->no_invoice);
+            $path = public_path() . "/qr_documents/" . $filename . '.svg';
+            if(!file_exists($path)){
+                $link = 'https://www.intilab.com/validation/';
+                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+        
+                QrCode::size(200)->generate($link . $unique, $path);
+                $dataQr = [
+                    'type_document' => 'invoice',
+                    'kode_qr' => $unique,
+                    'file' => $filename,
+                    'data' => json_encode([
+                        'no_document' => $request->no_invoice,
+                        'nama_customer' => $request->nama_perusahaan,
+                        'type_document' => 'invoice',
+                        'Tanggal_Pengesahan' => Carbon::parse($request->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Disahkan_Oleh' => $request->nama_pj,
+                        'Jabatan' => $request->jabatan_pj
+                    ]),
+                    'created_at' => Carbon::now(),
+                    'created_by' => 'System',
+                ];
+        
+                DB::table('qr_documents')->insert($dataQr);
+
+                DB::commit();
+                return response()->json([
+                    'message' => "QR Invoice $request->no_invoice berhasil digenerate"
+                ], 200);
+            } else {
+                $cekdata = QrDocument::where('file', $filename)->first();
+                if($cekdata == null){
+                    $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+                    $dataQr = [
+                        'type_document' => 'invoice',
+                        'kode_qr' => $unique,
+                        'file' => $filename,
+                        'data' => json_encode([
+                            'no_document' => $request->no_invoice,
+                            'nama_customer' => $request->nama_perusahaan,
+                            'type_document' => 'invoice',
+                            'Tanggal_Pengesahan' => Carbon::parse($request->tgl_invoice)
+                                ->locale('id')
+                                ->isoFormat('DD MMMM YYYY'),
+                            'Disahkan_Oleh' => $request->nama_pj,
+                            'Jabatan' => $request->jabatan_pj
+                        ]),
+                        'created_at' => Carbon::now(),
+                        'created_by' => 'System',
+                    ];
+
+                    QrDocument::create($dataQr);
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => "QR Invoice $request->no_invoice berhasil digenerate"
+                    ], 200);
+                } else {
+                    DB::rollback();
+                    return response()->json([
+                        'message' => "QR Invoice $request->no_invoice sudah ada pada server"
+                    ], 401);
+                }
+            }
+        } catch (Exception $e){
+            DB::rollback();
+            return response()->json([
+                'message' => $e->getMessage()
+            ], 401);
+        }
+        
+        // dd($dataQr);
+    }
 }
