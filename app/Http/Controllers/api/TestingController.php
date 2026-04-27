@@ -6292,7 +6292,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
                             'Disahkan_Oleh' => $request->nama_pj,
                             'Jabatan' => $request->jabatan_pj
                         ]),
-                        'created_at' => now(),
+                        'created_at' => Carbon::now(),
                         'created_by' => 'System',
                     ];
 
