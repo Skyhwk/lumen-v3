@@ -238,21 +238,38 @@ class DraftUlkController extends Controller
     // }
     public function index(Request $request)
     {
+        $listParamTemplate = [
+            'lingkungan_kerja',
+            'senyawa_volatile',
+            'debu_personal',
+            'sensoric_pm',
+            'direct_lain',
+        ];
+
+        // 1. Ambil semua parameter dari template yang dipilih
+        $parameterFdl = ParameterFdl::whereIn('nama_fdl', $listParamTemplate)->get();
+
         $parameterAllowed = [];
-        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
-        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
-        $parameterAllowed[] = 'Sinar UV';
-        $parameterAllowed[] = 'Ergonomi';
-        $parameterAllowed[] = 'Gelombang Elektro';
-        $parameterAllowed[] = 'Medan Listrik';
-        $parameterAllowed[] = 'Medan Magnit Statis';
-        $parameterAllowed[] = 'Medan Magnet';
-        $parameterAllowed[] = 'Power Density';
+        foreach ($parameterFdl as $row) {
+            $decoded = json_decode($row->parameters, true) ?? [];
+            $parameterAllowed = array_merge($parameterAllowed, $decoded);
+        }
 
+        // Tambahkan parameter manual
+        $manualAdd = [
+            'Sinar UV', 'Ergonomi', 'Gelombang Elektro', 'Medan Listrik', 
+            'Medan Magnit Statis', 'Medan Magnet', 'Power Density'
+        ];
+        $parameterAllowed = array_merge($parameterAllowed, $manualAdd);
 
+        // Bersihkan duplikasi dan karakter aneh
+        $parameterAllowed = array_unique(array_filter($parameterAllowed));
 
-        $pattern = implode('|', $parameterAllowed);
+        // 2. Buat Pattern Regex
+        // Gunakan preg_quote agar karakter seperti ( ) atau . tidak merusak query
+        $pattern = implode('|', array_map('preg_quote', $parameterAllowed));
 
+        // 3. Eksekusi Query
         $data = OrderDetail::selectRaw('
                     max(id) as id,
                     max(id_order_header) as id_order_header,
@@ -275,8 +292,8 @@ class DraftUlkController extends Controller
                     ->where('is_active', true)
                     ->where('kategori_3', '27-Udara Lingkungan Kerja')
                     ->where('status', 2)
-                    // Menggantikan loop orWhere dengan satu baris Regex
-                    ->whereRaw("parameter NOT REGEXP '(" . $pattern . ")'")
+                    // Hapus "NOT", sekarang kita filter yang COCOK saja (Whitelist)
+                    ->whereRaw("parameter REGEXP '(" . $pattern . ")'")
                     ->groupBy('cfr')
                     ->get();
         // 1. Kumpulkan semua no_sampel dari seluruh data ke satu array besar
