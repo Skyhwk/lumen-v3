@@ -8,4 +8,5 @@ class QrDocument extends Sector
 {
     protected $table = 'qr_documents';
     public $timestamps = false;
+    protected $guarded = [];
 }
