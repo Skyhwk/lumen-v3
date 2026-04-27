@@ -6274,6 +6274,11 @@ private function detectChangedPoints($oldPoints, $newPoints)
                 return response()->json([
                     'message' => "QR Invoice $request->no_invoice berhasil digenerate"
                 ], 200);
+            } else {
+                DB::rollback();
+                return response()->json([
+                    'message' => "File invoice $filename sudah ada pada server.!"
+                ], 401);
             }
         } catch (Exception $e){
             DB::rollback();
