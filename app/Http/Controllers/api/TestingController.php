@@ -6247,6 +6247,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
         try {
             $filename = \str_replace("/", "_", $request->no_invoice);
             $path = public_path() . "/qr_documents/" . $filename . '.svg';
+            $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
             if(!file_exists($path)){
                 $link = 'https://www.intilab.com/validation/';
                 $unique = 'isldc' . (int) floor(microtime(true) * 1000);
@@ -6258,11 +6259,11 @@ private function detectChangedPoints($oldPoints, $newPoints)
                     'file' => $filename,
                     'data' => json_encode([
                         'no_document' => $request->no_invoice,
-                        'nama_customer' => $request->nama_perusahaan,
+                        'nama_customer' => $inv->nama_perusahaan,
                         'type_document' => 'invoice',
-                        'Tanggal_Pengesahan' => Carbon::parse($request->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
-                        'Disahkan_Oleh' => $request->nama_pj,
-                        'Jabatan' => $request->jabatan_pj
+                        'Tanggal_Pengesahan' => Carbon::parse($inv->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Disahkan_Oleh' => $inv->nama_pj,
+                        'Jabatan' => $inv->jabatan_pj
                     ]),
                     'created_at' => Carbon::now(),
                     'created_by' => 'System',
@@ -6284,13 +6285,13 @@ private function detectChangedPoints($oldPoints, $newPoints)
                         'file' => $filename,
                         'data' => json_encode([
                             'no_document' => $request->no_invoice,
-                            'nama_customer' => $request->nama_perusahaan,
+                            'nama_customer' => $inv->nama_perusahaan,
                             'type_document' => 'invoice',
-                            'Tanggal_Pengesahan' => Carbon::parse($request->tgl_invoice)
+                            'Tanggal_Pengesahan' => Carbon::parse($inv->tgl_invoice)
                                 ->locale('id')
                                 ->isoFormat('DD MMMM YYYY'),
-                            'Disahkan_Oleh' => $request->nama_pj,
-                            'Jabatan' => $request->jabatan_pj
+                            'Disahkan_Oleh' => $inv->nama_pj,
+                            'Jabatan' => $inv->jabatan_pj
                         ]),
                         'created_at' => Carbon::now(),
                         'created_by' => 'System',
