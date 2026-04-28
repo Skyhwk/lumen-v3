@@ -155,7 +155,7 @@ class LHPHandleController extends BaseController
                             return isset($dataHeader['parameter'])
                                 && ($dataHeader['parameter'] == $paramLab || $dataHeader['parameter'] == $paramName)
                                 // && (isset($dataHeader['is_approved']) || isset($dataHeader['is_approve']));
-                                && (isset($dataHeader['lhps']) && $dataHeader['lhps']);
+                                && $this->isLhpsRilis($dataHeader);
                         });
                     });
 
@@ -304,5 +304,10 @@ class LHPHandleController extends BaseController
             ->first();
 
         return $bakuMutu->satuan ?? null;
+    }
+
+    private function isLhpsRilis($data): bool
+    {
+        return isset($data['lhps']) && (int) $data['lhps'] === 1;
     }
 }
