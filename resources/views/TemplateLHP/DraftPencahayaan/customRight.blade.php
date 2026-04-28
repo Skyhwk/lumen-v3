@@ -114,7 +114,7 @@
                     @foreach (json_decode($header->regulasi_custom) as $y)
 
                         @php
-                            $parts = explode('-', $y);
+                            $parts = explode('-', $y,2);
                             $regulasiId = $parts[0] ?? null;
                             $regulasiName = $parts[1] ?? '';
                             $regulasi = MasterRegulasi::find($regulasiId);
@@ -148,14 +148,14 @@
                         @foreach (json_decode($header->regulasi) as $y)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y,2)[1] }}</strong></td>
                                 </tr>
                             </table>
                         @endforeach
                            @php
                             // pastikan $header ada nilainya
-                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
-                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y,2)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y,2)[0])->first();
                                 if (!empty($table)) {
                                 $table = $table->konten;
                             } else {
