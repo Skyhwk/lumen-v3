@@ -6319,4 +6319,23 @@ private function detectChangedPoints($oldPoints, $newPoints)
         
         // dd($dataQr);
     }
+
+
+
+    public function renderInvoice(Request $request)
+    {
+        if ($request->is_copy) {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoiceTitik();
+                $render->renderInvoice($item);
+            }
+        } else {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoice();
+                $render->renderInvoice($item);
+            }
+        }
+
+        return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
 }
