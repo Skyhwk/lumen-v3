@@ -82,13 +82,13 @@
                     @foreach (json_decode($header->regulasi) as $y)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y,2)[1] }}</strong></td>
                                 </tr>
                             </table>
                     @endforeach
                         @php
-                            $regulasiId = explode('-', $y)[0];
-                            $regulasiName = explode('-', $y)[1] ?? '';
+                            $regulasiId = explode('-', $y,2)[0];
+                            $regulasiName = explode('-', $y,2)[1] ?? '';
                             $regulasi = MasterRegulasi::find($regulasiId);
                             $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
                             $table = $tableObj ? $tableObj->konten : '';

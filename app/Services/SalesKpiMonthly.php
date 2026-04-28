@@ -27,7 +27,7 @@ class SalesKpiMonthly
             $currentMonth = 12;
 
             $arrayYears = self::getYearRange($currentYear);
-            Log::info('Array Years: ' . json_encode($arrayYears));
+            // Log::info('Array Years: ' . json_encode($arrayYears));
             foreach ($arrayYears as $year) {
 
                 $monthList = [];
@@ -42,7 +42,7 @@ class SalesKpiMonthly
                         ->pluck('sales_id')
                         ->toArray();
                 
-                Log::info('Month List: ' . json_encode($monthList));
+                // Log::info('Month List: ' . json_encode($monthList));
                 foreach ($monthList as $periodeBulan) {
                     $indo = Carbon::createFromFormat('Y-m', $periodeBulan)->locale('id')->translatedFormat('F Y');
                     

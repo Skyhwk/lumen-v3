@@ -76,7 +76,6 @@ class TqcKebisinganController extends Controller
         $data = [];
         foreach ($orderDetails as $orderDetail) {
             $kebisinganHeader = KebisinganHeader::where('no_sampel', $orderDetail->no_sampel)->first();
-// dd($kebisinganHeader);
             $lhpsKebisinganHeader = LhpsKebisinganHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
             $lhpsKebisinganDetail = LhpsKebisinganDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
                 ->pluck('hasil_uji')
@@ -86,7 +85,7 @@ class TqcKebisinganController extends Controller
                 'no_sampel' => $orderDetail->no_sampel,
                 'titik' => $orderDetail->keterangan_1,
                 'history' => $lhpsKebisinganDetail,
-                'hasil' => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first())->hasil1,
+                'hasil' => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->where('is_active', '1')->orderByDesc('id')->first())->hasil1,
                 'leq_ls' => optional($kebisinganHeader)->leq_ls,
                 'leq_lm' => optional($kebisinganHeader)->leq_lm,
                 // 'analyst' => optional($lhpsKebisinganHeader)->created_by,
@@ -105,6 +104,11 @@ class TqcKebisinganController extends Controller
     public function handleApproveSelected(Request $request)
     {
         OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 2]);
+
+        KebisinganHeader::whereIn('no_sampel', $request->no_sampel_list)
+            ->update([
+                'lhps' => 1,
+            ]);
 
         return response()->json([
             'message' => 'Data berhasil diapprove.',

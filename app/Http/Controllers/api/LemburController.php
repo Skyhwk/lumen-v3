@@ -55,6 +55,8 @@ class LemburController extends Controller
                 DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
                 DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
                 DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
+                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
 
                 DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
                 DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
@@ -115,6 +117,8 @@ class LemburController extends Controller
                 DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
                 DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
                 DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
+                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
 
                 DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
                 DB::raw('MAX(fd.jam_mulai) as jam_mulai'),

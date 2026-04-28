@@ -138,95 +138,216 @@ class DraftUlkController extends Controller
     //     return Datatables::of($data)->make(true);
     // }
 
+    // public function index(Request $request)
+    // {
+    //     $parameterAllowed = [];
+    //     $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
+    //     $parameterAllowed = json_decode($parameterAllowed->parameters, true);
+    //     $parameterAllowed[] = 'Sinar UV';
+    //     $parameterAllowed[] = 'Ergonomi';
+    //     $parameterAllowed[] = 'Gelombang Elektro';
+    //     $parameterAllowed[] = 'Medan Listrik';
+    //     $parameterAllowed[] = 'Medan Magnit Statis';
+    //     $parameterAllowed[] = 'Medan Magnet';
+    //     $parameterAllowed[] = 'Power Density';
+
+
+
+    //     $pattern = implode('|', $parameterAllowed);
+
+    //     $data = OrderDetail::selectRaw('
+    //                 max(id) as id,
+    //                 max(id_order_header) as id_order_header,
+    //                 cfr,
+    //                 GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+    //                 MAX(nama_perusahaan) as nama_perusahaan,
+    //                 MAX(konsultan) as konsultan,
+    //                 MAX(no_quotation) as no_quotation,
+    //                 MAX(no_order) as no_order,
+    //                 MAX(parameter) as parameter,
+    //                 MAX(regulasi) as regulasi,
+    //                 GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+    //                 MAX(kategori_2) as kategori_2,
+    //                 MAX(kategori_3) as kategori_3,
+    //                 GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+    //                 GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+    //                 GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+    //             ')
+    //                 ->with(['lhps_ling', 'orderHeader'])
+    //                 ->where('is_active', true)
+    //                 ->where('kategori_3', '27-Udara Lingkungan Kerja')
+    //                 ->where('status', 2)
+    //                 // Menggantikan loop orWhere dengan satu baris Regex
+    //                 ->whereRaw("parameter NOT REGEXP '(" . $pattern . ")'")
+    //                 ->groupBy('cfr')
+    //                 ->get();
+    //     $data = $data->map(function ($item) {
+    //         // 1. Pecah no_sampel "S1,S2,S3" jadi array
+    //         $noSampelList = array_filter(explode(',', $item->no_sampel));
+
+    //         // 2. Ambil semua data lapangan untuk no_sampel tsb
+    //         $lapanganLing = DetailLingkunganKerja::whereIn('no_sampel', $noSampelList)->get();
+    //         $lapanganDirect = DataLapanganDirectLain::whereIn('no_sampel', $noSampelList)->get();
+    //         $debuPersonal = DataLapanganDebuPersonal::whereIn('no_sampel', $noSampelList)->get();
+    //         $lapanganSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $noSampelList)->get();
+    //         $partikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $noSampelList)->get();
+    //         $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa)->merge($partikulat);
+
+
+    //         // 3. Hitung min/max created_at
+    //         $minDate = null;
+    //         $maxDate = null;
+
+    //         if ($lapangan->isNotEmpty()) {
+    //             $minDate = $item->tanggal_tugas;
+    //             $maxDate = $lapangan->max('created_at');
+    //         }
+
+    //         $lhps = $item->lhps_ling;
+
+    //         if (empty($lhps) || (
+    //             empty($lhps->tanggal_sampling_awal) &&
+    //             empty($lhps->tanggal_sampling_akhir) &&
+    //             empty($lhps->tanggal_analisa_awal) &&
+    //             empty($lhps->tanggal_analisa_akhir)
+    //         )) {
+    //             $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
+    //             $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
+
+    //             // tanggal_terima di hasil selectRaw bisa beberapa, pisah koma juga
+    //             $tglTerima = $item->tanggal_terima;
+    //             if (strpos($tglTerima, ',') !== false) {
+    //                 $list = array_filter(explode(',', $tglTerima));
+    //                 sort($list);
+    //                 $tglTerima = $list[0]; // ambil paling awal
+    //             }
+
+    //             $item->tanggal_analisa_awal  = $tglTerima ?: null;
+    //             $item->tanggal_analisa_akhir = Carbon::now()->format('Y-m-d');
+    //         } else {
+    //             $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
+    //             $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
+    //             $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
+    //             $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
+    //         }
+    //         $item->data_lapangan_lingkungan_kerja = $lapangan->first();
+
+    //         return $item;
+    //     });
+    //     return Datatables::of($data)->make(true);
+    // }
     public function index(Request $request)
     {
+        $listParamTemplate = [
+            'lingkungan_kerja',
+            'senyawa_volatile',
+            'debu_personal',
+            'sensoric_pm',
+            'direct_lain',
+        ];
+
+        // 1. Ambil semua parameter dari template yang dipilih
+        $parameterFdl = ParameterFdl::whereIn('nama_fdl', $listParamTemplate)->get();
+
         $parameterAllowed = [];
-        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
-        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
-        $parameterAllowed[] = 'Sinar UV';
-        $parameterAllowed[] = 'Ergonomi';
-        $parameterAllowed[] = 'Gelombang Elektro';
-        $parameterAllowed[] = 'Medan Listrik';
-        $parameterAllowed[] = 'Medan Magnit Statis';
-        $parameterAllowed[] = 'Power Density';
+        foreach ($parameterFdl as $row) {
+            $decoded = json_decode($row->parameters, true) ?? [];
+            $parameterAllowed = array_merge($parameterAllowed, $decoded);
+        }
 
+        // Tambahkan parameter manual
+        $manualAdd = [
+            'Sinar UV', 'Ergonomi', 'Gelombang Elektro', 'Medan Listrik', 
+            'Medan Magnit Statis', 'Medan Magnet', 'Power Density'
+        ];
+        $parameterAllowed = array_merge($parameterAllowed, $manualAdd);
 
+        // Bersihkan duplikasi dan karakter aneh
+        $parameterAllowed = array_unique(array_filter($parameterAllowed));
 
+        // 2. Buat Pattern Regex
+        // Gunakan preg_quote agar karakter seperti ( ) atau . tidak merusak query
+        $pattern = implode('|', array_map('preg_quote', $parameterAllowed));
+
+        // 3. Eksekusi Query
         $data = OrderDetail::selectRaw('
-            max(id) as id,
-            max(id_order_header) as id_order_header,
-            cfr,
-            GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
-            MAX(nama_perusahaan) as nama_perusahaan,
-            MAX(konsultan) as konsultan,
-            MAX(no_quotation) as no_quotation,
-            MAX(no_order) as no_order,
-            MAX(parameter) as parameter,
-            MAX(regulasi) as regulasi,
-            GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
-            MAX(kategori_2) as kategori_2,
-            MAX(kategori_3) as kategori_3,
-            GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
-            GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
-            GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
-        ')
-            ->with([
-                'lhps_ling',
-                'orderHeader',
-            ])
-            ->where('is_active', true)
-            ->where('kategori_3', '27-Udara Lingkungan Kerja')
-            ->where('status', 2)
-            ->where(function ($query) use ($parameterAllowed) {
-                foreach ($parameterAllowed as $param) {
-                    $query->where('parameter', 'NOT LIKE', "%;$param%");
-                }
-            })
-            ->groupBy('cfr')
-            ->get();
-        $data = $data->map(function ($item) {
-            // 1. Pecah no_sampel "S1,S2,S3" jadi array
+                    max(id) as id,
+                    max(id_order_header) as id_order_header,
+                    cfr,
+                    GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+                    MAX(nama_perusahaan) as nama_perusahaan,
+                    MAX(konsultan) as konsultan,
+                    MAX(no_quotation) as no_quotation,
+                    MAX(no_order) as no_order,
+                    MAX(parameter) as parameter,
+                    MAX(regulasi) as regulasi,
+                    GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+                    MAX(kategori_2) as kategori_2,
+                    MAX(kategori_3) as kategori_3,
+                    GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+                    GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+                    GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+                ')
+                    ->with(['lhps_ling', 'orderHeader'])
+                    ->where('is_active', true)
+                    ->where('kategori_3', '27-Udara Lingkungan Kerja')
+                    ->where('status', 2)
+                    // Hapus "NOT", sekarang kita filter yang COCOK saja (Whitelist)
+                    ->whereRaw("parameter REGEXP '(" . $pattern . ")'")
+                    ->groupBy('cfr')
+                    ->get();
+        // 1. Kumpulkan semua no_sampel dari seluruh data ke satu array besar
+        $allNoSampel = [];
+        foreach ($data as $item) {
+            $samples = array_filter(explode(',', $item->no_sampel));
+            $allNoSampel = array_merge($allNoSampel, $samples);
+        }
+        $allNoSampel = array_unique($allNoSampel);
+
+        // 2. Tarik data dari 5 tabel pendukung sekaligus (Hanya 5 query, bukan N query)
+        $allLing = DetailLingkunganKerja::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
+        $allDirect = DataLapanganDirectLain::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
+        $allDebu = DataLapanganDebuPersonal::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
+        $allSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
+        $allPartikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
+
+        // 3. Map data di memori
+        $data->map(function ($item) use ($allLing, $allDirect, $allDebu, $allSenyawa, $allPartikulat) {
             $noSampelList = array_filter(explode(',', $item->no_sampel));
+            
+            $lapangan = collect();
+            foreach ($noSampelList as $no) {
+                if (isset($allLing[$no])) $lapangan = $lapangan->merge($allLing[$no]);
+                if (isset($allDirect[$no])) $lapangan = $lapangan->merge($allDirect[$no]);
+                if (isset($allDebu[$no])) $lapangan = $lapangan->merge($allDebu[$no]);
+                if (isset($allSenyawa[$no])) $lapangan = $lapangan->merge($allSenyawa[$no]);
+                if (isset($allPartikulat[$no])) $lapangan = $lapangan->merge($allPartikulat[$no]);
+            }
 
-            // 2. Ambil semua data lapangan untuk no_sampel tsb
-            $lapanganLing = DetailLingkunganKerja::whereIn('no_sampel', $noSampelList)->get();
-            $lapanganDirect = DataLapanganDirectLain::whereIn('no_sampel', $noSampelList)->get();
-            $debuPersonal = DataLapanganDebuPersonal::whereIn('no_sampel', $noSampelList)->get();
-            $lapanganSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $noSampelList)->get();
-            $partikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $noSampelList)->get();
-            $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa)->merge($partikulat);
-
-
-            // 3. Hitung min/max created_at
+            // --- (Sisa logika penentuan minDate, maxDate, dan lhps tetap sama) ---
             $minDate = null;
             $maxDate = null;
-
             if ($lapangan->isNotEmpty()) {
                 $minDate = $item->tanggal_tugas;
                 $maxDate = $lapangan->max('created_at');
             }
 
             $lhps = $item->lhps_ling;
-
             if (empty($lhps) || (
-                empty($lhps->tanggal_sampling_awal) &&
-                empty($lhps->tanggal_sampling_akhir) &&
-                empty($lhps->tanggal_analisa_awal) &&
-                empty($lhps->tanggal_analisa_akhir)
+                empty($lhps->tanggal_sampling_awal) && empty($lhps->tanggal_sampling_akhir) &&
+                empty($lhps->tanggal_analisa_awal) && empty($lhps->tanggal_analisa_akhir)
             )) {
-                $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
-                $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
+                $item->tanggal_sampling_awal  = $minDate ? \Carbon\Carbon::parse($minDate)->format('Y-m-d') : null;
+                $item->tanggal_sampling_akhir = $maxDate ? \Carbon\Carbon::parse($maxDate)->format('Y-m-d') : null;
 
-                // tanggal_terima di hasil selectRaw bisa beberapa, pisah koma juga
                 $tglTerima = $item->tanggal_terima;
                 if (strpos($tglTerima, ',') !== false) {
                     $list = array_filter(explode(',', $tglTerima));
                     sort($list);
-                    $tglTerima = $list[0]; // ambil paling awal
+                    $tglTerima = $list[0];
                 }
-
                 $item->tanggal_analisa_awal  = $tglTerima ?: null;
-                $item->tanggal_analisa_akhir = Carbon::now()->format('Y-m-d');
+                $item->tanggal_analisa_akhir = \Carbon\Carbon::now()->format('Y-m-d');
             } else {
                 $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
                 $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
@@ -237,6 +358,7 @@ class DraftUlkController extends Controller
 
             return $item;
         });
+
         return Datatables::of($data)->make(true);
     }
 
@@ -321,6 +443,7 @@ class DraftUlkController extends Controller
             ], 500);
         }
     }
+
 
     public function store(Request $request)
     {

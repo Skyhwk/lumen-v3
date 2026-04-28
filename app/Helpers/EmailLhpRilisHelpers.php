@@ -29,10 +29,10 @@ class EmailLhpRilisHelpers
 
             $cekHistory = EmailHistory::where('email_subject', 'LIKE', "{$prefix}%")->first();
 
-            if (!$cekHistory) {
-                Log::info("EmailLhpRilisHelpers: Email history not found, skipping email to : {$cekHistory->email_to}");
+            if(!$cekHistory || !property_exists($cekHistory, 'email_to') || !$cekHistory->email_to) {
+                Log::info("EmailLhpRilisHelpers: Email history not found, skipping email to : tidak ada");
                 return false;
-            }
+            }    
 
             if($no_order == null || $no_order == '') {
                 Log::info("EmailLhpRilisHelpers: No. Order is empty, skipping email to : {$cekHistory->email_to}");
@@ -70,7 +70,7 @@ class EmailLhpRilisHelpers
             }
 
         } catch (\Exception $e) {
-            Log::error("EmailLhpRilisHelpers ERROR: " . $e->getMessage());
+            Log::error("EmailLhpRilisHelpers ERROR: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
             return false;
         }
     }

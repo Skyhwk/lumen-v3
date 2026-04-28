@@ -14,7 +14,6 @@ use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\SamplingPlan;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -109,7 +108,7 @@ class ProcessAfterOrder
     {
         DB::beginTransaction();
         try {
-            Log::info('Processing LHP Link', [
+            Log::channel('afterOrder')->info('Processing LHP Link', [
                 'no_order' => $this->no_order,
                 'is_kontrak' => $this->is_kontrak,
                 'is_reorder' => $this->is_reorder,
@@ -134,7 +133,7 @@ class ProcessAfterOrder
             }
 
             DB::commit();
-            Log::info('Save link LHP success', ['no_order' => $this->no_order]);
+            Log::channel('afterOrder')->info('Save link LHP success', ['no_order' => $this->no_order]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -156,7 +155,7 @@ class ProcessAfterOrder
      */
     private function processKontrakReorder(): void
     {
-        Log::info('Processing KONTRAK REORDER', ['periode_list' => $this->periodeList]);
+        Log::channel('afterOrder')->info('Processing KONTRAK REORDER', ['periode_list' => $this->periodeList]);
 
         $existingLinks = LinkLhp::where('no_order', $this->no_order)->get();
         $existingPeriods = $existingLinks->pluck('periode')->toArray();
@@ -170,7 +169,7 @@ class ProcessAfterOrder
         $removedPeriods = $existingPeriodsCollection->diff($currentPeriods)->all();
         $unchangedPeriods = $currentPeriods->intersect($existingPeriodsCollection)->all();
 
-        Log::info('Period comparison', [
+        Log::channel('afterOrder')->info('Period comparison', [
             'added' => $addedPeriods,
             'removed' => $removedPeriods,
             'unchanged' => $unchangedPeriods
@@ -194,7 +193,7 @@ class ProcessAfterOrder
                     ->where('quotation_status', 'lhp_rilis')
                     ->update(['status' => 1]);
                 
-                Log::info('Expired removed period', ['periode' => $periode]);
+                Log::channel('afterOrder')->info('Expired removed period', ['periode' => $periode]);
             }
         }
 
@@ -233,7 +232,7 @@ class ProcessAfterOrder
                     ->where('quotation_status', 'lhp_rilis')
                     ->update(['expired' => $newExpiredDate]);
                 
-                Log::info('Updated expired for unchanged period', [
+                Log::channel('afterOrder')->info('Updated expired for unchanged period', [
                     'periode' => $periode,
                     'new_expired' => $newExpiredDate
                 ]);
@@ -247,7 +246,7 @@ class ProcessAfterOrder
      */
     private function processKontrakNonReorder(): void
     {
-        Log::info('Processing KONTRAK NON-REORDER', ['periode_list' => $this->periodeList]);
+        Log::channel('afterOrder')->info('Processing KONTRAK NON-REORDER', ['periode_list' => $this->periodeList]);
 
         foreach ($this->periodeList as $periode) {
             // Cek dulu apakah sudah ada link untuk periode ini (untuk antisipasi duplicate)
@@ -272,7 +271,7 @@ class ProcessAfterOrder
      */
     private function processNonKontrakReorder(): void
     {
-        Log::info('Processing NON-KONTRAK REORDER');
+        Log::channel('afterOrder')->info('Processing NON-KONTRAK REORDER');
 
         // Hitung jumlah LHP
         $orderDetail = OrderDetail::where('no_order', $this->no_order)
@@ -302,7 +301,7 @@ class ProcessAfterOrder
                 ->where('quotation_status', 'lhp_rilis')
                 ->update(['expired' => $newExpiredDate]);
             
-            Log::info('Updated non-kontrak reorder link', [
+            Log::channel('afterOrder')->info('Updated non-kontrak reorder link', [
                 'link_id' => $linkLhp->id,
                 'new_expired' => $newExpiredDate
             ]);
@@ -341,7 +340,7 @@ class ProcessAfterOrder
                 'link' => env('PORTAL_LHP') . $token
             ]);
 
-            Log::info('Created non-kontrak reorder link', [
+            Log::channel('afterOrder')->info('Created non-kontrak reorder link', [
                 'link_id' => $linkLhp->id,
                 'token_id' => $tokenId,
                 'token' => $token,
@@ -356,7 +355,7 @@ class ProcessAfterOrder
      */
     private function processNonKontrakNonReorder(): void
     {
-        Log::info('Processing NON-KONTRAK NON-REORDER');
+        Log::channel('afterOrder')->info('Processing NON-KONTRAK NON-REORDER');
 
         // Cek apakah sudah ada link (untuk antisipasi duplicate)
         $existingLink = LinkLhp::where('no_order', $this->no_order)->first();
@@ -413,7 +412,7 @@ class ProcessAfterOrder
             'link' => env('PORTAL_LHP') . $token
         ]);
 
-        Log::info('Created non-kontrak non-reorder link', [
+        Log::channel('afterOrder')->info('Created non-kontrak non-reorder link', [
             'link_id' => $linkLhp->id,
             'token_id' => $tokenId
         ]);
@@ -424,7 +423,7 @@ class ProcessAfterOrder
      */
     private function createLinkLhpForPeriode(string $periode): void
     {
-        Log::info('Creating LHP link for period', ['periode' => $periode]);
+        Log::channel('afterOrder')->info('Creating LHP link for period', ['periode' => $periode]);
 
         // Hitung jumlah LHP untuk periode ini
         $orderDetail = OrderDetail::where('no_order', $this->no_order)
@@ -481,7 +480,7 @@ class ProcessAfterOrder
             'link' => env('PORTAL_LHP') . $token
         ]);
 
-        Log::info('Created LHP link for period', [
+        Log::channel('afterOrder')->info('Created LHP link for period', [
             'periode' => $periode,
             'link_id' => $linkLhp->id,
             'token_id' => $tokenId
@@ -505,7 +504,7 @@ class ProcessAfterOrder
                         $kuotaExist->save();
                         $history->delete();
 
-                        Log::info('Kuota usage reverted', [
+                        Log::channel('afterOrder')->info('Kuota usage reverted', [
                             'pelanggan_id' => $this->id_pelanggan,
                             'no_order' => $this->no_order,
                             'sisa_kuota' => $kuotaExist->sisa
@@ -527,7 +526,7 @@ class ProcessAfterOrder
     {
         DB::beginTransaction();
         try {
-            Log::info('Processing ringkasan order link', ['no_order' => $this->no_order]);
+            Log::channel('afterOrder')->info('Processing ringkasan order link', ['no_order' => $this->no_order]);
 
             // Cek apakah sudah ada
             $existingLink = LinkRingkasanOrder::where('no_order', $this->no_order)->first();
@@ -546,7 +545,7 @@ class ProcessAfterOrder
                     ->where('quotation_status', 'ringkasan_order')
                     ->update(['expired' => Carbon::now()->addYear()]);
 
-                Log::info('Updated existing ringkasan order link', [
+                Log::channel('afterOrder')->info('Updated existing ringkasan order link', [
                     'link_id' => $existingLink->id
                 ]);
             } else {
@@ -583,14 +582,14 @@ class ProcessAfterOrder
                     'link' => env('PORTALV4'). 'ringkasan-order/' . $token
                 ]);
 
-                Log::info('Created new ringkasan order link', [
+                Log::channel('afterOrder')->info('Created new ringkasan order link', [
                     'link_id' => $linkRingkasan->id,
                     'token_id' => $tokenId
                 ]);
             }
 
             DB::commit();
-            Log::info('Save link ringkasan order success');
+            Log::channel('afterOrder')->info('Save link ringkasan order success');
 
         } catch (\Exception $e) {
             DB::rollBack();
