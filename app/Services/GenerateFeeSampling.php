@@ -220,63 +220,22 @@ class GenerateFeeSampling
 
                 $tempat = min(3, $lokasiSampling);
 
-                // =========================================================
-                // FIX UTAMA: Fee Luar Kota & Sampling 24 Jam — Saling Eksklusif
-                // =========================================================
-                //
-                // ATURAN BISNIS:
-                //   - Luar Kota durasi >= 2  → pakai `sampling_luar_kota_24jam` SAJA
-                //                              (sudah mencakup komponen menginap/24jam)
-                //                              → sampling_24jam TIDAK dihitung
-                //
-                //   - Luar Kota durasi == 1  → pakai `sampling_luar_kota` SAJA
-                //                              → sampling_24jam TIDAK dihitung
-                //                              (pulang hari, tidak ada komponen menginap)
-                //
-                //   - Dalam Kota durasi >= 2 → pakai `sampling_24jam` per hari efektif
-                //                              (dihitung via hitungFeeHariLiburDanSampling24Jam)
-                //
-                //   - Hari libur             → selalu dihitung di semua kondisi
-                // =========================================================
+                // Hitung semua fee lokasi + hari libur + 24jam dalam satu method
+                $hasilFee = $this->hitungFeeLokasiDan24Jam(
+                    $tgl,
+                    $adaLuarKota,
+                    $durasiTertinggiLuarKota,
+                    $durasiTertinggiDalamKota,
+                    $durasi_tertinggi,
+                    $fee,
+                    $liburKantor
+                );
 
-                if ($adaLuarKota) {
-
-                    // --- Hitung fee hari libur saja (tanpa sampling_24jam) ---
-                    $hasilLibur = $this->hitungFeeHariLibur(
-                        $tgl,
-                        $durasi_tertinggi,
-                        $fee,
-                        $liburKantor
-                    );
-                    $feeTambahan += $hasilLibur['total_fee'];
-                    $feeTambahanRincian['hari_libur'] += $hasilLibur['fee_hari_libur'];
-
-                    // --- Fee luar kota (pilih salah satu, tidak + sampling_24jam) ---
-                    if ($durasiTertinggiLuarKota >= 2) {
-                        // Luar kota dengan menginap: gunakan tarif luar_kota_24jam
-                        $feeTambahan += $fee->sampling_luar_kota_24jam;
-                        $feeTambahanRincian['luar_kota_24jam'] += $fee->sampling_luar_kota_24jam;
-                    } else {
-                        // Luar kota pulang hari: gunakan tarif luar_kota biasa
-                        $feeTambahan += $fee->sampling_luar_kota;
-                        $feeTambahanRincian['luar_kota'] += $fee->sampling_luar_kota;
-                    }
-
-                } else {
-
-                    // --- Dalam kota: hitung hari libur + sampling_24jam normal ---
-                    // FIX #3: pakai durasiTertinggiDalamKota (bukan durasi_tertinggi global)
-                    // agar kasus 1 hari ada item dalam+luar kota, durasi dalam kota tetap benar
-                    $hasilLibur24Jam = $this->hitungFeeHariLiburDanSampling24Jam(
-                        $tgl,
-                        $durasiTertinggiDalamKota,
-                        $fee,
-                        $liburKantor
-                    );
-                    $feeTambahan += $hasilLibur24Jam['total_fee'];
-                    $feeTambahanRincian['hari_libur']     += $hasilLibur24Jam['rincian']['hari_libur'];
-                    $feeTambahanRincian['sampling_24jam'] += $hasilLibur24Jam['rincian']['sampling_24jam'];
-                }
+                $feeTambahan                           += $hasilFee['total_fee'];
+                $feeTambahanRincian['hari_libur']      += $hasilFee['rincian']['hari_libur'];
+                $feeTambahanRincian['sampling_24jam']  += $hasilFee['rincian']['sampling_24jam'];
+                $feeTambahanRincian['luar_kota']       += $hasilFee['rincian']['luar_kota'];
+                $feeTambahanRincian['luar_kota_24jam'] += $hasilFee['rincian']['luar_kota_24jam'];
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
 
@@ -350,120 +309,108 @@ class GenerateFeeSampling
     }
 
     /**
-     * Hitung fee hari libur DAN sampling 24 jam.
-     * Digunakan untuk kasus DALAM KOTA dengan durasi > 1.
+     * Hitung semua fee lokasi, hari libur, dan 24 jam dalam satu method.
+     *
+     * ATURAN:
+     *   Hari libur      → selalu dihitung per hari efektif, di semua kondisi
+     *   Dalam kota      → sampling_24jam per hari efektif (durasi - 1)
+     *   Luar kota pulang hari (durasi 1) → luar_kota saja, tidak ada 24jam
+     *   Luar kota menginap (durasi >= 2) → luar_kota_24jam × (durasi - 1), tidak tambah luar_kota
+     *
+     *   Campuran luar + dalam kota → bandingkan total fee keduanya, ambil yang lebih tinggi
      */
-    private function hitungFeeHariLiburDanSampling24Jam($tanggalAwal, $durasi, $fee, $liburKantor)
-    {
-        $totalFee   = 0;
-        $feeRincian = [
-            'hari_libur'   => 0,
+    private function hitungFeeLokasiDan24Jam(
+        $tanggalAwal,
+        bool $adaLuarKota,
+        int $durasiLuarKota,
+        int $durasiDalamKota,
+        int $durasiTertinggi,
+        $fee,
+        array $liburKantor
+    ): array {
+        $rincian = [
+            'hari_libur'    => 0,
             'sampling_24jam' => 0,
+            'luar_kota'      => 0,
+            'luar_kota_24jam' => 0,
         ];
 
-        $tanggalMulai = Carbon::parse($tanggalAwal);
-        $durasiEfektif = max((int) $durasi - 1, 0);
+        $tanggalMulai  = Carbon::parse($tanggalAwal);
+        $durasiEfektif = max($durasiTertinggi - 1, 0);
 
-        $feeSudahDihitungPadaTanggal = [];
-
+        // === 1. Hitung hari libur per hari efektif (berlaku semua kondisi) ===
+        $sudahDihitung = [];
         for ($i = 0; $i < $durasiEfektif; $i++) {
-            $tgl       = $tanggalMulai->copy()->addDays($i)->toDateString();
-            $carbonTgl = Carbon::parse($tgl);
-
-            if (!in_array($tgl, $feeSudahDihitungPadaTanggal)) {
-                $isLibur = in_array($tgl, $liburKantor)
+            $tgl = $tanggalMulai->copy()->addDays($i)->toDateString();
+            if (!in_array($tgl, $sudahDihitung)) {
+                $carbonTgl = Carbon::parse($tgl);
+                $isLibur   = in_array($tgl, $liburKantor)
                     || $carbonTgl->isSaturday()
                     || $carbonTgl->isSunday();
-
                 if ($isLibur) {
-                    $totalFee += $fee->hari_libur;
-                    $feeRincian['hari_libur'] += $fee->hari_libur;
+                    $rincian['hari_libur'] += $fee->hari_libur;
                 }
-
-                // Dalam kota: hitung sampling_24jam per hari efektif
-                $totalFee += $fee->sampling_24jam;
-                $feeRincian['sampling_24jam'] += $fee->sampling_24jam;
-
-                $feeSudahDihitungPadaTanggal[] = $tgl;
+                $sudahDihitung[] = $tgl;
+            }
+        }
+        // Jika durasi 0 (sesaat), tetap cek hari libur di tanggal itu
+        if ($durasiTertinggi === 0) {
+            $tgl = $tanggalMulai->toDateString();
+            $carbonTgl = Carbon::parse($tgl);
+            $isLibur   = in_array($tgl, $liburKantor)
+                || $carbonTgl->isSaturday()
+                || $carbonTgl->isSunday();
+            if ($isLibur) {
+                $rincian['hari_libur'] += $fee->hari_libur;
             }
         }
 
-        // Jika hanya 1 hari (durasi == 0), cek hari libur saja
-        if ((int) $durasi === 0) {
-            $tgl       = $tanggalMulai->toDateString();
-            $carbonTgl = Carbon::parse($tgl);
+        // === 2. Hitung fee lokasi & 24jam ===
+        if ($adaLuarKota && $durasiDalamKota > 0) {
 
-            if (!in_array($tgl, $feeSudahDihitungPadaTanggal)) {
-                $isLibur = in_array($tgl, $liburKantor)
-                    || $carbonTgl->isSaturday()
-                    || $carbonTgl->isSunday();
-
-                if ($isLibur) {
-                    $totalFee += $fee->hari_libur;
-                    $feeRincian['hari_libur'] += $fee->hari_libur;
-                }
+            // --- Kasus campuran: ada luar kota + dalam kota di hari yang sama ---
+            // Hitung kandidat luar kota
+            $feeLuarKotaKandidat    = 0;
+            $feeLuarKota24JamKandidat = 0;
+            if ($durasiLuarKota <= 1) {
+                $feeLuarKotaKandidat = $fee->sampling_luar_kota;
+            } else {
+                $feeLuarKota24JamKandidat = $fee->sampling_luar_kota_24jam * ($durasiLuarKota - 1);
             }
+            $totalKandidatLuarKota = $feeLuarKotaKandidat + $feeLuarKota24JamKandidat;
+
+            // Hitung kandidat dalam kota
+            $totalKandidatDalamKota = $fee->sampling_24jam * max($durasiDalamKota - 1, 0);
+
+            // Ambil yang nilainya lebih tinggi
+            if ($totalKandidatLuarKota >= $totalKandidatDalamKota) {
+                $rincian['luar_kota']       = $feeLuarKotaKandidat;
+                $rincian['luar_kota_24jam'] = $feeLuarKota24JamKandidat;
+            } else {
+                $rincian['sampling_24jam'] = $totalKandidatDalamKota;
+            }
+
+        } elseif ($adaLuarKota) {
+
+            // --- Hanya luar kota ---
+            if ($durasiLuarKota <= 1) {
+                $rincian['luar_kota'] = $fee->sampling_luar_kota;
+            } else {
+                $rincian['luar_kota_24jam'] = $fee->sampling_luar_kota_24jam * ($durasiLuarKota - 1);
+            }
+
+        } else {
+
+            // --- Hanya dalam kota ---
+            $rincian['sampling_24jam'] = $fee->sampling_24jam * max($durasiDalamKota - 1, 0);
+
         }
+
+        $totalFee = array_sum($rincian);
 
         return [
             'total_fee' => $totalFee,
-            'rincian'   => $feeRincian,
-        ];
-    }
-
-    /**
-     * Hitung fee hari libur SAJA (tanpa sampling_24jam).
-     * Digunakan untuk kasus LUAR KOTA, karena fee 24jam sudah
-     * tercakup di dalam sampling_luar_kota_24jam.
-     */
-    private function hitungFeeHariLibur($tanggalAwal, $durasi, $fee, $liburKantor)
-    {
-        $totalFee    = 0;
-        $feeHariLibur = 0;
-
-        $tanggalMulai  = Carbon::parse($tanggalAwal);
-        $durasiEfektif = max((int) $durasi - 1, 0);
-
-        $feeSudahDihitungPadaTanggal = [];
-
-        for ($i = 0; $i < $durasiEfektif; $i++) {
-            $tgl       = $tanggalMulai->copy()->addDays($i)->toDateString();
-            $carbonTgl = Carbon::parse($tgl);
-
-            if (!in_array($tgl, $feeSudahDihitungPadaTanggal)) {
-                $isLibur = in_array($tgl, $liburKantor)
-                    || $carbonTgl->isSaturday()
-                    || $carbonTgl->isSunday();
-
-                if ($isLibur) {
-                    $totalFee     += $fee->hari_libur;
-                    $feeHariLibur += $fee->hari_libur;
-                }
-
-                $feeSudahDihitungPadaTanggal[] = $tgl;
-            }
-        }
-
-        // Jika hanya 1 hari (durasi == 0), tetap cek hari libur
-        if ((int) $durasi === 0) {
-            $tgl       = $tanggalMulai->toDateString();
-            $carbonTgl = Carbon::parse($tgl);
-
-            if (!in_array($tgl, $feeSudahDihitungPadaTanggal)) {
-                $isLibur = in_array($tgl, $liburKantor)
-                    || $carbonTgl->isSaturday()
-                    || $carbonTgl->isSunday();
-
-                if ($isLibur) {
-                    $totalFee     += $fee->hari_libur;
-                    $feeHariLibur += $fee->hari_libur;
-                }
-            }
-        }
-
-        return [
-            'total_fee'    => $totalFee,
-            'fee_hari_libur' => $feeHariLibur,
+            'rincian'   => $rincian,
         ];
     }
 }
