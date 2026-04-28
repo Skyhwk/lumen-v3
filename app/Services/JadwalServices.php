@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
+use App\Services\SendEmail;
+use App\Jobs\SendNotifPerubahanJadwalJob;
 
 
 class JadwalServices
@@ -56,6 +58,88 @@ class JadwalServices
     public static function __callStatic($method, $arguments)
     {
         echo "Static method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n";
+    }
+
+    public static function getSnapshotData($no_quotation, $tanggal, $parsial,$batch_id = null)
+    {
+        return Jadwal::with([
+                'samplingPlan:id,created_at,filename,is_active',
+                'samplingPlan' => function ($query) {
+                    $query->WithTypeModelSub(); 
+                },
+            ])
+            ->select(
+                'id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 
+                'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 
+                'note', 'urutan', 'driver', 'id_cabang', 'wilayah', 
+                DB::raw('group_concat(sampler) as sampler'), 
+                DB::raw('group_concat(id) as batch_id'), 
+                DB::raw('group_concat(userid) as batch_user')
+            )
+            ->where('no_quotation', $no_quotation)
+            ->where('tanggal', $tanggal)
+            ->when($batch_id, function ($q, $batch_id) {
+                $arrayBatchId = is_array($batch_id) ? $batch_id : explode(',', $batch_id);
+                $q->whereIn('id', $arrayBatchId);
+            })
+            ->where('is_active', 1)
+            ->groupBy(
+                'id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan', 
+                'isokinetic', 'pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 
+                'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang'
+            )
+            ->first();
+    }
+
+    public static function notifperubahan($dataBefore, $dataAfter,$notify_sales)
+    {
+        if (!$dataBefore && !$dataAfter) return;
+
+        // Fungsi bantuan (Helper) untuk merapikan format satu baris
+        $formatData = function($data) {
+            if (!$data) return 'Data Tidak Ditemukan';
+            
+            return [
+                'Wilayah'         => $data->wilayah ?? '-',
+                'No Quotation'    => $data->no_quotation ?? '-',
+                'Nama Perusahaan' => $data->nama_perusahaan ?? '-',
+                'Tanggal'         => $data->tanggal ?? '-',
+                'Waktu'           => ($data->jam_mulai ?? '-') . ' s/d ' . ($data->jam_selesai ?? '-'),
+                'Kategori'        => $data->kategori ?? '-', 
+                // 'Status'          => $data->status ?? '-',
+                
+                // INI ADALAH HASIL GROUP_CONCAT DARI QUERY
+                'Sampler'         => $data->sampler ?? 'Belum ada sampler', 
+                
+                // 'Kendaraan/Driver'=> ($data->kendaraan ?? '-') . ' / ' . ($data->driver ?? '-'),
+            ];
+        };
+
+        // Simpan hasil format ke dalam variabel array yang rapi
+        $formattedBefore = $formatData($dataBefore);
+        $formattedAfter  = $formatData($dataAfter);
+        $noQuotation     = $dataAfter ? $dataAfter->no_quotation : ($dataBefore->no_quotation ?? 'UNKNOWN');
+
+        $logData = [
+            'WAKTU_UPDATE' => \Carbon\Carbon::now()->format('Y-m-d H:i:s'),
+            'QUOTATION'    => $noQuotation,
+            '--- BEFORE ---' => $formattedBefore,
+            '--- AFTER ---'  => $formattedAfter,
+        ];
+
+       
+        Log::info("=== NOTIFIKASI PERUBAHAN JADWAL ===", $logData);
+        if ($notify_sales) {
+            \Log::info('Email akan dikirim untuk no_quotation: ' . $noQuotation);
+            // self::emailNotifPerubahanJadwal($noQuotation, $formattedBefore, $formattedAfter);
+            dispatch(new SendNotifPerubahanJadwalJob(
+            $noQuotation,
+            is_array($formattedBefore) ? $formattedBefore : [],
+            is_array($formattedAfter) ? $formattedAfter : []
+        ));
+        } else {
+            \Log::info('Email di-skip (user pilih tidak kirim) untuk no_quotation: ' . $noQuotation);
+        }
     }
 
     public static function on($field, $value)
@@ -1792,5 +1876,132 @@ class JadwalServices
         $isSamplerIdentical = ($oldSampler === $newSampler);
 
         return $isArrayIdentical && $isSamplerIdentical;
+    }
+
+    private static function emailNotifPerubahanJadwal($noQuotation, $before, $after)
+    {
+        try {
+            $quotation = QuotationKontrakH::where('no_document', $noQuotation)->first()
+                    ?: QuotationNonKontrak::where('no_document', $noQuotation)->first();
+
+            if (!$quotation) {
+                \Log::warning('emailNotifPerubahanJadwal: quotation tidak ditemukan', ['no_quotation' => $noQuotation]);
+                return;
+            }
+
+            if (empty($quotation->sales_id)) {
+                \Log::warning('emailNotifPerubahanJadwal: sales_id kosong', ['no_quotation' => $noQuotation]);
+                return;
+            }
+
+            $sales = MasterKaryawan::where('id', $quotation->sales_id)->first();
+            
+            $admSales = null;
+            if (! empty($quotation->updated_by)) {
+                $admSales = MasterKaryawan::where('nama_lengkap', $quotation->updated_by)->first();
+            }
+
+            $atasanSales = GetAtasan::where('id', $quotation->sales_id)->get();
+            $emailAtasanSales = [];
+            if ($atasanSales->count() > 0) {
+                $emailAtasanSales = $atasanSales->pluck('email')->toArray();
+            }
+            $emailSales = $sales->email;
+            $emailAtasanSales = array_values(array_filter($emailAtasanSales, function ($email) use ($emailSales) {
+                return $email && $email !== $emailSales;
+            }));
+            if (!$sales || empty($sales->email)) {
+                \Log::warning('emailNotifPerubahanJadwal: sales/email tidak ditemukan', [
+                    'no_quotation' => $noQuotation,
+                    'sales_id'     => $quotation->sales_id,
+                ]);
+                return;
+            }
+            $emailAdmSales = ($admSales && ! empty($admSales->email)) ? $admSales->email : null;
+            $emailBcc      = array_merge($emailAtasanSales, array_filter([$emailAdmSales]));
+            $emailTo       = $emailSales;
+            $cc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+            $konsultan = !empty($quotation->konsultan) ? $quotation->konsultan : null;
+            $subject = 'Pemberitahuan Perubahan Jadwal dengan no QT ' . $noQuotation;
+            if ($konsultan) {
+                $subject .= ' (' . $konsultan . ')';
+            }else {
+                $subject .= ' - ' . $quotation->nama_perusahaan;
+            }
+
+            $htmlBody = self::renderPerubahanJadwalEmailHtml(
+                $noQuotation, $before, $after, $sales->nama_lengkap
+            );
+
+            \Log::info('emailNotifPerubahanJadwal: mencoba kirim', [
+                'to'      => 'luthfi@xxxxx.com',
+                'subject' => $subject,
+            ]);
+            
+            SendEmail::where('to', $emailTo)
+                ->where('subject', $subject)
+                ->where('bcc', $emailBcc)
+                ->where('cc', $cc)
+                ->where('body', $htmlBody)
+                ->noReply()
+                ->send();
+
+            \Log::info('emailNotifPerubahanJadwal: berhasil dikirim', ['no_quotation' => $noQuotation]);
+
+        } catch (\Throwable $e) {
+            \Log::error('emailNotifPerubahanJadwal gagal: ' . $e->getMessage()
+                . ' — ' . $e->getFile() . ':' . $e->getLine());
+        }
+    }
+
+    private static function renderPerubahanJadwalEmailHtml($noQuotation, $before, $after, $namaSales)
+    {
+        // Helper: format value supaya rapi untuk user non-teknis
+        $formatValue = function ($key, $value) {
+            if ($key === 'Kategori' && is_string($value)) {
+                $decoded = json_decode($value, true);
+                if (is_array($decoded) && !empty($decoded)) {
+                    $lastIdx = count($decoded) - 1;
+                    $lines = [];
+                    foreach ($decoded as $i => $item) {
+                        $lines[] = htmlspecialchars($item) . ($i < $lastIdx ? ',' : '');
+                    }
+                    return implode('<br>', $lines);
+                }
+            }
+            return htmlspecialchars((string) $value);
+        };
+
+        $rows = '';
+        foreach ($before as $key => $valBefore) {
+            $valAfter = isset($after[$key]) ? $after[$key] : '-';
+            $changed  = ((string) $valBefore !== (string) $valAfter);
+
+            $bgBefore = $changed ? 'background-color:#fff3cd;' : '';
+            $bgAfter  = $changed ? 'background-color:#d4edda;' : '';
+
+            $rows .= '<tr>'
+                . '<td style="padding:6px 10px;border:1px solid #ddd;vertical-align:top;"><strong>'
+                .   htmlspecialchars($key) . '</strong></td>'
+                . '<td style="padding:6px 10px;border:1px solid #ddd;vertical-align:top;' . $bgBefore . '">'
+                .   $formatValue($key, $valBefore) . '</td>'
+                . '<td style="padding:6px 10px;border:1px solid #ddd;vertical-align:top;' . $bgAfter . '">'
+                .   $formatValue($key, $valAfter) . '</td>'
+                . '</tr>';
+        }
+
+        return '<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#333;">'
+            . '<p>Yth. ' . htmlspecialchars($namaSales) . ',</p>'
+            . '<p>Berikut pemberitahuan perubahan jadwal sampling untuk No. Quotation '
+            .   '<strong>' . htmlspecialchars($noQuotation) . '</strong>:</p>'
+            . '<table style="border-collapse:collapse;width:100%;max-width:720px;">'
+            . '<thead><tr style="background-color:#f0f0f0;">'
+            . '<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Field</th>'
+            . '<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Sebelum</th>'
+            . '<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Sesudah</th>'
+            . '</tr></thead>'
+            . '<tbody>' . $rows . '</tbody>'
+            . '</table>'
+            . '</body></html>';
     }
 }

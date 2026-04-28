@@ -660,7 +660,7 @@ class TestingController extends Controller
                         ])
                         ->generate();
 
-                        if($generate instanceof Exception) {
+                        if($generate instanceof \Exception) {
                             return response()->json([
                                 'message' => 'Gagal menggenerate sertifikat',
                                 'line' => $generate->getLine(),
