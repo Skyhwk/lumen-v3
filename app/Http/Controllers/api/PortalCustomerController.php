@@ -169,18 +169,18 @@ class PortalCustomerController extends Controller
 
         // Prepare the professional email body with a blue button
         $buttonStyle = 'background-color: #0073e6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;';
-        $loginUrl =  env('PPI_URL').'/customer/login';
+        $loginUrl =  env('PPI_URL').'/ppi/login';
         Users::where('email', $user)->update(['password'=> Hash::make($password), 'template'=>$request->template,'is_cheklist' => true]);
         $userApp = Users::where('email', $user)->where('is_cheklist',true)->first();
         $body = '<body style="font-family: Arial, sans-serif; color: #000;">
             <p>Halo <b>'.$userApp->nama_lengkap.'</b></p>
 
             <p>
-                Kami telah menerima permintaan verifikasi akun Anda pada aplikasi <b>Portal Customer</b>
+                Kami telah menerima permintaan verifikasi akun Anda pada aplikasi <b>Portal Pelanggan Intilab</b>
                 melalui email <b>'. $userApp->email .'</b> pada hari <strong>'.  $hasilTanggal .'</strong>.
             </p>
 
-            <p>Silahkan Masukan Email : '. $user .' dan Password : <strong style="font-size: 1.2em;">'. $password .'</strong> untuk login ke aplikasi <b> <a href='.$loginUrl.'>Portal Customer<a/></b> </p>.
+            <p>Silahkan Masukan Email : '. $user .' dan Password : <strong style="font-size: 1.2em;">'. $password .'</strong> untuk login ke aplikasi <b> <a href='.$loginUrl.'>Portal Pelanggan Intilab<a/></b> </p>.
 
 
 
