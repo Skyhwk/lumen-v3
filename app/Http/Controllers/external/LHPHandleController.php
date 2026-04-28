@@ -154,7 +154,8 @@ class LHPHandleController extends BaseController
 
                             return isset($dataHeader['parameter'])
                                 && ($dataHeader['parameter'] == $paramLab || $dataHeader['parameter'] == $paramName)
-                                && (isset($dataHeader['is_approved']) || isset($dataHeader['is_approve']));
+                                // && (isset($dataHeader['is_approved']) || isset($dataHeader['is_approve']));
+                                && (isset($dataHeader['lhps']) && $dataHeader['lhps']);
                         });
                     });
 
@@ -220,7 +221,8 @@ class LHPHandleController extends BaseController
 
                         // Case Khusus: Psikologi (Return array, bukan single object)
                         if ($paramId == self::PARAM_PSIKOLOGI && is_array($data)) {
-                            $psikoResults = collect($data)->filter(fn($item) => isset($item['is_approved']) || isset($item['is_approve']))
+                            // $psikoResults = collect($data)->filter(fn($item) => isset($item['is_approved']) || isset($item['is_approve']))
+                            $psikoResults = collect($data)->filter(fn($item) => isset($item['lhps']) && $item['lhps'])
                                 ->map(function ($item) use ($od, $paramName) {
                                     $titles = [
                                         'kp' => 'Konflik Peran',
