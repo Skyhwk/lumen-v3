@@ -305,9 +305,9 @@ class RegistrasiCustomerController extends Controller
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
             }
-            // return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
+            return response()->json(['link' => env('PORTALV4').'/ppi/form-online/' . $link->token], 200);
             // ganti ke portal.intilab.com
-            return response()->json(['link' => 'https://portal.intilab.com/customer/form-online/' . $link->token], 200);
+            // return response()->json(['link' => 'https://portal.intilab.com/ppi/form-online/' . $link->token], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
         }
