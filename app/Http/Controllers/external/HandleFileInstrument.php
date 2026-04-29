@@ -395,35 +395,51 @@ class HandleFileInstrument extends BaseController
                         $listParam = [];
                         $isParamExist = false;
                         
-                        // CEK PARAMETER IF EXIST
+                        // jika order detail ditemukan, cek apakah parameter dari file termasuk dalam parameter order detail
                         if($order_detail){
                             $order_parameter = json_decode($orderDetailsMap[$no_sampel]->parameter) ?? null;
+
+                            // Ambil list parameter dari order detail dan hanya ambil nama_lab
                             $listParam = array_map(function ($item) {
                                 return explode(';', $item)[1];
                             },$order_parameter);
+
                             $isParamExist = in_array($paramKey, $listParam);
 
                             $idCategory = explode('-', $order_detail->kategori_2)[0];
                             $stp = $templateStpMap["$paramKey;$idCategory"] ?? null;
                             
                             $kategori = explode('-', $order_detail->kategori_2);
+
                             $par = $parameterMap["$paramKey;$kategori[0]"] ?? null; 
+
                             $parId = $par ? $par->id : null;
                             if(!$isParamExist && $order_detail->kategori_2 == '1-Air'){
                                 $paramKey .= " (NA)";
                                 $isParamExist = in_array($paramKey, $listParam);
                                 $icpData['parameter'] = $paramKey;
                             }elseif(!$isParamExist && $order_detail->kategori_2 == '4-Udara' && $paramKey == 'Pb'){
-                                $paramKey .= " (24 Jam)";
-                                $isParamExist = in_array($paramKey, $listParam);
+                                $options = ["Pb", "Pb (24 Jam)", "Pb (6 Jam)", "Pb (8 Jam)"];
+
+                                foreach ($options as $opt) {
+                                    if (in_array($opt, $listParam)) {
+                                        $paramKey = $opt;
+                                        $isParamExist = true;
+                                        $par = $parameterMap["$paramKey;$kategori[0]"] ?? null; 
+                                        break;
+                                    }
+                                }
+
                                 $icpData['parameter'] = $paramKey;
                             }
 
                             if(!$isParamExist && $order_detail->kategori_2 == '1-Air'){
                                 $paramKey = substr($paramKey, 0, -5);
-                            }elseif(!$isParamExist && $order_detail->kategori_2 == '4-Udara' && $paramKey == 'Pb (24 Jam)'){
-                                $paramKey = substr($paramKey, 0, -9);
                             }
+                            // elseif(!$isParamExist && $order_detail->kategori_2 == '4-Udara' && $paramKey == 'Pb (24 Jam)'){
+                            //     // salahnya di sini Pb (24 Jam) di sunat jadi Pb.
+                            //     $paramKey = substr($paramKey, 0, -9);
+                            // }
                         }
 
                         // CEK ORDER DETAIL
@@ -1094,7 +1110,7 @@ class HandleFileInstrument extends BaseController
 					'status' => 500
 				];
 			}
-
+            // id parameter yang mengandung shift sesaat, 8 jam, 24 jam
 			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 308];
 			try {
 				// Siapkan header data
@@ -1112,9 +1128,8 @@ class HandleFileInstrument extends BaseController
                     'data_shift' => null
                 ];
                 
-                // Set data_shift jika ada
-                $saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 308];
-                if (in_array($par->id, $saveShift) || $stp->id == 13) {
+                
+                if (in_array($par->id, $saveShift) || $stp->id == 13) { // 14 punya spekto udara
                     if($isO3){
                         $ks = array_chunk(array_map('floatval', $request->ks), 2);
                         $kb = array_chunk(array_map('floatval', $request->kb), 2);
