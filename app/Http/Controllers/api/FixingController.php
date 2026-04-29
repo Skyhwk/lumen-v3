@@ -24,6 +24,8 @@ use App\Models\PengajuanFeeSampling;
 use App\Models\PengajuanFeeSamplingDetail;
 use App\Models\TemplateAkses;
 use App\Services\GenerateFeeSampling;
+use App\Services\RenderInvoice;
+use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
 use App\Services\RenderKontrakCopy;
 use App\Services\RenderNonKontrakCopy;
@@ -967,6 +969,23 @@ class FixingController extends Controller
     //         dd($e->getMessage(), $e->getLine(), $e->getFile());
     //     }
     // }
+
+    public function renderInvoice(Request $request)
+    {
+        if ($request->is_copy) {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoiceTitik();
+                $render->renderInvoice($item);
+            }
+        } else {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoice();
+                $render->renderInvoice($item);
+            }
+        }
+
+        return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
 
 
 
