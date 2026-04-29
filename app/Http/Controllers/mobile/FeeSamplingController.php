@@ -375,10 +375,11 @@ class FeeSamplingController extends Controller
 
             if ($cekdata) {
                 return response()->json(['message' => 'Anda sudah melakukan pengajuan fee sampling hari ini'], 400);
-            }   
+            }
 
             $data = new PengajuanFeeSampling();
             $data->user_id = $this->user_id;
+            $data->batch_id = \str_replace('.', '/', microtime(true));
             $data->total_fee_request = $request->total_fee;
             $data->periode = json_encode($request->periode);
             $data->metode_transfer = $request->metode_transfer;

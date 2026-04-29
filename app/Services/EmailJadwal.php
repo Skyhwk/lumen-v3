@@ -443,10 +443,10 @@ class EmailJadwal
                 $dataLink = GenerateLink::insert($data);
 
                 $cek->expired = Carbon::parse($cek->expired)->addMonths(1)->format('Y-m-d');
-                $cek->generated_at = $this->timestamp;
-                $cek->generated_by = $request->karyawan;
-                $cek->filename = $fileName;
-                $cek->is_generated = true;
+                // $cek->generated_at = $this->timestamp;
+                // $cek->generated_by = $request->karyawan;
+                $cek->jadwalfile = $fileName;
+                // $cek->is_generated = true;
                 $cek->save();
                 DB::commit();
                 return $token;

@@ -119,14 +119,14 @@
                                 @php
                                 
                                 @endphp
-                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y,2)[1] }}</strong></td>
                             </tr>
                         </table>
                     @endforeach
                        @php
                             // pastikan $header ada nilainya
-                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
-                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y,2)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y,2)[0])->first();
                                 if (!empty($table)) {
                                 $table = $table->konten;
                             } else {

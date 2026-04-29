@@ -39,7 +39,7 @@ class WsFinalAirController extends Controller
 	// }
 	public function index(Request $request)
 	{
-		$data = OrderDetail::with('wsValueAir', 'dataLapanganAir', 'sample_diantar.detail')
+		$data = OrderDetail::with('wsValueAir', 'dataLapanganAir', 'sampelDiantar.detail')
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '1-Air')
 			->where('status', 0)
