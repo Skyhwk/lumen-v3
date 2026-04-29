@@ -14,7 +14,7 @@ class Endotoksin
 
         $data = [
             // 'hasil' => json_encode($rumus),
-            'hasil' => $data->hp,
+            'hasil' => \str_replace(' EU/ml', "", $data->hp), // update hasil 1 dengan menghapus " EU/ml"
             'hasil_2' => json_encode($rumus),
             'rpd' => '',
             'recovery' => '',

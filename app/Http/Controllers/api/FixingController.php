@@ -24,6 +24,8 @@ use App\Models\PengajuanFeeSampling;
 use App\Models\PengajuanFeeSamplingDetail;
 use App\Models\TemplateAkses;
 use App\Services\GenerateFeeSampling;
+use App\Services\RenderInvoice;
+use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
 use App\Services\RenderKontrakCopy;
 use App\Services\RenderNonKontrakCopy;
@@ -753,14 +755,17 @@ class FixingController extends Controller
             return response()->json(['message' => $res['error']], $res['code']);
         }
 
+        $isDifferent = $res['current_fee'] != $res['updated_fee'];
+
         return response()->json([
-            'message' => $res['current_fee'] != $res['updated_fee']
+            'message' => $isDifferent
                 ? 'Berhasil mengambil data terbaru'
                 : 'Tidak terdapat perbedaan fee sampling',
-            'status' => $res['current_fee'] != $res['updated_fee'],
+            'status' => $isDifferent,
             'data' => [
                 'current_fee' => $res['current_fee'],
-                'updated_fee' => $res['updated_fee']
+                'updated_fee' => $res['updated_fee'],
+                'details' => $res['details'],
             ]
         ]);
     }
@@ -841,7 +846,10 @@ class FixingController extends Controller
             $after  = collect($tanggal)->contains(fn($t) => Carbon::parse($t)->gte($changeDate));
 
             if ($before && $after) {
-                return ['error' => 'Tanggal pengajuan tidak boleh melewati perubahan level sampler', 'code' => 422];
+                return [
+                    'error' => 'Tanggal pengajuan tidak boleh melewati perubahan level sampler',
+                    'code' => 422
+                ];
             }
 
             $warnaFinal = $before ? $history->old_warna : $history->new_warna;
@@ -863,11 +871,40 @@ class FixingController extends Controller
             $fee_sampling->detail_fee->pluck('tanggal')->toArray()
         );
 
+        $detailNow = $fee_sampling->detail_fee->keyBy('tanggal');
+
+        $details = collect($rekap['harian'])->map(function ($item) use ($detailNow) {
+            $current = $detailNow[$item['tanggal']] ?? null;
+
+            return [
+                'tanggal' => $item['tanggal'],
+
+                'current' => [
+                    'total_fee' => $current->total_fee ?? 0,
+                    'fee_pokok' => $current->fee_pokok ?? 0,
+                    'fee_tambahan' => $current->fee_tambahan ?? 0,
+                    'jumlah_tempat' => $current->jumlah_tempat ?? 0,
+                    'rincian_fee_pokok' => $current->rincian_fee_pokok ?? null,
+                    'fee_tambahan_rincian' => $current->fee_tambahan_rincian ?? null,
+                ],
+
+                'updated' => [
+                    'total_fee' => $item['total_fee'] ?? 0,
+                    'fee_pokok' => $item['fee_pokok'] ?? 0,
+                    'fee_tambahan' => $item['fee_tambahan'] ?? 0,
+                    'jumlah_tempat' => $item['jumlah_tempat'] ?? 0,
+                    'rincian_fee_pokok' => $item['rincian_fee_pokok'] ?? null,
+                    'fee_tambahan_rincian' => $item['fee_tambahan_rincian'] ?? null,
+                ]
+            ];
+        })->values();
+
         return [
             'fee_sampling' => $fee_sampling,
             'rekap' => $rekap,
             'current_fee' => $fee_sampling->total_fee_request,
-            'updated_fee' => $rekap['total_mingguan']
+            'updated_fee' => $rekap['total_mingguan'],
+            'details' => $details,
         ];
     }
 
@@ -968,7 +1005,20 @@ class FixingController extends Controller
     //     }
     // }
 
+    public function renderInvoice(Request $request)
+    {
+        if ($request->is_copy) {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoiceTitik();
+                $render->renderInvoice($item);
+            }
+        } else {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoice();
+                $render->renderInvoice($item);
+            }
+        }
 
-
-
+        return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
 }

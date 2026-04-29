@@ -125,6 +125,9 @@ class CheckOrderActive extends Command
                                 'regulasi'      => json_decode($d->regulasi, true),
                                 'lhp_rilis'     => ($d->status === 3) || ($steps['activeStep'] === 5) ? true : false,
                                 'steps'         => $steps,
+                                'points'        => $group->pluck('keterangan_1')->toArray(),
+                                'categories'    => $group->pluck('kategori_3')->toArray(),
+                                'sampelNumbers' => $group->pluck('no_sampel')->toArray(),
                             ];
                         })->values();
 
