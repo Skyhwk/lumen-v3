@@ -235,19 +235,190 @@ class DokumenFdlController extends Controller
         return DataTables::of($arrayFinal)->make(true);
     }
 
+    // public function detailsData(Request $request)
+    // {
+    //     try {
+    //         $loggedInUser = $this->karyawan;
+
+    //         $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
+    //             ->whereIn('id_jabatan', [41, 42])
+    //             ->exists();
+            
+    //         // Deteksi apakah jenis quotation kontrak (QTC) atau non-kontrak (QT)
+    //         $isKontrak = Str::contains($request->no_quotation, '/QTC/');
+
+    //         // Mulai query
+    //         $data = OrderDetail::with([
+    //             'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
+    //             'orderHeader.samplingPlan',
+    //             'orderHeader.samplingPlan.jadwal' => function ($query) {
+    //                 $query->where('is_active', true);
+    //             },
+    //         ])
+    //         ->where('is_active', true)
+    //         ->where('no_order', $request->no_order);
+
+    //         // Jika kontrak, filter juga berdasarkan periode
+    //         if ($isKontrak) {
+    //             $data = $data->where('tanggal_sampling', $request->tangal_sampling);
+    //             // $data->where('tanggal_sampling', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
+    //         }else{
+    //             $data = $data->where('tanggal_sampling', $request->tangal_sampling);
+    //         }
+
+    //         // Eksekusi query
+    //         $data = $data->get();
+    //         // dd($data);
+    //         $flatData = [];
+
+            
+    //         foreach ($data as $orderDetail) {
+    //             if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
+    //                 continue;
+    //             }
+
+    //             $allowPush = false;
+    //             $samplerTerpilih = $loggedInUser;
+
+    //             if (!$isProgrammer) {
+    //                 // Programmer bisa lihat semua, ambil salah satu sampler
+    //                 $allowPush = true;
+
+    //                 foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
+    //                     $jadwal = $samplingPlan->jadwal->first() ?? null;
+    //                     if ($jadwal && !empty($jadwal->sampler)) {
+    //                         $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+    //                         $samplerTerpilih = $samplerList[0]; // ambil yang pertama
+    //                         // atau pakai acak:
+    //                         // $samplerTerpilih = $samplerList[array_rand($samplerList)];
+    //                         break;
+    //                     }
+    //                 }
+    //             } else {
+    //                 // Non-programmer: cek apakah user termasuk di sampler jadwal
+    //                 foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
+    //                     foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
+    //                         if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
+    //                             $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+    //                             if (in_array($loggedInUser, $samplerList)) {
+    //                                 $allowPush = true;
+    //                                 break 2; // keluar dari dua loop
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+    //             if ($allowPush) {
+    //                 $crf = explode("-", $orderDetail->kategori_3);
+    //                 $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
+
+    //                 $flatData[] = [
+    //                     'sampler' => $samplerTerpilih,
+    //                     'nomor_quotation' => $orderDetail->no_quotation,
+    //                     'kategori' => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
+    //                     'no_order' => $orderDetail->no_order,
+    //                     'deskripsi' => $orderDetail->keterangan_1,
+    //                     'no_sampel' => $orderDetail->no_sampel,
+    //                     'tanggal_sampling' => $orderDetail->tanggal_sampling,
+    //                     'sample' => $nama_kategori[1] ?? ''
+    //                 ];
+    //             }
+    //         }
+    //         $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
+    //             ->where('no_quotation', $request->no_quotation)
+    //             ->where('is_active', true)
+    //             ->orderBy('id', 'desc')
+    //             ->first();
+            
+    //         // Lakukan pencocokan signature per baris data
+    //         if ($persiapan && $persiapan->detail_cs_documents) {
+    //             $csDocuments = json_decode($persiapan->detail_cs_documents, true);
+    //             foreach ($flatData as &$row) {
+    //                 // Ambil sample number dari row (contoh: "001")
+    //                 $rowSample = $row['sample'];
+    //                 $matchingDocs = [];
+    //                 if (is_array($csDocuments)) {
+    //                     foreach ($csDocuments as $doc) {
+    //                         // Pastikan dokumen memiliki field no_sampel berbentuk array
+    //                         if (isset($doc['no_sampel']) && is_array($doc['no_sampel'])) {
+    //                             // Cek apakah sample row ada di dalam array dokumen
+    //                             if (in_array($rowSample, $doc['no_sampel'])) {
+    //                                 $matchingDocs[] = $doc;
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+                    
+    //                 if (!empty($matchingDocs)) {
+    //                     // Jika ada lebih dari satu, coba pilih berdasarkan tanggal yang sesuai
+    //                     $selectedDoc = null;
+    //                     foreach ($matchingDocs as $doc) {
+    //                         if (isset($doc['tanggal']) && $doc['tanggal'] == $row['tanggal_sampling']) {
+    //                             $selectedDoc = $doc;
+    //                             break;
+    //                         }
+    //                     }
+    //                     if (!$selectedDoc) {
+    //                         // Jika tidak ada yang tanggalnya persis cocok, pilih yang paling baru
+    //                         usort($matchingDocs, function($a, $b) {
+    //                             return strtotime($b['tanggal']) - strtotime($a['tanggal']);
+    //                         });
+    //                         $selectedDoc = $matchingDocs[0];
+    //                     }
+    //                     // Tambahkan properti signature ke baris data
+    //                     $row['nama_sampler'] = $selectedDoc['nama_sampler_cs'] ?? null;
+    //                     $row['ttd_sampler']  = $selectedDoc['ttd_sampler_cs'] ?? null;
+    //                     $row['nama_pic']     = $selectedDoc['nama_pic_cs'] ?? null;
+    //                     $row['ttd_pic']      = $selectedDoc['ttd_pic_cs'] ?? null;
+    //                     $row['filename_cs']  = $selectedDoc['filename_cs'] ?? null;
+    //                 } else {
+    //                     // Jika tidak ditemukan dokumen yang cocok, set field signature null
+    //                     $row['nama_sampler'] = null;
+    //                     $row['ttd_sampler']  = null;
+    //                     $row['nama_pic']     = null;
+    //                     $row['ttd_pic']      = null;
+    //                     $row['filename_cs']  = null;
+    //                 }
+    //             }
+    //             unset($row);
+    //         }
+
+    //         // Urutkan berdasarkan no_sampel ASC
+    //         $sorted = collect($flatData)
+    //             ->sortBy('no_sampel')
+    //             ->values()
+    //             ->toArray();
+            
+    //         return DataTables::of($sorted)->make(true);
+
+    //     } catch (\Throwable $th) {
+    //         \Log::error('Gagal memuat detail data sampler login', [
+    //             'error' => $th->getMessage(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Terjadi kesalahan saat memproses data.',
+    //             'error' => $th->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
     public function detailsData(Request $request)
     {
         try {
             $loggedInUser = $this->karyawan;
 
-            $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
+            // 1. Cek Hak Akses Programmer
+            $isProgrammer = MasterKaryawan::where('nama_lengkap', $loggedInUser)
                 ->whereIn('id_jabatan', [41, 42])
                 ->exists();
-            
-            // Deteksi apakah jenis quotation kontrak (QTC) atau non-kontrak (QT)
-            $isKontrak = Str::contains($request->no_quotation, '/QTC/');
 
-            // Mulai query
+            // (Variabel $isKontrak dihapus karena tidak memberikan efek beda pada query)
+            $tanggalSampling = $request->tanggal_sampling ?? $request->tangal_sampling; 
+
+            // 2. Tarik Data Utama
             $data = OrderDetail::with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
                 'orderHeader.samplingPlan',
@@ -256,144 +427,81 @@ class DokumenFdlController extends Controller
                 },
             ])
             ->where('is_active', true)
-            ->where('no_order', $request->no_order);
+            ->where('no_order', $request->no_order)
+            ->where('tanggal_sampling', $tanggalSampling) // Langsung pasang di sini (Lebih bersih)
+            ->get();
 
-            // Jika kontrak, filter juga berdasarkan periode
-            if ($isKontrak) {
-                $data = $data->where('tanggal_sampling', $request->tangal_sampling);
-                // $data->where('tanggal_sampling', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
-            }else{
-                $data = $data->where('tanggal_sampling', $request->tangal_sampling);
-            }
-
-            // Eksekusi query
-            $data = $data->get();
-            // dd($data);
             $flatData = [];
 
-            // foreach ($data as $orderDetail) {
-            //     if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
-            //         continue;
-            //     }
-
-            //     $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
-            //         $jadwals = $samplingPlan->jadwal ?? collect();
-
-            //         $jadwals->each(function ($jadwal) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
-            //             if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
-            //                 $allowPush = false;
-
-            //                 if ($isProgrammer) {
-            //                     // Programmer bisa lihat semua
-            //                     // $allowPush = true;
-            //                     // Programmer bisa lihat semua, tapi ambil salah satu sampler
-            //                     $allowPush = true;
-
-            //                     if (!empty($jadwal->sampler)) {
-            //                         $samplerList = array_map('trim', explode(',', $jadwal->sampler));
-            //                         // Ambil satu sampler (pertama)
-            //                         $loggedInUser = $samplerList[0];
-            //                         // Jika mau acak: $loggedInUser = $samplerList[array_rand($samplerList)];
-            //                     }
-            //                 } else {
-            //                     // Non-programmer hanya kalau termasuk dalam sampler
-            //                     $samplerList = array_map('trim', explode(',', $jadwal->sampler));
-            //                     if (in_array($loggedInUser, $samplerList)) {
-            //                         $allowPush = true;
-            //                     }
-            //                 }
-
-            //                 if ($allowPush) {
-            //                     $crf = explode("-", $orderDetail->kategori_3);
-            //                     $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
-
-            //                     $flatData[] = [
-            //                         'sampler' => $loggedInUser,
-            //                         'nomor_quotation' => $orderDetail->no_quotation,
-            //                         'kategori' => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
-            //                         'no_order' => $orderDetail->no_order,
-            //                         'deskripsi' => $orderDetail->keterangan_1,
-            //                         'no_sampel' => $orderDetail->no_sampel,
-            //                         'tanggal_sampling' => $orderDetail->tanggal_sampling,
-            //                         'sample' => $nama_kategori[1] ?? ''
-            //                     ];
-            //                 }
-            //             }
-            //         });
-            //     });
-            // }
+            // 3. Proses Filter Hak Akses per Baris Data
             foreach ($data as $orderDetail) {
                 if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
-                    continue;
+                    continue; 
                 }
 
                 $allowPush = false;
                 $samplerTerpilih = $loggedInUser;
 
-                if (!$isProgrammer) {
-                    // Programmer bisa lihat semua, ambil salah satu sampler
+                if ($isProgrammer) {
+                    // LOGIKA PROGRAMMER: Loloskan, dan ambil sampler pertama sebagai display
                     $allowPush = true;
-
                     foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
-                        $jadwal = $samplingPlan->jadwal->first() ?? null;
+                        $jadwal = $samplingPlan->jadwal->first();
                         if ($jadwal && !empty($jadwal->sampler)) {
                             $samplerList = array_map('trim', explode(',', $jadwal->sampler));
-                            $samplerTerpilih = $samplerList[0]; // ambil yang pertama
-                            // atau pakai acak:
-                            // $samplerTerpilih = $samplerList[array_rand($samplerList)];
-                            break;
+                            $samplerTerpilih = $samplerList[0]; 
+                            break; 
                         }
                     }
                 } else {
-                    // Non-programmer: cek apakah user termasuk di sampler jadwal
+                    // LOGIKA SAMPLER BIASA: Wajib tercantum di jadwal pada tanggal tersebut
                     foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
                         foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
                             if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
                                 $samplerList = array_map('trim', explode(',', $jadwal->sampler));
                                 if (in_array($loggedInUser, $samplerList)) {
                                     $allowPush = true;
-                                    break 2; // keluar dari dua loop
+                                    break 2; // Jurus yang sangat bagus! Keluar dari 2 loop sekaligus.
                                 }
                             }
                         }
                     }
                 }
 
+                // Jika diizinkan melihat
                 if ($allowPush) {
                     $crf = explode("-", $orderDetail->kategori_3);
                     $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
 
                     $flatData[] = [
-                        'sampler' => $samplerTerpilih,
-                        'nomor_quotation' => $orderDetail->no_quotation,
-                        'kategori' => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
-                        'no_order' => $orderDetail->no_order,
-                        'deskripsi' => $orderDetail->keterangan_1,
-                        'no_sampel' => $orderDetail->no_sampel,
+                        'sampler'          => $samplerTerpilih,
+                        'nomor_quotation'  => $orderDetail->no_quotation,
+                        'kategori'         => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
+                        'no_order'         => $orderDetail->no_order,
+                        'deskripsi'        => $orderDetail->keterangan_1,
+                        'no_sampel'        => $orderDetail->no_sampel,
                         'tanggal_sampling' => $orderDetail->tanggal_sampling,
-                        'sample' => $nama_kategori[1] ?? ''
+                        'sample'           => $nama_kategori[1] ?? ''
                     ];
                 }
             }
-// dd($data);
+
+            // 4. Proses Pencocokan Dokumen CS (Logika sudah aman & baik)
             $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
                 ->where('no_quotation', $request->no_quotation)
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
                 ->first();
             
-            // Lakukan pencocokan signature per baris data
             if ($persiapan && $persiapan->detail_cs_documents) {
                 $csDocuments = json_decode($persiapan->detail_cs_documents, true);
                 foreach ($flatData as &$row) {
-                    // Ambil sample number dari row (contoh: "001")
                     $rowSample = $row['sample'];
                     $matchingDocs = [];
+                    
                     if (is_array($csDocuments)) {
                         foreach ($csDocuments as $doc) {
-                            // Pastikan dokumen memiliki field no_sampel berbentuk array
                             if (isset($doc['no_sampel']) && is_array($doc['no_sampel'])) {
-                                // Cek apakah sample row ada di dalam array dokumen
                                 if (in_array($rowSample, $doc['no_sampel'])) {
                                     $matchingDocs[] = $doc;
                                 }
@@ -402,7 +510,6 @@ class DokumenFdlController extends Controller
                     }
                     
                     if (!empty($matchingDocs)) {
-                        // Jika ada lebih dari satu, coba pilih berdasarkan tanggal yang sesuai
                         $selectedDoc = null;
                         foreach ($matchingDocs as $doc) {
                             if (isset($doc['tanggal']) && $doc['tanggal'] == $row['tanggal_sampling']) {
@@ -411,20 +518,18 @@ class DokumenFdlController extends Controller
                             }
                         }
                         if (!$selectedDoc) {
-                            // Jika tidak ada yang tanggalnya persis cocok, pilih yang paling baru
                             usort($matchingDocs, function($a, $b) {
                                 return strtotime($b['tanggal']) - strtotime($a['tanggal']);
                             });
                             $selectedDoc = $matchingDocs[0];
                         }
-                        // Tambahkan properti signature ke baris data
+                        
                         $row['nama_sampler'] = $selectedDoc['nama_sampler_cs'] ?? null;
                         $row['ttd_sampler']  = $selectedDoc['ttd_sampler_cs'] ?? null;
                         $row['nama_pic']     = $selectedDoc['nama_pic_cs'] ?? null;
                         $row['ttd_pic']      = $selectedDoc['ttd_pic_cs'] ?? null;
                         $row['filename_cs']  = $selectedDoc['filename_cs'] ?? null;
                     } else {
-                        // Jika tidak ditemukan dokumen yang cocok, set field signature null
                         $row['nama_sampler'] = null;
                         $row['ttd_sampler']  = null;
                         $row['nama_pic']     = null;
@@ -432,20 +537,17 @@ class DokumenFdlController extends Controller
                         $row['filename_cs']  = null;
                     }
                 }
-                unset($row);
+                unset($row); // Keamanan pass-by-reference. Very good!
             }
 
-            // Urutkan berdasarkan no_sampel ASC
-            $sorted = collect($flatData)
-                ->sortBy('no_sampel')
-                ->values()
-                ->toArray();
-            
+            // 5. Return DataTables
+            $sorted = collect($flatData)->sortBy('no_sampel')->values()->toArray();
             return DataTables::of($sorted)->make(true);
 
         } catch (\Throwable $th) {
             \Log::error('Gagal memuat detail data sampler login', [
                 'error' => $th->getMessage(),
+                'line'  => $th->getLine() 
             ]);
 
             return response()->json([
@@ -632,20 +734,37 @@ class DokumenFdlController extends Controller
                 }
 
                 // Update detail_cs_documents JSON
+                //===== perbaikan gagal render =====
                 $csDocuments = $persiapanSampel->detail_cs_documents
                     ? json_decode($persiapanSampel->detail_cs_documents, true)
                     : [];
+                $old_ttd_sampler_cs = null;
+                $old_ttd_pic_cs     = null;
+                $old_filename_cs    = null;
+                
+                foreach ($csDocuments as $doc) {
+                    if (isset($doc['no_sampel']) && $doc['no_sampel'] == $request->no_sampel) {
+                        $old_ttd_sampler_cs = $doc['ttd_sampler_cs'] ?? null;
+                        $old_ttd_pic_cs     = $doc['ttd_pic_cs'] ?? null;
+                        $old_filename_cs    = $doc['filename_cs'] ?? null;
+                        break;
+                    }
+                }
+                $final_ttd_sampler = $ttd_sampler ? $ttd_sampler->filename : $old_ttd_sampler_cs;
+                $final_ttd_pic     = $ttd_pic ? $ttd_pic->filename : $old_ttd_pic_cs;
+                $final_filename    = $request->filename_cs ?? $old_filename_cs;
+
 
                 $newDocument = [
                     'tanggal'         => $tanggalSampling,
                     'nama_sampler_cs' => $request->nama_sampler,
-                    'ttd_sampler_cs'  => $ttd_sampler ? $ttd_sampler->filename : null,
+                    'ttd_sampler_cs'  => $final_ttd_sampler, // <-- Gunakan TTD Final
                     'nama_pic_cs'     => $request->nama_pic,
-                    'ttd_pic_cs'      => $ttd_pic ? $ttd_pic->filename : null,
-                    'filename_cs'     => $request->filename_cs,
+                    'ttd_pic_cs'      => $final_ttd_pic,     // <-- Gunakan TTD Final
+                    'filename_cs'     => $final_filename,
                     'no_sampel'       => $request->no_sampel,
                 ];
-
+                //===== penutup perbaikan gagal render =====
                 $found = false;
                 foreach ($csDocuments as $idx => $doc) {
                     if (isset($doc['no_sampel']) && $doc['no_sampel'] == $request->no_sampel) {
@@ -716,11 +835,11 @@ class DokumenFdlController extends Controller
                     // dd('masuk');
                     // Siapkan data signature untuk PDF
                     $signatureData = (object) [
-                        'ttd_sampler' => $ttd_sampler ? $ttd_sampler->filename : null,
-                        'ttd_pic'     => $ttd_pic ? $ttd_pic->filename : null,
+                        'ttd_sampler' => $final_ttd_sampler, // <-- GUNAKAN VARIABEL FINAL
+                        'ttd_pic'     => $final_ttd_pic,     // <-- GUNAKAN VARIABEL FINAL
                         'nama_pic'    => $request->nama_pic,
                         'nama_sampler'=> $request->nama_sampler,
-                        'filename_cs' => $request->filename_cs,
+                        'filename_cs' => $final_filename,    // <-- (Opsional) Biar sekalian konsisten pakai final
                         'no_sampel'   => $request->no_sampel,
                     ];
 
@@ -904,17 +1023,26 @@ class DokumenFdlController extends Controller
                     </tr>
                 ');
             }
-            $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
-            $sign_pic = null;
-            if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
-            if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
-                return response()->json([
-                    'message' => $sign_pic->message ?? $sign_sampler->message
-                ],400);
+            // ==== perbaikan gagal decode ttd ====
+            $sign_sampler = null;
+            if (!empty($signatureData->ttd_sampler)) {
+                $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
             }
-            $ttd_sampler = $signatureData->ttd_sampler && $sign_sampler->status !== 'error' ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
-            $ttd_pic = $signatureData->ttd_pic && $sign_pic->status !== 'error' ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
 
+            $sign_pic = null;
+            if (!empty($signatureData->ttd_pic)) {
+                $sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+            }
+            if (
+                (isset($sign_sampler->status) && $sign_sampler->status === 'error') || 
+                (isset($sign_pic->status) && $sign_pic->status === 'error')
+            ) {
+                // Lempar exception, JANGAN return JSON
+                throw new \Exception($sign_pic->message ?? $sign_sampler->message ?? 'Gagal decode TTD');
+            }
+            $ttd_sampler = (!empty($signatureData->ttd_sampler) && $sign_sampler) ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+            $ttd_pic = (!empty($signatureData->ttd_pic) && $sign_pic) ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+            // ==== penutup perbaikan gagal decode ttd ====
             $pdf->WriteHTML('</table>
                             <table class="table" width="100%" style="border: none;margin-top: 20px">
                                 <tr>
@@ -945,10 +1073,11 @@ class DokumenFdlController extends Controller
 
             return $filename;
         } catch (\Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-            ], 500);
+            // return response()->json([
+            //     'message' => $ex->getMessage(),
+            //     'line' => $ex->getLine(),
+            // ], 500);
+            throw $ex;
         }
     }
 
