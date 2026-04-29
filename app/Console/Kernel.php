@@ -44,7 +44,6 @@ class Kernel extends ConsoleKernel
         Commands\KalkulasiTargetPenjadwalan::class,
         Commands\CheckOrderActive::class,
         Commands\SummaryInvoice::class,
-        Commands\AuditPersiapanCommand::class,
         Commands\CalculatePoinCustomer::class,
     ];
 
