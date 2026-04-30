@@ -1168,6 +1168,15 @@ class BasOnlineController extends Controller
                 return $dataBas[0]["filename"];
                 
             }
+
+            if($persiapanHeaderKategori->is_emailed_bas == 0 && $persiapanHeaderKategori->detail_bas_documents != null){
+                $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
+                if (!empty($dataBas) && is_array($dataBas)) {
+                    $dataBas = end($dataBas);
+                }
+               
+                return $dataBas[0]["filename"];
+            }
             
             $noSample = json_decode($persiapanHeaderKategori->no_sampel, true);
             
