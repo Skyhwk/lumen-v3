@@ -235,10 +235,12 @@ class SamplingPlanController extends Controller
             $samplers = $samplers->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
+
             $privateSampler = PerbantuanSampler::with('users.jabatan')
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
+
             $privateSampler->transform(function ($item) {
                 $digitCount = strlen((string) $item->user_id);
 
@@ -248,11 +250,11 @@ class SamplingPlanController extends Controller
                 } else {
                     $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
                 }
-                // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+
+                $item->id = $item->user_id;
+                
                 unset($item->jabatan);
                 if ($item->users && $item->users->jabatan) {
-                    // Kita "copy" objek jabatan dari dalam users ke root item
-                    // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
                     $jabatanObj = $item->users->getRelation('jabatan');
                     $item->setRelation('jabatan', $jabatanObj);
                 } else {

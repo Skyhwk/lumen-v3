@@ -334,7 +334,7 @@ class FeeSamplingController extends Controller
                     ? $historyLevel->old_warna
                     : $historyLevel->new_warna;
             }
-
+            $warnaFinal = $warnaFinal ?? 'hijau_muda';
             // 4. Ambil fee berdasarkan warna final
             $level = MasterFeeSampling::where('warna', $warnaFinal)
                 ->where('is_active', true)

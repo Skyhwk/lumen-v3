@@ -38,6 +38,7 @@ class CheckOrderActive extends Command
                 ["orderDetail.TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory"],
                 collect($lhpRelations)->map(fn($r) => "orderDetail.$r")->toArray()
             ))
+            ->whereDate('tanggal_order', ">=", '2025-05-01')
             ->where('is_active', 1)
             ->whereHas('orderDetail')
             ->get()
@@ -125,6 +126,9 @@ class CheckOrderActive extends Command
                                 'regulasi'      => json_decode($d->regulasi, true),
                                 'lhp_rilis'     => ($d->status === 3) || ($steps['activeStep'] === 5) ? true : false,
                                 'steps'         => $steps,
+                                'points'        => $group->pluck('keterangan_1')->toArray(),
+                                'categories'    => $group->pluck('kategori_3')->toArray(),
+                                'sampelNumbers' => $group->pluck('no_sampel')->toArray(),
                             ];
                         })->values();
 
@@ -153,7 +157,7 @@ class CheckOrderActive extends Command
                 ];
             })
 
-            ->filter(fn($o) => !$o['status_selesai'])
+            // ->filter(fn($o) => !$o['status_selesai'])
             ->values()
             ->toArray();
 

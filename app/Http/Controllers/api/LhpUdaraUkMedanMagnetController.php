@@ -6,6 +6,7 @@ use App\Models\LhpsMedanLMCustom;
 use App\Models\LhpsMedanLMDetail;
 use App\Models\LhpsMedanLMHeader;
 use App\Models\OrderDetail;
+use App\Models\ParameterFdl;
 
 use App\Services\LhpTemplate;
 use App\Services\PrintLhp;
@@ -20,6 +21,17 @@ class LhpUdaraUkMedanMagnetController extends Controller
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
+        $parameterFdl = ParameterFdl::where('nama_fdl', 'listrik_dan_magnet')->get();
+        $parameterAllowed = [];
+        foreach ($parameterFdl as $row) {
+            $decoded = json_decode($row->parameters, true) ?? [];
+            $parameterAllowed = array_merge($parameterAllowed, $decoded);
+        }
+
+        $regexPattern = implode('|', array_map(function($val) {
+            return preg_quote($val, '/');
+        }, $parameterAllowed));
+
         $data = OrderDetail::with([
             'lhps_medanlm',
             'orderHeader' => function ($query) {
@@ -31,10 +43,11 @@ class LhpUdaraUkMedanMagnetController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->where(function ($query) {
-                $query->where('parameter', 'like', '%Power Density%')
-                    ->orWhere('parameter', 'like', '%Medan Magnit Statis%')
-                    ->orWhere('parameter', 'like', '%Medan Listrik%');
+            ->where(function ($query) use ($regexPattern) {
+                if (!empty($regexPattern)) {
+                    // Mencari apakah kolom 'parameter' mengandung salah satu dari list allowed
+                    $query->whereRaw("parameter REGEXP ?", [$regexPattern]);
+                }
             })
             ->groupBy('cfr')
             ->where('status', 3)
