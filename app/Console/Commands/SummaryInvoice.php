@@ -96,7 +96,7 @@ class SummaryInvoice extends Command
                         CASE 
                             WHEN MAX(order_header.konsultan) IS NOT NULL 
                                 AND MAX(order_header.konsultan) != ''
-                            THEN CONCAT(MAX(order_header.nama_perusahaan), ' (', MAX(order_header.konsultan), ')')
+                            THEN CONCAT(MAX(order_header.konsultan), ' (', MAX(order_header.nama_perusahaan), ')')
                             ELSE MAX(order_header.nama_perusahaan)
                         END AS nama_customer
                     "),
