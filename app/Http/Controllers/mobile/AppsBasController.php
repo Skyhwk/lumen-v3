@@ -938,9 +938,10 @@ class AppsBasController extends Controller
                             'waktu_mulai' => $item['waktu_mulai'] ?? $header->waktu_mulai,
                             'waktu_selesai' => $item['waktu_selesai'] ?? $header->waktu_selesai,
                             'filename' => str_replace(
-                            ['&#039;', '/', ',', '.', '@', '"', '`'],
-                            ["'",       '',  '',  '',  '',  '',  ''],
-                            $item['filename_bas'] ?? $header->filename_bas),
+                                ['&#039;', '/', ',', '@', '"', '`'],
+                                ["'",       '',  '',  '',  '',  ''],
+                                $item['filename_bas'] ?? $header->filename_bas
+                            ),
                             // $item['filename_bas'] ?? $header->filename_bas,
                             'no_sampel' => $item['no_sampel'] ?? []
                         ];
