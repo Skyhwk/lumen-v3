@@ -32,7 +32,7 @@ class CheckOrderActive extends Command
             ->select(
                 'id','no_order','id_pelanggan','sales_id',
                 'no_document','created_at as tgl_order',
-                'nama_perusahaan','alamat_sampling','is_revisi'
+                'nama_perusahaan','alamat_sampling','is_revisi','konsultan'
             )
             ->with(array_merge(
                 ["orderDetail.TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory"],
@@ -140,7 +140,10 @@ class CheckOrderActive extends Command
                     })->values();
 
                 $statusSelesai = $dataOrderDetail->every(fn($i) => $i['status_selesai']);
-
+                $namaPt = ($order->konsultan != null || $order->konsultan != '')
+                    ? $order->konsultan . ' (' . $order->nama_perusahaan . ')' 
+                    : $order->nama_perusahaan;
+                    
                 return [
                     'id'              => $order->id,
                     'id_pelanggan'    => $order->id_pelanggan,
@@ -148,9 +151,7 @@ class CheckOrderActive extends Command
                     'no_penawaran'    => $order->no_document,
                     'no_order'        => $order->no_order,
                     'tgl_order'       => Carbon::parse($order->tgl_order)->format('Y-m-d'),
-                    'nama_perusahaan' => ($order->konsultan !== null && $order->konsultan !== '')
-                        ? $order->konsultan . ' (' . $order->nama_perusahaan . ')' 
-                        : $order->nama_perusahaan,
+                    'nama_perusahaan' => $namaPt,
                     'alamat_sampling' => $order->alamat_sampling,
                     'is_revisi'       => $order->is_revisi,
                     'sales_id'        => $order->sales_id,
