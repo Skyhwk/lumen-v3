@@ -1885,7 +1885,12 @@ class BasOnlineController extends Controller
         // Group sampling data by combined samplers
         $samplingBySampler = [];
         $sampleSamplerMap = []; // Track samplers per sample
-        
+        if (empty($samplingBySampler)) {
+            // fallback: groupkan semua sampling tanpa filter sampler
+            $firstSampler = $samplerJadwal->first();
+            $fallbackKey = $firstSampler ? $firstSampler->sampler : 'Sampler';
+            $samplingBySampler[$fallbackKey] = $dataSampling;
+        }
         
         foreach ($dataSampling as $sampling) {
             $sampleParts = explode('/', $sampling->no_sample);
