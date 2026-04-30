@@ -255,12 +255,7 @@ class DraftUlkController extends Controller
             $parameterAllowed = array_merge($parameterAllowed, $decoded);
         }
 
-        // Tambahkan parameter manual
-        $manualAdd = [
-            'Sinar UV', 'Ergonomi', 'Gelombang Elektro', 'Medan Listrik', 
-            'Medan Magnit Statis', 'Medan Magnet', 'Power Density'
-        ];
-        $parameterAllowed = array_merge($parameterAllowed, $manualAdd);
+        $parameterAllowed = array_merge($parameterAllowed);
 
         // Bersihkan duplikasi dan karakter aneh
         $parameterAllowed = array_unique(array_filter($parameterAllowed));
