@@ -148,7 +148,9 @@ class CheckOrderActive extends Command
                     'no_penawaran'    => $order->no_document,
                     'no_order'        => $order->no_order,
                     'tgl_order'       => Carbon::parse($order->tgl_order)->format('Y-m-d'),
-                    'nama_perusahaan' => $order->nama_perusahaan,
+                    'nama_perusahaan' => ($order->konsultan !== null && $order->konsultan !== '')
+                        ? $order->konsultan . ' (' . $order->nama_perusahaan . ')' 
+                        : $order->nama_perusahaan,
                     'alamat_sampling' => $order->alamat_sampling,
                     'is_revisi'       => $order->is_revisi,
                     'sales_id'        => $order->sales_id,
