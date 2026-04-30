@@ -38,6 +38,7 @@ class CheckOrderActive extends Command
                 ["orderDetail.TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory"],
                 collect($lhpRelations)->map(fn($r) => "orderDetail.$r")->toArray()
             ))
+            ->whereDate('tanggal_order', ">=", '2025-05-01')
             ->where('is_active', 1)
             ->whereHas('orderDetail')
             ->get()
@@ -156,7 +157,7 @@ class CheckOrderActive extends Command
                 ];
             })
 
-            ->filter(fn($o) => !$o['status_selesai'])
+            // ->filter(fn($o) => !$o['status_selesai'])
             ->values()
             ->toArray();
 
