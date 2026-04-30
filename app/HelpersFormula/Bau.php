@@ -11,8 +11,9 @@ class Bau
             if($data->hp == "Tidak_Berbau"){
                 $rumus = "Tidak Berbau";
             }else{
-                $rumus = number_format(($data->nilai_terkecil + (200 - $data->nilai_terkecil))/$data->nilai_terkecil, 1, '.', '');
-                $rumus = "Berbau : " .$rumus;
+                $nilai = ($data->nilai_terkecil + (200 - $data->nilai_terkecil)) / $data->nilai_terkecil;
+
+                $rumus = "Berbau : " . number_format(round($nilai, 1), 1, '.', '');
             }
         }else{ // Bau lama
             $rumus = $data->hp;
@@ -20,7 +21,7 @@ class Bau
 
         $data = [
             'hasil' => $rumus,
-            'hasil_2' => '',
+            'hasil_2' => $nilai ?? null,
             'rpd' => '',
             'recovery' => '',
         ];
