@@ -23,73 +23,157 @@ use Yajra\Datatables\Datatables;
 
 class LhpULKController extends Controller
 {
-    public function index(Request $request){
-        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
-        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
-        $parameterAllowed = array_merge($parameterAllowed, [
-            'Sinar UV',
-            'Ergonomi',
-            'Gelombang Elektro',
-            'Medan Listrik',
-            'Medan Magnit Statis',
-            'Power Density',]);
+    // public function index(Request $request){
+    //     $listParamTemplate = [
+    //         'lingkungan_kerja',
+    //         'senyawa_volatile',
+    //         'debu_personal',
+    //         'sensoric_pm',
+    //         'direct_lain',
+    //     ];
 
-        $data = OrderDetail::selectRaw('
-                max(id) as id,
-                max(id_order_header) as id_order_header,
-                cfr,
-                GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
-                MAX(nama_perusahaan) as nama_perusahaan,
-                MAX(konsultan) as konsultan,
-                MAX(no_quotation) as no_quotation,
-                MAX(no_order) as no_order,
-                MAX(parameter) as parameter,
-                MAX(regulasi) as regulasi,
-                GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
-                MAX(kategori_2) as kategori_2,
-                MAX(kategori_3) as kategori_3,
-                GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
-                GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
-                GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
-            ')
-            ->with(['lhps_ling','orderHeader'])
-            ->where('is_active', true)
-            ->where('kategori_3', '27-Udara Lingkungan Kerja')
-            ->where('status', 3)
-            // ->where(function ($query) use ($parameterAllowed) {
-            //     foreach ($parameterAllowed as $param) {
-            //         $query->where('parameter', 'NOT LIKE', "%;$param%");
-            //     }
-            // })
-            // --- LOGIKA VALIDASI TANPA OR WHERE ---
-            ->where(function ($query) use ($parameterAllowed) {
-                // Syntax SQL menghitung jumlah parameter (berdasarkan separator ;)
-                $countSql = "(LENGTH(parameter) - LENGTH(REPLACE(parameter, ';', '')) + 1)";
+    //     // 1. Ambil semua parameter dari template yang dipilih
+    //     $parameterFdl = ParameterFdl::whereIn('nama_fdl', $listParamTemplate)->get();
 
-                foreach ($parameterAllowed as $param) {
-                    // Kita gunakan CASE WHEN di dalam whereRaw
-                    // Logika: 
-                    // 1. Apakah jumlah parameter <= 2?
-                    //    YA -> Cek apakah parameter TIDAK mengandung kata terlarang (NOT LIKE).
-                    //    TIDAK -> Return 1 (True/Lolos) karena validasi blacklist tidak berlaku.
+    //     $parameterAllowed = [];
+    //     foreach ($parameterFdl as $row) {
+    //         $decoded = json_decode($row->parameters, true) ?? [];
+    //         $parameterAllowed = array_merge($parameterAllowed, $decoded);
+    //     }
+
+    //     // Tambahkan parameter manual
+    //     $manualAdd = [
+    //         'Sinar UV', 'Ergonomi', 'Gelombang Elektro', 'Medan Listrik', 
+    //         'Medan Magnit Statis', 'Medan Magnet', 'Power Density'
+    //     ];
+    //     $parameterAllowed = array_merge($parameterAllowed, $manualAdd);
+
+    //     // Bersihkan duplikasi dan karakter aneh
+    //     $parameterAllowed = array_unique(array_filter($parameterAllowed));
+
+    //     // 2. Buat Pattern Regex
+    //     // Gunakan preg_quote agar karakter seperti ( ) atau . tidak merusak query
+    //     $pattern = implode('|', array_map('preg_quote', $parameterAllowed));
+
+    //     $data = OrderDetail::selectRaw('
+    //             max(id) as id,
+    //             max(id_order_header) as id_order_header,
+    //             cfr,
+    //             GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+    //             MAX(nama_perusahaan) as nama_perusahaan,
+    //             MAX(konsultan) as konsultan,
+    //             MAX(no_quotation) as no_quotation,
+    //             MAX(no_order) as no_order,
+    //             MAX(parameter) as parameter,
+    //             MAX(regulasi) as regulasi,
+    //             GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+    //             MAX(kategori_2) as kategori_2,
+    //             MAX(kategori_3) as kategori_3,
+    //             GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+    //             GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+    //             GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+    //         ')
+    //         ->with(['lhps_ling','orderHeader'])
+    //         ->where('is_active', true)
+    //         ->where('kategori_3', '27-Udara Lingkungan Kerja')
+    //         ->where('status', 3)
+    //         // ->where(function ($query) use ($parameterAllowed) {
+    //         //     foreach ($parameterAllowed as $param) {
+    //         //         $query->where('parameter', 'NOT LIKE', "%;$param%");
+    //         //     }
+    //         // })
+    //         // --- LOGIKA VALIDASI TANPA OR WHERE ---
+    //         ->where(function ($query) use ($parameterAllowed) {
+    //             // Syntax SQL menghitung jumlah parameter (berdasarkan separator ;)
+    //             $countSql = "(LENGTH(parameter) - LENGTH(REPLACE(parameter, ';', '')) + 1)";
+
+    //             foreach ($parameterAllowed as $param) {
+    //                 // Kita gunakan CASE WHEN di dalam whereRaw
+    //                 // Logika: 
+    //                 // 1. Apakah jumlah parameter <= 2?
+    //                 //    YA -> Cek apakah parameter TIDAK mengandung kata terlarang (NOT LIKE).
+    //                 //    TIDAK -> Return 1 (True/Lolos) karena validasi blacklist tidak berlaku.
                     
-                    $query->whereRaw("
-                        CASE 
-                            WHEN $countSql <= 2 THEN parameter NOT LIKE ? 
-                            ELSE 1 
-                        END
-                    ", ["%;$param%"]);
-                }
-            })
-            ->groupBy('cfr');
+    //                 $query->whereRaw("
+    //                     CASE 
+    //                         WHEN $countSql <= 2 THEN parameter NOT LIKE ? 
+    //                         ELSE 1 
+    //                     END
+    //                 ", ["%;$param%"]);
+    //             }
+    //         })
+    //         ->groupBy('cfr');
 
-        return Datatables::of($data)
-            ->order(function ($query) {
-                $query->orderByRaw("MAX(tanggal_terima) DESC");
-            })
-            ->make(true);
+    //     return Datatables::of($data)
+    //         ->order(function ($query) {
+    //             $query->orderByRaw("MAX(tanggal_terima) DESC");
+    //         })
+    //         ->make(true);
 
+    // }
+
+    public function index(Request $request)
+{
+    $listParamTemplate = [
+        'lingkungan_kerja', 'senyawa_volatile', 'debu_personal', 
+        'sensoric_pm', 'direct_lain'
+    ];
+
+    // 1. Ambil semua parameter yang diperbolehkan
+    $parameterFdl = ParameterFdl::whereIn('nama_fdl', $listParamTemplate)->get();
+
+    $parameterAllowed = [];
+    foreach ($parameterFdl as $row) {
+        $decoded = json_decode($row->parameters, true) ?? [];
+        $parameterAllowed = array_merge($parameterAllowed, $decoded);
     }
+    
+    $parameterAllowed = array_unique(array_filter($parameterAllowed));
+
+    // 2. Buat Pattern Regex untuk Whitelist
+    // Kita gunakan [[:<:]] atau word boundaries agar "Magnet" tidak tertukar dengan "Magnetic"
+    // Namun untuk fleksibilitas tinggi, kita gunakan pipe (|)
+    $regexPattern = implode('|', array_map(function($val) {
+        return preg_quote($val, '/');
+    }, $parameterAllowed));
+
+    $data = OrderDetail::selectRaw('
+            max(id) as id,
+            max(id_order_header) as id_order_header,
+            cfr,
+            GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+            MAX(nama_perusahaan) as nama_perusahaan,
+            MAX(konsultan) as konsultan,
+            MAX(no_quotation) as no_quotation,
+            MAX(no_order) as no_order,
+            MAX(parameter) as parameter,
+            MAX(regulasi) as regulasi,
+            GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+            MAX(kategori_2) as kategori_2,
+            MAX(kategori_3) as kategori_3,
+            GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+            GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+            GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+        ')
+        ->with(['lhps_ling', 'orderHeader'])
+        ->where('is_active', true)
+        ->where('kategori_3', '27-Udara Lingkungan Kerja')
+        ->where('status', 3)
+        // --- LOGIKA WHITELIST MENGGUNAKAN REGEX ---
+        ->where(function ($query) use ($regexPattern) {
+            if (!empty($regexPattern)) {
+                // Mencari apakah kolom 'parameter' mengandung salah satu dari list allowed
+                $query->whereRaw("parameter REGEXP ?", [$regexPattern]);
+            }
+        })
+        ->groupBy('cfr');
+
+    return Datatables::of($data)
+        ->order(function ($query) {
+            $query->orderByRaw("MAX(tanggal_terima) DESC");
+        })
+        ->make(true);
+}
 
     public function handleReject(Request $request) {
         DB::beginTransaction();
