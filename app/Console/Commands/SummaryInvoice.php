@@ -92,7 +92,14 @@ class SummaryInvoice extends Command
                     DB::raw('MAX(invoice.pelanggan_id) AS pelanggan_id'),
                     DB::raw('MAX(invoice.detail_pendukung) AS detail_pendukung'),
 
-                    DB::raw('COALESCE(MAX(order_header.nama_perusahaan), MAX(order_header.konsultan)) AS nama_customer'),
+                    DB::raw("
+                        CASE 
+                            WHEN MAX(order_header.konsultan) IS NOT NULL 
+                                AND MAX(order_header.konsultan) != ''
+                            THEN CONCAT(MAX(order_header.nama_perusahaan), ' (', MAX(order_header.konsultan), ')')
+                            ELSE MAX(order_header.nama_perusahaan)
+                        END AS nama_customer
+                    "),
                     DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
                     DB::raw('GROUP_CONCAT(DISTINCT invoice.no_order) AS no_orders'),
 
