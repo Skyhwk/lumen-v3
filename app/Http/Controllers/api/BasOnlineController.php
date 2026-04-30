@@ -1165,7 +1165,7 @@ class BasOnlineController extends Controller
                     $dataBas = end($dataBas);
                 }
                
-                return $dataBas[0]["filename"];
+                return $dataBas["filename"];
                 
             }
 
@@ -1175,7 +1175,7 @@ class BasOnlineController extends Controller
                     $dataBas = end($dataBas);
                 }
                
-                return $dataBas[0]["filename"];
+                return $dataBas["filename"];
             }
             
             $noSample = json_decode($persiapanHeaderKategori->no_sampel, true);
