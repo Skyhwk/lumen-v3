@@ -226,7 +226,7 @@ class SummaryInvoice extends Command
             $newInvoiceNumbers = array_column($data, 'no_invoice');
 
             collect($data)
-                ->chunk(50)
+                ->chunk(500)
                 ->each(function ($chunk, $index) {
 
                     printf("\n[SummaryInvoice] [%s] Upsert chunk ke-%d size:%d", Carbon::now(), $index + 1, count($chunk));
@@ -290,11 +290,8 @@ class SummaryInvoice extends Command
                 ->whereNotIn('no_invoice', $newInvoiceNumbers)
                 ->delete();
 
-            DB::commit();
-
             printf("\n[SummaryInvoice] [%s] DONE total: %d", Carbon::now(), count($data));
         } catch (\Throwable $th) {
-            DB::rollBack();
             dd($th->getMessage(), $th->getLine(), $th->getFile());
         }
     }
