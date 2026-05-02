@@ -82,7 +82,7 @@ class SummaryInvoice extends Command
                     DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
 
                     DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
-                    DB::raw('(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+                    DB::raw('COALESCE(MAX(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0) AS nilai_pelunasan'),
 
                     DB::raw('MAX(invoice.is_generate) AS is_generate'),
                     DB::raw('MAX(invoice.generated_by) AS generated_by'),
