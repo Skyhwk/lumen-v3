@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ViewCustomerPoints;
+use App\Models\PointEarning;
 use Yajra\Datatables\Datatables;
 use Illuminate\Http\Request;
 
@@ -35,4 +36,10 @@ class ListCustomerTierController extends Controller
         return Datatables::of($customerTiers)->make(true);
     }
 
+    public function getHistoryPoints(Request $request)
+    {
+        $customerId = $request->input('customer_id');
+        $historyPoints = PointEarning::where('customer_id', $customerId)->orderBy('earned_at', 'desc')->get();
+        return Datatables::of($historyPoints)->make(true);
+    }
 }
