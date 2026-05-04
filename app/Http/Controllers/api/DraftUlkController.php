@@ -257,40 +257,46 @@ class DraftUlkController extends Controller
 
         $parameterAllowed = array_merge($parameterAllowed);
 
+        
         // Bersihkan duplikasi dan karakter aneh
         $parameterAllowed = array_unique(array_filter($parameterAllowed));
 
         // 2. Buat Pattern Regex
-        // Gunakan preg_quote agar karakter seperti ( ) atau . tidak merusak query
         $pattern = implode('|', array_map('preg_quote', $parameterAllowed));
+
 
         // 3. Eksekusi Query
         $data = OrderDetail::selectRaw('
-                    max(id) as id,
-                    max(id_order_header) as id_order_header,
-                    cfr,
-                    GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
-                    MAX(nama_perusahaan) as nama_perusahaan,
-                    MAX(konsultan) as konsultan,
-                    MAX(no_quotation) as no_quotation,
-                    MAX(no_order) as no_order,
-                    MAX(parameter) as parameter,
-                    MAX(regulasi) as regulasi,
-                    GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
-                    MAX(kategori_2) as kategori_2,
-                    MAX(kategori_3) as kategori_3,
-                    GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
-                    GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
-                    GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
-                ')
-                    ->with(['lhps_ling', 'orderHeader'])
-                    ->where('is_active', true)
-                    ->where('kategori_3', '27-Udara Lingkungan Kerja')
-                    ->where('status', 2)
-                    // Hapus "NOT", sekarang kita filter yang COCOK saja (Whitelist)
-                    ->whereRaw("parameter REGEXP '(" . $pattern . ")'")
-                    ->groupBy('cfr')
-                    ->get();
+            max(id) as id,
+            max(id_order_header) as id_order_header,
+            cfr,
+            GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+            MAX(nama_perusahaan) as nama_perusahaan,
+            MAX(konsultan) as konsultan,
+            MAX(no_quotation) as no_quotation,
+            MAX(no_order) as no_order,
+            MAX(parameter) as parameter,
+            MAX(regulasi) as regulasi,
+            GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+            MAX(kategori_2) as kategori_2,
+            MAX(kategori_3) as kategori_3,
+            GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+            GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+            GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+        ')
+            ->with(['lhps_ling', 'orderHeader', 'udaraDebu'])
+            ->where('is_active', true)
+            ->where('kategori_3', '27-Udara Lingkungan Kerja')
+            ->where('status', 2)
+            ->where(function($query) use ($parameterAllowed) {
+                foreach ($parameterAllowed as $param) {
+                    
+                    $query->orWhere('parameter', 'LIKE', '%' . $param . '%');
+                }
+            })
+            ->groupBy('cfr')
+            ->get();
+
         // 1. Kumpulkan semua no_sampel dari seluruh data ke satu array besar
         $allNoSampel = [];
         foreach ($data as $item) {
@@ -305,7 +311,6 @@ class DraftUlkController extends Controller
         $allDebu = DataLapanganDebuPersonal::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
         $allSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
         $allPartikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $allNoSampel)->get()->groupBy('no_sampel');
-
         // 3. Map data di memori
         $data->map(function ($item) use ($allLing, $allDirect, $allDebu, $allSenyawa, $allPartikulat) {
             $noSampelList = array_filter(explode(',', $item->no_sampel));
