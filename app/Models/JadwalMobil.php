@@ -9,5 +9,4 @@ class JadwalMobil extends Sector
     public $timestamps = false;
 
     protected $guarded = [];
-
 }
