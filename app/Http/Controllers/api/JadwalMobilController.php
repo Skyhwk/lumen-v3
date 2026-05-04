@@ -21,10 +21,10 @@ class JadwalMobilController extends Controller
 
     public function store(Request $request){
         JadwalMobil::create([
-            'tanggal_berangkat' => $request->tanggal_berangkat,
-            'jam_berangkat' => $request->jam_berangkat,
-            'plat_mobil' => $request->plat_mobil,
-            'keterangan' => $request->keterangan, 
+            'tanggal_berangkat' => $request->tanggal_berangkat ?? null,
+            'jam_berangkat' => $request->jam_berangkat ?? null,
+            'plat_mobil' => $request->plat_mobil ?? null,
+            'keterangan' => $request->keterangan ?? null,
             'created_by' => $this->karyawan,
             'created_at' => Carbon::now()
         ]);
@@ -40,10 +40,10 @@ class JadwalMobilController extends Controller
         }
 
         $jadwal->update([
-            'tanggal_berangkat' => $request->tanggal_berangkat,
-            'jam_berangkat' => $request->jam_berangkat,
-            'plat_mobil' => $request->plat_mobil,
-            'keterangan' => $request->keterangan,
+            'tanggal_berangkat' => $request->tanggal_berangkat ?? $jadwal->tanggal_berangkat,
+            'jam_berangkat' => $request->jam_berangkat ?? $jadwal->jam_berangkat,
+            'plat_mobil' => $request->plat_mobil ?? $jadwal->plat_mobil,
+            'keterangan' => $request->keterangan ?? $jadwal->keterangan,
             'updated_by' => $this->karyawan,
             'updated_at' => Carbon::now()
         ]);
