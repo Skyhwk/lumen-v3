@@ -59,7 +59,7 @@ class KaryawanNonAktifController extends Controller
 
             // Validate the status_karyawan
             if (!in_array($request->status_karyawan, $allowedStatus)) {
-                throw new Exception("Invalid status_karyawan value provided.");
+                throw new \Exception("Invalid status_karyawan value provided.");
             }
 
             $data = MasterKaryawan::where('id', $request->id)->first();
@@ -78,7 +78,7 @@ class KaryawanNonAktifController extends Controller
                 'message' => 'Karyawan berhasil diaktivasi',
                 'data' => $data
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage()
@@ -217,7 +217,7 @@ class KaryawanNonAktifController extends Controller
             return response()->json([
                 'message' => 'Karyawan telah di non aktif kan'
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Terjadi kesalahan saat memperbarui karyawan',
