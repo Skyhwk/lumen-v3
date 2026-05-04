@@ -66,4 +66,18 @@ class JadwalMobilController extends Controller
         return response()->json(['message' => 'Jadwal mobil berhasil dihapus'], 200);
     }
 
+    public function getKendaraanTerpakai(Request $request)
+    {
+        $query = JadwalMobil::where('tanggal_berangkat', $request->tanggal)
+                ->where('is_active', 1);
+
+        if ($request->exclude_id) {
+            $query->where('id', '!=', $request->exclude_id);
+        }
+
+        $terpakai = $query->pluck('plat_mobil')->toArray();
+
+        return response()->json(['data' => $terpakai]);
+    }
+
 }
