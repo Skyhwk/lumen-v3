@@ -1452,11 +1452,16 @@ class BasOnlineController extends Controller
     
             // Ambil entry terakhir — ini sudah berisi ttd, sampler, catatan lengkap
             $lastEntry = end($allDocuments);
+           
             $lastIndex = count($allDocuments) - 1;
     
             // ── Ambil no_sampel dari entry terakhir ───────────────────
-            $noSample = $lastEntry['no_sampel'] ?? [];
-    
+            $noKatSample = $lastEntry['no_sampel'] ?? [];
+            $noSample=[];
+            foreach ($noKatSample as $nosampel) {
+                array_push($noSample, $request->no_order . '/' . $nosampel);
+            }
+            
             if (empty($noSample)) {
                 return response()->json([
                     'message' => 'Data no_sampel di entry terakhir kosong.',
@@ -1464,7 +1469,7 @@ class BasOnlineController extends Controller
             }
     
             // ── Ambil data pendukung dari DB (sama seperti previewGenerate) ─
-            $infoSampling = json_decode(html_entity_decode($request->info_sampling), true);
+            $infoSampling = $request->info_sampling;
     
             $orderH = OrderHeader::where('no_document', $request->no_document)
                 ->where('no_order', $request->no_order)
@@ -1547,7 +1552,6 @@ class BasOnlineController extends Controller
                     $datParam[] = $vv->codingSampling;
                 }
             }
-    
             // ── Status sampling ───────────────────────────────────────
             $status      = [];
             $hariTanggal = [];
@@ -1576,10 +1580,11 @@ class BasOnlineController extends Controller
             // ── Siapkan persiapanHeader dengan detail_bas_documents entry terakhir ─
             // Override detail_bas_documents dengan hanya entry terakhir
             // agar cetakBASPDF2 membaca selectedDetail dari entry yang benar
+            
             $persiapanForPdf = clone $persiapanHeaderKategori;
             $persiapanForPdf->detail_bas_documents = json_encode([$lastEntry]);
+            
             $orderH->detail_bas_documents = json_encode([$lastEntry]);
-    
             // ── Generate filename baru ────────────────────────────────
             $microtime   = sprintf("%.0f", microtime(true) * 1000000);
             $filenameNew = str_replace(
@@ -1587,7 +1592,7 @@ class BasOnlineController extends Controller
                 "_",
                 'BAS_' . trim($orderH->no_document) . '_' . trim($orderH->nama_perusahaan) . '_' . $microtime . '.pdf'
             );
-    
+            
             // ── Generate PDF ──────────────────────────────────────────
             self::cetakBASPDF2(
                 $orderH,
@@ -1677,10 +1682,7 @@ class BasOnlineController extends Controller
         $microtime = sprintf("%.0f", microtime(true) * 1000000);
         $filename = $file_name ? $file_name : str_replace(["/", " "], "_", 'BAS_' . trim($dataHeader->no_document) . '_' . trim($dataHeader->nama_perusahaan) . '_' . $microtime . '.pdf');
         $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
-        if (!empty($detailDocuments) && is_array($detailDocuments)) {
-            $detailDocuments = end($detailDocuments);
-            
-        }
+        
         $selectedDetail = [
             'catatan' => '',
             'informasi_teknis' => '',
@@ -1688,27 +1690,12 @@ class BasOnlineController extends Controller
             'waktu_selesai' => '',
             'tanda_tangan' => [],
         ];
-        // dd($selectedDetail)
 
-        // Cari data detail yang cocok dengan nomor sampel
-        foreach ($detailDocuments as $detail) {
-            // if (is_array($detail['no_sampel']) && !empty($detail['no_sampel'])) {
-            //     $detailNoSampelSorted = $detail['no_sampel'];
-            //     sort($detailNoSampelSorted);
-
-            //     $requestedSampelsSorted = $requestedSampels;
-            //     sort($requestedSampelsSorted);
-
-            //     if ($detailNoSampelSorted === $requestedSampelsSorted) {
-            //         $selectedDetail = $detail;
-            //         break;
-            //     }
-            // }
-
-            // if (in_array($detail['no_sampel'], $requestedSampels)) {
-                $selectedDetail = $detail;
-            //     break;
-            // }
+        if (!empty($detailDocuments) && is_array($detailDocuments)) {
+            $lastDetail = end($detailDocuments);
+            if (is_array($lastDetail)) {
+                $selectedDetail = array_merge($selectedDetail, $lastDetail);
+            }
         }
 
         // dd($selectedDetail);
@@ -2150,13 +2137,20 @@ class BasOnlineController extends Controller
             foreach ($samplers as $index => $sampler) {
                 $number = $index + 1;
                 $ttd_sampler = $this->decodeImageToBase64($sampler['tanda_tangan']);
+
+                $ttdContent = $ttd_sampler->status !== 'error' 
+                    ? '<img src="' . $ttd_sampler->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />'
+                    : '<span style="font-size: 10px; color: #999; font-style: italic;">...</span>';
+
                 $samplerHtml .= '
                     <tr>
                         <td width="3"></td>
-                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">' . $number . '. ' . ($sampler['nama'] ?? 'No Name') . '</td>
-                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">' .
-                    (!empty($sampler['tanda_tangan']) && $ttd_sampler->status !== 'error' ? '<img src="' . $ttd_sampler->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />' : 'Belum ada tanda tangan') .
-                    '</td>
+                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $number . '. ' . ($sampler['nama'] ?? 'No Name') . '
+                        </td>
+                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $ttdContent . '
+                        </td>
                         <td width="3"></td>
                     </tr>';
             }
@@ -2176,13 +2170,19 @@ class BasOnlineController extends Controller
                 $number = $index + 1;
                 $ttd_pelanggan = $this->decodeImageToBase64($pelanggan['tanda_tangan']);
 
+                $ttdContent = $ttd_pelanggan->status !== 'error'
+                    ? '<img src="' . $ttd_pelanggan->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />'
+                    : '<span style="font-size: 10px; color: #999; font-style: italic;">...</span>';
+
                 $pelangganHtml .= '
                     <tr>
                         <td width="3"></td>
-                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">' . $number . '. ' . ($pelanggan['nama'] ?? 'No Name') . '</td>
-                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">' .
-                    (!empty($pelanggan['tanda_tangan']) && $ttd_pelanggan->status !== 'error' ? '<img src="' . $ttd_pelanggan->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />' : 'Belum ada tanda tangan') .
-                    '</td>
+                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $number . '. ' . ($pelanggan['nama'] ?? 'No Name') . '
+                        </td>
+                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $ttdContent . '
+                        </td>
                         <td width="3"></td>
                     </tr>';
             }
@@ -2447,7 +2447,7 @@ class BasOnlineController extends Controller
      * @param mixed $sample The sample to check the status of.
      * @return string The status of the sampling process: 'selesai' or 'belum selesai'.
      */
-    private function getStatusSampling($sample) // return selesai / blm selesai
+    /*private function getStatusSampling($sample) // return selesai / blm selesai
     {
         // dump($sample->no_sample);
         try {
@@ -2516,6 +2516,78 @@ class BasOnlineController extends Controller
             return $status;
         } catch (\Exception $th) {
             //throw $th;
+            throw new Exception($th->getMessage());
+        }
+    }*/
+    private function getStatusSampling($sample)
+    {
+        try {
+            $parametersRaw = json_decode($sample->parameter);
+            
+            // Panggil sekali di luar loop, bukan di dalam array_reduce
+            $requiredParameters = collect($this->getRequiredParameters())
+                ->where('category', $sample->kategori_2);
+
+            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample, $requiredParameters) {
+                $parameterName = explode(";", $item)[1] ?? null;
+
+                if (!$parameterName) {
+                    return $carry;
+                }
+
+                $matchedParameter = $requiredParameters  // <-- pakai variable yang sudah di-cache
+                    ->where('parameter', $parameterName)
+                    ->first();
+
+                if ($matchedParameter == null) {
+                    throw new Exception("Kemungkinan Parameter.$parameterName. Belum Terdaftar di RequiredParameters Hub IT");
+                }
+                $carry[] = $matchedParameter;
+                return $carry;
+            }, []);
+
+            $parameters = array_filter($parameters, function ($param) {
+                if ($param == null) {
+                    return false;
+                }
+                if ($param['category'] == '6-Padatan') {
+                    return is_array($param);
+                }
+                return is_array($param) && isset($param['model']);
+            });
+
+            $status = 'selesai';
+            if (!empty($parameters)) {
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
+                foreach ($parameters as $parameter) {
+                    if ($parameter['category'] == '6-Padatan') {
+                        continue;
+                    }
+                    if (in_array($parameter['parameter'], $parameterBypass)) {
+                        continue;
+                    }
+
+                    if ($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)') {
+                        continue;
+                    }
+
+                    if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
+                    }
+
+                    $verified = $this->verifyStatus($sample->no_sample, $parameter);
+
+                    if (!$verified) {
+                        $status = 'belum selesai';
+                        break;
+                    }
+                }
+            } else {
+                $status = 'belum selesai';
+            }
+
+            return $status;
+        } catch (\Exception $th) {
             throw new Exception($th->getMessage());
         }
     }
@@ -2700,6 +2772,7 @@ class BasOnlineController extends Controller
         }
         return null;
     }
+    /*update 
     private function getRequiredParameters()
     {
         // gini aja lah pake sub kategori mlh ngawur mls bgt
@@ -4616,7 +4689,443 @@ class BasOnlineController extends Controller
             ];
         }
         return $data_parameters;
+    } */
+    private function getRequiredParameters()
+    {
+        // Static hardcode tetap dipertahankan untuk parameter yang sudah terdaftar
+        $data_parameters = [
+            ["parameter" => "Air", "requiredCount" => 1, "category" => "1-Air", "model" => DataLapanganAir::class, "model2" => null],
+            ["parameter" => "Debu (P8J)", "requiredCount" => 2, "category" => "4-Udara", "model" => DataLapanganDebuPersonal::class, "model2" => null],
+            ["parameter" => "Asam Asetat (8 jam)", "requiredCount" => 2, "category" => "4-Udara", "model" => DataLapanganIklimPanas::class, "model2" => null],
+            ["parameter" => "Karbon Hitam (8 jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganDebuPersonal::class, "model2" => null],
+            ["parameter" => "PM 10 (Personil)", "requiredCount" => 2, "category" => "4-Udara", "model" => DataLapanganDebuPersonal::class, "model2" => null],
+            ["parameter" => "PM 2.5 (Personil)", "requiredCount" => 2, "category" => "4-Udara", "model" => DataLapanganDebuPersonal::class, "model2" => null],
+            ["parameter" => "Xylene secara personil sampling (SC)", "requiredCount" => 2, "category" => "4-Udara", "model" => DataLapanganDebuPersonal::class, "model2" => null],
+            ["parameter" => "C O", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "Co", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "CO (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "CO (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "CO (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "CO2", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "CO2 (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "CO2 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "H2CO", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "HCHO (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "O2", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "VOC", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "VOC (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganDirectLain::class, "model2" => null],
+            ["parameter" => "As", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Beban Emisi", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "C O", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Cd", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Cl2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Co", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "CO (P)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "CO2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Cr", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Cu", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Debu", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Debu (P)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Effisiensi Pembakaran", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "H2S", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "HC", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "HCl", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "HF", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Hg", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Mn", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NH3", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "VOC (SC)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NO", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NO2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NO2-Nox (P)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NO-NO2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NOx", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "NOx-NO2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "O2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "O2 (P)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Opasitas", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Partikulat", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Pb", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Sb", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Se", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Sn", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "SO2", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "SO2 (P)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "O2 (ESTB)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Suhu", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Tekanan Udara", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Tl", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Velocity", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Zn", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "CO (Bensin)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "CO (Gas)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "CO2 (Bensin)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "CO-cor (Bensin)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "HC (Bensin)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "HC (Gas)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "O2 (Bensin)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "Opasitas (Solar)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiKendaraan::class, "model2" => null],
+            ["parameter" => "Ergonomi", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganErgonomi::class, "model2" => null],
+            ["parameter" => "Get. Badan", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaran::class, "model2" => null],
+            ["parameter" => "Get. Bangunan", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaran::class, "model2" => null],
+            ["parameter" => "Get. Bangunan (24J)", "requiredCount" => 4, "category" => "4-Udara", "model" => DataLapanganGetaran::class, "model2" => null],
+            ["parameter" => "Get. Mesin", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaran::class, "model2" => null],
+            ["parameter" => "Get. Tangan Lengan", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaran::class, "model2" => null],
+            ["parameter" => "Getaran", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaran::class, "model2" => null],
+            ["parameter" => "Getaran (LK) ST", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaranPersonal::class, "model2" => null],
+            ["parameter" => "Getaran (LK) TL", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganGetaranPersonal::class, "model2" => null],
+            ["parameter" => "K3-KB", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "K3-KFK", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "K3-KFPBP", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "K3-KFS", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "K3-KRU", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "K3-KTRTHK", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "K3-KUV", "requiredCount" => 1, "category" => "4-Udara", "model" => null, "model2" => null],
+            ["parameter" => "IKD (CS)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganIklimDingin::class, "model2" => null],
+            ["parameter" => "Iklim Kerja Dingin (Cold Stress) - 8 Jam", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganIklimDingin::class, "model2" => null],
+            ["parameter" => "ISBB", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganIklimPanas::class, "model2" => null],
+            ["parameter" => "ISBB (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganIklimPanas::class, "model2" => null],
+            ["parameter" => "E. coli (SWAB)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "S. aureus (SWAB)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Salmonella (SWAB)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Shigella sp. (SWAB)", "requiredCount" => 3, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Iso-Combust", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-Debu", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-DMW", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Isokinetik (All)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-Moisture", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-Percent", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-ResTime", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-Traverse", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Iso-Velo", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganIsokinetikHasil::class, "model2" => null],
+            ["parameter" => "Kebisingan", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganKebisingan::class, "model2" => null],
+            ["parameter" => "Kebisingan (24 Jam)", "requiredCount" => 7, "category" => "4-Udara", "model" => DataLapanganKebisingan::class, "model2" => null],
+            ["parameter" => "Kebisingan (8 Jam)", "requiredCount" => 8, "category" => "4-Udara", "model" => DataLapanganKebisingan::class, "model2" => null],
+            ["parameter" => "Kebisingan (P8J)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganKebisinganPersonal::class, "model2" => null],
+            ["parameter" => "Aluminium (Al)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "As", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Asam Asetat", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Asbestos", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Ba", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Carbon Dust", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Cd", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Cl-", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Cl2", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Cl2 (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Cr", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Cu", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Dustfall", "requiredCount" => 2, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Dustfall (S)", "requiredCount" => 2, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Fe", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Fe (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "H2S", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "H2S (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "H2S (3 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "H2S (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "H2SO4", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "HCl", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "HCl (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "HF", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Hg", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Kelembaban", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Laju Ventilasi", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Laju Ventilasi (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Mn", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NH3", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NH3 (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NH3 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Ni", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NO2", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NO2 (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NO2 (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NO2 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "NOx", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "O3", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "O3 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Oil Mist", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Ortho Cresol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Ox", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Passive NO2", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Passive SO2", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Pb", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Pb (24 Jam)", "requiredCount" => 5, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Pb (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Pb (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Pertukaran Udara", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "PM 10 (24 Jam)", "requiredCount" => 5, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "PM 2.5 (24 Jam)", "requiredCount" => 5, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Sb", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Se", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Silica Crystaline 8 Jam", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Sn", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "SO2", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "SO2 (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "SO2 (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "SO2 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Suhu", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "TSP", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "TSP (24 Jam)", "requiredCount" => 5, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "TSP (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "TSP (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Zn", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganHidup::class, "model2" => DetailLingkunganKerja::class],
+            ["parameter" => "Gelombang Elektro", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganMedanLM::class, "model2" => null],
+            ["parameter" => "Medan Listrik", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganMedanLM::class, "model2" => null],
+            ["parameter" => "Medan Magnit Statis", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganMedanLM::class, "model2" => null],
+            ["parameter" => "Medan Magnet", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganMedanLM::class, "model2" => null],
+            ["parameter" => "Power Density", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganMedanLM::class, "model2" => null],
+            ["parameter" => "Bacterial Counts", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "E.Coli", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "E.Coli (KB)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "Fungal Counts", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "Jumlah Bakteri Total", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "T. Bakteri (1 Jam)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "T. Bakteri (KUDR - 8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "T. Jamur (1 Jam)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "T. Jamur (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "T. Jamur (KUDR - 8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "T.Bakteri (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "Total Bakteri", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "Total Bakteri (KB)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "Total Coliform", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "Pencahayaan", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganCahaya::class, "model2" => null],
+            ["parameter" => "Psikologi", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganPsikologi::class, "model2" => null],
+            ["parameter" => "PM 10", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DataLapanganPartikulatMeter::class],
+            ["parameter" => "PM 10 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DataLapanganPartikulatMeter::class],
+            ["parameter" => "PM 2.5", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DataLapanganPartikulatMeter::class],
+            ["parameter" => "PM 2.5 (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DataLapanganPartikulatMeter::class],
+            ["parameter" => "Acetone", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Adverse Odor", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Al. Hidrokarbon", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Al. Hidrokarbon (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Alcohol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Alkana Gas", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Asetonitril", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Benzene", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Benzene (8 Jam)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Butanon", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "CH4", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "CH4 (24 Jam)", "requiredCount" => 4, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Cyclohexanone", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "EA", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Eter", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Ethanol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Etil Benzene", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Fenol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "HC", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "HC (3 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "HC (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "HC (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "HCNM", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => DetailLingkunganHidup::class],
+            ["parameter" => "HCNM (3 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => DetailLingkunganHidup::class],
+            ["parameter" => "HCNM (6 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => DetailLingkunganHidup::class],
+            ["parameter" => "HCNM (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => DetailLingkunganHidup::class],
+            ["parameter" => "IPA", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Keton", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Kloroform", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "MEK", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Methacrylates", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Methanol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Metil Merkaptan", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Metil Merkaptan (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Metil Sulfida", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Metil Sulfida (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "MIBK", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "MK", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Naphthalene", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "N-Hexane (Faktor Kimia)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "N-Hexane Personil (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Siklohexane - 8 Jam", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Stirena", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Stirena (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Stirone", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Toluene", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Toluene (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Xylene", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Xylene (8 Jam)", "requiredCount" => 3, "category" => "4-Udara", "model" => DetailSenyawaVolatile::class, "model2" => null],
+            ["parameter" => "Sinar UV", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSinarUv::class, "model2" => null],
+            ["parameter" => "Bacillus C (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "E.Coli (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Enterobacteriaceae (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Kapang Khamir (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Listeria M (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Pseu Aeruginosa (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "S.Aureus (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Salmonella (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Shigella Sp. (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "T.Coli (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Total Kuman (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "TPC (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "Vibrio Ch (Swab Test)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganSwab::class, "model2" => null],
+            ["parameter" => "N-Propil Asetat (SC)", "requiredCount" => 1, "category" => "4-Udara", "model" => DataLapanganMedanLM::class, "model2" => null],
+            ["parameter" => "Asetaldehid (SC)", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DetailLingkunganHidup::class],
+            ["parameter" => "HC (sebagai CH4)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "CH4 (SC)", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+            ["parameter" => "Isopropil Alkohol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DetailSenyawaVolatile::class],
+            ["parameter" => "Metanol", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailLingkunganKerja::class, "model2" => DetailLingkunganHidup::class],
+            ["parameter" => "LEGIONELLA", "requiredCount" => 1, "category" => "4-Udara", "model" => DetailMicrobiologi::class, "model2" => null],
+            ["parameter" => "VOC Sebagai NMHC", "requiredCount" => 1, "category" => "5-Emisi", "model" => DataLapanganEmisiCerobong::class, "model2" => null],
+        ];
+
+        // Dynamic fallback: tangkap parameter baru yang belum terdaftar di hardcode
+        // Hanya untuk model yang punya kolom 'parameter'
+        $modelsWithParameter = [
+            ["class" => DetailLingkunganHidup::class,  "category" => "4-Udara", "model2" => DetailLingkunganKerja::class],
+            ["class" => DetailLingkunganKerja::class,  "category" => "4-Udara", "model2" => null],
+            ["class" => DetailMicrobiologi::class,      "category" => "4-Udara", "model2" => null],
+            ["class" => DetailSenyawaVolatile::class,   "category" => "4-Udara", "model2" => null],
+            ["class" => DataLapanganEmisiCerobong::class, "category" => "5-Emisi", "model2" => null],
+            ["class" => DataLapanganEmisiKendaraan::class, "category" => "5-Emisi", "model2" => null],
+        ];
+
+        // Kumpulkan semua parameter yang sudah terdaftar di hardcode supaya tidak duplikat
+        $registeredKeys = collect($data_parameters)
+            ->map(fn($p) => $p['parameter'] . '|' . $p['category'])
+            ->flip()
+            ->toArray();
+
+        foreach ($modelsWithParameter as $modelDef) {
+            $modelClass = $modelDef['class'];
+            try {
+                $distinctParams = $modelClass::select('parameter')
+                    ->distinct()
+                    ->whereNotNull('parameter')
+                    ->pluck('parameter');
+
+                foreach ($distinctParams as $paramName) {
+                    $key = $paramName . '|' . $modelDef['category'];
+                    if (!isset($registeredKeys[$key])) {
+                        // Parameter baru yang belum terdaftar — masuk sebagai fallback
+                        $data_parameters[] = [
+                            "parameter"     => $paramName,
+                            "requiredCount" => $this->resolveRequiredCount($paramName),
+                            "category"      => $modelDef['category'],
+                            "model"         => $modelClass,
+                            "model2"        => $modelDef['model2'],
+                        ];
+                        $registeredKeys[$key] = true;
+                    }
+                }
+            } catch (\Exception $e) {
+                // Skip jika model tidak punya kolom parameter
+                continue;
+            }
+        }
+
+        $padatanParam = [
+            "Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F",
+            "NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride",
+            "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"
+        ];
+
+        foreach ($padatanParam as $value) {
+            $data_parameters[] = [
+                "parameter"     => $value,
+                "requiredCount" => 1,
+                "category"      => "6-Padatan",
+                "model"         => null,
+                "model2"        => null,
+        ];
     }
+
+    return $data_parameters;
+}
+
+    private function resolveCategoryByModel(string $modelClass): string
+    {
+        $emisiModels = [
+            DataLapanganEmisiCerobong::class,
+            DataLapanganEmisiKendaraan::class,
+            DataLapanganIsokinetikHasil::class,
+        ];
+
+        $airModels = [
+            DataLapanganAir::class,
+        ];
+
+        if (in_array($modelClass, $emisiModels)) {
+            return "5-Emisi";
+        }
+
+        if (in_array($modelClass, $airModels)) {
+            return "1-Air";
+        }
+
+        return "4-Udara";
+    }
+
+    private function resolveRequiredCount(string $parameter): int
+    {
+        $countMap = [
+            // Kebisingan
+            "Kebisingan (8 Jam)"                    => 8,
+            "Kebisingan (24 Jam)"                   => 7,
+
+            // 5 kali
+            "PM 10 (24 Jam)"                        => 5,
+            "PM 2.5 (24 Jam)"                       => 5,
+            "TSP (24 Jam)"                          => 5,
+            "Pb (24 Jam)"                           => 5,
+
+            // 4 kali
+            "Get. Bangunan (24J)"                   => 4,
+            "Cl2 (24 Jam)"                          => 4,
+            "H2S (24 Jam)"                          => 4,
+            "NH3 (24 Jam)"                          => 4,
+            "NO2 (24 Jam)"                          => 4,
+            "SO2 (24 Jam)"                          => 4,
+            "CH4 (24 Jam)"                          => 4,
+            "CO (24 Jam)"                           => 4,
+            "CO2 (24 Jam)"                          => 4,
+
+            // 3 kali
+            "Iklim Kerja Dingin (Cold Stress) - 8 Jam" => 3,
+            "ISBB (8 Jam)"                          => 3,
+            "E. coli (SWAB)"                        => 3,
+            "S. aureus (SWAB)"                      => 3,
+            "Salmonella (SWAB)"                     => 3,
+            "Shigella sp. (SWAB)"                   => 3,
+            "H2S (3 Jam)"                           => 3,
+            "H2S (8 Jam)"                           => 3,
+            "NH3 (8 Jam)"                           => 3,
+            "NO2 (6 Jam)"                           => 3,
+            "NO2 (8 Jam)"                           => 3,
+            "SO2 (6 Jam)"                           => 3,
+            "SO2 (8 Jam)"                           => 3,
+            "TSP (6 Jam)"                           => 3,
+            "TSP (8 Jam)"                           => 3,
+            "PM 10 (8 Jam)"                         => 3,
+            "PM 2.5 (8 Jam)"                        => 3,
+            "Pb (6 Jam)"                            => 3,
+            "Pb (8 Jam)"                            => 3,
+            "Fe (8 Jam)"                            => 3,
+            "HCl (8 Jam)"                           => 3,
+            "O3 (8 Jam)"                            => 3,
+            "Laju Ventilasi (8 Jam)"                => 3,
+            "Silica Crystaline 8 Jam"               => 3,
+            "T. Bakteri (KUDR - 8 Jam)"             => 3,
+            "T.Bakteri (8 Jam)"                     => 3,
+            "T. Jamur (8 Jam)"                      => 3,
+            "T. Jamur (KUDR - 8 Jam)"               => 3,
+            "CO (6 Jam)"                            => 3,
+            "CO (8 Jam)"                            => 3,
+            "CO2 (8 Jam)"                           => 3,
+            "HCHO (8 Jam)"                          => 3,
+            "VOC (8 Jam)"                           => 3,
+            "Karbon Hitam (8 Jam)"                  => 3,
+            "Asam Asetat (8 jam)"                   => 3,
+
+            // 2 kali
+            "Debu (P8J)"                            => 2,
+            "PM 10 (Personil)"                      => 2,
+            "PM 2.5 (Personil)"                     => 2,
+            "Xylene secara personil sampling (SC)"  => 2,
+            "Dustfall"                              => 2,
+            "Dustfall (S)"                          => 2,
+        ];
+
+        return $countMap[$parameter] ?? 1;
+    }
+
 
     public function decodeImageToBase64($filename)
     {
