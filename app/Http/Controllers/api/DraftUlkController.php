@@ -261,10 +261,6 @@ class DraftUlkController extends Controller
         // Bersihkan duplikasi dan karakter aneh
         $parameterAllowed = array_unique(array_filter($parameterAllowed));
 
-        // 2. Buat Pattern Regex
-        $pattern = implode('|', array_map('preg_quote', $parameterAllowed));
-
-
         // 3. Eksekusi Query
         $data = OrderDetail::selectRaw('
             max(id) as id,
