@@ -56,6 +56,7 @@ use App\Models\DetailMicrobiologi;
 use App\Models\DetailSenyawaVolatile;
 use App\Models\SampelTidakSelesai;
 use App\Models\QrDocument;
+use App\Models\RequiredParameters;
 use DateTime;
 use Exception;
 
@@ -1452,11 +1453,16 @@ class BasOnlineController extends Controller
     
             // Ambil entry terakhir — ini sudah berisi ttd, sampler, catatan lengkap
             $lastEntry = end($allDocuments);
+           
             $lastIndex = count($allDocuments) - 1;
     
             // ── Ambil no_sampel dari entry terakhir ───────────────────
-            $noSample = $lastEntry['no_sampel'] ?? [];
-    
+            $noKatSample = $lastEntry['no_sampel'] ?? [];
+            $noSample=[];
+            foreach ($noKatSample as $nosampel) {
+                array_push($noSample, $request->no_order . '/' . $nosampel);
+            }
+            
             if (empty($noSample)) {
                 return response()->json([
                     'message' => 'Data no_sampel di entry terakhir kosong.',
@@ -1464,7 +1470,8 @@ class BasOnlineController extends Controller
             }
     
             // ── Ambil data pendukung dari DB (sama seperti previewGenerate) ─
-            $infoSampling = json_decode(html_entity_decode($request->info_sampling), true);
+            $infoSampling = json_decode($request->info_sampling, true);
+            
     
             $orderH = OrderHeader::where('no_document', $request->no_document)
                 ->where('no_order', $request->no_order)
@@ -1547,7 +1554,6 @@ class BasOnlineController extends Controller
                     $datParam[] = $vv->codingSampling;
                 }
             }
-    
             // ── Status sampling ───────────────────────────────────────
             $status      = [];
             $hariTanggal = [];
@@ -1576,10 +1582,11 @@ class BasOnlineController extends Controller
             // ── Siapkan persiapanHeader dengan detail_bas_documents entry terakhir ─
             // Override detail_bas_documents dengan hanya entry terakhir
             // agar cetakBASPDF2 membaca selectedDetail dari entry yang benar
+            
             $persiapanForPdf = clone $persiapanHeaderKategori;
             $persiapanForPdf->detail_bas_documents = json_encode([$lastEntry]);
+            
             $orderH->detail_bas_documents = json_encode([$lastEntry]);
-    
             // ── Generate filename baru ────────────────────────────────
             $microtime   = sprintf("%.0f", microtime(true) * 1000000);
             $filenameNew = str_replace(
@@ -1587,7 +1594,7 @@ class BasOnlineController extends Controller
                 "_",
                 'BAS_' . trim($orderH->no_document) . '_' . trim($orderH->nama_perusahaan) . '_' . $microtime . '.pdf'
             );
-    
+            
             // ── Generate PDF ──────────────────────────────────────────
             self::cetakBASPDF2(
                 $orderH,
@@ -1609,11 +1616,15 @@ class BasOnlineController extends Controller
                 'detail_bas_documents' => json_encode(array_values($allDocuments)),
             ]);
     
-            return response()->json([
-                'message'  => 'BAS berhasil di-regenerate.',
-                'filename' => $filenameNew,
-                'path'     => url('dokumen/bas/' . $filenameNew),
-            ], 200);
+            return response()->json([$filenameNew], 200);
+            // return response()->json([
+            //     'status'   => true,
+            //     'message'  => 'BAS berhasil di-regenerate.',
+            //     'data'     => [
+            //         'filename' => $filenameNew, // string
+            //         'path'     => url('dokumen/bas/' . $filenameNew),
+            //     ]
+            // ], 200);
     
         } catch (\Exception $e) {
             return response()->json([
@@ -1622,7 +1633,6 @@ class BasOnlineController extends Controller
             ], 500);
         }
     }
-
 
     /* private */
     private function cetakBASPDF2($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
@@ -1677,10 +1687,7 @@ class BasOnlineController extends Controller
         $microtime = sprintf("%.0f", microtime(true) * 1000000);
         $filename = $file_name ? $file_name : str_replace(["/", " "], "_", 'BAS_' . trim($dataHeader->no_document) . '_' . trim($dataHeader->nama_perusahaan) . '_' . $microtime . '.pdf');
         $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
-        if (!empty($detailDocuments) && is_array($detailDocuments)) {
-            $detailDocuments = end($detailDocuments);
-            
-        }
+        
         $selectedDetail = [
             'catatan' => '',
             'informasi_teknis' => '',
@@ -1688,27 +1695,12 @@ class BasOnlineController extends Controller
             'waktu_selesai' => '',
             'tanda_tangan' => [],
         ];
-        // dd($selectedDetail)
 
-        // Cari data detail yang cocok dengan nomor sampel
-        foreach ($detailDocuments as $detail) {
-            // if (is_array($detail['no_sampel']) && !empty($detail['no_sampel'])) {
-            //     $detailNoSampelSorted = $detail['no_sampel'];
-            //     sort($detailNoSampelSorted);
-
-            //     $requestedSampelsSorted = $requestedSampels;
-            //     sort($requestedSampelsSorted);
-
-            //     if ($detailNoSampelSorted === $requestedSampelsSorted) {
-            //         $selectedDetail = $detail;
-            //         break;
-            //     }
-            // }
-
-            // if (in_array($detail['no_sampel'], $requestedSampels)) {
-                $selectedDetail = $detail;
-            //     break;
-            // }
+        if (!empty($detailDocuments) && is_array($detailDocuments)) {
+            $lastDetail = end($detailDocuments);
+            if (is_array($lastDetail)) {
+                $selectedDetail = array_merge($selectedDetail, $lastDetail);
+            }
         }
 
         // dd($selectedDetail);
@@ -2150,13 +2142,20 @@ class BasOnlineController extends Controller
             foreach ($samplers as $index => $sampler) {
                 $number = $index + 1;
                 $ttd_sampler = $this->decodeImageToBase64($sampler['tanda_tangan']);
+
+                $ttdContent = $ttd_sampler->status !== 'error' 
+                    ? '<img src="' . $ttd_sampler->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />'
+                    : '<span style="font-size: 10px; color: #999; font-style: italic;">...</span>';
+
                 $samplerHtml .= '
                     <tr>
                         <td width="3"></td>
-                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">' . $number . '. ' . ($sampler['nama'] ?? 'No Name') . '</td>
-                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">' .
-                    (!empty($sampler['tanda_tangan']) && $ttd_sampler->status !== 'error' ? '<img src="' . $ttd_sampler->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />' : 'Belum ada tanda tangan') .
-                    '</td>
+                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $number . '. ' . ($sampler['nama'] ?? 'No Name') . '
+                        </td>
+                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $ttdContent . '
+                        </td>
                         <td width="3"></td>
                     </tr>';
             }
@@ -2176,13 +2175,19 @@ class BasOnlineController extends Controller
                 $number = $index + 1;
                 $ttd_pelanggan = $this->decodeImageToBase64($pelanggan['tanda_tangan']);
 
+                $ttdContent = $ttd_pelanggan->status !== 'error'
+                    ? '<img src="' . $ttd_pelanggan->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />'
+                    : '<span style="font-size: 10px; color: #999; font-style: italic;">...</span>';
+
                 $pelangganHtml .= '
                     <tr>
                         <td width="3"></td>
-                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">' . $number . '. ' . ($pelanggan['nama'] ?? 'No Name') . '</td>
-                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">' .
-                    (!empty($pelanggan['tanda_tangan']) && $ttd_pelanggan->status !== 'error' ? '<img src="' . $ttd_pelanggan->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />' : 'Belum ada tanda tangan') .
-                    '</td>
+                        <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $number . '. ' . ($pelanggan['nama'] ?? 'No Name') . '
+                        </td>
+                        <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">
+                            ' . $ttdContent . '
+                        </td>
                         <td width="3"></td>
                     </tr>';
             }
@@ -2447,7 +2452,7 @@ class BasOnlineController extends Controller
      * @param mixed $sample The sample to check the status of.
      * @return string The status of the sampling process: 'selesai' or 'belum selesai'.
      */
-    private function getStatusSampling($sample) // return selesai / blm selesai
+    /*private function getStatusSampling($sample) // return selesai / blm selesai
     {
         // dump($sample->no_sample);
         try {
@@ -2516,6 +2521,78 @@ class BasOnlineController extends Controller
             return $status;
         } catch (\Exception $th) {
             //throw $th;
+            throw new Exception($th->getMessage());
+        }
+    }*/
+    private function getStatusSampling($sample)
+    {
+        try {
+            $parametersRaw = json_decode($sample->parameter);
+            
+            // Panggil sekali di luar loop, bukan di dalam array_reduce
+            $requiredParameters = collect($this->getRequiredParameters())
+                ->where('category', $sample->kategori_2);
+
+            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample, $requiredParameters) {
+                $parameterName = explode(";", $item)[1] ?? null;
+
+                if (!$parameterName) {
+                    return $carry;
+                }
+
+                $matchedParameter = $requiredParameters  // <-- pakai variable yang sudah di-cache
+                    ->where('parameter', $parameterName)
+                    ->first();
+
+                if ($matchedParameter == null) {
+                    throw new Exception("Kemungkinan Parameter.$parameterName. Belum Terdaftar di RequiredParameters Hub IT");
+                }
+                $carry[] = $matchedParameter;
+                return $carry;
+            }, []);
+
+            $parameters = array_filter($parameters, function ($param) {
+                if ($param == null) {
+                    return false;
+                }
+                if ($param['category'] == '6-Padatan') {
+                    return is_array($param);
+                }
+                return is_array($param) && isset($param['model']);
+            });
+
+            $status = 'selesai';
+            if (!empty($parameters)) {
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
+                foreach ($parameters as $parameter) {
+                    if ($parameter['category'] == '6-Padatan') {
+                        continue;
+                    }
+                    if (in_array($parameter['parameter'], $parameterBypass)) {
+                        continue;
+                    }
+
+                    if ($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)') {
+                        continue;
+                    }
+
+                    if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
+                    }
+
+                    $verified = $this->verifyStatus($sample->no_sample, $parameter);
+
+                    if (!$verified) {
+                        $status = 'belum selesai';
+                        break;
+                    }
+                }
+            } else {
+                $status = 'belum selesai';
+            }
+
+            return $status;
+        } catch (\Exception $th) {
             throw new Exception($th->getMessage());
         }
     }
@@ -2700,6 +2777,7 @@ class BasOnlineController extends Controller
         }
         return null;
     }
+    /*update 
     private function getRequiredParameters()
     {
         // gini aja lah pake sub kategori mlh ngawur mls bgt
@@ -4616,7 +4694,136 @@ class BasOnlineController extends Controller
             ];
         }
         return $data_parameters;
+    } */
+    private function getRequiredParameters()
+    {
+        // Baca dari DB (hasil input via tools UI)
+        $fromDb = RequiredParameters::all()->map(function ($item) {
+            return [
+                "parameter"     => $item->parameter,
+                "requiredCount" => $item->required_count,
+                "category"      => $item->category,
+                "model"         => $item->model,
+                "model2"        => $item->model2,
+            ];
+        })->toArray();
+
+        // $padatanParam tetap hardcode karena fixed, tidak perlu masuk DB
+        $padatanParam = [
+            "Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F",
+            "NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride",
+            "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"
+        ];
+
+        foreach ($padatanParam as $value) {
+            $fromDb[] = [
+                "parameter"     => $value,
+                "requiredCount" => 1,
+                "category"      => "6-Padatan",
+                "model"         => null,
+                "model2"        => null,
+            ];
+        }
+
+        return $fromDb;
     }
+
+    private function resolveCategoryByModel(string $modelClass): string
+    {
+        $emisiModels = [
+            DataLapanganEmisiCerobong::class,
+            DataLapanganEmisiKendaraan::class,
+            DataLapanganIsokinetikHasil::class,
+        ];
+
+        $airModels = [
+            DataLapanganAir::class,
+        ];
+
+        if (in_array($modelClass, $emisiModels)) {
+            return "5-Emisi";
+        }
+
+        if (in_array($modelClass, $airModels)) {
+            return "1-Air";
+        }
+
+        return "4-Udara";
+    }
+
+    private function resolveRequiredCount(string $parameter): int
+    {
+        $countMap = [
+            // Kebisingan
+            "Kebisingan (8 Jam)"                    => 8,
+            "Kebisingan (24 Jam)"                   => 7,
+
+            // 5 kali
+            "PM 10 (24 Jam)"                        => 5,
+            "PM 2.5 (24 Jam)"                       => 5,
+            "TSP (24 Jam)"                          => 5,
+            "Pb (24 Jam)"                           => 5,
+
+            // 4 kali
+            "Get. Bangunan (24J)"                   => 4,
+            "Cl2 (24 Jam)"                          => 4,
+            "H2S (24 Jam)"                          => 4,
+            "NH3 (24 Jam)"                          => 4,
+            "NO2 (24 Jam)"                          => 4,
+            "SO2 (24 Jam)"                          => 4,
+            "CH4 (24 Jam)"                          => 4,
+            "CO (24 Jam)"                           => 4,
+            "CO2 (24 Jam)"                          => 4,
+
+            // 3 kali
+            "Iklim Kerja Dingin (Cold Stress) - 8 Jam" => 3,
+            "ISBB (8 Jam)"                          => 3,
+            "E. coli (SWAB)"                        => 3,
+            "S. aureus (SWAB)"                      => 3,
+            "Salmonella (SWAB)"                     => 3,
+            "Shigella sp. (SWAB)"                   => 3,
+            "H2S (3 Jam)"                           => 3,
+            "H2S (8 Jam)"                           => 3,
+            "NH3 (8 Jam)"                           => 3,
+            "NO2 (6 Jam)"                           => 3,
+            "NO2 (8 Jam)"                           => 3,
+            "SO2 (6 Jam)"                           => 3,
+            "SO2 (8 Jam)"                           => 3,
+            "TSP (6 Jam)"                           => 3,
+            "TSP (8 Jam)"                           => 3,
+            "PM 10 (8 Jam)"                         => 3,
+            "PM 2.5 (8 Jam)"                        => 3,
+            "Pb (6 Jam)"                            => 3,
+            "Pb (8 Jam)"                            => 3,
+            "Fe (8 Jam)"                            => 3,
+            "HCl (8 Jam)"                           => 3,
+            "O3 (8 Jam)"                            => 3,
+            "Laju Ventilasi (8 Jam)"                => 3,
+            "Silica Crystaline 8 Jam"               => 3,
+            "T. Bakteri (KUDR - 8 Jam)"             => 3,
+            "T.Bakteri (8 Jam)"                     => 3,
+            "T. Jamur (8 Jam)"                      => 3,
+            "T. Jamur (KUDR - 8 Jam)"               => 3,
+            "CO (6 Jam)"                            => 3,
+            "CO (8 Jam)"                            => 3,
+            "CO2 (8 Jam)"                           => 3,
+            "HCHO (8 Jam)"                          => 3,
+            "VOC (8 Jam)"                           => 3,
+            "Karbon Hitam (8 Jam)"                  => 3,
+            "Asam Asetat (8 jam)"                   => 3,
+
+            // 2 kali
+            "Debu (P8J)"                            => 2,
+            "PM 10 (Personil)"                      => 2,
+            "PM 2.5 (Personil)"                     => 2,
+            "Xylene secara personil sampling (SC)"  => 2,
+            "Dustfall"                              => 2,
+            "Dustfall (S)"                          => 2,
+        ];
+
+        return $countMap[$parameter] ?? 1;
+    }
+
 
     public function decodeImageToBase64($filename)
     {
@@ -4672,6 +4879,105 @@ class BasOnlineController extends Controller
         }
 
         return 'bin';
+    }
+
+    // Step 1: Trace parameter
+    public function traceParameter(Request $request)
+    {
+        $parameterName = $request->input('parameter');
+        
+        $models = [
+            DataLapanganAir::class,
+            DataLapanganDebuPersonal::class,
+            DataLapanganDirectLain::class,
+            DataLapanganEmisiCerobong::class,
+            DataLapanganEmisiKendaraan::class,
+            DataLapanganGetaran::class,
+            DataLapanganGetaranPersonal::class,
+            DataLapanganIklimDingin::class,
+            DataLapanganIklimPanas::class,
+            DataLapanganIsokinetikHasil::class,
+            DataLapanganKebisingan::class,
+            DataLapanganKebisinganPersonal::class,
+            DataLapanganMedanLM::class,
+            DataLapanganMicrobiologi::class,
+            DataLapanganPartikulatMeter::class,
+            DataLapanganPsikologi::class,
+            DataLapanganSinarUv::class,
+            DataLapanganSwab::class,
+            DataLapanganErgonomi::class,
+            DataLapanganCahaya::class,
+            DetailLingkunganHidup::class,
+            DetailLingkunganKerja::class,
+            DetailMicrobiologi::class,
+            DetailSenyawaVolatile::class,
+        ];
+
+        $found = [];
+        foreach ($models as $modelClass) {
+            try {
+                $exists = $modelClass::where('parameter', $parameterName)->exists();
+                if ($exists) {
+                    $found[] = $modelClass;
+                }
+            } catch (\Exception $e) {
+                // Model tidak punya kolom parameter, skip
+                continue;
+            }
+        }
+
+        if (empty($found)) {
+            return response()->json(['found' => false, 'message' => 'Parameter tidak ditemukan di data lapangan manapun']);
+        }
+
+        // Tentukan category otomatis
+        $emisiModels = [DataLapanganEmisiCerobong::class, DataLapanganEmisiKendaraan::class, DataLapanganIsokinetikHasil::class];
+        $airModels   = [DataLapanganAir::class];
+
+        $primaryModel = $found[0];
+        if (in_array($primaryModel, $emisiModels)) {
+            $category = "5-Emisi";
+        } elseif (in_array($primaryModel, $airModels)) {
+            $category = "1-Air";
+        } else {
+            $category = "4-Udara";
+        }
+
+        return response()->json([
+            'found'          => true,
+            'parameter'      => $parameterName,
+            'category'       => $category,
+            'model'          => $found[0] ?? null,
+            'model2'         => $found[1] ?? null,
+            'model_basename' => class_basename($found[0]),
+            'model2_basename'=> isset($found[1]) ? class_basename($found[1]) : null,
+        ]);
+    }
+
+    // Step 2: Simpan ke DB
+    public function storeRequiredParameter(Request $request)
+    {
+        $request->validate([
+            'parameter'      => 'required|string',
+            'required_count' => 'required|integer|min:1',
+            'category'       => 'required|string',
+            'model'          => 'nullable|string',
+            'model2'         => 'nullable|string',
+        ]);
+
+        RequiredParameters::updateOrCreate(
+            [
+                'parameter' => $request->parameter,
+                'category'  => $request->category,
+            ],
+            [
+                'required_count' => $request->required_count,
+                'model'          => $request->model,
+                'model2'         => $request->model2,
+            ]
+        );
+
+        return response()->json(['message' => 'Parameter berhasil disimpan']);
     }
 
 }
