@@ -289,8 +289,8 @@ class GenerateFeeSampling
                     'fee_pokok'     => $feePokok,
                     'rincian_fee_pokok' => [
                         'base'                      => (int) ($feePokokDasar * $multiplierPokok * $hariAktif),
-                        'tambah_tempat_kedua'       => $tempat >= 2 ? (int) (10000 * $multiplierPokok * $hariAktif) : 0,
-                        'tambah_tempat_selanjutnya' => $tempat >= 3 ? (int) (($tempat - 2) * 15000 * $multiplierPokok * $hariAktif) : 0,
+                        'tambah_tempat_kedua'       => $tempat >= 2 ? (int) 10000 : 0,
+                        'tambah_tempat_selanjutnya' => $tempat >= 3 ? (int) 15000 : 0,
                         'multiplier_hari_libur'     => $multiplierPokok,
                     ],
                     'fee_tambahan'         => $feeTambahan,
