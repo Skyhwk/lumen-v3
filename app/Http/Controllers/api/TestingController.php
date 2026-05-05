@@ -80,6 +80,7 @@ use App\Models\{
     TemplatePaketAnalisa
 };
 use App\Services\{
+    CombineLHPService,
     GetAtasan,
     SamplingPlanServices,
     RenderSamplingPlan,
@@ -6335,6 +6336,13 @@ private function detectChangedPoints($oldPoints, $newPoints)
                 $render->renderInvoice($item);
             }
         }
+
+        return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
+
+    public function testHarold(){
+        $test = new CombineLHPService();
+        $test->testRendersuratKeterangan();
 
         return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
     }
