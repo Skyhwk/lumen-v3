@@ -38,4 +38,9 @@ class Jadwal extends Sector
     {
         return $this->belongsTo(QuotationNonKontrak::class, "no_quotation", "no_document");
     }
+
+    public function jadwalMobil()
+    {
+        return $this->belongsTo(JadwalMobil::class, 'kendaraan', 'plat_mobil');
+    }
 }

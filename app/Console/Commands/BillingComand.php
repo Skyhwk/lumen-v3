@@ -174,10 +174,9 @@ class BillingComand extends Command
     private function sync(array $data)
     {
         $chunkSize = 500;
+        $syncTime = Carbon::now()->subHours(7);
 
-        collect($data)->chunk($chunkSize)->each(function ($chunk) {
-
-            $now = Carbon::now()->subHours(7);
+        collect($data)->chunk($chunkSize)->each(function ($chunk) use ($syncTime) {
             $headers = [];
             $details = [];
 
@@ -196,8 +195,8 @@ class BillingComand extends Command
                     'terbayar' => $row['terbayar'],
                     'total_pph' => $row['total_pph'],
                     'is_complete' => $row['is_complete'],
-                    'created_at' => $now,
-                    'updated_at' => $now,
+                    'created_at' => $syncTime,
+                    'updated_at' => $syncTime,
                 ];
 
                 // =========================
@@ -218,13 +217,13 @@ class BillingComand extends Command
                         'pph' => $inv['pph'],
                         'is_complete' => $inv['is_complete'],
                         'sales_id' => $inv['sales_id'],
-                        'created_at' => $now,
-                        'updated_at' => $now,
+                        'created_at' => $syncTime,
+                        'updated_at' => $syncTime,
                     ];
                 }
             }
 
-            DB::transaction(function () use ($headers, $details, $now) {
+            DB::transaction(function () use ($headers, $details) {
 
                 // =========================
                 // UPSERT HEADER
@@ -246,6 +245,35 @@ class BillingComand extends Command
                 // =========================
                 $this->bulkUpsertDetail($details);
             });
+        });
+
+        $this->cleanupStaleRows($syncTime);
+    }
+
+    private function cleanupStaleRows(Carbon $syncTime): void
+    {
+        DB::transaction(function () use ($syncTime) {
+            DB::table('billing_list_detail')
+                ->where(function ($query) use ($syncTime) {
+                    $query->whereNull('updated_at')
+                        ->orWhere('updated_at', '<', $syncTime);
+                })
+                ->delete();
+
+            DB::table('billing_list_header')
+                ->where(function ($query) use ($syncTime) {
+                    $query->whereNull('updated_at')
+                        ->orWhere('updated_at', '<', $syncTime);
+                })
+                ->delete();
+
+            DB::table('billing_list_header')
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('billing_list_detail')
+                        ->whereColumn('billing_list_detail.billing_header_id', 'billing_list_header.id');
+                })
+                ->delete();
         });
     }
 
