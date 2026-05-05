@@ -29,30 +29,13 @@ class SertifikasiDriverController extends Controller
                 ->pluck('user_id')
                 ->toArray();
 
-            $samplers = MasterKaryawan::with('jabatan');
-
-            if ($request->mode == 'add') {
-                $samplers->whereIn('id_jabatan', [94]);
-            } else {
-                $samplers->whereIn('id_jabatan', [70, 75, 94, 110]);
-            }
-
-            $samplers = $samplers->where('is_active', true)
-                ->whereNotIn('id', $driverUserIds)
-                ->orderBy('nama_lengkap')
-                ->get();
-
-            $privateSampler = MasterKaryawan::with('jabatan')
-                ->whereIn('id', [21, 56, 311, 531, 39, 95, 112, 377, 531, 35, 171])
+            $karyawan = MasterKaryawan::with('jabatan')
                 ->where('is_active', true)
                 ->whereNotIn('id', $driverUserIds)
                 ->orderBy('nama_lengkap')
                 ->get();
 
-            $allSamplers = $samplers->merge($privateSampler);
-            $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
-
-            return Datatables::of($allSamplers)->make(true);
+            return Datatables::of($karyawan)->make(true);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -112,7 +95,6 @@ class SertifikasiDriverController extends Controller
                     'message' => 'Data Driver Berhasil Di Tambahkan',
 
                 ], 200);
-
             }
         } catch (\Throwable $th) {
             // return response()->json([
@@ -150,8 +132,6 @@ class SertifikasiDriverController extends Controller
             //     'status' => '500'
             // ], 500);
         }
-
-
     }
 
     public function deleteDriver(Request $request)
@@ -166,7 +146,6 @@ class SertifikasiDriverController extends Controller
             return response()->json([
                 'message' => 'Data Driver Berhasil Di Hapus!',
             ], 200);
-
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'Gagal menghapus data driver!, Silahkan hubungi IT',
@@ -179,8 +158,5 @@ class SertifikasiDriverController extends Controller
             // ], 500);
 
         }
-
     }
 }
-
-
