@@ -33,16 +33,16 @@ class DokumenSkppaController extends Controller
     {
         DB::beginTransaction();
         try {
-            $bap = DokumenSkppa::where('id', $request->id)->first();
-            $bap->count_print = $bap->count_print + 1;
-            $bap->is_printed = true;
-            $bap->printed_by = $this->karyawan;
-            $bap->printed_at = Carbon::now()->format('Y-m-d H:i:s');
-            $bap->save();
+            $skppa = DokumenSkppa::where('id', $request->id)->first();
+            $skppa->count_print = $skppa->count_print + 1;
+            $skppa->is_printed = true;
+            $skppa->printed_by = $this->karyawan;
+            $skppa->printed_at = Carbon::now()->format('Y-m-d H:i:s');
+            $skppa->save();
 
             DB::commit();
             return response()->json([
-                'message' => 'Berhasil Print BAP' . $bap->no_document,
+                'message' => 'Berhasil Print Dokumen SKPPA' . $skppa->no_document,
             ], 200);
         } catch (\Exception $th) {
             DB::rollBack();
