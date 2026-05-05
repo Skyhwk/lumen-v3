@@ -45,7 +45,36 @@ class QtOrderedController extends Controller
         try {
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
-                    ->select('request_quotation.*') // tambahkan ini
+                    ->select(
+                        'request_quotation.document_status',
+                        'request_quotation.kode_promo',
+                        'request_quotation.pelanggan_ID',
+                        'request_quotation.no_document',
+                        'request_quotation.nama_perusahaan',
+                        'request_quotation.flag_status',
+                        'request_quotation.status_sampling',
+                        'request_quotation.sp_by',
+                        'request_quotation.no_tlp_perusahaan',
+                        'request_quotation.konsultan',
+                        'request_quotation.nama_pic_order',
+                        'request_quotation.no_pic_order',
+                        'request_quotation.keterangan',
+                        'request_quotation.grand_total',
+                        'request_quotation.total_discount',
+                        'request_quotation.total_ppn',
+                        'request_quotation.total_pph',
+                        'request_quotation.piutang',
+                        'request_quotation.created_at',
+                        'request_quotation.sales_id',
+                        'request_quotation.keterangan_reject_sp',
+                        'request_quotation.filename',
+                        'request_quotation.jadwalfile',
+                        'request_quotation.tanggal_penawaran',
+                        'request_quotation.id',
+                        'request_quotation.is_generate_data_lab',
+                        'request_quotation.id_cabang',
+                        'request_quotation.is_active',
+                        )
                     ->where('request_quotation.id_cabang', $request->cabang)
                     ->where('request_quotation.flag_status', 'ordered')
                     ->where('request_quotation.is_approved', true)
@@ -55,7 +84,36 @@ class QtOrderedController extends Controller
                     ->orderBy('request_quotation.id', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
-                    ->select('request_quotation_kontrak_H.*')
+                    ->select(
+                        'request_quotation_kontrak_H.document_status',
+                        'request_quotation_kontrak_H.kode_promo',
+                        'request_quotation_kontrak_H.pelanggan_ID',
+                        'request_quotation_kontrak_H.no_document',
+                        'request_quotation_kontrak_H.nama_perusahaan',
+                        'request_quotation_kontrak_H.flag_status',
+                        'request_quotation_kontrak_H.status_sampling',
+                        'request_quotation_kontrak_H.sp_by',
+                        'request_quotation_kontrak_H.no_tlp_perusahaan',
+                        'request_quotation_kontrak_H.konsultan',
+                        'request_quotation_kontrak_H.nama_pic_order',
+                        'request_quotation_kontrak_H.no_pic_order',
+                        'request_quotation_kontrak_H.keterangan',
+                        'request_quotation_kontrak_H.grand_total',
+                        'request_quotation_kontrak_H.total_discount',
+                        'request_quotation_kontrak_H.total_ppn',
+                        'request_quotation_kontrak_H.total_pph',
+                        'request_quotation_kontrak_H.piutang',
+                        'request_quotation_kontrak_H.created_at',
+                        'request_quotation_kontrak_H.sales_id',
+                        'request_quotation_kontrak_H.keterangan_reject_sp',
+                        'request_quotation_kontrak_H.filename',
+                        'request_quotation_kontrak_H.jadwalfile',
+                        'request_quotation_kontrak_H.tanggal_penawaran',
+                        'request_quotation_kontrak_H.id',
+                        'request_quotation_kontrak_H.is_generate_data_lab',
+                        'request_quotation_kontrak_H.id_cabang',
+                        'request_quotation_kontrak_H.is_active',
+                        )
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
                     ->where('request_quotation_kontrak_H.flag_status', 'ordered')
                     ->where('request_quotation_kontrak_H.is_approved', true)
@@ -92,12 +150,12 @@ class QtOrderedController extends Controller
                     if (is_null($row->konfirmasi)) {
                         return '-';
                     }
-                    
+
                     if (is_iterable($row->konfirmasi)) {
                         // konfirmasi is a collection or array
                         $poList = collect($row->konfirmasi)
                             ->pluck('no_purchaseorder')
-                            ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                            ->filter(fn($po) => !is_null($po) && trim($po) !== '')
                             ->unique()
                             ->implode(', ');
                         return $poList ?: '-';
@@ -172,7 +230,7 @@ class QtOrderedController extends Controller
             }
 
             $data = $data->get();
-            
+
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
 
@@ -195,31 +253,31 @@ class QtOrderedController extends Controller
             // --- HEADER TABEL (Sesuai Frontend) ---
             $startRow = 4;
             $headers = [
-                'No', 
-                'Kode Promo', 
-                'ID Pelanggan', 
-                'No Quotation', 
-                'No Order', 
-                'No PO', 
-                'Nama Perusahaan', 
-                'Status', 
-                'Status Sampling', 
-                'Ket Reject SP', 
-                'SP By', 
-                'No Tlp Perusahaan', 
-                'Konsultan', 
-                'PIC Order', 
-                'No Tlp PIC', 
+                'No',
+                'Kode Promo',
+                'ID Pelanggan',
+                'No Quotation',
+                'No Order',
+                'No PO',
+                'Nama Perusahaan',
+                'Status',
+                'Status Sampling',
+                'Ket Reject SP',
+                'SP By',
+                'No Tlp Perusahaan',
+                'Konsultan',
+                'PIC Order',
+                'No Tlp PIC',
                 'Keterangan',
-                'Total Price', 
-                'Total Discount', 
-                'Nilai PPN', 
+                'Total Price',
+                'Total Discount',
+                'Nilai PPN',
                 'Nilai PPh',     // TAMBAHAN
                 'Nilai Tagihan', // TAMBAHAN
-                'Nama Sales', 
+                'Nama Sales',
                 'Created At'
             ];
-            
+
             $col = 'A';
             foreach ($headers as $header) {
                 $sheet->setCellValue($col . $startRow, $header);
@@ -247,7 +305,7 @@ class QtOrderedController extends Controller
                     if (is_iterable($row->konfirmasi)) {
                         $poList = collect($row->konfirmasi)
                             ->pluck('no_purchaseorder')
-                            ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                            ->filter(fn($po) => !is_null($po) && trim($po) !== '')
                             ->unique()
                             ->implode(', ');
                         $noPO = $poList ?: '-';
@@ -260,8 +318,8 @@ class QtOrderedController extends Controller
                 }
 
                 // Format Tanggal Indo
-                $createdAt = $row->created_at 
-                    ? \Carbon\Carbon::parse($row->created_at)->locale('id')->translatedFormat('d F Y H:i') 
+                $createdAt = $row->created_at
+                    ? \Carbon\Carbon::parse($row->created_at)->locale('id')->translatedFormat('d F Y H:i')
                     : '-';
 
                 $sheet->setCellValue('A' . $rowNum, $no++);
@@ -275,25 +333,25 @@ class QtOrderedController extends Controller
                 $sheet->setCellValue('I' . $rowNum, $row->status_sampling ?? '-');
                 $sheet->setCellValue('J' . $rowNum, $row->ket_reject_sp ?? '-');
                 $sheet->setCellValue('K' . $rowNum, $row->sp_by ?? '-');
-                
+
                 // No Tlp
                 $sheet->setCellValueExplicit('L' . $rowNum, $row->no_tlp_perusahaan ?? '-', DataType::TYPE_STRING);
-                
+
                 $sheet->setCellValue('M' . $rowNum, $row->konsultan ?? '-');
                 $sheet->setCellValue('N' . $rowNum, $row->nama_pic_order ?? '-');
-                
+
                 // No Tlp PIC
                 $sheet->setCellValueExplicit('O' . $rowNum, $row->no_tlp_pic_order ?? '-', DataType::TYPE_STRING);
-                
+
                 $sheet->setCellValue('P' . $rowNum, $row->keterangan ?? '-');
-                
+
                 // Angka Duit
                 $sheet->setCellValue('Q' . $rowNum, $row->grand_total);
                 $sheet->setCellValue('R' . $rowNum, $row->total_discount);
                 $sheet->setCellValue('S' . $rowNum, $row->total_ppn);
                 $sheet->setCellValue('T' . $rowNum, $row->total_pph); // Masukin PPH
                 $sheet->setCellValue('U' . $rowNum, $row->piutang);   // Masukin Piutang
-                
+
                 $sheet->setCellValue('V' . $rowNum, $row->sales->nama_lengkap ?? '-');
                 $sheet->setCellValue('W' . $rowNum, $createdAt);
 
@@ -314,12 +372,12 @@ class QtOrderedController extends Controller
             ]);
 
             // Format Currency (Q sampe U)
-            $sheet->getStyle('Q'.($startRow+1).':U' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
-            
+            $sheet->getStyle('Q' . ($startRow + 1) . ':U' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+
             // Alignment Center
             $alignCenterCols = ['A', 'C', 'H', 'I', 'W'];
             foreach ($alignCenterCols as $col) {
-                $sheet->getStyle($col.($startRow+1).':'.$col.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle($col . ($startRow + 1) . ':' . $col . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             }
 
             // Auto Fit Columns
@@ -336,7 +394,6 @@ class QtOrderedController extends Controller
 
             $writer->save('php://output');
             exit;
-
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }
@@ -620,12 +677,20 @@ class QtOrderedController extends Controller
                 $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
                 $alasanVoidQt->save();
 
+                $baseQuotation = $this->getBaseQuotation($data->no_document);
+
+                Invoice::where('no_quotation', 'like', '%' . $baseQuotation . '%')
+                    ->update([
+                        'deleted_by' => $this->karyawan, 
+                        'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                        'is_active' => false
+                        ]);
+
                 DB::commit();
                 return response()->json([
                     'message' => 'Success void request Quotation number ' . $data->no_document . '.!',
                     'status' => '200'
                 ], 200);
-
             } else {
                 DB::rollback();
                 return response()->json([
@@ -641,5 +706,10 @@ class QtOrderedController extends Controller
                 'status' => '500'
             ], 500);
         }
+    }
+
+    private function getBaseQuotation($quotationNumber)
+    {
+        return preg_replace('/R\d+$/', '', $quotationNumber);
     }
 }

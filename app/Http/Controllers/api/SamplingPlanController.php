@@ -14,6 +14,7 @@ use App\Models\MasterKaryawan;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\PerbantuanSampler;
+use App\Models\PersiapanSampelHeader;
 use App\Models\PraNoSample;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
@@ -234,10 +235,12 @@ class SamplingPlanController extends Controller
             $samplers = $samplers->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
+
             $privateSampler = PerbantuanSampler::with('users.jabatan')
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
+
             $privateSampler->transform(function ($item) {
                 $digitCount = strlen((string) $item->user_id);
 
@@ -247,11 +250,11 @@ class SamplingPlanController extends Controller
                 } else {
                     $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
                 }
-                // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+
+                $item->id = $item->user_id;
+                
                 unset($item->jabatan);
                 if ($item->users && $item->users->jabatan) {
-                    // Kita "copy" objek jabatan dari dalam users ke root item
-                    // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
                     $jabatanObj = $item->users->getRelation('jabatan');
                     $item->setRelation('jabatan', $jabatanObj);
                 } else {
@@ -624,6 +627,10 @@ class SamplingPlanController extends Controller
     {
 
         try {
+            // ========================================================
+            // 1. SNAPSHOT BEFORE: Tarik data sebelum ada perubahan apa-apa
+            // ========================================================
+            $dataBefore = JadwalServices::getSnapshotData($request->no_quotation, $request->tanggal_lama, $request->tipe_parsial,$request->batch_id);
             //code...
             $dataObject = (object) [
                 'no_quotation'    => $request->no_quotation,
@@ -670,6 +677,14 @@ class SamplingPlanController extends Controller
             // TAMBAHAN UNTUK UPDATE ORDER DETAIL
             $this->updateOrderDetail($dataObject, $request->tanggal);
 
+            // ========================================================
+            // 2. SNAPSHOT AFTER: Tarik data setelah SP dieksekusi
+            // ========================================================
+            // Catatan: Jika ada kemungkinan no_quotation berubah, sesuaikan query ini.
+            // Jika hanya tanggal/sampler yang berubah, ini sudah aman.
+            $dataAfter = JadwalServices::getSnapshotData($request->no_quotation, $request->tanggal, $request->tipe_parsial);
+
+            JadwalServices::notifperubahan($dataBefore, $dataAfter,$request->boolean('notify_sales'));
 
             switch ($type) {
                 case 'QT':

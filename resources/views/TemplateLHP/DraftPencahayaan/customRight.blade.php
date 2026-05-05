@@ -111,35 +111,35 @@
                     </tr> -->
                 </table>
                 @if (!empty($header->regulasi_custom))
-                    @foreach (json_decode($header->regulasi_custom) as $y)
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                        @if ($key == $page)
+                            @php
+                                $parts = explode('-', $y,2);
+                                $regulasiId = $parts[0] ?? null;
+                                $regulasiName = $parts[1] ?? '';
+                                $regulasi = MasterRegulasi::find($regulasiId);
+                                $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                                $table = $tableObj ? $tableObj->konten : '';
+                            @endphp
 
-                        @php
-                            $parts = explode('-', $y);
-                            $regulasiId = $parts[0] ?? null;
-                            $regulasiName = $parts[1] ?? '';
-                            $regulasi = MasterRegulasi::find($regulasiId);
-                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
-                            $table = $tableObj ? $tableObj->konten : '';
-                        @endphp
-
-                        <table width="100%" style="padding-top: 10px;">
-                            <tr>
-                                <td class="custom5" colspan="3">
-                                    <strong>{{ $regulasiName }}</strong>
-                                </td>
-                            </tr>
-                        </table>
-
-                        @if($table)
-                            <table width="100%" style="padding-top: 5px;">
+                            <table width="100%" style="padding-top: 10px;">
                                 <tr>
                                     <td class="custom5" colspan="3">
-                                        Lampiran di halaman terakhir
+                                        <strong>{{ $regulasiName }}</strong>
                                     </td>
                                 </tr>
                             </table>
-                        @endif
 
+                            @if($table)
+                                <table width="100%" style="padding-top: 5px;">
+                                    <tr>
+                                        <td class="custom5" colspan="3">
+                                            Lampiran di halaman terakhir
+                                        </td>
+                                    </tr>
+                                </table>
+                            @endif
+                        @endif
                     @endforeach
                 @endif
 
@@ -148,14 +148,14 @@
                         @foreach (json_decode($header->regulasi) as $y)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y,2)[1] }}</strong></td>
                                 </tr>
                             </table>
                         @endforeach
                            @php
                             // pastikan $header ada nilainya
-                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
-                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y,2)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y,2)[0])->first();
                                 if (!empty($table)) {
                                 $table = $table->konten;
                             } else {

@@ -43,9 +43,19 @@ class RegistrasiCustomerController extends Controller
     {
         try {
             $search = trim($request->search ?? '');
+            
+            $userId = $request->user_id;
+
+            $userIds = Users::where('id', '!=', $userId)
+                ->pluck('id_pelanggan')
+                ->flatMap(fn ($item) => json_decode($item, true) ?? [])
+                ->unique()
+                ->values()
+                ->toArray();
 
             $query = MasterPelanggan::query()
                 ->where('is_active', true)
+                ->whereNotIn('id_pelanggan', $userIds)
                 ->select('id_pelanggan', 'nama_pelanggan');
 
             if (empty($search)) {
@@ -102,7 +112,7 @@ class RegistrasiCustomerController extends Controller
                 $user->nama_lengkap = $request->nama_lengkap;
                 $user->email = $request->email;
                 $user->password = Hash::make('password');
-                $user->id_pelanggan = json_encode($request->id_pelanggan);
+                $user->id_pelanggan = json_encode($request->id_pelanggan ?? []);
                 $user->created_by = $this->karyawan;
                 $user->created_at = Carbon::now();
                 $user->role_id = 2; // Super Admin
@@ -160,7 +170,7 @@ class RegistrasiCustomerController extends Controller
                 $user = Users::find($request->id);
                 $user->nama_lengkap = $request->nama_lengkap;
                 $user->email = $request->email;
-                $user->id_pelanggan = json_encode($request->id_pelanggan);
+                $user->id_pelanggan = json_encode($request->id_pelanggan ?? []);
                 $user->updated_by = $this->karyawan;
                 $user->updated_at = Carbon::now();
                 $user->save();
@@ -305,9 +315,9 @@ class RegistrasiCustomerController extends Controller
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
             }
-            // return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
+            return response()->json(['link' => env('PORTALV4').'ppi/form-online/' . $link->token], 200);
             // ganti ke portal.intilab.com
-            return response()->json(['link' => 'https://portal.intilab.com/customer/form-online/' . $link->token], 200);
+            // return response()->json(['link' => 'https://portal.intilab.com/ppi/form-online/' . $link->token], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
         }

@@ -50,6 +50,10 @@ class NotificationFdlService
     public function sendApproveNotification($menu, $no_sampel, $approved_by, $created_by)
     {
         $user = MasterKaryawan::where('nama_lengkap', $created_by)->where('is_active', true)->first();
+        if (!$user) {
+            // Jika pengguna tidak ditemukan, Anda bisa memilih untuk tidak mengirim notifikasi atau menangani kasus ini sesuai kebutuhan
+            return;
+        }
         $token = FcmTokenFdl::where('user_id', $user->id)->first();
         $title = "No Sampel $no_sampel Telah di Setujui";
         $message = "Data Lapangan dengan no sampel $no_sampel pada FDL $menu telah di approve oleh $approved_by";
@@ -60,6 +64,10 @@ class NotificationFdlService
     public function sendRejectNotification($menu, $no_sampel, $reason, $rejected_by, $created_by)
     {
         $user = MasterKaryawan::where('nama_lengkap', $created_by)->where('is_active', true)->first();
+        if (!$user) {
+            // Jika pengguna tidak ditemukan, Anda bisa memilih untuk tidak mengirim notifikasi atau menangani kasus ini sesuai kebutuhan
+            return;
+        }
         $token = FcmTokenFdl::where('user_id', $user->id)->first();
         $title = "No Sampel $no_sampel Telah di Reject";
         $message = "Data Lapangan dengan no sampel $no_sampel pada FDL $menu di reject oleh $rejected_by dengan alasan $reason";
@@ -70,6 +78,10 @@ class NotificationFdlService
     public function sendNotification($title, $message, $created_by)
     {
         $user = MasterKaryawan::where('nama_lengkap', $created_by)->where('is_active', true)->first();
+        if (!$user) {
+            // Jika pengguna tidak ditemukan, Anda bisa memilih untuk tidak mengirim notifikasi atau menangani kasus ini sesuai kebutuhan
+            return;
+        }
         $token = FcmTokenFdl::where('user_id', $user->id)->first();
         
         if ($token) {

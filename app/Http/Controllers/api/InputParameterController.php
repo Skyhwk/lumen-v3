@@ -3891,7 +3891,7 @@ class InputParameterController extends Controller
 						$pengukuran = json_decode($data->pengukuran);
                         $flow = (float) ($pengukuran->{"Flow Rate"} ?? null);
 						$flowRate[] = $flow;
-                        $durasi_value = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
+                        $durasi_value = (float) $pengukuran->Durasi ?? null; // hapus teks durasi karena ada satuan menit. Hasil: 10.0 (atau 10 dalam bentuk float)
 						$durasi[] = $durasi_value;
 						$volume[] = ($flow * $durasi_value) / 1000;
 					}

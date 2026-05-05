@@ -52,7 +52,7 @@ class BOD_APHA
             if($selisih_d >= 2.0 && $d2 >= 1){ # Ketentuan 1
                 $rumus = $rumus;
             } else if ($selisih_d < 2.0 && $fp == 1){ # Ketentuan 2
-                $rumus = $selisih_d;
+                $rumus = $rumus;
             } else if ($d2 < 1 && $fp > 1){ # Ketentuan 3
                 $rumus = '>'.$rumus;
             } else if ($selisih_d < 1 && $fp > 1){ # Ketentuan 4

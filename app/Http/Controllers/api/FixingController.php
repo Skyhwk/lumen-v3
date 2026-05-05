@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 use App\Helpers\Fixing;
@@ -8,8 +9,10 @@ use App\Jobs\RenderPdfPenawaran;
 use App\Models\AksesMenu;
 use App\Models\ExpiredLink;
 use App\Models\GenerateLink;
+use App\Models\HistoryLevelSampler;
 use App\Models\Jadwal;
 use App\Models\JobTask;
+use App\Models\MasterFeeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Menu;
 use App\Models\OrderDetail;
@@ -17,7 +20,12 @@ use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\MasterPelanggan;
+use App\Models\PengajuanFeeSampling;
+use App\Models\PengajuanFeeSamplingDetail;
 use App\Models\TemplateAkses;
+use App\Services\GenerateFeeSampling;
+use App\Services\RenderInvoice;
+use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
 use App\Services\RenderKontrakCopy;
 use App\Services\RenderNonKontrakCopy;
@@ -121,7 +129,6 @@ class FixingController extends Controller
                     }
 
                     DB::commit();
-
                 } catch (\Throwable $th) {
                     DB::rollback();
                     $errorCount++;
@@ -144,7 +151,6 @@ class FixingController extends Controller
                 'total_documents' => count($dataList),
                 'error_details'   => $errorDetails,
             ], 200);
-
         } catch (\Throwable $th) {
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
@@ -211,7 +217,6 @@ class FixingController extends Controller
 
                     $job = new RenderPdfPenawaran($request->id, 'kontrak');
                     $this->dispatch($job);
-
                 } else {
                     $data      = QuotationNonKontrak::find($request->id);
                     $jobTaskId = JobTask::insertGetId([
@@ -265,9 +270,9 @@ class FixingController extends Controller
     {
         try {
             $data = MasterPelanggan::where('id_pelanggan', $request->id_pelanggan)
-            ->where('is_active', true)
-            ->whereNotIn('sales_id', ['127'])   
-            ->first();
+                ->where('is_active', true)
+                ->whereNotIn('sales_id', ['127'])
+                ->first();
             if (! $data) {
                 return response()->json([
                     'message' => 'Data pelanggan tidak ditemukan!',
@@ -361,7 +366,7 @@ class FixingController extends Controller
                 return response()->json(['message' => 'Order Header not found'], 404);
             }
 
-        
+
             $orderHeader->nama_perusahaan = $request->nama_pelanggan;
             $orderHeader->konsultan       = $request->nama_konsultan ?: null;
             $orderHeader->alamat_sampling = $request->alamat_sampling ?: null;
@@ -372,7 +377,7 @@ class FixingController extends Controller
                     'nama_perusahaan' => $request->nama_pelanggan,
                     'konsultan'       => $request->nama_konsultan ?: null,
                 ]);
-            
+
             Jadwal::where('no_quotation', $request->no_document)
                 ->where('is_active', true)
                 ->update(['nama_perusahaan' => $request->nama_pelanggan], ['alamat' => $request->alamat_sampling]);
@@ -467,14 +472,16 @@ class FixingController extends Controller
                 // =====================
                 // VALIDASI PARAMETER
                 // =====================
-               $paramLama = collect(is_array($detailLama->parameter) 
-                    ? $detailLama->parameter 
-                    : (json_decode($detailLama->parameter, true) ?? [])
+                $paramLama = collect(
+                    is_array($detailLama->parameter)
+                        ? $detailLama->parameter
+                        : (json_decode($detailLama->parameter, true) ?? [])
                 )->sort()->values()->toArray();
 
-                $paramBaru = collect(is_array($detailBaru->parameter) 
-                    ? $detailBaru->parameter 
-                    : (json_decode($detailBaru->parameter, true) ?? [])
+                $paramBaru = collect(
+                    is_array($detailBaru->parameter)
+                        ? $detailBaru->parameter
+                        : (json_decode($detailBaru->parameter, true) ?? [])
                 )->sort()->values()->toArray();
 
                 if ($paramLama !== $paramBaru) {
@@ -523,7 +530,6 @@ class FixingController extends Controller
 
             DB::commit();
             return response()->json(['message' => 'Berhasil update no sampel'], 200);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -690,7 +696,7 @@ class FixingController extends Controller
                     $akses = json_decode($akses, true);
                 }
 
-                
+
                 if (is_array($akses) && ! empty($akses)) {
                     $updatedAkses = collect($akses)->map(function ($item) use ($parentMap) {
                         $menuName       = $item['name'] ?? '';
@@ -739,6 +745,167 @@ class FixingController extends Controller
         }
 
         return $parentMap;
+    }
+
+    public function searchFeeSampling(Request $request)
+    {
+        $res = $this->processFeeSampling($request->batch_id, $request->tanggal);
+
+        if (isset($res['error'])) {
+            return response()->json(['message' => $res['error']], $res['code']);
+        }
+
+        $isDifferent = $res['current_fee'] != $res['updated_fee'];
+
+        return response()->json([
+            'message' => $isDifferent
+                ? 'Berhasil mengambil data terbaru'
+                : 'Tidak terdapat perbedaan fee sampling',
+            'status' => $isDifferent,
+            'data' => [
+                'current_fee' => $res['current_fee'],
+                'updated_fee' => $res['updated_fee'],
+                'details' => $res['details'],
+            ]
+        ]);
+    }
+
+    public function updateFeeSampling(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $res = $this->processFeeSampling($request->batch_id, $request->tanggal);
+
+            if (isset($res['error'])) {
+                return response()->json(['message' => $res['error']], $res['code']);
+            }
+
+            $fee = $res['fee_sampling'];
+            $rekap = $res['rekap'];
+
+            $fee->update([
+                'total_fee_request' => $res['updated_fee']
+            ]);
+
+            foreach ($rekap['harian'] as $item) {
+                PengajuanFeeSamplingDetail::where('pengajuan_fee_sampling_id', $fee->id)
+                    ->where('tanggal', $item['tanggal'])
+                    ->update([
+                        'total_fee' => $item['total_fee'],
+                        'fee_pokok' => $item['fee_pokok'],
+                        'fee_tambahan' => $item['fee_tambahan'],
+                        'jumlah_tempat' => $item['jumlah_tempat'],
+                        'rincian_fee_pokok' => $item['rincian_fee_pokok'],
+                        'fee_tambahan_rincian' => $item['fee_tambahan_rincian'],
+                    ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Berhasil mengupdate fee sampling',
+                'status' => true
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => $th->getMessage(),
+                'status' => false
+            ], 500);
+        }
+    }
+
+    private function processFeeSampling($batch_id, $tanggal = [])
+    {
+        $fee_sampling = PengajuanFeeSampling::with('detail_fee')
+            ->where('batch_id', $batch_id)
+            ->first();
+
+        if (!$fee_sampling) {
+            return ['error' => 'Data tidak ditemukan', 'code' => 404];
+        }
+
+        $master = MasterKaryawan::find($fee_sampling->user_id);
+
+        if (!$master || !$master->warna) {
+            return ['error' => 'Level Sampler Belum Ditentukan', 'code' => 401];
+        }
+
+        $history = HistoryLevelSampler::where('user_id', $master->user_id)
+            ->latest()
+            ->first();
+
+        $warnaFinal = $master->warna;
+
+        if ($history && !empty($tanggal)) {
+            $changeDate = Carbon::parse($history->created_at)->startOfDay();
+
+            $before = collect($tanggal)->contains(fn($t) => Carbon::parse($t)->lt($changeDate));
+            $after  = collect($tanggal)->contains(fn($t) => Carbon::parse($t)->gte($changeDate));
+
+            if ($before && $after) {
+                return [
+                    'error' => 'Tanggal pengajuan tidak boleh melewati perubahan level sampler',
+                    'code' => 422
+                ];
+            }
+
+            $warnaFinal = $before ? $history->old_warna : $history->new_warna;
+        }
+
+        $level = MasterFeeSampling::where('warna', $warnaFinal)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$level) {
+            return ['error' => 'Level Sampler Tidak Ditemukan', 'code' => 404];
+        }
+
+        $generate = new GenerateFeeSampling();
+
+        $rekap = $generate->rekapFeeSampling(
+            $fee_sampling->user_id,
+            $level->kategori,
+            $fee_sampling->detail_fee->pluck('tanggal')->toArray()
+        );
+
+        $detailNow = $fee_sampling->detail_fee->keyBy('tanggal');
+
+        $details = collect($rekap['harian'])->map(function ($item) use ($detailNow) {
+            $current = $detailNow[$item['tanggal']] ?? null;
+
+            return [
+                'tanggal' => $item['tanggal'],
+
+                'current' => [
+                    'total_fee' => $current->total_fee ?? 0,
+                    'fee_pokok' => $current->fee_pokok ?? 0,
+                    'fee_tambahan' => $current->fee_tambahan ?? 0,
+                    'jumlah_tempat' => $current->jumlah_tempat ?? 0,
+                    'rincian_fee_pokok' => $current->rincian_fee_pokok ?? null,
+                    'fee_tambahan_rincian' => $current->fee_tambahan_rincian ?? null,
+                ],
+
+                'updated' => [
+                    'total_fee' => $item['total_fee'] ?? 0,
+                    'fee_pokok' => $item['fee_pokok'] ?? 0,
+                    'fee_tambahan' => $item['fee_tambahan'] ?? 0,
+                    'jumlah_tempat' => $item['jumlah_tempat'] ?? 0,
+                    'rincian_fee_pokok' => $item['rincian_fee_pokok'] ?? null,
+                    'fee_tambahan_rincian' => $item['fee_tambahan_rincian'] ?? null,
+                ]
+            ];
+        })->values();
+
+        return [
+            'fee_sampling' => $fee_sampling,
+            'rekap' => $rekap,
+            'current_fee' => $fee_sampling->total_fee_request,
+            'updated_fee' => $rekap['total_mingguan'],
+            'details' => $details,
+        ];
     }
 
     // public function exportPelangganBelumOrder(Request $request)
@@ -837,8 +1004,21 @@ class FixingController extends Controller
     //         dd($e->getMessage(), $e->getLine(), $e->getFile());
     //     }
     // }
-    
 
- 
+    public function renderInvoice(Request $request)
+    {
+        if ($request->is_copy) {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoiceTitik();
+                $render->renderInvoice($item);
+            }
+        } else {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoice();
+                $render->renderInvoice($item);
+            }
+        }
 
+        return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
 }
