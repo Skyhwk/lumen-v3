@@ -31,7 +31,7 @@ class SampelDatangController extends Controller
             $samples = SampelDiantar::with(['order.orderDetail' => function ($query) {
                 $query->where('is_active', true)
                       ->where('kategori_1', 'SD');
-            },'detail'])->get();
+            },'detail'])->orderBy('id','desc')->get();
             // $samples->each(function ($sample) {
             //     $uniquePeriode = collect();
             //     if ($sample->order && $sample->order->orderDetail) {
