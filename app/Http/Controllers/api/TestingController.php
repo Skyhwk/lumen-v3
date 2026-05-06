@@ -94,7 +94,8 @@ use App\Services\{
     SendEmail,
     GetBawahan,
     SnapshotPersiapanService,
-    GenerateToken
+    GenerateToken,
+    CombineLHPService,
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -6337,5 +6338,13 @@ private function detectChangedPoints($oldPoints, $newPoints)
         }
 
         return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
+
+    public function generateSkpp(Request $request)
+    {
+        $skppGenerator = new CombineLHPService();
+        $skppGenerator->testRendersuratKeterangan($request->no_order, $request->periode);
+
+        return response()->json(['message' => 'SKPP has been generated successfully'], 200);
     }
 }
