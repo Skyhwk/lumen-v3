@@ -93,19 +93,27 @@ class JadwalFdlController extends Controller
         ->map(function ($group) {
             $first = $group->first();
             $allSamplers = $group
-                ->flatMap(function ($item) {
-                    return collect(explode(',', $item->sampler))
-                        ->map(function ($sampler) use ($item) {
-                            $sampler = trim($sampler);
+            ->flatMap(function ($item) {
+                $allTeams = explode(',', $item->sampler);
 
-                            return $sampler == $item->driver
-                                ? $sampler . ' (Driver)'
-                                : $sampler;
-                        });
-                })
-                ->unique()
-                ->values()
-                ->implode(', ');
+                if ($item->driver != '' && $item->driver != null) {
+                    $allTeams[] = $item->driver;
+                }
+
+                $allTeams = array_values(array_unique($allTeams));
+
+                return collect($allTeams)
+                    ->map(function ($sampler) use ($item) {
+                        $sampler = trim($sampler);
+
+                        return $sampler == $item->driver
+                            ? $sampler . ' (Driver)'
+                            : $sampler;
+                    });
+            })
+            ->unique()
+            ->values()
+            ->implode(', ');
 
             return [
                 'kendaraan'    => $first->kendaraan,
