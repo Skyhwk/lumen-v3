@@ -87,9 +87,9 @@ class FollowUpWebsiteController extends Controller
             if ($data) {
                 $body = self::generateEmailBody($data);
 
-                $email = SendEmail::where('to', 'faidhah@intilab.com')
-                    ->where('subject', 'Pemberitahuan Permintaan Penawaran Baru')
-                    ->where('bcc', ['winda@intilab.com'])
+                $email = SendEmail::where('to', 'sales@intilab.com')
+                    ->where('subject', 'Pemberitahuan Permintaan Penawaran Baru dari website INTILAB')
+                    ->where('cc', ['faidhah@intilab.com', 'reiko@intilab.com'])
                     ->where('body', $body)
                     ->where('karyawan', env('MAIL_NOREPLY_USERNAME'))
                     ->noReply()

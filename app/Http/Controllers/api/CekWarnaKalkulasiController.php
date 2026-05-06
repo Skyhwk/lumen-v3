@@ -46,14 +46,31 @@ class CekWarnaKalkulasiController extends Controller
         // 🔥 ambil semua range
         $dasarTargets = DasarTarget::where('is_active', 1)->get();
 
-        // 🔥 cari range yang cocok
+        // Fungsi untuk menentukan teks putih atau hitam
+        function getContrastColor($hexColor) {
+            // Hapus tanda # jika ada
+            $hex = str_replace('#', '', $hexColor);
+
+            // Konversi ke RGB
+            $r = hexdec(substr($hex, 0, 2));
+            $g = hexdec(substr($hex, 2, 2));
+            $b = hexdec(substr($hex, 4, 2));
+
+            // Rumus YIQ (Luma contrast)
+            $yiq = (($r * 299) + ($g * 587) + ($b * 114)) / 1000;
+
+            return ($yiq >= 128) ? '#000000' : '#ffffff';
+        }
+
+        // 🔥 Cari range yang cocok
         $matched = $dasarTargets->first(function ($item) use ($nilaiPersentase) {
             return $nilaiPersentase > (float) $item->persentase_awal &&
                 $nilaiPersentase <= (float) $item->persentase_akhir;
         });
 
         return response()->json([
-            'color' => $matched ? $matched->color : null,
+            'color'      => $matched ? $matched->color : null,
+            'text_color' => $matched ? getContrastColor($matched->color) : '#000000',
             'keterangan' => $matched ? $matched->keterangan : null,
         ]);
     }

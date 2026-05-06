@@ -82,7 +82,7 @@ class SummaryInvoice extends Command
                     DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
 
                     DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
-                    DB::raw('(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+                    DB::raw('COALESCE(MAX(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0) AS nilai_pelunasan'),
 
                     DB::raw('MAX(invoice.is_generate) AS is_generate'),
                     DB::raw('MAX(invoice.generated_by) AS generated_by'),
@@ -226,7 +226,7 @@ class SummaryInvoice extends Command
             $newInvoiceNumbers = array_column($data, 'no_invoice');
 
             collect($data)
-                ->chunk(50)
+                ->chunk(500)
                 ->each(function ($chunk, $index) {
 
                     printf("\n[SummaryInvoice] [%s] Upsert chunk ke-%d size:%d", Carbon::now(), $index + 1, count($chunk));
@@ -290,11 +290,8 @@ class SummaryInvoice extends Command
                 ->whereNotIn('no_invoice', $newInvoiceNumbers)
                 ->delete();
 
-            DB::commit();
-
             printf("\n[SummaryInvoice] [%s] DONE total: %d", Carbon::now(), count($data));
         } catch (\Throwable $th) {
-            DB::rollBack();
             dd($th->getMessage(), $th->getLine(), $th->getFile());
         }
     }

@@ -27,6 +27,6 @@ class MasterTargetSales extends Sector
 
     public function sales()
     {
-        return $this->belongsTo(MasterKaryawan::class, 'karyawan_id')->where('is_active', true);
+        return $this->belongsTo(MasterKaryawan::class, 'karyawan_id');
     }
 }
