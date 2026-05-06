@@ -57,8 +57,12 @@ use App\Models\DetailSenyawaVolatile;
 use App\Models\SampelTidakSelesai;
 use App\Models\QrDocument;
 use App\Models\RequiredParameters;
+use App\Models\MasterKategori;
+use App\Models\Parameter;
 use DateTime;
 use Exception;
+use Illuminate\Support\Facades\Validator;
+
 
 class BasOnlineController extends Controller
 {
@@ -4881,6 +4885,7 @@ class BasOnlineController extends Controller
         return 'bin';
     }
 
+    //requierParameterBas
     // Step 1: Trace parameter
     public function traceParameter(Request $request)
     {
@@ -4955,29 +4960,193 @@ class BasOnlineController extends Controller
     }
 
     // Step 2: Simpan ke DB
-    public function storeRequiredParameter(Request $request)
+    public function insertData(Request $request)
     {
-        $request->validate([
-            'parameter'      => 'required|string',
-            'required_count' => 'required|integer|min:1',
-            'category'       => 'required|string',
-            'model'          => 'nullable|string',
-            'model2'         => 'nullable|string',
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: *');
+        // header('Access-Control-Allow-Headers: *');
+        
+        $validator = Validator::make($request->all(), [
+            'list_parameter'                  => 'required|array',
+            'list_parameter.*.parameter'      => 'required|string',
+            'list_parameter.*.required_count' => 'required|integer|min:1',
+            'list_parameter.*.category'       => 'required|string',
         ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors()->first()
+            ], 400);
+        }
+        $validated = $validator->validated();
+        $models = [
+            DataLapanganAir::class, DataLapanganDebuPersonal::class, DataLapanganDirectLain::class,
+            DataLapanganEmisiCerobong::class, DataLapanganEmisiKendaraan::class, DataLapanganGetaran::class,
+            DataLapanganGetaranPersonal::class, DataLapanganIklimDingin::class, DataLapanganIklimPanas::class,
+            DataLapanganIsokinetikHasil::class, DataLapanganKebisingan::class, DataLapanganKebisinganPersonal::class,
+            DataLapanganMedanLM::class, DataLapanganMicrobiologi::class, DataLapanganPartikulatMeter::class,
+            DataLapanganPsikologi::class, DataLapanganSinarUv::class, DataLapanganSwab::class,
+            DataLapanganErgonomi::class, DataLapanganCahaya::class, DetailLingkunganHidup::class,
+            DetailLingkunganKerja::class, DetailMicrobiologi::class, DetailSenyawaVolatile::class,
+        ];
 
-        RequiredParameters::updateOrCreate(
-            [
-                'parameter' => $request->parameter,
-                'category'  => $request->category,
-            ],
-            [
-                'required_count' => $request->required_count,
-                'model'          => $request->model,
-                'model2'         => $request->model2,
-            ]
-        );
+        foreach ($request->list_parameter as $item) {
+            $parameterName  = $item['parameter'];
+            $category       = $item['category'];
+            $requiredCount  = $item['required_count'];
+            $found          = [];
 
-        return response()->json(['message' => 'Parameter berhasil disimpan']);
+            // 1. Trace Model secara otomatis
+            foreach ($models as $modelClass) {
+                try {
+                    if ($modelClass::where('parameter', trim($parameterName))->exists()) {
+                            $found[] = $modelClass;
+                        }
+                } catch (\Exception $e) {
+                    continue;
+                }
+            }
+
+            // 2. Cari apakah parameter dengan kategori ini SUDAH ADA (Tanpa mempedulikan model)
+            $existingParam = RequiredParameters::where('parameter', trim($parameterName))
+                                   ->where('category', trim($category))
+                                   ->first();
+
+            if ($existingParam) {
+                $existingParam->required_count = $requiredCount;
+                $messages = [];
+                
+                foreach ($found as $foundModel) {
+                    if ($existingParam->model === $foundModel || $existingParam->model2 === $foundModel) {
+                        // Sudah terdaftar di model1 atau model2, skip
+                        $messages[] = "Parameter '{$parameterName}' sudah terdaftar di " . class_basename($foundModel);
+                        continue;
+                    }
+
+                    if (empty($existingParam->model)) {
+                        $existingParam->model = $foundModel;
+                    } elseif (empty($existingParam->model2)) {
+                        $existingParam->model2 = $foundModel;
+                        break;
+                    }
+
+                }
+
+                $existingParam->save();
+            } else {
+                RequiredParameters::create([
+                    'parameter'      => trim($parameterName),
+                    'category'       => trim($category),
+                    'required_count' => $requiredCount,
+                    'model'          => $found[0] ?? null,
+                    'model2'         => $found[1] ?? null,
+                ]);
+            }
+        }
+
+        return response()->json(['message' => 'Semua parameter berhasil diproses dan disimpan']);
+    }
+    // get list parameter for datatable
+    public function getListParameter(Request $request)
+    {
+        try {
+            // Ambil semua data dari tabel, urutkan dari yang terbaru
+            $parameters = RequiredParameters::where('is_active', true)->orderBy('id', 'desc')->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameters,
+                'message' => 'Berhasil mengambil data parameter'
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengambil data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getMasterKategori(Request $request)
+    {
+        try {
+            // Ambil semua data dari tabel, urutkan dari yang terbaru
+            $categories = MasterKategori::orderBy('id', 'desc')->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $categories,
+                'message' => 'Berhasil mengambil data master kategori'
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengambil data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function listParameter(Request $request)
+    {
+        try{
+
+            $parameters = Parameter::select('id','nama_lab')->where('is_active', true)->get();
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameters,
+                'message' => 'Berhasil mengambil data parameter'
+            ], 200);
+        }catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengambil data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function updateDataParameter(Request $request)
+    {
+        try {
+            $parameter = RequiredParameters::find($request->id);
+            $parameter->required_count = $request->required_count;
+            $parameter->save();
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameter,
+                // 'message' => 'Berhasil mengupdate data parameter'
+            ], 200);
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengupdate data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteDataParameter(Request $request)
+    {
+        try {
+            $parameter = RequiredParameters::find($request->id);
+            $parameter->is_active = false;
+            $parameter->save();
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameter,
+                'message' => 'Berhasil menghapus data parameter'
+            ], 200);
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal menghapus data: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
 }
