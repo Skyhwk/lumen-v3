@@ -541,8 +541,8 @@ class ReadyOrderController extends Controller
                 $data->wilayah = $dataQuotation->wilayah;
                 $data->syarat_ketentuan = $dataQuotation->syarat_ketentuan;
                 $data->keterangan_tambahan = $dataQuotation->keterangan_tambahan;
-                $data->tanggal_order = Carbon::now()->format('Y-m-d H:i:s');
-                $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
+                // $data->tanggal_order = Carbon::now()->format('Y-m-d H:i:s');
+                // $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
                 $data->updated_by = $this->karyawan;
                 $data->sales_id = $dataQuotation->sales_id;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -659,6 +659,7 @@ class ReadyOrderController extends Controller
             
             if ($shouldCreateInvoice) {
                 $this->dispatchCreateInvoiceJob($data, $dataQuotation, $request, 'non_kontrak');
+                self::generateInvoice($data->no_order, $dataQuotation->no_document);
             }
 
             return response()->json([
@@ -1119,6 +1120,7 @@ class ReadyOrderController extends Controller
             DB::commit();
             
             $this->dispatchCreateInvoiceJob($data, $dataQuotation, $request, 'non_kontrak');
+            self::generateInvoice($data->no_order, $dataQuotation->no_document);
 
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
@@ -1527,6 +1529,7 @@ class ReadyOrderController extends Controller
             // }
             
             $this->dispatchCreateInvoiceJob($dataOrderHeader, $dataQuotation, $request, 'non_kontrak');
+            self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
 
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
@@ -1534,6 +1537,7 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollback();
+            dd($th);
             throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
@@ -2016,8 +2020,8 @@ class ReadyOrderController extends Controller
             $data->wilayah = $dataQuotation->wilayah;
             $data->syarat_ketentuan = $dataQuotation->syarat_ketentuan;
             $data->keterangan_tambahan = $dataQuotation->keterangan_tambahan;
-            $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
-            $data->tanggal_order = Carbon::now()->format('Y-m-d');
+            // $data->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
+            // $data->tanggal_order = Carbon::now()->format('Y-m-d');
             $data->updated_by = $this->karyawan;
             $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->sales_id = $dataQuotation->sales_id;
@@ -2622,6 +2626,8 @@ class ReadyOrderController extends Controller
             // }
 
             $this->dispatchCreateInvoiceJob($dataOrderHeader, $dataQuotation, $request, 'kontrak');
+
+            self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
 
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
@@ -3356,8 +3362,8 @@ class ReadyOrderController extends Controller
             $updateHeader->wilayah = $dataQuotation->wilayah;
             $updateHeader->syarat_ketentuan = $dataQuotation->syarat_ketentuan;
             $updateHeader->keterangan_tambahan = $dataQuotation->keterangan_tambahan;
-            $updateHeader->tanggal_order = Carbon::now()->format('Y-m-d H:i:s');
-            $updateHeader->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
+            // $updateHeader->tanggal_order = Carbon::now()->format('Y-m-d H:i:s');
+            // $updateHeader->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
             $updateHeader->updated_by = $this->karyawan;
             $updateHeader->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $updateHeader->sales_id = $dataQuotation->sales_id;
