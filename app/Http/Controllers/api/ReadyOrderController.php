@@ -2706,6 +2706,7 @@ class ReadyOrderController extends Controller
         $nilai_tagihan = str_replace(',', '', $request->tagihan_awal);
 
         $nilai_tagihan = $first ? floatval($nilai_tagihan) : (floatval($dataQuotation->biaya_akhir) - floatval($nilai_tagihan));
+        $nilai_tagihan = $first ? floatval($nilai_tagihan) : (floatval($dataQuotation->biaya_akhir) - floatval($nilai_tagihan));
 
         $namaPerusahaan = '-';
         if ($dataQuotation->konsultan != null) {
@@ -2790,6 +2791,7 @@ class ReadyOrderController extends Controller
         $total_diskon = $detail->total_diskon;
         $tagihan_awal = $firstPeriode ? str_replace(',', '', $request->tagihan_awal) : $detail->biaya_akhir;
 
+        $nilai_tagihan = $first ? $tagihan_awal : (floatval($detail->biaya_akhir) - floatval($tagihan_awal));
         $nilai_tagihan = $first ? $tagihan_awal : (floatval($detail->biaya_akhir) - floatval($tagihan_awal));
 
         $namaPerusahaan = '-';
