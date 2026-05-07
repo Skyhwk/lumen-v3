@@ -658,6 +658,8 @@ class SamplingPlanController extends Controller
                 'isokinetic'      => (int) $request->isokinetic,
                 'pendampingan_k3' => (int) $request->pendampingan_k3,
                 'id_cabang'       => $request->id_cabang[0],
+                'fee_sampler_durasi' => $request->fee_sampler_durasi,
+                'fee_sampler_id' => $request->fee_sampler_id,
             ];
 
             $type = explode('/', $request->no_quotation)[1];
@@ -763,6 +765,8 @@ class SamplingPlanController extends Controller
                 'pendampingan_k3' => $request->pendampingan_k3,
                 'isokinetic'      => $request->isokinetic,
                 'id_cabang'       => $request->id_cabang[0],
+                'fee_sampler_durasi' => $request->fee_sampler_durasi,
+                'fee_sampler_id' => $request->fee_sampler_id,
             ];
 
             $type = explode('/', $request->no_quotation)[1];

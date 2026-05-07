@@ -571,6 +571,7 @@ class JadwalServices
                         'updated_by' => $dataUpdate->karyawan,
                         'id_sampling' => $dataUpdate->sampling,
                         'id_cabang' => $dataUpdate->id_cabang,
+                        'durasi_personal' => $dataUpdate->fee_sampler_durasi[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($datajad);
                     $noqt = $val->no_quotation;
@@ -625,6 +626,7 @@ class JadwalServices
                         'updated_at' => $this->timestamp,
                         'kendaraan' => $dataUpdate->kendaraan,
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
+                        'durasi_personal' => $dataUpdate->fee_sampler_durasi[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
                 }
@@ -1003,6 +1005,7 @@ class JadwalServices
                     $val->updated_at = $this->timestamp;
                     $val->updated_by = $dataUpdate->karyawan;
                     $val->id_cabang = $dataUpdate->id_cabang;
+                    $val->durasi_personal = $dataUpdate->fee_sampler_durasi[$key] ?? null;
                     $val->save();
 
                     $noqt = $val->no_quotation;
@@ -1054,7 +1057,8 @@ class JadwalServices
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
                         'kendaraan' => $dataUpdate->kendaraan,
-                        'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL
+                        'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL,
+                        'durasi_personal' => $dataUpdate->fee_sampler_durasi[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
                 }
@@ -1271,12 +1275,7 @@ class JadwalServices
         if ($dataAdd->alamat == null) {
             throw new Exception("Alamat is required when add jadwal", 401);
         }
-        // if ($dataAdd->isokinetic == null) {
-        //     throw new Exception("Isokinetic is required when add jadwal", 401);
-        // }
-        // if ($dataAdd->pendampingan_k3 == null) {
-        //     throw new Exception("Pendampingan K3 is required when add jadwal", 401);
-        // }
+        
 
         DB::beginTransaction();
         try {
@@ -1287,30 +1286,7 @@ class JadwalServices
              */
 
             $no_document = $dataAdd->no_document;
-            /* test
-            if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
-                
-                $originalNoDocument = substr($no_document, 0, $matches[0][1]);
-                
-                $documents = SamplingPlan::where('no_quotation', $dataAdd->no_quotation)
-                    ->where('no_document', 'like', "{$originalNoDocument}%")
-                    ->where('no_document', '<>', $no_document)
-                    ->where('periode_kontrak',$dataAdd->periode)
-                    ->orderBy('no_quotation')
-                    ->pluck('id');
-                
-                if ($documents->isNotEmpty()) { // Hanya lanjutkan jika ada dokumen yang ditemukan
-                    $noQt = explode('/', $dataAdd->no_quotation);
-                    $updateQuery = Jadwal::whereIn('id_sampling', $documents);
-
-                    if (isset($noQt[1]) && $noQt[1] === 'QT') {
-                        $updateQuery->where('no_quotation', $dataAdd->no_quotation);
-                    }
-
-                    $updateQuery->update(['is_active' => false]);
-                }
-            }
-             */
+            
             if (preg_match('/R[0-9]+$/', $no_document, $matches, PREG_OFFSET_CAPTURE)) {
                 $originalNoDocument = substr($no_document, 0, $matches[0][1]);
                 // Hanya cari dokumen ORI saja (tanpa suffix R), bukan semua revisi sebelumnya
@@ -1381,6 +1357,7 @@ class JadwalServices
                     "wilayah" => $wilayah,
                     "isokinetic" => $dataAdd->isokinetic[$i] ?? 0,
                     "pendampingan_k3" => $dataAdd->pendampingan_k3[$i] ?? 0,
+                    "fee_sampler_durasi" => $dataAdd->fee_sampler_durasi[$i] ?? null,
                 ];
             }
             
@@ -1417,6 +1394,7 @@ class JadwalServices
                             'pendampingan_k3' => $val['pendampingan_k3'][$keys] ?? 0,
                             'sampler' => explode(',', $value)[1],
                             'userid' => explode(',', $value)[0],
+                            'durasi_personal' => $val['fee_sampler_durasi'][$key] ?? null
                         ];
                         
                         // Menyimpan data pertama langsung ke database
@@ -1452,6 +1430,7 @@ class JadwalServices
                             'sampler' => explode(',', $value)[1],
                             'userid' => explode(',', $value)[0],
                             'parsial' => $firstJadwalId,
+                            'durasi_personal' => $val['fee_sampler_durasi'][$key] ?? null
                         ];
                         
                         Jadwal::insert($commonData);
@@ -1637,6 +1616,7 @@ class JadwalServices
                     'id_cabang' => $dataParsial->id_cabang,
                     'created_by' => $dataParsial->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'durasi_personal' => $dataParsial->fee_sampler_durasi[$key] ?? null,
                 ];
 
                 $update = Jadwal::insert($body);
@@ -1819,7 +1799,8 @@ class JadwalServices
                     'kendaraan' => $dataParsial->kendaraan,
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
-                    'id_cabang' => $dataParsial->id_cabang
+                    'id_cabang' => $dataParsial->id_cabang,
+                    'durasi_personal' => $dataParsial->fee_sampler_durasi[$key] ?? null,
                 ];
                 $update = Jadwal::insert($body);
             }
