@@ -420,8 +420,8 @@ class RenderNonKontrak
                         <td style="font-size: 13px; text-align:right; padding: 5px;">' . self::rupiah($data->harga_transportasi * $data->transportasi) . '</td>
                     </tr>'
                 );
+                $hargaTransportasiPerdiem += $data->harga_transportasi * $data->transportasi;
             }
-            $hargaTransportasiPerdiem += $data->harga_transportasi * $data->transportasi;
             $perdiem_24 = "";
             $total_perdiem = 0;
 
@@ -446,9 +446,9 @@ class RenderNonKontrak
                         <td style="font-size: 13px; text-align:right; padding: 5px;">' . self::rupiah($data->harga_perdiem_personil_total + $total_perdiem) . '</td>
                     </tr>'
                 );
+                $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
             }
-
-            $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
+            
 
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
