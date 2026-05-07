@@ -90,7 +90,7 @@ class RenderDokumenSkppa
 
         return '<table width="100%" style="font-size:6pt; font-style:italic; font-family:serif; border-top:1px solid #000; padding-top:4px;">
                 <tr>
-                    <td width="25%" align="left" valign="top">
+                    <td width="30%" align="left" valign="top">
                     Dokumen ini diterbitkan otomatis oleh sistem
                     </td>
                     <td width="50%" align="center" valign="top">
@@ -99,7 +99,7 @@ class RenderDokumenSkppa
                     Sampora Kab. Tangerang 15341 021-5089-8988/89
                     contact@intilab.com
                     </td>
-                    <td width="25%" align="right" valign="top">
+                    <td width="20%" align="right" valign="top">
                     ' . $timestamp . '
                     </td>
                 </tr>

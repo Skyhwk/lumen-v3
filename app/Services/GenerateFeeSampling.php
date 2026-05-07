@@ -280,18 +280,18 @@ class GenerateFeeSampling
                 }
 
                 $hariAktif       = max($durasi_tertinggi - 1, 1);
-                $multiplierPokok = $hasilFee['rincian']['fee_pokok_multiplier']; // ← tambah ini
-                $feePokok = (int) (($feePokokDasar + $feePokokTambahan) * $multiplierPokok * $hariAktif);
+                $feePokok = (int) (($feePokokDasar + $feePokokTambahan) * $hariAktif);
+                $feePokok += (int) $hasilFee['rincian']['fee_pokok_ekstra_libur'];
                 $totalHarian = $feePokok + $feeTambahan;
                 $rekap[] = [
                     'tanggal'       => $tgl,
                     'jumlah_tempat' => $tempat,
                     'fee_pokok'     => $feePokok,
                     'rincian_fee_pokok' => [
-                        'base'                      => (int) ($feePokokDasar * $multiplierPokok * $hariAktif),
+                        'base'                      => (int) ($feePokokDasar * $hariAktif),
                         'tambah_tempat_kedua'       => $tempat >= 2 ? (int) 10000 : 0,
                         'tambah_tempat_selanjutnya' => $tempat >= 3 ? (int) 15000 : 0,
-                        'multiplier_hari_libur'     => $multiplierPokok,
+                        'ekstra_hari_libur'         => (int) $hasilFee['rincian']['fee_pokok_ekstra_libur'],
                     ],
                     'fee_tambahan'         => $feeTambahan,
                     'fee_tambahan_rincian' => $feeTambahanRincian,
@@ -335,11 +335,11 @@ class GenerateFeeSampling
         array $liburKantor
     ): array {
         $rincian = [
-            'hari_libur'           => 0,
-            'sampling_24jam'       => 0,
-            'luar_kota'            => 0,
-            'luar_kota_24jam'      => 0,
-            'fee_pokok_multiplier' => 1, // ← tambah ini
+            'hari_libur'             => 0,
+            'sampling_24jam'         => 0,
+            'luar_kota'              => 0,
+            'luar_kota_24jam'        => 0,
+            'fee_pokok_ekstra_libur' => 0,
         ];
 
         $tanggalMulai  = Carbon::parse($tanggalAwal);
@@ -357,33 +357,32 @@ class GenerateFeeSampling
                 $isLibur           = $isSabtu || $isMinggu || $isLiburPerusahaan;
 
                 if ($isLibur) {
-                    $rincian['hari_libur'] += $fee->hari_libur;
+                    $rincian['hari_libur']             += $fee->hari_libur;
                 }
 
-                // ← tambah ini
+                // Ekstra fee pokok hanya Minggu atau libur perusahaan, BUKAN Sabtu
                 if ($isMinggu || $isLiburPerusahaan) {
-                    $rincian['fee_pokok_multiplier'] = 2;
+                    $rincian['fee_pokok_ekstra_libur'] += $fee->titik_1;
                 }
 
                 $sudahDihitung[] = $tgl;
             }
         }
         // Jika durasi 0 (sesaat), tetap cek hari libur di tanggal itu
-        if ($durasiTertinggi === 0) {
+        if ($durasiTertinggi === 0 || $durasiTertinggi === 1) {
             $tgl               = $tanggalMulai->toDateString();
             $carbonTgl         = Carbon::parse($tgl);
             $isSabtu           = $carbonTgl->isSaturday();
             $isMinggu          = $carbonTgl->isSunday();
             $isLiburPerusahaan = in_array($tgl, $liburKantor);
             $isLibur           = $isSabtu || $isMinggu || $isLiburPerusahaan;
-
             if ($isLibur) {
-                $rincian['hari_libur'] += $fee->hari_libur;
+                $rincian['hari_libur']             += $fee->hari_libur;
             }
 
-            // ← tambah ini
+            // Ekstra fee pokok hanya Minggu atau libur perusahaan, BUKAN Sabtu
             if ($isMinggu || $isLiburPerusahaan) {
-                $rincian['fee_pokok_multiplier'] = 2;
+                $rincian['fee_pokok_ekstra_libur'] += $fee->titik_1;
             }
         }
 
@@ -427,13 +426,13 @@ class GenerateFeeSampling
             $rincian['sampling_24jam'] = $fee->sampling_24jam * max($durasiDalamKota - 1, 0);
 
         }
-        $multiplierPokok = $rincian['fee_pokok_multiplier'];
-        unset($rincian['fee_pokok_multiplier']);
+        $multiplierPokok = $rincian['fee_pokok_ekstra_libur'];
+        unset($rincian['fee_pokok_ekstra_libur']);
         $totalFee = array_sum($rincian);
 
         return [
             'total_fee' => $totalFee,
-            'rincian'   => array_merge($rincian, ['fee_pokok_multiplier' => $multiplierPokok]),
+            'rincian'   => array_merge($rincian, ['fee_pokok_ekstra_libur' => $multiplierPokok]),
         ];
     }
 }
