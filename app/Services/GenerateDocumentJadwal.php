@@ -18,31 +18,30 @@ use Mpdf\Mpdf;
 class GenerateDocumentJadwal
 {
     private $data;
-    private $dataSampling;
 
     /** @var string|null */
+    private $karyawan;
+
+    /** @var bool */
     private $email = false;
 
     public static function onKontrak($id)
     {
         $data = QuotationKontrakH::with('detail', 'sampling')->where('id', $id)->first();
-        $dataSampling = SamplingPlan::where('id', $spId)->where('quotation_id', $id)->where('is_active', 1)->first();
+        // dd(json_decode($data->data_pendukung_sampling)->toArray());
         // dd($data->sampling->where('periode_kontrak','2025-02')->first()->jadwal()->where('periode' ,'2025-02')->get()->toArray());
         $self       = new self();
         $self->data = $data;
-        $self->dataSampling = $dataSampling;
 
         return $self;
     }
 
-    public static function onNonKontrak($id, $spId)
+    public static function onNonKontrak($id)
     {
         $data = QuotationNonKontrak::with('sampling')->where('id', $id)->first();
-        $dataSampling = SamplingPlan::where('id', $spId)->where('quotation_id', $id)->where('is_active', 1)->first();
 
         $self       = new self();
         $self->data = $data;
-        $self->dataSampling = $dataSampling;
 
         return $self;
     }
@@ -61,8 +60,7 @@ class GenerateDocumentJadwal
 
     public function save()
     {
-        $quote           = $this->data;
-        $sampling_plan   = $this->dataSampling;
+        $quote     = $this->data;
         DB::beginTransaction();
         try {
             $filename  = $this->renderNonKontrak($quote);
@@ -92,12 +90,6 @@ class GenerateDocumentJadwal
                 // $quote->is_generated   = true;
                 $quote->is_ready_order = 1;
                 $quote->save();
-
-                // Update jadwal dengan file jadwal yang sudah digenerate
-                if ($sampling_plan) {
-                    $sampling_plan->filename_jadwal = $filename;
-                    $sampling_plan->save();
-                }
             }
 
             JobTask::insert([
@@ -184,12 +176,11 @@ class GenerateDocumentJadwal
 
     }
 
-    private function renderNonKontrak($data, $dataSampling = null)
+    private function renderNonKontrak($data)
     {
         try {
             $sampling = '';
             $data     = $data;
-            $dataSampling = $dataSampling ?? $this->dataSampling;
 
             if ($data->status_sampling == 'S24') {
                 $sampling = 'SAMPLING 24 JAM';
@@ -261,7 +252,7 @@ class GenerateDocumentJadwal
                 $periode_       = self::tanggal_indonesia($sampling_plan->periode_kontrak, 'period');
             }
 
-            $fileName = preg_replace('/\\//', '-', 'JADWAL-SAMPLING-' . $dataSampling->no_document) . '.pdf';
+            $fileName = preg_replace('/\\//', '-', 'JADWAL-SAMPLING-' . $data->no_document) . '.pdf';
 
             $commonView = [
                 'data'                 => $data,
