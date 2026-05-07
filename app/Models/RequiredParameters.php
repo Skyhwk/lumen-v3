@@ -8,4 +8,5 @@ class RequiredParameters extends Sector
 {
     protected $table = 'required_parameters';
     public $timestamps = false;
+    protected $guarded = [];
 }

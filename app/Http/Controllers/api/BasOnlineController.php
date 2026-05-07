@@ -57,8 +57,12 @@ use App\Models\DetailSenyawaVolatile;
 use App\Models\SampelTidakSelesai;
 use App\Models\QrDocument;
 use App\Models\RequiredParameters;
+use App\Models\MasterKategori;
+use App\Models\Parameter;
 use DateTime;
 use Exception;
+use Illuminate\Support\Facades\Validator;
+
 
 class BasOnlineController extends Controller
 {
@@ -1413,11 +1417,9 @@ class BasOnlineController extends Controller
         }
     }
 
-    public function regenerateBasFromLastEntry(Request $request)
+   public function regenerateBasFromLastEntry(Request $request)
     {
         try {
-            
-    
             // ── Ambil PersiapanSampelHeader ──────────────────────────
             $requestSamples = explode(",", $request->kategori);
             $requestSamples = array_map(function ($item) {
@@ -1425,7 +1427,7 @@ class BasOnlineController extends Controller
                 return $matches[1] ?? null;
             }, $requestSamples);
             $requestSamples = array_filter($requestSamples);
-    
+
             $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
                 ->where('no_quotation', $request->no_document)
                 ->where('tanggal_sampling', $request->tanggal_sampling)
@@ -1435,62 +1437,55 @@ class BasOnlineController extends Controller
                         $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
                     }
                 })->first();
-    
+
             if (!$persiapanHeaderKategori) {
-                return response()->json([
-                    'message' => 'Data persiapan sampel tidak ditemukan.',
-                ], 404);
+                return response()->json(['message' => 'Data persiapan sampel tidak ditemukan.'], 404);
             }
-    
+
             // ── Ambil entry terakhir dari detail_bas_documents ────────
             $allDocuments = json_decode($persiapanHeaderKategori->detail_bas_documents ?? '[]', true) ?? [];
-    
+
             if (empty($allDocuments)) {
                 return response()->json([
                     'message' => 'Belum ada data BAS yang tersimpan. Generate BAS terlebih dahulu.',
                 ], 404);
             }
-    
-            // Ambil entry terakhir — ini sudah berisi ttd, sampler, catatan lengkap
+
             $lastEntry = end($allDocuments);
-           
             $lastIndex = count($allDocuments) - 1;
-    
+
             // ── Ambil no_sampel dari entry terakhir ───────────────────
             $noKatSample = $lastEntry['no_sampel'] ?? [];
-            $noSample=[];
+            $noSample = [];
             foreach ($noKatSample as $nosampel) {
-                array_push($noSample, $request->no_order . '/' . $nosampel);
+                $noSample[] = $request->no_order . '/' . $nosampel;
             }
-            
+
             if (empty($noSample)) {
-                return response()->json([
-                    'message' => 'Data no_sampel di entry terakhir kosong.',
-                ], 422);
+                return response()->json(['message' => 'Data no_sampel di entry terakhir kosong.'], 422);
             }
-    
-            // ── Ambil data pendukung dari DB (sama seperti previewGenerate) ─
+
+            // ── Ambil data pendukung dari DB ──────────────────────────
             $infoSampling = json_decode($request->info_sampling, true);
-            
-    
+
             $orderH = OrderHeader::where('no_document', $request->no_document)
                 ->where('no_order', $request->no_order)
                 ->first();
-    
+
             if (!$orderH) {
                 return response()->json(['message' => 'Data order tidak ditemukan.'], 404);
             }
-    
+
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
                 ->where('status_quotation', $infoSampling['status_quotation'])
                 ->where('is_active', true)
                 ->first();
-    
+
             if (!$sp) {
                 return response()->json(['message' => 'Data sampling plan tidak ditemukan.'], 401);
             }
-    
+
             $jadwal = Jadwal::select([
                     'id_sampling', 'kategori', 'tanggal', 'durasi',
                     'jam_mulai', 'jam_selesai',
@@ -1502,58 +1497,59 @@ class BasOnlineController extends Controller
                 ->where('is_active', true)
                 ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai'])
                 ->get()->pluck('tanggal');
-    
+
             if ($jadwal->isEmpty()) {
                 return response()->json(['message' => 'Data jadwal tidak ditemukan.'], 401);
             }
-    
+
             $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
                 ->where([
                     ['id_sampling', '=', $sp->id],
                     ['tanggal', '=', $request->tanggal_sampling],
                     ['is_active', '=', true],
                 ])->get();
-    
+
             $orderD = OrderDetail::with(['codingSampling'])
                 ->where('id_order_header', $orderH->id)
                 ->where('no_order', $request->no_order)
                 ->whereIn('no_sampel', $noSample)
                 ->whereIn('tanggal_sampling', $jadwal)
                 ->get();
-    
+
             // ── Build data_sampling ───────────────────────────────────
             $dataSampling = [];
             $datParam     = [];
             foreach ($orderD as $vv) {
                 $dataSampling[] = (object) [
-                    'no_sample'        => $vv->no_sampel,
-                    'kategori_2'       => $vv->kategori_2,
-                    'kategori_3'       => $vv->kategori_3,
-                    'nama_perusahaan'  => $vv->nama_perusahaan,
-                    'koding_sampling'  => $vv->koding_sampling,
+                    'no_sample'             => $vv->no_sampel,
+                    'kategori_2'            => $vv->kategori_2,
+                    'kategori_3'            => $vv->kategori_3,
+                    'nama_perusahaan'       => $vv->nama_perusahaan,
+                    'koding_sampling'       => $vv->koding_sampling,
                     'file_koding_sample'    => $vv->file_koding_sampel,
                     'file_koding_sampling'  => $vv->file_koding_sampling,
-                    'konsultan'        => $vv->orderHeader->konsultan,
-                    'tanggal_sampling' => $vv->tanggal_sampling,
-                    'keterangan_1'     => $vv->keterangan_1,
-                    'jumlah_label'     => $vv->codingSampling->jumlah_label ?? null,
-                    'status_sampling'  => $vv->kategori_1,
-                    'id'               => $vv->id,
-                    'id_order_header'  => $vv->id_order_header,
-                    'id_req_header'    => $infoSampling['id_request'],
-                    'id_req_detail'    => $request->id_req_detail,
-                    'periode_kontrak'  => $vv->periode,
-                    'tgl_order'        => $orderH->tanggal_order,
-                    'botol'            => $vv->botol,
-                    'parameter'        => $vv->parameter,
-                    'no_order'         => $vv->orderHeader->no_order,
-                    'no_document'      => $request->no_document,
+                    'konsultan'             => $vv->orderHeader->konsultan,
+                    'tanggal_sampling'      => $vv->tanggal_sampling,
+                    'keterangan_1'          => $vv->keterangan_1,
+                    'jumlah_label'          => $vv->codingSampling->jumlah_label ?? null,
+                    'status_sampling'       => $vv->kategori_1,
+                    'id'                    => $vv->id,
+                    'id_order_header'       => $vv->id_order_header,
+                    'id_req_header'         => $infoSampling['id_request'],
+                    'id_req_detail'         => $request->id_req_detail,
+                    'periode_kontrak'       => $vv->periode,
+                    'tgl_order'             => $orderH->tanggal_order,
+                    'botol'                 => $vv->botol,
+                    'parameter'             => $vv->parameter,
+                    'no_order'              => $vv->orderHeader->no_order,
+                    'no_document'           => $request->no_document,
                 ];
-    
+
                 if ($vv->codingSampling) {
                     $datParam[] = $vv->codingSampling;
                 }
             }
+
             // ── Status sampling ───────────────────────────────────────
             $status      = [];
             $hariTanggal = [];
@@ -1564,68 +1560,58 @@ class BasOnlineController extends Controller
                 } else {
                     $status[$sample->no_sample] = $this->getStatusSampling($sample);
                 }
-    
+
                 $dataLapangan = $this->getDataLapangan(
                     $sample->kategori_2,
                     $sample->kategori_3,
                     $sample->no_sample,
                     $sample->parameter
                 );
-    
+
                 if ($dataLapangan && $dataLapangan->created_at && $status[$sample->no_sample] === 'selesai') {
                     $hariTanggal[$sample->no_sample] = $dataLapangan->created_at;
                 } else {
                     $hariTanggal[$sample->no_sample] = null;
                 }
             }
-    
-            // ── Siapkan persiapanHeader dengan detail_bas_documents entry terakhir ─
-            // Override detail_bas_documents dengan hanya entry terakhir
-            // agar cetakBASPDF2 membaca selectedDetail dari entry yang benar
-            
+
+            // ── Siapkan data untuk PDF ────────────────────────────────
             $persiapanForPdf = clone $persiapanHeaderKategori;
             $persiapanForPdf->detail_bas_documents = json_encode([$lastEntry]);
-            
             $orderH->detail_bas_documents = json_encode([$lastEntry]);
-            // ── Generate filename baru ────────────────────────────────
+
+            // Selalu buat nama baru agar tidak terkena cache browser
             $microtime   = sprintf("%.0f", microtime(true) * 1000000);
             $filenameNew = str_replace(
                 ["/", " "],
                 "_",
                 'BAS_' . trim($orderH->no_document) . '_' . trim($orderH->nama_perusahaan) . '_' . $microtime . '.pdf'
             );
-            
+
             // ── Generate PDF ──────────────────────────────────────────
             self::cetakBASPDF2(
                 $orderH,
                 $dataSampling,
                 $datParam,
                 $persiapanForPdf,
-                $lastEntry['filename'] ?? null, // file_name_old
-                $filenameNew,                   // file_name baru
+                null,
+                $filenameNew,
                 $samplerJadwal,
                 $status,
-                $hariTanggal
+                $hariTanggal,
+                $lastEntry
             );
-    
-            // ── Update hanya filename di entry terakhir (append tetap utuh) ──
-            $allDocuments[$lastIndex]['filename']         = $filenameNew;
+
+            // ── Update entry terakhir ─────────────────────────────────
+            $allDocuments[$lastIndex]['filename']           = $filenameNew;
             $allDocuments[$lastIndex]['tanggal_regenerate'] = Carbon::now()->toDateTimeString();
-    
+
             $persiapanHeaderKategori->update([
                 'detail_bas_documents' => json_encode(array_values($allDocuments)),
             ]);
-    
+
             return response()->json([$filenameNew], 200);
-            // return response()->json([
-            //     'status'   => true,
-            //     'message'  => 'BAS berhasil di-regenerate.',
-            //     'data'     => [
-            //         'filename' => $filenameNew, // string
-            //         'path'     => url('dokumen/bas/' . $filenameNew),
-            //     ]
-            // ], 200);
-    
+
         } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -1634,344 +1620,280 @@ class BasOnlineController extends Controller
         }
     }
 
-    /* private */
-    private function cetakBASPDF2($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
-    {
+    
+    // ============================================================
+    // FUNGSI PRIVATE: cetakBASPDF2
+    // PERUBAHAN UTAMA:
+    //   1. Tambah parameter $lastEntry (default null)
+    //   2. Jika $lastEntry ada → sampler diambil dari lastEntry['tanda_tangan']
+    //      bukan dari jadwal DB → tidak ada duplikasi halaman
+    //   3. $samplingBySampler selalu hanya 1 grup → 1 halaman konten
+    // ============================================================
+    private function cetakBASPDF2(
+        $dataHeader,
+        $dataSampling,
+        $dataParam,
+        $dataPersiapan,
+        $file_name_old,
+        $file_name,
+        $samplerJadwal,
+        $status,
+        $hariTanggal,
+        $lastEntry = null
+    ) {
         $psh = $dataPersiapan;
         if (!$psh) {
             return response()->json([
                 'message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!',
             ], 401);
         }
-
-        $noDocument = explode('/', $psh->no_document);
+ 
+        $noDocument    = explode('/', $psh->no_document);
         $noDocument[1] = 'BAS';
-        $noDocument = implode('/', $noDocument);
-
+        $noDocument    = implode('/', $noDocument);
+ 
         $qr_img = '';
         $qr = QrDocument::where('id_document', $psh->id)
             ->where('type_document', 'berita_acara_sampling')
             ->whereJsonContains('data->no_document', $noDocument)
             ->first();
-
+ 
         if ($qr) {
             $qr_data = json_decode($qr->data, true);
             if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
                 $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
             }
         }
-
-        $mpdfConfig = array(
-            'mode' => 'utf-8',
-            'format' => [216, 305],
-            'margin_header' => 5,
-            'margin_bottom' => 3,
-            'margin_footer' => 3,
-            'setAutoTopMargin' => 'stretch',
+ 
+        $mpdfConfig = [
+            'mode'                => 'utf-8',
+            'format'              => [216, 305],
+            'margin_header'       => 5,
+            'margin_bottom'       => 3,
+            'margin_footer'       => 3,
+            'setAutoTopMargin'    => 'stretch',
             'setAutoBottomMargin' => 'stretch',
-            'orientation' => 'P',
-        );
-        $pdf = new Mpdf($mpdfConfig);
-
-        $kategoriList = is_array(request()->kategori) ? request()->kategori : explode(',', request()->kategori);
-        $requestedSampels = array_map(function ($kategori) {
-            $parts = explode('-', $kategori);
-            return trim($parts[count($parts) - 1]);
-        }, $kategoriList);
-
-        asort($requestedSampels);
-
-        // Nama File PDF Berdasarkan Kombinasi Kategori
-        // $filename = str_replace(["/", " "], "_", 'BAS_' . trim($dataHeader->no_document) . '_' . trim($dataHeader->nama_perusahaan) . '_' . $sampelNumber . '.pdf');
-
-        $microtime = sprintf("%.0f", microtime(true) * 1000000);
-        $filename = $file_name ? $file_name : str_replace(["/", " "], "_", 'BAS_' . trim($dataHeader->no_document) . '_' . trim($dataHeader->nama_perusahaan) . '_' . $microtime . '.pdf');
-        $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
-        
-        $selectedDetail = [
-            'catatan' => '',
-            'informasi_teknis' => '',
-            'waktu_mulai' => '',
-            'waktu_selesai' => '',
-            'tanda_tangan' => [],
+            'orientation'         => 'P',
         ];
-
+        $pdf = new Mpdf($mpdfConfig);
+ 
+        $microtime = sprintf("%.0f", microtime(true) * 1000000);
+        $filename  = $file_name
+            ? $file_name
+            : str_replace(["/", " "], "_", 'BAS_' . trim($dataHeader->no_document) . '_' . trim($dataHeader->nama_perusahaan) . '_' . $microtime . '.pdf');
+ 
+        $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
+ 
+        $selectedDetail = [
+            'catatan'           => '',
+            'informasi_teknis'  => '',
+            'waktu_mulai'       => '',
+            'waktu_selesai'     => '',
+            'tanda_tangan'      => [],
+        ];
+ 
         if (!empty($detailDocuments) && is_array($detailDocuments)) {
             $lastDetail = end($detailDocuments);
             if (is_array($lastDetail)) {
                 $selectedDetail = array_merge($selectedDetail, $lastDetail);
             }
         }
-
-        // dd($selectedDetail);
-
+ 
         $namaHari = [
-            'Sunday' => 'Minggu',
-            'Monday' => 'Senin',
-            'Tuesday' => 'Selasa',
-            'Wednesday' => 'Rabu',
-            'Thursday' => 'Kamis',
-            'Friday' => 'Jumat',
-            'Saturday' => 'Sabtu'
+            'Sunday'    => 'Minggu', 'Monday'  => 'Senin',  'Tuesday'  => 'Selasa',
+            'Wednesday' => 'Rabu',   'Thursday' => 'Kamis', 'Friday'   => 'Jumat',
+            'Saturday'  => 'Sabtu',
         ];
-
         $namaBulan = [
-            'January' => 'Januari',
-            'February' => 'Februari',
-            'March' => 'Maret',
-            'April' => 'April',
-            'May' => 'Mei',
-            'June' => 'Juni',
-            'July' => 'Juli',
-            'August' => 'Agustus',
-            'September' => 'September',
-            'October' => 'Oktober',
-            'November' => 'November',
-            'December' => 'Desember'
+            'January'  => 'Januari',  'February' => 'Februari', 'March'    => 'Maret',
+            'April'    => 'April',    'May'       => 'Mei',      'June'     => 'Juni',
+            'July'     => 'Juli',     'August'    => 'Agustus',  'September'=> 'September',
+            'October'  => 'Oktober',  'November'  => 'November', 'December' => 'Desember',
         ];
-
-        $footer = array(
-            'odd' => array(
-                'C' => array(
-                    'content' => 'Hal {PAGENO} dari {nbpg}',
-                    'font-size' => 6,
-                    'font-style' => 'I',
-                    'font-family' => 'serif',
-                    'color' => '#606060'
-                ),
-                'R' => array(
-                    'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
-                    'font-size' => 5,
-                    'font-style' => 'I',
-                    'font-family' => 'serif',
-                    'color' => '#000000'
-                ),
-                'L' => array(
-                    'content' => '' . $qr_img . '',
-                    'font-size' => 4,
-                    'font-style' => 'I',
-                    'font-family' => 'serif',
-                    'color' => '#000000'
-                ),
+ 
+        $footer = [
+            'odd' => [
+                'C' => ['content' => 'Hal {PAGENO} dari {nbpg}', 'font-size' => 6, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#606060'],
+                'R' => ['content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}', 'font-size' => 5, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#000000'],
+                'L' => ['content' => $qr_img, 'font-size' => 4, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#000000'],
                 'line' => -1,
-            )
-        );
-
+            ],
+        ];
+ 
         $css = '
-            .custom {
-                padding: 5px;
-                font-size: 12px;
-                font-weight: bold;
-                border: 1px solid #000000;
-                text-align: center;
-            }
-            .custom2 {
-                padding-top: 8px;
-                font-size: 12px;
-            }
-            .custom3 {
-                font-size: 12px;
-                padding: 10px;
-                margin-bottom: 5mm;
-            }
-            .custom4 {
-                display: flex;
-                justify-content: end;
-            }
-            .custom5 {
-                font-size: 12px;
-                padding: 5px;
-                border: 1px solid #000000;
-                font-weight: bold;
-                text-align: center;
-            }
-            .kolomno {
-                font-size: 12px;
-                border-left: 1px solid #000000;
-                border-top: 1px solid #000000;
-                border-bottom: 1px solid #000000;
-                text-align: center;
-                margin-bottom: 5mm;
-            }
-            .kolomttd {
-                font-size: 12px;
-                border-right: 1px solid #000000;
-                border-top: 1px solid #000000;
-                border-bottom: 1px solid #000000;
-                text-align: center;
-                margin-bottom: 5mm;
-            }
-            .kolomttd2 {
-                padding: 23px;
-                border: 1px solid #000000;
-            }
-            .kotak {
-                border: 1px solid #000000;
-            }
-            body {
-                font-size: 12px; /* Ukuran font */
-                line-height: 1.5; /* Jarak antar baris */
-            }
-            .table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            .table td, .table th {
-                padding: 8px;
-                font-size: 10px;
-                border: 1px solid #000;
-            }
+            .custom  { padding: 5px; font-size: 12px; font-weight: bold; border: 1px solid #000000; text-align: center; }
+            .custom2 { padding-top: 8px; font-size: 12px; }
+            .custom3 { font-size: 12px; padding: 10px; margin-bottom: 5mm; }
+            .custom4 { display: flex; justify-content: end; }
+            .custom5 { font-size: 12px; padding: 5px; border: 1px solid #000000; font-weight: bold; text-align: center; }
+            .kolomno   { font-size: 12px; border-left: 1px solid #000000; border-top: 1px solid #000000; border-bottom: 1px solid #000000; text-align: center; margin-bottom: 5mm; }
+            .kolomttd  { font-size: 12px; border-right: 1px solid #000000; border-top: 1px solid #000000; border-bottom: 1px solid #000000; text-align: center; margin-bottom: 5mm; }
+            .kolomttd2 { padding: 23px; border: 1px solid #000000; }
+            .kotak     { border: 1px solid #000000; }
+            body       { font-size: 12px; line-height: 1.5; }
+            .table     { width: 100%; border-collapse: collapse; }
+            .table td, .table th { padding: 8px; font-size: 10px; border: 1px solid #000; }
         ';
-
+ 
         $pdf->SetDisplayMode('fullpage');
         $pdf->setFooter($footer);
-
-        $tanggal = $dataSampling[0]->tanggal_sampling ?? null;
-
-        $hariInggris = date('l', strtotime($tanggal));
-        
-        $bulanInggris = date('F', strtotime($tanggal));
-
-        $hari = $namaHari[$hariInggris];
-        $tanggalNumber = date('d', strtotime($tanggal));
-        $bulan = $namaBulan[$bulanInggris];
-        $tahun = date('Y', strtotime($tanggal));
-
-        // $namaSampler = $samplerJadwal->pluck('sampler')->unique()->values()->all();
-
-        $waktuMulai = $selectedDetail['waktu_mulai'] ?? '';
+ 
+        // ── Apply CSS global sekali di awal ───────────────────────────
+        $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
+ 
+        $tanggalSampling = $dataSampling[0]->tanggal_sampling ?? null;
+        $hariInggris     = date('l', strtotime($tanggalSampling));
+        $bulanInggris    = date('F', strtotime($tanggalSampling));
+        $hari            = $namaHari[$hariInggris];
+        $tanggalNumber   = date('d', strtotime($tanggalSampling));
+        $bulan           = $namaBulan[$bulanInggris];
+        $tahun           = date('Y', strtotime($tanggalSampling));
+ 
+        $waktuMulai   = $selectedDetail['waktu_mulai']  ?? '';
         $waktuSelesai = $selectedDetail['waktu_selesai'] ?? '';
-
+ 
         if (!empty($waktuSelesai)) {
-            $carbon = Carbon::parse($waktuSelesai)->locale('id');
-            $jam = $carbon->format('H');
-            $menit = $carbon->format('i');
+            $carbon      = Carbon::parse($waktuSelesai)->locale('id');
+            $jam         = $carbon->format('H');
+            $menit       = $carbon->format('i');
             $hariSelesai = $carbon->translatedFormat('l');
-            $tanggal = $carbon->translatedFormat('d F Y');
+            $tanggal     = $carbon->translatedFormat('d F Y');
         } else {
             $jam = $menit = $hariSelesai = $tanggal = '';
         }
-        $samplerKategoriMap = [];
-        foreach ($samplerJadwal as $jadwal) {
-            $samplerName = $jadwal->sampler;
-            $kategoriArray = json_decode($jadwal->kategori, true);
-
-            foreach ($kategoriArray as $kategori) {
-                // Extract sample number from kategori (e.g., "Udara Lingkungan Kerja - 001" -> "001")
-                $parts = explode(' - ', $kategori);
-                if (count($parts) >= 2) {
-                    $sampleNumber = end($parts);
-
-                    // Support multiple samplers per sample number
-                    if (!isset($samplerKategoriMap[$sampleNumber])) {
-                        $samplerKategoriMap[$sampleNumber] = [];
-                    }
-                    if (!in_array($samplerName, $samplerKategoriMap[$sampleNumber])) {
-                        $samplerKategoriMap[$sampleNumber][] = $samplerName;
+ 
+        // ── Tentukan daftar sampler ───────────────────────────────────
+        $sampleSamplerMap = [];
+ 
+        if ($lastEntry !== null) {
+            // MODE REGENERATE: ambil sampler dari data yang tersimpan
+            $tandaTanganEntry = $lastEntry['tanda_tangan'] ?? [];
+ 
+            $semuaSamplerUnik = array_values(array_filter(
+                array_map(
+                    fn($ttd) => (isset($ttd['role']) && $ttd['role'] === 'sampler') ? trim($ttd['nama']) : null,
+                    $tandaTanganEntry
+                )
+            ));
+ 
+            if (empty($semuaSamplerUnik)) {
+                $semuaSamplerUnik = ['Petugas Sampler'];
+            }
+ 
+            foreach ($dataSampling as $sampling) {
+                $sampleSamplerMap[$sampling->no_sample] = $semuaSamplerUnik;
+            }
+ 
+            $samplerKeyGabungan = implode(', ', $semuaSamplerUnik);
+            $samplingBySampler  = [
+                $samplerKeyGabungan => $dataSampling,
+            ];
+ 
+        } else {
+            // MODE GENERATE PERTAMA: logika dari jadwal DB
+            $samplerKategoriMap = [];
+            foreach ($samplerJadwal as $jadwalItem) {
+                $samplerName   = $jadwalItem->sampler;
+                $kategoriArray = json_decode($jadwalItem->kategori, true);
+                foreach ($kategoriArray as $kategori) {
+                    $parts = explode(' - ', $kategori);
+                    if (count($parts) >= 2) {
+                        $sampleNumber = end($parts);
+                        if (!isset($samplerKategoriMap[$sampleNumber])) {
+                            $samplerKategoriMap[$sampleNumber] = [];
+                        }
+                        if (!in_array($samplerName, $samplerKategoriMap[$sampleNumber])) {
+                            $samplerKategoriMap[$sampleNumber][] = $samplerName;
+                        }
                     }
                 }
             }
-        }
-        // dd($samplerKategoriMap);
-
-        // Group sampling data by combined samplers
-        $samplingBySampler = [];
-        $sampleSamplerMap = []; // Track samplers per sample
-        if (empty($samplingBySampler)) {
-            // fallback: groupkan semua sampling tanpa filter sampler
-            $firstSampler = $samplerJadwal->first();
-            $fallbackKey = $firstSampler ? $firstSampler->sampler : 'Sampler';
-            $samplingBySampler[$fallbackKey] = $dataSampling;
-        }
-        
-        foreach ($dataSampling as $sampling) {
-            $sampleParts = explode('/', $sampling->no_sample);
-            if (count($sampleParts) >= 2) {
-                $sampleNumber = end($sampleParts);
-                if (isset($samplerKategoriMap[$sampleNumber])) {
+ 
+            $semuaSampler = [];
+            foreach ($samplerJadwal as $jadwalItem) {
+                $namaArr = explode(',', $jadwalItem->sampler);
+                foreach ($namaArr as $n) {
+                    $semuaSampler[] = trim($n);
+                }
+            }
+            $semuaSamplerUnik = array_unique(array_filter($semuaSampler));
+            sort($semuaSamplerUnik);
+ 
+            $samplerKeyGabungan = !empty($semuaSamplerUnik) ? implode(', ', $semuaSamplerUnik) : 'Petugas Sampler';
+            $samplingBySampler  = [];
+ 
+            foreach ($dataSampling as $sampling) {
+                $sampleParts  = explode('/', $sampling->no_sample);
+                $sampleNumber = count($sampleParts) >= 2 ? end($sampleParts) : null;
+ 
+                if ($sampleNumber && isset($samplerKategoriMap[$sampleNumber])) {
                     $assignedSamplers = $samplerKategoriMap[$sampleNumber];
-                    $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
-
-                    // Create combined key for samplers working together
-                    $samplerKey = count($assignedSamplers) > 2 ? implode(', ', $assignedSamplers) : implode(' & ', $assignedSamplers);
-
-                    if (!isset($samplingBySampler[$samplerKey])) {
-                        $samplingBySampler[$samplerKey] = [];
-                    }
-                    $samplingBySampler[$samplerKey][] = $sampling;
                 } else {
-                    $keyFirst = array_key_first($samplerKategoriMap);
-                    // $assignedSamplers = $samplerKategoriMap['001'];
-                    $assignedSamplers = $samplerKategoriMap[$keyFirst];
-                    
-                    $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
-
-                    // Create combined key for samplers working together
-                    $samplerKey = count($assignedSamplers) > 2 ? implode(', ', $assignedSamplers) : implode(' & ', $assignedSamplers);
-
-                    if (!isset($samplingBySampler[$samplerKey])) {
-                        $samplingBySampler[$samplerKey] = [];
-                    }
-                    $samplingBySampler[$samplerKey][] = $sampling;
+                    $keyFirst         = array_key_first($samplerKategoriMap);
+                    $assignedSamplers = $keyFirst ? $samplerKategoriMap[$keyFirst] : array_values($semuaSamplerUnik);
                 }
+ 
+                $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
+ 
+                $samplerKey = count($assignedSamplers) > 2
+                    ? implode(', ', $assignedSamplers)
+                    : implode(' & ', $assignedSamplers);
+ 
+                if (!isset($samplingBySampler[$samplerKey])) {
+                    $samplingBySampler[$samplerKey] = [];
+                }
+                $samplingBySampler[$samplerKey][] = $sampling;
             }
         }
-        // dd($samplingBySampler, $sampleSamplerMap);
-
+ 
+        // ── Render PDF ────────────────────────────────────────────────
         $isFirstPage = true;
-
-        // Create separate page for each sampler
+ 
         foreach ($samplingBySampler as $samplerName => $samplerSamplingData) {
             if (!$isFirstPage) {
                 $pdf->AddPage();
             }
             $isFirstPage = false;
-
+ 
+            $firstSample      = $samplerSamplingData[0];
+            $samplersDiHeader = $sampleSamplerMap[$firstSample->no_sample] ?? $semuaSamplerUnik;
+ 
+            // Build petugasSamList
             $petugasSamList = '';
-            if (!empty($sampleSamplerMap)) {
-                foreach ($sampleSamplerMap as $noSample => $samplers) {
-                    if ($noSample == $samplerSamplingData[0]->no_sample) {
-                        if (count($samplers) == 1) {
-                            $petugasSamList .= '' . $samplers[0] . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Petugas sampling)';
-                        } else {
-                            $i = 1;
-                            foreach ($samplers as $sampler) {
-                                if ($i == 1) {
-                                    $petugasSamList .= '- ' . $sampler . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Petugas sampling)<br>';
-                                } else {
-                                    $petugasSamList .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- ' . $sampler . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Petugas sampling)<br>';
-                                }
-                                $i++;
-                            }
-                        }
-                        break;
+            if (!empty($samplersDiHeader)) {
+                if (count($samplersDiHeader) == 1) {
+                    $petugasSamList = $samplersDiHeader[0] . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Petugas sampling)';
+                } else {
+                    foreach ($samplersDiHeader as $i => $sampler) {
+                        $prefix = $i === 0 ? '- ' : '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- ';
+                        $petugasSamList .= $prefix . $sampler . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Petugas sampling)<br>';
                     }
                 }
             } else {
-                $petugasSamList = ': ............................ (Petugas sampling)';
+                $petugasSamList = '............................ (Petugas sampling)';
             }
-
+ 
             $header = '
                 <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
                     <tr>
                         <td class="custom5"><b>No Dokumen: ' . $noDocument . '</b></td>
-                        <td class="custom3" width="40%" ></td>
+                        <td class="custom3" width="40%"></td>
                         <td class="custom5">No Order: ' . $dataHeader->no_order . '</td>
                     </tr>
                 </table>
                 <div style="height: 40px;"></div>
-                <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;margin-bottom: 40px;">
+                <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-bottom: 40px;">
                     <tr>
                         <td class="custom3" colspan="2">
-                            Hari: ' . $hari . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
-                            Tanggal: ' . $tanggalNumber . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
-                            Bulan: ' . $bulan . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+                            Hari: ' . $hari . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                            Tanggal: ' . $tanggalNumber . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                            Bulan: ' . $bulan . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                             Tahun: ' . $tahun . '
                         </td>
                     </tr>
                     <tr>
                         <td class="custom3" style="text-align: justify;" colspan="2">
-                        Sesuai dengan permintaan pihak pelanggan, melalui Berita Acara Sampling ini, bahwa pihak PT Inti Surya Laboratorium telah melakukan kegiatan pengambilan sampel / contoh uji (sampling) yang dilaksanakan sebagaimana rincian berikut :
+                            Sesuai dengan permintaan pihak pelanggan, melalui Berita Acara Sampling ini, bahwa pihak PT Inti Surya Laboratorium telah melakukan kegiatan pengambilan sampel / contoh uji (sampling) yang dilaksanakan sebagaimana rincian berikut :
                         </td>
                     </tr>
                     <tr>
@@ -2004,72 +1926,63 @@ class BasOnlineController extends Controller
                     </tr>
                 </table>
             ';
-
-            $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
+ 
+            // ── FIX: Tidak ada WriteHTML('<!DOCTYPE html>...<body>') di sini ──
+            // CSS sudah di-apply sekali via HEADER_CSS di atas.
+            // Cukup set header dan langsung tulis konten tabel.
             $pdf->SetHTMLHeader($header);
-            $pdf->WriteHTML('<!DOCTYPE html>
-                <html>
-                <head>
-                    <style>' . $css . '</style>
-                </head>
-                <body>');
-
+ 
             $p = 1;
             $pdf->WriteHTML('<table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-top: 12px;">');
-
-            // Process sampling data for this specific sampler
-            foreach ($samplerSamplingData as $key => $val) {
-                $dataSampelTidakSelesai = SampelTidakSelesai::where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->first();
-                $dat = explode("-", $val->kategori_3);
-                $boxChecked = '&#9745;'; // ☑
-                $boxUnchecked = '&#9744;'; // ☐
-
-                $isSelesai = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
-                $selesaiBox = $isSelesai ? $boxChecked : $boxUnchecked;
+ 
+            foreach ($samplerSamplingData as $val) {
+                $dataSampelTidakSelesai = SampelTidakSelesai::where('no_sampel', $val->no_sample)
+                    ->where('no_order', $val->no_order)->first();
+ 
+                $dat          = explode("-", $val->kategori_3);
+                $boxChecked   = '&#9745;';
+                $boxUnchecked = '&#9744;';
+ 
+                $isSelesai       = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
+                $selesaiBox      = $isSelesai ? $boxChecked : $boxUnchecked;
                 $belumSelesaiBox = $isSelesai ? $boxUnchecked : $boxChecked;
-
-                $raw = $hariTanggal[$val->no_sample] ?? null;
-
+                $raw             = $hariTanggal[$val->no_sample] ?? null;
+ 
                 if ($isSelesai) {
-                    if ($raw) {
-                        // parse & terjemahkan ke locale Indonesia
-                        // $c = Carbon::parse($raw)->locale('id');
-                        // $hari2 = $c->translatedFormat('l');      // e.g. "Jumat"
-                        // $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
-                        $tanggalHtml = "Hari/Tanggal : ....................................";
-                        $sisa_sampling = "Sisa Sampling : .................................... Titik";
-                    } else {
-                        // placeholder jika belum ada
-                        $tanggalHtml = "Hari/Tanggal : ....................................";
-                        $sisa_sampling = "Sisa Sampling : .................................... Titik";
-                    }
+                    $tanggalHtml   = "Hari/Tanggal : ....................................";
+                    $sisa_sampling = "Sisa Sampling : .................................... Titik";
                 } else {
                     if (isset($dataSampelTidakSelesai) && $dataSampelTidakSelesai->status == "Dilanjutkan") {
-                        $c = Carbon::parse($dataSampelTidakSelesai->tanggal_dilanjutkan)->locale('id');
-                        $hari2 = $c->translatedFormat('l');      // e.g. "Jumat"
-                        $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
-                        $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
+                        $c             = Carbon::parse($dataSampelTidakSelesai->tanggal_dilanjutkan)->locale('id');
+                        $tanggalHtml   = "Hari/Tanggal : " . $c->translatedFormat('l') . " / " . $c->translatedFormat('d F Y');
                         $sisa_sampling = "Sisa Sampling : 1 Titik";
                     } else {
-                        $tanggalHtml = "Hari/Tanggal : ....................................";
+                        $tanggalHtml   = "Hari/Tanggal : ....................................";
                         $sisa_sampling = "Sisa Sampling : 1 Titik";
                     }
                 }
-
+ 
+                $alasan        = $dataSampelTidakSelesai->alasan ?? '';
+                $alasanLainnya = !in_array($alasan, [
+                    "Dibatalkan oleh pihak pelanggan",
+                    "Terbatas/kendala waktu/cuaca",
+                    "Titik sampling tidak/belum siap",
+                ]) && isset($dataSampelTidakSelesai->alasan);
+ 
                 $pdf->WriteHTML('
                 <tr>
                     <td class="custom" width="10">' . $p++ . '</td>
                     <td class="custom" width="120">' . $val->no_sample . '</td>
-                    <td class="custom" width="80" style="white-space: wrap;">' . $dat[1] . '</td>
+                    <td class="custom" width="80" style="white-space: wrap;">' . ($dat[1] ?? '') . '</td>
                     <td class="custom" width="80" style="white-space: wrap;">' . $val->keterangan_1 . '</td>
                     <td width="210" style="border: 1px solid #000000;">
                         <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin: 8px;">
                             <tr>
-                            <td style="font-size: 20px; font-weight: bold;" width="10">' . $selesaiBox . '</td>
-                                <td class="custom2" style="font-weight: bold;">Selesai </td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . $selesaiBox . '</td>
+                                <td class="custom2" style="font-weight: bold;">Selesai</td>
                             </tr>
                             <tr>
-                            <td style="font-size: 20px; font-weight: bold;" width="10">' . $belumSelesaiBox . '</td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . $belumSelesaiBox . '</td>
                                 <td class="custom2" style="font-weight: bold;">Belum selesai / dilanjutkan pada :</td>
                             </tr>
                             <tr>
@@ -2083,75 +1996,62 @@ class BasOnlineController extends Controller
                     <td style="border: 1px solid #000000;" width="240">
                         <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin: 8px;">
                             <tr>
-                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Dibatalkan oleh pihak pelanggan" ? "&#9745;" : "&#9744;") . '</td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . ($alasan == "Dibatalkan oleh pihak pelanggan" ? "&#9745;" : "&#9744;") . '</td>
                                 <td class="custom2">Dibatalkan oleh pihak pelanggan</td>
-                                <td class="custom2">' . (($dataSampelTidakSelesai->alasan ?? '') == "Dibatalkan oleh pihak pelanggan" ? "1" : "......") . ' Titik</td>
+                                <td class="custom2">' . ($alasan == "Dibatalkan oleh pihak pelanggan" ? "1" : "......") . ' Titik</td>
                             </tr>
                             <tr>
-                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Terbatas/kendala waktu/cuaca" ? "&#9745;" : "&#9744;") . '</td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . ($alasan == "Terbatas/kendala waktu/cuaca" ? "&#9745;" : "&#9744;") . '</td>
                                 <td class="custom2">Terbatas / kendala waktu / cuaca</td>
-                                <td class="custom2">' . (($dataSampelTidakSelesai->alasan ?? '') == "Terbatas/kendala waktu/cuaca" ? "1" : "......") . ' Titik</td>
+                                <td class="custom2">' . ($alasan == "Terbatas/kendala waktu/cuaca" ? "1" : "......") . ' Titik</td>
                             </tr>
                             <tr>
-                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Titik sampling tidak/belum siap" ? "&#9745;" : "&#9744;") . '</td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . ($alasan == "Titik sampling tidak/belum siap" ? "&#9745;" : "&#9744;") . '</td>
                                 <td class="custom2">Titik sampling tidak / belum siap</td>
-                                <td class="custom2">' . (($dataSampelTidakSelesai->alasan ?? '') == "Titik sampling tidak/belum siap" ? "1" : "......") . ' Titik</td>
+                                <td class="custom2">' . ($alasan == "Titik sampling tidak/belum siap" ? "1" : "......") . ' Titik</td>
                             </tr>
                             <tr>
-                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') != "Dibatalkan oleh pihak pelanggan" && ($dataSampelTidakSelesai->alasan ?? '') != "Terbatas/kendala waktu/cuaca" && ($dataSampelTidakSelesai->alasan ?? '') != "Titik sampling tidak/belum siap" && isset($dataSampelTidakSelesai->alasan) ? "&#9745;" : "&#9744;") . '</td>
-                                <td colspan="2" class="custom2">Lainnya :' . (($dataSampelTidakSelesai->alasan ?? '') != "Dibatalkan oleh pihak pelanggan" && ($dataSampelTidakSelesai->alasan ?? '') != "Terbatas/kendala waktu/cuaca" && ($dataSampelTidakSelesai->alasan ?? '') != "Titik sampling tidak/belum siap" && isset($dataSampelTidakSelesai->alasan) ? ($dataSampelTidakSelesai->alasan ?? '') : "...............................................") . '</td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . ($alasanLainnya ? "&#9745;" : "&#9744;") . '</td>
+                                <td colspan="2" class="custom2">Lainnya : ' . ($alasanLainnya ? $alasan : ".......................................") . '</td>
                             </tr>
                         </table>
                     </td>
                 </tr>
                 ');
             }
-
+ 
             $pdf->WriteHTML('</table>');
         }
-        
-        $catatan = $selectedDetail['catatan'] ?? '';
+ 
+        // ── Halaman Footer: Catatan, Informasi Teknis, Tanda Tangan ──
+        $catatan         = $selectedDetail['catatan']          ?? '';
         $informasiTeknis = $selectedDetail['informasi_teknis'] ?? '';
-        $tandaTangan = $selectedDetail['tanda_tangan'] ?? [];
-
+        $tandaTangan     = $selectedDetail['tanda_tangan']     ?? [];
+ 
         $signatureData = [];
         if (!empty($tandaTangan) && is_array($tandaTangan)) {
-            $signatureData = array_map(function ($sig) {
-                return [
-                    'role' => $sig['role'],
-                    'nama' => $sig['nama'],
-                    'tanda_tangan' => $sig['tanda_tangan']
-                ];
-            }, $tandaTangan);
+            $signatureData = array_map(fn($sig) => [
+                'role'         => $sig['role'],
+                'nama'         => $sig['nama'],
+                'tanda_tangan' => $sig['tanda_tangan'],
+            ], $tandaTangan);
         }
-
-        $samplers = [];
-        $pelanggans = [];
-        if (is_array($signatureData)) {
-            foreach ($signatureData as $sig) {
-                if (isset($sig['role']) && $sig['role'] === 'sampler') {
-                    $samplers[] = $sig;
-                } elseif (isset($sig['role']) && $sig['role'] === 'pelanggan') {
-                    $pelanggans[] = $sig;
-                }
-            }
-        }
-        // dd($pelanggans,$selectedDetail);
+ 
+        $samplers   = array_filter($signatureData, fn($s) => ($s['role'] ?? '') === 'sampler');
+        $pelanggans = array_filter($signatureData, fn($s) => ($s['role'] ?? '') === 'pelanggan');
+ 
         $samplerHtml = '';
         if (!empty($samplers)) {
-            foreach ($samplers as $index => $sampler) {
-                $number = $index + 1;
+            foreach (array_values($samplers) as $index => $sampler) {
                 $ttd_sampler = $this->decodeImageToBase64($sampler['tanda_tangan']);
-
-                $ttdContent = $ttd_sampler->status !== 'error' 
+                $ttdContent  = $ttd_sampler->status !== 'error'
                     ? '<img src="' . $ttd_sampler->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />'
                     : '<span style="font-size: 10px; color: #999; font-style: italic;">...</span>';
-
                 $samplerHtml .= '
                     <tr>
                         <td width="3"></td>
                         <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">
-                            ' . $number . '. ' . ($sampler['nama'] ?? 'No Name') . '
+                            ' . ($index + 1) . '. ' . ($sampler['nama'] ?? 'No Name') . '
                         </td>
                         <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">
                             ' . $ttdContent . '
@@ -2168,22 +2068,19 @@ class BasOnlineController extends Controller
                     <td width="3"></td>
                 </tr>';
         }
-
+ 
         $pelangganHtml = '';
         if (!empty($pelanggans)) {
-            foreach ($pelanggans as $index => $pelanggan) {
-                $number = $index + 1;
+            foreach (array_values($pelanggans) as $index => $pelanggan) {
                 $ttd_pelanggan = $this->decodeImageToBase64($pelanggan['tanda_tangan']);
-
-                $ttdContent = $ttd_pelanggan->status !== 'error'
+                $ttdContent    = $ttd_pelanggan->status !== 'error'
                     ? '<img src="' . $ttd_pelanggan->base64 . '" alt="" style="max-width: 100px; max-height: 50px;" />'
                     : '<span style="font-size: 10px; color: #999; font-style: italic;">...</span>';
-
                 $pelangganHtml .= '
                     <tr>
                         <td width="3"></td>
                         <td width="100" style="font-size: 14px; border: 1px solid #000000; padding: 10px; text-align: center;">
-                            ' . $number . '. ' . ($pelanggan['nama'] ?? 'No Name') . '
+                            ' . ($index + 1) . '. ' . ($pelanggan['nama'] ?? 'No Name') . '
                         </td>
                         <td width="100" style="border: 1px solid #000000; padding: 10px; text-align: center;">
                             ' . $ttdContent . '
@@ -2200,106 +2097,42 @@ class BasOnlineController extends Controller
                     <td width="3"></td>
                 </tr>';
         }
-
+ 
+        $dotLine = '...........................................................................................................................................................................................................................................................';
+ 
+        $catatanHtml = $catatan ?: str_repeat('<tr><td style="padding-bottom: 13px;">' . $dotLine . '</td></tr>', 9);
+        $infoTekHtml = $informasiTeknis ?: str_repeat('<tr><td style="padding-bottom: 13px;">' . $dotLine . '</td></tr>', 9);
+ 
+        // ── FIX: Tidak ada </body></html> di sini karena tidak ada
+        //         <!DOCTYPE html><html><body> yang dibuka sebelumnya.
+        //         mPDF tidak memerlukan wrapper HTML untuk WriteHTML fragment.
         $pdf->AddPage();
         $pdf->WriteHTML('
             <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
                 <tr>
                     <td colspan="5" style="border: 1px solid #000000; padding-bottom: 9px;">
                         <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-left: 12px; margin-top: 12px;">
-                            <tr>
-                                <td style="font-size: 14px; padding-bottom: 13px;">Catatan tambahan :</td>
-                            </tr>
-                            <tr>
-                                <td style="font-size: 14px; padding-bottom: 13px;">
-                                ' . ($catatan ? $catatan : '
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                ') . '
-                                </td>
-                            </tr>
+                            <tr><td style="font-size: 14px; padding-bottom: 13px;">Catatan tambahan :</td></tr>
+                            <tr><td style="font-size: 14px; padding-bottom: 13px;">' . $catatanHtml . '</td></tr>
                         </table>
                     </td>
-                    <tr>
-                    <td colspan="5" style="padding: 5px;"></td>
-                    </tr>
                 </tr>
+                <tr><td colspan="5" style="padding: 5px;"></td></tr>
                 <tr>
                     <td colspan="5" style="border: 1px solid #000000; padding-bottom: 9px;">
                         <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-left: 12px; margin-top: 12px;">
-                            <tr>
-                                <td style="font-size: 14px; padding-bottom: 13px;">Informasi-Informasi Teknis Yang Berkaitan Dengan Kegiatan Pengujian Selanjutnya : </td>
-                            </tr>
-                            <tr>
-                                <td style="font-size: 14px; padding-bottom: 13px;">
-                                    ' . ($informasiTeknis ? $informasiTeknis : '
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
-                                    </tr>
-                                    ') . '  
-                                </td>
-                            </tr>
+                            <tr><td style="font-size: 14px; padding-bottom: 13px;">Informasi-Informasi Teknis Yang Berkaitan Dengan Kegiatan Pengujian Selanjutnya :</td></tr>
+                            <tr><td style="font-size: 14px; padding-bottom: 13px;">' . $infoTekHtml . '</td></tr>
                         </table>
                     </td>
                 </tr>
+                <tr><td colspan="5" style="padding: 5px;"></td></tr>
                 <tr>
-                    <td colspan="5" style="padding: 5px;"></td>
+                    <td colspan="5" style="font-size: 14px;">
+                        Sesuai dengan rincian diatas maka pihak-pihak yang berkaitan dengan kegiatan, menyetujui adanya data dan informasi tersebut
+                    </td>
                 </tr>
-                <tr>
-                    <td colspan="5" style="font-size: 14px;">Sesuai dengan rincian diatas maka pihak-pihak yang berkaitan dengan kegiatan, menyetujui adanya data dan informasi tersebut</td>
-                </tr>
-                <tr>
-                    <td colspan="5" style="padding: 5px;"></td>
-                </tr>
+                <tr><td colspan="5" style="padding: 5px;"></td></tr>
                 <tr>
                     <td colspan="5">
                         <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-top: 16px;">
@@ -2308,43 +2141,31 @@ class BasOnlineController extends Controller
                                     <table width="100%" style="padding-top: 10px; padding-bottom: 10px;">
                                         <tr>
                                             <td colspan="4" style="text-align: center; font-weight: bold; font-size: 14px;">
-                                                <span>Pihak Yang Menjalankan Kegiatan</span>
-                                                <br/>
-                                                <span style="font-style: italic;"> (Sampler) </span>
+                                                <span>Pihak Yang Menjalankan Kegiatan</span><br/>
+                                                <span style="font-style: italic;">(Sampler)</span>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">
-                                                Nama Lengkap
-                                            </td>
-                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">
-                                                Tanda Tangan
-                                            </td>
+                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">Nama Lengkap</td>
+                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">Tanda Tangan</td>
                                         </tr>
                                         ' . $samplerHtml . '
                                     </table>
                                 </td>
-
                                 <td style="padding: 8px;"></td>
-
                                 <td style="border: 1px solid #000000;">
                                     <table width="100%" style="padding-top: 10px; padding-bottom: 10px;">
                                         <tr>
                                             <td colspan="4" style="text-align: center; font-weight: bold; font-size: 14px;">
-                                                <span>Pihak Yang Menjalankan Kegiatan</span>
-                                                <br/>
+                                                <span>Pihak Yang Menjalankan Kegiatan</span><br/>
                                                 <span style="font-style: italic;">(Pelanggan)</span>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">
-                                                Nama Lengkap
-                                            </td>
-                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">
-                                                Tanda Tangan
-                                            </td>
+                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">Nama Lengkap</td>
+                                            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 14px;">Tanda Tangan</td>
                                         </tr>
-                                    ' . $pelangganHtml . '
+                                        ' . $pelangganHtml . '
                                     </table>
                                 </td>
                             </tr>
@@ -2352,28 +2173,20 @@ class BasOnlineController extends Controller
                     </td>
                 </tr>
             </table>
-        </body>
-        </html>');
-
+        ');
+ 
+        // ── Simpan file PDF ───────────────────────────────────────────
         $path = public_path('dokumen/bas');
-
-        // Pastikan direktori tersedia
         if (!file_exists($path)) {
             mkdir($path, 0777, true);
         }
-
-        // Cek apakah file lama ada dan hapus jika ditemukan
-        // if ($file_name_old && file_exists($path . '/' . $file_name_old)) {
-        //     unlink($path . '/' . $file_name_old);
-        // }
-
-        // Path file lengkap
-        $filePath = $path . '/' . $filename;
-
-        $pdf->Output($filePath, 'F');
-        // return $pdf->Output('', 'I');
+ 
+        $pdf->Output($path . '/' . $filename, 'F');
         return response()->json([$filename], 200);
     }
+
+
+    
     private function getDataLapangan($kategori_2, $kategori_3, $no_sample, $parameter)
     {
         $data = null;
@@ -4881,6 +4694,7 @@ class BasOnlineController extends Controller
         return 'bin';
     }
 
+    //requierParameterBas
     // Step 1: Trace parameter
     public function traceParameter(Request $request)
     {
@@ -4955,29 +4769,193 @@ class BasOnlineController extends Controller
     }
 
     // Step 2: Simpan ke DB
-    public function storeRequiredParameter(Request $request)
+    public function insertData(Request $request)
     {
-        $request->validate([
-            'parameter'      => 'required|string',
-            'required_count' => 'required|integer|min:1',
-            'category'       => 'required|string',
-            'model'          => 'nullable|string',
-            'model2'         => 'nullable|string',
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: *');
+        // header('Access-Control-Allow-Headers: *');
+        
+        $validator = Validator::make($request->all(), [
+            'list_parameter'                  => 'required|array',
+            'list_parameter.*.parameter'      => 'required|string',
+            'list_parameter.*.required_count' => 'required|integer|min:1',
+            'list_parameter.*.category'       => 'required|string',
         ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors()->first()
+            ], 400);
+        }
+        $validated = $validator->validated();
+        $models = [
+            DataLapanganAir::class, DataLapanganDebuPersonal::class, DataLapanganDirectLain::class,
+            DataLapanganEmisiCerobong::class, DataLapanganEmisiKendaraan::class, DataLapanganGetaran::class,
+            DataLapanganGetaranPersonal::class, DataLapanganIklimDingin::class, DataLapanganIklimPanas::class,
+            DataLapanganIsokinetikHasil::class, DataLapanganKebisingan::class, DataLapanganKebisinganPersonal::class,
+            DataLapanganMedanLM::class, DataLapanganMicrobiologi::class, DataLapanganPartikulatMeter::class,
+            DataLapanganPsikologi::class, DataLapanganSinarUv::class, DataLapanganSwab::class,
+            DataLapanganErgonomi::class, DataLapanganCahaya::class, DetailLingkunganHidup::class,
+            DetailLingkunganKerja::class, DetailMicrobiologi::class, DetailSenyawaVolatile::class,
+        ];
 
-        RequiredParameters::updateOrCreate(
-            [
-                'parameter' => $request->parameter,
-                'category'  => $request->category,
-            ],
-            [
-                'required_count' => $request->required_count,
-                'model'          => $request->model,
-                'model2'         => $request->model2,
-            ]
-        );
+        foreach ($request->list_parameter as $item) {
+            $parameterName  = $item['parameter'];
+            $category       = $item['category'];
+            $requiredCount  = $item['required_count'];
+            $found          = [];
 
-        return response()->json(['message' => 'Parameter berhasil disimpan']);
+            // 1. Trace Model secara otomatis
+            foreach ($models as $modelClass) {
+                try {
+                    if ($modelClass::where('parameter', trim($parameterName))->exists()) {
+                            $found[] = $modelClass;
+                        }
+                } catch (\Exception $e) {
+                    continue;
+                }
+            }
+
+            // 2. Cari apakah parameter dengan kategori ini SUDAH ADA (Tanpa mempedulikan model)
+            $existingParam = RequiredParameters::where('parameter', trim($parameterName))
+                                   ->where('category', trim($category))
+                                   ->first();
+
+            if ($existingParam) {
+                $existingParam->required_count = $requiredCount;
+                $messages = [];
+                
+                foreach ($found as $foundModel) {
+                    if ($existingParam->model === $foundModel || $existingParam->model2 === $foundModel) {
+                        // Sudah terdaftar di model1 atau model2, skip
+                        $messages[] = "Parameter '{$parameterName}' sudah terdaftar di " . class_basename($foundModel);
+                        continue;
+                    }
+
+                    if (empty($existingParam->model)) {
+                        $existingParam->model = $foundModel;
+                    } elseif (empty($existingParam->model2)) {
+                        $existingParam->model2 = $foundModel;
+                        break;
+                    }
+
+                }
+
+                $existingParam->save();
+            } else {
+                RequiredParameters::create([
+                    'parameter'      => trim($parameterName),
+                    'category'       => trim($category),
+                    'required_count' => $requiredCount,
+                    'model'          => $found[0] ?? null,
+                    'model2'         => $found[1] ?? null,
+                ]);
+            }
+        }
+
+        return response()->json(['message' => 'Semua parameter berhasil diproses dan disimpan']);
+    }
+    // get list parameter for datatable
+    public function getListParameter(Request $request)
+    {
+        try {
+            // Ambil semua data dari tabel, urutkan dari yang terbaru
+            $parameters = RequiredParameters::where('is_active', true)->orderBy('id', 'desc')->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameters,
+                'message' => 'Berhasil mengambil data parameter'
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengambil data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getMasterKategori(Request $request)
+    {
+        try {
+            // Ambil semua data dari tabel, urutkan dari yang terbaru
+            $categories = MasterKategori::orderBy('id', 'desc')->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $categories,
+                'message' => 'Berhasil mengambil data master kategori'
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengambil data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function listParameter(Request $request)
+    {
+        try{
+
+            $parameters = Parameter::select('id','nama_lab')->where('is_active', true)->get();
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameters,
+                'message' => 'Berhasil mengambil data parameter'
+            ], 200);
+        }catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengambil data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function updateDataParameter(Request $request)
+    {
+        try {
+            $parameter = RequiredParameters::find($request->id);
+            $parameter->required_count = $request->required_count;
+            $parameter->save();
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameter,
+                // 'message' => 'Berhasil mengupdate data parameter'
+            ], 200);
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengupdate data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteDataParameter(Request $request)
+    {
+        try {
+            $parameter = RequiredParameters::find($request->id);
+            $parameter->is_active = false;
+            $parameter->save();
+            return response()->json([
+                'status' => 'success',
+                'data' => $parameter,
+                'message' => 'Berhasil menghapus data parameter'
+            ], 200);
+        } catch (\Exception $e) {
+            // Tangkap error jika terjadi masalah di database
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal menghapus data: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
 }
