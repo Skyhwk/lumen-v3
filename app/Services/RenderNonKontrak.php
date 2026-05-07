@@ -261,6 +261,7 @@ class RenderNonKontrak
                     </thead>
                 <tbody>');
             $i = 1;
+            $total_harga_pengujian = 0;
             foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
                 $kategori = explode("-", $a->kategori_1);
                 $kategori2 = explode("-", $a->kategori_2);
@@ -404,8 +405,10 @@ class RenderNonKontrak
                     </tr>'
                 );
 
+                $total_harga_pengujian += $a->harga_total;
                 $i++;
             }
+            $hargaTransportasiPerdiem = 0;
             $wilayah = explode("-", $data->wilayah, 2);
             if ($data->transportasi > 0 && $data->harga_transportasi_total != null && !is_null($data->transportasi)) {
                 $pdf->WriteHTML(
@@ -418,6 +421,7 @@ class RenderNonKontrak
                     </tr>'
                 );
             }
+            $hargaTransportasiPerdiem += $data->harga_transportasi * $data->transportasi;
             $perdiem_24 = "";
             $total_perdiem = 0;
 
@@ -443,6 +447,9 @@ class RenderNonKontrak
                     </tr>'
                 );
             }
+
+            $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
+
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
                 $u = '';
@@ -583,6 +590,18 @@ class RenderNonKontrak
                 '</td>
                 <td width="36%">
                     <table class="table table-bordered" width="100%" style="font-size: 11px; margin-right: -4px;">
+                        <tr>
+                            <td style="text-align:center;padding:5px;">
+                                Harga Pengujian
+                            </td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($total_harga_pengujian) . '</td>
+                        </tr> 
+                        <tr>
+                            <td style="text-align:center;padding:5px;">
+                                Harga Transportasi Perdiem
+                            </td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($hargaTransportasiPerdiem) . '</td>
+                        </tr>     
                         <tr>
                             <td style="text-align:center;padding:5px;">
                                 <b>' . strtoupper(__('QT.total.sub')) . '</b>
