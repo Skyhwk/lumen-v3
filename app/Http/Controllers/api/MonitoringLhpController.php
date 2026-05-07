@@ -23,7 +23,7 @@ class MonitoringLhpController extends Controller
         $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
         $workDay = Carbon::now()->subWeekdays(10);
 
-        $liburPerusahaan = LiburPerusahaan::where('tanggal', '>=', $workDay)->get();
+        $liburPerusahaan = LiburPerusahaan::where('tanggal', '>=', $workDay)->where('tanggal', '<=', Carbon::now())->get();
         $workDayWithLibur = $workDay->subWeekdays($liburPerusahaan->count());
 
         $linkLhpQuery = LinkLhp::select(
