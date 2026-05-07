@@ -419,7 +419,8 @@ class HandleFileInstrument extends BaseController
                                 $isParamExist = in_array($paramKey, $listParam);
                                 $icpData['parameter'] = $paramKey;
                             }elseif(!$isParamExist && $order_detail->kategori_2 == '4-Udara' && $paramKey == 'Pb'){
-                                $options = ["Pb", "Pb (24 Jam)", "Pb (6 Jam)", "Pb (8 Jam)"];
+                                $options = ["Pb", "Pb (24 Jam)"];
+                                // $options = ["Pb", "Pb (24 Jam)", "Pb (6 Jam)", "Pb (8 Jam)"];
 
                                 foreach ($options as $opt) {
                                     if (in_array($opt, $listParam)) {
