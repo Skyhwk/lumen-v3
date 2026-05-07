@@ -95,7 +95,6 @@ class SertifikasiDriverController extends Controller
                     'message' => 'Data Driver Berhasil Di Tambahkan',
 
                 ], 200);
-
             }
         } catch (\Throwable $th) {
             // return response()->json([
@@ -133,8 +132,6 @@ class SertifikasiDriverController extends Controller
             //     'status' => '500'
             // ], 500);
         }
-
-
     }
 
     public function deleteDriver(Request $request)
@@ -149,7 +146,6 @@ class SertifikasiDriverController extends Controller
             return response()->json([
                 'message' => 'Data Driver Berhasil Di Hapus!',
             ], 200);
-
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'Gagal menghapus data driver!, Silahkan hubungi IT',
@@ -162,8 +158,5 @@ class SertifikasiDriverController extends Controller
             // ], 500);
 
         }
-
     }
 }
-
-

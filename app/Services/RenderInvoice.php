@@ -1817,6 +1817,21 @@ class RenderInvoice
                 <td style="border: 1px solid; font-size: 9px; width:33%; text-align:center;" class="text-right">' . self::rupiah($total_harga) . '</td></tr>
             ');
 
+            if(explode('/', $dataHead->no_quotation)[1] == 'QTC'){
+                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
+            } else {
+                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
+            }
+            if($dataTagihanBerjalan->count() > 0) {
+                $tagihanBerjalan = $dataTagihanBerjalan->sum('nilai_tagihan');
+                $nomorInvoiceBerjalan = $dataTagihanBerjalan->pluck('no_invoice')->implode(', ');
+                $pdf->writeHTML('
+                    <tr >
+                    <td style="border: 1px solid; font-size: 10px; padding:3px;" width:60%;><b style="text-transform: uppercase;">TAGIHAN PADA INVOICE (' . $nomorInvoiceBerjalan . ')</b></td>
+                    <td style="border: 1px solid; font-size: 9px; width:33%; text-align:center;" class="text-right">' . self::rupiah($tagihanBerjalan) . '</td></tr>
+                ');
+            }
+
             $ketDetail = json_decode(json_encode($harga1[0]));
 
             if ($ketDetail->keterangan == null) {

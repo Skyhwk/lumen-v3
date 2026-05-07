@@ -80,6 +80,7 @@ use App\Models\{
     TemplatePaketAnalisa
 };
 use App\Services\{
+    CombineLHPService,
     GetAtasan,
     SamplingPlanServices,
     RenderSamplingPlan,

@@ -371,13 +371,13 @@ class ReadyOrderController extends Controller
         try {
             if ($request->status_quotation == 'kontrak') {
                 $dataQuotation = QuotationKontrakH::where('no_document', $request->no_document)->where('is_active', true)->first();
-                if($request->is_generate_data_lab === 0){
-                    if($dataQuotation->data_lama && $dataQuotation->data_lama != null){
+                if ($request->is_generate_data_lab === 0) {
+                    if ($dataQuotation->data_lama && $dataQuotation->data_lama != null) {
                         $dataLama = json_decode($dataQuotation->data_lama);
-                        if(isset($dataLama->no_order) && $dataLama->no_order != null){
+                        if (isset($dataLama->no_order) && $dataLama->no_order != null) {
                             $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
-                            ->where('is_active', true)
-                            ->first();
+                                ->where('is_active', true)
+                                ->first();
                             if ($orderHeader) {
                                 // Cek apakah ada OrderDetail aktif
                                 $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
@@ -402,13 +402,13 @@ class ReadyOrderController extends Controller
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
-                if($request->is_generate_data_lab === 0){
-                    if($dataQuotation->data_lama && $dataQuotation->data_lama != null){
+                if ($request->is_generate_data_lab === 0) {
+                    if ($dataQuotation->data_lama && $dataQuotation->data_lama != null) {
                         $dataLama = json_decode($dataQuotation->data_lama);
-                        if(isset($dataLama->no_order) && $dataLama->no_order != null){
+                        if (isset($dataLama->no_order) && $dataLama->no_order != null) {
                             $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
-                            ->where('is_active', true)
-                            ->first();
+                                ->where('is_active', true)
+                                ->first();
                             if ($orderHeader) {
                                 // Cek apakah ada OrderDetail aktif
                                 $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
@@ -494,7 +494,7 @@ class ReadyOrderController extends Controller
         DB::beginTransaction();
         try {
             $data_lama = null;
-            
+
             if ($dataQuotation->data_lama != null) {
                 $data_lama = json_decode($dataQuotation->data_lama);
                 if ($data_lama->no_order != null) {
@@ -608,7 +608,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->is_generate_data_lab = 0;
             $dataQuotation->save();
-            
+
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
             $shouldCreateInvoice = $dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null);
 
@@ -618,9 +618,9 @@ class ReadyOrderController extends Controller
             // if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
             //     self::createInvoice($data, $dataQuotation, $request, false);
             // }
-                    $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
+            $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
 
-                    $emailBody = "
+            $emailBody = "
                         <p>Yth. Bapak/Ibu {$name},</p>
 
                         <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
@@ -639,21 +639,21 @@ class ReadyOrderController extends Controller
                             PT. Inti Surya Laboratorium
                         </p>
                     ";
-                    $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
-                    $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $data->sales_id)->get()->pluck('email')->toArray());
-                    SendEmail::where('to', $data->email_pic_order)
-                        ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
-                        ->where('body', $emailBody)
-                        ->where('cc', json_decode($dataQuotation->email_cc, true))
-                        ->where('bcc', $emailbcc)
-                        ->noReply()
-                        ->send();
-        
-                    $linkRingkasanOrder->is_emailed = 1;
-                    $linkRingkasanOrder->count_email += 1;
-                    $linkRingkasanOrder->emailed_by = $this->karyawan;
-                    $linkRingkasanOrder->emailed_at = Carbon::now();
-                    $linkRingkasanOrder->save();
+            $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+            $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $data->sales_id)->get()->pluck('email')->toArray());
+            SendEmail::where('to', $data->email_pic_order)
+                ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
+                ->where('body', $emailBody)
+                ->where('cc', json_decode($dataQuotation->email_cc, true))
+                ->where('bcc', $emailbcc)
+                ->noReply()
+                ->send();
+
+            $linkRingkasanOrder->is_emailed = 1;
+            $linkRingkasanOrder->count_email += 1;
+            $linkRingkasanOrder->emailed_by = $this->karyawan;
+            $linkRingkasanOrder->emailed_at = Carbon::now();
+            $linkRingkasanOrder->save();
 
             DB::commit();
             
@@ -1074,7 +1074,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->save();
 
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
-            
+
             // Email Dimatikan dulu sampai waktunya diperlukan
 
             // $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->latest()->first();
@@ -1100,7 +1100,7 @@ class ReadyOrderController extends Controller
             //             PT. Inti Surya Laboratorium
             //         </p>
             //     ";
-    
+
             //     SendEmail::where('to', $data->email_pic_order)
             //         ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
             //         ->where('body', $emailBody)
@@ -1108,7 +1108,7 @@ class ReadyOrderController extends Controller
             //         ->where('bcc', GetAtasan::where('user_id', $data->sales_id)->get()->pluck('email')->toArray())
             //         ->noReply()
             //         ->send();
-    
+
             //     $linkRingkasanOrder->is_emailed = 1;
             //     $linkRingkasanOrder->count_email += 1;
             //     $linkRingkasanOrder->emailed_by = $this->karyawan;
@@ -1491,7 +1491,7 @@ class ReadyOrderController extends Controller
                         PT. Inti Surya Laboratorium
                     </p>
                 ";
-    
+
                 $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
                 $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
                 SendEmail::where('to', $dataOrderHeader->email_pic_order)
@@ -1501,7 +1501,7 @@ class ReadyOrderController extends Controller
                     ->where('bcc', $emailbcc)
                     ->noReply()
                     ->send();
-    
+
                 $linkRingkasanOrder->is_emailed = 1;
                 $linkRingkasanOrder->count_email += 1;
                 $linkRingkasanOrder->emailed_by = $this->karyawan;
@@ -1639,7 +1639,7 @@ class ReadyOrderController extends Controller
                         // $existing_detail_non_aktif = OrderDetail::where('no_order', $data_lama->no_order)
                         // ->where('no_sampel', $changes)
                         // ->first();
-                        
+
                         // if ($existing_detail_non_aktif && $existing_detail_non_aktif->is_active == 0) {
                         //     $tanggal_sampling = $existing_detail_non_aktif->tanggal_sampling;
                         //     if ($detail_baru[$changes]["status_sampling"] != 'SD') {
@@ -1698,7 +1698,7 @@ class ReadyOrderController extends Controller
                     // ->where('active', 0)
                     ->orderByDesc('no_sampel')
                     ->first();
-                if($cek_detail) {
+                if ($cek_detail) {
                     $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
                     $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
                 } else {
@@ -1799,7 +1799,7 @@ class ReadyOrderController extends Controller
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
 
-                    if($value->status_sampling != 'SD'){
+                    if ($value->status_sampling != 'SD') {
                         $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                         $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
                         if (!$tanggal_sampling) {
@@ -2094,6 +2094,93 @@ class ReadyOrderController extends Controller
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);
             });
+
+            $inv = Invoice::where('no_order', $no_order)
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $totalInvoice = (float) $inv->sum('nilai_tagihan');
+            $biayaAkhir   = (float) $data->biaya_akhir;
+
+            $already_pay = $inv->contains(function ($i) {
+                return (float) $i->nilai_pelunasan > 0;
+            });
+
+            if ($inv->count() > 0) {
+                if ($biayaAkhir > $totalInvoice) {
+                    // Nilai terbaru lebih besar
+                    $selisih = $biayaAkhir - $totalInvoice;
+
+                    if ($already_pay) {
+                        // Kalau sudah ada pembayaran, jangan ubah invoice lama.
+                        // Biarin aja, harus update manual.
+                    } else {
+                        // Belum dibayar
+                        if ($selisih > 500000) {
+                            // Selisih di atas 500k, buat invoice baru
+                            $newRequest = clone $request;
+                            $newRequest->merge([
+                                'tagihan_awal' => $inv->sum('nilai_tagihan'),
+                                'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Tagihan tambahan revisi order',
+                            ]);
+
+                            self::createInvoice($data, $dataQuotation, $newRequest, false);
+                        } else {
+                            // Selisih di bawah/sama dengan 500k, tambahkan ke invoice terakhir
+                            $lastInvoice = $inv->sortByDesc('id')->first();
+
+                            if ($lastInvoice) {
+                                $lastInvoice->nilai_tagihan = (float) $lastInvoice->nilai_tagihan + $selisih;
+                                $lastInvoice->piutang       = (float) $lastInvoice->piutang + $selisih;
+                                $lastInvoice->total_tagihan = (float) $lastInvoice->nilai_tagihan;
+                                $lastInvoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                                $lastInvoice->updated_by    = 'system revisi order';
+                                $lastInvoice->save();
+                            }
+                        }
+                    }
+                } else if ($totalInvoice > $biayaAkhir && !$already_pay) {
+                    // Nilai terbaru lebih kecil dan belum dibayar.
+                    // Kurangi invoice dari yang terakhir dulu.
+                    $selisihKurang = $totalInvoice - $biayaAkhir;
+
+                    $invoicesDesc = $inv->sortByDesc('id');
+
+                    foreach ($invoicesDesc as $invoice) {
+                        if ($selisihKurang <= 0) {
+                            break;
+                        }
+
+                        $nilaiTagihan = (float) $invoice->nilai_tagihan;
+
+                        if ($nilaiTagihan <= 0) {
+                            continue;
+                        }
+
+                        if ($nilaiTagihan <= $selisihKurang) {
+                            $selisihKurang -= $nilaiTagihan;
+
+                            $invoice->nilai_tagihan = 0;
+                            $invoice->piutang       = 0;
+                            $invoice->total_tagihan = 0;
+                            $invoice->is_active     = 0;
+                            $invoice->updated_by    = $this->karyawan;
+                            $invoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                            $invoice->save();
+                        } else {
+                            $invoice->nilai_tagihan = $nilaiTagihan - $selisihKurang;
+                            $invoice->piutang       = max(0, (float) $invoice->piutang - $selisihKurang);
+                            $invoice->total_tagihan = $nilaiTagihan - $selisihKurang;
+                            $invoice->updated_by    = $this->karyawan;
+                            $invoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                            $invoice->save();
+
+                            $selisihKurang = 0;
+                        }
+                    }
+                }
+            }
+
 
             // $workerOperation = new WorkerOperation();
             // $workerOperation->index($data, $data_to_log, $bcc, $this->user_id);
@@ -2615,13 +2702,12 @@ class ReadyOrderController extends Controller
         $nilai_tagihan = $first ? floatval($nilai_tagihan) : (floatval($dataQuotation->biaya_akhir) - floatval($nilai_tagihan));
 
         $namaPerusahaan = '-';
-        if($dataQuotation->konsultan != null){
+        if ($dataQuotation->konsultan != null) {
             $namaPerusahaan = $dataQuotation->konsultan . ' (' . $dataQuotation->nama_perusahaan . ')';
         } else {
             $namaPerusahaan = $dataQuotation->nama_perusahaan;
         }
-
-        if($nilai_tagihan <= 10) return;
+        if ($nilai_tagihan <= 10) return;
 
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
@@ -2639,11 +2725,11 @@ class ReadyOrderController extends Controller
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
             'nilai_tagihan' => $nilai_tagihan,
-            'total_tagihan' => $first ? $dataQuotation->biaya_akhir : $dataQuotation->biaya_akhir - $nilai_tagihan,
+            'total_tagihan' => $nilai_tagihan,
             'rekening' => $cek_rekening,
             'nama_pj' => 'Yulia Agustina',
             'jabatan_pj' => 'Account Receivable Adm. Supervisor',
-            'keterangan' => $request->keterangan_tagihan,
+            'keterangan' => $first ? $request->keterangan_tagihan : "Total Tagihan",
             'alamat_penagihan' => $dataOrderHeader->alamat_kantor,
             'nama_pic' => $dataOrderHeader->nama_pic_order,
             'no_pic' => $dataOrderHeader->no_pic_order,
@@ -2701,13 +2787,13 @@ class ReadyOrderController extends Controller
         $nilai_tagihan = $first ? $tagihan_awal : (floatval($detail->biaya_akhir) - floatval($tagihan_awal));
 
         $namaPerusahaan = '-';
-        if($dataQuotation->konsultan != null){
+        if ($dataQuotation->konsultan != null) {
             $namaPerusahaan = $dataQuotation->konsultan . ' (' . $dataQuotation->nama_perusahaan . ')';
         } else {
             $namaPerusahaan = $dataQuotation->nama_perusahaan;
         }
 
-        if($nilai_tagihan <= 10) return;
+        if ($nilai_tagihan <= 10) return;
 
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
@@ -2724,12 +2810,12 @@ class ReadyOrderController extends Controller
             'keterangan_tambahan' => null,
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
-            'nilai_tagihan' => $nilai_tagihan,
+            'nilai_tagihan' => $first ? $nilai_tagihan : $detail->biaya_akhir - $tagihan_awal,
             'total_tagihan' => $first ? $detail->biaya_akhir : $detail->biaya_akhir - $tagihan_awal,
             'rekening' => $cek_rekening,
             'nama_pj' => 'Yulia Agustina',
             'jabatan_pj' => 'Account Receivable Adm. Supervisor',
-            'keterangan' => $request->keterangan_tagihan,
+            'keterangan' => ($first && $firstPeriode) ? $request->keterangan_tagihan : 'Total Tagihan',
             'alamat_penagihan' => $dataOrderHeader->alamat_kantor,
             'nama_pic' => $dataOrderHeader->nama_pic_order,
             'no_pic' => $dataOrderHeader->no_pic_order,
@@ -2746,17 +2832,17 @@ class ReadyOrderController extends Controller
         ];
         Invoice::insert($insert);
         self::generateQrInvoice($noInvoice, $insert[0]);
-        
     }
 
-    private function generateQrInvoice($noInvoice, $insert){
+    private function generateQrInvoice($noInvoice, $insert)
+    {
         // dd($insert, $noInvoice);
         $filename = \str_replace("/", "_", $noInvoice);
         $path = public_path() . "/qr_documents/" . $filename . '.svg';
-        if(!file_exists($path)){
+        if (!file_exists($path)) {
             $link = 'https://www.intilab.com/validation/';
             $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-    
+
             QrCode::size(200)->generate($link . $unique, $path);
             $dataQr = [
                 'type_document' => 'invoice',
@@ -2773,13 +2859,14 @@ class ReadyOrderController extends Controller
                 'created_at' => Carbon::now(),
                 'created_by' => 'System',
             ];
-    
+
             DB::table('qr_documents')->insert($dataQr);
         }
         // dd($dataQr);
     }
 
-    private function generateInvoice($no_order, $no_document){
+    private function generateInvoice($no_order, $no_document)
+    {
         $invoice_numbers = Invoice::where('no_order', $no_order)->where('is_active', 1)->get()->pluck('no_invoice')->toArray();
 
         // Python::call('render-invoice', ['invoice_numbers' => $invoice_numbers]);
@@ -2934,7 +3021,7 @@ class ReadyOrderController extends Controller
                 // $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
                 // dd($no_urut_sample);
                 // $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
-                if($cek_detail) {
+                if ($cek_detail) {
                     $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
                     $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
                 } else {
@@ -3345,6 +3432,100 @@ class ReadyOrderController extends Controller
             // $reorderNotifierService = new ReorderNotifierService();
             // $reorderNotifierService->run($updateHeader, $data_to_log, $bcc, $this->user_id);
 
+            $inv = Invoice::where('no_order', $no_order)
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $totalInvoice = (float) $inv->sum('nilai_tagihan');
+            $biayaAkhir   = (float) $updateHeader->biaya_akhir;
+
+            $already_pay = $inv->contains(function ($i) {
+                return (float) $i->nilai_pelunasan > 0;
+            });
+
+            $all_period = $inv->contains(function ($i) {
+                return (float) $i->periode = 'all';
+            });
+
+            if ($all_period) {
+                if ($inv->count() > 0) {
+                    if ($biayaAkhir > $totalInvoice) {
+                        // Nilai terbaru lebih besar
+                        $selisih = $biayaAkhir - $totalInvoice;
+
+                        if ($already_pay) {
+                            // Kalau sudah ada pembayaran, jangan ubah invoice lama.
+                            // Biarin aja, harus update manual.
+                        } else {
+                            // Belum dibayar
+                            if ($selisih > 500000) {
+                                // Selisih di atas 500k, buat invoice baru
+                                $newRequest = clone $request;
+                                $newRequest->merge([
+                                    'tagihan_awal' => $inv->sum('nilai_tagihan'),
+                                    'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Tagihan tambahan revisi order',
+                                ]);
+
+                                self::createInvoice($data, $dataQuotation, $newRequest, false);
+                            } else {
+                                // Selisih di bawah/sama dengan 500k, tambahkan ke invoice terakhir
+                                $lastInvoice = $inv->sortByDesc('id')->first();
+
+                                if ($lastInvoice) {
+                                    $lastInvoice->nilai_tagihan = (float) $lastInvoice->nilai_tagihan + $selisih;
+                                    $lastInvoice->piutang       = (float) $lastInvoice->piutang + $selisih;
+                                    $lastInvoice->total_tagihan = (float) $lastInvoice->nilai_tagihan;
+                                    $lastInvoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                                    $lastInvoice->updated_by    = 'system revisi order';
+                                    $lastInvoice->save();
+                                }
+                            }
+                        }
+                    } else if ($totalInvoice > $biayaAkhir && !$already_pay) {
+                        // Nilai terbaru lebih kecil dan belum dibayar.
+                        // Kurangi invoice dari yang terakhir dulu.
+                        $selisihKurang = $totalInvoice - $biayaAkhir;
+
+                        $invoicesDesc = $inv->sortByDesc('id');
+
+                        foreach ($invoicesDesc as $invoice) {
+                            if ($selisihKurang <= 0) {
+                                break;
+                            }
+
+                            $nilaiTagihan = (float) $invoice->nilai_tagihan;
+
+                            if ($nilaiTagihan <= 0) {
+                                continue;
+                            }
+
+                            if ($nilaiTagihan <= $selisihKurang) {
+                                $selisihKurang -= $nilaiTagihan;
+
+                                $invoice->nilai_tagihan = 0;
+                                $invoice->piutang       = 0;
+                                $invoice->total_tagihan = 0;
+                                $invoice->is_active     = 0;
+                                $invoice->updated_by    = $this->karyawan;
+                                $invoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                                $invoice->save();
+                            } else {
+                                $invoice->nilai_tagihan = $nilaiTagihan - $selisihKurang;
+                                $invoice->piutang       = max(0, (float) $invoice->piutang - $selisihKurang);
+                                $invoice->total_tagihan = $nilaiTagihan - $selisihKurang;
+                                $invoice->updated_by    = $this->karyawan;
+                                $invoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                                $invoice->save();
+
+                                $selisihKurang = 0;
+                            }
+                        }
+                    }
+                }
+            } else {
+                self::syncInvoiceKontrakPeriode($updateHeader, $dataQuotation, $request);
+            }
+
             // dd('stop');
             DB::commit();
 
@@ -3371,6 +3552,144 @@ class ReadyOrderController extends Controller
             DB::rollBack();
             dd($e);
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
+        }
+    }
+
+    private function syncInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request)
+    {
+        foreach ($dataQuotation->detail as $key => $detail) {
+            $periode    = $detail->periode_kontrak;
+            $biayaAkhir = (float) $detail->biaya_akhir;
+
+            $inv = Invoice::where('no_order', $dataOrderHeader->no_order)
+                ->where('periode', $periode)
+                ->where('is_active', 1)
+                ->orderBy('id', 'asc')
+                ->get();
+
+            // Kalau periode ini belum punya invoice, buat seperti flow orderKontrak
+            if ($inv->count() == 0) {
+                self::createInvoiceKontrakPeriode(
+                    $dataOrderHeader,
+                    $dataQuotation,
+                    $request,
+                    $periode,
+                    true,
+                    false
+                );
+
+                continue;
+            }
+            
+            $totalInvoice = (float) $inv->sum('nilai_tagihan');
+
+            $alreadyPay = $inv->contains(function ($i) {
+                return (float) $i->nilai_pelunasan > 0;
+            });
+
+            if ($biayaAkhir > $totalInvoice) {
+                $selisih = $biayaAkhir - $totalInvoice;
+
+                if ($alreadyPay) {
+                    // Kalau periode ini sudah ada pembayaran, jangan ubah invoice lama
+                    // Sesuai flow lu sebelumnya: biarin manual
+                    continue;
+                }
+
+                if ($selisih > 500000) {
+                    // Buat invoice baru khusus selisih periode ini
+                    self::createInvoiceKontrakPeriodeCustomAmount(
+                        $dataOrderHeader,
+                        $dataQuotation,
+                        $request,
+                        $periode,
+                        $selisih
+                    );
+                } else {
+                    // Tambahkan ke invoice terakhir di periode ini
+                    $lastInvoice = $inv->sortByDesc('id')->first();
+
+                    if ($lastInvoice) {
+                        $lastInvoice->nilai_tagihan = (float) $lastInvoice->nilai_tagihan + $selisih;
+                        $lastInvoice->piutang       = (float) $lastInvoice->piutang + $selisih;
+                        $lastInvoice->total_tagihan = (float) $lastInvoice->nilai_tagihan;
+                        $lastInvoice->updated_by    = 'system revisi order';
+                        $lastInvoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                        $lastInvoice->save();
+                    }
+                }
+            } else if ($totalInvoice > $biayaAkhir && !$alreadyPay) {
+                $selisihKurang = $totalInvoice - $biayaAkhir;
+
+                foreach ($inv->sortByDesc('id') as $invoice) {
+                    if ($selisihKurang <= 0) break;
+
+                    $nilaiTagihan = (float) $invoice->nilai_tagihan;
+
+                    if ($nilaiTagihan <= 0) continue;
+
+                    if ($nilaiTagihan <= $selisihKurang) {
+                        $selisihKurang -= $nilaiTagihan;
+
+                        $invoice->nilai_tagihan = 0;
+                        $invoice->piutang       = 0;
+                        $invoice->total_tagihan = 0;
+                        $invoice->is_active     = 0;
+                        $invoice->updated_by    = 'system revisi order';
+                        $invoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                        $invoice->save();
+                    } else {
+                        $sisaTagihan = $nilaiTagihan - $selisihKurang;
+
+                        $invoice->nilai_tagihan = $sisaTagihan;
+                        $invoice->piutang       = max(0, (float) $invoice->piutang - $selisihKurang);
+                        $invoice->total_tagihan = $sisaTagihan;
+                        $invoice->updated_by    = 'system revisi order';
+                        $invoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+                        $invoice->save();
+
+                        $selisihKurang = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    private function createInvoiceKontrakPeriodeCustomAmount(
+        $dataOrderHeader,
+        $dataQuotation,
+        $request,
+        $periode,
+        $amount
+    ) {
+        $newRequest = clone $request;
+        $newRequest->merge([
+            'tagihan_awal' => $amount,
+            'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Tagihan tambahan revisi periode ' . $periode,
+        ]);
+
+        self::createInvoiceKontrakPeriode(
+            $dataOrderHeader,
+            $dataQuotation,
+            $newRequest,
+            $periode,
+            true,
+            true
+        );
+
+        $lastInvoice = Invoice::where('no_order', $dataOrderHeader->no_order)
+            ->where('periode', $periode)
+            ->where('is_active', 1)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($lastInvoice) {
+            $lastInvoice->nilai_tagihan = $amount;
+            $lastInvoice->piutang       = $amount;
+            $lastInvoice->total_tagihan = $amount;
+            $lastInvoice->updated_by    = 'system revisi order';
+            $lastInvoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
+            $lastInvoice->save();
         }
     }
 
@@ -3460,7 +3779,8 @@ class ReadyOrderController extends Controller
         return in_array($value, $array);
     }
 
-    private function updateCustomer($data){
+    private function updateCustomer($data)
+    {
         $customer = MasterPelanggan::where('id_pelanggan', $data->id_pelanggan)->where('is_active', true)->first();
         $customer->kategori_pelanggan = $data->kategori_pelanggan ?? null;
         $customer->sub_kategori = $data->sub_kategori ?? null;
