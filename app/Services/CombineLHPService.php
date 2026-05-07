@@ -289,6 +289,10 @@ class CombineLHPService
                 $no_po = '-';
             }
 
+            $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', $tanggal_analisa_akhir)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
             $cek_skppa = DokumenSkppa::where('no_order', $no_order)->where('periode', $periode)->first();
             if($cek_skppa) {
                 return true;
@@ -307,8 +311,12 @@ class CombineLHPService
                 $skppa->nama_perusahaan = $order->nama_perusahaan;
                 $skppa->alamat_perusahaan = $order->alamat_kantor;
                 $skppa->alamat_sampling = $order->alamat_sampling;
+                $skppa->nama_pengesah = $pengesah->nama_karyawan;
+                $skppa->jabatan_pengesah = $pengesah->jabatan_karyawan;
                 $skppa->no_po = $no_po;
+
                 $details = $order->orderDetail->when($periode, fn($q) => $q->where('periode', $periode));
+                
                 $skppa->total_sampel = $details->count();
                 $skppa->total_lhp = $details->pluck('cfr')->filter()->unique()->count();
                 $skppa->tanggal_sampling = $details->min('tanggal_sampling');
@@ -324,11 +332,7 @@ class CombineLHPService
                 $skppa->generate_by = 'system';
                 $skppa->save();
             }
-
-            $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', Carbon::now())
-                ->orderByDesc('berlaku_mulai')
-                ->first();
-
+            
             $filename = \str_replace("/", "_", $skppa->no_document);
             $path = public_path() . "/qr_documents/" . $filename . '.svg';
             if (!file_exists($path)) {
