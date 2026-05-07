@@ -57,12 +57,12 @@
 
     $details[] = [
         'label' => 'Total Sampel Analisa',
-        'value' => $data->total_sampel . ' sampel' ?? '-',
+        'value' => $data->total_sampel . ' Sampel' ?? '-',
     ];
 
     $details[] = [
         'label' => 'Total Laporan Hasil Pengujian',
-        'value' => $data->total_lhp . ' lhp' ?? '-',
+        'value' => $data->total_lhp . ' Dokumen' ?? '-',
     ];
 
     // Prioritas tanggal: sampel diterima > sampling

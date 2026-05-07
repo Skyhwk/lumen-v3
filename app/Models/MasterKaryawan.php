@@ -174,4 +174,9 @@ class MasterKaryawan extends Sector
     {
         return $this->hasMany(DendaKaryawan::class, 'nik_karyawan', 'nik_karyawan')->where('is_active', true);
     }
+
+    public function rekening()
+    {
+        return $this->hasOne(RekeningKaryawan::class, 'nik_karyawan', 'nik_karyawan')->where('is_active', true);
+    }
 }
