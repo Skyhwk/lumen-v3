@@ -45,7 +45,36 @@ class QtOrderedController extends Controller
         try {
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
-                    ->select('request_quotation.*') // tambahkan ini
+                    ->select(
+                        'request_quotation.document_status',
+                        'request_quotation.kode_promo',
+                        'request_quotation.pelanggan_ID',
+                        'request_quotation.no_document',
+                        'request_quotation.nama_perusahaan',
+                        'request_quotation.flag_status',
+                        'request_quotation.status_sampling',
+                        'request_quotation.sp_by',
+                        'request_quotation.no_tlp_perusahaan',
+                        'request_quotation.konsultan',
+                        'request_quotation.nama_pic_order',
+                        'request_quotation.no_pic_order',
+                        'request_quotation.keterangan',
+                        'request_quotation.grand_total',
+                        'request_quotation.total_discount',
+                        'request_quotation.total_ppn',
+                        'request_quotation.total_pph',
+                        'request_quotation.piutang',
+                        'request_quotation.created_at',
+                        'request_quotation.sales_id',
+                        'request_quotation.keterangan_reject_sp',
+                        'request_quotation.filename',
+                        'request_quotation.jadwalfile',
+                        'request_quotation.tanggal_penawaran',
+                        'request_quotation.id',
+                        'request_quotation.is_generate_data_lab',
+                        'request_quotation.id_cabang',
+                        'request_quotation.is_active',
+                        )
                     ->where('request_quotation.id_cabang', $request->cabang)
                     ->where('request_quotation.flag_status', 'ordered')
                     ->where('request_quotation.is_approved', true)
@@ -55,7 +84,36 @@ class QtOrderedController extends Controller
                     ->orderBy('request_quotation.id', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
-                    ->select('request_quotation_kontrak_H.*')
+                    ->select(
+                        'request_quotation_kontrak_H.document_status',
+                        'request_quotation_kontrak_H.kode_promo',
+                        'request_quotation_kontrak_H.pelanggan_ID',
+                        'request_quotation_kontrak_H.no_document',
+                        'request_quotation_kontrak_H.nama_perusahaan',
+                        'request_quotation_kontrak_H.flag_status',
+                        'request_quotation_kontrak_H.status_sampling',
+                        'request_quotation_kontrak_H.sp_by',
+                        'request_quotation_kontrak_H.no_tlp_perusahaan',
+                        'request_quotation_kontrak_H.konsultan',
+                        'request_quotation_kontrak_H.nama_pic_order',
+                        'request_quotation_kontrak_H.no_pic_order',
+                        'request_quotation_kontrak_H.keterangan',
+                        'request_quotation_kontrak_H.grand_total',
+                        'request_quotation_kontrak_H.total_discount',
+                        'request_quotation_kontrak_H.total_ppn',
+                        'request_quotation_kontrak_H.total_pph',
+                        'request_quotation_kontrak_H.piutang',
+                        'request_quotation_kontrak_H.created_at',
+                        'request_quotation_kontrak_H.sales_id',
+                        'request_quotation_kontrak_H.keterangan_reject_sp',
+                        'request_quotation_kontrak_H.filename',
+                        'request_quotation_kontrak_H.jadwalfile',
+                        'request_quotation_kontrak_H.tanggal_penawaran',
+                        'request_quotation_kontrak_H.id',
+                        'request_quotation_kontrak_H.is_generate_data_lab',
+                        'request_quotation_kontrak_H.id_cabang',
+                        'request_quotation_kontrak_H.is_active',
+                        )
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
                     ->where('request_quotation_kontrak_H.flag_status', 'ordered')
                     ->where('request_quotation_kontrak_H.is_approved', true)

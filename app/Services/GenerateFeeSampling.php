@@ -26,7 +26,13 @@ class GenerateFeeSampling
             if (!$fee) {
                 throw new \Exception("Fee untuk level '$level' tidak ditemukan.");
             }
-
+            // Cast semua field fee ke int
+            $fee->titik_1                  = (int) $fee->titik_1;
+            $fee->isokinetik               = (int) $fee->isokinetik;
+            $fee->hari_libur               = (int) $fee->hari_libur;
+            $fee->sampling_24jam           = (int) $fee->sampling_24jam;
+            $fee->sampling_luar_kota       = (int) $fee->sampling_luar_kota;
+            $fee->sampling_luar_kota_24jam = (int) $fee->sampling_luar_kota_24jam;
             // 2. Ambil semua tanggal libur
             $liburKantor = LiburPerusahaan::whereIn('tipe', ['cuti_bersama', 'Penggantian'])
                 ->where('is_active', 1)
@@ -263,7 +269,7 @@ class GenerateFeeSampling
                 }
 
                 // === Fee Pokok ===
-                $feePokokDasar    = $fee->titik_1;
+                $feePokokDasar    = (int) $fee->titik_1;
                 $feePokokTambahan = 0;
 
                 if ($tempat >= 2) {
@@ -273,19 +279,19 @@ class GenerateFeeSampling
                     $feePokokTambahan += ($tempat - 2) * 15000;
                 }
 
-                $hariAktif = max($durasi_tertinggi - 1, 1);
-                $feePokok  = ($feePokokDasar + $feePokokTambahan) * $hariAktif;
-
+                $hariAktif       = max($durasi_tertinggi - 1, 1);
+                $multiplierPokok = $hasilFee['rincian']['fee_pokok_multiplier']; // ← tambah ini
+                $feePokok = (int) (($feePokokDasar + $feePokokTambahan) * $multiplierPokok * $hariAktif);
                 $totalHarian = $feePokok + $feeTambahan;
-
                 $rekap[] = [
                     'tanggal'       => $tgl,
                     'jumlah_tempat' => $tempat,
                     'fee_pokok'     => $feePokok,
                     'rincian_fee_pokok' => [
-                        'base'                     => $feePokokDasar * $hariAktif,
-                        'tambah_tempat_kedua'       => $tempat >= 2 ? 10000 * $hariAktif : 0,
-                        'tambah_tempat_selanjutnya' => $tempat >= 3 ? ($tempat - 2) * 15000 * $hariAktif : 0,
+                        'base'                      => (int) ($feePokokDasar * $multiplierPokok * $hariAktif),
+                        'tambah_tempat_kedua'       => $tempat >= 2 ? (int) 10000 : 0,
+                        'tambah_tempat_selanjutnya' => $tempat >= 3 ? (int) 15000 : 0,
+                        'multiplier_hari_libur'     => $multiplierPokok,
                     ],
                     'fee_tambahan'         => $feeTambahan,
                     'fee_tambahan_rincian' => $feeTambahanRincian,
@@ -329,10 +335,11 @@ class GenerateFeeSampling
         array $liburKantor
     ): array {
         $rincian = [
-            'hari_libur'    => 0,
-            'sampling_24jam' => 0,
-            'luar_kota'      => 0,
-            'luar_kota_24jam' => 0,
+            'hari_libur'           => 0,
+            'sampling_24jam'       => 0,
+            'luar_kota'            => 0,
+            'luar_kota_24jam'      => 0,
+            'fee_pokok_multiplier' => 1, // ← tambah ini
         ];
 
         $tanggalMulai  = Carbon::parse($tanggalAwal);
@@ -343,25 +350,40 @@ class GenerateFeeSampling
         for ($i = 0; $i < $durasiEfektif; $i++) {
             $tgl = $tanggalMulai->copy()->addDays($i)->toDateString();
             if (!in_array($tgl, $sudahDihitung)) {
-                $carbonTgl = Carbon::parse($tgl);
-                $isLibur   = in_array($tgl, $liburKantor)
-                    || $carbonTgl->isSaturday()
-                    || $carbonTgl->isSunday();
+                $carbonTgl         = Carbon::parse($tgl);
+                $isSabtu           = $carbonTgl->isSaturday();
+                $isMinggu          = $carbonTgl->isSunday();
+                $isLiburPerusahaan = in_array($tgl, $liburKantor);
+                $isLibur           = $isSabtu || $isMinggu || $isLiburPerusahaan;
+
                 if ($isLibur) {
                     $rincian['hari_libur'] += $fee->hari_libur;
                 }
+
+                // ← tambah ini
+                if ($isMinggu || $isLiburPerusahaan) {
+                    $rincian['fee_pokok_multiplier'] = 2;
+                }
+
                 $sudahDihitung[] = $tgl;
             }
         }
         // Jika durasi 0 (sesaat), tetap cek hari libur di tanggal itu
         if ($durasiTertinggi === 0) {
-            $tgl = $tanggalMulai->toDateString();
-            $carbonTgl = Carbon::parse($tgl);
-            $isLibur   = in_array($tgl, $liburKantor)
-                || $carbonTgl->isSaturday()
-                || $carbonTgl->isSunday();
+            $tgl               = $tanggalMulai->toDateString();
+            $carbonTgl         = Carbon::parse($tgl);
+            $isSabtu           = $carbonTgl->isSaturday();
+            $isMinggu          = $carbonTgl->isSunday();
+            $isLiburPerusahaan = in_array($tgl, $liburKantor);
+            $isLibur           = $isSabtu || $isMinggu || $isLiburPerusahaan;
+
             if ($isLibur) {
                 $rincian['hari_libur'] += $fee->hari_libur;
+            }
+
+            // ← tambah ini
+            if ($isMinggu || $isLiburPerusahaan) {
+                $rincian['fee_pokok_multiplier'] = 2;
             }
         }
 
@@ -405,12 +427,13 @@ class GenerateFeeSampling
             $rincian['sampling_24jam'] = $fee->sampling_24jam * max($durasiDalamKota - 1, 0);
 
         }
-
+        $multiplierPokok = $rincian['fee_pokok_multiplier'];
+        unset($rincian['fee_pokok_multiplier']);
         $totalFee = array_sum($rincian);
 
         return [
             'total_fee' => $totalFee,
-            'rincian'   => $rincian,
+            'rincian'   => array_merge($rincian, ['fee_pokok_multiplier' => $multiplierPokok]),
         ];
     }
 }

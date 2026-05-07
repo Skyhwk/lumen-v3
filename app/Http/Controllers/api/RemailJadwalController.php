@@ -106,11 +106,11 @@ class RemailJadwalController extends Controller
                 throw new \Exception('Data quotation tidak ditemukan');
             }
 
-            if ($cek->jadwalfile) {
-                return response()->json([
-                    'message' => 'Silahkan hubungi IT, file jadwal sudah pernah dibuat sebelumnya',
-                ], 401);
-            }
+            // if ($cek->jadwalfile) {
+            //     return response()->json([
+            //         'message' => 'Silahkan hubungi IT, file jadwal sudah pernah dibuat sebelumnya',
+            //     ], 401);
+            // }
 
             if ($request->mode == 'non_kontrak') {
                 JobTask::insert([
@@ -138,7 +138,7 @@ class RemailJadwalController extends Controller
 
             return response()->json([
                 'message' => 'Dokumen jadwal berhasil dibuat',
-            ], 200, );
+            ], 200 );
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([

@@ -197,7 +197,7 @@ class PortalCustomerController extends Controller
             <p>Hormat Kami,</p>
             <p><b>PT Inti Surya Laboratorium</b></p>';
         $email = SendEmail::where('to', $user)
-            ->where('subject', 'Form Registrasi')
+            ->where('subject', 'Tindak Lanjut Registrasi Portal Pelanggan Intilab')
             ->where('body',$body )
             ->where('karyawan', env('MAIL_NOREPLY_USERNAME'))
             ->noReply()
