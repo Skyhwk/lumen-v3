@@ -98,7 +98,7 @@
     Dengan ini perusahaan menerangkan rincian pekerjaan sebagai berikut :
 </p>
 
-<table style="width:100%; font-size:14px; line-height:1;">
+<table style="width:100%; font-size:14px; line-height:1.2;">
     @foreach($details as $index => $item)
         <tr>
             <td style="width:3%; vertical-align:top;">{{ chr(97 + $index) }}.</td>
