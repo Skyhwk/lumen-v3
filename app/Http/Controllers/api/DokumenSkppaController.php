@@ -202,9 +202,14 @@ class DokumenSkppaController extends Controller
         }
 
         $cek_skppa = DokumenSkppa::where('no_order', $no_order)->when($periode, fn($q) => $q->where('periode', $periode))->first();
+
         if ($cek_skppa) {
             return true;
         } else {
+            $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', $tanggal_analisa_akhir)
+            ->orderByDesc('berlaku_mulai')
+            ->first();
+
             $skppa = new DokumenSkppa();
             $skppa->id_order = $order->id;
             $skppa->no_order = $order->no_order;
@@ -219,9 +224,12 @@ class DokumenSkppaController extends Controller
             $skppa->nama_perusahaan = $order->nama_perusahaan;
             $skppa->alamat_perusahaan = $order->alamat_kantor;
             $skppa->alamat_sampling = $order->alamat_sampling;
+            $skppa->nama_pengesah = $pengesah->nama_karyawan;
+            $skppa->jabatan_pengesah = $pengesah->jabatan_karyawan;
             $skppa->no_po = $no_po;
             
             $details = $order->orderDetail->when($request->periode, fn($q) => $q->where('periode', $request->periode));
+            
             $skppa->total_sampel = $details->count();
             $skppa->total_lhp = $details->pluck('cfr')->filter()->unique()->count();
             $skppa->tanggal_sampling = $details->min('tanggal_sampling');
@@ -239,9 +247,7 @@ class DokumenSkppaController extends Controller
             $skppa->save();
         }
 
-        $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', Carbon::now())
-            ->orderByDesc('berlaku_mulai')
-            ->first();
+        
 
         $filename = \str_replace("/", "_", $skppa->no_document);
         $path = public_path() . "/qr_documents/" . $filename . '.svg';
