@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 
 use App\Models\LinkLhp;
 use App\Models\OrderHeader;
+use App\Models\DokumenCoc;
 
 class CombineLHPService
 {
@@ -133,5 +134,62 @@ class CombineLHPService
             Log::error("CombineLHPService: Exception Error for {$noOrder} - {$th->getMessage()}");
             Log::error($th);
         }
+    }
+
+    private function generateDokumenCoc(string $no_order, string $no_lhp)
+    {
+        $isExists = DokumenCoc::where('no_lhp', $no_lhp)->exists();
+        if ($isExists) {
+            Log::warning("Dokumen COC dengan no lhp {$no_lhp} sudah ada");
+            return;
+        }
+
+        $orderHeader = OrderHeader::where('no_order', $no_order)->where('is_active', true)->first();
+        $orderDetail = $orderHeader->orderDetail->where('cfr', $no_lhp)->where('is_active', true);
+
+        $dokumenCoc = new DokumenCoc();
+        $dokumenCoc->no_dokumen = $this->generateNoDokumenCoc();
+        $dokumenCoc->no_penawaran = $orderHeader->no_document;
+        $dokumenCoc->no_order = $no_order;
+        $dokumenCoc->no_lhp = $no_lhp;
+        $dokumenCoc->nama_perusahaan = $orderHeader->nama_perusahaan;
+        $dokumenCoc->alamat_sampling = $orderHeader->alamat_sampling;
+        $dokumenCoc->titik_sampling = json_encode($orderDetail->pluck('keterangan_1')->filter()->unique()->values()->toArray());
+        $dokumenCoc->kategori_sampling = $orderDetail->pluck('kategori_1')->filter()->unique()->values()->implode(', ');
+        $dokumenCoc->parameter_uji = json_encode([]);
+        $dokumenCoc->regulasi = json_encode($orderDetail->flatMap(fn($item) => json_decode($item->regulasi, true))->filter()->unique()->values()->toArray());
+        $dokumenCoc->tgl_penawaran = $orderHeader->tgl_penawaran;
+        $dokumenCoc->tgl_konfirmasi_order = null;
+        $dokumenCoc->tgl_mulai_sampling = null;
+        $dokumenCoc->tgl_selesai_sampling = null;
+        $dokumenCoc->tgl_terima_lab = null;
+        $dokumenCoc->tgl_mulai_tcc = null;
+        $dokumenCoc->tgl_selesai_tcc = null;
+        $dokumenCoc->tgl_mulai_drafting = null;
+        $dokumenCoc->tgl_selesai_drafting = $orderDetail->first()->approved_at;
+        $dokumenCoc->tgl_penerbitan_lhp = $orderDetail->first()->approved_at;
+        $dokumenCoc->generated_by = 'System';
+        $dokumenCoc->generated_at = date('Y-m-d H:i:s');
+        $dokumenCoc->save();
+    }
+
+    private function generateNoDokumenCoc()
+    {
+        $number = 1;
+
+        $latest = DokumenCoc::whereYear('generated_at', date('y'))->latest('generated_at')->first();
+        if ($latest) {
+            $explode = explode('/', $latest->no_document);
+
+            if (isset($explode[1])) {
+                $lastCode = $explode[1];
+                $lastNumber = (int) substr($lastCode, 2);
+                $number = $lastNumber + 1;
+            }
+        }
+
+        $number = date('y') . str_pad($number, 4, '0', STR_PAD_LEFT);
+
+        return "ISL-04-COC/{$number}";
     }
 }

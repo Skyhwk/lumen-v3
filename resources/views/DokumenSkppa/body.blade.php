@@ -23,6 +23,11 @@
     $details = [];
 
     $details[] = [
+        'label' => 'ID Pelanggan',
+        'value' => $data->id_pelanggan ?? '-',
+    ];
+
+    $details[] = [
         'label' => 'Nama Perusahaan',
         'value' => $data->nama_perusahaan ?? '-',
     ];

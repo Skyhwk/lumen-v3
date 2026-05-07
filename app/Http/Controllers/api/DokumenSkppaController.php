@@ -209,11 +209,14 @@ class DokumenSkppaController extends Controller
             $skppa = new DokumenSkppa();
             $skppa->id_order = $order->id;
             $skppa->no_order = $order->no_order;
+            $skppa->tanggal_order = $order->tanggal_order;
             $skppa->no_quotation = $order->no_document;
+            $skppa->tanggal_penawaran = $order->tanggal_penawaran;
             $skppa->periode = $periode;
             $skppa->no_document = $no_document;
             $skppa->tanggal_rilis = Carbon::now()->format('Y-m-d');
             $skppa->filename = str_replace('/', '_', $no_document) . '.pdf';
+            $skppa->id_pelanggan = $order->id_pelanggan;
             $skppa->nama_perusahaan = $order->nama_perusahaan;
             $skppa->alamat_perusahaan = $order->alamat_kantor;
             $skppa->alamat_sampling = $order->alamat_sampling;
@@ -222,6 +225,8 @@ class DokumenSkppaController extends Controller
             $details = $order->orderDetail->when($request->periode, fn($q) => $q->where('periode', $request->periode));
             $skppa->total_sampel = $details->count();
             $skppa->total_lhp = $details->pluck('cfr')->filter()->unique()->count();
+            $skppa->tanggal_sampling = $details->min('tanggal_sampling');
+            $skppa->kategori = json_encode($details->groupBy('kategori_3')->map(fn($items, $kategori) => ['kategori' => $kategori, 'jumlah' => $items->count()])->values()->toArray());
 
             $skppa->tanggal_sampling_awal = $tanggal_sampling_awal;
             $skppa->tanggal_sampling_akhir = $tanggal_sampling_akhir;
