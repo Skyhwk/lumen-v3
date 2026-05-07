@@ -10,6 +10,7 @@ use App\Models\QrDocument;
 use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use Illuminate\Support\Facades\DB;
+use setasign\Fpdi\Tcpdf\Fpdi;
 use Mpdf;
 
 class RenderInvoice
@@ -24,29 +25,33 @@ class RenderInvoice
         try {
             $invoice = Invoice::where('is_active', true)
                 ->where('no_invoice', $noInvoice)
-                ->first();
+                ->firstOrFail();
+
+            // 1. Generate PDF invoice utama
             if ($invoice->is_custom == true) {
                 $filename = $this->renderCustom($noInvoice);
             } else {
                 $filename = $this->renderHeader($noInvoice);
             }
+
             if (!$filename) {
                 throw new \Exception("Gagal membuat file header untuk invoice: $noInvoice");
             }
 
-            // Update invoice dengan filename
-            $update = Invoice::where('no_invoice', $noInvoice)->update(['filename' => $filename]);
+            // 2. Kalau ada file_faktur, merge ke halaman berikutnya
 
-            // if (!$update) {
-            //     throw new \Exception("Invoice dengan nomor $noInvoice tidak ditemukan.");
-            // }
+            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $noInvoice);
+
+
+            // 3. Update filename final
+            Invoice::where('no_invoice', $noInvoice)->update([
+                'filename' => $filename
+            ]);
 
             DB::commit();
-            return true; // Proses berhasil
+            return true;
         } catch (\Exception $e) {
             DB::rollBack();
-
-            // Lempar ulang exception agar bisa ditangani di tempat lain
             throw $e;
         }
     }
@@ -156,7 +161,7 @@ class RenderInvoice
             );
 
             $pdf = new Mpdf($mpdfConfig);
-            $pdf->SetProtection(array('print'), '', 'skyhwk12');
+            // $pdf->SetProtection(array('print'), '', 'skyhwk12');
             $pdf->SetWatermarkImage(public_path() . '/logo-watermark.png', -1, '', array(65, 60));
             $pdf->showWatermarkImage = true;
             $pdf->showWatermarkText = true;
@@ -1649,8 +1654,8 @@ class RenderInvoice
                         <p style="font-size:10px">- Bukti Pembayaran agar dapat di e-mail ke : billing@intilab.com</p>
                         <p style="font-size:10px">- Invoice asli ini berlaku juga sebagai kwitansi asli yang sah</p>
                         ' . (($dataHead->nilai_tagihan < 4999999)
-                            ? '<p style="font-size:10px">- Invoice ini diterbitkan secara elektronik dan berlaku sebagai dokumen sah tanpa memerlukan tanda tangan fisik</p>'
-                            : '') . '
+                ? '<p style="font-size:10px">- Invoice ini diterbitkan secara elektronik dan berlaku sebagai dokumen sah tanpa memerlukan tanda tangan fisik</p>'
+                : '') . '
                         ' . $spk . '
             ');
 
@@ -2426,5 +2431,93 @@ class RenderInvoice
         }
 
         return $chunks;
+    }
+
+    private function mergeInvoiceWithFaktur($invoiceFile, $fakturFile, $noInvoice)
+    {
+        $invoicePath = public_path('invoice/' . $invoiceFile);
+        $fakturPath  = public_path('invoice-faktur/' . $fakturFile);
+
+        if (!file_exists($invoicePath)) {
+            throw new \Exception("File invoice tidak ditemukan: {$invoicePath}");
+        }
+
+        // 🟢 CASE 1: kalau faktur ga ada → protect invoice aja
+        if (empty($fakturFile) || !file_exists($fakturPath)) {
+
+            $pdf = new Fpdi();
+            $pdf->setPrintHeader(false);
+            $pdf->setPrintFooter(false);
+
+            $pageCount = $pdf->setSourceFile($invoicePath);
+            for ($i = 1; $i <= $pageCount; $i++) {
+                $tpl = $pdf->importPage($i);
+                $size = $pdf->getTemplateSize($tpl);
+
+                $orientation = $size['width'] > $size['height'] ? 'L' : 'P';
+                $pdf->AddPage($orientation, [$size['width'], $size['height']]);
+                $pdf->useTemplate($tpl);
+            }
+
+            // 🔒 protect langsung
+            $pdf->SetProtection(['print'], '', 'skyhwk12');
+
+            // overwrite pakai temp (biar aman)
+            $tempPath  = public_path('invoice/temp_' . $invoiceFile);
+            $finalPath = $invoicePath;
+
+            $pdf->Output($tempPath, 'F');
+
+            if (file_exists($finalPath)) {
+                @unlink($finalPath);
+            }
+
+            rename($tempPath, $finalPath);
+
+            return $invoiceFile;
+        }
+
+        // 🔴 CASE 2: kalau ada faktur → merge + protect
+        $pdf = new Fpdi();
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+
+        // invoice
+        $invoicePageCount = $pdf->setSourceFile($invoicePath);
+        for ($i = 1; $i <= $invoicePageCount; $i++) {
+            $tpl = $pdf->importPage($i);
+            $size = $pdf->getTemplateSize($tpl);
+
+            $orientation = $size['width'] > $size['height'] ? 'L' : 'P';
+            $pdf->AddPage($orientation, [$size['width'], $size['height']]);
+            $pdf->useTemplate($tpl);
+        }
+
+        // faktur
+        $fakturPageCount = $pdf->setSourceFile($fakturPath);
+        for ($i = 1; $i <= $fakturPageCount; $i++) {
+            $tpl = $pdf->importPage($i);
+            $size = $pdf->getTemplateSize($tpl);
+
+            $orientation = $size['width'] > $size['height'] ? 'L' : 'P';
+            $pdf->AddPage($orientation, [$size['width'], $size['height']]);
+            $pdf->useTemplate($tpl);
+        }
+
+        // 🔒 protect final
+        $pdf->SetProtection(['print'], '', 'skyhwk12');
+
+        $tempPath  = public_path('invoice/temp_' . $invoiceFile);
+        $finalPath = $invoicePath;
+
+        $pdf->Output($tempPath, 'F');
+
+        if (file_exists($finalPath)) {
+            @unlink($finalPath);
+        }
+
+        rename($tempPath, $finalPath);
+
+        return $invoiceFile;
     }
 }
