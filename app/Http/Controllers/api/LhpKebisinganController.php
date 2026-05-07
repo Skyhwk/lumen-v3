@@ -117,7 +117,6 @@ class LhpKebisinganController extends Controller
 
             $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
             if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
-
                 $master_regulasi = MasterRegulasi::find($id_regulasii);
                 if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
                     $fileName = LhpTemplate::setDataDetail($detail)
@@ -126,7 +125,7 @@ class LhpKebisinganController extends Controller
                         ->useLampiran(true)
                         ->whereView('DraftKebisinganLh')
                         ->render();
-                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($header)
                         ->setDataCustom($custom)
@@ -142,7 +141,6 @@ class LhpKebisinganController extends Controller
                     ->whereView('DraftKebisingan')
                     ->render();
             }
-
 
             $header->file_lhp = $fileName;
             $header->save();
