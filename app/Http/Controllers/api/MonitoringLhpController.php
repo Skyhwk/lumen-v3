@@ -130,7 +130,7 @@ class MonitoringLhpController extends Controller
         */
 
         if ($request->filled('tanggal_sampling')) {
-            $rekapOrder->having('tanggal_sampling', 'like', '%' . $request->tanggal_sampling . '%');
+            $rekapOrder->whereYear('tanggal_sampling', $request->tanggal_sampling);
         }
 
         $rekapOrder->orderBy('tanggal_sampling', 'asc');
