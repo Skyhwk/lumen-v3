@@ -146,11 +146,8 @@ class CombineLHPService
         }
     }
 
-    public function generateSuratKeterangan(Request $request)
+    private function generateSuratKeterangan($no_order, $periode = null)
     {
-        $no_order = $request->no_order;
-        $periode = $request->periode ?? null;
-
         $order = OrderHeader::with(['orderDetail', 'invoices'])->where('no_order', $no_order)->first();
 
         $yearFull = date('Y');
@@ -309,7 +306,7 @@ class CombineLHPService
             $skppa->alamat_sampling = $order->alamat_sampling;
             $skppa->no_po = $no_po;
             
-            $details = $order->orderDetail->when($request->periode, fn($q) => $q->where('periode', $request->periode));
+            $details = $order->orderDetail->when($periode, fn($q) => $q->where('periode', $periode));
             $skppa->total_sampel = $details->count();
             $skppa->total_lhp = $details->pluck('cfr')->filter()->unique()->count();
             $skppa->tanggal_sampling = $details->min('tanggal_sampling');
