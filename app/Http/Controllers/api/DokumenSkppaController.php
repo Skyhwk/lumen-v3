@@ -60,7 +60,6 @@ class DokumenSkppaController extends Controller
 
     public function generateSkppa(Request $request)
     {
-        try {
         $no_order = $request->no_order;
         $periode = $request->periode ?? null;
 
@@ -178,7 +177,7 @@ class DokumenSkppaController extends Controller
         }
 
         // gabung YY + 4 digit
-        $number = $yearShort . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        $number = $yearShort . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
 
         $no_document = "ISL-04-SKET/{$number}";
 
@@ -221,12 +220,13 @@ class DokumenSkppaController extends Controller
             $skppa->alamat_perusahaan = $order->alamat_kantor;
             $skppa->alamat_sampling = $order->alamat_sampling;
             $skppa->no_po = $no_po;
-
+            
             $details = $order->orderDetail->when($request->periode, fn($q) => $q->where('periode', $request->periode));
             $skppa->total_sampel = $details->count();
             $skppa->total_lhp = $details->pluck('cfr')->filter()->unique()->count();
             $skppa->tanggal_sampling = $details->min('tanggal_sampling');
-            $skppa->kategori = json_encode($details->groupBy('kategori_3')->map(fn($items, $kategori) => ['kategori' => $kategori, 'jumlah' => $items->count()])->values()->toArray());
+            $skppa->subkategori = json_encode($details->groupBy('kategori_3')->map(fn($items, $kategori) => ['kategori' => $kategori, 'jumlah' => $items->count()])->values()->toArray());
+            $skppa->kategori = json_encode($details->pluck('kategori_1')->filter()->unique()->toArray());
 
             $skppa->tanggal_sampling_awal = $tanggal_sampling_awal;
             $skppa->tanggal_sampling_akhir = $tanggal_sampling_akhir;
@@ -277,11 +277,6 @@ class DokumenSkppaController extends Controller
         $skppa->filename = $fileName;
         $skppa->save();
 
-
         return true;
-            //code...
-        } catch (\Throwable $th) {
-            //throw $th;
-        }
     }
 }
