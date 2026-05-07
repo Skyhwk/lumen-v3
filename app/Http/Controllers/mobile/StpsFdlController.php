@@ -87,9 +87,9 @@ class StpsFdlController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
-                    if (!$isOrangPusat) {
-                        $q->whereIn('id_cabang', $myPrivileges);
-                    }
+                    // if (!$isOrangPusat) {
+                    //     $q->whereIn('id_cabang', $myPrivileges);
+                    // }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
