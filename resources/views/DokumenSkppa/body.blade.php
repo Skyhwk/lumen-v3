@@ -23,13 +23,23 @@
     $details = [];
 
     $details[] = [
+        'label' => 'Nama Perusahaan',
+        'value' => $data->nama_perusahaan ?? '-',
+    ];
+
+    $details[] = [
+        'label' => 'Alamat Sampling',
+        'value' => $data->alamat_sampling ?? '-',
+    ];
+
+    $details[] = [
         'label' => 'No. Penawaran (Quotation)',
         'value' => $data->no_quotation ?? '-',
     ];
 
     $details[] = [
-        'label' => 'No. PO Pelanggan',
-        'value' => $data->no_po ?? '-',
+        'label' => 'No. Order',
+        'value' => $data->no_order ?? '-',
     ];
 
     // Kalau kontrak → tambah periode di bawah PO
@@ -39,6 +49,21 @@
             'value' => formatPeriode($data->periode),
         ];
     }
+
+    $details[] = [
+        'label' => 'No. PO Pelanggan',
+        'value' => $data->no_po ?? '-',
+    ];
+
+    $details[] = [
+        'label' => 'Total Sampel Analisa',
+        'value' => $data->total_sampel . ' Sampel' ?? '-',
+    ];
+
+    $details[] = [
+        'label' => 'Total Laporan Hasil Pengujian',
+        'value' => $data->total_lhp . ' Dokumen' ?? '-',
+    ];
 
     // Prioritas tanggal: sampel diterima > sampling
     if (!empty($data->tanggal_sampel_diterima_awal)) {
@@ -60,55 +85,51 @@
     $details[] = [
         'label' => 'Tanggal Penyelesaian Analisa',
         'value' => formatTanggalRange(
-            $data->tanggal_penyelesaian_analisa_awal
+            $data->tanggal_penyelesaian_analisa_akhir
         ),
     ];
 @endphp
 
-<p style="margin:0; font-size:12px;">
+<p style="margin:0; font-size:14px;">
     Perihal : <b>Penyelesaian Pekerjaan Analisa</b>
 </p>
 
-<p style="margin-top:10px; font-size:12px;">
+<p style="margin-top:18px; font-size:14px;">
     Dengan ini perusahaan menerangkan rincian pekerjaan sebagai berikut :
 </p>
 
-<table style="width:100%; font-size:12px; line-height:1.6; margin-top:5px;">
+<table style="width:100%; font-size:14px; line-height:1.2;">
     @foreach($details as $index => $item)
         <tr>
             <td style="width:3%; vertical-align:top;">{{ chr(97 + $index) }}.</td>
-            <td style="width:35%;">{{ $item['label'] }}</td>
-            <td style="width:2%;">:</td>
-            <td>{{ $item['value'] }}</td>
+            <td style="width:35%; vertical-align:top;">{{ $item['label'] }}</td>
+            <td style="width:2%; vertical-align:top;">:</td>
+            <td style="vertical-align:top;">{{ $item['value'] }}</td>
         </tr>
     @endforeach
 </table>
 
-<p style="margin-top:15px; font-size:12px; text-align:justify;">
+<p style="margin-top:15px; font-size:14px; text-align:justify;">
     Bahwa perihal pekerjaan analisa lingkungan tersebut telah dilaksanakan dan diselesaikan dengan baik,
     sesuai dengan permintaan pihak pelanggan, serta sesuai dengan kesepakatan dan telah diperiksa
     dan disetujui oleh kedua belah pihak.
 </p>
 
-<p style="font-size:12px; text-align:justify;">
+<p style="font-size:14px; text-align:justify;">
     Demikian surat keterangan ini dibuat agar dapat dipergunakan sebagaimana mestinya.
 </p>
 
-<p style="margin-top:20px; font-size:12px;">
-    Tangerang, {{ Carbon::now()->translatedFormat('d F Y') }}
-</p>
-
-<p style="font-size:12px;">
-    Penerima Kerja,
-</p>
-
-<table style="margin-top:10px; font-size:12px; border-collapse:collapse;">
-    <tr>
-        <td style="padding:0; text-align:left;">PT Inti Surya Laboratorium</td>
-    </tr>
-    <tr>
-        <td style="padding:18px 0 0 0; text-align:center;">
-            <img src="{{ $qr }}" width="50px" height="50px">
-        </td>
-    </tr>
-</table>
+<div style="margin-top:20px; font-size:14px;">
+    
+    <table style="font-size:14px; border-collapse:collapse;">
+        <tr>
+            <td style="padding:0; text-align:left;">Tangerang, {{ Carbon::now()->translatedFormat('d F Y') }}<br/>
+    Penerima Kerja,<br/>PT Inti Surya Laboratorium</td>
+        </tr>
+        <tr>
+            <td style="padding:18px 0 0 0; text-align:center;">
+                <img src="{{ $qr }}" width="80px" height="80px">
+            </td>
+        </tr>
+    </table>
+</div>

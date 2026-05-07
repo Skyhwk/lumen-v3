@@ -30,6 +30,7 @@ class StpsFdlController extends Controller
 
     public function index(Request $request)
     {
+        
         try {
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
                 ->whereIn('id_jabatan', [41, 42])
@@ -87,16 +88,16 @@ class StpsFdlController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
-                    if (!$isOrangPusat) {
-                        $q->whereIn('id_cabang', $myPrivileges);
-                    }
+                    // if (!$isOrangPusat) {
+                    //     $q->whereIn('id_cabang', $myPrivileges);
+                    // }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
             ->where('is_active', true)
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get(); // Hati-hati, load semua ke memori
-
+            
             // 2. Mapping Manual (High Performance PHP Array)
             $cabangMap = [
                 1 => 'HEAD OFFICE',
@@ -107,8 +108,10 @@ class StpsFdlController extends Controller
             $groupedData = [];
 
             foreach ($data as $item) {
+               
                 // Early exit jika relasi tidak lengkap
                 if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {continue;}
+                
                 $orderHeader = $item->orderHeader;
                 $periode = $item->periode ?? '';
                 $targetPlan = null;
@@ -140,12 +143,12 @@ class StpsFdlController extends Controller
                     'id_request'       => $targetPlan->quotation_id,
                     'status_quotation' => $targetPlan->status_quotation
                 ]);
-
+                
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
-                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
-                        continue; 
-                    }
+                    // if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                    //     continue; 
+                    // }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -238,7 +241,7 @@ class StpsFdlController extends Controller
                     }
                 }
             }
-
+             
             // 3. Return ke DataTables (Collection Client Side)
             // Karena data sudah berupa Array, kita bungkus dengan collect()
             return DataTables::of(collect(array_values($groupedData)))

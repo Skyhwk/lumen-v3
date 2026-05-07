@@ -19,7 +19,7 @@ class PaymentFeeSalesController extends Controller
 {
     public function index(Request $request)
     {
-        $withdrawalFeeSales = WithdrawalFeeSales::with('sales')
+        $withdrawalFeeSales = WithdrawalFeeSales::with(['sales.rekening'])
         ->whereIn('status', $request->status)
         ->where('is_active', true)
         ->whereNull('transfer_date')
