@@ -84,9 +84,23 @@ class MobilisasiOperasionalController extends Controller
                 'kendaraan'    => $first->kendaraan,
                 'jadwal_mobil' => $first->jadwal_mobil,
                 'list_pt'      => $group->map(function ($item) {
-                    $arraySamplers = collect(explode(',', $item->sampler))->map(function ($sampler) use ($item){
-                        return ($sampler == $item->driver) ? $sampler . ' (Driver)' : $sampler;
-                    });
+                    $arraySamplers = collect(explode(',', $item->sampler))
+                        ->filter(fn($sampler) => trim($sampler) !== '')
+                        ->map(fn($sampler) => trim($sampler))
+                        ->when($item->driver !== null && $item->driver !== '', function ($collection) use ($item) {
+                            // tambahkan driver kalau belum ada
+                            if (!$collection->contains($item->driver)) {
+                                $collection->push($item->driver);
+                            }
+
+                            return $collection;
+                        })
+                        ->map(function ($sampler) use ($item) {
+                            return ($sampler == $item->driver)
+                                ? $sampler . ' (Driver)'
+                                : $sampler;
+                        })
+                        ->values();
                     
                     return [
                         'no_quotation'    => $item->no_quotation,

@@ -60,6 +60,7 @@ class DokumenSkppaController extends Controller
 
     public function generateSkppa(Request $request)
     {
+        try {
         $no_order = $request->no_order;
         $periode = $request->periode ?? null;
 
@@ -208,14 +209,20 @@ class DokumenSkppaController extends Controller
             $skppa = new DokumenSkppa();
             $skppa->id_order = $order->id;
             $skppa->no_order = $order->no_order;
+            $skppa->no_quotation = $order->no_document;
             $skppa->periode = $periode;
             $skppa->no_document = $no_document;
-            $skppa->no_quotation = $order->no_document;
             $skppa->tanggal_rilis = Carbon::now()->format('Y-m-d');
             $skppa->filename = str_replace('/', '_', $no_document) . '.pdf';
             $skppa->nama_perusahaan = $order->nama_perusahaan;
             $skppa->alamat_perusahaan = $order->alamat_kantor;
+            $skppa->alamat_sampling = $order->alamat_sampling;
             $skppa->no_po = $no_po;
+
+            $details = $order->orderDetail->when($request->periode, fn($q) => $q->where('periode', $request->periode));
+            $skppa->total_sampel = $details->count();
+            $skppa->total_lhp = $details->pluck('cfr')->filter()->unique()->count();
+
             $skppa->tanggal_sampling_awal = $tanggal_sampling_awal;
             $skppa->tanggal_sampling_akhir = $tanggal_sampling_akhir;
             $skppa->tanggal_sampel_diterima_awal = $tanggal_terima_awal;
@@ -267,5 +274,9 @@ class DokumenSkppaController extends Controller
 
 
         return true;
+            //code...
+        } catch (\Throwable $th) {
+            //throw $th;
+        }
     }
 }
