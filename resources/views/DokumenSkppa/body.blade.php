@@ -23,13 +23,23 @@
     $details = [];
 
     $details[] = [
+        'label' => 'Nama Perusahaan',
+        'value' => $data->nama_perusahaan ?? '-',
+    ];
+
+    $details[] = [
+        'label' => 'Alamat Sampling',
+        'value' => $data->alamat_sampling ?? '-',
+    ];
+
+    $details[] = [
         'label' => 'No. Penawaran (Quotation)',
         'value' => $data->no_quotation ?? '-',
     ];
 
     $details[] = [
-        'label' => 'No. PO Pelanggan',
-        'value' => $data->no_po ?? '-',
+        'label' => 'No. Order',
+        'value' => $data->no_order ?? '-',
     ];
 
     // Kalau kontrak → tambah periode di bawah PO
@@ -39,6 +49,21 @@
             'value' => formatPeriode($data->periode),
         ];
     }
+
+    $details[] = [
+        'label' => 'No. PO Pelanggan',
+        'value' => $data->no_po ?? '-',
+    ];
+
+    $details[] = [
+        'label' => 'Total Sampel Analisa',
+        'value' => $data->total_sampel . ' sampel' ?? '-',
+    ];
+
+    $details[] = [
+        'label' => 'Total Laporan Hasil Pengujian',
+        'value' => $data->total_lhp . ' lhp' ?? '-',
+    ];
 
     // Prioritas tanggal: sampel diterima > sampling
     if (!empty($data->tanggal_sampel_diterima_awal)) {
@@ -77,9 +102,9 @@
     @foreach($details as $index => $item)
         <tr>
             <td style="width:3%; vertical-align:top;">{{ chr(97 + $index) }}.</td>
-            <td style="width:35%;">{{ $item['label'] }}</td>
-            <td style="width:2%;">:</td>
-            <td>{{ $item['value'] }}</td>
+            <td style="width:35%; vertical-align:top;">{{ $item['label'] }}</td>
+            <td style="width:2%; vertical-align:top;">:</td>
+            <td style="vertical-align:top;">{{ $item['value'] }}</td>
         </tr>
     @endforeach
 </table>
