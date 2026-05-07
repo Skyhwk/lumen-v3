@@ -271,24 +271,31 @@ class GenerateInvoiceController extends Controller
     public function getDataEmail(Request $request)
     {
         $invoice = Invoice::with('orderHeaderQuot')->where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
+        if (explode('/', $invoice->no_invoice)[1] == 'INV') {
+            if ($invoice->created_at > '2026-04-27 00:00:00' && !$invoice->file_faktur) {
+                return response()->json([
+                    'message' => 'File Faktur belum di upload, silahkan koordinasi dengan tim Tax!',
+                ], 400);
+            }
+        }
         if ($invoice->orderHeaderQuot == null) {
             $quotation = $invoice->Quotation();
             $status = '';
             if ($quotation) {
                 if ($quotation->flag_status == "sp") {
-                    $status = 'masih di tahap Sampling Plan';
+                    $status = 'Quotation masih di tahap Sampling Plan. Silahkan konfirmasi ke divisi Sales.';
                 } else if ($quotation->flag_status == "draft") {
-                    $status = 'masih di tahap Draft';
+                    $status = 'Quotation masih di tahap Draft. Silahkan konfirmasi ke divisi Sales.';
                 } else if ($quotation->flag_status == "emailed") {
-                    $status = 'masih di tahap Emailed';
+                    $status = 'Quotation masih di tahap Email. Silahkan konfirmasi ke divisi Sales.';
                 } else {
-                    $status = 'telah di Void';
+                    $status = 'Quotation telah di Void';
                 }
             } else {
-                $status = 'telah di Void';
+                $status = 'Quotation telah di Void';
             }
             return response()->json([
-                'message' => 'Quotation ' . $status . '. Silahkan konfirmasi ke divisi Sales.',
+                'message' => $status,
             ], 400);
         }
         try {
@@ -1551,5 +1558,20 @@ class GenerateInvoiceController extends Controller
         } else {
             return $var[2] . " " . $bulan[(int) $var[1]] . " " . $var[0];
         }
+    }
+
+    public function clearFaktur(Request $request)
+    {
+        $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
+
+        $inv->file_faktur = null;
+        $inv->faktur_pajak = null;
+        $inv->save();
+
+        $this->generatePDF($request->no_invoice);
+
+        return response()->json([
+            'success'  => 'Sukses menghapus faktur',
+        ]);
     }
 }
