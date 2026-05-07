@@ -21,7 +21,7 @@ class RenderDokumenSkppa
 
         $htmlBody = view($view . '.body', ['data' => $data, 'qr' => $qr])->render();
         $htmlHeader = view($view . '.header', ['data' => $data])->render();
-        $htmlFooter = self::footer('');
+        // $htmlFooter = self::footer('');
         // $htmlFooter = view($view . '.footer', ['data' => $data])->render();
 
         $defaultConfig = (new ConfigVariables())->getDefaults();
@@ -76,9 +76,39 @@ class RenderDokumenSkppa
         $mpdf->keep_table_proportions = true;
 
         $mpdf->SetHTMLHeader($htmlHeader);
-        $mpdf->setHTMLFooter($htmlFooter);
+        // $mpdf->setHTMLFooter($htmlFooter);
         $mpdf->WriteHTML(self::generateStylesheet(), \Mpdf\HTMLParserMode::HEADER_CSS);
         $mpdf->WriteHTML($htmlBody);
+        $footer = array(
+            'odd' => array(
+                'C' => array(
+                    'content' => 'Hal {PAGENO} dari {nbpg}',
+                    'font-size' => 5,
+                    'font-style' => 'I',
+                    'font-family' => 'serif',
+                    'color' => '#606060'
+                ),
+                'R' => array(
+                    'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                    'font-size' => 5,
+                    'font-style' => 'I',
+                    // 'font-style' => 'B',
+                    'font-family' => 'serif',
+                    'color' => '#000000'
+                ),
+                'L' => array(
+                    'content' =>  'PT Inti Surya Laboratorium<br>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk,<br>Sampora Kab. Tangerang 15341 021-5089-8988/89 contact@intilab.com',
+                    'font-size' => 4,
+                    'font-style' => 'I',
+                    // 'font-style' => 'B',
+                    'font-family' => 'serif',
+                    'color' => '#000000'
+                ),
+                'line' => -1,
+            )
+        );
+
+        $mpdf->setFooter($footer);
 
         $mpdf->Output($filePath, \Mpdf\Output\Destination::FILE);
         return $filename;
