@@ -96,7 +96,6 @@ use App\Services\{
     GetBawahan,
     SnapshotPersiapanService,
     GenerateToken,
-    CombineLHPService,
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -6345,7 +6344,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
     {
         $skppGenerator = new CombineLHPService();
         $skppGenerator->testRendersuratKeterangan($request->no_order, $request->periode);
-
+    
         return response()->json(['message' => 'SKPP has been generated successfully'], 200);
     }
 }
