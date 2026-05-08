@@ -40,20 +40,47 @@ class SamplingPlanController extends Controller
         
         $active = $request->is_active == '' ? true : $request->is_active;
 
-        $data = Jadwal::with([
-            'samplingPlan:id,created_at,filename,is_active',
-            'samplingPlan' => function ($query) {
-                $query->WithTypeModelSub();
-            },
-        ])
-            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 
-            DB::raw('MAX(created_by) as created_by'), 
-            DB::raw('MIN(created_at) as created_at'), // Ambil waktu buat paling awal
-            DB::raw('MAX(updated_at) as updated_at'), // Ambil waktu update paling baru
-            DB::raw('MAX(updated_by) as updated_by') ) // Ambil user update terakhir)
-            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang')
-            ->whereNotNull('no_quotation')
-            ->where('is_active', $active);
+        // $data = Jadwal::with([
+        //     'samplingPlan:id,created_at,filename,is_active',
+        //     'samplingPlan' => function ($query) {
+        //         $query->WithTypeModelSub();
+        //     },
+        // ])
+        //     ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi','durasi_personal', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 
+        //     DB::raw('MAX(created_by) as created_by'), 
+        //     DB::raw('MIN(created_at) as created_at'), // Ambil waktu buat paling awal
+        //     DB::raw('MAX(updated_at) as updated_at'), // Ambil waktu update paling baru
+        //     DB::raw('MAX(updated_by) as updated_by') ) // Ambil user update terakhir)
+        //     ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang')
+        //     ->whereNotNull('no_quotation')
+        //     ->where('is_active', $active);
+        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
+'samplingPlan' => function ($query) {
+    $query->WithTypeModelSub();
+},])
+        ->select(
+            'id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan',
+            'isokinetic', 'pendampingan_k3', 'tanggal', 'periode',
+            'jam_mulai', 'jam_selesai', 'kategori', 'durasi',
+            'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah',
+            DB::raw('group_concat(sampler) as sampler'),
+            DB::raw('group_concat(id) as batch_id'),
+            DB::raw('group_concat(userid) as batch_user'),
+            DB::raw('group_concat(durasi_personal) as durasi_personal'), // ✅ tambah ini
+            DB::raw('MAX(created_by) as created_by'),
+            DB::raw('MIN(created_at) as created_at'),
+            DB::raw('MAX(updated_at) as updated_at'),
+            DB::raw('MAX(updated_by) as updated_by')
+        )
+        ->groupBy(
+            'id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode',
+            'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'durasi',
+            'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai',
+            'warna', 'note', 'urutan', 'wilayah', 'id_cabang'
+            // ❌ durasi_personal TIDAK masuk group by
+        )
+        ->whereNotNull('no_quotation')
+        ->where('is_active', $active);
 
         // Filter cabang
         // if ($request->filled('id_cabang_filter')) {
@@ -658,6 +685,8 @@ class SamplingPlanController extends Controller
                 'isokinetic'      => (int) $request->isokinetic,
                 'pendampingan_k3' => (int) $request->pendampingan_k3,
                 'id_cabang'       => $request->id_cabang[0],
+                'durasi_personal' => $request->durasi_personal,
+                // 'fee_sampler_id' => $request->fee_sampler_id,
             ];
 
             $type = explode('/', $request->no_quotation)[1];
@@ -763,6 +792,8 @@ class SamplingPlanController extends Controller
                 'pendampingan_k3' => $request->pendampingan_k3,
                 'isokinetic'      => $request->isokinetic,
                 'id_cabang'       => $request->id_cabang[0],
+                'durasi_personal' => $request->durasi_personal,
+                // 'fee_sampler_id' => $request->fee_sampler_id,
             ];
 
             $type = explode('/', $request->no_quotation)[1];

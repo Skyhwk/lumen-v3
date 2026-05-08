@@ -244,7 +244,8 @@ class RequestSamplingPlanRevisiController extends Controller
                 "karyawan" => $this->karyawan,
                 'driver' => $request->driver ?? null,
                 "isokinetic" => $request->isokinetic,
-                "pendampingan_k3" => $request->pendampingan_k3
+                "pendampingan_k3" => $request->pendampingan_k3,
+                "durasi_personal" => $request->durasi_personal,
             ];
             
             $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
