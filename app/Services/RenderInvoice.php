@@ -28,10 +28,14 @@ class RenderInvoice
                 ->firstOrFail();
 
             // 1. Generate PDF invoice utama
-            if ($invoice->is_custom == true) {
-                $filename = $this->renderCustom($noInvoice);
+            if ($invoice->upload_file) {
+                $filename = $invoice->upload_file;
             } else {
-                $filename = $this->renderHeader($noInvoice);
+                if ($invoice->is_custom == true) {
+                    $filename = $this->renderCustom($noInvoice);
+                } else {
+                    $filename = $this->renderHeader($noInvoice);
+                }
             }
 
             if (!$filename) {
@@ -40,7 +44,7 @@ class RenderInvoice
 
             // 2. Kalau ada file_faktur, merge ke halaman berikutnya
 
-            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $noInvoice);
+            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $invoice->upload_file);
 
 
             // 3. Update filename final
@@ -1817,12 +1821,12 @@ class RenderInvoice
                 <td style="border: 1px solid; font-size: 9px; width:33%; text-align:center;" class="text-right">' . self::rupiah($total_harga) . '</td></tr>
             ');
 
-            if(explode('/', $dataHead->no_quotation)[1] == 'QTC'){
+            if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
                 $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
             } else {
                 $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
             }
-            if($dataTagihanBerjalan->count() > 0) {
+            if ($dataTagihanBerjalan->count() > 0) {
                 $tagihanBerjalan = $dataTagihanBerjalan->sum('nilai_tagihan');
                 $nomorInvoiceBerjalan = $dataTagihanBerjalan->pluck('no_invoice')->implode(', ');
                 $pdf->writeHTML('
@@ -2448,9 +2452,10 @@ class RenderInvoice
         return $chunks;
     }
 
-    private function mergeInvoiceWithFaktur($invoiceFile, $fakturFile, $noInvoice)
+    private function mergeInvoiceWithFaktur($invoiceFile, $fakturFile, $uploadFile = null)
     {
         $invoicePath = public_path('invoice/' . $invoiceFile);
+        if($uploadFile) $invoicePath = public_path('invoice-upload/' . $invoiceFile);
         $fakturPath  = public_path('invoice-faktur/' . $fakturFile);
 
         if (!file_exists($invoicePath)) {
@@ -2523,7 +2528,7 @@ class RenderInvoice
         $pdf->SetProtection(['print'], '', 'skyhwk12');
 
         $tempPath  = public_path('invoice/temp_' . $invoiceFile);
-        $finalPath = $invoicePath;
+        $finalPath = public_path('invoice/' . $invoiceFile);
 
         $pdf->Output($tempPath, 'F');
 
