@@ -2480,7 +2480,7 @@ class RenderInvoice
             }
 
             // 🔒 protect langsung
-            $pdf->SetProtection(['print'], '', 'skyhwk12');
+            $pdf->SetProtection(['copy', 'modify'], '', 'skyhwk12', 0, null);
 
             // overwrite pakai temp (biar aman)
             $tempPath  = public_path('invoice/temp_' . $invoiceFile);
@@ -2525,7 +2525,7 @@ class RenderInvoice
         }
 
         // 🔒 protect final
-        $pdf->SetProtection(['print'], '', 'skyhwk12');
+        $pdf->SetProtection(['copy', 'modify'], '', 'skyhwk12', 0, null);
 
         $tempPath  = public_path('invoice/temp_' . $invoiceFile);
         $finalPath = public_path('invoice/' . $invoiceFile);
