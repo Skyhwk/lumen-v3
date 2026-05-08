@@ -37,7 +37,6 @@ class SummaryInvoice extends Command
                     ['invoice.is_active', true],
                     ['invoice.is_emailed', true],
                     ['invoice.is_whitelist', false],
-                    ['order_header.is_active', true],
                 ])
                 ->select([
                     DB::raw('MAX(invoice.id) AS id'),
