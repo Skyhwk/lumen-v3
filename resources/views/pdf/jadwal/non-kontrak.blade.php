@@ -108,7 +108,8 @@
                             <th class="text-center" width="25%">Tanggal</th>
                             <th class="text-center" width="15%">Jam Mulai</th>
                             <th class="text-center" width="15%">Jam Selesai</th>
-                            <th class="text-center" width="45%">Sampler</th>
+                            <th class="text-center" width="10%">Durasi</th>
+                            <th class="text-center" width="35%">Sampler</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -117,6 +118,7 @@
                         <td style="text-align:center; vertical-align: middle;">{{ $row['tanggal'] }}</td>
                         <td style="text-align:center; vertical-align: middle;">{{ $row['jam_mulai'] }}</td>
                         <td style="text-align:center; vertical-align: middle;">{{ $row['jam_selesai'] }}</td>
+                        <td style="text-align:center; vertical-align: middle;">{{ $row['durasi'] }}</td>
                         <td style="text-align:center; vertical-align: middle;">{{ $row['samplers'] }}</td>
                     </tr>
 @endforeach

@@ -32,8 +32,9 @@
                             <th width="5%" style="padding: 5px !important;">NO</th>
                             <th width="22%">Tanggal</th>
                             <th width="12%">Jam</th>
+                            <th width="10%">Durasi</th>
                             <th width="20%">Petugas sampler</th>
-                            <th width="41%">Kategori</th>
+                            <th width="31%">Kategori</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -42,6 +43,7 @@
                             <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['no'] }}</td>
                             <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['tanggal'] }}</td>
                             <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['jam'] }}</td>
+                            <td style="vertical-align: middle; text-align:center; font-size: 11px;">{{ $row['durasi'] }}</td>
                             <td style="vertical-align: middle; text-align:center; font-size: 10px; padding: 4px;">{{ $row['petugas_sampler'] ?? '—' }}</td>
                             <td style="vertical-align: middle; font-size: 11px; padding: 5px;">{{ $row['kategori'] }}</td>
                         </tr>

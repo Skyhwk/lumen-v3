@@ -466,9 +466,22 @@ class GenerateDocumentJadwal
     {
         $groups    = [];
         $orderKeys = [];
+        $acuanDurasi = [
+            0 => 'Sesaat',
+            1 => '8 Jam',
+            2 => '1x24 Jam',
+            3 => '2x24 Jam',
+            4 => '3x24 Jam',
+            5 => '4x24 Jam',
+            6 => '5x24 Jam',
+            7 => '6x24 Jam',
+            8 => '7x24 Jam',
+            9 => '8x24 Jam',
+        ];
 
         foreach ($jadwalIterable as $jadwal) {
             $tanggalKey = date('Y-m-d', strtotime($jadwal->tanggal));
+            $durasi     = $jadwal->durasi;
             $jam        = substr($jadwal->jam_mulai, 0, 5) . ' - ' . substr($jadwal->jam_selesai, 0, 5);
             $decoded    = json_decode($jadwal->kategori, true);
             if (is_array($decoded)) {
@@ -484,7 +497,10 @@ class GenerateDocumentJadwal
             $groupKey = $tanggalKey . "\0" . $jam . "\0" . $kategoriText;
             if (! isset($groups[$groupKey])) {
                 $groups[$groupKey] = [
-                    'tanggal'   => self::tanggal_indonesia($tanggalKey),
+                    // 'tanggal'   => self::tanggal_indonesia($tanggalKey),
+                    'tanggal'   => $tanggalKey,
+                    'durasi'    => $acuanDurasi[$durasi],
+                    'intDurasi' => (int)$durasi,
                     'jam'       => $jam,
                     'kategori'  => $kategoriText,
                     '_samplers' => ($samplerName !== '') ? [$samplerName] : [],
@@ -512,13 +528,60 @@ class GenerateDocumentJadwal
 
         $rows = [];
         $no   = 1;
+
         foreach ($orderKeys as $groupKey) {
             $g        = $groups[$groupKey];
             $samplerT = implode(', ', $g['_samplers']);
+            $tanggalTampil = $g['tanggal'];
+
+            if ($g['intDurasi'] > 1) {
+                try {
+                    $start = Carbon::createFromFormat('Y-m-d', $g['tanggal']);
+                    if ($start !== false) {
+                        $end = $start->copy();
+                        $days = $g['intDurasi'];
+                        $end->addDays($days - 1);
+                        $start->locale('id');
+                        $end->locale('id');
+
+                        if ($start->isSameDay($end)) {
+                            $tanggalTampil = $start->isoFormat('DD MMMM YYYY');
+                        } elseif (
+                            $start->month == $end->month &&
+                            $start->year == $end->year
+                        ) {
+                            $tanggalTampil =
+                                $start->isoFormat('DD') .
+                                ' - ' .
+                                $end->isoFormat('DD MMMM YYYY');
+                        } elseif (
+                            $start->month != $end->month &&
+                            $start->year == $end->year
+                        ) {
+                            $tanggalTampil =
+                                $start->isoFormat('DD MMMM') .
+                                ' - ' .
+                                $end->isoFormat('DD MMMM YYYY');
+                        }else {
+                            $tanggalTampil =
+                                $start->isoFormat('DD MMMM YYYY') .
+                                ' - ' .
+                                $end->isoFormat('DD MMMM YYYY');
+                        }
+                    }
+                } catch (\Exception $ex) {
+                    $tanggalTampil = self::tanggal_indonesia($g['tanggal']);
+                }
+            } else {
+                $tanggalTampil = self::tanggal_indonesia($g['tanggal']);
+            }
+
+
             $rows[]   = [
                 'no'               => $no++,
-                'tanggal'          => $g['tanggal'],
+                'tanggal'          => $tanggalTampil,
                 'jam'              => $g['jam'],
+                'durasi'           => $g['durasi'],
                 'petugas_sampler'  => $samplerT !== '' ? $samplerT : '—',
                 'kategori'         => $g['kategori'],
             ];
@@ -532,9 +595,23 @@ class GenerateDocumentJadwal
      */
     private static function buildJadwalSamplingSection($sampling_plan): array
     {
+        $acuanDurasi = [
+            0 => 'Sesaat',
+            1 => '8 Jam',
+            2 => '1x24 Jam',
+            3 => '2x24 Jam',
+            4 => '3x24 Jam',
+            5 => '4x24 Jam',
+            6 => '5x24 Jam',
+            7 => '6x24 Jam',
+            8 => '7x24 Jam',
+            9 => '8x24 Jam',
+        ];
+
         $groupedKategori   = [];
         $groupedSampler    = [];
         $groupedDate       = [];
+        $groupedDurasi     = [];
         $groupedJamMulai   = [];
         $groupedJamSelesai = [];
 
@@ -542,6 +619,7 @@ class GenerateDocumentJadwal
             array_push($groupedKategori, json_decode($item->kategori));
             array_push($groupedSampler, $item->sampler);
             array_push($groupedDate, $item->tanggal);
+            array_push($groupedDurasi, $item->durasi);
             array_push($groupedJamMulai, $item->jam_mulai);
             array_push($groupedJamSelesai, $item->jam_selesai);
         }
@@ -549,6 +627,7 @@ class GenerateDocumentJadwal
         $kategories = collect($groupedKategori)->flatten()->unique()->values()->toArray();
         $samplers   = array_unique($groupedSampler);
         $dates      = array_unique($groupedDate);
+        $durasi     = array_unique($groupedDurasi);
         $jamMulai   = array_unique($groupedJamMulai);
         $jamSelesai = array_unique($groupedJamSelesai);
 
@@ -585,9 +664,12 @@ class GenerateDocumentJadwal
         $rows = [];
         foreach ($tanggalKeys as $tanggal) {
             $jadwals = $jadwalGrouped[$tanggal];
+            $durasi = (int)$jadwals[0]->durasi;
+            $durasiText = $acuanDurasi[$durasi];
             $samplerList   = [];
             $minJamMulai   = '23:59:59';
             $maxJamSelesai = '00:00:00';
+            $tanggalTampil = self::tanggal_indonesia(date('Y-m-d', strtotime($tanggal)));
 
             foreach ($jadwals as $jadwal) {
                 if (! in_array($jadwal->sampler, $samplerList)) {
@@ -601,8 +683,51 @@ class GenerateDocumentJadwal
                 }
             }
 
+            if ($durasi > 1) {
+                try {
+                    $start = Carbon::createFromFormat('Y-m-d', $tanggal);
+                    if ($start !== false) {
+                        $end = $start->copy();
+                        $days = $durasi;
+                        $end->addDays($days - 1);
+                        $start->locale('id');
+                        $end->locale('id');
+
+                        if ($start->isSameDay($end)) {
+                            $tanggalTampil = $start->isoFormat('DD MMMM YYYY');
+                        } elseif (
+                            $start->month == $end->month &&
+                            $start->year == $end->year
+                        ) {
+                            $tanggalTampil =
+                                $start->isoFormat('DD') .
+                                ' - ' .
+                                $end->isoFormat('DD MMMM YYYY');
+                        } elseif (
+                            $start->month != $end->month &&
+                            $start->year == $end->year
+                        ) {
+                            $tanggalTampil =
+                                $start->isoFormat('DD MMMM') .
+                                ' - ' .
+                                $end->isoFormat('DD MMMM YYYY');
+                        }else {
+                            $tanggalTampil =
+                                $start->isoFormat('DD MMMM YYYY') .
+                                ' - ' .
+                                $end->isoFormat('DD MMMM YYYY');
+                        }
+                    }
+                } catch (\Exception $ex) {
+                    $tanggalTampil = self::tanggal_indonesia(date('Y-m-d', strtotime($tanggal)));
+                }
+            } else {
+                $tanggalTampil = self::tanggal_indonesia(date('Y-m-d', strtotime($tanggal)));
+            }
+
             $rows[] = [
-                'tanggal'     => self::tanggal_indonesia(date('Y-m-d', strtotime($tanggal))),
+                'tanggal'     => $tanggalTampil,
+                'durasi'      => $durasiText,
                 'jam_mulai'   => substr($minJamMulai, 0, 5),
                 'jam_selesai' => substr($maxJamSelesai, 0, 5),
                 'samplers'    => implode(', ', $samplerList),
