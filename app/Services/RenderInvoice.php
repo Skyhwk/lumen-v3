@@ -28,10 +28,14 @@ class RenderInvoice
                 ->firstOrFail();
 
             // 1. Generate PDF invoice utama
-            if ($invoice->is_custom == true) {
-                $filename = $this->renderCustom($noInvoice);
+            if ($invoice->upload_file) {
+                $filename = $invoice->upload_file;
             } else {
-                $filename = $this->renderHeader($noInvoice);
+                if ($invoice->is_custom == true) {
+                    $filename = $this->renderCustom($noInvoice);
+                } else {
+                    $filename = $this->renderHeader($noInvoice);
+                }
             }
 
             if (!$filename) {
@@ -1817,12 +1821,12 @@ class RenderInvoice
                 <td style="border: 1px solid; font-size: 9px; width:33%; text-align:center;" class="text-right">' . self::rupiah($total_harga) . '</td></tr>
             ');
 
-            if(explode('/', $dataHead->no_quotation)[1] == 'QTC'){
+            if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
                 $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
             } else {
                 $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
             }
-            if($dataTagihanBerjalan->count() > 0) {
+            if ($dataTagihanBerjalan->count() > 0) {
                 $tagihanBerjalan = $dataTagihanBerjalan->sum('nilai_tagihan');
                 $nomorInvoiceBerjalan = $dataTagihanBerjalan->pluck('no_invoice')->implode(', ');
                 $pdf->writeHTML('
