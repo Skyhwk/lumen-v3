@@ -133,11 +133,36 @@ class WsFinalEmisiEmisiSumberBergerakController extends Controller
 
 	public function handleApproveSelected(Request $request)
 	{
-		OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
+		DB::beginTransaction();
+		try {
+			$orderDetails = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->get();
 
-		return response()->json([
-			'message' => 'Data berhasil diapprove.',
-			'success' => true,
-		], 200);
+			OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
+
+			foreach ($orderDetails as $detail) {
+				HistoryAppReject::insert([
+					'no_lhp' => $detail->cfr,
+					'no_sampel' => $detail->no_sampel,
+					'kategori_2' => $detail->kategori_2,
+					'kategori_3' => $detail->kategori_3,
+					'menu' => 'WS Final Emisi',
+					'status' => 'approve',
+					'approved_at' => Carbon::now(),
+					'approved_by' => $this->karyawan
+				]);
+			}
+
+			DB::commit();
+			return response()->json([
+				'message' => 'Data berhasil diapprove.',
+				'success' => true,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+				'success' => false,
+			], 500);
+		}
 	}
 }

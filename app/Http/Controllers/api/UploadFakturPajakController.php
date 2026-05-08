@@ -152,13 +152,14 @@ class UploadFakturPajakController extends Controller
             $inv->file_faktur = $fileName;
             $inv->faktur_pajak = $request->no_faktur;
             $inv->save();
-            
-            DB::commit();
 
             $this->generatePDF($inv->no_invoice);
             
+            DB::commit();
+
+            
             return response()->json([
-                'success'  => 'Sukses menyimpan file upload',
+                'success'  => 'Sukses menyimpan file faktur',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

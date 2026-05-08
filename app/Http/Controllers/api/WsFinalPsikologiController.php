@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\OrderDetail;
 use App\Models\PsikologiHeader;
 use App\Models\DataPsikologi;
+use App\Models\HistoryAppReject;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -250,6 +251,17 @@ class WsFinalPsikologiController extends Controller
 				->first();
 			$data->status = 2;
 			$data->save();
+
+			HistoryAppReject::insert([
+				'no_lhp' => $data->cfr,
+				'no_sampel' => $data->no_sampel,
+				'kategori_2' => $data->kategori_2,
+				'kategori_3' => $data->kategori_3,
+				'menu' => 'WS Final Udara',
+				'status' => 'approve',
+				'approved_at' => Carbon::now(),
+				'approved_by' => $this->karyawan
+			]);
 			DB::commit();
 			return response()->json([
 				'message' => 'success',
