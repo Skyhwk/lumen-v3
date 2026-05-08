@@ -9,6 +9,7 @@ use App\Models\WsValueLingkungan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Services\ApproveAnalystService;
 use App\Models\DustFallHeader;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
@@ -152,6 +153,10 @@ class GravimetriUdaraController extends Controller
             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->approved_by = $this->karyawan;
             $data->save();
+
+            ApproveAnalystService::noSampel($data->no_sampel)
+                ->approvedBy($this->karyawan)
+                ->menu('Analysis');
 
             DB::commit();
 

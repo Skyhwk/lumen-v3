@@ -8,6 +8,7 @@ use App\Models\WsValueAir;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Services\ApproveAnalystService;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -89,6 +90,10 @@ class BenthosController extends Controller
             $data->approved_by = $this->karyawan;
             $data->is_approve = 1;
             $data->save();
+
+            ApproveAnalystService::noSampel($data->no_sampel)
+                ->approvedBy($this->karyawan)
+                ->menu('Analysis');
 
             DB::commit();
 
