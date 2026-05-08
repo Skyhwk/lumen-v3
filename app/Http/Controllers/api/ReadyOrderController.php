@@ -3611,7 +3611,8 @@ class ReadyOrderController extends Controller
                         $dataQuotation,
                         $request,
                         $periode,
-                        $selisih
+                        $selisih,
+                        $key == 0
                     );
                 } else {
                     // Tambahkan ke invoice terakhir di periode ini
@@ -3668,12 +3669,13 @@ class ReadyOrderController extends Controller
         $dataQuotation,
         $request,
         $periode,
-        $amount
+        $amount,
+        $firstPeriode
     ) {
         $newRequest = clone $request;
         $newRequest->merge([
             'tagihan_awal' => $amount,
-            'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Tagihan tambahan revisi periode ' . $periode,
+            'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Total Tagihan ',
         ]);
 
         self::createInvoiceKontrakPeriode(
@@ -3682,7 +3684,7 @@ class ReadyOrderController extends Controller
             $newRequest,
             $periode,
             true,
-            true
+            $firstPeriode
         );
 
         $lastInvoice = Invoice::where('no_order', $dataOrderHeader->no_order)

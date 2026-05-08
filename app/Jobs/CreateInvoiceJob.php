@@ -120,7 +120,6 @@ class CreateInvoiceJob extends Job
                 $createdInvoices[] = $this->insertInvoice($orderHeader, $quotation, $value, false, true);
             }
         }
-
         return array_filter($createdInvoices);
     }
 
@@ -177,12 +176,30 @@ class CreateInvoiceJob extends Job
         $jadwal = $this->getJadwal($quotation->no_document, $periode);
         $tanggalJatuhTempo = Carbon::parse($jadwal)->addDays(30)->format('Y-m-d');
         $expired = date('Y-m-d', strtotime($tanggalJatuhTempo . ' + 2 years'));
-        $tagihanAwal = $periode !== null && !$firstPeriode ? $source->biaya_akhir : $this->tagihanAwal();
+        // $tagihanAwal = $periode !== null && !$firstPeriode ? $source->biaya_akhir : $this->tagihanAwal();
+        $tagihanAwal = $this->tagihanAwal();
+        $nilaiTagihan = 0;
+        $totalTagihan = 0;
+        if($firstPeriode) {
+            $nilaiTagihan = $first ? $tagihanAwal : $source->biaya_akhir - $tagihanAwal;
+            $totalTagihan = $first ? $tagihanAwal : $source->biaya_akhir - $tagihanAwal;
+        } else {
+            $nilaiTagihan = $source->biaya_akhir;
+            $totalTagihan = $source->biaya_akhir;
+        }
         $periodeInvoice = $periode;
 
         if ($periodeInvoice === null) {
             $noDoc = explode('/', $orderHeader->no_document);
             $periodeInvoice = isset($noDoc[1]) && $noDoc[1] == 'QTC' ? 'all' : null;
+        }
+
+        $keterangan = '';
+
+        if ($periode){
+            $keterangan = ($first && $firstPeriode) ? $this->payload['keterangan_tagihan'] : 'Total Tagihan';
+        } else {
+            $keterangan = $first ? $this->payload['keterangan_tagihan'] : 'Total Tagihan';
         }
 
         $namaPerusahaan = $quotation->konsultan != null
@@ -204,12 +221,12 @@ class CreateInvoiceJob extends Job
             'keterangan_tambahan' => null,
             'tgl_faktur' => date('Y-m-d H:i:s'),
             'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
-            'nilai_tagihan' => $first ? $tagihanAwal : $source->biaya_akhir - $tagihanAwal,
-            'total_tagihan' => $first ? $source->biaya_akhir : $source->biaya_akhir - $tagihanAwal,
+            'nilai_tagihan' => $nilaiTagihan,
+            'total_tagihan' => $totalTagihan,
             'rekening' => $cekRekening,
             'nama_pj' => 'Yulia Agustina',
             'jabatan_pj' => 'Account Receivable Adm. Supervisor',
-            'keterangan' => $this->payload['keterangan_tagihan'] ?? null,
+            'keterangan' => $keterangan,
             'alamat_penagihan' => $orderHeader->alamat_kantor,
             'nama_pic' => $orderHeader->nama_pic_order,
             'no_pic' => $orderHeader->no_pic_order,
