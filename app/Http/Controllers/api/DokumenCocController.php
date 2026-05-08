@@ -46,7 +46,10 @@ class DokumenCocController extends Controller
 
         $dokumenCoc = DokumenCoc::where('no_lhp', $no_lhp)->first();
         if ($dokumenCoc) {
-            return response()->json(['message' => 'Dokumen COC dengan no lhp ' . $no_lhp . ' sudah ada'], 400);
+            return response()->json([
+                'message'  => 'Berhasil mendapatkan data COC',
+                'filename' => $dokumenCoc->filename,
+            ], 200);
         }
 
         $orderDetail = OrderDetail::withAnyDataLapangan()
@@ -131,7 +134,10 @@ class DokumenCocController extends Controller
         $dokumenCoc->filename = $this->renderDokumenCoc($dokumenCoc, $path);
         $dokumenCoc->save();
 
-        return response()->json(['message' => 'Berhasil generate dokumen coc', 'data' => $dokumenCoc], 201);
+        return response()->json([
+            'message'  => 'Berhasil generate data COC',
+            'filename' => $dokumenCoc->filename,
+        ], 200);
     }
 
     private function renderDokumenCoc($data, $qr)
