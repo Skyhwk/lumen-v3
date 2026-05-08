@@ -1470,7 +1470,7 @@ class GenerateInvoiceController extends Controller
 
             $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
             // Pastikan folder invoice ada
-            $folder = public_path('invoice');
+            $folder = public_path('invoice-upload');
             if (!file_exists($folder)) {
                 mkdir($folder, 0777, true);
             }

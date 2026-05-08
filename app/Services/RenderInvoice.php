@@ -44,7 +44,7 @@ class RenderInvoice
 
             // 2. Kalau ada file_faktur, merge ke halaman berikutnya
 
-            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $noInvoice);
+            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $invoice->upload_file);
 
 
             // 3. Update filename final
@@ -2452,9 +2452,10 @@ class RenderInvoice
         return $chunks;
     }
 
-    private function mergeInvoiceWithFaktur($invoiceFile, $fakturFile, $noInvoice)
+    private function mergeInvoiceWithFaktur($invoiceFile, $fakturFile, $uploadFile = null)
     {
         $invoicePath = public_path('invoice/' . $invoiceFile);
+        if($uploadFile) $invoicePath = public_path('invoice-upload/' . $invoiceFile);
         $fakturPath  = public_path('invoice-faktur/' . $fakturFile);
 
         if (!file_exists($invoicePath)) {
@@ -2527,7 +2528,7 @@ class RenderInvoice
         $pdf->SetProtection(['print'], '', 'skyhwk12');
 
         $tempPath  = public_path('invoice/temp_' . $invoiceFile);
-        $finalPath = $invoicePath;
+        $finalPath = public_path('invoice/' . $invoiceFile);
 
         $pdf->Output($tempPath, 'F');
 
