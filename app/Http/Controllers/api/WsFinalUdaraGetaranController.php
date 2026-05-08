@@ -1013,10 +1013,25 @@ class WsFinalUdaraGetaranController extends Controller
 	{
 		DB::beginTransaction();
 		try {
-			$orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+			$orderDetails = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->get();
+
+			OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
 				->update([
 					'status' => 1,
 				]);
+
+			foreach ($orderDetails as $detail) {
+				HistoryAppReject::insert([
+					'no_lhp' => $detail->cfr,
+					'no_sampel' => $detail->no_sampel,
+					'kategori_2' => $detail->kategori_2,
+					'kategori_3' => $detail->kategori_3,
+					'menu' => 'WS Final Udara',
+					'status' => 'approve',
+					'approved_at' => Carbon::now(),
+					'approved_by' => $this->karyawan
+				]);
+			}
 
 			GetaranHeader::whereIn('no_sampel', $request->no_sampel_list)
 				->update([
