@@ -571,7 +571,7 @@ class JadwalServices
                         'updated_by' => $dataUpdate->karyawan,
                         'id_sampling' => $dataUpdate->sampling,
                         'id_cabang' => $dataUpdate->id_cabang,
-                        'durasi_personal' => $dataUpdate->fee_sampler_durasi[$key] ?? null,
+                        'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($datajad);
                     $noqt = $val->no_quotation;
@@ -626,7 +626,7 @@ class JadwalServices
                         'updated_at' => $this->timestamp,
                         'kendaraan' => $dataUpdate->kendaraan,
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
-                        'durasi_personal' => $dataUpdate->fee_sampler_durasi[$key] ?? null,
+                        'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
                 }
@@ -1005,7 +1005,7 @@ class JadwalServices
                     $val->updated_at = $this->timestamp;
                     $val->updated_by = $dataUpdate->karyawan;
                     $val->id_cabang = $dataUpdate->id_cabang;
-                    $val->durasi_personal = $dataUpdate->fee_sampler_durasi[$key] ?? null;
+                    $val->durasi_personal = $dataUpdate->durasi_personal[$key] ?? null;
                     $val->save();
 
                     $noqt = $val->no_quotation;
@@ -1058,7 +1058,7 @@ class JadwalServices
                         'updated_at' => $this->timestamp,
                         'kendaraan' => $dataUpdate->kendaraan,
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL,
-                        'durasi_personal' => $dataUpdate->fee_sampler_durasi[$key] ?? null,
+                        'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
                 }
@@ -1357,7 +1357,7 @@ class JadwalServices
                     "wilayah" => $wilayah,
                     "isokinetic" => $dataAdd->isokinetic[$i] ?? 0,
                     "pendampingan_k3" => $dataAdd->pendampingan_k3[$i] ?? 0,
-                    "fee_sampler_durasi" => $dataAdd->fee_sampler_durasi[$i] ?? null,
+                    "durasi_personal" => $dataAdd->durasi_personal[$i] ?? null,
                 ];
             }
             
@@ -1394,7 +1394,7 @@ class JadwalServices
                             'pendampingan_k3' => $val['pendampingan_k3'][$keys] ?? 0,
                             'sampler' => explode(',', $value)[1],
                             'userid' => explode(',', $value)[0],
-                            'durasi_personal' => $val['fee_sampler_durasi'][$key] ?? null
+                            'durasi_personal' => $val['durasi_personal'][$key] ?? null
                         ];
                         
                         // Menyimpan data pertama langsung ke database
@@ -1430,7 +1430,7 @@ class JadwalServices
                             'sampler' => explode(',', $value)[1],
                             'userid' => explode(',', $value)[0],
                             'parsial' => $firstJadwalId,
-                            'durasi_personal' => $val['fee_sampler_durasi'][$key] ?? null
+                            'durasi_personal' => $val['durasi_personal'][$key] ?? null
                         ];
                         
                         Jadwal::insert($commonData);
@@ -1616,7 +1616,7 @@ class JadwalServices
                     'id_cabang' => $dataParsial->id_cabang,
                     'created_by' => $dataParsial->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'durasi_personal' => $dataParsial->fee_sampler_durasi[$key] ?? null,
+                    'durasi_personal' => $dataParsial->durasi_personal[$key] ?? null,
                 ];
 
                 $update = Jadwal::insert($body);
@@ -1800,7 +1800,7 @@ class JadwalServices
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
                     'id_cabang' => $dataParsial->id_cabang,
-                    'durasi_personal' => $dataParsial->fee_sampler_durasi[$key] ?? null,
+                    'durasi_personal' => $dataParsial->durasi_personal[$key] ?? null,
                 ];
                 $update = Jadwal::insert($body);
             }
