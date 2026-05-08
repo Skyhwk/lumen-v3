@@ -65,11 +65,12 @@
 
                             <thead>
                                 <tr style="background-color: #f2f2f2;">
-                                    <th align="center" width="6%">No.</th>
-                                    <th align="center" width="22%">Tanggal</th>
-                                    <th align="center" width="14%">Jam</th>
+                                    <th align="center" width="5%">No.</th>
+                                    <th align="center" width="20%">Tanggal</th>
+                                    <th align="center" width="12%">Jam</th>
+                                    <th align="center" width="12%">Durasi</th>
                                     <th align="center" width="20%">Petugas sampler</th>
-                                    <th align="left" width="38%">Kategori</th>
+                                    <th align="left" width="37%">Kategori</th>
                                 </tr>
                             </thead>
 
@@ -79,6 +80,7 @@
                                     <td align="center">{{ $row['no'] }}</td>
                                     <td align="center">{{ $row['tanggal'] }}</td>
                                     <td align="center">{{ $row['jam'] }}</td>
+                                    <td align="center">{{ $row['durasi'] }}</td>
                                     <td align="center">{{ $row['petugas_sampler'] ?? '—' }}</td>
                                     <td>{{ $row['kategori'] }}</td>
                                 </tr>

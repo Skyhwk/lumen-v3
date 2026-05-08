@@ -271,13 +271,13 @@ class GenerateInvoiceController extends Controller
     public function getDataEmail(Request $request)
     {
         $invoice = Invoice::with('orderHeaderQuot')->where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
-        if (explode('/', $invoice->no_invoice)[1] == 'INV') {
-            if ($invoice->created_at > '2026-04-27 00:00:00' && !$invoice->file_faktur) {
-                return response()->json([
-                    'message' => 'File Faktur belum di upload, silahkan koordinasi dengan tim Tax!',
-                ], 400);
-            }
-        }
+        // if (explode('/', $invoice->no_invoice)[1] == 'INV') {
+        //     if ($invoice->created_at > '2026-04-27 00:00:00' && !$invoice->file_faktur) {
+        //         return response()->json([
+        //             'message' => 'File Faktur belum di upload, silahkan koordinasi dengan tim Tax!',
+        //         ], 400);
+        //     }
+        // }
         if ($invoice->orderHeaderQuot == null) {
             $quotation = $invoice->Quotation();
             $status = '';
@@ -1470,20 +1470,23 @@ class GenerateInvoiceController extends Controller
 
             $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
             // Pastikan folder invoice ada
-            $folder = public_path('invoice');
+            $folder = public_path('invoice-upload');
             if (!file_exists($folder)) {
                 mkdir($folder, 0777, true);
             }
 
             // Generate nama file unik
-            $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '_' . 'upload' . '.pdf';
+            $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '.pdf';
 
             // Simpan file
             $file->move($folder, $fileName);
             $inv->upload_file = $fileName;
+            $inv->filename = $fileName;
             $inv->save();
-
             DB::commit();
+            
+            self::generatePDF($request->no_invoice);
+
             return response()->json([
                 'success'  => 'Sukses menyimpan file upload',
             ]);

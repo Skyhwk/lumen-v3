@@ -88,7 +88,7 @@ class UploadFakturPajakController extends Controller
                 ->groupBy('invoice.no_invoice')
                 ->where('is_emailed', false)
                 ->where('no_invoice', 'LIKE', '%INV/%')
-                ->where('invoice.created_at', '>', '2026-04-27 00:00:00')
+                ->where('invoice.created_at', '>', '2026-01-27 00:00:00')
                 ->whereNull('file_faktur')
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
@@ -152,13 +152,14 @@ class UploadFakturPajakController extends Controller
             $inv->file_faktur = $fileName;
             $inv->faktur_pajak = $request->no_faktur;
             $inv->save();
-            
-            DB::commit();
 
             $this->generatePDF($inv->no_invoice);
             
+            DB::commit();
+
+            
             return response()->json([
-                'success'  => 'Sukses menyimpan file upload',
+                'success'  => 'Sukses menyimpan file faktur',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
