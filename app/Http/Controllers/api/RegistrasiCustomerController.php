@@ -26,7 +26,7 @@ class RegistrasiCustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $data = Users::orderBy('id', 'desc')->get();
+        $data = Users::where('role', 2)->orderBy('id', 'desc')->get();
         foreach ($data as &$item) {
             // dump(json_decode($item->id_pelanggan));
             // if($item->id_pelanggan && $item->id_pelanggan != 'null') {
