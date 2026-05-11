@@ -746,4 +746,14 @@ class OrderDetail extends Sector
 
         return $hasil->isNotEmpty() ? $hasil : null;
     }
+
+    public function scan_tc()
+    {
+        return $this->hasOne(ScanSampelTc::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function scan_analis()
+    {
+        return $this->hasOne(ScanSampelAnalis::class, 'no_sampel', 'no_sampel');
+    }
 }
