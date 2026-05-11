@@ -19,6 +19,7 @@ use App\Console\Commands\ScheduleQtTransaction;
 use App\Console\Commands\CheckOrderActive;
 use App\Console\Commands\SummaryInvoice;
 use App\Console\Commands\CalculatePoinCustomer;
+use App\Console\Commands\CalculateParameter;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -45,6 +46,7 @@ class Kernel extends ConsoleKernel
         Commands\CheckOrderActive::class,
         Commands\SummaryInvoice::class,
         Commands\CalculatePoinCustomer::class,
+        Commands\CalculateParameter::class,
     ];
 
     /**
