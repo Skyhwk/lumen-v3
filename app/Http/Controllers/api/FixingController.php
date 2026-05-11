@@ -1007,7 +1007,7 @@ class FixingController extends Controller
 
     public function renderInvoice(Request $request)
     {
-        if ($request->is_copy) {
+        if ($request->is_copy && $request->is_copy != 'false') {
             foreach ($request->invoice_numbers as $item) {
                 $render = new RenderInvoiceTitik();
                 $render->renderInvoice($item);
