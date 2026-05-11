@@ -59,7 +59,7 @@ class CalculateParameter extends Command
         $this->info('Mengambil seluruh order detail...');
 
         $orderDetails = OrderDetail::where('is_active', 1)
-            ->whereYear('tanggal_sampling', '>=', 2025)
+            ->whereYear('tanggal_sampling', '>=', Carbon::now()->year)
             ->select(
                 'id',
                 'parameter',
