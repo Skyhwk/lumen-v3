@@ -184,14 +184,14 @@ class GenerateFeeSampling
                     $dalamKotaWilayah = $dalamKotaMap[$item->id_cabang] ?? [];
                     if (!in_array(strtoupper($item->wilayah), $dalamKotaWilayah)) {
                         $adaLuarKota             = true;
-                        $durasiTertinggiLuarKota = max($durasiTertinggiLuarKota, (int) $item->durasi);
+                        $durasiTertinggiLuarKota = max($durasiTertinggiLuarKota, (int) $item->durasi_personal);
                     } else {
                         // FIX #3: track durasi tertinggi khusus dalam kota
                         // agar kasus campuran (ada luar+dalam kota di hari sama) tetap benar
-                        $durasiTertinggiDalamKota = max($durasiTertinggiDalamKota, (int) $item->durasi);
+                        $durasiTertinggiDalamKota = max($durasiTertinggiDalamKota, (int) $item->durasi_personal);
                     }
 
-                    $durasi_tertinggi = max($durasi_tertinggi, (int) $item->durasi);
+                    $durasi_tertinggi = max($durasi_tertinggi, (int) $item->durasi_personal);
 
                     // FIX #1: simpan item yang bertindak sebagai driver (jangan pakai $item sisa loop)
                     if (
