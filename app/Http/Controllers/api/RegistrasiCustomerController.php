@@ -57,7 +57,12 @@ class RegistrasiCustomerController extends Controller
             return $item;
         });
 
-        return datatables()->of($data)->make(true);
+        return response()->json([
+            'message' => 'Data customer berhasil ditampilkan',
+            'data' => $data,
+            'status' => 200,
+            'success' => true
+        ], 200);
     }
 
     // Refactored -
