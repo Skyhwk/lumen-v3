@@ -9,6 +9,8 @@ use App\Models\EmailHistory;
 
 use App\Services\SendEmail;
 
+use App\Services\GenerateDokumenCocService;
+
 class EmailLhpRilisHelpers
 {
     public static function run($data)
@@ -65,6 +67,9 @@ class EmailLhpRilisHelpers
                     ->where('karyawan', $karyawan)
                     ->fromLhp()
                     ->send();
+
+                $service = new GenerateDokumenCocService($data['cfr']);
+                $service->generate();
     
                 return $email;
             }
