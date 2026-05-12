@@ -26,15 +26,37 @@ class RegistrasiCustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $data = Users::orderBy('id', 'desc')->get();
-        foreach ($data as &$item) {
-            // dump(json_decode($item->id_pelanggan));
-            // if($item->id_pelanggan && $item->id_pelanggan != 'null') {
+        $data = Users::where('role_id', 2)
+            ->orderBy('id', 'desc')
+            ->get();
 
-            $item->pelanggan = MasterPelanggan::whereIn('id_pelanggan', json_decode($item->id_pelanggan))->get();
-            // }
-        };
-        // dd($data);
+        // Ambil semua id pelanggan dari seluruh user
+        $allPelangganIds = $data->pluck('id_pelanggan')
+            ->filter()
+            ->flatMap(function ($item) {
+                return json_decode($item, true) ?? [];
+            })
+            ->unique()
+            ->values();
+
+        // Query pelanggan hanya sekali
+        $pelanggan = MasterPelanggan::whereIn('id_pelanggan', $allPelangganIds)
+            ->get()
+            ->keyBy('id_pelanggan');
+
+        // Mapping pelanggan ke masing-masing user
+        $data->transform(function ($item) use ($pelanggan) {
+
+            $ids = json_decode($item->id_pelanggan, true) ?? [];
+
+            $item->pelanggan = collect($ids)
+                ->map(fn($id) => $pelanggan[$id] ?? null)
+                ->filter()
+                ->values();
+
+            return $item;
+        });
+
         return datatables()->of($data)->make(true);
     }
 

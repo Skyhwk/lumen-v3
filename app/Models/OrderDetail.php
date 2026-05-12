@@ -602,7 +602,7 @@ class OrderDetail extends Sector
 
     public function isoHeader()
     {
-        return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approve', true);
+        return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approved', true);
     }
 
     public function lhps_hygene()
@@ -632,4 +632,128 @@ class OrderDetail extends Sector
     //     return $this->hasMany(DataLapanganIsokinetikPenentuanPartikulat::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
     // }
 
+    public function gravimetri()
+    {
+        return $this->hasMany(Gravimetri::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    public function titrimetri()
+    {
+        return $this->hasMany(Titrimetri::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    public function colorimetri()
+    {
+        return $this->hasMany(Colorimetri::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    public function subkontrak()
+    {
+        return $this->hasMany(Subkontrak::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approve', true);
+    }
+
+    public function iklim()
+    {
+        return $this->hasMany(IklimHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approve', true);
+    }
+
+    public function medanLm()
+    {
+        return $this->hasMany(MedanLmHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approve', true);
+    }
+
+    public function sinarUv()
+    {
+        return $this->hasMany(SinarUvHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    public function microbiologi()
+    {
+        return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    public function swab()
+    {
+        return $this->hasMany(SwabTestHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    public function ergonomi()
+    {
+        return $this->hasMany(ErgonomiHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approve', true);
+    }
+
+    public function emisiCerobong()
+    {
+        return $this->hasMany(EmisiCerobongHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true)->where('is_approved', true);
+    }
+
+    protected array $anyLapanganHeaderRelations = [
+        'gravimetri', 'titrimetri', 'colorimetri', 'subkontrak',
+        'udaraDirect', 'udaraPartikulat', 'udaraMicrobio', 'udaraDebu', 'dustFall', 'pencahayaanHeader', 'lingkunganHeader', 'microbiologi', 'medanLm', 'sinarUv', 'iklim', 'getaranHeader', 'kebisinganHeader', 'swab', 'ergonomi',
+        'emisiCerobong', 'isoHeader',
+    ];
+
+    public function scopeWithAnyLapanganHeader($query)
+    {
+        return $query->with((new static )->anyLapanganHeaderRelations);
+    }
+
+    public function getAnyLapanganHeaderAttribute()
+    {
+        $hasil = collect();
+
+        foreach ($this->anyLapanganHeaderRelations as $relation) {
+            if ($this->relationLoaded($relation) && $this->{$relation}) {
+                $relasi = $this->{$relation};
+
+                if ($relasi instanceof \Illuminate\Database\Eloquent\Collection) {
+                    $hasil = $hasil->merge($relasi);
+                } else {
+                    $hasil->push($relasi);
+                }
+            }
+        }
+
+        return $hasil->isNotEmpty() ? $hasil : null;
+    }
+
+    protected array $anyLhpsRelations = [
+        'lhps_air', 'lhps_emisi', 'lhps_emisi_isokinetik', 'lhps_emisi_c', 'lhps_ergonomi', 'lhps_getaran', 'lhps_hygene', 'lhps_iklim', 
+        'lhps_kebisingan', 'lhps_kebisingan_personal', 'lhps_ling', 'lhps_medanlm', 'lhps_microbiologi', 'lhps_padatan', 'lhps_pencahayaan', 
+        'lhps_sinaruv', 'lhps_swab_udara', 'lhp_psikologi'
+    ];
+
+    public function scopeWithAnyLhps($query)
+    {
+        return $query->with((new static )->anyLhpsRelations);
+    }
+
+    public function getAnyLhpsAttribute()
+    {
+        $hasil = collect();
+
+        foreach ($this->anyLhpsRelations as $relation) {
+            if ($this->relationLoaded($relation) && $this->{$relation}) {
+                $relasi = $this->{$relation};
+
+                if ($relasi instanceof \Illuminate\Database\Eloquent\Collection) {
+                    $hasil = $hasil->merge($relasi);
+                } else {
+                    $hasil->push($relasi);
+                }
+            }
+        }
+
+        return $hasil->isNotEmpty() ? $hasil : null;
+    }
+
+    public function scan_tc()
+    {
+        return $this->hasOne(ScanSampelTc::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function scan_analis()
+    {
+        return $this->hasOne(ScanSampelAnalis::class, 'no_sampel', 'no_sampel');
+    }
 }
