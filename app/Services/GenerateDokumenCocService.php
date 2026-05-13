@@ -27,7 +27,7 @@ class GenerateDokumenCocService
     {
         $number = 1;
 
-        $latest = DokumenCoc::whereYear('generated_at', date('y'))->latest('generated_at')->first();
+        $latest = DokumenCoc::whereYear('generated_at', date('Y'))->latest('generated_at')->first();
         if ($latest) {
             $explode = explode('/', $latest->no_dokumen);
 
