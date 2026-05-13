@@ -57,6 +57,12 @@ class GenerateDokumenCocService
 
         $orderHeader = OrderHeader::find($orderDetail->first()->id_order_header);
 
+        $isAir = $orderDetail->contains(fn($item) => $item->kategori_2 === '1-Air');
+
+        $cutOffDate = Carbon::parse($isAir ? '2026-01-01' : '2026-05-01');
+
+        if (Carbon::parse($orderHeader->tgl_order)->lte($cutOffDate)) return null;
+
         $parameterIds = $orderDetail
             ->flatMap(fn($item) => json_decode($item->parameter, true))
             ->filter()

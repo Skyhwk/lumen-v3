@@ -27,6 +27,8 @@ class DokumenCocController extends Controller
         $service = new GenerateDokumenCocService($no_lhp);
         $filename = $service->generate();
 
+        if (!$filename) return response()->json(['message' => 'Dokumen tidak tersedia'], 401);
+
         return response()->json([
             'message'  => 'Berhasil generate data COC',
             'filename' => $filename,
