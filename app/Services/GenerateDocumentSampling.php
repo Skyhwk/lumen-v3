@@ -1,7 +1,6 @@
 <?php
 namespace App\Services;
 
-use App\Models\Jadwal;
 use App\Models\JobTask;
 use App\Models\Parameter;
 use App\Models\QuotationKontrakH;
@@ -66,7 +65,7 @@ class GenerateDocumentSampling
                 'no_document' => $quote->no_document,
                 'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
-            Log::error(['GenerateDocumentJadwal: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            Log::error(['GenerateDocumentSampling: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
             return false;
 
         }
@@ -95,7 +94,7 @@ class GenerateDocumentSampling
                 'no_document' => $quote->no_document,
                 'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
-            Log::error(['GenerateDocumentJadwal: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            Log::error(['GenerateDocumentSampling: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
             return false;
 
         }
