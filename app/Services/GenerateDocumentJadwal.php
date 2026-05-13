@@ -28,8 +28,6 @@ class GenerateDocumentJadwal
     public static function onKontrak($id)
     {
         $data = QuotationKontrakH::with('detail', 'sampling')->where('id', $id)->first();
-        // dd(json_decode($data->data_pendukung_sampling)->toArray());
-        // dd($data->sampling->where('periode_kontrak','2025-02')->first()->jadwal()->where('periode' ,'2025-02')->get()->toArray());
         $self       = new self();
         $self->data = $data;
 
