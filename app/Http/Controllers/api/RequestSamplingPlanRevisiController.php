@@ -305,6 +305,95 @@ class RequestSamplingPlanRevisiController extends Controller
         }
     }
 
+    public function kendaraanAvalible(Request $request){
+    
+        $tanggal = $request->tanggal;
+        // $jamMulai = $request->jam_mulai;
+        // $jamSelesai = $request->jam_selesai;
+        $idSamplingEdit = $request->id_sampling; 
+
+        // --- 1. Ambil Semua Daftar Kendaraan dari API Eksternal ---
+        $masterKendaraan = [];
+        $url = 'https://apps.intilab.com/api/devices';
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET"); 
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer RzBFAiAsSMLm1ORiB2hH9KQvaGjNSN-1jHrV7nK_WIf1cF4CnwIhAMjtQNnyRNrpy4NogP8qHJWdv_5KVyiWcTLVt7JKSsN2eyJ1IjozLCJlIjoiMjA2MC0wNy0wN1QxNzowMDowMC4wMDArMDA6MDAifQ', 
+            'Accept: application/json',
+            'Content-Type: application/json'
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode == 200 && $response) {
+            $resBody = json_decode($response, true);
+            $masterKendaraan = array_column($resBody, 'name');
+        } else {
+            return response()->json([
+                'message' => 'Gagal mengambil data kendaraan dari API.',
+                'error' => $curlError
+            ], 500);
+        }
+        
+        // --- 2. Cari Semua Jadwal yang Bentrok ---
+        $queryBentrok = DB::table('jadwal')
+            ->select('kendaraan', 'sampler', 'jam_mulai', 'created_at', 'updated_at')
+            ->where('tanggal', $tanggal)
+            ->whereNotNull('kendaraan')
+            ->where('is_active', 1);
+            // ->where(function($query) use ($jamMulai, $jamSelesai) {
+            //     // Rumus Overlap
+            //     $query->where('jam_mulai', '<', $jamSelesai)
+            //         ->where('jam_selesai', '>', $jamMulai);
+            // });
+
+        if ($idSamplingEdit) {
+            $queryBentrok->where('id_sampling', '!=', $idSamplingEdit);
+        }
+
+        $dataBentrok = $queryBentrok->get();
+
+        // --- 3. Filter Konflik Sesuai Aturan (Paling awal jamnya, lalu created/updated_at) ---
+        $detailKonflik = [];
+
+        foreach ($dataBentrok as $row) {
+            $veh = $row->kendaraan;
+
+            // Jika kendaraan ini belum masuk daftar konflik, masukkan.
+            if (!isset($detailKonflik[$veh])) {
+                $detailKonflik[$veh] = $row;
+            } else {
+                // Jika sudah ada, bandingkan jam_mulai-nya
+                $existing = $detailKonflik[$veh];
+
+                if ($row->jam_mulai < $existing->jam_mulai) {
+                    // Jam lebih awal menang
+                    $detailKonflik[$veh] = $row;
+                } elseif ($row->jam_mulai == $existing->jam_mulai) {
+                    // Jika jamnya sama, adu created_at atau updated_at
+                    $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
+                    $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
+
+                    if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
+                        $detailKonflik[$veh] = $row;
+                    }
+                }
+            }
+        }
+
+        return response()->json([
+            'status'    => true,
+            'data'      => array_map(function($name) { return ['id' => $name, 'text' => $name]; }, $masterKendaraan), 
+            'conflicts' => $detailKonflik 
+        ]);
+    }
+
     private function updateOrderDetail($data, $tanggal)
     {
         $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
