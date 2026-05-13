@@ -132,9 +132,10 @@ class GroupedCfrByLhp
                     
                     $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
-                    $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
+                    $tglAnalisa = ($item->status !=  0 ) ? optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null) : null;
 
-                    $isTglAnalisaEqualTglSampling = in_array($item->kategori_3, $kategori_validation) || str_contains($item->parameter, 'Ergonomi') || str_contains($item->kategori_3, 'Psikologi') || str_contains(strtolower($item->keterangan_1), 'higiene');
+                    $isTglAnalisaEqualTglSampling = in_array($item->kategori_3, $kategori_validation) || str_contains($item->parameter, 'Ergonomi') || str_contains($item->kategori_3, 'Psikologi') || ($item->kategori_2 == '4-Udara' && str_contains(strtolower($item->kategori_3), 'higiene'));
+                    
                     if ($isTglAnalisaEqualTglSampling) {
                         $steps['analisa']['date'] = $tglSampling;
                     } else {
