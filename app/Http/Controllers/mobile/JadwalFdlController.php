@@ -87,7 +87,7 @@ class JadwalFdlController extends Controller
                     return strtolower(trim($sampler));
                 });
 
-            return $samplers->contains('irfan afriadi') || $samplers->contains(strtolower($samplerLogin));
+            return $samplers->contains(strtolower($samplerLogin));
         })
         ->groupBy('kendaraan')
         ->map(function ($group) {
