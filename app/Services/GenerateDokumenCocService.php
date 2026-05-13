@@ -79,7 +79,7 @@ class GenerateDokumenCocService
         $tglApproveWsFinal = optional($historyAppRejectWsFinal)->approved_at;
         $tglApproveLhps = $orderDetail->flatMap->any_lhps->max('approved_at');
 
-        $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', $tglApproveLhps)->latest('berlaku_mulai')->first();
+        $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', $tglApproveLhps ? date('Y-m-d', strtotime($tglApproveLhps)) : date('Y-m-d'))->latest('berlaku_mulai')->first();
 
         $dokumenCoc = new DokumenCoc();
         $dokumenCoc->no_dokumen = $this->generateNoDokumenCoc();
@@ -96,8 +96,8 @@ class GenerateDokumenCocService
         $dokumenCoc->tgl_konfirmasi_order = $orderHeader->tanggal_order;
         $dokumenCoc->tgl_mulai_sampling = $orderDetail->flatMap->any_data_lapangan->min('created_at');
         $dokumenCoc->tgl_selesai_sampling = $orderDetail->flatMap->any_data_lapangan->max('created_at');
-        $dokumenCoc->tgl_terima_lab = $orderDetail->flatMap->TrackingSatu->max('ftc_verifier') ?? $orderDetail->flatMap->scan_tc->max('created_at');
-        $dokumenCoc->tgl_mulai_analisa = $orderDetail->flatMap->TrackingSatu->min('ftc_laboratory') ?? $orderDetail->flatMap->scan_analis->min('created_at');
+        $dokumenCoc->tgl_terima_lab = $orderDetail->map->TrackingSatu->max('ftc_verifier') ?? $orderDetail->map->scan_tc->max('created_at');
+        $dokumenCoc->tgl_mulai_analisa = $orderDetail->map->TrackingSatu->min('ftc_laboratory') ?? $orderDetail->map->scan_analis->min('created_at');
         $dokumenCoc->tgl_selesai_analisa = $tglApproveLapanganHeaderMax;
         $dokumenCoc->tgl_mulai_tcc = $tglApproveLapanganHeaderMax;
         $dokumenCoc->tgl_selesai_tcc = $tglApproveWsFinal;
