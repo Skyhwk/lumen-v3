@@ -20,7 +20,6 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
-use App\Services\GenerateDocumentSampling;
 use App\Services\GetAtasan;
 use App\Services\JadwalServices;
 use App\Services\Notification;
@@ -717,28 +716,29 @@ class SamplingPlanController extends Controller
 
             switch ($type) {
                 case 'QT':
-                $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
+                    $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
+                            'job'         => 'GenerateDocumentSampling',
+                            'status'      => 'processing',
+                            'no_document' => $quotation->no_document,
+                            'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
+                    $this->dispatch($job); 
+                    break;
+
+                case 'QTC':
+                    $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
                         'job'         => 'GenerateDocumentSampling',
                         'status'      => 'processing',
                         'no_document' => $quotation->no_document,
                         'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
-                $this->dispatch($job);                              
-                break;
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
+                    $this->dispatch($job);
+                    break;
 
-                case 'QTC':
-                $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
-                    'job'         => 'GenerateDocumentSampling',
-                    'status'      => 'processing',
-                    'no_document' => $quotation->no_document,
-                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
-                $this->dispatch($job);
-                
                 default:
                     Log::info('Render GenerateDocumentSamplingJob Gagal. No Quotation: ' . $request->no_quotation);
                     break;
@@ -809,28 +809,29 @@ class SamplingPlanController extends Controller
            
             switch ($type) {
                 case 'QT':
-                $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
+                    $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
+                            'job'         => 'GenerateDocumentSampling',
+                            'status'      => 'processing',
+                            'no_document' => $quotation->no_document,
+                            'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
+                    $this->dispatch($job);                              
+                    break;
+
+                case 'QTC':
+                    $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
                         'job'         => 'GenerateDocumentSampling',
                         'status'      => 'processing',
                         'no_document' => $quotation->no_document,
                         'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
-                $this->dispatch($job);                              
-                break;
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
+                    $this->dispatch($job);
+                    break;
 
-                case 'QTC':
-                $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
-                    'job'         => 'GenerateDocumentSampling',
-                    'status'      => 'processing',
-                    'no_document' => $quotation->no_document,
-                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
-                $this->dispatch($job);
-                
                 default:
                     Log::info('Render GenerateDocumentSamplingJob Gagal. No Quotation: ' . $request->no_quotation);
                     break;
