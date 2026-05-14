@@ -20,7 +20,6 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
-use App\Services\GenerateDocumentSampling;
 use App\Services\GetAtasan;
 use App\Services\JadwalServices;
 use App\Services\Notification;
@@ -55,32 +54,32 @@ class SamplingPlanController extends Controller
         //     ->whereNotNull('no_quotation')
         //     ->where('is_active', $active);
         $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
-'samplingPlan' => function ($query) {
-    $query->WithTypeModelSub();
-},])
-        ->select(
-            'id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan',
-            'isokinetic', 'pendampingan_k3', 'tanggal', 'periode',
-            'jam_mulai', 'jam_selesai', 'kategori', 'durasi',
-            'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah',
-            DB::raw('group_concat(sampler) as sampler'),
-            DB::raw('group_concat(id) as batch_id'),
-            DB::raw('group_concat(userid) as batch_user'),
-            DB::raw('group_concat(durasi_personal) as durasi_personal'), // ✅ tambah ini
-            DB::raw('MAX(created_by) as created_by'),
-            DB::raw('MIN(created_at) as created_at'),
-            DB::raw('MAX(updated_at) as updated_at'),
-            DB::raw('MAX(updated_by) as updated_by')
-        )
-        ->groupBy(
-            'id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode',
-            'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'durasi',
-            'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai',
-            'warna', 'note', 'urutan', 'wilayah', 'id_cabang'
-            // ❌ durasi_personal TIDAK masuk group by
-        )
-        ->whereNotNull('no_quotation')
-        ->where('is_active', $active);
+        'samplingPlan' => function ($query) {
+            $query->WithTypeModelSub();
+        },])
+            ->select(
+                'id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan',
+                'isokinetic', 'pendampingan_k3', 'tanggal', 'periode',
+                'jam_mulai', 'jam_selesai', 'kategori', 'durasi',
+                'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah','kendaraan',
+                DB::raw('group_concat(sampler) as sampler'),
+                DB::raw('group_concat(id) as batch_id'),
+                DB::raw('group_concat(userid) as batch_user'),
+                DB::raw('group_concat(durasi_personal) as durasi_personal'), // ✅ tambah ini
+                DB::raw('MAX(created_by) as created_by'),
+                DB::raw('MIN(created_at) as created_at'),
+                DB::raw('MAX(updated_at) as updated_at'),
+                DB::raw('MAX(updated_by) as updated_by')
+            )
+            ->groupBy(
+                'id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode',
+                'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'durasi',
+                'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai',
+                'warna', 'note', 'urutan', 'wilayah', 'id_cabang','kendaraan'
+                // ❌ durasi_personal TIDAK masuk group by
+            )
+            ->whereNotNull('no_quotation')
+            ->where('is_active', $active);
 
         // Filter cabang
         // if ($request->filled('id_cabang_filter')) {
@@ -717,28 +716,29 @@ class SamplingPlanController extends Controller
 
             switch ($type) {
                 case 'QT':
-                $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
+                    $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
+                            'job'         => 'GenerateDocumentSampling',
+                            'status'      => 'processing',
+                            'no_document' => $quotation->no_document,
+                            'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
+                    $this->dispatch($job); 
+                    break;
+
+                case 'QTC':
+                    $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
                         'job'         => 'GenerateDocumentSampling',
                         'status'      => 'processing',
                         'no_document' => $quotation->no_document,
                         'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
-                $this->dispatch($job);                              
-                break;
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
+                    $this->dispatch($job);
+                    break;
 
-                case 'QTC':
-                $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
-                    'job'         => 'GenerateDocumentSampling',
-                    'status'      => 'processing',
-                    'no_document' => $quotation->no_document,
-                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
-                $this->dispatch($job);
-                
                 default:
                     Log::info('Render GenerateDocumentSamplingJob Gagal. No Quotation: ' . $request->no_quotation);
                     break;
@@ -809,28 +809,29 @@ class SamplingPlanController extends Controller
            
             switch ($type) {
                 case 'QT':
-                $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
+                    $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
+                            'job'         => 'GenerateDocumentSampling',
+                            'status'      => 'processing',
+                            'no_document' => $quotation->no_document,
+                            'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
+                    $this->dispatch($job);                              
+                    break;
+
+                case 'QTC':
+                    $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
+                    $jobTaskId = JobTask::insert([
                         'job'         => 'GenerateDocumentSampling',
                         'status'      => 'processing',
                         'no_document' => $quotation->no_document,
                         'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
-                $this->dispatch($job);                              
-                break;
+                    ]);
+                    $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
+                    $this->dispatch($job);
+                    break;
 
-                case 'QTC':
-                $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
-                $jobTaskId = JobTask::insert([
-                    'job'         => 'GenerateDocumentSampling',
-                    'status'      => 'processing',
-                    'no_document' => $quotation->no_document,
-                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
-                $this->dispatch($job);
-                
                 default:
                     Log::info('Render GenerateDocumentSamplingJob Gagal. No Quotation: ' . $request->no_quotation);
                     break;
@@ -1202,5 +1203,97 @@ class SamplingPlanController extends Controller
             // Jangan dd() di API production, return error message
             return response()->json(['message' => $th->getMessage()], 500);
         }
+    }
+    //RzBFAiAsSMLm1ORiB2hH9KQvaGjNSN-1jHrV7nK_WIf1cF4CnwIhAMjtQNnyRNrpy4NogP8qHJWdv_5KVyiWcTLVt7JKSsN2eyJ1IjozLCJlIjoiMjA2MC0wNy0wN1QxNzowMDowMC4wMDArMDA6MDAifQ
+    public function kendaraanAvalible(Request $request){
+    
+        $tanggal = $request->tanggal;
+        // $jamMulai = $request->jam_mulai;
+        // $jamSelesai = $request->jam_selesai;
+        $idSamplingEdit = $request->id_sampling; 
+
+        // --- 1. Ambil Semua Daftar Kendaraan dari API Eksternal ---
+        $masterKendaraan = [];
+        $url = 'https://apps.intilab.com/api/devices';
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET"); 
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer RzBFAiAsSMLm1ORiB2hH9KQvaGjNSN-1jHrV7nK_WIf1cF4CnwIhAMjtQNnyRNrpy4NogP8qHJWdv_5KVyiWcTLVt7JKSsN2eyJ1IjozLCJlIjoiMjA2MC0wNy0wN1QxNzowMDowMC4wMDArMDA6MDAifQ', 
+            'Accept: application/json',
+            'Content-Type: application/json'
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode == 200 && $response) {
+            $resBody = json_decode($response, true);
+            $masterKendaraan = array_column($resBody, 'name');
+        } else {
+            return response()->json([
+                'message' => 'Gagal mengambil data kendaraan dari API.',
+                'error' => $curlError
+            ], 500);
+        }
+        
+        // --- 2. Cari Semua Jadwal yang Bentrok ---
+        $queryBentrok = DB::table('jadwal')
+            ->select('kendaraan', 'sampler', 'jam_mulai', 'created_at', 'updated_at')
+            ->where('tanggal', $tanggal)
+            ->whereNotNull('kendaraan')
+            ->where('is_active', 1);
+            // ->where(function($query) use ($jamMulai, $jamSelesai) {
+            //     // Rumus Overlap
+            //     $query->where('jam_mulai', '<', $jamSelesai)
+            //         ->where('jam_selesai', '>', $jamMulai);
+            // });
+
+        if ($idSamplingEdit) {
+            $queryBentrok->where('id_sampling', '!=', $idSamplingEdit);
+        }
+
+        $dataBentrok = $queryBentrok->get();
+
+        // --- 3. Filter Konflik Sesuai Aturan (Paling awal jamnya, lalu created/updated_at) ---
+        $detailKonflik = [];
+
+        foreach ($dataBentrok as $row) {
+            $veh = $row->kendaraan;
+
+            // Jika kendaraan ini belum masuk daftar konflik, masukkan.
+            if (!isset($detailKonflik[$veh])) {
+                $detailKonflik[$veh] = $row;
+            } else {
+                // Jika sudah ada, bandingkan jam_mulai-nya
+                $existing = $detailKonflik[$veh];
+
+                if ($row->jam_mulai < $existing->jam_mulai) {
+                    // Jam lebih awal menang
+                    $detailKonflik[$veh] = $row;
+                } elseif ($row->jam_mulai == $existing->jam_mulai) {
+                    // Jika jamnya sama, adu created_at atau updated_at
+                    $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
+                    $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
+
+                    if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
+                        $detailKonflik[$veh] = $row;
+                    }
+                }
+            }
+        }
+
+        // --- 4. Return Format JSON ---
+        return response()->json([
+            'status'    => true,
+            // Karena kita mau nampilin semua mobil, 'data' isinya $masterKendaraan murni
+            'data'      => array_map(function($name) { return ['id' => $name, 'text' => $name]; }, $masterKendaraan), 
+            // Kirim detail konflik sebagai referensi Frontend
+            'conflicts' => $detailKonflik 
+        ]);
     }
 }
