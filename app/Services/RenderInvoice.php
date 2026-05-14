@@ -1966,7 +1966,7 @@ class RenderInvoice
             );
 
             $pdf = new Mpdf($mpdfConfig);
-            $pdf->SetProtection(array('print'), '', 'skyhwk12');
+            // $pdf->SetProtection(array('print'), '', 'skyhwk12');
             $pdf->SetWatermarkImage(public_path() . '/logo-watermark.png', -1, '', array(65, 60));
             $pdf->showWatermarkImage = true;
             $pdf->showWatermarkText = true;
