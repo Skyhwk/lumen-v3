@@ -91,7 +91,7 @@ class GenerateInvoiceController extends Controller
 
     public function getSomeInvoice(Request $request)
     {
-        dd($request->all());
+        // dd($request->all());
         $nomorInvoice = Invoice::where('no_invoice', $request->no_invoice)->first();
 
         if (!$nomorInvoice) {
@@ -171,6 +171,7 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.keterangan_tambahan) AS keterangan_tambahan'),
                 DB::raw('MAX(invoice.jabatan_pic) AS jabatan_pic'),
                 DB::raw('MAX(invoice.no_po) AS no_po'),
+                DB::raw('MAX(invoice.no_quotation) AS document'),
                 DB::raw('MAX(invoice.no_spk) AS no_spk'),
                 DB::raw('MAX(invoice.tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
                 DB::raw('MAX(invoice.filename) AS filename'),
