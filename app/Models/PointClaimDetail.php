@@ -7,6 +7,7 @@ use App\Models\PointClaim;
 
 class PointClaimDetail extends Sector
 {
+    protected $connection = 'portal_customer';
     protected $table = 'point_claim_details';
 
     protected $fillable = [
