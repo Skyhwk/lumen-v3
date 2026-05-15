@@ -565,27 +565,27 @@ class OrderDetail extends Sector
 
     public function udaraLingkungan()
     {
-        return $this->hasMany(LingkunganHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approved', true);
+        return $this->hasMany(LingkunganHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approved', true)->where('is_active', true);
     }
 
     public function udaraSubKontrak()
     {
-        return $this->hasMany(Subkontrak::class, 'no_sampel', 'no_sampel')->with('ws_value_linkungan', 'ws_udara')->where('is_approve', true);
+        return $this->hasMany(Subkontrak::class, 'no_sampel', 'no_sampel')->with('ws_value_linkungan', 'ws_udara')->where('is_approve', true)->where('is_active', true);
     }
 
     public function udaraDirect()
     {
-        return $this->hasMany(DirectLainHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true);
+        return $this->hasMany(DirectLainHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true)->where('is_active', true);
     }
 
     public function udaraPartikulat()
     {
-        return $this->hasMany(PartikulatHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true);
+        return $this->hasMany(PartikulatHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true)->where('is_active', true);
     }
 
     public function udaraMicrobio()
     {
-        return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
+        return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true)->where('is_active', true);
     }
 
     public function udaraDebu()
