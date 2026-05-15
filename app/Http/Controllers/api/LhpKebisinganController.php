@@ -22,16 +22,33 @@ class LhpKebisinganController extends Controller
     public function index(Request $request){
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
-            'lhps_kebisingan',
-            'orderHeader' => function ($query) {
-                $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
-            }
-        ])
-            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel, GROUP_CONCAT(regulasi SEPARATOR "||") as regulasi_all')
+                'lhps_kebisingan',
+                'orderHeader' => function ($query) {
+                    $query->select(
+                        'id',
+                        'nama_pic_order',
+                        'jabatan_pic_order',
+                        'no_pic_order',
+                        'email_pic_order',
+                        'alamat_sampling'
+                    );
+                }
+            ])
+            ->whereHas('lhps_kebisingan') // hanya yang punya relasi lhp
+            ->selectRaw('
+                order_detail.*,
+                GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel,
+                GROUP_CONCAT(regulasi SEPARATOR "||") as regulasi_all
+            ')
             ->where('is_approve', 1)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3', ["23-Kebisingan", '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'])
+            ->whereIn('kategori_3', [
+                "23-Kebisingan",
+                '24-Kebisingan (24 Jam)',
+                '25-Kebisingan (Indoor)',
+                '26-Kualitas Udara Dalam Ruang'
+            ])
             ->whereJsonDoesntContain('parameter', '271;Kebisingan (P8J)')
             ->where('status', 3)
             ->groupBy('cfr')
