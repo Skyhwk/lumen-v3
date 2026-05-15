@@ -31,6 +31,7 @@ class RenderInvoice
             if ($invoice->upload_file) {
                 $filename = $invoice->upload_file;
             } else {
+                dd('render ulang');
                 if ($invoice->is_custom == true) {
                     $filename = $this->renderCustom($noInvoice);
                 } else {
@@ -41,11 +42,8 @@ class RenderInvoice
             if (!$filename) {
                 throw new \Exception("Gagal membuat file header untuk invoice: $noInvoice");
             }
-
             // 2. Kalau ada file_faktur, merge ke halaman berikutnya
-
             $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $invoice->upload_file);
-
 
             // 3. Update filename final
             Invoice::where('no_invoice', $noInvoice)->update([
@@ -2457,7 +2455,6 @@ class RenderInvoice
         $invoicePath = public_path('invoice/' . $invoiceFile);
         if($uploadFile) $invoicePath = public_path('invoice-upload/' . $invoiceFile);
         $fakturPath  = public_path('invoice-faktur/' . $fakturFile);
-
         if (!file_exists($invoicePath)) {
             throw new \Exception("File invoice tidak ditemukan: {$invoicePath}");
         }
@@ -2484,7 +2481,7 @@ class RenderInvoice
 
             // overwrite pakai temp (biar aman)
             $tempPath  = public_path('invoice/temp_' . $invoiceFile);
-            $finalPath = $invoicePath;
+            $finalPath = public_path('invoice/' . $invoiceFile);
 
             $pdf->Output($tempPath, 'F');
 
