@@ -95,6 +95,8 @@ class GenerateFeeSampling
                 $durasiTertinggiLuarKota  = 0;
                 $durasiTertinggiDalamKota = 0; // FIX #3: track durasi dalam kota sendiri
                 $itemDriver               = null; // FIX #1: simpan item yang jadi driver
+                $sudahHitungIsokinetik = false;
+                $sudahHitungK3 = false;
 
                 foreach ($items as $item) {
                     $alamatSampling  = strtolower(trim($item->nama_perusahaan));
@@ -159,23 +161,29 @@ class GenerateFeeSampling
                         $note = strtolower($item->note);
 
                         if (strpos($note, 'pendampingan') !== false || $item->pendampingan_k3 == true) {
-                            if (in_array($userId, $userK3)) {
+                            if (in_array($userId, $userK3) && !$sudahHitungK3) {
                                 $feeTambahan += 45000;
                                 $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
+                                $sudahHitungK3 = true;
                             }
                         } elseif (strpos($note, 'isokinetik') !== false || $hasEmisiIsokinetik || stripos($note, 'iso') !== false || $item->isokinetic == true) {
-                            $feeTambahan += $fee->isokinetik;
-                            $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                            if (!$sudahHitungIsokinetik) {
+                                $feeTambahan += $fee->isokinetik;
+                                $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                                $sudahHitungIsokinetik = true;
+                            }
                         }
                     } else {
-                        if ($hasEmisiIsokinetik || $item->isokinetic == true) {
+                        if (($hasEmisiIsokinetik || $item->isokinetic == true) && !$sudahHitungIsokinetik) {
                             $feeTambahan += $fee->isokinetik;
                             $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                            $sudahHitungIsokinetik = true;
                         }
                         if ($item->pendampingan_k3 == true) {
-                            if (in_array($userId, $userK3)) {
+                            if (in_array($userId, $userK3) && !$sudahHitungK3) {
                                 $feeTambahan += 45000;
                                 $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
+                                $sudahHitungK3 = true;
                             }
                         }
                     }
