@@ -209,7 +209,7 @@
             Kegiatan Sampling
         </td>
         <td style="border: 1px solid #000; padding: 5px;">
-            {{ indonesianDateFormat($data->tgl_mulai_sampling) }}
+            {{ indonesianDateFormat($data->tgl_mulai_sampling, true) }}
         </td>
         <td style="border: 1px solid #000; padding: 5px;">
             {{ indonesianDateFormat($data->tgl_selesai_sampling, true) }}
@@ -221,7 +221,7 @@
             Sampel diterima Laboratorium
         </td>
         <td colspan="2" style="border: 1px solid #000; padding: 5px;">
-            {{ indonesianDateFormat($data->tgl_terima_lab) }}
+            {{ indonesianDateFormat($data->tgl_terima_lab, true) }}
         </td>
     </tr>
 
@@ -230,7 +230,7 @@
             Kegiatan Analisa
         </td>
         <td style="border: 1px solid #000; padding: 5px;">
-            {{ indonesianDateFormat($data->tgl_mulai_analisa) }}
+            {{ indonesianDateFormat($data->tgl_mulai_analisa, true) }}
         </td>
         <td style="border: 1px solid #000; padding: 5px;">
             {{ indonesianDateFormat($data->tgl_selesai_analisa, true) }}

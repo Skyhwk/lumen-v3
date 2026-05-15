@@ -96,6 +96,7 @@ use App\Services\{
     GetBawahan,
     SnapshotPersiapanService,
     GenerateToken,
+    GenerateDokumenCocService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -6398,5 +6399,13 @@ private function detectChangedPoints($oldPoints, $newPoints)
         $skppGenerator->testRendersuratKeterangan($request->no_order, $request->periode);
     
         return response()->json(['message' => 'SKPP has been generated successfully'], 200);
+    }
+
+    public function generateCoc(Request $request)
+    {
+        $cocGenerator = new GenerateDokumenCocService($request->no_lhp);
+        $cocGenerator->generate();
+    
+        return response()->json(['message' => 'CoC has been generated successfully'], 200);
     }
 }

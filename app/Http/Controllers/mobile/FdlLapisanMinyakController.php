@@ -131,9 +131,12 @@ class FdlLapisanMinyakController extends Controller
             $data->created_at                                                   = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            $update = DB::table('order_detail')
-                ->where('no_sampel', strtoupper(trim($request->no_sampel)))
-                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->first();
+
+            if($orderDetail->tanggal_terima == null){
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                $orderDetail->save();
+            }
 
             $this->resultx = "Data Sampling Observasi Lapisan Minyak Dengan No Sample $request->no_sampel berhasil disimpan oleh $this->karyawan";
 
