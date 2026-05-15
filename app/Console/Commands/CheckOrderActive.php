@@ -107,6 +107,12 @@ class CheckOrderActive extends Command
                                 $steps['drafting']['date'] = optional($lhps->created_at)
                                     ? Carbon::parse($lhps->created_at)->format('Y-m-d')
                                     : null;
+                                
+                                if($steps['drafting']['date'] != null){
+                                    $steps['analisa']['date'] = optional($lhps->created_at)
+                                    ? Carbon::parse($lhps->created_at)->format('Y-m-d')
+                                    : null;
+                                }
 
                                 $steps['lhp_release']['date'] = optional($lhps->approved_at)
                                     ? Carbon::parse($lhps->approved_at)->format('Y-m-d')
