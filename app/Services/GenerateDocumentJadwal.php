@@ -437,7 +437,7 @@ class GenerateDocumentJadwal
           
             return $fileName;
         } catch (\Exception $ex) {
-            Log::error(['RenderKontrakDocumentJadwal: ' . $ex->getMessage() . ' - ' . $ex->getFile() . ' - ' . $ex->getLine()]);
+            Log::error(['RenderKontrakDocumentJadwal: ' . $ex]);
             return false;
         }
     }
