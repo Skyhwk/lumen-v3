@@ -128,9 +128,9 @@ class JadwalServices
         ];
 
        
-        Log::info("=== NOTIFIKASI PERUBAHAN JADWAL ===", $logData);
+        Log::channel('sampling')->info("=== NOTIFIKASI PERUBAHAN JADWAL ===", $logData);
         if ($notify_sales) {
-            \Log::info('Email akan dikirim untuk no_quotation: ' . $noQuotation);
+            Log::channel('sampling')->info('Email akan dikirim untuk no_quotation: ' . $noQuotation);
             // self::emailNotifPerubahanJadwal($noQuotation, $formattedBefore, $formattedAfter);
             dispatch(new SendNotifPerubahanJadwalJob(
             $noQuotation,
@@ -138,7 +138,7 @@ class JadwalServices
             is_array($formattedAfter) ? $formattedAfter : []
         ));
         } else {
-            \Log::info('Email di-skip (user pilih tidak kirim) untuk no_quotation: ' . $noQuotation);
+            Log::channel('sampling')->info('Email di-skip (user pilih tidak kirim) untuk no_quotation: ' . $noQuotation);
         }
     }
 
@@ -836,7 +836,7 @@ class JadwalServices
                         $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
                         $psh->sampler_jadwal = $newSamplerString;
                         // E. Eksekusi Simpan
-                        Log::info('Debug Dirty Check', [
+                        Log::channel('sampling')->info('Debug Dirty Check', [
                             'no_quotation' => $dataUpdate->no_quotation,
                             'no_sampel_old' => $psh->getOriginal('no_sampel'),
                             'no_sampel_new' => $psh->no_sampel,
@@ -1206,7 +1206,7 @@ class JadwalServices
                             }
                         }
                         // E. Eksekusi Simpan
-                        Log::info('Debug Dirty Check', [
+                        Log::channel('sampling')->info('Debug Dirty Check', [
                             'no_quotation' => $dataUpdate->no_quotation,
                             'no_sampel_old' => $psh->getOriginal('no_sampel'),
                             'no_sampel_new' => $psh->no_sampel,
@@ -1866,12 +1866,12 @@ class JadwalServices
                     ?: QuotationNonKontrak::where('no_document', $noQuotation)->first();
 
             if (!$quotation) {
-                \Log::warning('emailNotifPerubahanJadwal: quotation tidak ditemukan', ['no_quotation' => $noQuotation]);
+                \Log::channel('sampling')->warning('emailNotifPerubahanJadwal: quotation tidak ditemukan', ['no_quotation' => $noQuotation]);
                 return;
             }
 
             if (empty($quotation->sales_id)) {
-                \Log::warning('emailNotifPerubahanJadwal: sales_id kosong', ['no_quotation' => $noQuotation]);
+                \Log::channel('sampling')->warning('emailNotifPerubahanJadwal: sales_id kosong', ['no_quotation' => $noQuotation]);
                 return;
             }
 
@@ -1892,7 +1892,7 @@ class JadwalServices
                 return $email && $email !== $emailSales;
             }));
             if (!$sales || empty($sales->email)) {
-                \Log::warning('emailNotifPerubahanJadwal: sales/email tidak ditemukan', [
+                \Log::channel('sampling')->warning('emailNotifPerubahanJadwal: sales/email tidak ditemukan', [
                     'no_quotation' => $noQuotation,
                     'sales_id'     => $quotation->sales_id,
                 ]);
@@ -1914,8 +1914,8 @@ class JadwalServices
                 $noQuotation, $before, $after, $sales->nama_lengkap
             );
 
-            \Log::info('emailNotifPerubahanJadwal: mencoba kirim', [
-                'to'      => 'luthfi@xxxxx.com',
+            \Log::channel('sampling')->info('emailNotifPerubahanJadwal: mencoba kirim', [
+                'to'      => $emailTo,
                 'subject' => $subject,
             ]);
             
@@ -1927,10 +1927,10 @@ class JadwalServices
                 ->noReply()
                 ->send();
 
-            \Log::info('emailNotifPerubahanJadwal: berhasil dikirim', ['no_quotation' => $noQuotation]);
+            \Log::channel('sampling')->info('emailNotifPerubahanJadwal: berhasil dikirim', ['no_quotation' => $noQuotation]);
 
         } catch (\Throwable $e) {
-            \Log::error('emailNotifPerubahanJadwal gagal: ' . $e->getMessage()
+            \Log::channel('sampling')->error('emailNotifPerubahanJadwal gagal: ' . $e->getMessage()
                 . ' — ' . $e->getFile() . ':' . $e->getLine());
         }
     }
