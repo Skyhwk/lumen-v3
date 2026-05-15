@@ -45,7 +45,17 @@
 @php
     $kategori = explode('-', $y->kategori_1);
     $kategori2 = explode('-', $y->kategori_2);
-    $regulasi = ($y->regulasi && $y->regulasi[0] != '') ? explode('-', $y->regulasi[0])[1] : '';
+    $regulasi = '';
+    if(is_array($y->regulasi) && count($y->regulasi) > 0){
+        $regulasiArr = [];
+        foreach($y->regulasi as $regulasiItem){
+            // Ambil bagian selain id depan (bisa nama regulasi dengan tanda -)
+            $tmpParts = explode('-', $regulasiItem, 2);
+            $regulasiArr[] = isset($tmpParts[1]) ? $tmpParts[1] : $tmpParts[0];
+        }
+        $regulasi = implode(', ', $regulasiArr);
+
+    }
 @endphp
                             <tr>
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">{{ $i }}</td>
