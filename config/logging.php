@@ -66,6 +66,12 @@ return [
             'days' => 14,
         ],
 
+        'sampling' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/sampling/log.log'),
+            'level' => 'info',
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
