@@ -19,7 +19,7 @@ class GenerateFeeSampling
     public function rekapFeeSampling($userId, $level, $tanggal)
     {
         try {
-            $userK3 = [166, 216];
+            $userK3 = [166, 216, 77];
 
             // 1. Ambil fee berdasarkan level
             $fee = MasterFeeSampling::where('kategori', $level)->first();
