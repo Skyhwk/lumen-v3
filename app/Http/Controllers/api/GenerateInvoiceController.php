@@ -176,8 +176,7 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.filename) AS filename'),
                 DB::raw('MAX(invoice.file_pph) AS file_pph'),
                 DB::raw('MAX(invoice.upload_file) AS upload_file'),
-                DB::raw('MAX(order_header.konsultan) AS consultant'),
-                DB::raw('MAX(order_header.no_document) AS document'),
+                DB::raw('MAX(invoice.nama_perusahaan) AS nama_perusahaan'),
                 DB::raw('MAX(invoice.created_at) AS created_at'),
                 DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
                 DB::raw('MAX(invoice.nilai_pelunasan) AS nilai_pelunasan'),
@@ -1481,7 +1480,7 @@ class GenerateInvoiceController extends Controller
             // Simpan file
             $file->move($folder, $fileName);
             $inv->upload_file = $fileName;
-            $inv->filename = $fileName;
+            // $inv->filename = $fileName;
             $inv->save();
             DB::commit();
             
