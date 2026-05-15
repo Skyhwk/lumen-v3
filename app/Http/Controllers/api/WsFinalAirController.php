@@ -12,6 +12,7 @@ use App\Models\Subkontrak;
 use App\Models\HistoryWsValueAir;
 use App\Models\HistoryAppReject;
 use App\Models\CategorySample;
+use App\Models\Mdl;
 use App\Http\Controllers\Controller;
 use App\Models\DataLimbah;
 use Illuminate\Http\Request;
@@ -25,18 +26,6 @@ use Carbon\Carbon;
 
 class WsFinalAirController extends Controller
 {
-	// public function index(Request $request)
-	// {
-	// 	$data = OrderDetail::with('wsValueAir', 'dataLapanganAir', 'sample_diantar.detail')
-	// 		->where('is_active', $request->is_active)
-	// 		->where('kategori_2', '1-Air')
-	// 		->where('status', 0)
-	// 		->whereNotNull('tanggal_terima')
-	// 		->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-	// 		->whereYear('tanggal_sampling', explode('-', $request->date)[0]);
-
-	// 	return Datatables::of($data)->make(true);
-	// }
 	public function index(Request $request)
 	{
 		$data = OrderDetail::with('wsValueAir', 'dataLapanganAir', 'sampelDiantar.detail')
@@ -97,9 +86,39 @@ class WsFinalAirController extends Controller
 			->editColumn('hasil_json', function ($item) {
 				$hasil = json_decode($item->hasil_json ?? '{}', true);
 				return $hasil ?? [];
+			})->addColumn('hasil_uji', function ($item) {
+				$hasilUji = $item->hasil;
+
+				// ambil parameter dari relasi yang ada
+				$parameter = null;
+
+				if ($item->colorimetri) {
+					$parameter = $item->colorimetri->parameter;
+				} elseif ($item->gravimetri) {
+					$parameter = $item->gravimetri->parameter;
+				} elseif ($item->titrimetri) {
+					$parameter = $item->titrimetri->parameter;
+				} elseif ($item->subkontrak) {
+					$parameter = $item->subkontrak->parameter;
+				}
+
+				// cek mdl berdasarkan parameter
+				$mdl = Mdl::where('parameter_nama', $parameter)->where('category_id', 1)->where('is_active', 1)->first();
+
+				if (
+					$mdl &&
+					is_numeric($hasilUji) &&
+					(float)$hasilUji < (float)$mdl->value
+				) {
+					return '<' . $mdl->value;
+				}
+
+				return $hasilUji;
 			})
 			->make(true);
 	}
+
+	
 
 	public function rejectAnalys(Request $request)
 	{

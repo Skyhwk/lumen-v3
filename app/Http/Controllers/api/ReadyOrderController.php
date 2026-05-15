@@ -3565,6 +3565,39 @@ class ReadyOrderController extends Controller
 
     private function syncInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request)
     {
+        $activePeriods = collect($dataQuotation->detail)
+            ->pluck('periode_kontrak')
+            ->filter(function ($periode) {
+                return $periode !== null && $periode !== '';
+            })
+            ->map(function ($periode) {
+                return (string) $periode;
+            })
+            ->values();
+
+        $unpaidInvoices = Invoice::where('no_order', $dataOrderHeader->no_order)
+            ->where('is_active', 1)
+            ->where(function ($query) {
+                $query->whereNull('nilai_pelunasan')
+                    ->orWhere('nilai_pelunasan', 0);
+            })
+            ->get();
+
+        foreach ($unpaidInvoices as $invoice) {
+            $invoicePeriode = (string) $invoice->periode;
+
+            if ($invoicePeriode === 'all') {
+                continue;
+            }
+
+            if (!$activePeriods->contains($invoicePeriode)) {
+                $invoice->is_active  = 0;
+                $invoice->updated_by = $this->karyawan;
+                $invoice->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                $invoice->save();
+            }
+        }
+
         foreach ($dataQuotation->detail as $key => $detail) {
             $periode    = $detail->periode_kontrak;
             $biayaAkhir = (float) $detail->biaya_akhir;

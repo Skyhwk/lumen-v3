@@ -144,7 +144,7 @@ class FunctionValue
 		} else if($id == 63) {
 			$result = self::spektroF($id_param, $request->no_sample, $hp, $fp, $id);
 			return $result;
-		} else if($id == 68||$id == 69) {
+		} else if($id == 68||$id == 69 || 1971) {
 			$result = self::spektroFenol($id_param, $request->no_sample, $hp, $fp, $id);
 			return $result;
 		} else if($id == 92) {
@@ -674,9 +674,9 @@ class FunctionValue
 
 	public function spektroFenol($id, $no_sample, $hp, $fp, $id_val){
 		$rumus =number_format(($hp / 100) * 1000 * $fp, 4);
-		if($id_val==68){
-			if($rumus<0.0009)$rumus = '<0.0009';
-		}
+		
+		if($rumus<0.0009)$rumus = '<0.0009';
+		
 		$rumus = str_replace(",", "", $rumus);
 		$NaCl = '';
 		$RPD = '';
