@@ -34,7 +34,6 @@ class LhpKebisinganController extends Controller
                     );
                 }
             ])
-            ->whereHas('lhps_kebisingan') // hanya yang punya relasi lhp
             ->selectRaw('
                 order_detail.*,
                 GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel,
@@ -57,35 +56,51 @@ class LhpKebisinganController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-    public function handleReject(Request $request) {
+    public function handleReject(Request $request)
+    {
         DB::beginTransaction();
+
         try {
-            $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-            if($header != null) {
 
-                $header->is_approve = 0;
-                $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
-                $header->rejected_by = $this->karyawan;
-                
-                // $header->file_qr = null;
-                $header->save();
+            $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)
+                ->where('is_active', true)
+                ->first();
 
-                OrderDetail::where('cfr', $request->cfr)->where('is_active', true)->update([
-                    'status' => 2,
-                    'is_approve' => 0,
-                    'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'rejected_by' => $this->karyawan
-                ]);
+            if (!$header) {
+                return response()->json([
+                    'message' => 'Data LHP tidak ditemukan'
+                ], 404);
             }
 
-            DB::commit();
-            return response()->json([
-                'message' => 'Reject no sampel '.$request->cfr.' berhasil!'
+            $now = Carbon::now();
+
+            $header->update([
+                'is_approve' => 0,
+                'rejected_at' => $now,
+                'rejected_by' => $this->karyawan
             ]);
-        } catch (Exception $e) {
-            DB::rollBack();
+
+            OrderDetail::where('cfr', $request->cfr)
+                ->where('is_active', true)
+                ->update([
+                    'status' => 2,
+                    'is_approve' => 0,
+                    'rejected_at' => $now,
+                    'rejected_by' => $this->karyawan
+                ]);
+
+            DB::commit();
+
             return response()->json([
-                'message' => 'Terjadi kesalahan '.$e->getMessage(),
+                'message' => 'Reject no sampel ' . $request->cfr . ' berhasil!'
+            ]);
+
+        } catch (Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Terjadi kesalahan ' . $e->getMessage(),
             ], 401);
         }
     }
