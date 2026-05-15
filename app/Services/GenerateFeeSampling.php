@@ -278,9 +278,8 @@ class GenerateFeeSampling
                 if ($tempat >= 3) {
                     $feePokokTambahan += ($tempat - 2) * 15000;
                 }
-
                 $hariAktif       = max($durasi_tertinggi - 1, 1);
-                $feePokok = (int) (($feePokokDasar + $feePokokTambahan) * $hariAktif);
+                $feePokok = (int) (($feePokokDasar * $hariAktif)    + $feePokokTambahan);
                 $feePokok += (int) $hasilFee['rincian']['fee_pokok_ekstra_libur'];
                 $totalHarian = $feePokok + $feeTambahan;
                 $rekap[] = [
