@@ -8,6 +8,9 @@ use App\Models\ProsesFdlSar;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
+use App\Services\GenerateQrDocumentLhp;
+use App\Services\RenderLhpSar;
+
 class FdlSarController extends Controller
 {
     public function checkQr(Request $request)
@@ -39,5 +42,34 @@ class FdlSarController extends Controller
             'is_usable' => $isUsable,
             'data' => $header
             ], 200);
+    }
+
+    public function index (Request $request) {
+        $proses = ProsesFdlSar::where('is_completed', true)->where('karyawan_id', 127)->get();
+        $data = SarHeader::whereIn('no_order', $proses->pluck('no_order'))->where('is_active', true)->where('is_completed', true)->get();
+
+        return response()->json([
+            'message' => 'success',
+            'data' => $data
+            ], 200);
+    }
+
+    public function renderPdf(Request $request)
+    {
+        $hasilUjiSAR = SarHeader::with('detail')->findOrFail($request->id);
+
+        $hasilUjiSAR->tanggal_lhp = date('Y-m-d');
+
+        $file_qr = new GenerateQrDocumentLhp();
+        if ($path = $file_qr->insertSAR('LHP_SAR', $hasilUjiSAR, $this->karyawan)) {
+            $hasilUjiSAR->file_qr = $path;
+        }
+
+        $filename = RenderLhpSar::setDataHeader($hasilUjiSAR)->setDataDetail($hasilUjiSAR->detail)->render();
+
+        $hasilUjiSAR->file_lhp = $filename;
+        $hasilUjiSAR->save();
+
+        return response()->json($filename, 200);
     }
 }
