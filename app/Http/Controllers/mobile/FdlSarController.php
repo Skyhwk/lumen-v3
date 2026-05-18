@@ -149,6 +149,11 @@ class FdlSarController extends Controller
         ]);
 
         if($update) {
+            $data = SarHeader::with('detail')->where('no_order', $request->no_order)->where('is_active', true)->where('is_completed', true)->first();
+
+            $service = new GenerateStrukSarService();
+            $service->generate($data);
+            
             return response()->json([
                 'message' => 'Proses selesai',
                 'status' => true
