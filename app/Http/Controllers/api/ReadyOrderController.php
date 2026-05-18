@@ -41,6 +41,7 @@ use App\Models\MasterPelanggan;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
 use Illuminate\Support\Facades\Http;
+use Mpdf;
 
 class ReadyOrderController extends Controller
 {
@@ -655,6 +656,16 @@ class ReadyOrderController extends Controller
             $linkRingkasanOrder->emailed_by = $this->karyawan;
             $linkRingkasanOrder->emailed_at = Carbon::now();
             $linkRingkasanOrder->save();
+
+            $type = 'kontrak';
+
+            if(explode('/', $dataQuotation->no_document)[1] == 'QT'){
+                $type = 'non_kontrak';
+            }
+
+            if($dataQuotation->status_sampling == 'SAR'){
+                self::executeSAR($dataQuotation->no_document, $type);
+            }
 
             DB::commit();
 
@@ -1467,7 +1478,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
 
-            self::executeSAR($dataQuotation->no_document, 'non_kontrak');
+            // self::executeSAR($dataQuotation->no_document, 'non_kontrak');
 
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
@@ -2103,7 +2114,7 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
-            self::executeSAR($dataQuotation->no_document, 'non_kontrak');
+            // self::executeSAR($dataQuotation->no_document, 'non_kontrak');
 
             $inv = Invoice::where('no_order', $no_order)
                 ->orderBy('id', 'asc')
@@ -2569,7 +2580,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->save();
 
 
-            self::executeSAR($dataQuotation->no_document, 'kontrak');
+            // self::executeSAR($dataQuotation->no_document, 'kontrak');
 
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
@@ -2917,6 +2928,7 @@ class ReadyOrderController extends Controller
 
     public function reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request)
     {
+        dd('reor=der');
         DB::beginTransaction();
         try {
 
@@ -3443,7 +3455,7 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
-            self::executeSAR($dataQuotation->no_document, 'kontrak');
+            // self::executeSAR($dataQuotation->no_document, 'kontrak');
 
             // $workerOperation = new WorkerOperation();
             // $workerOperation->index($updateHeader, $data_to_log, $bcc, $this->user_id);
@@ -3848,9 +3860,8 @@ class ReadyOrderController extends Controller
         $order = OrderHeader::where('no_document', $no_quotation)
             ->where('is_active', true)
             ->first();
-
         if ($type == 'kontrak') {
-            $quotation = QuotationKontrakH::where('no_document', $no_quotation)
+            $quotation = QuotationKontrakH::with(['order', 'sampling', 'detail'])->where('no_document', $no_quotation)
                 ->where('is_active', true)
                 ->first();
         } else {
@@ -3869,9 +3880,30 @@ class ReadyOrderController extends Controller
             $dataSampling = json_decode($dataSampling, true) ?: [];
         }
 
-        $jumlah_sampel = collect($dataSampling)->sum(function ($item) {
-            return (int) ($item['jumlah_titik'] ?? 0);
+        $jumlah_sampel = collect($dataSampling)->sum(function ($item) use ($type) {
+            $jumlahTitik = (int) ($item['jumlah_titik'] ?? 0);
+
+            if ($type == 'kontrak') {
+                $jumlahPeriode = count($item['periode'] ?? []);
+
+                return $jumlahTitik * $jumlahPeriode;
+            }
+
+            return $jumlahTitik;
         });
+
+        if (!file_exists(public_path() . '/barcode/sar')) {
+            mkdir(public_path() . '/barcode/sar', 0777, true);
+        }
+
+        QrCode::format('png')
+            ->size(220)
+            ->generate(
+                $order->no_order,
+                public_path() . '/barcode/sar/' . \str_replace("/", "-", $order->no_order) . '.png'
+            );
+
+        $filename = $this->cetakPDFSTPS($no_quotation, $type);
 
         DataLapanganSARHeader::updateOrCreate(
             [
@@ -3887,9 +3919,626 @@ class ReadyOrderController extends Controller
                 'no_telpon' => $order->no_tlp_pic_sampling,
                 'titik_koordinat' => null,
                 'jumlah_sampel' => $jumlah_sampel,
+                'filename' => $filename,
                 'updated_at' => Carbon::now(),
                 'updated_by' => $this->karyawan,
             ]
         );
+
+    }
+
+    private function cetakPDFSTPS($noQuotation, $type)
+    {
+        try {
+            return $this->renderQuotationStpsFromDataPendukung($noQuotation, $type);
+        } catch (\Throwable $th) {
+            Log::error(['ReadyOrderController cetakPDFSTPS: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            return response()->json([
+                'message' => 'Data STPS tidak bisa dicetak karena data tidak sinkron dengan data jadwal.!',
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    private function renderQuotationStpsFromDataPendukung($noQuotation, $type)
+    {
+        $isKontrak = $type === 'kontrak';
+
+        if ($isKontrak) {
+            $quotation = QuotationKontrakH::with(['order', 'sampling.jadwal', 'detail'])
+                ->where('no_document', $noQuotation)
+                ->where('is_active', true)
+                ->first();
+        } else {
+            $quotation = QuotationNonKontrak::with(['order', 'sampling.jadwal'])
+                ->where('no_document', $noQuotation)
+                ->where('is_active', true)
+                ->first();
+        }
+
+        if (!$quotation) {
+            throw new \Exception('Quotation tidak ditemukan.');
+        }
+
+        $dataOrder = $quotation->order;
+        if (!$dataOrder) {
+            throw new \Exception('Order tidak ditemukan.');
+        }
+
+        $statusSampling = $this->getStatusSamplingForStps($quotation, $isKontrak);
+        // if (in_array($statusSampling, ['SD', 'SAR'])) {
+        //     return response()->json([
+        //         'message' => 'Sample diantar tidak memiliki STPS.!',
+        //     ], 401);
+        // }
+
+        $dataPengujian = $this->buildStpsDataPengujian($quotation, $isKontrak);
+        if (empty($dataPengujian)) {
+            throw new \Exception('Data pengujian tidak ditemukan.');
+        }
+        $dataNomorSampelSections = $this->buildStpsNomorSampelSections($quotation, $isKontrak, $dataOrder->no_order);
+        if (empty($dataNomorSampelSections)) {
+            throw new \Exception('Data nomor sampel tidak ditemukan.');
+        }
+
+        $tanggalSampling = $this->getQuotationSamplingDate($quotation);
+        $konsultant = $quotation->konsultan ? strtoupper($quotation->konsultan) : '';
+        $perusahaan = $quotation->konsultan ? ' (' . $quotation->nama_perusahaan . ') ' : $quotation->nama_perusahaan;
+        $namaPic = $quotation->nama_pic_sampling .
+            ($quotation->jabatan_pic_sampling ? ' (' . $quotation->jabatan_pic_sampling . ')' : '(-)') .
+            ($quotation->no_tlp_pic_sampling ? ' - ' . $quotation->no_tlp_pic_sampling : '');
+
+        $pdf = new Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'margin_header' => 10,
+            'margin_footer' => 3,
+            'setAutoTopMargin' => 'stretch',
+            'setAutoBottomMargin' => 'stretch',
+            'orientation' => 'P'
+        ]);
+        $pdf->SetProtection(['print'], '', 'skyhwk12');
+        $pdf->showWatermarkImage = true;
+        $pdf->setFooter([
+            'odd' => [
+                'C' => [
+                    'content' => 'Hal {PAGENO} dari {nbpg}',
+                    'font-size' => 6,
+                    'font-style' => 'I',
+                    'font-family' => 'serif',
+                    'color' => '#606060'
+                ],
+                'R' => [
+                    'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                    'font-size' => 5,
+                    'font-style' => 'I',
+                    'font-family' => 'serif',
+                    'color' => '#000000'
+                ],
+                'L' => [
+                    'content' => '',
+                    'font-size' => 4,
+                    'font-style' => 'I',
+                    'font-family' => 'serif',
+                    'color' => '#000000'
+                ],
+                'line' => -1,
+            ]
+        ]);
+
+        $pdf->SetHTMLHeader($this->buildStpsHeaderHtml(
+            $dataOrder,
+            $statusSampling,
+            $quotation,
+            $tanggalSampling,
+            $konsultant,
+            $perusahaan,
+            $namaPic
+        ));
+
+        $this->writeStpsTable(
+            $pdf,
+            $dataPengujian,
+            $this->buildStpsTransportPerdiemRows($quotation, $isKontrak),
+            'TITIK',
+            function ($row) {
+                return $row['jumlah_titik'];
+            }
+        );
+
+        $barcodeSarPath = public_path() . '/barcode/sar/' . str_replace('/', '-', $dataOrder->no_order) . '.png';
+        if (file_exists($barcodeSarPath)) {
+            $pdf->WriteHTML('
+                <table width="100%" style="margin-top: 10px;">
+                    <tr>
+                        <td style="text-align: center;">
+                            <img src="' . $barcodeSarPath . '" style="width: 80px; height: 80px; margin-bottom: 16px;">
+                            <div style="font-size: 10px; text-align: center;">
+                                QR ini digunakan untuk sampler melakukan penginputan nilai hasil uji.
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            ');
+        }
+
+        foreach ($dataNomorSampelSections as $section) {
+            $pdf->SetHTMLHeader($this->buildStpsHeaderHtml(
+                $dataOrder,
+                $statusSampling,
+                $quotation,
+                $tanggalSampling,
+                $konsultant,
+                $perusahaan,
+                $namaPic,
+                $isKontrak ? ($section['periode'] ?? null) : null
+            ));
+            $pdf->AddPage();
+            $this->writeStpsTable(
+                $pdf,
+                $section['rows'],
+                $section['transport_rows'] ?? [],
+                'NOMOR SAMPEL',
+                function ($row) {
+                    return $row['nomor_sampel_html'] ?? '-';
+                },
+                true
+            );
+        }
+
+        if (!file_exists(public_path() . '/stps')) {
+            mkdir(public_path() . '/stps', 0777, true);
+        }
+
+        $fileName = 'STPS-' . str_replace('/', '-', $quotation->no_document) . '.pdf';
+        $pdf->Output(public_path() . '/stps/' . $fileName, 'F');
+
+        return $fileName;
+    }
+
+    private function getStatusSamplingForStps($quotation, $isKontrak)
+    {
+        if (!$isKontrak) {
+            return $quotation->status_sampling;
+        }
+
+        $detail = collect($quotation->detail)->sortBy('periode_kontrak')->first();
+        return $detail->status_sampling ?? $quotation->status_sampling;
+    }
+
+    private function getStatusSamplingLabelForStps($status)
+    {
+        switch ($status) {
+            case 'SP':
+                return '<span><i>Sample Pickup</i></span>';
+            case 'S24':
+                return '<span>Sampling 24 Jam</span>';
+            case 'SAR':
+                return '<span>Sampling Anti Ribet</span>';
+            case 'SD':
+                return '<span>Sampling Diantar</span>';
+            case 'RS':
+                return '<span>Re-Sampling</span>';
+            default:
+                return '<span>Sampling</span>';
+        }
+    }
+
+    private function getQuotationSamplingDate($quotation)
+    {
+        foreach (collect($quotation->sampling ?? []) as $samplingPlan) {
+            $jadwal = collect($samplingPlan->jadwal ?? [])
+                ->where('is_active', 1)
+                ->sortBy('tanggal')
+                ->first();
+
+            if ($jadwal && !empty($jadwal->tanggal)) {
+                return $jadwal->tanggal;
+            }
+        }
+
+        return null;
+    }
+
+    private function buildStpsHeaderHtml($dataOrder, $statusSampling, $quotation, $tanggalSampling, $konsultant, $perusahaan, $namaPic, $periode = null)
+    {
+        $periodeHtml = '';
+        if (!empty($periode)) {
+            $periodeHtml = '
+                <tr>
+                    <td style="text-align: center; font-size: 12px;" colspan="2"><b>' . self::tanggal_indonesia($periode . '-01', 'period') . '</b></td>
+                </tr>
+            ';
+        }
+
+        return '
+            <table width="100%">
+                <tr>
+                    <td width="60%"></td>
+                    <td>
+                        <table class="table table-bordered" width="100%">
+                            <tr>
+                                <td width="50%" style="text-align: center; font-size: 13px;"><b>No Order</b></td>
+                                <td style="text-align: center; font-size: 13px;"><b>' . $dataOrder->no_order . '</b></td>
+                            </tr>
+                            <tr>
+                                <td style="text-align: center; font-size: 12px;" colspan="2"><b>' . $this->getStatusSamplingLabelForStps($statusSampling) . '</b></td>
+                            </tr>
+                            ' . $periodeHtml . '
+                        </table>
+                    </td>
+                </tr>
+            </table>
+            <table width="100%">
+                <tr>
+                    <td class="text-left text-wrap" style="width: 55%;"></td>
+                    <td style="text-align:center">
+                        <p style="font-size:14px;"><b><u>SURAT TUGAS PENGAMBILAN SAMPEL</u></b></p>
+                    </td>
+                </tr>
+            </table>
+            <table style="font-size:13px;font-weight:700;width:100%;margin-top:20px;">
+                <tr>
+                    <td>' . $konsultant . $perusahaan . '</td>
+                </tr>
+                <tr>
+                    <td width="100%">
+                        <p style="font-size:10px">
+                            <u>Informasi Sampling :</u><br>
+                            <span id="tgl_sampling">' . ($tanggalSampling ? self::tanggal_indonesia($tanggalSampling, 'hari') : 'Belum dijadwalkan') . '</span><br>
+                            <span id="alamat_sampling" style="white-space:pre-wrap;word-wrap:break-word;width:50%">' . $quotation->alamat_sampling . '</span><br>
+                            <span id="pic_order">PIC : ' . $namaPic . '</span>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        ';
+    }
+
+    private function writeStpsTable($pdf, array $dataRows, array $extraRows, $thirdColumnTitle, callable $thirdColumnRenderer, $isNomorSampel = false)
+    {
+        $thirdColumnWidth = $isNomorSampel ? '24%' : '13%';
+        $secondColumnWidth = $isNomorSampel ? '74%' : '85%';
+
+        $pdf->WriteHTML('
+            <table class="table table-bordered" style="font-size: 8px; margin-bottom: 10px;">
+                <thead class="text-center">
+                    <tr>
+                        <th width="2%" style="padding: 5px !important;">NO</th>
+                        <th width="' . $secondColumnWidth . '%">KETERANGAN PENGUJIAN</th>
+                        <th width="' . $thirdColumnWidth . '%">' . $thirdColumnTitle . '</th>
+                    </tr>
+                </thead>
+                <tbody>');
+
+        $i = 1;
+        foreach ($dataRows as $value) {
+            $thirdColumnValue = $thirdColumnRenderer($value);
+            $thirdColumnStyle = $isNomorSampel
+                ? 'font-size: 14px; padding: 5px; text-align:center; vertical-align: middle;'
+                : 'font-size: 13px; padding: 5px;text-align:center;';
+
+            $pdf->WriteHTML(
+                '<tr>
+                    <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
+                    <td style="font-size: 12px; padding: 5px;">' . $this->renderStpsDataPengujianDescription($value) . '</td>
+                    <td style="' . $thirdColumnStyle . '">' . $thirdColumnValue . '</td>
+                </tr>'
+            );
+            $i++;
+        }
+
+        foreach ($extraRows as $value) {
+            $thirdColumnValue = $value['nomor_sampel_html'] ?? $value['jumlah_titik'] ?? '-';
+            $thirdColumnStyle = $isNomorSampel
+                ? 'font-size: 14px; padding: 5px; text-align:center; vertical-align: middle;'
+                : 'font-size: 13px; padding: 5px;text-align:center;';
+
+            $pdf->WriteHTML(
+                '<tr>
+                    <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
+                    <td style="font-size: 12px; padding: 5px;">' . $value['keterangan'] . '</td>
+                    <td style="' . $thirdColumnStyle . '">' . $thirdColumnValue . '</td>
+                </tr>'
+            );
+            $i++;
+        }
+
+        $pdf->WriteHTML('</tbody></table>');
+    }
+
+    private function buildStpsDataPengujian($quotation, $isKontrak)
+    {
+        $rows = [];
+
+        if (!$isKontrak) {
+            foreach ($this->decodeJsonToArray($quotation->data_pendukung_sampling) as $item) {
+                $normalized = $this->normalizeStpsSamplingItem($item);
+                if ($normalized) {
+                    $rows[] = $normalized;
+                }
+            }
+
+            return $rows;
+        }
+
+        foreach (collect($quotation->detail ?? [])->sortBy('periode_kontrak') as $detail) {
+            $periode = $detail->periode_kontrak ?? null;
+            foreach ($this->decodeJsonToArray($detail->data_pendukung_sampling) as $group) {
+                $groupPeriode = $group['periode_kontrak'] ?? $periode;
+                foreach ($this->decodeJsonToArray($group['data_sampling'] ?? []) as $item) {
+                    $normalized = $this->normalizeStpsSamplingItem($item, $groupPeriode);
+                    if ($normalized) {
+                        $rows[] = $normalized;
+                    }
+                }
+            }
+        }
+
+        if (empty($rows)) {
+            foreach ($this->decodeJsonToArray($quotation->data_pendukung_sampling ?? []) as $item) {
+                $normalized = $this->normalizeStpsSamplingItem($item);
+                if ($normalized) {
+                    $rows[] = $normalized;
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    private function buildStpsNomorSampelSections($quotation, $isKontrak, $noOrder)
+    {
+        if (!$isKontrak) {
+            $rows = [];
+            foreach ($this->decodeJsonToArray($quotation->data_pendukung_sampling) as $item) {
+                $normalized = $this->normalizeStpsSamplingItem($item, null, $noOrder);
+                if ($normalized) {
+                    $rows[] = $normalized;
+                }
+            }
+
+            if (empty($rows)) {
+                return [];
+            }
+
+            return [[
+                'periode' => null,
+                'rows' => $rows,
+                'transport_rows' => $this->buildStpsTransportPerdiemRows($quotation, false, null, true),
+            ]];
+        }
+
+        $sections = [];
+        foreach (collect($quotation->detail ?? [])->sortBy('periode_kontrak') as $detail) {
+            $periode = $detail->periode_kontrak ?? null;
+            $rows = [];
+
+            foreach ($this->decodeJsonToArray($detail->data_pendukung_sampling) as $group) {
+                $groupPeriode = $group['periode_kontrak'] ?? $periode;
+                foreach ($this->decodeJsonToArray($group['data_sampling'] ?? []) as $item) {
+                    $normalized = $this->normalizeStpsSamplingItem($item, $groupPeriode, $noOrder);
+                    if ($normalized) {
+                        $rows[] = $normalized;
+                    }
+                }
+            }
+
+            if (!empty($rows)) {
+                $sections[] = [
+                    'periode' => $periode,
+                    'rows' => $rows,
+                    'transport_rows' => $this->buildStpsTransportPerdiemRows($quotation, true, $detail, true),
+                ];
+            }
+        }
+
+        if (empty($sections)) {
+            $rows = [];
+            foreach ($this->decodeJsonToArray($quotation->data_pendukung_sampling ?? []) as $item) {
+                $normalized = $this->normalizeStpsSamplingItem($item, null, $noOrder);
+                if ($normalized) {
+                    $rows[] = $normalized;
+                }
+            }
+
+            if (!empty($rows)) {
+                $sections[] = [
+                    'periode' => null,
+                    'rows' => $rows,
+                    'transport_rows' => $this->buildStpsTransportPerdiemRows($quotation, true, null, true),
+                ];
+            }
+        }
+
+        return $sections;
+    }
+
+    private function normalizeStpsSamplingItem($item, $periode = null, $noOrder = null)
+    {
+        $item = (array) $item;
+        if (empty($item)) {
+            return null;
+        }
+
+        $kategori1 = $item['kategori_1'] ?? '';
+        $kategori2 = $item['kategori_2'] ?? '';
+        $parameter = $this->decodeJsonToArray($item['parameter'] ?? []);
+        $regulasi = $this->decodeJsonToArray($item['regulasi'] ?? []);
+        $periodeList = $this->decodeJsonToArray($item['periode'] ?? []);
+        $jumlahTitik = (int) ($item['jumlah_titik'] ?? 0);
+        $penamaanTitik = $this->decodeJsonToArray($item['penamaan_titik'] ?? []);
+
+        if (!$periode && !empty($periodeList)) {
+            $jumlahTitik *= count($periodeList);
+        }
+
+        $nomorSampel = [];
+        foreach ($penamaanTitik as $titik) {
+            foreach ($this->decodeJsonToArray($titik) as $kode => $nama) {
+                if ($kode === '' || $kode === null) {
+                    continue;
+                }
+
+                $nomorSampel[] = $noOrder ? $noOrder . '/' . $kode : $kode;
+            }
+        }
+
+        return [
+            'kategori_1' => $this->extractLabelAfterDash($kategori1),
+            'kategori_2' => $this->extractLabelAfterDash($kategori2),
+            'periode' => $periode,
+            'regulasi' => array_values(array_filter(array_map(function ($value) {
+                return $this->extractLabelAfterDash($value);
+            }, $regulasi))),
+            'parameter' => array_values(array_filter(array_map(function ($value) {
+                $parts = explode(';', $value, 2);
+                return $parts[1] ?? $parts[0] ?? '';
+            }, $parameter))),
+            'persiapan' => ($kategori1 === '1-Air' && !empty($item['volume']))
+                ? '( ' . number_format(((float) $item['volume']) / 1000, 1) . ' L )'
+                : '',
+            'total_parameter' => isset($item['total_parameter']) ? (int) $item['total_parameter'] : count($parameter),
+            'jumlah_titik' => $jumlahTitik,
+            'nomor_sampel' => $nomorSampel,
+            'nomor_sampel_html' => !empty($nomorSampel) ? implode('<br>', array_map(function ($item) {
+                return $item . ';';
+            }, $nomorSampel)) : '-',
+            'is_paket_analisa' => $item['is_paket_analisa'] ?? false,
+            'paket' => $item['paket'] ?? null,
+        ];
+    }
+
+    private function renderStpsDataPengujianDescription(array $value)
+    {
+        $judul = $value['kategori_2'];
+
+        if (!empty($value['is_paket_analisa']) && !empty($value['paket'])) {
+            $judul .= ' - (' . strtoupper($value['paket']) . ')';
+        }
+
+        if (!empty($value['periode'])) {
+            $judul .= ' - ' . self::tanggal_indonesia($value['periode'] . '-01', 'period');
+        }
+
+        $html = '<b style="font-size: 12px;">' . $judul . '</b><hr>';
+
+        foreach ($value['regulasi'] as $index => $regulasi) {
+            $html .= $index === 0
+                ? '<u style="font-size: 12px;">' . $regulasi . '</u>'
+                : '<br><u style="font-size: 12px;">' . $regulasi . '</u>';
+        }
+
+        foreach ($value['parameter'] as $index => $parameter) {
+            $html .= $index === 0
+                ? '<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span>'
+                : ' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span>';
+        }
+
+        $html .= '<br><hr><b><span style="font-size: 13px; margin-top: 5px;">Total Parameter : ' . $value['total_parameter'];
+        if (!empty($value['persiapan'])) {
+            $html .= ' ' . $value['persiapan'];
+        }
+        $html .= '</span></b>';
+
+        return $html;
+    }
+
+    private function buildStpsTransportPerdiemRows($quotation, $isKontrak, $detail = null, $isNomorSampel = false)
+    {
+        $rows = [];
+
+        if (!$isKontrak) {
+            $wilayah = explode('-', $quotation->wilayah ?? '', 2);
+            $namaWilayah = $wilayah[1] ?? $wilayah[0] ?? '';
+
+            if ((int) ($quotation->transportasi ?? 0) > 0) {
+                $rows[] = [
+                    'keterangan' => 'Transportasi - Wilayah Sampling : ' . $namaWilayah,
+                    'jumlah_titik' => 1,
+                    'nomor_sampel_html' => $isNomorSampel ? '-' : null,
+                ];
+            }
+
+            if ((int) ($quotation->perdiem_jumlah_orang ?? 0) > 0) {
+                $rows[] = [
+                    'keterangan' => 'Perdiem : ' . (int) $quotation->perdiem_jumlah_orang,
+                    'jumlah_titik' => 1,
+                    'nomor_sampel_html' => $isNomorSampel ? '-' : null,
+                ];
+            }
+
+            return $rows;
+        }
+
+        $details = $detail ? collect([$detail]) : collect($quotation->detail ?? [])->sortBy('periode_kontrak');
+
+        foreach ($details as $detailItem) {
+            $wilayah = explode('-', $quotation->wilayah ?? '', 2);
+            $namaWilayah = $wilayah[1] ?? $wilayah[0] ?? '';
+            $labelPeriode = (!$isNomorSampel && !empty($detailItem->periode_kontrak))
+                ? ' - ' . self::tanggal_indonesia($detailItem->periode_kontrak . '-01', 'period')
+                : '';
+
+            if ((int) ($detailItem->transportasi ?? 0) > 0) {
+                $rows[] = [
+                    'keterangan' => 'Transportasi - Wilayah Sampling : ' . $namaWilayah . $labelPeriode,
+                    'jumlah_titik' => 1,
+                    'nomor_sampel_html' => $isNomorSampel ? '-' : null,
+                ];
+            }
+
+            if ((int) ($detailItem->perdiem_jumlah_orang ?? 0) > 0) {
+                $rows[] = [
+                    'keterangan' => 'Perdiem : ' . (int) $detailItem->perdiem_jumlah_orang . $labelPeriode,
+                    'jumlah_titik' => 1,
+                    'nomor_sampel_html' => $isNomorSampel ? '-' : null,
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
+    private function decodeJsonToArray($value)
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (is_object($value)) {
+            return json_decode(json_encode($value), true) ?: [];
+        }
+
+        if (is_string($value) && $value !== '') {
+            return json_decode($value, true) ?: [];
+        }
+
+        return [];
+    }
+
+    private function extractLabelAfterDash($value)
+    {
+        if (!is_string($value) || $value === '') {
+            return '';
+        }
+
+        $parts = explode('-', $value);
+        if (count($parts) <= 1) {
+            return $value;
+        }
+
+        return implode('-', array_slice($parts, 1));
+    }
+
+    protected static function tanggal_indonesia($tanggal, $mode = null)
+    {
+        $carbonDate = Carbon::parse($tanggal);
+
+        if ($mode == "period") {
+            return $carbonDate->translatedFormat('F Y');
+        } else {
+            return $carbonDate->translatedFormat('d F Y');
+        }
     }
 }
