@@ -2928,7 +2928,6 @@ class ReadyOrderController extends Controller
 
     public function reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request)
     {
-        dd('reor=der');
         DB::beginTransaction();
         try {
 
