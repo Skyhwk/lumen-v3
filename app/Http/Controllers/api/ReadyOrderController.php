@@ -3926,6 +3926,44 @@ class ReadyOrderController extends Controller
         );
 
     }
+    
+    public function regenerateSarPdf(Request $request)
+    {
+        try {
+            $noQuotation = $request->no_quotation;
+            $type = $request->type;
+
+            if (empty($noQuotation)) {
+                return response()->json([
+                    'message' => 'No quotation wajib diisi.',
+                ], 422);
+            }
+
+            if (empty($type)) {
+                $isKontrak = QuotationKontrakH::where('no_document', $noQuotation)
+                    ->where('is_active', true)
+                    ->exists();
+                $type = $isKontrak ? 'kontrak' : 'non_kontrak';
+            }
+
+            $this->executeSAR($noQuotation, $type);
+
+            $dataSar = DataLapanganSARHeader::where('no_quotation', $noQuotation)->first();
+
+            return response()->json([
+                'message' => 'PDF STPS SAR berhasil dirender ulang.',
+                'filename' => $dataSar->filename ?? null,
+                'type' => $type,
+            ], 200);
+        } catch (\Throwable $th) {
+            Log::error(['ReadyOrderController regenerateSarPdf: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+
+            return response()->json([
+                'message' => 'PDF STPS SAR gagal dirender ulang.',
+                'detail' => $th->getMessage(),
+            ], 500);
+        }
+    }
 
     private function cetakPDFSTPS($noQuotation, $type)
     {

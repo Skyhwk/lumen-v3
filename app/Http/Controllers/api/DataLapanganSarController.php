@@ -16,11 +16,11 @@ class DataLapanganSarController extends Controller
     {
         try {
             $salesSubquery = DB::table('request_quotation')
-                ->select('no_document', 'id_cabang', 'sales_id', 'tanggal_penawaran')
+                ->select('no_document', 'id_cabang', 'sales_id', 'tanggal_penawaran', DB::raw("'non_kontrak' as quotation_type"))
                 ->where('is_active', true)
                 ->unionAll(
                     DB::table('request_quotation_kontrak_H')
-                        ->select('no_document', 'id_cabang', 'sales_id', 'tanggal_penawaran')
+                        ->select('no_document', 'id_cabang', 'sales_id', 'tanggal_penawaran', DB::raw("'kontrak' as quotation_type"))
                         ->where('is_active', true)
                 );
 
@@ -44,6 +44,7 @@ class DataLapanganSarController extends Controller
                     'qt.id_cabang',
                     'qt.sales_id',
                     'qt.tanggal_penawaran',
+                    'qt.quotation_type as type',
                     'mc.nama_cabang',
                 ])
                 ->whereNotNull('datalapangan_sar_header.filename');
