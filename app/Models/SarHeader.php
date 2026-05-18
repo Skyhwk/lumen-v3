@@ -13,7 +13,7 @@ class SarHeader extends Sector
     protected $guarded = [];
 
     public function detail(){
-        return $this->hasMany(SarDetail::class, 'id', 'id_header')
+        return $this->hasMany(SarDetail::class, 'id_header', 'id')
         ->where('is_active', true);
     }
 }
