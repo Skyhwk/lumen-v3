@@ -371,7 +371,7 @@ class ReadyOrderController extends Controller
         try {
             if ($request->status_quotation == 'kontrak') {
                 $dataQuotation = QuotationKontrakH::where('no_document', $request->no_document)->where('is_active', true)->first();
-                if ($request->is_generate_data_lab === 0) {
+                if ($request->is_generate_data_lab === 0 || $dataQuotation->status_sampling == 'SAR') {
                     if ($dataQuotation->data_lama && $dataQuotation->data_lama != null) {
                         $dataLama = json_decode($dataQuotation->data_lama);
                         if (isset($dataLama->no_order) && $dataLama->no_order != null) {
@@ -402,7 +402,7 @@ class ReadyOrderController extends Controller
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
-                if ($request->is_generate_data_lab === 0) {
+                if ($request->is_generate_data_lab === 0 || $dataQuotation->status_sampling == 'SAR') {
                     if ($dataQuotation->data_lama && $dataQuotation->data_lama != null) {
                         $dataLama = json_decode($dataQuotation->data_lama);
                         if (isset($dataLama->no_order) && $dataLama->no_order != null) {
@@ -715,7 +715,7 @@ class ReadyOrderController extends Controller
             }
 
             $no_order = $id_pelanggan . $y . $no_urut;
-            if ($request->is_generate_data_lab == 0) {
+            if ($request->is_generate_data_lab == 0 || $dataQuotation->status_sampling == 'SAR') {
                 return self::orderNonPengujian($dataQuotation, $no_order, $request);
             } else {
                 if (count(json_decode($dataQuotation->data_pendukung_sampling)) == 0) {
@@ -831,7 +831,7 @@ class ReadyOrderController extends Controller
 
             $no_order = $id_pelanggan . $y . $no_urut;
 
-            if ($request->is_generate_data_lab == 0) {
+            if ($request->is_generate_data_lab == 0 || $dataQuotation->status_sampling == 'SAR') {
                 return self::orderNonPengujian($dataQuotation, $no_order, $request);
             } else {
                 if (count(json_decode($dataQuotation->data_pendukung_sampling)) == 0) {
