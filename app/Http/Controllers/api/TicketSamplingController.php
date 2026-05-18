@@ -21,7 +21,13 @@ class TicketSamplingController extends Controller
     {
         try {
             $department = $request->attributes->get('user')->karyawan->id_department;
-            if ($department == 14 && !in_array($this->user_id, [10, 15, 93, 123])) {
+            if (
+                (
+                    in_array($department, [14, 16]) && // APLING && Technical Assurance Supervisor
+                    !in_array($this->user_id, [10, 15, 93, 123])
+                ) ||
+                in_array($this->user_id, [39]) // ID BIMA
+            ) {
                 $data = TicketSampling::where('is_active', true)
                     ->orderBy('id', 'desc');
                 return Datatables::of($data)
@@ -327,11 +333,19 @@ class TicketSamplingController extends Controller
             DB::commit();
 
             if ($this->karyawan == $data->created_by) {
-                $user_programmer = MasterKaryawan::where('id_department', 14)
-                    ->whereNotIn('id', [10, 15, 93, 123])
-                    ->where('is_active', true)
-                    ->pluck('id')
-                    ->toArray();
+                // $user_programmer = MasterKaryawan::whereIn('id_department', [14, 16])
+                //     ->whereNotIn('id', [10, 15, 93, 123])
+                //     ->where('is_active', true)
+                //     ->pluck('id')
+                //     ->toArray();
+                $user_programmer = MasterKaryawan::where(function ($query) {
+                    $query->whereIn('id_department', [14, 16])
+                        ->whereNotIn('id', [10, 15, 93, 123]);
+                })
+                ->orWhere('id', 39)
+                ->where('is_active', true)
+                ->pluck('id')
+                ->toArray();
 
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Sampling Update')
@@ -457,11 +471,20 @@ class TicketSamplingController extends Controller
 
             $data->save();
 
-            $user_Sampling = MasterKaryawan::where('id_department', 14)
-                ->whereNotIn('id', [10, 15, 93, 123])
-                ->where('is_active', true)
-                ->pluck('id')
-                ->toArray();
+            // $user_Sampling = MasterKaryawan::where('id_department', 14)
+            //     ->whereNotIn('id', [10, 15, 93, 123])
+            //     ->where('is_active', true)
+            //     ->pluck('id')
+            //     ->toArray();
+
+            $user_Sampling = MasterKaryawan::where(function ($query) {
+                $query->whereIn('id_department', [14, 16])
+                    ->whereNotIn('id', [10, 15, 93, 123]);
+            })
+            ->orWhere('id', 39)
+            ->where('is_active', true)
+            ->pluck('id')
+            ->toArray();
 
             Notification::whereIn('id', $user_Sampling)
                 ->title('Ticket Sampling !')
