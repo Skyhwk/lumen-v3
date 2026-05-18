@@ -23,10 +23,10 @@ class GenerateStrukSarService
 
         $mpdf->WriteHTML($html);
 
-        $filename = public_path("struk/sar/{$data->no_order}.pdf");
+        $filename = public_path("struk/sar/STRUK_SAR_{$data->no_order}.pdf");
 
         if (!file_exists(dirname($filename))) {
-            mkdir(dirname($filename), 0755, true);
+            mkdir(dirname($filename), 0777, true);
         }
 
         $mpdf->Output($filename, Destination::FILE);
