@@ -75,6 +75,72 @@ class GenerateQrDocumentLhp
             ], 500);
         }
     }
+    public function insertSAR($type_doc, $data, $generated_by)
+    {
+        $doc = 'LHP_' . $data->no_order;
+        $cek = QrDocument::where('file', $doc)
+            ->first();
+        if ($cek) {
+            $cek->id_document = $data->id;
+            $cek->data = json_encode([
+                'Nomor_Order' => $data->no_order,
+                'Nama_Pelanggan' => $data->nama_pelanggan,
+                'Pelanggan_ID' => substr($data->no_order, 0, 6),
+                'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                // 'Disahkan_Oleh' => $data->nama_karyawan,
+                // 'Jabatan' => $data->jabatan_karyawan
+            ]);
+            $cek->created_at =Carbon::now()->format('Y-m-d H:i:s');
+            $cek->created_by = $generated_by;
+            $cek->save();
+            return $cek->file;
+        }
+        DB::beginTransaction();
+        try {
+
+            $filename = 'LHP_' . \str_replace("/", "_", $data->no_order);
+            $dir = public_path() . "/qr_documents/";
+
+            if (!file_exists($dir)) {
+                mkdir($dir, 0777, true);
+            }
+
+            $path = public_path() . "/qr_documents/" . $filename . '.svg';
+            $link = 'https://www.intilab.com/validation/';
+            $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+            QrCode::size(200)->generate($link . $unique, $path);
+            // dd($path);
+
+            $dataQr = [
+                'id_document' => $data->id,
+                'type_document' => $type_doc,
+                'kode_qr' => $unique,
+                'file' => $filename,
+                'data' => json_encode([
+                    'Nomor_Order' => $data->no_order,
+                    'Nama_Pelanggan' => html_entity_decode($data->nama_pelanggan),
+                    'Pelanggan_ID' => substr($data->no_order, 0, 6),
+                    'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    // 'Disahkan_Oleh' => $data->nama_karyawan,
+                    // 'Jabatan' => $data->jabatan_karyawan
+                ]),
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $generated_by
+            ];
+
+            QrDocument::insert($dataQr);
+            DB::commit();
+            return $filename;
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
+            ], 500);
+        }
+    }
 
     public function update($type_doc, $data)
     {
