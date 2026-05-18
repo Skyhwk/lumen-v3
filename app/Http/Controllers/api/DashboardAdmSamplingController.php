@@ -277,7 +277,7 @@ class DashboardAdmSamplingController extends Controller
 
         $tableRows = SamplingPlan::query()
         ->selectRaw("
-            created_by as sales,
+            petugas_jadwal as admin_sampling,
 
             COUNT(
                 CASE
@@ -297,25 +297,22 @@ class DashboardAdmSamplingController extends Controller
                 TIMESTAMPDIFF(
                     SECOND,
                     created_at,
-                    approved_at
+                    timestamp_jadwal
                 )
             ) as avgSeconds
         ")
         ->where('is_active', true)
         ->where('status', 1)
-        ->where('is_approved', 1)
-        ->whereNotNull('approved_at')
-
-        // FILTER PERIODE
+        ->whereNotNull('timestamp_jadwal')
         ->whereYear('created_at', $tahunSekarang)
         ->whereMonth('created_at', $numMonth)
-
-        ->groupBy('created_by')
+        ->groupBy('petugas_jadwal')
+        ->orderBy('avgSeconds', 'desc')
         ->get()
         ->map(function ($item) use ($formatDuration) {
 
             return [
-                'sales' => $item->sales,
+                'admin_sampling' => $item->admin_sampling,
                 'requestSp' => (int) $item->requestSp,
                 'spRevisi' => (int) $item->spRevisi,
                 'average' => $formatDuration($item->avgSeconds),
@@ -331,7 +328,7 @@ class DashboardAdmSamplingController extends Controller
 
     public function getChart(Request $request)
     {
-        $tahun = $request->year ?? now()->year;
+        $tahun = $request->year ?? Carbon::now()->year;
         
         $chartLabels = [
             1 => 'Jan',
