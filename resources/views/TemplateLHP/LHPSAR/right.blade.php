@@ -8,13 +8,15 @@
                         </td>
                     </tr>
                     <tr>
+                        <td class="custom5" width="120">No Order</td>
+                        <td class="custom5" width="12">:</td>
+                        <td class="custom5">{{ $header->no_order }}</td>
+                    </tr>
+                    <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ $header->nama_pelanggan }}</td>
                     </tr>
-                </table>
-
-                <table style="padding-top: 10px;" width="100%">
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
