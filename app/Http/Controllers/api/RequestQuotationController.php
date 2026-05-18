@@ -766,7 +766,7 @@ class RequestQuotationController extends Controller
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
-            $data->transportasi = $payload->data_wilayah->status_sampling != 'SD' ? $payload->data_wilayah->transportasi : null;
+            $data->transportasi = !in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR']) ? $payload->data_wilayah->transportasi : null;
             $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem;
 
             $harga_transport = 0;
@@ -775,7 +775,7 @@ class RequestQuotationController extends Controller
             $perdiem = 0;
 
             if ($payload->data_wilayah->status_wilayah == 'DALAM KOTA') {
-                if ($payload->data_wilayah->status_sampling != 'SD') {
+                if (!in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
                     $data->perdiem_jumlah_orang = $payload->data_wilayah->perdiem_jumlah_orang;
                     $data->perdiem_jumlah_hari = $payload->data_wilayah->perdiem_jumlah_hari;
 
@@ -834,7 +834,7 @@ class RequestQuotationController extends Controller
                 $harga_transportasi_darat = 0;
                 $harga_penginapan = 0;
 
-                if ($payload->data_wilayah->status_sampling != 'SD') {
+                if (!in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
                     $data->perdiem_jumlah_orang = $payload->data_wilayah->perdiem_jumlah_orang;
                     $data->perdiem_jumlah_hari = $payload->data_wilayah->perdiem_jumlah_hari;
 
@@ -1312,7 +1312,7 @@ class RequestQuotationController extends Controller
                 }
 
                 if($data_lama->status_sp == 'false') {
-                    if ($payload->data_wilayah->status_sampling == 'SD') {
+                    if (in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
                         SamplingPlan::where('no_quotation', $data->no_document)
                             ->update([
                                 'quotation_id' => $data->id,
@@ -1725,7 +1725,7 @@ class RequestQuotationController extends Controller
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
-            $data->transportasi = $payload->data_wilayah->status_sampling != 'SD' ? $payload->data_wilayah->transportasi : null;
+            $data->transportasi = !in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR']) ? $payload->data_wilayah->transportasi : null;
 
             $harga_transport = 0;
             $jam = 0;
@@ -1733,7 +1733,7 @@ class RequestQuotationController extends Controller
             $perdiem = 0;
 
             if ($payload->data_wilayah->status_wilayah == 'DALAM KOTA') {
-                if ($payload->data_wilayah->status_sampling != 'SD') {
+                if (!in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
                     $data->perdiem_jumlah_orang = $payload->data_wilayah->perdiem_jumlah_orang;
                     $data->perdiem_jumlah_hari = $payload->data_wilayah->perdiem_jumlah_hari;
 
@@ -1783,7 +1783,7 @@ class RequestQuotationController extends Controller
                 $harga_transportasi_darat = 0;
                 $harga_penginapan = 0;
 
-                if ($payload->data_wilayah->status_sampling != 'SD') {
+                if (!in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
                     $data->perdiem_jumlah_orang = $payload->data_wilayah->perdiem_jumlah_orang;
                     $data->perdiem_jumlah_hari = $payload->data_wilayah->perdiem_jumlah_hari;
 
@@ -2267,7 +2267,7 @@ class RequestQuotationController extends Controller
 
                     $message = "Terjadi perubahan quotation $dataOld->no_document menjadi $data->no_document dan data yang sudah terjadwal akan di tarik otomatis oleh system dan menunggu request baru dari sales";
                 } else { //tidak merubah jadwal dalam arti update no doc dalam sp  if($data_lama->status_sp == 'false')
-                    if ($payload->data_wilayah->status_sampling == 'SD') {
+                    if (in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
                         SamplingPlan::where('no_quotation', $dataOld->no_document)
                             ->update([
                                 'no_quotation' => $data->no_document,
@@ -3092,11 +3092,11 @@ class RequestQuotationController extends Controller
                         if (in_array($pengujian->periode_kontrak, $data_wilayah->wilayah_data[$c]->periode)) {
 
                             // Menjumlahkan total % discount transport kedalam variable
-                            if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD')
+                            if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR']))
                                 $dataD->transportasi = $data_wilayah->wilayah_data[$c]->transportasi;
                             // dd($data_wilayah->status_Wilayah);
                             if ($data_wilayah->status_Wilayah == 'DALAM KOTA') {
-                                if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD') {
+                                if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR'])) {
 
                                     $dataD->perdiem_jumlah_orang = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang;
                                     $dataD->perdiem_jumlah_hari = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
@@ -3202,7 +3202,7 @@ class RequestQuotationController extends Controller
                                 $harga_transportasi_darat = 0;
                                 $harga_penginapan = 0;
                             } else {
-                                if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD') {
+                                if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR'])) {
 
                                     $dataD->perdiem_jumlah_orang = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang;
                                     $dataD->perdiem_jumlah_hari = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
@@ -3224,7 +3224,7 @@ class RequestQuotationController extends Controller
                                 $harga_penginapan = 0;
 
                                 // dd($data_wilayah->wilayah_data);
-                                if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD') {
+                                if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR'])) {
                                     //hitung harga tiket perjalanan
                                     $dataD->kalkulasi_by_sistem = $data_wilayah->wilayah_data[$c]->kalkulasi_by_sistem;
 
@@ -4629,11 +4629,11 @@ class RequestQuotationController extends Controller
                         if (in_array($pengujian->periode_kontrak, $data_wilayah->wilayah_data[$c]->periode)) {
 
                             // Menjumlahkan total % discount transport kedalam variable
-                            if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD')
+                            if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR']))
                                 $dataD->transportasi = $data_wilayah->wilayah_data[$c]->transportasi;
                             // dd($data_wilayah->status_Wilayah);
                             if ($data_wilayah->status_Wilayah == 'DALAM KOTA') {
-                                if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD') {
+                                if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR'])) {
 
                                     $dataD->perdiem_jumlah_orang = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang;
                                     $dataD->perdiem_jumlah_hari = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
@@ -4739,7 +4739,7 @@ class RequestQuotationController extends Controller
                                 $harga_transportasi_darat = 0;
                                 $harga_penginapan = 0;
                             } else {
-                                if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD') {
+                                if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR'])) {
 
                                     $dataD->perdiem_jumlah_orang = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang;
                                     $dataD->perdiem_jumlah_hari = $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
@@ -4761,7 +4761,7 @@ class RequestQuotationController extends Controller
                                 $harga_penginapan = 0;
 
                                 // dd($data_wilayah->wilayah_data);
-                                if ($data_wilayah->wilayah_data[$c]->status_sampling != 'SD') {
+                                if (!in_array($data_wilayah->wilayah_data[$c]->status_sampling, ['SD', 'SAR'])) {
                                     //hitung harga tiket perjalanan
                                     $dataD->kalkulasi_by_sistem = $data_wilayah->wilayah_data[$c]->kalkulasi_by_sistem;
 

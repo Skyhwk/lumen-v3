@@ -339,7 +339,7 @@ class QtApproveController extends Controller
 
                 $status_sampling = array_unique($status_sampling);
                 if (count($status_sampling) == 1) {
-                    if (in_array('SD', $status_sampling)) {
+                    if (in_array('SD', $status_sampling) || in_array('SAR', $status_sampling)) {
                         $data->flag_status = 'sp';
                         $data->is_ready_order = 1;
                     } else if ($nonPengujian) {

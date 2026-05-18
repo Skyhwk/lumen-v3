@@ -40,9 +40,15 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 
 class QtOrderedController extends Controller
 {
+    protected function getStatusSamplingFilter()
+    {
+        return null;
+    }
+
     public function index(Request $request)
     {
         try {
+            $statusSamplingFilter = $this->getStatusSamplingFilter();
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
                     ->select(
@@ -82,6 +88,10 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation.tanggal_penawaran', 'desc')
                     ->orderBy('request_quotation.id', 'desc');
+
+                if ($statusSamplingFilter) {
+                    $data->where('request_quotation.status_sampling', $statusSamplingFilter);
+                }
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
                     ->select(
@@ -121,6 +131,10 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc')
                     ->orderBy('request_quotation_kontrak_H.id', 'desc');
+
+                if ($statusSamplingFilter) {
+                    $data->where('request_quotation_kontrak_H.status_sampling', $statusSamplingFilter);
+                }
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -193,6 +207,7 @@ class QtOrderedController extends Controller
     public function exportExcel(Request $request)
     {
         try {
+            $statusSamplingFilter = $this->getStatusSamplingFilter();
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
                     ->select('request_quotation.*') // tambahkan ini
@@ -203,6 +218,10 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation.tanggal_penawaran', 'desc')
                     ->orderBy('request_quotation.id', 'desc');
+
+                if ($statusSamplingFilter) {
+                    $data->where('request_quotation.status_sampling', $statusSamplingFilter);
+                }
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
                     ->select('request_quotation_kontrak_H.*')
@@ -213,6 +232,10 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc')
                     ->orderBy('request_quotation_kontrak_H.id', 'desc');
+
+                if ($statusSamplingFilter) {
+                    $data->where('request_quotation_kontrak_H.status_sampling', $statusSamplingFilter);
+                }
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;

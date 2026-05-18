@@ -48,7 +48,7 @@ class SampelDatangController extends Controller
             ->where('no_document', 'LIKE', '%' . $request->no_quotation . '%')
             ->whereHas('order')
             ->whereNotIn('flag_status', ['void', 'rejected'])
-            ->where(fn($q) => $q->where('status_sampling', 'SD')->orWhereNull('status_sampling'))
+            ->where(fn($q) => $q->whereIn('status_sampling', ['SD', 'SAR'])->orWhereNull('status_sampling'))
             ->where('is_active', true)
             ->limit(10)
             ->get()

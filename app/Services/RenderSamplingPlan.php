@@ -51,7 +51,9 @@ class RenderSamplingPlan
             $sampling = '';
             $data = $this->data;
 
-            if ($data->status_sampling == 'S24') {
+            if ($data->status_sampling == 'SAR') {
+                $sampling = 'SAMPLING ANTI RIBET';
+            } else if ($data->status_sampling == 'S24') {
                 $sampling = 'SAMPLING 24 JAM';
             } else if ($data->status_sampling == 'SD') {
                 $sampling = 'SAMPLING DATANG';
@@ -516,7 +518,9 @@ class RenderSamplingPlan
             // dd($data->sampling->where('periode_kontrak', $periode)->toArray());
             // dd($data->detail->toArray());
 
-            if ($data->status_sampling == 'S24') {
+            if ($data->status_sampling == 'SAR') {
+                $sampling = 'SAMPLING ANTI RIBET';
+            } else if ($data->status_sampling == 'S24') {
                 $sampling = 'SAMPLING 24 JAM';
             } else if ($data->status_sampling == 'SD') {
                 $sampling = 'SAMPLING DATANG';

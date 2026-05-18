@@ -287,6 +287,9 @@ class RenderKontrak
             );
 
             switch ($data->status_sampling) {
+                case "SAR":
+                    $sampling = strtoupper(__('QTC.status_sampling.SAR'));
+                    break;
                 case "S24":
                     $sampling = strtoupper(__('QTC.status_sampling.S24'));
                     break;
@@ -984,6 +987,9 @@ class RenderKontrak
 
                     array_push($per, $value->periode_kontrak);
                     switch ($v->status_sampling) {
+                        case "SAR":
+                            $sampling = strtoupper(__('QTC.status_sampling.SAR'));
+                            break;
                         case "S24":
                             $sampling = strtoupper(__('QTC.status_sampling.S24'));
                             break;

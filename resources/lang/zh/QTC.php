@@ -12,6 +12,7 @@ return [
         'right_content' => '注：本文件由系统自动发布。'
     ],
     'status_sampling' => [
+        'SAR' => 'Sampling Anti Ribet',
         'S24' => '24小时采样',
         'SD' => '已送达样品',
         'S' => '采样'

@@ -761,7 +761,7 @@ class StpsFdlController extends Controller
                 //  =========================================COLLECT DATA SELESAI========================================
             }
 
-            if ($dataPenawaran->status_sampling == 'SD') {
+            if (in_array($dataPenawaran->status_sampling, ['SD', 'SAR'])) {
                 return response()->json([
                     'message' => 'Sample diantar tidak memiliki STPS.!',
                 ], 401);

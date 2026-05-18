@@ -1577,4 +1577,18 @@ class GenerateInvoiceController extends Controller
             'success'  => 'Sukses menghapus faktur',
         ]);
     }
+
+    public function clearFileUpload(Request $request)
+    {
+        $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
+
+        $inv->upload_file = null;
+        $inv->save();
+
+        $this->generatePDF($request->no_invoice);
+
+        return response()->json([
+            'success'  => 'Sukses menghapus faktur',
+        ]);
+    }
 }

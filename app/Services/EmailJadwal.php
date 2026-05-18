@@ -513,6 +513,9 @@ class EmailJadwal
         }
 
         switch ($data->status_sampling) {
+            case 'SAR':
+                $sampling = strtoupper(__('Jadwal.status_sampling.SAR'));
+                break;
             case 'S24':
                 $sampling = strtoupper(__('Jadwal.status_sampling.S24'));
                 break;
@@ -817,6 +820,9 @@ class EmailJadwal
             }
 
             switch ($data->status_sampling) {
+                case 'SAR':
+                    $sampling = strtoupper(__('Jadwal.status_sampling.SAR'));
+                    break;
                 case 'S24':
                     $sampling = strtoupper(__('Jadwal.status_sampling.S24'));
                     break;
