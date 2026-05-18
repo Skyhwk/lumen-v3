@@ -1613,7 +1613,7 @@ class ReadyOrderController extends Controller
 
                     if ($existing_detail) {
                         $tanggal_sampling = $existing_detail->tanggal_sampling;
-                        if ($detail_baru[$changes]["status_sampling"] != 'SD') {
+                        if (!in_array($detail_baru[$changes]["status_sampling"], ['SD', 'SAR'])) {
                             $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
                             $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
                             if (!$tanggal_sampling) {
@@ -2384,7 +2384,7 @@ class ReadyOrderController extends Controller
                                 $periodeNew = $periode_kontrak;
                                 $statusSamplingNew = $t->status_sampling;
                                 $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
-                                if ($statusSamplingNew != 'SD') {
+                                if (!in_array($statusSamplingNew, ['SD', 'SAR'])) {
                                     $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
                                     if (!$tanggal_sampling) {
                                         DB::rollback();
@@ -2982,7 +2982,7 @@ class ReadyOrderController extends Controller
                         $statusSamplingNew = $detail_baru[$changes]["status_sampling"];
                         $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
 
-                        if ($statusSamplingNew != 'SD') {
+                        if (!in_array($statusSamplingNew, ['SD', 'SAR'])) {
                             $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
                             if (!$tanggal_sampling) {
                                 DB::rollback();
@@ -3144,7 +3144,7 @@ class ReadyOrderController extends Controller
                     $periodeNew = $value->periode_kontrak;
                     $statusSamplingNew = $value->status_sampling;
                     $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
-                    if ($statusSamplingNew != 'SD') {
+                    if (!in_array($statusSamplingNew, ['SD', 'SAR'])) {
                         $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
                         if (!$tanggal_sampling) {
                             DB::rollback();
