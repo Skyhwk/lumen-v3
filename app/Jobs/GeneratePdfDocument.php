@@ -121,6 +121,9 @@ class GeneratePdfDocument extends Job
         );
 
         switch ($data->status_sampling) {
+            case 'SAR':
+                $sampling = 'SAMPLING ANTI RIBET';
+                break;
             case 'S24':
                 $sampling = 'SAMPLING 24 JAM';
                 break;
@@ -314,6 +317,9 @@ class GeneratePdfDocument extends Job
             'orientation' => 'P'
         );
         switch ($data->status_sampling) {
+            case 'SAR':
+                $sampling = 'SAMPLING ANTI RIBET';
+                break;
             case 'S24':
                 $sampling = 'SAMPLING 24 JAM';
                 break;
@@ -575,6 +581,9 @@ class GeneratePdfDocument extends Job
 
         //create by staf : ist690,step 5 chek sampling
         switch ($data->status_sampling) {
+            case 'SAR':
+                $sampling = 'SAMPLING ANTI RIBET';
+                break;
             case 'S24':
                 $sampling = 'SAMPLING 24 JAM';
                 break;
@@ -879,7 +888,9 @@ class GeneratePdfDocument extends Job
             'orientation' => 'P'
         );
 
-        if ($data->status_sampling == 'S24') {
+        if ($data->status_sampling == 'SAR') {
+            $sampling = 'SAMPLING ANTI RIBET';
+        } else if ($data->status_sampling == 'S24') {
             $sampling = 'SAMPLING 24 JAM';
         } else if ($data->status_sampling == 'SD') {
             $sampling = 'SAMPLE DIANTAR';

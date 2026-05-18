@@ -95,7 +95,8 @@ class QuoteSampleController extends Controller
                     $status = strtolower($item->status_sampling);
                     if (
                         (strpos($search, '24') !== false && $status === 's24') ||
-                        (strpos($search, 'antar') !== false && $status === 'sd') ||
+                        (strpos($search, 'antar') !== false && in_array($status, ['sd', 'sar'])) ||
+                        (strpos($search, 'anti ribet') !== false && $status === 'sar') ||
                         (strpos($search, 'sampling') !== false && $status === 's') ||
                         (strpos($search, 're') !== false && $status === 'rs')
                     ) {
@@ -281,7 +282,7 @@ class QuoteSampleController extends Controller
 
 
 
-                if ($value->status_sampling != 'SD') {
+                if (!in_array($value->status_sampling, ['SD', 'SAR'])) {
                     $pdf->SetHTMLHeader('
                         <table class="table table-bordered" width="100%" style="margin-bottom: 10px;">
                             <tr class="">

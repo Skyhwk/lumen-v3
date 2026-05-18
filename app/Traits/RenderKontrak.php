@@ -240,6 +240,9 @@ trait RenderKontrak
             );
 
             switch ($data->status_sampling) {
+                case "SAR":
+                    $sampling = "SAMPLING ANTI RIBET";
+                    break;
                 case "S24":
                     $sampling = "SAMPLING 24 JAM";
                     break;
@@ -679,6 +682,9 @@ trait RenderKontrak
 
                     array_push($per, $value->periode_kontrak);
                     switch ($v->status_sampling) {
+                        case "SAR":
+                            $sampling = "SAMPLING ANTI RIBET";
+                            break;
                         case "S24":
                             $sampling = "SAMPLING 24 JAM";
                             break;

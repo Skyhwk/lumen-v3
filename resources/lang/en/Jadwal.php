@@ -12,6 +12,7 @@ return [
         'right_content' => 'Note : This document is published automatically by the system.'
     ],
     'status_sampling' => [
+        'SAR' => 'Sampling Anti Ribet',
         'S24' => '24 Hours Sampling',
         'SD' => 'Delivered Sample',
         'S' => 'Sampling',

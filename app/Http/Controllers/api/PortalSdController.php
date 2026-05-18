@@ -35,7 +35,7 @@ class PortalSdController extends Controller
             if($search == null){
                 if ($type[1] == 'QTC') {
                     $search = QuotationKontrakH::with(['SampelDiantar','detail' => function ($q) {
-                        $q->where('status_sampling', 'SD');
+                        $q->whereIn('status_sampling', ['SD', 'SAR']);
                     }])->where('no_document', $request->no_document)
                     ->where('is_active', 1)
                     ->first();
@@ -152,7 +152,7 @@ class PortalSdController extends Controller
             $linkPath = env('APP_URL') . '/public/quotation/';
             if ($type[1] === 'QTC') {
                 $data = QuotationKontrakH::with(['detail' => function ($q) use ($request) {
-                    $q->where('status_sampling', 'SD');
+                    $q->whereIn('status_sampling', ['SD', 'SAR']);
                 }])
                     ->where('no_document', $request->no_document)
                     ->where('is_active', true)
@@ -169,7 +169,7 @@ class PortalSdController extends Controller
             } else {
                 $data = QuotationNonKontrak::where('no_document', $request->no_document)
                     ->where('flag_status', 'ordered')
-                    ->where('status_sampling', 'SD')
+                    ->whereIn('status_sampling', ['SD', 'SAR'])
                     ->where('is_active', true)
                     ->first();
                 $formatData = (object)[
@@ -797,7 +797,7 @@ class PortalSdController extends Controller
             if ($type[1] == 'QTC') {
                 if($datas->isEmpty()){
                     $datas = QuotationKontrakH::with(['detail' => function ($q) {
-                        $q->where('status_sampling', 'SD');
+                        $q->whereIn('status_sampling', ['SD', 'SAR']);
                     }])->where('no_document', $request->no_document)
                     ->where('is_active', 1)
                     ->first();
@@ -967,21 +967,21 @@ class PortalSdController extends Controller
     {
         if ($request->status_quotation == 'kontrak') {
             $chekSD = QuotationKontrakH::with(['detail' => function ($q) {
-                $q->where('status_sampling', 'SD');
+                $q->whereIn('status_sampling', ['SD', 'SAR']);
             }])
                 ->where('id', $request->id)
                 //->where('flag_status', 'ordered')
                 ->where('is_active', true)->first();
 
             if ($chekSD != null) {
-                $hasSD = collect($chekSD->detail)->contains('status_sampling', 'SD');
+                $hasSD = collect($chekSD->detail)->contains(fn ($item) => in_array($item->status_sampling, ['SD', 'SAR']));
                 return response()->json(["status" => $hasSD], 200);
             } else {
                 return response()->json(["status" => false], 200);
             }
         } else {
             $chekSD = QuotationNonKontrak::where('id', $request->id)
-                ->where('status_sampling', 'SD')
+                ->whereIn('status_sampling', ['SD', 'SAR'])
                 //->where('flag_status', 'ordered')
                 ->where('is_active', true)->first();
             if ($chekSD != null) {
@@ -1055,7 +1055,7 @@ class PortalSdController extends Controller
 
                 if ($type[1] == 'QTC') {
                     $dataQt = QuotationKontrakH::with(['detail' => function ($q) {
-                        $q->where('status_sampling', 'SD');
+                        $q->whereIn('status_sampling', ['SD', 'SAR']);
                     }])->where('no_document', $request->no_document)
                     ->where('is_active', 1)
                     ->first();
@@ -1107,7 +1107,7 @@ class PortalSdController extends Controller
                 } else {
                     $dataQt = QuotationNonKontrak::where('no_document', $request->no_document)
                         ->where('is_active', 1)
-                        ->where('status_sampling', 'SD')
+                        ->whereIn('status_sampling', ['SD', 'SAR'])
                         ->first();
 
                     if ($dataQt != null) {

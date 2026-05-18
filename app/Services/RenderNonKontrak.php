@@ -86,7 +86,9 @@ class RenderNonKontrak
                 $mpdfConfig['default_font'] = 'notoserifsc';
             }
 
-            if ($data->status_sampling == 'S24') {
+            if ($data->status_sampling == 'SAR') {
+                $sampling = strtoupper(__('QT.status_sampling.SAR'));
+            } else if ($data->status_sampling == 'S24') {
                 $sampling = strtoupper(__('QT.status_sampling.S24'));
             } else if ($data->status_sampling == 'SD') {
                 $sampling = strtoupper(__('QT.status_sampling.SD'));
