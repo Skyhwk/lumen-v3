@@ -159,4 +159,23 @@ class FdlSarController extends Controller
             ], 400);
         }
     }
+
+    public function renderPdf(Request $request)
+    {
+        $hasilUjiSAR = SarHeader::with('detail')->findOrFail($request->id);
+
+        $hasilUjiSAR->tanggal_lhp = date('Y-m-d');
+
+        $file_qr = new GenerateQrDocumentLhp();
+        if ($path = $file_qr->insertSAR('LHP_SAR', $hasilUjiSAR, $this->karyawan)) {
+            $hasilUjiSAR->file_qr = $path;
+        }
+
+        $filename = RenderLhpSar::setDataHeader($hasilUjiSAR)->setDataDetail($hasilUjiSAR->detail)->render();
+
+        $hasilUjiSAR->file_lhp = $filename;
+        $hasilUjiSAR->save();
+
+        return response()->json($filename, 200);
+    }
 }
