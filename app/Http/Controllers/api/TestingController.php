@@ -53,7 +53,7 @@ use App\Models\{
     Gravimetri,
     MasterPelanggan,
     Titrimetri,
-    WsValueAir,//batas
+    WsValueAir, //batas
     DataLapanganEmisiOrder,
     DataLapanganIsokinetikBeratMolekul,
     DataLapanganIsokinetikKadarAir,
@@ -77,6 +77,7 @@ use App\Models\{
     JenisFont,
     TemplateBackground,
     MasterTargetSales,
+    SarHeader,
     TemplatePaketAnalisa
 };
 use App\Services\{
@@ -96,7 +97,8 @@ use App\Services\{
     GetBawahan,
     SnapshotPersiapanService,
     GenerateToken,
-    GenerateDokumenCocService
+    GenerateDokumenCocService,
+    GenerateStrukSarService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -129,14 +131,14 @@ class TestingController extends Controller
             $row['atasan_langsung'] = json_decode($row['atasan_langsung'], true) ?? [];
             $byId[$row['id']] = $row;
         }
-    
+
         // cari ROOT (manager / spv yg tidak punya manager di data)
         $roots = [];
         foreach ($byId as $row) {
             if (!in_array($row['grade'], ['MANAGER', 'SUPERVISOR'])) {
                 continue;
             }
-    
+
             $punyaAtasanDiData = false;
             foreach ($row['atasan_langsung'] as $atasanId) {
                 if (isset($byId[$atasanId]) && $byId[$atasanId]['grade'] === 'MANAGER') {
@@ -144,17 +146,17 @@ class TestingController extends Controller
                     break;
                 }
             }
-    
+
             if (!$punyaAtasanDiData) {
                 $roots[$row['id']] = [
                     'id'   => $row['id'],
                     'nama' => $row['nama_lengkap'],
-                    'grade'=> $row['grade'],
-                    'child'=> []
+                    'grade' => $row['grade'],
+                    'child' => []
                 ];
             }
         }
-    
+
         // helper cari bawahan langsung
         $getBawahan = function ($atasanId) use ($byId) {
             $out = [];
@@ -165,24 +167,24 @@ class TestingController extends Controller
             }
             return $out;
         };
-    
+
         // bangun struktur
         foreach ($roots as $rootId => &$root) {
-    
+
             // ROOT MANAGER → MANAGER > SUPERVISOR > STAFF
             if ($root['grade'] === 'MANAGER') {
-    
+
                 $supervisors = $getBawahan($rootId);
                 foreach ($supervisors as $spv) {
                     if ($spv['grade'] !== 'SUPERVISOR') continue;
-    
+
                     $spvNode = [
                         'id'   => $spv['id'],
                         'nama' => $spv['nama_lengkap'],
-                        'grade'=> 'SUPERVISOR',
-                        'child'=> []
+                        'grade' => 'SUPERVISOR',
+                        'child' => []
                     ];
-    
+
                     $staffs = $getBawahan($spv['id']);
                     foreach ($staffs as $staff) {
                         if (
@@ -192,20 +194,20 @@ class TestingController extends Controller
                             $spvNode['child'][] = [
                                 'id'   => $staff['id'],
                                 'nama' => $staff['nama_lengkap'],
-                                'grade'=> 'STAFF',
+                                'grade' => 'STAFF',
                                 'id_jabatan' => $staff['id_jabatan']
                             ];
                         }
                     }
-    
+
                     if (!empty($spvNode['child'])) {
                         $root['child'][] = $spvNode;
                     }
                 }
-    
-            // ROOT SUPERVISOR → SUPERVISOR > STAFF
+
+                // ROOT SUPERVISOR → SUPERVISOR > STAFF
             } else {
-    
+
                 $staffs = $getBawahan($rootId);
                 foreach ($staffs as $staff) {
                     if (
@@ -215,39 +217,39 @@ class TestingController extends Controller
                         $root['child'][] = [
                             'id'   => $staff['id'],
                             'nama' => $staff['nama_lengkap'],
-                            'grade'=> 'STAFF',
+                            'grade' => 'STAFF',
                             'id_jabatan' => $staff['id_jabatan']
                         ];
                     }
                 }
             }
         }
-    
+
         return array_values($roots);
     }
 
     public function show(Request $request)
-    { 
-        
+    {
+
         try {
             switch ($request->menu) {
                 case 'contract-order':
                     // 1. Ambil data Order per Perusahaan
-                    $subTahun = substr($request->year, -2); 
+                    $subTahun = substr($request->year, -2);
                     $orders = OrderHeader::select(
-                            'nama_perusahaan',
-                            DB::raw('MAX(wilayah) as wilayah'),
-                            // Menggabungkan no_document menjadi string untuk referensi jika perlu
-                            DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
-                            DB::raw('SUM(total_dpp) as summary')
-                        )
+                        'nama_perusahaan',
+                        DB::raw('MAX(wilayah) as wilayah'),
+                        // Menggabungkan no_document menjadi string untuk referensi jika perlu
+                        DB::raw('GROUP_CONCAT(DISTINCT no_document SEPARATOR ", ") as daftar_no_doc'),
+                        DB::raw('SUM(total_dpp) as summary')
+                    )
                         ->where('is_active', 1)
                         ->where('nama_perusahaan', $request->nama_perusahaan)
                         ->where('no_document', "LIKE", "%QTC/$subTahun%")
                         ->groupBy('nama_perusahaan')
                         ->get();
 
-                        dd($orders);
+                    dd($orders);
 
                     // 2. Ambil semua no_document unik dari perusahaan tersebut untuk ditarik detailnya
                     // Kita perlu memecah kembali daftar_no_doc jika ada banyak dokumen
@@ -259,25 +261,34 @@ class TestingController extends Controller
                     $allNoDocs = array_unique($allNoDocs);
 
                     // 3. Tarik semua data Quotation Detail berdasarkan kumpulan no_document tersebut
-                    $allQuotations = QuotationKontrakH::with(['detail' => function($q) use ($request) {
-                            $q->where('periode_kontrak', 'LIKE', '%' . $request->year . '%');
-                        }])
+                    $allQuotations = QuotationKontrakH::with(['detail' => function ($q) use ($request) {
+                        $q->where('periode_kontrak', 'LIKE', '%' . $request->year . '%');
+                    }])
                         ->whereIn('no_document', $allNoDocs)
                         ->get()
                         ->groupBy('no_document');
 
                     // 4. Inisialisasi Total untuk Footer
                     $bulanTotals = [
-                        'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
-                        'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
-                        'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+                        'january' => 0,
+                        'february' => 0,
+                        'march' => 0,
+                        'april' => 0,
+                        'may' => 0,
+                        'june' => 0,
+                        'july' => 0,
+                        'august' => 0,
+                        'september' => 0,
+                        'october' => 0,
+                        'november' => 0,
+                        'december' => 0,
                     ];
 
                     // 5. Mapping data Bulanan ke setiap baris Perusahaan
                     foreach ($orders as $order) {
                         // Ambil semua dokumen milik perusahaan ini
                         $myDocs = explode(', ', $order->daftar_no_doc);
-                        
+
                         // Kumpulkan semua header quotation yang terkait dengan dokumen-dokumen perusahaan ini
                         $relatedQuotationHeaders = [];
                         foreach ($myDocs as $docNo) {
@@ -301,134 +312,134 @@ class TestingController extends Controller
 
                     // 6. Return Data (Contoh format JSON untuk DataTables)
                     // Pake datatables dari collection
-                    return response()->json(["data" => $orders],200);
+                    return response()->json(["data" => $orders], 200);
                     break;
-                case 'getForecast' :
+                case 'getForecast':
                     // 1️⃣ Order detail → map no_order => tgl_sampling
                     $orderSamplingFromDetail = OrderDetail::query()
-                    ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
-                    ->where('order_detail.is_active', 1)
-                    ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
-                    ->selectRaw('
+                        ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
+                        ->where('order_detail.is_active', 1)
+                        ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
+                        ->selectRaw('
                         order_detail.no_order,
                         MIN(order_detail.tanggal_sampling) AS tgl_sampling,
                         oh.sales_id
                     ')
-                    ->groupBy('order_detail.no_order', 'oh.sales_id')
-                    ->get()
-                    ->keyBy('no_order')
-                    ->map(function ($row) {
-                        return [
-                            'tgl_sampling' => $row->tgl_sampling,
-                            'sales_id'     => $row->sales_id,
-                        ];
-                    });
+                        ->groupBy('order_detail.no_order', 'oh.sales_id')
+                        ->get()
+                        ->keyBy('no_order')
+                        ->map(function ($row) {
+                            return [
+                                'tgl_sampling' => $row->tgl_sampling,
+                                'sales_id'     => $row->sales_id,
+                            ];
+                        });
 
                     $orderSamplingFromHeader = OrderHeader::query()
-                    ->whereNotExists(function ($q) {
-                        $q->select(DB::raw(1))
-                        ->from('order_detail as od')
-                        ->whereColumn('od.id_order_header', 'order_header.id')
-                        ->where('od.is_active', 1);
-                    })
-                    ->whereNotNull('no_document')
-                    ->select('no_order', 'sales_id')
-                    ->distinct()
-                    ->get()
-                    ->keyBy('no_order')
-                    ->map(fn ($row) => [
-                        'tgl_sampling' => null,
-                        'sales_id'     => $row->sales_id,
-                    ]);
+                        ->whereNotExists(function ($q) {
+                            $q->select(DB::raw(1))
+                                ->from('order_detail as od')
+                                ->whereColumn('od.id_order_header', 'order_header.id')
+                                ->where('od.is_active', 1);
+                        })
+                        ->whereNotNull('no_document')
+                        ->select('no_order', 'sales_id')
+                        ->distinct()
+                        ->get()
+                        ->keyBy('no_order')
+                        ->map(fn($row) => [
+                            'tgl_sampling' => null,
+                            'sales_id'     => $row->sales_id,
+                        ]);
 
                     $orderSamplingMap = $orderSamplingFromDetail
-                    ->merge($orderSamplingFromHeader)
-                    ->toArray();
+                        ->merge($orderSamplingFromHeader)
+                        ->toArray();
 
                     // 2️⃣ Ambil pelanggan + invoice + relasi
                     $invoice = MasterPelanggan::query()
-                    ->with([
-                        'invoices.recordPembayaran',
-                        'invoices.recordWithdraw'
-                    ])
-                    ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
-                    ->where('is_active', 1)
-                    ->where('id_pelanggan', 'AATI01')
-                    ->whereHas('invoices')
-                    ->get()
-                    ->map(function ($pelanggan) use ($orderSamplingMap) {
+                        ->with([
+                            'invoices.recordPembayaran',
+                            'invoices.recordWithdraw'
+                        ])
+                        ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
+                        ->where('is_active', 1)
+                        ->where('id_pelanggan', 'AATI01')
+                        ->whereHas('invoices')
+                        ->get()
+                        ->map(function ($pelanggan) use ($orderSamplingMap) {
 
-                        $tagihan = $pelanggan->invoices->sum('nilai_tagihan');
+                            $tagihan = $pelanggan->invoices->sum('nilai_tagihan');
 
-                        $invoices = $pelanggan->invoices
-                            ->groupBy('no_invoice')
-                            ->map(function ($group, $noInvoice) use ($orderSamplingMap) {
-                                
-                                $first = $group->first();
+                            $invoices = $pelanggan->invoices
+                                ->groupBy('no_invoice')
+                                ->map(function ($group, $noInvoice) use ($orderSamplingMap) {
 
-                                $nilaiTagihan = $group->sum('nilai_tagihan');
+                                    $first = $group->first();
 
-                                $pembayaran = $first->recordPembayaran->sum('nilai_pembayaran');
-                                $withdraw   = $first->recordWithdraw->sum('nilai_pembayaran');
-                                $terbayar   = $pembayaran + $withdraw;
+                                    $nilaiTagihan = $group->sum('nilai_tagihan');
 
-                                $pph = $first->recordWithdraw->sum(function ($item) {
-                                    return $item->keterangan_pelunasan === 'PPH'
-                                        ? $item->nilai_pembayaran
-                                        : 0;
-                                });
+                                    $pembayaran = $first->recordPembayaran->sum('nilai_pembayaran');
+                                    $withdraw   = $first->recordWithdraw->sum('nilai_pembayaran');
+                                    $terbayar   = $pembayaran + $withdraw;
 
-                                $periode = $group->pluck('periode')->filter()->unique()->values();
-                                $noOrder = $group->pluck('no_order')->unique()->values();
+                                    $pph = $first->recordWithdraw->sum(function ($item) {
+                                        return $item->keterangan_pelunasan === 'PPH'
+                                            ? $item->nilai_pembayaran
+                                            : 0;
+                                    });
 
-                                $tglSampling = $noOrder
-                                ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
-                                ->filter()
+                                    $periode = $group->pluck('periode')->filter()->unique()->values();
+                                    $noOrder = $group->pluck('no_order')->unique()->values();
+
+                                    $tglSampling = $noOrder
+                                        ->map(fn($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
+                                        ->filter()
+                                        ->values();
+
+                                    $sales_id = $noOrder
+                                        ->map(fn($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
+                                        ->filter()
+                                        ->unique()
+                                        ->values();
+                                    // ->first(); // biasanya 1 invoice = 1 sales
+                                    if ($noInvoice == 'ISL/INV/2600413') dd($sales_id, $noOrder);
+                                    return [
+                                        'id_pelanggan'   => $first->pelanggan_id,
+                                        'no_quotation'   => $group->pluck('no_quotation')->unique()->implode(','),
+                                        'no_order'       => $noOrder->implode(','),
+                                        'no_invoice'     => $noInvoice,
+                                        'periode'        => $periode->isEmpty() ? null : $periode->implode(','),
+                                        'tgl_sampling'   => $tglSampling->isEmpty() ? null : $tglSampling->implode(','),
+                                        'tgl_invoice'    => $first->tgl_invoice,
+                                        'tgl_jatuh_tempo' => $first->tgl_jatuh_tempo,
+                                        'nilai_tagihan'  => $nilaiTagihan,
+                                        'terbayar'       => $terbayar,
+                                        'pph'            => $pph,
+                                        'is_complete'    => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
+                                        'sales_id'       => $sales_id
+                                    ];
+                                })
                                 ->values();
 
-                                $sales_id = $noOrder
-                                ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
-                                ->filter()
-                                ->unique()
-                                ->values();
-                                // ->first(); // biasanya 1 invoice = 1 sales
-                                if($noInvoice == 'ISL/INV/2600413')dd($sales_id, $noOrder);
-                                return [
-                                    'id_pelanggan'   => $first->pelanggan_id,
-                                    'no_quotation'   => $group->pluck('no_quotation')->unique()->implode(','),
-                                    'no_order'       => $noOrder->implode(','),
-                                    'no_invoice'     => $noInvoice,
-                                    'periode'        => $periode->isEmpty() ? null : $periode->implode(','),
-                                    'tgl_sampling'   => $tglSampling->isEmpty() ? null : $tglSampling->implode(','),
-                                    'tgl_invoice'    => $first->tgl_invoice,
-                                    'tgl_jatuh_tempo'=> $first->tgl_jatuh_tempo,
-                                    'nilai_tagihan'  => $nilaiTagihan,
-                                    'terbayar'       => $terbayar,
-                                    'pph'            => $pph,
-                                    'is_complete'    => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
-                                    'sales_id'       => $sales_id
-                                ];
-                            })
-                            ->values();
+                            $totalTerbayar = $invoices->sum('terbayar');
+                            $totalPph      = $invoices->sum('pph');
 
-                        $totalTerbayar = $invoices->sum('terbayar');
-                        $totalPph      = $invoices->sum('pph');
-
-                        return [
-                            'id_pelanggan'            => $pelanggan->id_pelanggan,
-                            'nama_pelanggan'          => $pelanggan->nama_pelanggan,
-                            'sales_penanggung_jawab'  => $pelanggan->sales_penanggung_jawab,
-                            'sales_id'                => $pelanggan->sales_id,
-                            'jumlah_invoice'          => $invoices->count(),
-                            'nilai_tagihan'           => $tagihan,
-                            'terbayar'                => $totalTerbayar,
-                            'total_pph'               => $totalPph,
-                            'is_complete'             => abs($tagihan - $totalTerbayar) <= 10 ? 1 : 0,
-                            'invoices'                => $invoices->toArray(),
-                        ];
-                    })
-                    ->values()
-                    ->toArray();
+                            return [
+                                'id_pelanggan'            => $pelanggan->id_pelanggan,
+                                'nama_pelanggan'          => $pelanggan->nama_pelanggan,
+                                'sales_penanggung_jawab'  => $pelanggan->sales_penanggung_jawab,
+                                'sales_id'                => $pelanggan->sales_id,
+                                'jumlah_invoice'          => $invoices->count(),
+                                'nilai_tagihan'           => $tagihan,
+                                'terbayar'                => $totalTerbayar,
+                                'total_pph'               => $totalPph,
+                                'is_complete'             => abs($tagihan - $totalTerbayar) <= 10 ? 1 : 0,
+                                'invoices'                => $invoices->toArray(),
+                            ];
+                        })
+                        ->values()
+                        ->toArray();
                     // dd($invoice);
 
                     // $orderDetail = OrderDetail::query()
@@ -437,7 +448,7 @@ class TestingController extends Controller
                     //     ->selectRaw('no_order, periode, MIN(tanggal_sampling) as tgl_sampling')
                     //     ->groupBy('no_order', 'periode')
                     //     ->get()->toArray();
-                    
+
                     // $invoice = MasterPelanggan::with(['invoices'])
                     // ->selectRaw('id_pelanggan, nama_pelanggan, sales_penanggung_jawab, sales_id')
                     // ->where('is_active', 1)
@@ -466,7 +477,7 @@ class TestingController extends Controller
                     //         $pph = $group[0]->recordWithdraw->sum(function($item) {
                     //             return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
                     //         }) ?? 0;
-                            
+
                     //         return [
                     //             "id_pelanggan" => $id_pelanggan,
                     //             "no_quotation" => implode(',', $no_quotation),
@@ -482,7 +493,7 @@ class TestingController extends Controller
                     //             "is_complete" => abs($nilaiTagihan - $terbayar) <= 10 ? 1 : 0,
                     //         ];
                     //     })->values()->toArray();
-                        
+
                     //     $totalPph = collect($invoices)->sum(function($invoice) {
                     //         return $invoice['pph'] ?? 0;
                     //     });
@@ -490,7 +501,7 @@ class TestingController extends Controller
                     //         return $invoice['terbayar'] ?? 0;
                     //     });
                     //     $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
-            
+
                     //     return [
                     //         'id_pelanggan' => $q->id_pelanggan,
                     //         'nama_pelanggan' => $q->nama_pelanggan,
@@ -584,7 +595,7 @@ class TestingController extends Controller
                     //         'invoices'                => $invoices,
                     //     ];
                     // })->values()->toArray();
-                    
+
                     return response()->json([
                         'success' => true,
                         'julahData' => count($invoice),
@@ -607,26 +618,26 @@ class TestingController extends Controller
                         ->whereNotNull('no_quotation')
                         ->groupBy('no_quotation')
                         ->get();
-                    
+
                     $order = OrderHeader::where('is_active', 1)
                         ->where('is_revisi', 0)
                         ->pluck('no_document')->toArray();
 
                     $data = $jadwalKontrak
                         ->concat($jadwalNonKontrak)
-                        ->filter(function($q) use ($order) {
+                        ->filter(function ($q) use ($order) {
                             return !in_array($q->no_quotation, $order);
                         })
                         ->sortBy('tanggal')
                         ->values()->toArray();
-                    
+
                     dd(count($data));
 
                     return response()->json([
                         'success' => true,
                         'data' => $data
                     ]);
-                    
+
                     break;
                 case 'generateSertificate':
                     $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', 7)->first();
@@ -647,22 +658,22 @@ class TestingController extends Controller
                         $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
                         $filename = $no_sertifikat . '.pdf';
                         $generate = GenerateWebinarSertificate::make($filename)
-                        ->options([
-                            'layout'            => $layout->nama_file,
-                            'font'              => $font->jenis_font ?? 'roboto',
-                            'template'          => $template->nama_template,
-                            'recipientName'     => $value->name,
-                            'id'                => $value->id,
-                            'webinarTitle'      => $getHeader->title,
-                            'webinarTopic'      => $getHeader->topic,
-                            'webinarSubTopic'   => $getHeader->sub_topic,
-                            'webinarDate'       => $getHeader->date,
-                            'panelis'           => $panelis,
-                            'noSertifikat'      => $no_sertifikat,
-                        ])
-                        ->generate();
+                            ->options([
+                                'layout'            => $layout->nama_file,
+                                'font'              => $font->jenis_font ?? 'roboto',
+                                'template'          => $template->nama_template,
+                                'recipientName'     => $value->name,
+                                'id'                => $value->id,
+                                'webinarTitle'      => $getHeader->title,
+                                'webinarTopic'      => $getHeader->topic,
+                                'webinarSubTopic'   => $getHeader->sub_topic,
+                                'webinarDate'       => $getHeader->date,
+                                'panelis'           => $panelis,
+                                'noSertifikat'      => $no_sertifikat,
+                            ])
+                            ->generate();
 
-                        if($generate instanceof \Exception) {
+                        if ($generate instanceof \Exception) {
                             return response()->json([
                                 'message' => 'Gagal menggenerate sertifikat',
                                 'line' => $generate->getLine(),
@@ -676,7 +687,7 @@ class TestingController extends Controller
 
                         FacadesLog::info('update ' . $value->id . ' ' . $filename);
                     }
-                    
+
                     dd('done');
                     break;
                 case 'addSubscriber':
@@ -690,7 +701,7 @@ class TestingController extends Controller
                         ->whereRaw("kp.email_perusahaan REGEXP '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'")
                         ->distinct()
                         ->pluck('email_perusahaan');
-                    
+
                     if ($emails->isEmpty()) {
                         return 'Tidak ada email valid.';
                     }
@@ -701,15 +712,15 @@ class TestingController extends Controller
 
                     // Pastikan Http client tersedia
                     // untuk Laravel 7+ sudah built-in, pakai Illuminate\Support\Facades\Http;
-                    
+
 
                     // 2. Bulk subscribe
                     foreach ($emails as $email) {
                         try {
                             $response = Http::withHeaders([
-                                    'X-MLMMJADMIN-API-AUTH-TOKEN' => $token,
-                                    'Content-Type' => 'application/json',
-                                ])
+                                'X-MLMMJADMIN-API-AUTH-TOKEN' => $token,
+                                'Content-Type' => 'application/json',
+                            ])
                                 ->timeout(10)
                                 ->withoutVerifying()
                                 ->post($endpoint, [
@@ -746,16 +757,16 @@ class TestingController extends Controller
                 case 'send-promo':
                     $body = view('Email.Intilabbration')->render();
                     $email = SendEmail::where('to', 'promotion@intilab.com')
-                    // $email = SendEmail::where('to', 'dedi@intilab.com')
-                    ->where('subject', '🎁 Kado Istimewa Intilabration 7th')
-                    ->where('body', $body)
-                    ->where('cc', null)
-                    ->where('bcc', null)
-                    ->where('replyto', ['m.promo@intilab.com'])
-                    ->where('attachments', null)
-                    ->where('karyawan', $this->karyawan)
-                    ->fromPromoSales()
-                    ->send();
+                        // $email = SendEmail::where('to', 'dedi@intilab.com')
+                        ->where('subject', '🎁 Kado Istimewa Intilabration 7th')
+                        ->where('body', $body)
+                        ->where('cc', null)
+                        ->where('bcc', null)
+                        ->where('replyto', ['m.promo@intilab.com'])
+                        ->where('attachments', null)
+                        ->where('karyawan', $this->karyawan)
+                        ->fromPromoSales()
+                        ->send();
 
                     dd($email);
                     break;
@@ -1772,26 +1783,26 @@ class TestingController extends Controller
                         return response()->json(["data" => $chekRegen], 200);
                     }
                 case 'cs_render':
-                    
-                    $orderDetail =OrderDetail::where('tanggal_sampling',$request->tanggal_sampling)
-                        ->where('no_order',$request->no_order)
-                        ->where('is_active',1)
-                        ->select('no_quotation','no_sampel','tanggal_sampling','file_koding_sampel','parameter','kategori_2','kategori_3','konsultan','no_order','keterangan_1','nama_perusahaan')
+
+                    $orderDetail = OrderDetail::where('tanggal_sampling', $request->tanggal_sampling)
+                        ->where('no_order', $request->no_order)
+                        ->where('is_active', 1)
+                        ->select('no_quotation', 'no_sampel', 'tanggal_sampling', 'file_koding_sampel', 'parameter', 'kategori_2', 'kategori_3', 'konsultan', 'no_order', 'keterangan_1', 'nama_perusahaan')
                         ->get();
                     $noSampel = $orderDetail->pluck('no_sampel')->unique();
-                    $pSDetailMap =PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
-                    ->select('id_persiapan_sampel_header','no_sampel', 'parameters') // Hanya ambil kolom yg perlu
-                    ->get()
-                    ->keyBy('no_sampel');
-                    $idPsh=null;
+                    $pSDetailMap = PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
+                        ->select('id_persiapan_sampel_header', 'no_sampel', 'parameters') // Hanya ambil kolom yg perlu
+                        ->get()
+                        ->keyBy('no_sampel');
+                    $idPsh = null;
                     foreach ($orderDetail as $item) {
                         $jumlahBotol = 0;
                         $jumlahLabel = 0;
                         // Cek apakah 'no_sampel' ada di map kita (lookup O(1) - sangat cepat)
                         if (isset($pSDetailMap[$item->no_sampel])) {
-                            
+
                             $psd = $pSDetailMap[$item->no_sampel]; // Langsung ambil data, tanpa loop
-                            $idPsh=$psd->id_persiapan_sampel_header;
+                            $idPsh = $psd->id_persiapan_sampel_header;
                             $parameters = json_decode($psd->parameters);
 
                             if (is_array($parameters) || is_object($parameters)) {
@@ -1811,13 +1822,13 @@ class TestingController extends Controller
                         $item->jumlah_label = $jumlahLabel;
                         $item->status_c1 = $this->checkLengthData($item->kategori_2, $item->kategori_3, json_decode($item->parameter), $item->no_sampel);
                     }
-                    $psHeader =PersiapanSampelHeader::where('id',$idPsh)->where('is_active',1)->first();
-                    $ttd =json_decode($psHeader->detail_cs_documents,true);
-                    
+                    $psHeader = PersiapanSampelHeader::where('id', $idPsh)->where('is_active', 1)->first();
+                    $ttd = json_decode($psHeader->detail_cs_documents, true);
+
                     $noDocument = explode('/', $psHeader->no_document);
                     $noDocument[1] = 'CS';
                     $noDocument = implode('/', $noDocument);
-                    
+
                     $qr_img = '';
                     $qr = QrDocument::where('id_document', $psHeader->id)
                         ->where('type_document', 'coding_sample')
@@ -1834,9 +1845,9 @@ class TestingController extends Controller
                         'ttd_sampler' => $ttd[0]['ttd_sampler_cs'],
                         'ttd_pic'     => $ttd[0]['ttd_pic_cs'],
                         'nama_pic'    => $ttd[0]['nama_pic_cs'],
-                        'nama_sampler'=> $ttd[0]['nama_sampler_cs'],
+                        'nama_sampler' => $ttd[0]['nama_sampler_cs'],
                     ];
-                    
+
                     try {
                         $pdf = new Mpdf([
                             'mode' => 'utf-8',
@@ -1856,7 +1867,7 @@ class TestingController extends Controller
                         $microtime_unique = str_replace('.', '_', (string) $micro_time_float);
                         $base_filename = 'RE_DOC_CS_' . $orderDetail->first()->no_order;
                         $filename = $base_filename . '_' . $microtime_unique . '.pdf';
-                        
+
                         $pdf->setFooter([
                             'odd' => [
                                 'C' => [
@@ -1942,7 +1953,7 @@ class TestingController extends Controller
                                         <tr><td colspan="3" style="padding: 2px;"></td></tr>
                                     </table>
                         ');
-                        
+
                         $pdf->WriteHTML('
                                     <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
                                         <tr>
@@ -1958,7 +1969,7 @@ class TestingController extends Controller
                         ');
 
                         foreach ($orderDetail as $item) {
-                            
+
                             $pdf->WriteHTML('
                                         <tr>
                                             <td class="custom5" width="90">' . $item->no_sampel . '</td>
@@ -1974,11 +1985,11 @@ class TestingController extends Controller
                         }
                         $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
                         $sign_pic = null;
-                        if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
-                        if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
+                        if ($signatureData->ttd_pic != null) $sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+                        if ($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error') {
                             return response()->json([
                                 'message' => $sign_pic->message ?? $sign_sampler->message
-                            ],400);
+                            ], 400);
                         }
                         $ttd_sampler = $signatureData->ttd_sampler && $sign_sampler->status !== 'error' ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
                         $ttd_pic = $signatureData->ttd_pic && $sign_pic->status !== 'error' ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
@@ -2012,21 +2023,21 @@ class TestingController extends Controller
 
                         // Tutup HTML document
                         $pdf->WriteHTML('</body></html>');
-                            $dir = public_path("cs");
+                        $dir = public_path("cs");
 
-                            if (!file_exists($dir)) {
-                                mkdir($dir, 0755, true);
-                            }
-                            $pdf->Output(public_path() . '/dokumen/cs/' . $filename, 'F');
-                            return response()->json(['status' => false, 'data' => $filename], 200);
-                        } catch (\Exception $ex) {
-                            return response()->json([
-                                'message' => $ex->getMessage(),
-                                'line' => $ex->getLine(),
-                                'file' => $ex->getFile(),
-                            ], 500);
+                        if (!file_exists($dir)) {
+                            mkdir($dir, 0755, true);
                         }
-                    
+                        $pdf->Output(public_path() . '/dokumen/cs/' . $filename, 'F');
+                        return response()->json(['status' => false, 'data' => $filename], 200);
+                    } catch (\Exception $ex) {
+                        return response()->json([
+                            'message' => $ex->getMessage(),
+                            'line' => $ex->getLine(),
+                            'file' => $ex->getFile(),
+                        ], 500);
+                    }
+
                 case 'sni_ergonomi':
                     DB::beginTransaction();
 
@@ -2207,10 +2218,10 @@ class TestingController extends Controller
                             // AMAN TARIK DATA
                             // ===============================
                             $atas  = (isset($pengukuran['Tubuh_Bagian_Atas'])  && is_array($pengukuran['Tubuh_Bagian_Atas']))
-                                        ? $pengukuran['Tubuh_Bagian_Atas']  : [];
+                                ? $pengukuran['Tubuh_Bagian_Atas']  : [];
 
                             $bawah = (isset($pengukuran['Tubuh_Bagian_Bawah']) && is_array($pengukuran['Tubuh_Bagian_Bawah']))
-                                        ? $pengukuran['Tubuh_Bagian_Bawah'] : [];
+                                ? $pengukuran['Tubuh_Bagian_Bawah'] : [];
 
                             $manualHandling = $pengukuran['Manual_Handling'] ?? 'Tidak';
 
@@ -2241,7 +2252,7 @@ class TestingController extends Controller
                                                     $totalPoin2 += $skor;
                                                 }
                                             }
-                                        } 
+                                        }
                                         // elseif ($faktor !== 'Tidak') {
                                         //     $skor = intval(explode('-', $faktor)[0] ?? 0);
                                         //     $totalPoin2 += $skor;
@@ -2275,7 +2286,6 @@ class TestingController extends Controller
                         DB::commit();  // semua sukses baru dikunci ke DB
 
                         return response()->json(['message' => 'Proses selesai'], 200);
-
                     } catch (\Throwable $e) {
 
                         DB::rollBack();  // SEMUA perubahan dibatalkan
@@ -2288,8 +2298,41 @@ class TestingController extends Controller
                         ], 500);
                     }
                 case 'tracing_datalapangan':
-                    $models =[
-                        DataLapanganCahaya::class,DataLapanganDebuPersonal::class,DataLapanganDirectLain::class,DataLapanganEmisiCerobong::class,DataLapanganEmisiKendaraan::class,DataLapanganEmisiOrder::class,DataLapanganGetaran::class,DataLapanganGetaranPersonal::class,DataLapanganIklimDingin::class,DataLapanganIklimPanas::class,DataLapanganIsokinetikBeratMolekul::class,DataLapanganIsokinetikKadarAir::class,DataLapanganIsokinetikPenentuanKecepatanLinier::class,DataLapanganKebisingan::class,DataLapanganKebisinganBySoundMeter::class,DataLapanganKebisinganPersonal::class,DataLapanganKecerahan::class,DataLapanganLapisanMinyak::class,DataLapanganMedanLM::class,DataLapanganMicrobiologi::class,DataLapanganPartikulatMeter::class,DataLapanganPsikologi::class,DataLapanganSampah::class,DataLapanganSenyawaVolatile::class,DataLapanganSinarUV::class,DataLapanganSwab::class,DataLapanganUnion::class,DataLimbah::class,DetailFlowMeter::class,DetailLingkunganHidup::class,DetailLingkunganKerja::class,DetailMicrobiologi::class,DetailSenyawaVolatile::class,DetailSoundMeter::class
+                    $models = [
+                        DataLapanganCahaya::class,
+                        DataLapanganDebuPersonal::class,
+                        DataLapanganDirectLain::class,
+                        DataLapanganEmisiCerobong::class,
+                        DataLapanganEmisiKendaraan::class,
+                        DataLapanganEmisiOrder::class,
+                        DataLapanganGetaran::class,
+                        DataLapanganGetaranPersonal::class,
+                        DataLapanganIklimDingin::class,
+                        DataLapanganIklimPanas::class,
+                        DataLapanganIsokinetikBeratMolekul::class,
+                        DataLapanganIsokinetikKadarAir::class,
+                        DataLapanganIsokinetikPenentuanKecepatanLinier::class,
+                        DataLapanganKebisingan::class,
+                        DataLapanganKebisinganBySoundMeter::class,
+                        DataLapanganKebisinganPersonal::class,
+                        DataLapanganKecerahan::class,
+                        DataLapanganLapisanMinyak::class,
+                        DataLapanganMedanLM::class,
+                        DataLapanganMicrobiologi::class,
+                        DataLapanganPartikulatMeter::class,
+                        DataLapanganPsikologi::class,
+                        DataLapanganSampah::class,
+                        DataLapanganSenyawaVolatile::class,
+                        DataLapanganSinarUV::class,
+                        DataLapanganSwab::class,
+                        DataLapanganUnion::class,
+                        DataLimbah::class,
+                        DetailFlowMeter::class,
+                        DetailLingkunganHidup::class,
+                        DetailLingkunganKerja::class,
+                        DetailMicrobiologi::class,
+                        DetailSenyawaVolatile::class,
+                        DetailSoundMeter::class
                     ];
                     $noSampelCari = $request->input('no_sampel');
                     $results = [];
@@ -2314,7 +2357,7 @@ class TestingController extends Controller
                 case 'missing-qrcode':
                     try {
                         // 1. Input Array
-                        $listSamples = $request->input('no_sampel', []); 
+                        $listSamples = $request->input('no_sampel', []);
 
                         if (empty($listSamples) || !is_array($listSamples)) {
                             throw new \Exception("Input 'samples' harus array.");
@@ -2342,21 +2385,21 @@ class TestingController extends Controller
                         $counter = 0;
 
                         foreach ($listSamples as $noSampel) {
-                            
+
                             $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
                             if (!$orderDetail) continue;
 
-                            $qrImageFile = $this->generateQRCoding($noSampel); 
-                            $pathQR = '/qrcode/sample/'; 
+                            $qrImageFile = $this->generateQRCoding($noSampel);
+                            $pathQR = '/qrcode/sample/';
 
                             // Decode JSON Persiapan
                             $listPersiapan = json_decode($orderDetail->persiapan, true);
                             if (empty($listPersiapan)) {
-                                $listPersiapan = [['type_botol' => 'SAMPEL']]; 
+                                $listPersiapan = [['type_botol' => 'SAMPEL']];
                             }
 
                             foreach ($listPersiapan as $item) {
-                                
+
                                 $labelParameter = $item['type_botol'] ?? $item['parameter'];
 
                                 // Buka baris baru jika counter genap
@@ -2364,9 +2407,9 @@ class TestingController extends Controller
                                     $pdf->WriteHTML("<tr>");
                                 }
                                 // $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
-                                $styleContainer = ($counter % 2 == 0) 
-                                ? 'padding: 10px 20px 10px 10px;'  // Kolom Kiri
-                                : 'padding: 10px 10px 10px 20px;'; // Kolom Kanan
+                                $styleContainer = ($counter % 2 == 0)
+                                    ? 'padding: 10px 20px 10px 10px;'  // Kolom Kiri
+                                    : 'padding: 10px 10px 10px 20px;'; // Kolom Kanan
 
                                 // Render SATU KOTAK STIKER
                                 // Kita gunakan <div> dengan border-radius di dalam <td>
@@ -2409,7 +2452,7 @@ class TestingController extends Controller
                                 if ($counter % 2 == 1) {
                                     $pdf->WriteHTML("</tr>");
                                 }
-                                
+
                                 $counter++;
                             }
                         }
@@ -2430,7 +2473,6 @@ class TestingController extends Controller
                             'status' => true,
                             'data' => $filename
                         ], 200);
-
                     } catch (\Exception $e) {
                         return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
                     }
@@ -2477,12 +2519,12 @@ class TestingController extends Controller
 
                         // 3. Loop Utama berdasarkan input samples
                         foreach ($listSamples as $noSampel) {
-                            
+
                             // Ambil data OrderDetail berdasarkan no_sampel
                             $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
 
                             if (!$orderDetail) {
-                                continue; 
+                                continue;
                             }
 
                             // Ambil kolom 'label' dan decode JSON-nya
@@ -2493,13 +2535,13 @@ class TestingController extends Controller
                                 // Fallback jika kosong, setidaknya print 1 dengan nama default
                                 $listLabels = ['SAMPEL'];
                             }
-                            
+
                             // Format Tanggal Sampling
                             $tglSampling = \Carbon\Carbon::parse($orderDetail->tanggal_sampling)->translatedFormat('d F Y');
 
                             // 4. Loop Label (Print sebanyak jumlah label yang ada)
                             foreach ($listLabels as $labelText) {
-                                
+
                                 // Buka baris baru jika counter genap
                                 if ($counter % 2 == 0) {
                                     $pdf->WriteHTML("<tr>");
@@ -2512,7 +2554,7 @@ class TestingController extends Controller
                                 $pdf->WriteHTML('
                                     <td style="text-align: center; padding: ' . $padding . '">
                                         <span style="font-size: 18px; font-weight: bold;">' . $noSampel . '.</span><br>
-                                        <span style="font-size: 14px; font-weight: bold;">' . $text = explode('-',$orderDetail->kategori_3)[1] . '</span><br>
+                                        <span style="font-size: 14px; font-weight: bold;">' . $text = explode('-', $orderDetail->kategori_3)[1] . '</span><br>
                                         <hr>
                                         <span style="font-size: 16px; font-weight: bold;">' . $tglSampling . '</span>
                                     </td>
@@ -2522,7 +2564,7 @@ class TestingController extends Controller
                                 if ($counter % 2 == 1) {
                                     $pdf->WriteHTML("</tr>");
                                 }
-                                
+
                                 $counter++;
                             }
                         }
@@ -2541,14 +2583,13 @@ class TestingController extends Controller
                         }
 
                         // Mode 'F' untuk simpan ke file agar bisa direturn nama filenya ke JSON response
-                        $pdf->Output(public_path() . '/cs/' . $filename, 'I'); 
+                        $pdf->Output(public_path() . '/cs/' . $filename, 'I');
 
                         return response()->json([
                             'status' => true,
                             'message' => 'Label generated successfully',
                             'data' => $filename
                         ], 200);
-
                     } catch (\Throwable $th) {
                         return response()->json(['status' => false, 'message' => $th->getMessage()], 500);
                     }
@@ -2556,17 +2597,17 @@ class TestingController extends Controller
                 case 'capture data':
                     $log = new SnapshotPersiapanService();
                     $log->SnapShot();
-                    return response()->json(["message"=>"tercatar di log"],200);
+                    return response()->json(["message" => "tercatar di log"], 200);
                 case 'compare':
                     $quotationsA = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->idcompareOld)->get();
                     $quotationsB = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->idcompareNew)->get();
-                    
+
                     // Merge semua data_pendukung_sampling dari multiple records
                     $oldData = $this->mergeDataPendukung($quotationsA);
                     $newData = $this->mergeDataPendukung($quotationsB);
-                    
+
                     $result = $this->compare($oldData, $newData);
-                    
+
                     return response()->json([
                         'diff_summary' => $result
                     ]);
@@ -2577,7 +2618,7 @@ class TestingController extends Controller
                         // 1. Ambil order yang perlu diupdate
                         $orders = OrderHeader::whereNull('sales_id')
                             ->where('is_active', 1)
-                            ->get(['id','no_document']);
+                            ->get(['id', 'no_document']);
 
                         if ($orders->isEmpty()) {
                             DB::commit();
@@ -2592,24 +2633,23 @@ class TestingController extends Controller
 
                         // 3. Ambil mapping sales_id
                         $kontrakMap = QuotationKontrakH::whereIn('no_document', $docNumbers)
-                            ->pluck('sales_id','no_document');
+                            ->pluck('sales_id', 'no_document');
 
                         $nonKontrakMap = QuotationNonKontrak::whereIn('no_document', $docNumbers)
-                            ->pluck('sales_id','no_document');
+                            ->pluck('sales_id', 'no_document');
 
                         // 4. Proses update
                         $updated = 0;
 
                         foreach ($orders as $order) {
 
-                            if (str_contains($order->no_document,'QTC')) {
+                            if (str_contains($order->no_document, 'QTC')) {
 
                                 if (isset($kontrakMap[$order->no_document])) {
                                     $order->sales_id = $kontrakMap[$order->no_document];
                                     $order->save();
                                     $updated++;
                                 }
-
                             } else {
 
                                 if (isset($nonKontrakMap[$order->no_document])) {
@@ -2617,7 +2657,6 @@ class TestingController extends Controller
                                     $order->save();
                                     $updated++;
                                 }
-
                             }
                         }
 
@@ -2628,7 +2667,6 @@ class TestingController extends Controller
                             'total_diproses' => $orders->count(),
                             'total_berhasil_update' => $updated
                         ], 200);
-
                     } catch (\Exception $e) {
 
                         DB::rollBack();
@@ -2641,9 +2679,9 @@ class TestingController extends Controller
                 case 'updateVolumeQuotation':
                 case 'generatelink':
                     $generate = new GenerateToken();
-                    $getData = QuotationKontrakH::where('no_document',$request->no_document)->first();
+                    $getData = QuotationKontrakH::where('no_document', $request->no_document)->first();
                     $resultToken = $generate->save('kontrak', $getData, $this->karyawan, 'quotation');
-                    return response()->json(["data"=>$resultToken],200);
+                    return response()->json(["data" => $resultToken], 200);
 
                     DB::beginTransaction();
 
@@ -2676,7 +2714,7 @@ class TestingController extends Controller
                                 $kategori = $exp[0];
                                 $vol = 0;
 
-                                if($item['volume'] > 0){
+                                if ($item['volume'] > 0) {
                                     continue;
                                 }
 
@@ -2724,7 +2762,6 @@ class TestingController extends Controller
                             'start_date' => $request->start_date,
                             'end_date' => $request->end_date
                         ], 200);
-
                     } catch (\Exception $th) {
 
                         DB::rollBack();
@@ -2741,35 +2778,68 @@ class TestingController extends Controller
             }
         } catch (\Throwable $th) {
             //throw $th;
-            return response()->json(["message" =>$th->getMessage(),"line"=>$th->getLine()],500);
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine()], 500);
         }
     }
 
     private function processDetails($quotationHeaders)
     {
         $bulan = [
-            'january' => 0, 'february' => 0, 'march' => 0, 'april' => 0,
-            'may' => 0, 'june' => 0, 'july' => 0, 'august' => 0,
-            'september' => 0, 'october' => 0, 'november' => 0, 'december' => 0,
+            'january' => 0,
+            'february' => 0,
+            'march' => 0,
+            'april' => 0,
+            'may' => 0,
+            'june' => 0,
+            'july' => 0,
+            'august' => 0,
+            'september' => 0,
+            'october' => 0,
+            'november' => 0,
+            'december' => 0,
         ];
 
         foreach ($quotationHeaders as $value) {
-            if(!$value->detail->isEmpty()){
+            if (!$value->detail->isEmpty()) {
                 foreach ($value->detail as $detail) {
                     $bulanStr = explode('-', $detail->periode_kontrak)[1] ?? null;
                     switch ($bulanStr) {
-                        case '01': $bulan['january'] += $detail->total_dpp; break;
-                        case '02': $bulan['february'] += $detail->total_dpp; break;
-                        case '03': $bulan['march'] += $detail->total_dpp; break;
-                        case '04': $bulan['april'] += $detail->total_dpp; break;
-                        case '05': $bulan['may'] += $detail->total_dpp; break;
-                        case '06': $bulan['june'] += $detail->total_dpp; break;
-                        case '07': $bulan['july'] += $detail->total_dpp; break;
-                        case '08': $bulan['august'] += $detail->total_dpp; break;
-                        case '09': $bulan['september'] += $detail->total_dpp; break;
-                        case '10': $bulan['october'] += $detail->total_dpp; break;
-                        case '11': $bulan['november'] += $detail->total_dpp; break;
-                        case '12': $bulan['december'] += $detail->total_dpp; break;
+                        case '01':
+                            $bulan['january'] += $detail->total_dpp;
+                            break;
+                        case '02':
+                            $bulan['february'] += $detail->total_dpp;
+                            break;
+                        case '03':
+                            $bulan['march'] += $detail->total_dpp;
+                            break;
+                        case '04':
+                            $bulan['april'] += $detail->total_dpp;
+                            break;
+                        case '05':
+                            $bulan['may'] += $detail->total_dpp;
+                            break;
+                        case '06':
+                            $bulan['june'] += $detail->total_dpp;
+                            break;
+                        case '07':
+                            $bulan['july'] += $detail->total_dpp;
+                            break;
+                        case '08':
+                            $bulan['august'] += $detail->total_dpp;
+                            break;
+                        case '09':
+                            $bulan['september'] += $detail->total_dpp;
+                            break;
+                        case '10':
+                            $bulan['october'] += $detail->total_dpp;
+                            break;
+                        case '11':
+                            $bulan['november'] += $detail->total_dpp;
+                            break;
+                        case '12':
+                            $bulan['december'] += $detail->total_dpp;
+                            break;
                     }
                 }
             }
@@ -2778,267 +2848,267 @@ class TestingController extends Controller
         return $bulan;
     }
     /*=== logic compare === */
-   // CONTROLLER CODE - Ambil semua records, bukan first()
+    // CONTROLLER CODE - Ambil semua records, bukan first()
 
-// Helper: Merge data_pendukung_sampling dari multiple records
-private function mergeDataPendukung($quotations)
-{
-    $merged = [];
-    
-    foreach ($quotations as $quotation) {
-        $data = is_string($quotation->data_pendukung_sampling) 
-            ? json_decode($quotation->data_pendukung_sampling, true) 
-            : $quotation->data_pendukung_sampling;
-        
-        if ($data) {
-            $merged = array_merge($merged, $data);
-        }
-    }
-    
-    return $merged;
-}
+    // Helper: Merge data_pendukung_sampling dari multiple records
+    private function mergeDataPendukung($quotations)
+    {
+        $merged = [];
 
-private function compare($oldDataJson, $newDataJson)
-{
-    // 1. Decode JSON menjadi Array (jika masih string)
-    $oldRaw = is_string($oldDataJson) ? json_decode($oldDataJson, true) : $oldDataJson;
-    $newRaw = is_string($newDataJson) ? json_decode($newDataJson, true) : $newDataJson;
+        foreach ($quotations as $quotation) {
+            $data = is_string($quotation->data_pendukung_sampling)
+                ? json_decode($quotation->data_pendukung_sampling, true)
+                : $quotation->data_pendukung_sampling;
 
-    $oldData = $this->rekeyByPeriod($oldRaw);
-    $newData = $this->rekeyByPeriod($newRaw);
-
-    $diffs = [];
-    
-    // Gabungkan semua key periode
-    $allPeriods = array_unique(array_merge(array_keys($oldData), array_keys($newData)));
-    sort($allPeriods);
-
-    foreach ($allPeriods as $period) {
-        $oldItem = $oldData[$period] ?? null;
-        $newItem = $newData[$period] ?? null;
-
-        // Deteksi Periode BARU (Added)
-        if (!$oldItem && $newItem) {
-            $diffs[$period] = [
-                'status' => 'ADDED',
-                'data' => $newItem
-            ];
-            continue;
+            if ($data) {
+                $merged = array_merge($merged, $data);
+            }
         }
 
-        // Deteksi Periode DIHAPUS (Removed)
-        if ($oldItem && !$newItem) {
-            $diffs[$period] = [
-                'status' => 'REMOVED',
-                'data' => $oldItem
-            ];
-            continue;
+        return $merged;
+    }
+
+    private function compare($oldDataJson, $newDataJson)
+    {
+        // 1. Decode JSON menjadi Array (jika masih string)
+        $oldRaw = is_string($oldDataJson) ? json_decode($oldDataJson, true) : $oldDataJson;
+        $newRaw = is_string($newDataJson) ? json_decode($newDataJson, true) : $newDataJson;
+
+        $oldData = $this->rekeyByPeriod($oldRaw);
+        $newData = $this->rekeyByPeriod($newRaw);
+
+        $diffs = [];
+
+        // Gabungkan semua key periode
+        $allPeriods = array_unique(array_merge(array_keys($oldData), array_keys($newData)));
+        sort($allPeriods);
+
+        foreach ($allPeriods as $period) {
+            $oldItem = $oldData[$period] ?? null;
+            $newItem = $newData[$period] ?? null;
+
+            // Deteksi Periode BARU (Added)
+            if (!$oldItem && $newItem) {
+                $diffs[$period] = [
+                    'status' => 'ADDED',
+                    'data' => $newItem
+                ];
+                continue;
+            }
+
+            // Deteksi Periode DIHAPUS (Removed)
+            if ($oldItem && !$newItem) {
+                $diffs[$period] = [
+                    'status' => 'REMOVED',
+                    'data' => $oldItem
+                ];
+                continue;
+            }
+
+            // Bandingkan Detail jika kedua ada
+            $changes = $this->compareItemDetails($oldItem, $newItem);
+
+            if (!empty($changes)) {
+                $diffs[$period] = [
+                    'status' => 'MODIFIED',
+                    'changes' => $changes
+                ];
+            }
         }
 
-        // Bandingkan Detail jika kedua ada
-        $changes = $this->compareItemDetails($oldItem, $newItem);
-        
-        if (!empty($changes)) {
-            $diffs[$period] = [
-                'status' => 'MODIFIED',
-                'changes' => $changes
-            ];
+        // TAMBAHAN: Summary perubahan jumlah periode
+        $periodSummary = [
+            'old_period_count' => count($oldData),
+            'new_period_count' => count($newData),
+            'period_changed' => count($oldData) !== count($newData)
+        ];
+
+        return [
+            'period_summary' => $periodSummary,
+            'details' => $diffs
+        ];
+    }
+
+    private function rekeyByPeriod($data)
+    {
+        $result = [];
+        if (!$data) return $result;
+
+        foreach ($data as $item) {
+            $periode = isset($item['periode_kontrak']) ? trim($item['periode_kontrak']) : null;
+            if ($periode) {
+                $result[$periode] = $item;
+            }
         }
+        return $result;
     }
 
-    // TAMBAHAN: Summary perubahan jumlah periode
-    $periodSummary = [
-        'old_period_count' => count($oldData),
-        'new_period_count' => count($newData),
-        'period_changed' => count($oldData) !== count($newData)
-    ];
-
-    return [
-        'period_summary' => $periodSummary,
-        'details' => $diffs
-    ];
-}
-
-private function rekeyByPeriod($data)
-{
-    $result = [];
-    if (!$data) return $result;
-    
-    foreach ($data as $item) {
-        $periode = isset($item['periode_kontrak']) ? trim($item['periode_kontrak']) : null;
-        if ($periode) {
-            $result[$periode] = $item;
+    private function compareItemDetails($old, $new)
+    {
+        if (!$old || !$new) {
+            return ['error' => 'Data tidak valid'];
         }
-    }
-    return $result;
-}
 
-private function compareItemDetails($old, $new)
-{
-    if (!$old || !$new) {
-        return ['error' => 'Data tidak valid'];
-    }
+        $changes = [];
 
-    $changes = [];
+        // Ambil data sampling pertama (index 0)
+        $oldSamp = $old['data_sampling'][0] ?? [];
+        $newSamp = $new['data_sampling'][0] ?? [];
 
-    // Ambil data sampling pertama (index 0)
-    $oldSamp = $old['data_sampling'][0] ?? [];
-    $newSamp = $new['data_sampling'][0] ?? [];
+        // === 1. CEK KATEGORI ===
+        $oldKat1 = trim($oldSamp['kategori_1'] ?? '');
+        $newKat1 = trim($newSamp['kategori_1'] ?? '');
+        $oldKat2 = trim($oldSamp['kategori_2'] ?? '');
+        $newKat2 = trim($newSamp['kategori_2'] ?? '');
 
-    // === 1. CEK KATEGORI ===
-    $oldKat1 = trim($oldSamp['kategori_1'] ?? '');
-    $newKat1 = trim($newSamp['kategori_1'] ?? '');
-    $oldKat2 = trim($oldSamp['kategori_2'] ?? '');
-    $newKat2 = trim($newSamp['kategori_2'] ?? '');
-
-    if ($oldKat1 !== $newKat1 || $oldKat2 !== $newKat2) {
-        $changes['kategori'] = [
-            'kategori_1' => [
-                'from' => $oldKat1,
-                'to' => $newKat1,
-                'changed' => $oldKat1 !== $newKat1
-            ],
-            'kategori_2' => [
-                'from' => $oldKat2,
-                'to' => $newKat2,
-                'changed' => $oldKat2 !== $newKat2
-            ]
-        ];
-    }
-
-    // === 2. CEK REGULASI ===
-    $oldReg = array_map('trim', $oldSamp['regulasi'] ?? []);
-    $newReg = array_map('trim', $newSamp['regulasi'] ?? []);
-
-    sort($oldReg);
-    sort($newReg);
-
-    if ($oldReg !== $newReg) {
-        $addedReg = array_values(array_diff($newReg, $oldReg));
-        $removedReg = array_values(array_diff($oldReg, $newReg));
-
-        $changes['regulasi'] = [
-            'added' => $addedReg,
-            'removed' => $removedReg,
-            'old_count' => count($oldReg),
-            'new_count' => count($newReg),
-            'snapshot_old' => $oldReg,
-            'snapshot_new' => $newReg
-        ];
-    }
-
-    // === 3. CEK PARAMETER ===
-    $oldParams = array_map('trim', array_values($oldSamp['parameter'] ?? []));
-    $newParams = array_map('trim', array_values($newSamp['parameter'] ?? []));
-
-    sort($oldParams);
-    sort($newParams);
-
-    if ($oldParams !== $newParams) {
-        $addedParams = array_values(array_diff($newParams, $oldParams));
-        $removedParams = array_values(array_diff($oldParams, $newParams));
-
-        $changes['parameter'] = [
-            'added' => $addedParams,
-            'removed' => $removedParams,
-            'old_count' => count($oldParams),
-            'new_count' => count($newParams),
-            'snapshot_old' => $oldParams,
-            'snapshot_new' => $newParams
-        ];
-    }
-
-    // === 4. CEK JUMLAH TITIK ===
-    $oldTitik = intval($oldSamp['jumlah_titik'] ?? 0);
-    $newTitik = intval($newSamp['jumlah_titik'] ?? 0);
-    
-    if ($oldTitik !== $newTitik) {
-        $changes['jumlah_titik'] = [
-            'from' => $oldTitik,
-            'to' => $newTitik,
-            'diff' => $newTitik - $oldTitik
-        ];
-    }
-
-    // === 5. CEK PENAMAAN TITIK ===
-    $oldNames = $oldSamp['penamaan_titik'] ?? [];
-    $newNames = $newSamp['penamaan_titik'] ?? [];
-    
-    // Sort untuk memastikan urutan tidak mempengaruhi
-    ksort($oldNames);
-    ksort($newNames);
-    
-    if (json_encode($oldNames) !== json_encode($newNames)) {
-        $changes['penamaan_titik'] = [
-            'old' => $oldNames,
-            'new' => $newNames,
-            'changed_points' => $this->detectChangedPoints($oldNames, $newNames)
-        ];
-    }
-
-    // === 6. CEK HARGA ===
-    $oldHarga = intval($oldSamp['harga_total'] ?? 0);
-    $newHarga = intval($newSamp['harga_total'] ?? 0);
-    
-    if ($oldHarga !== $newHarga) {
-        $changes['harga'] = [
-            'from' => $oldHarga,
-            'to' => $newHarga,
-            'diff' => $newHarga - $oldHarga,
-            'diff_percentage' => $oldHarga > 0 ? round((($newHarga - $oldHarga) / $oldHarga) * 100, 2) : 0
-        ];
-    }
-
-    // === 7. CEK TOTAL PARAMETER ===
-    $oldTotal = intval($oldSamp['total_parameter'] ?? 0);
-    $newTotal = intval($newSamp['total_parameter'] ?? 0);
-    
-    if ($oldTotal !== $newTotal) {
-        $changes['total_parameter'] = [
-            'from' => $oldTotal,
-            'to' => $newTotal,
-            'diff' => $newTotal - $oldTotal
-        ];
-    }
-
-    return $changes;
-}
-
-private function detectChangedPoints($oldPoints, $newPoints)
-{
-    $changed = [];
-    
-    // Deteksi titik yang ditambah atau diubah
-    foreach ($newPoints as $key => $newPoint) {
-        if (!isset($oldPoints[$key])) {
-            $changed[] = [
-                'type' => 'added',
-                'key' => $key,
-                'value' => $newPoint
-            ];
-        } elseif ($oldPoints[$key] !== $newPoint) {
-            $changed[] = [
-                'type' => 'modified',
-                'key' => $key,
-                'from' => $oldPoints[$key],
-                'to' => $newPoint
+        if ($oldKat1 !== $newKat1 || $oldKat2 !== $newKat2) {
+            $changes['kategori'] = [
+                'kategori_1' => [
+                    'from' => $oldKat1,
+                    'to' => $newKat1,
+                    'changed' => $oldKat1 !== $newKat1
+                ],
+                'kategori_2' => [
+                    'from' => $oldKat2,
+                    'to' => $newKat2,
+                    'changed' => $oldKat2 !== $newKat2
+                ]
             ];
         }
-    }
-    
-    // Deteksi titik yang dihapus
-    foreach ($oldPoints as $key => $oldPoint) {
-        if (!isset($newPoints[$key])) {
-            $changed[] = [
-                'type' => 'removed',
-                'key' => $key,
-                'value' => $oldPoint
+
+        // === 2. CEK REGULASI ===
+        $oldReg = array_map('trim', $oldSamp['regulasi'] ?? []);
+        $newReg = array_map('trim', $newSamp['regulasi'] ?? []);
+
+        sort($oldReg);
+        sort($newReg);
+
+        if ($oldReg !== $newReg) {
+            $addedReg = array_values(array_diff($newReg, $oldReg));
+            $removedReg = array_values(array_diff($oldReg, $newReg));
+
+            $changes['regulasi'] = [
+                'added' => $addedReg,
+                'removed' => $removedReg,
+                'old_count' => count($oldReg),
+                'new_count' => count($newReg),
+                'snapshot_old' => $oldReg,
+                'snapshot_new' => $newReg
             ];
         }
+
+        // === 3. CEK PARAMETER ===
+        $oldParams = array_map('trim', array_values($oldSamp['parameter'] ?? []));
+        $newParams = array_map('trim', array_values($newSamp['parameter'] ?? []));
+
+        sort($oldParams);
+        sort($newParams);
+
+        if ($oldParams !== $newParams) {
+            $addedParams = array_values(array_diff($newParams, $oldParams));
+            $removedParams = array_values(array_diff($oldParams, $newParams));
+
+            $changes['parameter'] = [
+                'added' => $addedParams,
+                'removed' => $removedParams,
+                'old_count' => count($oldParams),
+                'new_count' => count($newParams),
+                'snapshot_old' => $oldParams,
+                'snapshot_new' => $newParams
+            ];
+        }
+
+        // === 4. CEK JUMLAH TITIK ===
+        $oldTitik = intval($oldSamp['jumlah_titik'] ?? 0);
+        $newTitik = intval($newSamp['jumlah_titik'] ?? 0);
+
+        if ($oldTitik !== $newTitik) {
+            $changes['jumlah_titik'] = [
+                'from' => $oldTitik,
+                'to' => $newTitik,
+                'diff' => $newTitik - $oldTitik
+            ];
+        }
+
+        // === 5. CEK PENAMAAN TITIK ===
+        $oldNames = $oldSamp['penamaan_titik'] ?? [];
+        $newNames = $newSamp['penamaan_titik'] ?? [];
+
+        // Sort untuk memastikan urutan tidak mempengaruhi
+        ksort($oldNames);
+        ksort($newNames);
+
+        if (json_encode($oldNames) !== json_encode($newNames)) {
+            $changes['penamaan_titik'] = [
+                'old' => $oldNames,
+                'new' => $newNames,
+                'changed_points' => $this->detectChangedPoints($oldNames, $newNames)
+            ];
+        }
+
+        // === 6. CEK HARGA ===
+        $oldHarga = intval($oldSamp['harga_total'] ?? 0);
+        $newHarga = intval($newSamp['harga_total'] ?? 0);
+
+        if ($oldHarga !== $newHarga) {
+            $changes['harga'] = [
+                'from' => $oldHarga,
+                'to' => $newHarga,
+                'diff' => $newHarga - $oldHarga,
+                'diff_percentage' => $oldHarga > 0 ? round((($newHarga - $oldHarga) / $oldHarga) * 100, 2) : 0
+            ];
+        }
+
+        // === 7. CEK TOTAL PARAMETER ===
+        $oldTotal = intval($oldSamp['total_parameter'] ?? 0);
+        $newTotal = intval($newSamp['total_parameter'] ?? 0);
+
+        if ($oldTotal !== $newTotal) {
+            $changes['total_parameter'] = [
+                'from' => $oldTotal,
+                'to' => $newTotal,
+                'diff' => $newTotal - $oldTotal
+            ];
+        }
+
+        return $changes;
     }
-    
-    return $changed;
-}
+
+    private function detectChangedPoints($oldPoints, $newPoints)
+    {
+        $changed = [];
+
+        // Deteksi titik yang ditambah atau diubah
+        foreach ($newPoints as $key => $newPoint) {
+            if (!isset($oldPoints[$key])) {
+                $changed[] = [
+                    'type' => 'added',
+                    'key' => $key,
+                    'value' => $newPoint
+                ];
+            } elseif ($oldPoints[$key] !== $newPoint) {
+                $changed[] = [
+                    'type' => 'modified',
+                    'key' => $key,
+                    'from' => $oldPoints[$key],
+                    'to' => $newPoint
+                ];
+            }
+        }
+
+        // Deteksi titik yang dihapus
+        foreach ($oldPoints as $key => $oldPoint) {
+            if (!isset($newPoints[$key])) {
+                $changed[] = [
+                    'type' => 'removed',
+                    'key' => $key,
+                    'value' => $oldPoint
+                ];
+            }
+        }
+
+        return $changed;
+    }
     /* compare close */
 
     public function bulkRenderInvoice(Request $request)
@@ -4616,18 +4686,18 @@ private function detectChangedPoints($oldPoints, $newPoints)
 
     public function fixDetailStructure(Request $request)
     {
-       
+
         try {
             // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
-            
+
             $fixedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
-             
+
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
@@ -5272,7 +5342,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
             $data = OrderDetail::with([
                 'dataPsikologi',
                 'lhp_psikologi',
-                ])
+            ])
                 ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
                 ->where('is_active', true)
                 ->whereJsonContains('parameter', [
@@ -5288,16 +5358,15 @@ private function detectChangedPoints($oldPoints, $newPoints)
 
             foreach ($data as $item) {
                 $lhp = LhpUdaraPsikologiHeader::where('no_cfr', $item->cfr)->where('is_active', true)->first();
-                
+
                 if ($lhp) {
                     $lhp->is_approve = 0;
                     $lhp->save();
-                    
                 }
                 $no_sampel = explode(',', $item->no_sampel);
                 foreach ($no_sampel as $no) {
                     $orderDetail = OrderDetail::where('no_sampel', $no)->first();
-                    if($orderDetail){
+                    if ($orderDetail) {
                         $orderDetail->status = 2;
                         $orderDetail->is_approve = 0;
                         $orderDetail->save();
@@ -5651,7 +5720,8 @@ private function detectChangedPoints($oldPoints, $newPoints)
         return $map[$parameter] ?? 1;
     }
 
-    public function checkLengthData($category2, $category3, $parameters, $no_sampel) {
+    public function checkLengthData($category2, $category3, $parameters, $no_sampel)
+    {
         $parameters = array_reduce($parameters, function ($carry, $item) {
             $parameterName = explode(";", $item)[1];
             $carry[$parameterName] = $this->getRequiredCount($parameterName);
@@ -5659,11 +5729,11 @@ private function detectChangedPoints($oldPoints, $newPoints)
         }, []);
         // dd($parameters);
 
-        if($category2 == "4-Udara") {
+        if ($category2 == "4-Udara") {
             foreach ($parameters as $parameter => $requiredCount) {
                 if (in_array($category3, ["11-Udara Ambient", "27-Udara Lingkungan Kerja", "12-Udara Angka Kuman"])) {
                     $partikulatMeter = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)->count();
-                    if($partikulatMeter < $requiredCount){
+                    if ($partikulatMeter < $requiredCount) {
                         if ($category3 == "11-Udara Ambient") {
                             if ($parameter == "C O") {
                                 if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
@@ -5673,7 +5743,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
                                 if (DetailLingkunganHidup::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
                             }
                         }
-        
+
                         if ($category3 == "27-Udara Lingkungan Kerja") {
                             if ($parameter == "C O") {
                                 if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
@@ -5681,85 +5751,56 @@ private function detectChangedPoints($oldPoints, $newPoints)
                                 if (DetailLingkunganKerja::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
                             }
                         }
-        
+
                         if ($category3 == "12-Udara Angka Kuman") {
                             if (DetailMicrobiologi::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
                         }
-                    }else {
+                    } else {
                         return 0;
                     }
-                }
-
-                else if ($category3 == "23-Kebisingan") {
+                } else if ($category3 == "23-Kebisingan") {
                     if ($parameter == "Kebisingan (8 Jam)") {
                         if (DataLapanganKebisinganPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
                     } else {
                         if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
                     }
-                }
-        
-                else if ($category3 == "24-Kebisingan (24 Jam)") {
+                } else if ($category3 == "24-Kebisingan (24 Jam)") {
                     if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                }
-        
-                else if ($category3 == "28-Pencahayaan") {
+                } else if ($category3 == "28-Pencahayaan") {
                     $jumlah = DataLapanganCahaya::where('no_sampel', $no_sampel)->count();
 
-                    if($jumlah < $requiredCount) return 0;
-
-                }
-        
-                else if (in_array($category3, ["19-Getaran (Mesin)", "15-Getaran (Kejut Bangunan)", "13-Getaran", "14-Getaran (Bangunan)", "18-Getaran (Lingkungan)"])) {
+                    if ($jumlah < $requiredCount) return 0;
+                } else if (in_array($category3, ["19-Getaran (Mesin)", "15-Getaran (Kejut Bangunan)", "13-Getaran", "14-Getaran (Bangunan)", "18-Getaran (Lingkungan)"])) {
                     if (DataLapanganGetaran::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                }
-        
-                else if (in_array($category3, ["17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])) {
+                } else if (in_array($category3, ["17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])) {
                     if (DataLapanganGetaranPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                }
-        
-                else if ($category3 == "21-Iklim Kerja") {
+                } else if ($category3 == "21-Iklim Kerja") {
                     if ($parameter == "ISBB") {
                         if (DataLapanganIklimPanas::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
                     } elseif ($parameter == "IKD (CS)") {
                         if (DataLapanganIklimDingin::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
                     }
-                }
-                
-                else if ($category3 == "46-Udara Swab Test") {
+                } else if ($category3 == "46-Udara Swab Test") {
                     if (DataLapanganSwab::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                }
-
-                else if($category3 == "53-Ergonomi") {
-                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                }
-                else if($category3 == "53-Ergonomi") {
-                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                }
-
-                else {
-                    if(in_array($parameter, ["Debu (P8J)", "PM 10 (Personil)", "PM 2.5 (Personil)", "Karbon Hitam (8 jam)"])) {
-                        if(DataLapanganDebuPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                    }
-
-                    else if(in_array($parameter, ["Medan Magnit Statis", "Power Density", "Medan Listrik", "Gelombang Elektro"])) {
-                        if(DataLapanganMedanLM::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                    }
-
-                    else if($parameter == "Sinar UV") {
-                        if(DataLapanganSinarUV::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                    }
-
-                    else if($parameter == "Psikologi") {
-                        if(DataLapanganPsikologi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
-                    }
-
-                    else {
+                } else if ($category3 == "53-Ergonomi") {
+                    if (DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                } else if ($category3 == "53-Ergonomi") {
+                    if (DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                } else {
+                    if (in_array($parameter, ["Debu (P8J)", "PM 10 (Personil)", "PM 2.5 (Personil)", "Karbon Hitam (8 jam)"])) {
+                        if (DataLapanganDebuPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else if (in_array($parameter, ["Medan Magnit Statis", "Power Density", "Medan Listrik", "Gelombang Elektro"])) {
+                        if (DataLapanganMedanLM::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else if ($parameter == "Sinar UV") {
+                        if (DataLapanganSinarUV::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else if ($parameter == "Psikologi") {
+                        if (DataLapanganPsikologi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else {
                         return 0;
                     }
                 }
-        
             }
-        }else if($category2 == "5-Emisi") {
+        } else if ($category2 == "5-Emisi") {
             foreach ($parameters as $parameter => $requiredCount) {
                 if (in_array($category3, ["32-Emisi Kendaraan (Solar)", "31-Emisi Kendaraan (Bensin)", "116-Emisi Kendaraan (Gas)"])) {
                     if (DataLapanganEmisiKendaraan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
@@ -5773,10 +5814,10 @@ private function detectChangedPoints($oldPoints, $newPoints)
 
                 // return 1;
             }
-        } else if($category2 == "1-Air") {
+        } else if ($category2 == "1-Air") {
             if (DataLapanganAir::where('no_sampel', $no_sampel)->exists()) {
                 return  1;
-            }else{
+            } else {
                 return 0;
             }
         } else {
@@ -5790,7 +5831,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
     {
         // Path penyimpanan
         $path = public_path('dokumen/cs/signatures');
-        
+
         // Path file lengkap
         $filePath = $path . '/' . $filename;
 
@@ -5804,7 +5845,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
 
         // Baca konten file
         $imageContent = file_get_contents($filePath);
-        if($imageContent === false) {
+        if ($imageContent === false) {
             return (object) [
                 'status' => 'error',
                 'message' => 'Gagal membaca file'
@@ -5828,13 +5869,13 @@ private function detectChangedPoints($oldPoints, $newPoints)
         ];
     }
 
-    public function recoverInvoice(Request $request) {
+    public function recoverInvoice(Request $request)
+    {
         $invoices = Invoice::where(function ($query) {
             $query->where('updated_at', '>=', Carbon::now()->startOfDay());
         })->get()->pluck('no_invoice')->toArray();
 
         return response()->json($invoices);
-    
     }
 
     private function searchClosestKey($temp_result, $isLoop = false)
@@ -6060,7 +6101,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
                     $data[$kategoriKey][$key]['Durasi Gerakan'] = $nilai . ';' . $range;
 
                     $total += $nilai;
-                }elseif ($value !== 'Tidak') {
+                } elseif ($value !== 'Tidak') {
 
                     if (!isset($durasiConfig[$key][1])) {
                         continue;
@@ -6084,11 +6125,12 @@ private function detectChangedPoints($oldPoints, $newPoints)
         ];
     }
 
-    public function testReassign(){
+    public function testReassign()
+    {
         $randomSales = new RandomSalesAssign;
         $result = $randomSales->run('reassign');
 
-        foreach($result['new_sales'] as $key => $sales){
+        foreach ($result['new_sales'] as $key => $sales) {
             $result['new_sales'][$key]['total_customer'] = MasterPelanggan::where('sales_id', $sales['id'])->where('is_active', true)->count();
         }
 
@@ -6097,7 +6139,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
 
     public function testGenerateSertifWebinar(Request $request)
     {
-        $bg_img_path = public_path('background-sertifikat/'.$request->bg_img_path) ?? public_path('background-template/certificate-bg.jpg.');
+        $bg_img_path = public_path('background-sertifikat/' . $request->bg_img_path) ?? public_path('background-template/certificate-bg.jpg.');
         // dd($request->all());
         // (new GenerateWebinarSertificate(
         //     $request->fullname, 
@@ -6134,7 +6176,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
     {
 
         $collectData = [];
-        
+
         MasterPelanggan::with([
             'pic_pelanggan',
             'kontak_pelanggan',
@@ -6143,57 +6185,57 @@ private function detectChangedPoints($oldPoints, $newPoints)
             'latestKontrakQuotation:id,pelanggan_ID,no_document,created_at,updated_at,periode_kontrak_akhir',
             'latestDFUS:id,id_pelanggan,sales_penanggung_jawab,tanggal',
         ])
-        ->select(
-            'id',
-            'id_pelanggan',
-            'nama_pelanggan',
-            'sales_id',
-            'sales_penanggung_jawab',
-            'is_active'
-        )
-        ->where('is_active', true)
-        ->where('sales_id', '<>', 127)
-        ->whereNotNull('sales_id')
-        ->chunk(2000, function ($customers) use (&$collectData) {
+            ->select(
+                'id',
+                'id_pelanggan',
+                'nama_pelanggan',
+                'sales_id',
+                'sales_penanggung_jawab',
+                'is_active'
+            )
+            ->where('is_active', true)
+            ->where('sales_id', '<>', 127)
+            ->whereNotNull('sales_id')
+            ->chunk(2000, function ($customers) use (&$collectData) {
 
-            foreach ($customers as $customer) {
+                foreach ($customers as $customer) {
 
-                // ❌ Kalau pernah order → skip
-                if ($customer->latestOrder) {
-                    continue;
-                }
-                
-                // ❌ Kalau tidak punya quotation → skip
-                if (!$customer->latestKontrakQuotation && !$customer->latestNonKontrakQuotation) {
-                    continue;
-                }
+                    // ❌ Kalau pernah order → skip
+                    if ($customer->latestOrder) {
+                        continue;
+                    }
 
-                $dfus = $customer->latestDFUS;
-                if (!$dfus || !$dfus->tanggal) {
-                    continue;
-                }
+                    // ❌ Kalau tidak punya quotation → skip
+                    if (!$customer->latestKontrakQuotation && !$customer->latestNonKontrakQuotation) {
+                        continue;
+                    }
 
-                $tanggal = Carbon::parse($dfus->tanggal);
+                    $dfus = $customer->latestDFUS;
+                    if (!$dfus || !$dfus->tanggal) {
+                        continue;
+                    }
 
-                $cutOffDate = Carbon::create(2026, 2, 1)->startOfDay();
+                    $tanggal = Carbon::parse($dfus->tanggal);
 
-                if ($tanggal->lt($cutOffDate)) {
-                    $pic = optional($customer->pic_pelanggan->first());
-                    $collectData[] = [
-                        'ID Pelanggan' => $customer->id_pelanggan,
-                        'Nama Perusahaan' => $customer->nama_pelanggan,
-                        'No Telepon Perusahaan' => 
+                    $cutOffDate = Carbon::create(2026, 2, 1)->startOfDay();
+
+                    if ($tanggal->lt($cutOffDate)) {
+                        $pic = optional($customer->pic_pelanggan->first());
+                        $collectData[] = [
+                            'ID Pelanggan' => $customer->id_pelanggan,
+                            'Nama Perusahaan' => $customer->nama_pelanggan,
+                            'No Telepon Perusahaan' =>
                             $customer->kontak_pelanggan
                                 ->pluck('no_tlp_perusahaan')
                                 ->filter()
                                 ->implode(', ') ?: '-',
-                        'Nama PIC' => $pic->nama_pic ?? '-',
-                        'Nomor PIC' => $pic->no_tlp_pic ?? '-',
-                        'Jabatan PIC' => $pic->jabatan_pic ?? '-',
-                    ];
+                            'Nama PIC' => $pic->nama_pic ?? '-',
+                            'Nomor PIC' => $pic->no_tlp_pic ?? '-',
+                            'Jabatan PIC' => $pic->jabatan_pic ?? '-',
+                        ];
+                    }
                 }
-            }
-        });
+            });
 
         $fileName = 'customer_reassign_januari_2026.xlsx';
         $directory = public_path('export-excel');
@@ -6244,16 +6286,17 @@ private function detectChangedPoints($oldPoints, $newPoints)
         ]);
     }
 
-    public function generateQrInvoice(Request $request){
+    public function generateQrInvoice(Request $request)
+    {
         DB::beginTransaction();
         try {
             $filename = \str_replace("/", "_", $request->no_invoice);
             $path = public_path() . "/qr_documents/" . $filename . '.svg';
             $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
-            if(!file_exists($path)){
+            if (!file_exists($path)) {
                 $link = 'https://www.intilab.com/validation/';
                 $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-        
+
                 QrCode::size(200)->generate($link . $unique, $path);
                 $dataQr = [
                     'type_document' => 'invoice',
@@ -6270,7 +6313,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
                     'created_at' => Carbon::now(),
                     'created_by' => 'System',
                 ];
-        
+
                 DB::table('qr_documents')->insert($dataQr);
 
                 DB::commit();
@@ -6279,7 +6322,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
                 ], 200);
             } else {
                 $cekdata = QrDocument::where('file', $filename)->first();
-                if($cekdata == null){
+                if ($cekdata == null) {
                     $unique = 'isldc' . (int) floor(microtime(true) * 1000);
                     $dataQr = [
                         'type_document' => 'invoice',
@@ -6312,21 +6355,22 @@ private function detectChangedPoints($oldPoints, $newPoints)
                     ], 401);
                 }
             }
-        } catch (Exception $e){
+        } catch (Exception $e) {
             DB::rollback();
             return response()->json([
                 'message' => $e->getMessage()
             ], 401);
         }
-        
+
         // dd($dataQr);
     }
 
-    public function generateQrDocument(Request $request){
+    public function generateQrDocument(Request $request)
+    {
         DB::beginTransaction();
         try {
             $order_detail = OrderDetail::where('cfr', $request->cfr)->where('is_active', 1)->first();
-            if(!$order_detail){
+            if (!$order_detail) {
                 return response()->json([
                     'message' => "Data order dengan CFR $request->cfr tidak ditemukan"
                 ], 404);
@@ -6336,10 +6380,10 @@ private function detectChangedPoints($oldPoints, $newPoints)
                 ->first();
             $filename = 'LHP_' . \str_replace("/", "_", $order_detail->cfr);
             $path = public_path() . "/qr_documents/" . $filename . '.svg';
-            if(!file_exists($path)){
+            if (!file_exists($path)) {
                 $link = 'https://www.intilab.com/validation/';
                 $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-        
+
                 QrCode::size(200)->generate($link . $unique, $path);
                 $dataQr = [
                     'type_document' => $request->type_document,
@@ -6368,7 +6412,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
                     'message' => "QR Document $filename sudah ada pada server"
                 ], 401);
             }
-        } catch (Exception $e){
+        } catch (Exception $e) {
             DB::rollback();
             return response()->json([
                 'message' => $e->getMessage()
@@ -6397,7 +6441,7 @@ private function detectChangedPoints($oldPoints, $newPoints)
     {
         $skppGenerator = new CombineLHPService();
         $skppGenerator->testRendersuratKeterangan($request->no_order, $request->periode);
-    
+
         return response()->json(['message' => 'SKPP has been generated successfully'], 200);
     }
 
@@ -6405,7 +6449,17 @@ private function detectChangedPoints($oldPoints, $newPoints)
     {
         $cocGenerator = new GenerateDokumenCocService($request->no_lhp);
         $cocGenerator->generate();
-    
+
         return response()->json(['message' => 'CoC has been generated successfully'], 200);
+    }
+
+    public function generateStrukSar(Request $request)
+    {
+        $data = SarHeader::with('detail')->where('no_order', $request->no_order)->where('is_active', true)->first();
+
+        $service = new GenerateStrukSarService();
+        $service->generate($data);
+        
+        return response()->json(['message' => 'Struk SAR has been generated successfully'], 200);
     }
 }
