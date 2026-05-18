@@ -31,6 +31,7 @@ use App\Jobs\CreateInvoiceJob;
 use App\Jobs\RenderInvoiceJob;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
+use App\Models\DataLapanganSARHeader;
 use App\Models\Invoice;
 use App\Models\HistoryKuotaPengujian;
 use App\Models\JobTask;
@@ -656,7 +657,7 @@ class ReadyOrderController extends Controller
             $linkRingkasanOrder->save();
 
             DB::commit();
-            
+
             if ($shouldCreateInvoice) {
                 $this->dispatchCreateInvoiceJob($data, $dataQuotation, $request, 'non_kontrak');
                 self::generateInvoice($data->no_order, $dataQuotation->no_document);
@@ -1118,7 +1119,7 @@ class ReadyOrderController extends Controller
             // }
 
             DB::commit();
-            
+
             $this->dispatchCreateInvoiceJob($data, $dataQuotation, $request, 'non_kontrak');
             self::generateInvoice($data->no_order, $dataQuotation->no_document);
 
@@ -1465,6 +1466,9 @@ class ReadyOrderController extends Controller
 
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
+
+            self::executeSAR($dataQuotation->no_document, 'non_kontrak');
+
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
@@ -1527,7 +1531,7 @@ class ReadyOrderController extends Controller
             //         }
             //     }
             // }
-            
+
             $this->dispatchCreateInvoiceJob($dataOrderHeader, $dataQuotation, $request, 'non_kontrak');
             self::generateInvoice($dataOrderHeader->no_order, $dataQuotation->no_document);
 
@@ -2099,6 +2103,8 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
+            self::executeSAR($dataQuotation->no_document, 'non_kontrak');
+
             $inv = Invoice::where('no_order', $no_order)
                 ->orderBy('id', 'asc')
                 ->get();
@@ -2561,6 +2567,9 @@ class ReadyOrderController extends Controller
             }
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
+
+
+            self::executeSAR($dataQuotation->no_document, 'kontrak');
 
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
@@ -3434,6 +3443,8 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
+            self::executeSAR($dataQuotation->no_document, 'kontrak');
+
             // $workerOperation = new WorkerOperation();
             // $workerOperation->index($updateHeader, $data_to_log, $bcc, $this->user_id);
 
@@ -3621,7 +3632,7 @@ class ReadyOrderController extends Controller
 
                 continue;
             }
-            
+
             $totalInvoice = (float) $inv->sum('nilai_tagihan');
 
             $alreadyPay = $inv->contains(function ($i) {
@@ -3830,5 +3841,55 @@ class ReadyOrderController extends Controller
         $customer->bahan_pelanggan = $data->bahan_pelanggan ?? null;
         $customer->merk_pelanggan = $data->merk_pelanggan ?? null;
         $customer->save();
+    }
+
+    private function executeSAR($no_quotation, $type)
+    {
+        $order = OrderHeader::where('no_document', $no_quotation)
+            ->where('is_active', true)
+            ->first();
+
+        if ($type == 'kontrak') {
+            $quotation = QuotationKontrakH::where('no_document', $no_quotation)
+                ->where('is_active', true)
+                ->first();
+        } else {
+            $quotation = QuotationNonKontrak::where('no_document', $no_quotation)
+                ->where('is_active', true)
+                ->first();
+        }
+
+        if (!$order || !$quotation) {
+            return;
+        }
+
+        $dataSampling = $quotation->data_pendukung_sampling ?? [];
+
+        if (is_string($dataSampling)) {
+            $dataSampling = json_decode($dataSampling, true) ?: [];
+        }
+
+        $jumlah_sampel = collect($dataSampling)->sum(function ($item) {
+            return (int) ($item['jumlah_titik'] ?? 0);
+        });
+
+        DataLapanganSARHeader::updateOrCreate(
+            [
+                // kondisi pencarian
+                'no_quotation' => $no_quotation,
+            ],
+            [
+                // data yang diupdate / create
+                'no_order' => $order->no_order,
+                'nama_pelanggan' => $order->nama_perusahaan,
+                'alamat_pelanggan' => $order->alamat_sampling,
+                'email_pelanggan' => $order->email_pic_order,
+                'no_telpon' => $order->no_tlp_pic_sampling,
+                'titik_koordinat' => null,
+                'jumlah_sampel' => $jumlah_sampel,
+                'updated_at' => Carbon::now(),
+                'updated_by' => $this->karyawan,
+            ]
+        );
     }
 }
