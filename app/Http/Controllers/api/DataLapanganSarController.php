@@ -46,8 +46,7 @@ class DataLapanganSarController extends Controller
                     'qt.tanggal_penawaran',
                     'qt.quotation_type as type',
                     'mc.nama_cabang',
-                ])
-                ->whereNotNull('datalapangan_sar_header.filename');
+                ]);
 
             if (!empty($request->cabang)) {
                 $data->where('qt.id_cabang', $request->cabang);
