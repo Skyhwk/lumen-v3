@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\RenderLhpSar;
+use App\Services\GenerateStrukSarService;
 
 class FdlSarController extends Controller
 {
@@ -188,5 +189,18 @@ class FdlSarController extends Controller
             'data' => $data
         ], 200);
 
+    }
+
+    public function generateStrukSar(Request $request)
+    {
+        $data = SarHeader::with('detail')->where('no_order', $request->no_order)->where('is_active', true)->first();
+
+        $service = new GenerateStrukSarService();
+        $service->generate($data);
+        
+        return response()->json([
+            'message' => 'Struk SAR has been generated successfully',
+            'data' => $data
+        ], 200);
     }
 }
