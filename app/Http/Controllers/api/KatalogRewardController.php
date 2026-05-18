@@ -4,6 +4,8 @@ namespace App\Http\Controllers\api;
 use App\Models\KatalogReward;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
@@ -99,10 +101,12 @@ class KatalogRewardController extends Controller
             'weight' => ['nullable', 'string', 'max:100'],
             'min_claim' => ['nullable', 'string', 'max:100'],
             'code' => ['required', 'string', 'max:100', $codeUnique],
-            'showcase' => ['nullable', 'string', 'max:150'],
             'variants' => ['nullable'],
             'notes' => ['nullable'],
-            'gallery' => ['nullable'],
+            'existing_gallery' => ['nullable'],
+            'new_gallery' => ['nullable'],
+            'gallery_files' => ['nullable', 'array'],
+            'gallery_files.*' => ['nullable', 'file', 'image', 'max:5120'],
         ];
     }
 
@@ -117,10 +121,9 @@ class KatalogRewardController extends Controller
         $reward->weight = trim((string) ($request->weight ?? '-'));
         $reward->min_claim = trim((string) ($request->min_claim ?? '1 pcs'));
         $reward->code = trim((string) $request->code);
-        $reward->showcase = trim((string) ($request->showcase ?? ('Katalog ' . $reward->category)));
         $reward->variants = $this->normalizeStringArray($request->variants, ['Default']);
         $reward->notes = $this->normalizeStringArray($request->notes, ['Produk internal untuk kebutuhan katalog reward.']);
-        $reward->gallery = $this->normalizeGallery($request->gallery);
+        $reward->gallery = $this->storeGallery($request, $reward->gallery ?? []);
         $reward->is_active = true;
     }
 
@@ -165,6 +168,96 @@ class KatalogRewardController extends Controller
             ->filter(fn ($item) => $item['label'] !== '' || $item['imageUrl'] !== '')
             ->values()
             ->all();
+    }
+
+    protected function storeGallery(Request $request, array $currentGallery = []): array
+    {
+        $existingGallery = $this->normalizeGallery($request->existing_gallery);
+        $newGalleryMetadata = $this->normalizeGallery($request->new_gallery);
+        $uploadedFiles = $request->file('gallery_files', []);
+        $savedGallery = $existingGallery;
+
+        if (!is_array($uploadedFiles)) {
+            $uploadedFiles = [$uploadedFiles];
+        }
+
+        foreach ($uploadedFiles as $index => $file) {
+            if (!$file instanceof UploadedFile) {
+                continue;
+            }
+
+            $metadata = $newGalleryMetadata[$index] ?? [];
+            $relativePath = $this->saveImageAsWebp($file);
+
+            $savedGallery[] = [
+                'label' => trim((string) ($metadata['label'] ?? ('Gambar ' . ($index + 1)))),
+                'imageUrl' => $relativePath,
+                'preview' => isset($metadata['preview']) && is_array($metadata['preview']) ? array_values($metadata['preview']) : ['#f5f5f5', '#cfd6df'],
+                'accent' => (string) ($metadata['accent'] ?? '#111827'),
+            ];
+        }
+
+        $this->deleteRemovedGalleryFiles($currentGallery, $savedGallery);
+
+        return array_values($savedGallery);
+    }
+
+    protected function saveImageAsWebp(UploadedFile $file): string
+    {
+        $directory = public_path('katalog-reward');
+
+        if (!File::exists($directory)) {
+            File::makeDirectory($directory, 0755, true);
+        }
+
+        $binary = file_get_contents($file->getRealPath());
+        $image = imagecreatefromstring($binary);
+
+        if ($image === false) {
+            abort(422, 'File foto tidak valid');
+        }
+
+        imagepalettetotruecolor($image);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+
+        $fileName = uniqid('reward_', true) . '.webp';
+        $targetPath = $directory . DIRECTORY_SEPARATOR . $fileName;
+        $isSaved = imagewebp($image, $targetPath, 85);
+        imagedestroy($image);
+
+        if (!$isSaved) {
+            abort(500, 'Gagal menyimpan foto reward');
+        }
+
+        return $fileName;
+    }
+
+    protected function deleteRemovedGalleryFiles(array $currentGallery, array $savedGallery): void
+    {
+        $currentPaths = collect($currentGallery)
+            ->pluck('imageUrl')
+            ->filter()
+            ->map(fn ($url) => public_path($this->normalizePublicRelativePath((string) $url)))
+            ->all();
+
+        $savedPaths = collect($savedGallery)
+            ->pluck('imageUrl')
+            ->filter()
+            ->map(fn ($url) => public_path($this->normalizePublicRelativePath((string) $url)))
+            ->all();
+
+        foreach (array_diff($currentPaths, $savedPaths) as $removedPath) {
+            if (strpos($removedPath, public_path('katalog-reward')) === 0 && File::exists($removedPath)) {
+                File::delete($removedPath);
+            }
+        }
+    }
+
+    protected function normalizePublicRelativePath(string $url): string
+    {
+        $parsedPath = parse_url($url, PHP_URL_PATH) ?: $url;
+        return ltrim(str_replace('\\', '/', $parsedPath), '/');
     }
 
     protected function calculateRewardPointFromPurchasePrice(int $purchasePrice): int
@@ -218,7 +311,6 @@ class KatalogRewardController extends Controller
                 'weight' => $reward->weight ?: '-',
                 'minClaim' => $reward->min_claim ?: '1 pcs',
                 'code' => $reward->code,
-                'showcase' => $reward->showcase ?: ('Katalog ' . $reward->category),
                 'notes' => $reward->notes ?? [],
             ],
         ];

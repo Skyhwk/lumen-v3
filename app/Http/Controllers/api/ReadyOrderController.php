@@ -725,7 +725,7 @@ class ReadyOrderController extends Controller
                     return self::orderNonKontrakNonPengujian($dataQuotation, $no_order, $request);
                 } else {
                     $dataJadwal = null;
-                    if ($dataQuotation->status_sampling != 'SD') {
+                    if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                         $jadwalCollection = collect($dataQuotation->sampling->first()->jadwal ?? []);
 
                         $dataJadwal = $jadwalCollection
@@ -844,7 +844,7 @@ class ReadyOrderController extends Controller
                     ], 200);
                 }
                 $dataJadwal = [];
-                if ($dataQuotation->status_sampling != 'SD') {
+                if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                     $jadwalCollection = collect();
 
                     foreach ($dataQuotation->sampling as $sampling) {
@@ -894,7 +894,7 @@ class ReadyOrderController extends Controller
 
                     $kategoriQT = [];
                     foreach ($dataQuotation->detail as $detail) {
-                        if ($detail->status_sampling == 'SD')
+                        if (in_array($detail->status_sampling, ['SD', 'SAR']))
                             continue;
 
                         $samplingData = $this->extractSampling($detail->data_pendukung_sampling);
@@ -1282,7 +1282,7 @@ class ReadyOrderController extends Controller
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
                     $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
 
-                    if ($dataQuotation->status_sampling != 'SD') {
+                    if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                         $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
                         if (!$tanggal_sampling) {
                             DB::rollback();
@@ -1803,7 +1803,7 @@ class ReadyOrderController extends Controller
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
 
-                    if ($value->status_sampling != 'SD') {
+                    if (!in_array($value->status_sampling, ['SD', 'SAR'])) {
                         $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                         $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
                         if (!$tanggal_sampling) {

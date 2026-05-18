@@ -118,7 +118,9 @@ class QuoteSampleSdController extends Controller
                     if (strpos($keyword, '24')) {
                         $query->where('status_sampling', 'S24');
                     } elseif (strpos($keyword, 'antar')) {
-                        $query->where('status_sampling', 'SD');
+                        $query->whereIn('status_sampling', ['SD', 'SAR']);
+                    } elseif (strpos($keyword, 'anti ribet')) {
+                        $query->where('status_sampling', 'SAR');
                     } elseif (strpos($keyword, 'sampling')) {
                         $query->where('status_sampling', 'S');
                     } elseif (strpos($keyword, 're')) {

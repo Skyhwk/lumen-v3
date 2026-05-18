@@ -918,7 +918,7 @@ class FollowUpQuotationController extends Controller
                 return self::orderNonKontrakNonPengujian($dataQuotation, $no_order);
             } else {
                 $dataJadwal = null;
-                if ($dataQuotation->status_sampling != 'SD') {
+                if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                     $jadwalCollection = collect($dataQuotation->sampling->first()->jadwal ?? []);
                     $dataJadwal = $jadwalCollection->map(function ($item) {
                         return [
@@ -1066,7 +1066,7 @@ class FollowUpQuotationController extends Controller
                 // return self::orderNonKontrakNonPengujian($dataQuotation, $no_order);
             }
             $dataJadwal = [];
-            if ($dataQuotation->status_sampling != 'SD') {
+            if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                 $jadwalCollection = collect();
                 foreach ($dataQuotation->sampling as $sampling) {
                     $periode = $sampling->periode_kontrak;
@@ -1125,7 +1125,7 @@ class FollowUpQuotationController extends Controller
 
                 // dd($array_kategori_jadwal,$dataJadwal);
                 foreach ($dataQuotation->detail as $detail) {
-                    if ($detail->status_sampling == 'SD')
+                    if (in_array($detail->status_sampling, ['SD', 'SAR']))
                         continue;
                     foreach (json_decode($detail->data_pendukung_sampling) as $data_pengujian) {
                         // dd($data_pengujian);
@@ -1412,7 +1412,7 @@ class FollowUpQuotationController extends Controller
                     $number_imaginer = sprintf("%03d", $n);
 
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
-                    if ($dataQuotation->status_sampling != 'SD') {
+                    if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                         foreach ($dataJadwal as $jadwal) {
                             foreach ($jadwal['kategori'] as $index => $kat) {
                                 if (\explode(' - ', $kat)[1] == $number_imaginer) {
@@ -1986,7 +1986,7 @@ class FollowUpQuotationController extends Controller
                             $number_imaginer = sprintf("%03d", $n);
 
                             $tanggal_sampling = Carbon::now()->format('Y-m-d');
-                            if ($dataQuotation->status_sampling != 'SD') {
+                            if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                                 foreach ($dataJadwal as $jadwal) {
                                     foreach ($jadwal['kategori'] as $index => $kat) {
                                         if (\explode(' - ', $kat)[1] == $number_imaginer) {
@@ -2402,7 +2402,7 @@ class FollowUpQuotationController extends Controller
 
                                 $number_imaginer = sprintf("%03d", $n);
 
-                                if ($dataQuotation->status_sampling != 'SD') {
+                                if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                                     foreach ($dataJadwal as $sampling_plan) {
                                         if ($sampling_plan['periode_kontrak'] == $periode_kontrak) {
                                             foreach ($sampling_plan['jadwal'] as $jadwal) {
@@ -3109,7 +3109,7 @@ class FollowUpQuotationController extends Controller
                             $number_imaginer = sprintf("%03d", $no);
                             $tanggal_sampling = $periode_kontrak . '-01';
                             //dedi 2025-02-14
-                            if ($dataQuotation->status_sampling != 'SD') {
+                            if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
                                 foreach ($dataJadwal as $sampling_plan) {
                                     if ($sampling_plan['periode_kontrak'] == $periode_kontrak) {
                                         foreach ($sampling_plan['jadwal'] as $jadwal) {

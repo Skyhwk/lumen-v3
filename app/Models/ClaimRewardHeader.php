@@ -7,7 +7,7 @@ use App\Models\Sector;
 class ClaimRewardHeader extends Sector
 {
     protected $connection = 'portal_customer';
-    protected $table = 'claimed_h';
+    protected $table = 'claim_reward_header';
     protected $guarded = [];
 
     protected $casts = [

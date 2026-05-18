@@ -12,6 +12,7 @@ return [
         'right_content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem'
     ],
     'status_sampling' => [
+        'SAR' => 'Sampling Anti Ribet',
         'S24' => 'Sampling 24 Jam',
         'SD' => 'Sample Diantar',
         'S' => 'Sampling',

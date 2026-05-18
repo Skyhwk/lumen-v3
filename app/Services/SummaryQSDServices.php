@@ -184,7 +184,7 @@ class SummaryQSDServices
                 break;
 
             case 'sd':
-                $query->whereIn('status_sampling', ['SD', 'SP'])
+                $query->whereIn('status_sampling', ['SD', 'SAR', 'SP'])
                     ->whereNotNull('no_order');
                 break;
 

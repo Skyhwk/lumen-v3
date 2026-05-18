@@ -714,6 +714,9 @@ class RenderData
             );
 
             switch ($data->status_sampling) {
+                case "SAR":
+                    $sampling = "SAMPLING ANTI RIBET";
+                    break;
                 case "S24":
                     $sampling = "SAMPLING 24 JAM";
                     break;
@@ -1216,7 +1219,9 @@ class RenderData
                 foreach (json_decode($v->data_pendukung_sampling) as $key => $value) {
                     // array_push($period, $this->tanggal_indonesia($value->periode_kontrak, 'period'));
                     array_push($per, $value->periode_kontrak);
-                    if ($v->status_sampling == "S24") {
+                    if ($v->status_sampling == "SAR") {
+                        $sampling = "SAMPLING ANTI RIBET";
+                    } elseif ($v->status_sampling == "S24") {
                         $sampling = "SAMPLING 24 JAM";
                     } elseif ($v->status_sampling == "SD") {
                         $sampling = "SAMPLE DIANTAR";
@@ -3283,6 +3288,9 @@ class RenderData
 
             //code...
             switch ($data->status_sampling) {
+                case "SAR":
+                    $sampling = "SAMPLING ANTI RIBET";
+                    break;
                 case "S24":
                     $sampling = "SAMPLING 24 JAM";
                     break;
@@ -3721,6 +3729,9 @@ class RenderData
 
                     array_push($per, $value->periode_kontrak);
                     switch ($v->status_sampling) {
+                        case "SAR":
+                            $sampling = "SAMPLING ANTI RIBET";
+                            break;
                         case "S24":
                             $sampling = "SAMPLING 24 JAM";
                             break;

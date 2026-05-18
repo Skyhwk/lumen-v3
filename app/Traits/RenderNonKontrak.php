@@ -54,7 +54,9 @@ trait RenderNonKontrak
             'orientation' => 'P'
         );
 
-        if ($data->status_sampling == 'S24') {
+        if ($data->status_sampling == 'SAR') {
+            $sampling = 'SAMPLING ANTI RIBET';
+        } else if ($data->status_sampling == 'S24') {
             $sampling = 'SAMPLING 24 JAM';
         } else if ($data->status_sampling == 'SD') {
             $sampling = 'SAMPLE DIANTAR';
