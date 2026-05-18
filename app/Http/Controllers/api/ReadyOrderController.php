@@ -3908,11 +3908,11 @@ class ReadyOrderController extends Controller
         DataLapanganSARHeader::updateOrCreate(
             [
                 // kondisi pencarian
-                'no_quotation' => $no_quotation,
+                'no_order' => $order->no_order,
             ],
             [
                 // data yang diupdate / create
-                'no_order' => $order->no_order,
+                'no_quotation' => $no_quotation,
                 'nama_pelanggan' => $order->nama_perusahaan,
                 'alamat_pelanggan' => $order->alamat_sampling,
                 'email_pelanggan' => $order->email_pic_order,
