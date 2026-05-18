@@ -23,7 +23,7 @@
                 </tr>
                 <tr>
                     <td style="height: 70px;"><img src="{{ public_path('qr_documents/' . $header->file_qr . '.svg') }}"
-                            width="50px" height="50px"></td>
+                            width="70px" height="70px"></td>
                 </tr>
                 <tr>
                     <td style="height: 70px;"></td>
