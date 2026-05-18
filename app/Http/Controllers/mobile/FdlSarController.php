@@ -181,7 +181,7 @@ class FdlSarController extends Controller
     }
 
     public function index (Request $request) {
-        $proses = ProsesFdlSar::where('karyawan_id', 127)->where('is_completed', true)->get();
+        $proses = ProsesFdlSar::where('karyawan_id', $this->user_id)->where('is_completed', true)->get();
         $data = SarHeader::where('is_active', true)->whereIn('no_order', $proses->pluck('no_order'))->get();
 
         return response()->json([
