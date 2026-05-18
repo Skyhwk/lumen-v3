@@ -1443,6 +1443,8 @@ class JadwalServices
             if (!is_null($cek)) {
                 $cek->status = 1;
                 $cek->status_jadwal = 'jadwal';
+                $cek->timestamp_jadwal = Carbon::now();
+                $cek->petugas_jadwal = $dataAdd->karyawan;
                 $cek->save();
             }
 

@@ -31,7 +31,6 @@ class RenderInvoice
             if ($invoice->upload_file) {
                 $filename = $invoice->upload_file;
             } else {
-                dd('render ulang');
                 if ($invoice->is_custom == true) {
                     $filename = $this->renderCustom($noInvoice);
                 } else {
