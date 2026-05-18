@@ -9,8 +9,12 @@ class GenerateStrukSarService
 {
     public function generate($data)
     {
+        $html = view("struk.sar", ["data" => $data])->render();
+
+        $estimatedHeight = max(200, substr_count($html, '<tr') * 8);
+
         $mpdf = new Mpdf([
-            "format" => [80, 200],
+            "format" => [80, $estimatedHeight],
             "margin_left" => 4,
             "margin_right" => 4,
             "margin_top" => 4,
@@ -19,17 +23,20 @@ class GenerateStrukSarService
             "default_font" => "arial",
         ]);
 
-        $html = view("struk.sar", ["data" => $data])->render();
-
         $mpdf->WriteHTML($html);
 
-        $filename = public_path("struk/sar/STRUK_SAR_{$data->no_order}.pdf");
+        $filename = "STRUK_SAR_{$data->no_order}.pdf";
 
-        if (!file_exists(dirname($filename))) {
-            mkdir(dirname($filename), 0777, true);
+        $filepath = public_path("struk/sar/$filename");
+
+        if (!file_exists(dirname($filepath))) {
+            mkdir(dirname($filepath), 0777, true);
         }
 
-        $mpdf->Output($filename, Destination::FILE);
+        $mpdf->Output($filepath, Destination::FILE);
+
+        $data->file_struk = $filename;
+        $data->save();
 
         return $filename;
     }

@@ -128,9 +128,9 @@
         <table>
             <thead>
                 <tr>
-                    <td class="bold" width="35%">No. Sampel</td>
+                    <td class="bold" width="35%">{{ $nomorSampel }}</td>
                     <td class="bold" width="5%">:</td>
-                    <td class="bold">{{ $nomorSampel }}</td>
+                    <td class="bold">{{ $sampels->first()->lokasi_pengambilan_sampel ?: '-' }}</td>
                 </tr>
             </thead>
         </table>
@@ -142,7 +142,7 @@
                 <tr>
                     <td width="50%" class="bold">Parameter</td>
                     <td width="25%" class="bold center">Hasil Uji</td>
-                    <td width="25%" class="bold center">Bakumutu</td>
+                    <td width="25%" class="bold center">Nilai Rujukan</td>
                 </tr>
             </thead>
 
@@ -155,10 +155,15 @@
 
                         <td class="center">
                             {{ $sampel->hasil_uji }}
+                                @if ($sampel->hasil_uji > $nilaiRujukan)
+                                    ↗
+                                @else 
+                                    ↙
+                                @endif
                         </td>
 
                         <td class="center">
-                            {{ $sampel->hasil_uji >= $nilaiRujukan ? '↑' : '↓' }}
+                            {{ $nilaiRujukan }}
                         </td>
                     </tr>
                 @endforeach
@@ -174,8 +179,7 @@
         </tr>
         <tr>
             <td>
-                <b>↑</b> = Hasil Uji melebihi ambang batas nilai rujukan<br>
-                <b>↓</b> = Hasil Uji kurang dari ambang batas nilai rujukan
+                <b>↗</b> = Hasil Uji melebihi ambang batas nilai rujukan<br>
             </td>
         </tr>
     </table>
@@ -186,7 +190,12 @@
         <tr>
             <td width="35%">Tanggal</td>
             <td width="5%">:</td>
-            <td>{{ Carbon::parse($data->tanggal_lhp)->translatedFormat('d F Y') }}</td>
+            <td>{{ Carbon::parse($data->waktu_selesai_sampling)->translatedFormat('l, d F Y : H:i') }}</td>
+        </tr>
+        <tr>
+            <td width="35%">Petugas</td>
+            <td width="5%">:</td>
+            <td>{{ $sampels->first()->created_by ?: '-' }}</td>
         </tr>
     </table>
 
