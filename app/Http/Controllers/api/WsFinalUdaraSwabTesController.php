@@ -833,7 +833,7 @@ class WsFinalUdaraSwabTesController extends Controller
         DB::beginTransaction();
         try {
             $header = SwabTestHeader::where('no_sampel', $request->no_sampel)->update([
-                'is_approve'   => 0,
+                'is_approved'   => 0,
                 'is_active'    => 0,
                 'notes_reject' => $request->note,
                 'rejected_by'  => $this->karyawan,
@@ -842,7 +842,7 @@ class WsFinalUdaraSwabTesController extends Controller
 
             if (! $header) {
                 $header = MicrobioHeader::where('no_sampel', $request->no_sampel)->update([
-                    'is_approve'   => 0,
+                    'is_approved'   => 0,
                     'is_active'    => 0,
                     'notes_reject' => $request->note,
                     'rejected_by'  => $this->karyawan,
