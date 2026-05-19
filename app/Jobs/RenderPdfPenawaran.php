@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Services\RenderNonKontrak;
 use App\Services\RenderKontrak;
+use App\Services\RenderSar;
 
 class RenderPdfPenawaran extends Job
 {
@@ -23,6 +24,12 @@ class RenderPdfPenawaran extends Job
             $render->renderDataQuotation($this->id, 'id');
             $render = new RenderKontrak();
             $render->renderDataQuotation($this->id, 'en');
+            return true;
+        } else if ($this->qt == 'quotation-sar') {
+            $render = new RenderSar();
+            $render->renderHeader($this->id, 'id');
+            $render = new RenderSar();
+            $render->renderHeader($this->id, 'en');
             return true;
         } else {
             $render = new RenderNonKontrak();
