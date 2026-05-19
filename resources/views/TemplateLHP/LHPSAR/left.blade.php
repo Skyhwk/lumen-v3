@@ -20,14 +20,21 @@
 
             @foreach ($grouped as $nomorSampel => $items)
                 @php
-                    $rowspan = count($items);
+                    $rowspan = count($parametersSar);
+                    $firstItem = collect($items)->first();
                 @endphp
 
-                @foreach ($items as $index => $yy)
+                @foreach ($parametersSar as $index => $param)
                     @php
                         $isLastGroup = $groupIndex == $totalGroup;
                         $classCenter = $isLastGroup ? 'pd-5-solid-center' : 'pd-5-dot-center';
                         $classText = $isLastGroup ? 'pd-3-solid' : 'pd-3-dot';
+
+                        // Find the tested parameter in $items
+                        $tested = collect($items)->first(function ($item) use ($param) {
+                            return strtolower($item['parameter']) == strtolower($param->nama_lab) || 
+                                   strtolower($item['parameter']) == strtolower($param->nama_regulasi);
+                        });
                     @endphp
 
                     <tr>
@@ -44,7 +51,7 @@
                                 width="10%"
                                 style="text-align: right; border-right: none;">
                                 <sup style="font-size: 5px; margin-top: -10px;">
-                                    {{ $yy['nomor_sampel'] }}
+                                    {{ $nomorSampel }}
                                 </sup>
                             </td>
 
@@ -53,23 +60,23 @@
                                 class="{{ $classText }}"
                                 width="32%"
                                 style="border-left: none; text-align: left;">
-                                {{ $yy['lokasi_pengambilan_sampel'] }}
+                                {{ $firstItem['lokasi_pengambilan_sampel'] ?? '-' }}
                             </td>
                         @endif
 
                         {{-- PARAMETER --}}
                         <td class="{{ $classCenter }}">
-                            {{ $yy['parameter'] }}
+                            {{ $param->nama_regulasi }}
                         </td>
 
                         {{-- HASIL UJI --}}
                         <td class="{{ $classCenter }}">
-                            {{ $yy['hasil_uji'] }}
+                            {{ $tested ? $tested['hasil_uji'] : '-' }}
                         </td>
 
                         {{-- NILAI RUJUKAN --}}
                         <td class="{{ $classCenter }}">
-                            -
+                            {{ $param->nilai_rujukan ?? '-' }}
                         </td>
 
                     </tr>

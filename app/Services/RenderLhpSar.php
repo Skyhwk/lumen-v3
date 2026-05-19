@@ -71,17 +71,20 @@ class RenderLhpSar
 
         $stylesheet = $this->generateStylesheet();
 
-        $htmlHeader = view('TemplateLHP.LHPSAR.header', compact('header', 'detail'))->render();
-        $htmlBody = view('TemplateLHP.LHPSAR.left', compact('header', 'detail'))->render();
-        $htmlFooter = view('TemplateLHP.LHPSAR.footer', compact('header', 'detail'))->render();
+        $parametersSar = \App\Models\ParameterSar::where('is_active', 1)->get();
+
+        $htmlHeader = view('TemplateLHP.LHPSAR.header', compact('header', 'detail', 'parametersSar'))->render();
+        $htmlBody = view('TemplateLHP.LHPSAR.left', compact('header', 'detail', 'parametersSar'))->render();
+        $htmlFooter = view('TemplateLHP.LHPSAR.footer', compact('header', 'detail', 'parametersSar'))->render();
 
         $mpdf->SetHTMLHeader($htmlHeader);
-        $mpdf->WriteHTML($stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
-        $mpdf->WriteHTML($htmlBody);
         $mpdf->SetHTMLFooter($htmlFooter);
 
         $mpdf->showWatermarkImage = true;
         $mpdf->SetWatermarkImage(public_path() . "/logo-watermark.png", -1, "", [110, 35]);
+
+        $mpdf->WriteHTML($stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
+        $mpdf->WriteHTML($htmlBody);
 
         $mpdf->SetProtection(['print'], '', 'skyhwk12', 128);
 
