@@ -12,6 +12,17 @@ Carbon::setLocale('id');
 
 class DashboardComponentController extends Controller
 {
+
+protected $fillable = [
+    'nama_komponen',
+    'nama_dashboard',
+    'owner',
+    'owner_id',
+    'is_active',
+    'created_by',
+    'updated_by'
+];
+
     public function index(Request $request)
     {
         try {
@@ -24,50 +35,59 @@ class DashboardComponentController extends Controller
     }
     
     public function store(Request $request)
-    {
-        try {
-            if ($request->id == null || $request->id == '') {
-                DashboardComponent::create([
-                    'nama_komponen' => $request->nama_komponen,
-                    'nama_dashboard' => $request->nama_dashboard,
-                    'owner' => $request->owner,
-                    'owner_id' => $request->owner_id,
-                    'is_active' => $request->is_active,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $this->karyawan,
-                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'updated_by' => $this->karyawan,
-                ]);
+{
+    try {
 
-            } else if ($request->id != null || $request->id != '') {
-                DashboardComponent::where('id', $request->id)->update([
-                    'nama_komponen' => $request->nama_komponen,
-                    'nama_dashboard' => $request->nama_dashboard,
-                    'owner' => $request->owner,
-                    'owner_id' => $request->owner_id,
-                    'is_active' => $request->is_active,
-                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'updated_by' => $this->karyawan,
-                ]);
+        if (!empty($request->id)) {
+
+            $data = DashboardComponent::find($request->id);
+
+            if (!$data) {
+                return response()->json([
+                    'message' => 'Data not found'
+                ], 404);
             }
 
-            return response ()->json([
-                'message' => 'Komponen berhasil disimpan.',
-                'status' => '200'
-            ], 200);
+            $data->update([
+                'nama_komponen' => $request->nama_komponen,
+                'nama_dashboard' => $request->nama_dashboard,
+                'owner' => $request->owner,
+                'owner_id' => $request->owner_id,
+                'is_active' => $request->is_active,
+                'updated_by' => $this->karyawan,
+                'created_by' => $this->karyawan,
+                'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
 
-            
-           
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile()
-            ], 401);
+        } else {
+
+            DashboardComponent::create([
+                'nama_komponen' => $request->nama_komponen,
+                'nama_dashboard' => $request->nama_dashboard,
+                'owner' => $request->owner,
+                'owner_id' => $request->owner_id,
+                'is_active' => $request->is_active,
+                'created_by' => $this->karyawan,
+                'updated_by' => $this->karyawan,
+            ]);
         }
-    }
 
-      public function delete(Request $request)
+        return response()->json([
+            'message' => 'Success'
+        ], 200);
+
+    } catch (\Exception $e) {
+
+        return response()->json([
+            'error' => true,
+            'message' => $e->getMessage(),
+            'line' => $e->getLine(),
+            'file' => $e->getFile(),
+        ], 500);
+    }
+}
+    public function delete(Request $request)
     {
         try {
             DashboardComponent::where('id', $request->id)->update([

@@ -8,7 +8,7 @@ use App\Models\Sector;
 class DashboardComponent extends Sector
 {
     protected $table = "dashboard_component";
-    public $timestamps = false;
+    // public $timestamps = false;
     protected $guarded = [];
 
     // public function detail(){
