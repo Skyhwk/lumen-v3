@@ -4,6 +4,7 @@ namespace App\Http\Controllers\mobile;
 use App\Models\SarHeader;
 use App\Models\SarDetail;
 use App\Models\ProsesFdlSar;
+use App\Models\ParameterSar;
 
 use Carbon\Carbon;
 use App\Http\Controllers\Controller;
@@ -185,15 +186,78 @@ class FdlSarController extends Controller
         return response()->json($filename, 200);
     }
 
-    public function index (Request $request) {
-        $proses = ProsesFdlSar::where('karyawan_id', $this->user_id)->where('is_completed', true)->get();
-        $data = SarHeader::where('is_active', true)->whereIn('no_order', $proses->pluck('no_order'))->get();
+    public function index(Request $request)
+    {
+        $proses = ProsesFdlSar::where('karyawan_id', 127)->where('is_completed', true)->get();
+        
+        $data = SarHeader::with('detail')
+            ->where('is_active', true)
+            ->whereIn('no_order', $proses->pluck('no_order'))
+            ->get();
+
+        $nilai_rujukan = ParameterSar::select('id_parameter', 'nama_lab', 'nama_regulasi', 'nilai_rujukan')
+            ->where('is_active', true)
+            ->get();
+
+        $result = $data->map(function ($header) use ($nilai_rujukan) {
+            // 1. Kelompokkan detail berdasarkan nomor_sampel
+            $groupedBySample = $header->detail->groupBy('nomor_sampel');
+
+            // 2. Loop setiap grup sampel
+            $samples = $groupedBySample->map(function ($details, $nomor_sampel) use ($nilai_rujukan) {
+                // Index detail berdasarkan id_parameter untuk lookup cepat di dalam sampel ini
+                $detailMap = $details->keyBy('id_parameter');
+
+                // Ambil lokasi dari salah satu baris detail (karena lokasi biasanya sama per sampel)
+                $lokasi = $details->first()->lokasi_pengambilan_sampel ?? '-';
+
+                // 3. Paksa semua parameter rujukan muncul di sampel ini
+                $parameters = $nilai_rujukan->map(function ($param) use ($detailMap) {
+                    $detail = $detailMap->get($param->id_parameter);
+                    
+                    $hasil_uji = $detail ? $detail->hasil_uji : '-';
+                    $melebihi = false;
+
+                    if ($detail && is_numeric($hasil_uji) && is_numeric($param->nilai_rujukan)) {
+                        $melebihi = (float)$hasil_uji > (float)$param->nilai_rujukan;
+                    }
+
+                    return [
+                        'id_parameter'   => $param->id_parameter,
+                        'nama_regulasi'  => $param->nama_regulasi,
+                        'nama_lab'       => $param->nama_lab,
+                        'hasil_uji'      => $hasil_uji,
+                        'nilai_rujukan'  => $param->nilai_rujukan,
+                        'melebihi_rujukan' => $melebihi,
+                    ];
+                });
+
+                return [
+                    'nomor_sampel' => $nomor_sampel,
+                    'lokasi'       => $lokasi,
+                    'item_parameters' => $parameters
+                ];
+            })->values(); // Reset keys agar menjadi array numeric []
+
+            return [
+                'id'                     => $header->id,
+                'no_order'               => $header->no_order,
+                'no_quotation'           => $header->no_quotation,
+                'email_pelanggan'        => $header->email_pelanggan,
+                'jumlah_sampel'          => $header->jumlah_sampel,
+                'nama_pelanggan'         => $header->nama_pelanggan,
+                'alamat_pelanggan'       => $header->alamat_pelanggan,
+                'waktu_mulai_sampling'   => $header->waktu_mulai_sampling,
+                'waktu_selesai_sampling' => $header->waktu_selesai_sampling,
+                'sampel_groups'          => $samples, // Sekarang data dikelompokkan per sampel
+                'petugas'                => $header->petugas
+            ];
+        });
 
         return response()->json([
             'message' => 'success',
-            'data' => $data
+            'data'    => $result,
         ], 200);
-
     }
 
     public function generateStrukSar(Request $request)
