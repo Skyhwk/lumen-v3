@@ -17,56 +17,101 @@ use App\Services\GetBawahan;
 
 class TicketSamplingController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     try {
+    //         $department = $request->attributes->get('user')->karyawan->id_department;
+    //         if (
+    //             (
+    //                 in_array($department, [14, 16]) && // APLING && Technical Assurance Supervisor
+    //                 !in_array($this->user_id, [10, 15, 93, 123])
+    //             ) ||
+    //             in_array($this->user_id, [39]) // ID BIMA
+    //         ) {
+    //             $data = TicketSampling::where('is_active', true)
+    //                 ->orderBy('id', 'desc');
+    //             return Datatables::of($data)
+    //                 ->addColumn('reff', function ($row) {
+    //                     $filePath = public_path('ticket_sampling/' . $row->filename);
+    //                     if (file_exists($filePath) && is_file($filePath)) {
+    //                         return file_get_contents($filePath);
+    //                     } else {
+    //                         return 'File not found';
+    //                     }
+    //                 })
+    //                 ->make(true);
+    //         } else {
+
+    //             $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+    //             $data = TicketSampling::whereIn('request_by', $getBawahan)
+    //                 ->where('is_active', true)
+    //                 ->orderBy('id', 'desc');
+
+    //             return Datatables::of($data)
+    //                 ->addColumn('reff', function ($row) {
+    //                     $filePath = public_path('ticket_sampling/' . $row->filename);
+    //                     if (file_exists($filePath) && is_file($filePath)) {
+    //                         return file_get_contents($filePath);
+    //                     } else {
+    //                         return 'File not found';
+    //                     }
+    //                 })
+    //                 ->addColumn('can_approve', function ($row) use ($getBawahan) {
+    //                     // comment
+    //                     return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+    //                 })
+    //                 ->make(true);
+    //         }
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'data' => [],
+    //             'message' => $e->getMessage(),
+    //         ], 201);
+    //     }
+    // }
+
     public function index(Request $request)
     {
         try {
             $department = $request->attributes->get('user')->karyawan->id_department;
-            if (
-                (
-                    in_array($department, [14, 16]) && // APLING && Technical Assurance Supervisor
-                    !in_array($this->user_id, [10, 15, 93, 123])
-                ) ||
-                in_array($this->user_id, [39]) // ID BIMA
-            ) {
-                $data = TicketSampling::where('is_active', true)
-                    ->orderBy('id', 'desc');
-                return Datatables::of($data)
-                    ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_sampling/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
-                    })
-                    ->make(true);
-            } else {
+            
+            $isFullAccess = (
+                in_array($department, [14]) &&
+                !in_array($this->user_id, [10, 15, 93, 123])
+            ) || in_array($this->user_id, [39, 127, 13]);
 
+            // Departemen yang handle ticket (SAMPLING & TECHNICAL ASSURANCE)
+            $isHandlerDept = in_array($department, [14, 16, 22, 7]); // ganti dengan ID aslinya
+
+            if ($isFullAccess) {
+                $data = TicketSampling::where('is_active', true)->orderBy('id', 'desc');
+            } else {
                 $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
                 $data = TicketSampling::whereIn('request_by', $getBawahan)
                     ->where('is_active', true)
                     ->orderBy('id', 'desc');
-
-                return Datatables::of($data)
-                    ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_sampling/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
-                    })
-                    ->addColumn('can_approve', function ($row) use ($getBawahan) {
-                        // comment
-                        return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
-                    })
-                    ->make(true);
             }
+
+            return Datatables::of($data)
+                ->addColumn('reff', function ($row) {
+                    $filePath = public_path('ticket_sampling/' . $row->filename);
+                    return file_exists($filePath) && is_file($filePath)
+                        ? file_get_contents($filePath)
+                        : 'File not found';
+                })
+                ->addColumn('can_approve', function ($row) use ($isFullAccess, $isHandlerDept) {
+                    if ($isFullAccess || $isHandlerDept) return false;
+                    $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+                    return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+                })
+                ->addColumn('is_handler_dept', function ($row) use ($isHandlerDept) {
+                    // Flag untuk frontend, apakah user ini dari dept SAMPLING/TA
+                    return $isHandlerDept;
+                })
+                ->make(true);
+
         } catch (\Exception $e) {
-            return response()->json([
-                'data' => [],
-                'message' => $e->getMessage(),
-            ], 201);
+            return response()->json(['data' => [], 'message' => $e->getMessage()], 201);
         }
     }
 
