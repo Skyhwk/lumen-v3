@@ -42,6 +42,7 @@ protected $fillable = [
         
             if($userHaveAllAccess) {
                 $DashboardComponent = DashboardComponent::where('is_active', 1)->get();
+    
                 return DataTables::of($DashboardComponent)->make(true);
             } else {
                 $DashboardComponent = DashboardComponent::where('owner_id', '=', $this->user_id)->where('is_active', 1)->get();
@@ -140,10 +141,10 @@ protected $fillable = [
 
     public function getBawahan(Request $request)
     {
-        $userId = $this->user_id;
-        $subordinates = GetBawahan::where('id', $userId)->get()->pluck('user_id')->toArray();
-        unset($subordinates[array_search($userId, $subordinates)]);
-        $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)
+        $owner_id = $request->owner_id;
+        $subordinates = GetBawahan::where('id', $owner_id)->get()->pluck('user_id')->toArray();
+        unset($subordinates[array_search($owner_id, $subordinates)]);
+        $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)->where('master_karyawan.is_active', 1)
                 ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
                 ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
                 ->get();
