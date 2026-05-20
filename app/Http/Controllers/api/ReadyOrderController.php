@@ -4448,7 +4448,7 @@ class ReadyOrderController extends Controller
 
     private function renderStpsDataPengujianDescription(array $value)
     {
-        $judul = $value['kategori_2'];
+        $judul = $value['kategori_1'];
 
         if (!empty($value['is_paket_analisa']) && !empty($value['paket'])) {
             $judul .= ' - (' . strtoupper($value['paket']) . ')';
