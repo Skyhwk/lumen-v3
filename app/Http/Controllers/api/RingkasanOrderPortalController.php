@@ -148,7 +148,19 @@ class RingkasanOrderPortalController extends Controller
                                 
                                 // Parse Kategori JSON
                                 $kategoriJson = json_decode($first->kategori);
-    
+                                $durasiOptions = [
+                                    '0' => 'Sesaat',
+                                    '1' => '8 Jam',
+                                    '2' => '1x24 Jam',
+                                    '3' => '2x24 Jam',
+                                    '4' => '3x24 Jam',
+                                    '5' => '4x24 Jam',
+                                    '6' => '6x24 Jam',
+                                    '7' => '7x24 Jam'
+                                ];
+
+                                $selectedOption = $first->durasi;
+                                $durasiLabel = $durasiOptions[$selectedOption];
                                 return [
                                     'tanggal'      => $first->tanggal,
                                     'tanggalLabel' => \Carbon\Carbon::parse($first->tanggal)->translatedFormat('d F Y'),
@@ -158,7 +170,8 @@ class RingkasanOrderPortalController extends Controller
                                     'jam_mulai'    => $first->jam_mulai,
                                     'jam_selesai'  => $first->jam_selesai,
                                     'jumlah_titik' => is_countable($kategoriJson) ? count($kategoriJson) : 0,
-                                    'status' => 'sampling'
+                                    'status' => 'sampling',
+                                    'durasi' => $durasiLabel
                                 ];
                             })->values()->all();
     
