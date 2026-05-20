@@ -20,7 +20,7 @@ class CreateDashboardComponentTable extends Migration
             $table->string('nama_dashboard');
             $table->string('owner');
             $table->string('owner_id');
-            $table->integer('is_active');
+            $table->integer('is_active')->default(1);
             $table->string('updated_by');
             $table->string('created_by');
             $table->dateTime('deleted_at')->nullable();
