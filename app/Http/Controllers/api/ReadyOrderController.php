@@ -680,7 +680,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
             throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
@@ -1552,7 +1551,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollback();
-            dd($th);
             throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
@@ -3580,7 +3578,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
-            dd($e);
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
     }
@@ -4017,7 +4014,6 @@ class ReadyOrderController extends Controller
         if (empty($dataNomorSampelSections)) {
             throw new \Exception('Data nomor sampel tidak ditemukan.');
         }
-
         $tanggalSampling = $this->getQuotationSamplingDate($quotation);
         $konsultant = $quotation->konsultan ? strtoupper($quotation->konsultan) : '';
         $perusahaan = $quotation->konsultan ? ' (' . $quotation->nama_perusahaan . ') ' : $quotation->nama_perusahaan;
@@ -4397,7 +4393,6 @@ class ReadyOrderController extends Controller
         if (empty($item)) {
             return null;
         }
-
         $kategori1 = $item['kategori_1'] ?? '';
         $kategori2 = $item['kategori_2'] ?? '';
         $parameter = $this->decodeJsonToArray($item['parameter'] ?? []);
@@ -4409,6 +4404,14 @@ class ReadyOrderController extends Controller
         if (!$periode && !empty($periodeList)) {
             $jumlahTitik *= count($periodeList);
         }
+
+        // Ambil semua ID dulu
+        $parameterIds = array_map(function ($value) {
+            return explode(';', $value, 2)[0];
+        }, $parameter);
+
+        // Query sekali
+        $parameterMap = \App\Models\Parameter::whereIn('id', $parameterIds)->where('is_active', true)->pluck('nama_regulasi', 'id');
 
         $nomorSampel = [];
         foreach ($penamaanTitik as $titik) {
@@ -4428,9 +4431,11 @@ class ReadyOrderController extends Controller
             'regulasi' => array_values(array_filter(array_map(function ($value) {
                 return $this->extractLabelAfterDash($value);
             }, $regulasi))),
-            'parameter' => array_values(array_filter(array_map(function ($value) {
+            // Lalu map
+            'parameter' => array_values(array_filter(array_map(function ($value) use ($parameterMap) {
                 $parts = explode(';', $value, 2);
-                return $parts[1] ?? $parts[0] ?? '';
+                $id = $parts[0];
+                return $parameterMap[$id] ?? $parts[1] ?? $parts[0] ?? '';
             }, $parameter))),
             'persiapan' => ($kategori1 === '1-Air' && !empty($item['volume']))
                 ? '( ' . number_format(((float) $item['volume']) / 1000, 1) . ' L )'
@@ -4448,8 +4453,7 @@ class ReadyOrderController extends Controller
 
     private function renderStpsDataPengujianDescription(array $value)
     {
-        $judul = $value['kategori_2'];
-
+        $judul = $value['kategori_1'];
         if (!empty($value['is_paket_analisa']) && !empty($value['paket'])) {
             $judul .= ' - (' . strtoupper($value['paket']) . ')';
         }
@@ -4465,7 +4469,6 @@ class ReadyOrderController extends Controller
                 ? '<u style="font-size: 12px;">' . $regulasi . '</u>'
                 : '<br><u style="font-size: 12px;">' . $regulasi . '</u>';
         }
-
         foreach ($value['parameter'] as $index => $parameter) {
             $html .= $index === 0
                 ? '<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span>'

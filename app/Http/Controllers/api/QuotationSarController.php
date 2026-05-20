@@ -30,6 +30,10 @@ use App\Models\JobTask;
 use App\Models\MasterPelanggan;
 use App\Models\KelengkapanKonfirmasiQs;
 use App\Models\{KontakPelanggan, AlamatPelanggan, PicPelanggan};
+use App\Models\{SamplingPlan, Jadwal};
+use App\Models\{OrderHeader, OrderDetail};
+use App\Models\{Ftc, FtcT, QrPsikologi};
+use App\Models\Invoice;
 
 class QuotationSarController extends Controller
 {
