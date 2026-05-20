@@ -2965,7 +2965,7 @@ class InputParameterController extends Controller
 									}
 									foreach ($dat as $key => $val) {
 										if ($key == 'Durasi' || $key == 'Durasi 2') {
-											$formt = (int) str_replace(" menit", "", $val);
+											$formt = (float) str_replace(" menit", "", $val);
 											array_push($durasii, $formt);
 										} else {
 											array_push($flow, $val);
