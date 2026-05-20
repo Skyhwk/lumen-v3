@@ -39,7 +39,6 @@ class LingkunganHidupSO2
         $satuan = null;
 
         $C_value = $C1_value = $C2_value = $C14_value = $C15_value = $C16_value = [];
-
         foreach ($ks as $key => $value) {
             $Ta = floatval($data->suhu_array[$key]) + 273;
             $Vu = \str_replace(",", "", number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key]) / $Ta) * (298 / 760), 4));
