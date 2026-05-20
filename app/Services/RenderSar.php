@@ -596,20 +596,24 @@ class RenderSar
                                 Harga Pengujian
                             </td>
                             <td style="text-align:right;padding:5px;">' . self::rupiah($total_harga_pengujian) . '</td>
-                        </tr> 
+                        </tr>'
+            );
+            if($hargaTransportasiPerdiem > 0) {
+                $pdf->wrihteHTML('
                         <tr>
                             <td style="text-align:center;padding:5px;">
                                 Harga Transportasi Perdiem
                             </td>
                             <td style="text-align:right;padding:5px;">' . self::rupiah($hargaTransportasiPerdiem) . '</td>
-                        </tr>     
+                        </tr>');
+            }
+            $pdf->writeHTML('
                         <tr>
                             <td style="text-align:center;padding:5px;">
                                 <b>' . strtoupper(__('QT.total.sub')) . '</b>
                             </td>
                             <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
-                        </tr>'
-            );
+                        </tr>');
             if ($data->total_discount_air > 0) {
                 $pdf->WriteHTML(
                     ' <tr>
