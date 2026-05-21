@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\RenderLhpSar;
 use App\Services\GenerateStrukSarService;
+use App\Services\SendEmail;
 
 class FdlSarController extends Controller
 {
@@ -250,7 +251,7 @@ class FdlSarController extends Controller
                 'waktu_mulai_sampling'   => $header->waktu_mulai_sampling,
                 'waktu_selesai_sampling' => $header->waktu_selesai_sampling,
                 'sampel_groups'          => $samples, // Sekarang data dikelompokkan per sampel
-                'petugas'                => $header->petugas
+                'petugas'                => $header->detail->first()->created_by ?? $header->detail->first()->updated_by ?? '-',
             ];
         });
 
@@ -272,4 +273,89 @@ class FdlSarController extends Controller
             'data' => $data
         ], 200);
     }
+
+    public function sendEmailStruk(Request $request)
+    {
+        DB::beginTransaction();
+        dd('send email struk', $request->all());
+        
+        try {
+            $data = SarHeader::with('detail')->where('no_order', $request->no_order)->where('is_active', true)->first();
+            $subject = 'Hasil Pengujian SAR - ' . $data->nama_pelanggan;
+            $content = "
+                Yth. {$data->nama_pelanggan},
+
+                Berikut terlampir hasil pengujian SAR dengan nomor order {$data->no_order}.
+
+                Silakan cek lampiran untuk detail hasil pengujian.
+
+                Terima kasih.
+
+                Hormat kami,
+                PT. Inti Surya Laboratorium
+                ";
+            $to = $request->input('to');
+            $cc = $request->input('cc', []);
+            $attachments = $request->input('attachments', []);
+            $noOrder = $request->input('no_order');
+            $noDocument = $request->input('no_document');
+
+            if (empty($subject)) {
+                throw new \Exception('Subject is required');
+            }
+            if (empty($to)) {
+                throw new \Exception('Recipient email is required');
+            }
+
+            $ccArray = [];
+            $bcc = [];
+
+            if (!empty($cc)) {
+                if (is_array($cc)) {
+                    $ccArray = $cc;
+                } else {
+                    $ccArray = array_filter(array_map('trim', explode(',', $cc)));
+                }
+            }
+
+            $emailInstance = SendEmail::where('to', $to)
+                ->where('cc', $ccArray)
+                ->where('bcc', $bcc)
+                ->where('subject', $subject)
+                ->where('body', $content)
+                ->noReply();
+
+            if (is_array($attachments) && !empty($attachments)) {
+                $validAttachments = [];
+                foreach ($attachments as $fileName) {
+                    array_push($validAttachments, public_path() . '/dokumen/bas/' . $fileName);
+                }
+
+                if (!empty($validAttachments)) {
+                    $emailInstance = $emailInstance->where('attachment', $validAttachments);
+                }
+            }
+
+            $sent = $emailInstance->send();
+
+            if ($sent) {
+                DB::commit();
+                return response()->json([
+                    'message' => 'Email sent successfully',
+                    'data' => $data
+                ], 200);
+            } else {
+                throw new \Exception('Failed to send email');
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            error_log('Email sending error: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Gagal mengirim email: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

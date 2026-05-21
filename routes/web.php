@@ -99,8 +99,8 @@ $router->group(['prefix' => 'director'], function () use ($router) {
         $router->get('/dashboard/perMenuCount', 'directorApp\DashboardController@perMenuCount');
     });
 });
-
-
+// Print Termal
+$router->get('/mobile/print-termal', 'mobile\PrintTermalController@createPrintJob');
 
 
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
