@@ -31,7 +31,7 @@ class PrintTermalController extends Controller
                 }
             };
     
-            $noOrder   = $request->input('no_order', 'TPTT012603');
+            $noOrder   = $request->input('no_order');
             $printMode = 'full'; // 'full' atau 'filled'
     
             $header = SarHeader::with('detail')
