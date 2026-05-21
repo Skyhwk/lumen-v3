@@ -54,10 +54,11 @@ protected $fillable = [
             $dashboardOwner = DashboardComponent::where('is_active', 1)->where(
                 'owner_id', $this->user_id
             )->get();
+
             $dashboardAccess = SetAksesDashboard::whereJsonContains(
                 'user_list',
                 $this->karyawan
-            )->get();
+            )->whereNull('deleted_at')->get();
 
             $dashboardAccess->transform(function($item) {
                 $component = DashboardComponent::where('nama_dashboard', $item->nama_dashboard)->first();
