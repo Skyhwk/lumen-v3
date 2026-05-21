@@ -3,6 +3,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DashboardComponent;
+use App\Models\SetAksesDashboard;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
@@ -65,6 +66,8 @@ protected $fillable = [
                     ], 404);
                 }
 
+                $oldDashboardName = $data->nama_dashboard;
+
                 $data->update([
                     'nama_komponen' => $request->nama_komponen,
                     'nama_dashboard' => $request->nama_dashboard,
@@ -76,6 +79,16 @@ protected $fillable = [
                     'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 ]);
+
+                if (!empty($request->nama_dashboard) && $oldDashboardName !== $request->nama_dashboard) {
+                    SetAksesDashboard::where('nama_dashboard', $oldDashboardName)
+                        ->whereNull('deleted_at')
+                        ->update([
+                            'nama_dashboard' => $request->nama_dashboard,
+                            'updated_by' => $this->karyawan,
+                            'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                        ]);
+                }
 
             } else {
                 DashboardComponent::create([
@@ -107,6 +120,10 @@ protected $fillable = [
     public function delete(Request $request)
     {
         try {
+            SetAksesDashboard::where('nama_dashboard', $request->nama_dashboard)->update([
+                'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'deleted_by' => $this->karyawan
+            ]);
             DashboardComponent::where('id', $request->id)->update([
                 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'deleted_by' => $this->karyawan,

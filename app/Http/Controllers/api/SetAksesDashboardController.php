@@ -22,7 +22,7 @@ protected $fillable = [
     public function index(Request $request)
     {
         try {
-            $userHaveAllAccess = $this->user_id === 1 || $this->user_id === 127;
+            $userHaveAllAccess = $this->user_id === 1 || $this->user_id === 127 || $this->user_id === 152;
         
             if($userHaveAllAccess) {
                 $DashboardComponent = DashboardComponent::where('is_active', 1)->get();
@@ -41,45 +41,82 @@ protected $fillable = [
             dd($th);
         }
     }
+
+    public function getDashboardByUser(Request $request)
+    {
+        try {
+            // dd($this->karyawan);
+            $dashboard = SetAksesDashboard::whereJsonContains(
+                'user_list',
+                $this->karyawan
+            )->whereNull('deleted_at')->get();
+
+            $dashboard->transform(function($item) {
+                $component = DashboardComponent::where('nama_dashboard', $item->nama_dashboard)->where('is_active', 1)->first();
+                $item->nama_komponen = $component ? $component->nama_komponen : null;
+                return $item;
+            });
+
+            if ($dashboard) {
+                return response()->json([
+                    'data' => $dashboard
+                ], 200);
+            } else {
+                return response()->json([
+                    'message' => 'Dashboard not found',
+                    'status' => '404'
+                ], 404);
+            }
+        } catch (\Exception $e) {
+            \Log::error($e);
+
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ], 500);
+        }
+    }
     
     public function store(Request $request)
-{
-    try {
-        $dashboardIsExist = SetAksesDashboard::where('nama_dashboard', $request->nama_dashboard)->first() ?? null;
+    {
+        try {
+            $dashboardIsExist = SetAksesDashboard::where('nama_dashboard', $request->nama_dashboard)->first() ?? null;
 
-        if ($dashboardIsExist) {
-            SetAksesDashboard::where('nama_dashboard', $dashboardIsExist->nama_dashboard)->update([
-                'user_list' => $request->user_list,
-                'updated_by' => $this->karyawan,
-                'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-               'deleted_at' => null,
-                'deleted_by' => null,
-            ]); 
+            if ($dashboardIsExist) {
+                SetAksesDashboard::where('nama_dashboard', $dashboardIsExist->nama_dashboard)->update([
+                    'user_list' => $request->user_list,
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'deleted_at' => null,
+                    'deleted_by' => null,
+                ]); 
 
-            
-        } else {
-            SetAksesDashboard::create([
-                'nama_dashboard' => $request->nama_dashboard,
-                'user_list' => $request->user_list,
-                'created_by' => $this->karyawan,
-                'updated_by' => $this->karyawan,
-            ]);
+                
+            } else {
+                SetAksesDashboard::create([
+                    'nama_dashboard' => $request->nama_dashboard,
+                    'user_list' => $request->user_list,
+                    'created_by' => $this->karyawan,
+                    'updated_by' => $this->karyawan,
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'Success'
+            ], 200);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ], 500);
         }
-
-        return response()->json([
-            'message' => 'Success'
-        ], 200);
-
-    } catch (\Exception $e) {
-
-        return response()->json([
-            'error' => true,
-            'message' => $e->getMessage(),
-            'line' => $e->getLine(),
-            'file' => $e->getFile(),
-        ], 500);
     }
-}
+
     public function delete(Request $request)
     {
         try {
