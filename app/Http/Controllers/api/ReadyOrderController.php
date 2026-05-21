@@ -3461,6 +3461,7 @@ class ReadyOrderController extends Controller
             // $reorderNotifierService->run($updateHeader, $data_to_log, $bcc, $this->user_id);
 
             $inv = Invoice::where('no_order', $no_order)
+                ->where('is_active', 1)
                 ->orderBy('id', 'asc')
                 ->get();
 
@@ -3472,7 +3473,7 @@ class ReadyOrderController extends Controller
             });
 
             $all_period = $inv->contains(function ($i) {
-                return (float) $i->periode = 'all';
+                return (string) $i->periode === 'all';
             });
 
             if ($all_period) {
@@ -3494,7 +3495,7 @@ class ReadyOrderController extends Controller
                                     'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Tagihan tambahan revisi order',
                                 ]);
 
-                                self::createInvoice($data, $dataQuotation, $newRequest, false);
+                                self::createInvoice($updateHeader, $dataQuotation, $newRequest, false);
                             } else {
                                 // Selisih di bawah/sama dengan 500k, tambahkan ke invoice terakhir
                                 $lastInvoice = $inv->sortByDesc('id')->first();
