@@ -24,6 +24,6 @@ class ClaimRewardHeader extends Sector
 
     public function details()
     {
-        return $this->hasMany(ClaimRewardDetail::class, 'claim_id', 'id');
+        return $this->hasMany(ClaimRewardDetail::class, 'header_id', 'id');
     }
 }

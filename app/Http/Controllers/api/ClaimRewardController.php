@@ -41,6 +41,7 @@ class ClaimRewardController extends Controller
                 ->addColumn('qty', fn ($claim) => (int) ($claim->total_qty ?? $claim->details->sum('qty')))
                 ->addColumn('total_points', fn ($claim) => (int) ($claim->total_points ?? $claim->details->sum('total_points')))
                 ->addColumn('status_label', fn ($claim) => ucfirst((string) $claim->status))
+                ->with('summary', $this->buildSummary(clone $data))
                 ->make(true);
         }
 
@@ -99,7 +100,7 @@ class ClaimRewardController extends Controller
                 $detailTotalPoints = $unitPoints * $qty;
 
                 ClaimRewardDetail::create([
-                    'claim_id' => $header->id,
+                    'header_id' => $header->id,
                     'reward_id' => $reward->id,
                     'reward_title' => $reward->title,
                     'reward_category' => $reward->category,
@@ -143,20 +144,19 @@ class ClaimRewardController extends Controller
 
     public function process(Request $request)
     {
-        return $this->handleStatusUpdate($request, [self::STATUS_PENDING], self::STATUS_PROCESSED, function ($claim, $request) {
+        return $this->handleStatusUpdate($request, [self::STATUS_APPROVED], self::STATUS_PROCESSED, function ($claim, $request) {
             $claim->processed_by = $this->karyawan ?? $request->processed_by ?? null;
             $claim->processed_at = Carbon::now();
+            $this->applyShippingData($claim, $request);
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
         }, 'Claim reward sedang diproses.');
     }
 
     public function approve(Request $request)
     {
-        return $this->handleStatusUpdate($request, [self::STATUS_PENDING, self::STATUS_PROCESSED], self::STATUS_APPROVED, function ($claim, $request) {
+        return $this->handleStatusUpdate($request, [self::STATUS_PENDING], self::STATUS_APPROVED, function ($claim, $request) {
             $claim->approved_by = $this->karyawan ?? $request->approved_by ?? null;
             $claim->approved_at = Carbon::now();
-            $claim->shipping_courier = $request->shipping_courier ?: $claim->shipping_courier;
-            $claim->shipping_reference = $request->shipping_reference ?: $claim->shipping_reference;
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
         }, 'Claim reward disetujui dan siap ditindaklanjuti.');
     }
@@ -186,13 +186,33 @@ class ClaimRewardController extends Controller
 
     public function complete(Request $request)
     {
-        return $this->handleStatusUpdate($request, [self::STATUS_APPROVED], self::STATUS_COMPLETED, function ($claim, $request) {
+        return $this->handleStatusUpdate($request, [self::STATUS_PROCESSED], self::STATUS_COMPLETED, function ($claim, $request) {
             $claim->completed_by = $this->karyawan ?? $request->completed_by ?? null;
             $claim->completed_at = Carbon::now();
-            $claim->shipping_courier = $request->shipping_courier ?: $claim->shipping_courier;
-            $claim->shipping_reference = $request->shipping_reference ?: $claim->shipping_reference;
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
         }, 'Claim reward telah selesai diproses.');
+    }
+
+    public function getShippingCouriers()
+    {
+        $data = ClaimRewardHeader::query()
+            ->select('shipping_courier')
+            ->whereNotNull('shipping_courier')
+            ->where('shipping_courier', '<>', '')
+            ->when($this->hasHeaderColumn('shipping_method'), function ($query) {
+                $query->where('shipping_method', 'expedition');
+            })
+            ->distinct()
+            ->orderBy('shipping_courier')
+            ->pluck('shipping_courier')
+            ->values()
+            ->all();
+
+        return response()->json([
+            'data' => $data,
+            'status' => 200,
+            'message' => 'Berhasil mendapatkan data kurir',
+        ]);
     }
 
     public function cancel(Request $request)
@@ -211,7 +231,7 @@ class ClaimRewardController extends Controller
             ->with(['details' => function ($query) {
                 $query->where('is_active', true)->orderBy('id');
             }])
-            ->whereIn('status', [self::STATUS_PENDING, self::STATUS_PROCESSED])
+            ->where('status', self::STATUS_PENDING)
             ->when($this->hasHeaderColumn('is_active'), fn ($query) => $query->where('is_active', true))
             ->orderBy('created_at')
             ->limit(20)
@@ -250,6 +270,8 @@ class ClaimRewardController extends Controller
             'note' => ['nullable', 'string'],
             'shipping_reference' => ['nullable', 'string', 'max:255'],
             'shipping_courier' => ['nullable', 'string', 'max:255'],
+            'shipping_method' => ['nullable', 'in:internal,expedition'],
+            'estimated_received_date' => ['nullable', 'date'],
         ]);
 
         if ($validator->fails()) {
@@ -315,6 +337,22 @@ class ClaimRewardController extends Controller
         }
     }
 
+    protected function buildSummary($query): array
+    {
+        $rows = $query
+            ->reorder()
+            ->select('status', DB::raw('COUNT(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return [
+            'total' => (int) $rows->sum(),
+            'pending' => (int) ($rows[self::STATUS_PENDING] ?? 0),
+            'approved' => (int) ($rows[self::STATUS_APPROVED] ?? 0),
+            'completed' => (int) ($rows[self::STATUS_COMPLETED] ?? 0),
+        ];
+    }
+
     protected function notifyCustomer(ClaimRewardHeader $claim, string $title, string $message): void
     {
         if (empty($claim->customer_id)) {
@@ -341,18 +379,22 @@ class ClaimRewardController extends Controller
 
         return [
             'id' => $claim->id,
+            'noPesanan' => $claim->no_pesanan ?? $claim->claim_code,
+            'no_pesanan' => $claim->no_pesanan ?? $claim->claim_code,
             'claimCode' => $claim->claim_code,
             'claim_code' => $claim->claim_code,
             'customerId' => $claim->customer_id,
             'customer_id' => $claim->customer_id,
             'customerCode' => $claim->customer_code,
             'customer_code' => $claim->customer_code,
-            'customerName' => $claim->customer_name,
-            'customer_name' => $claim->customer_name,
-            'customerEmail' => $claim->customer_email,
-            'customer_email' => $claim->customer_email,
-            'phone' => $claim->customer_phone,
-            'customer_phone' => $claim->customer_phone,
+            'name' => $claim->name ?? $claim->customer_name,
+            'customerName' => $claim->customer_name ?? $claim->name,
+            'customer_name' => $claim->customer_name ?? $claim->name,
+            'email' => $claim->email ?? $claim->customer_email,
+            'customerEmail' => $claim->customer_email ?? $claim->email,
+            'customer_email' => $claim->customer_email ?? $claim->email,
+            'phone' => $claim->phone ?? $claim->customer_phone,
+            'customer_phone' => $claim->customer_phone ?? $claim->phone,
             'itemCount' => $details->count(),
             'item_count' => $details->count(),
             'rewardTitle' => $this->buildRewardTitleSummary($claim, $details),
@@ -372,14 +414,19 @@ class ClaimRewardController extends Controller
             'statusLabel' => ucfirst((string) $claim->status),
             'status_label' => ucfirst((string) $claim->status),
             'address' => $claim->address,
-            'customerNote' => $claim->customer_note,
-            'customer_note' => $claim->customer_note,
+            'user_note' => $claim->user_note ?? $claim->customer_note,
+            'customerNote' => $claim->customer_note ?? $claim->user_note,
+            'customer_note' => $claim->customer_note ?? $claim->user_note,
             'internalNote' => $claim->internal_note,
             'internal_note' => $claim->internal_note,
             'shippingCourier' => $claim->shipping_courier,
             'shipping_courier' => $claim->shipping_courier,
             'shippingReference' => $claim->shipping_reference,
             'shipping_reference' => $claim->shipping_reference,
+            'shippingMethod' => $claim->shipping_method,
+            'shipping_method' => $claim->shipping_method,
+            'estimatedReceivedDate' => $claim->meta['estimated_received_date'] ?? null,
+            'estimated_received_date' => $claim->meta['estimated_received_date'] ?? null,
             'createdAt' => optional($claim->created_at)->format('Y-m-d H:i:s'),
             'created_at' => optional($claim->created_at)->format('Y-m-d H:i:s'),
             'processedAt' => optional($claim->processed_at)->format('Y-m-d H:i:s'),
@@ -401,7 +448,8 @@ class ClaimRewardController extends Controller
     {
         return [
             'id' => $detail->id,
-            'claim_id' => $detail->claim_id,
+            'header_id' => $detail->header_id,
+            'claim_id' => $detail->header_id,
             'rewardId' => $detail->reward_id,
             'reward_id' => $detail->reward_id,
             'rewardTitle' => $detail->reward_title,
@@ -473,6 +521,29 @@ class ClaimRewardController extends Controller
         return $current === '' ? $incoming : $current . "\n" . $incoming;
     }
 
+    protected function applyShippingData(ClaimRewardHeader $claim, Request $request): void
+    {
+        $method = $request->shipping_method ?: $claim->shipping_method ?: null;
+
+        if ($this->hasHeaderColumn('shipping_method')) {
+            $claim->shipping_method = $method;
+        }
+
+        if ($method === 'internal') {
+            $claim->shipping_courier = 'Kurir Internal';
+            $claim->shipping_reference = null;
+        } else {
+            $claim->shipping_courier = $request->shipping_courier ?: $claim->shipping_courier;
+            $claim->shipping_reference = $request->shipping_reference ?: $claim->shipping_reference;
+        }
+
+        if ($request->estimated_received_date) {
+            $meta = $claim->meta ?: [];
+            $meta['estimated_received_date'] = $request->estimated_received_date;
+            $claim->meta = $meta;
+        }
+    }
+
     protected function generateClaimCode(): string
     {
         return 'CR-' . Carbon::now()->format('YmdHis');
@@ -484,7 +555,7 @@ class ClaimRewardController extends Controller
 
         if ($columns === null) {
             try {
-                $columns = DB::connection('portal_customer')->getSchemaBuilder()->getColumnListing('claimed_h');
+                $columns = DB::connection('portal_customer')->getSchemaBuilder()->getColumnListing((new ClaimRewardHeader())->getTable());
             } catch (\Throwable $exception) {
                 $columns = [];
             }
