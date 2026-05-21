@@ -46,16 +46,30 @@ protected $fillable = [
     {
         try {
             // dd($this->karyawan);
-            $dashboard = SetAksesDashboard::whereJsonContains(
+            // $dashboard = SetAksesDashboard::whereJsonContains(
+            //     'user_list',
+            //     $this->karyawan
+            // )->get();
+
+            $dashboardOwner = DashboardComponent::where('is_active', 1)->where(
+                'owner_id', $this->user_id
+            )->get();
+            $dashboardAccess = SetAksesDashboard::whereJsonContains(
                 'user_list',
                 $this->karyawan
-            )->whereNull('deleted_at')->get();
+            )->get();
 
-            $dashboard->transform(function($item) {
-                $component = DashboardComponent::where('nama_dashboard', $item->nama_dashboard)->where('is_active', 1)->first();
+            $dashboardAccess->transform(function($item) {
+                $component = DashboardComponent::where('nama_dashboard', $item->nama_dashboard)->first();
                 $item->nama_komponen = $component ? $component->nama_komponen : null;
                 return $item;
             });
+
+            $dashboard = $dashboardOwner->merge($dashboardAccess)->unique('nama_dashboard')->values();
+
+             return response()->json([
+                'data' => $dashboard
+            ], 200);
 
             if ($dashboard) {
                 return response()->json([
