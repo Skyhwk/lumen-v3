@@ -172,7 +172,7 @@
                     @php
                         // Bersihkan nilai kosong & spasi berlebih
                         $items = array_map('trim', array_filter($keterangan_koreksi));
-
+                        // dd($items);
                         // Inisialisasi variabel hasil
                         $bagian_standar = '';
                         $bagian_o2 = '';
@@ -180,19 +180,24 @@
                         $bagian_semua = '';
                         $bagian_angka = '';
                         $bagian_khusus = '';
-
+                        $bagian_kecuali = '';
                         // Deteksi bagian berdasarkan isi teks
                         foreach ($items as $v) {
                             if (Str::contains(strtolower($v), 'standar')) {
                                 $bagian_standar =
                                     'Volume Gas diukur dalam keadaan standar (25°C dan 1 tekanan atmosfer)';
+                            } else if (Str::contains(strtolower($v), 'seng (zn)')) {
+                                $bagian_kecuali = 'Kecuali parameter Seng (Zn) dan Total Sulfur Tereduksi (H₂S)';
                             } elseif (Str::contains(strtolower($v), 'o2')) {
                                 $bagian_o2 = 'dengan O₂ terkoreksi';
                             } elseif (Str::contains(strtolower($v), 'kering')) {
                                 $bagian_kering = 'dalam keadaan kering';
                             } elseif (Str::contains(strtolower($v), 'parameter')) {
                                 $bagian_semua = 'untuk semua parameter';
-                            } elseif (Str::contains(strtolower($v), 'angka')) {
+                            }  elseif (Str::contains(strtolower($v), 'partikulat')) {
+                                // Tambahan: khusus untuk partikulat
+                                $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
+                            }  elseif (Str::contains(strtolower($v), 'angka')) {
                                 // Cari angka persen (misalnya 6%, 15%, dst)
                                 if (preg_match('/(\d+(?:[\.,]\d+)?)\s*%/', $v, $matches)) {
                                     $bagian_angka = 'sebesar ' . $matches[1] . '%';
@@ -200,9 +205,6 @@
                                     // fallback jika tidak ada angka
                                     $bagian_angka = 'sebesar 15%';
                                 }
-                            } elseif (Str::contains(strtolower($v), 'partikulat')) {
-                                // Tambahan: khusus untuk partikulat
-                                $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
                             }
                         }
 
@@ -215,9 +217,10 @@
                                 $bagian_kering,
                                 $bagian_semua,
                                 $bagian_khusus, // diletakkan paling akhir
+                                $bagian_kecuali
                             ]))
                         );
-
+                        dd($gabungKeterangan);
                         // Tambahkan titik di akhir jika belum ada
                         if ($gabungKeterangan && !preg_match('/[.!?]$/', $gabungKeterangan)) {
                             $gabungKeterangan .= '.';

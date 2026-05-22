@@ -192,7 +192,7 @@
                         $bagian_semua = '';
                         $bagian_angka = '';
                         $bagian_khusus = '';
-
+                        $bagian_kecuali = '';
                         // Deteksi bagian berdasarkan isi teks
                         foreach ($items as $v) {
                             if (Str::contains(strtolower($v), 'standar')) {
