@@ -220,7 +220,6 @@
                                 $bagian_kecuali
                             ]))
                         );
-                        dd($gabungKeterangan);
                         // Tambahkan titik di akhir jika belum ada
                         if ($gabungKeterangan && !preg_match('/[.!?]$/', $gabungKeterangan)) {
                             $gabungKeterangan .= '.';
