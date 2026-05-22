@@ -46,7 +46,7 @@ class DraftAirController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('lhps_air', 'orderHeader', 'dataLapanganAir', 'sampleDiantar')
+        $data = OrderDetail::with('lhps_air', 'orderHeader', 'dataLapanganAir', 'sampelDiantar.detail')
             ->where('is_approve', false)
             ->where('is_active', true)
             ->where('kategori_2', '1-Air')
