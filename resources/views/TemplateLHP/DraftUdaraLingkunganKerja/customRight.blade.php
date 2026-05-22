@@ -80,7 +80,7 @@
     if(in_array('HCHO (8 Jam)', $cekDetail)) {
         $shift = $isPagi ? 'L1' : ($isSiang ? 'L2' : ($isSore ? 'L3' : null));
         if ($shift) {
-            $cekDataLapangan = DataLapanganDirectLain::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['HCHO (8 Jam)'])->first();
+            $cekDataLapangan = DataLapanganDirectLain::where('no_sampel', $header->no_sampel)->where('shift', 'like', '%' . $shift . '%')->whereIn('parameter', ['HCHO (8 Jam)'])->first();
             
             $waktu_pengukuran = $cekDataLapangan->waktu;
             $cuaca = $cekDataLapangan->cuaca ?? NULL;
