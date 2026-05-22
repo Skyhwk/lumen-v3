@@ -55,7 +55,7 @@
     if (stripos($regulasiThisPage, "shift 1") !== false) $isPagi = true;
     if (stripos($regulasiThisPage, "shift 2") !== false) $isSiang = true;
     if (stripos($regulasiThisPage, "shift 3") !== false) $isSore = true;
-
+    dd($isPagi, $isSiang, $isSore);
     $cekDetail = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('parameter_lab')->toArray();
     
     if(in_array('NO2 (8 Jam)', $cekDetail) || in_array('SO2 (8 Jam)', $cekDetail) || in_array('HCHO (8 Jam)', $cekDetail)) {
