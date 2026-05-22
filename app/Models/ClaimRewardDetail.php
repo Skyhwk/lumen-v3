@@ -20,7 +20,7 @@ class ClaimRewardDetail extends Sector
 
     public function claim()
     {
-        return $this->belongsTo(ClaimRewardHeader::class, 'claim_id', 'id');
+        return $this->belongsTo(ClaimRewardHeader::class, 'header_id', 'id');
     }
 
     public function reward()
