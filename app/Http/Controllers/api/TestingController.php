@@ -4,101 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{
-    QuotationKontrakH,
-    QuotationKontrakD,
-    SamplingPlan,
-    QuotationNonKontrak,
-    Jadwal,
-    AnalystFormula,
-    Colorimetri,
-    OrderHeader,
-    OrderDetail,
-    Invoice,
-    PersiapanSampelHeader,
-    PersiapanSampelDetail,
-    LhpsAirHeader,
-    LhpsAirDetail,
-    LhpsAirCustom,
-    MasterBakumutu,
-    HargaParameter,
-    KelengkapanKonfirmasiQs,
-    Parameter,
-    DataLapanganAir,
-    LhpUdaraPsikologiHeader,
-    SampelTidakSelesai,
-    MasterKaryawan,
-    QrDocument,
-    DataLapanganPartikulatMeter,
-    DetailSenyawaVolatile,
-    DetailLingkunganHidup,
-    DataLapanganDirectLain,
-    DetailLingkunganKerja,
-    DetailMicrobiologi,
-    DataLapanganKebisinganPersonal,
-    DataLapanganKebisingan,
-    DataLapanganCahaya,
-    DataLapanganGetaran,
-    DataLapanganGetaranPersonal,
-    DataLapanganIklimPanas,
-    DataLapanganIklimDingin,
-    DataLapanganSwab,
-    DataLapanganErgonomi,
-    DataLapanganDebuPersonal,
-    DataLapanganMedanLM,
-    DataLapanganSinarUV,
-    DataLapanganPsikologi,
-    DataLapanganEmisiKendaraan,
-    DataLapanganEmisiCerobong,
-    DataLapanganIsokinetikHasil,
-    Gravimetri,
-    MasterPelanggan,
-    Titrimetri,
-    WsValueAir, //batas
-    DataLapanganEmisiOrder,
-    DataLapanganIsokinetikBeratMolekul,
-    DataLapanganIsokinetikKadarAir,
-    DataLapanganIsokinetikPenentuanKecepatanLinier,
-    DataLapanganIsokinetikSurveiLapangan,
-    DataLapanganKebisinganBySoundMeter,
-    DataLapanganKecerahan,
-    DataLapanganLapisanMinyak,
-    DataLapanganMicrobiologi,
-    DataLapanganSampah,
-    DataLapanganSenyawaVolatile,
-    DataLapanganUnion,
-    DataLimbah,
-    DataPsikologi,
-    DetailFlowMeter,
-    DetailSoundMeter,
-    DailyQsd,
-    SertifikatWebinarHeader,
-    SertifikatWebinarDetail,
-    LayoutCertificate,
-    JenisFont,
-    TemplateBackground,
-    MasterTargetSales,
-    SarHeader,
-    TemplatePaketAnalisa
+    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirHeader,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,batasDataLapanganEmisiOrder,
 };
 use App\Services\{
-    CombineLHPService,
-    GetAtasan,
-    SamplingPlanServices,
-    RenderSamplingPlan,
-    JadwalServices,
-    RenderInvoice,
-    RenderInvoiceTitik,
-    GeneratePraSampling,
-    GenerateQrDocumentLhp,
-    GenerateWebinarSertificate,
-    LhpTemplate,
-    RandomSalesAssign,
-    SendEmail,
-    GetBawahan,
-    SnapshotPersiapanService,
-    GenerateToken,
-    GenerateDokumenCocService,
-    GenerateStrukSarService
+    CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -885,7 +794,6 @@ class TestingController extends Controller
 
                     return response()->json($tables, 200);
                 case 'update-nodoc':
-
                     $rows = SamplingPlan::where('no_document', 'like', '%ISL/SP/25-I%')->orderBy('no_document')->get(['no_document', 'quotation_id', 'status_quotation', 'id'])->toArray();
                     $num = 0;
                     foreach ($rows as $row) {
@@ -899,7 +807,6 @@ class TestingController extends Controller
                     }
                     return response()->json('berhasil update nodoc', 200);
                 case 'render-doc':
-
                     $rows = SamplingPlan::whereIn('no_document', ['ISL/SP/24-XII/09103597'])
                         ->where('status', 1)
                         ->where('is_active', 1)

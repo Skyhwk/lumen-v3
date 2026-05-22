@@ -154,23 +154,25 @@ class RequestSamplingPlanController extends Controller
             ->get();
         
         $privateSampler->transform(function ($item) {
-            $digitCount = strlen((string)$item->user_id);
+            $digitCount = strlen((string) $item->user_id);
+
+            // 2. Tentukan suffix (akhiran nama)
             if ($digitCount > 4) {
                 $item->nama_display = $item->nama_lengkap . ' (freelance)';
             } else {
                 $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
             }
-            // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+
+            $item->id = $item->user_id;
+            
             unset($item->jabatan);
             if ($item->users && $item->users->jabatan) {
-                // Kita "copy" objek jabatan dari dalam users ke root item
-                // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
                 $jabatanObj = $item->users->getRelation('jabatan');
                 $item->setRelation('jabatan', $jabatanObj);
             } else {
                 // Fallback jika data kosong (opsional, biar frontend gak error undefined)
-                $jabatanObj = (object)[
-                    "nama_jabatan" => "Freelance Sampler"
+                $jabatanObj = (object) [
+                    "nama_jabatan" => "Freelance Sampler",
                 ];
                 $item->jabatan = $jabatanObj;
             }
@@ -182,7 +184,7 @@ class RequestSamplingPlanController extends Controller
             return $item;
         });
         $allSamplers = $samplers->concat($privateSampler);
-        $allSamplers = $allSamplers->unique('user_id');
+        $allSamplers = $allSamplers->unique('id');
         $allSamplers = $allSamplers->sortBy('nama_display')->values();
         return response()->json($allSamplers, 200);
     }

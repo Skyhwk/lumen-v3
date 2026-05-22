@@ -298,7 +298,7 @@ class SamplingPlanController extends Controller
                 return $item;
             });
             $allSamplers = $samplers->concat($privateSampler);
-            $allSamplers = $allSamplers->unique('user_id');
+            $allSamplers = $allSamplers->unique('id');
             $allSamplers = $allSamplers->sortBy('nama_display')->values();
 
             return Datatables::of($allSamplers)->make(true);
