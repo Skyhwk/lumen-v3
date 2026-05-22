@@ -2,6 +2,7 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganKerja;
+    use App\Models\DataLapanganDirectLain;
     use App\Models\LhpsLingCustom;
     use Carbon\Carbon;
 
@@ -58,19 +59,37 @@
 
     $cekDetail = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('parameter_lab')->toArray();
     
-    if(in_array('NO2 (8 Jam)', $cekDetail) || in_array('SO2 (8 Jam)', $cekDetail) || in_array('HCHO (8 Jam)', $cekDetail)) {
+    if(in_array('NO2 (8 Jam)', $cekDetail) || in_array('SO2 (8 Jam)', $cekDetail)) {
         $shift = $isPagi ? 'L1' : ($isSiang ? 'L2' : ($isSore ? 'L3' : null));
         if ($shift) {
-            $cekDataLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['NO2 (8 Jam)', 'SO2 (8 Jam)', 'HCHO (8 Jam)'])->first();
+            $cekDataLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['NO2 (8 Jam)', 'SO2 (8 Jam)'])->first();
             
             $waktu_pengukuran = $cekDataLapangan->waktu_pengukuran;
-            $cuaca = $cekDataLapangan->cuaca;
+            $cuaca = $cekDataLapangan->cuaca ?? NULL;
             $suhu = $cekDataLapangan->suhu;
             $kelembapan = $cekDataLapangan->kelembapan;
 
             $kecepatan_angin = ($cekDataLapangan->kecepatan_angin !== null && $cekDataLapangan->kecepatan_angin !== "") 
                 ? str_replace(',', '', number_format($cekDataLapangan->kecepatan_angin * 3.6, 2)) 
                 : '-';
+            // $arah_angin = $cekDataLapangan->arah_angin;
+            $tekanan_udara = $cekDataLapangan->tekanan_udara;
+        }
+    }
+
+    if(in_array('HCHO (8 Jam)', $cekDetail)) {
+        $shift = $isPagi ? 'L1' : ($isSiang ? 'L2' : ($isSore ? 'L3' : null));
+        if ($shift) {
+            $cekDataLapangan = DataLapanganDirectLain::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['HCHO (8 Jam)'])->first();
+            
+            $waktu_pengukuran = $cekDataLapangan->waktu;
+            $cuaca = $cekDataLapangan->cuaca ?? NULL;
+            $suhu = $cekDataLapangan->suhu;
+            $kelembapan = $cekDataLapangan->kelembaban;
+
+            // $kecepatan_angin = ($cekDataLapangan->kecepatan_angin !== null && $cekDataLapangan->kecepatan_angin !== "") 
+            //     ? str_replace(',', '', number_format($cekDataLapangan->kecepatan_angin * 3.6, 2)) 
+            //     : '-';
             // $arah_angin = $cekDataLapangan->arah_angin;
             $tekanan_udara = $cekDataLapangan->tekanan_udara;
         }
