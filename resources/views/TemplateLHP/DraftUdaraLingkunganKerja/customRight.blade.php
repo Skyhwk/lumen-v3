@@ -58,10 +58,10 @@
 
     $cekDetail = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('parameter_lab')->toArray();
     
-    if(in_array('NO2 (8 Jam)', $cekDetail) || in_array('SO2 (8 Jam)', $cekDetail)) {
+    if(in_array('NO2 (8 Jam)', $cekDetail) || in_array('SO2 (8 Jam)', $cekDetail) || in_array('HCHO (8 Jam)', $cekDetail)) {
         $shift = $isPagi ? 'L1' : ($isSiang ? 'L2' : ($isSore ? 'L3' : null));
         if ($shift) {
-            $cekDataLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['NO2 (8 Jam)', 'SO2 (8 Jam)'])->first();
+            $cekDataLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['NO2 (8 Jam)', 'SO2 (8 Jam)', 'HCHO (8 Jam)'])->first();
             
             $waktu_pengukuran = $cekDataLapangan->waktu_pengukuran;
             $cuaca = $cekDataLapangan->cuaca;
