@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Services\GenerateSkhpSarOnthespotService;
 
 class FdlSarOnTheSpotController extends Controller
 {
@@ -163,7 +164,7 @@ class FdlSarOnTheSpotController extends Controller
 
     public function prosesSelesai(Request $request)
     {
-        $cekHeader = SarOnthespotHeader::with('detail', 'hasilUji')->where('no_order', $request->no_order)->first();
+        $cekHeader = SarOnthespotHeader::with('detail', 'hasilUji.acuan')->where('no_order', $request->no_order)->first();
         if(!$cekHeader)
         {
             return response()->json([
@@ -171,14 +172,35 @@ class FdlSarOnTheSpotController extends Controller
                 'data' => null
             ], 400);
         }
-        
-        $cekHeader->status_order = 'done';
-        $cekHeader->save();
 
-        return response()->json([
-            'message' => 'Proses selesai',
-            'data' => $cekHeader ?? []
-        ], 200);
+        try {
+            $service = new GenerateSkhpSarOnthespotService();
+            $result = $service->generate($cekHeader, $this->karyawan);
+
+            $cekHeader->status_order = 'done';
+            $cekHeader->save();
+
+            $message = 'Proses selesai';
+            if (!$result['email_sent']) {
+                $message = empty($cekHeader->email)
+                    ? 'Proses selesai, email tidak dikirim karena email pelanggan kosong'
+                    : 'Proses selesai, namun gagal mengirim email ke pelanggan';
+            }
+
+            return response()->json([
+                'message' => $message,
+                'data' => $cekHeader,
+                'file_skhp' => $result['filename'],
+                'email_sent' => $result['email_sent'],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error($e->getMessage());
+
+            return response()->json([
+                'message' => 'Gagal generate surat keterangan hasil pengujian: ' . $e->getMessage(),
+                'data' => null,
+            ], 400);
+        }
     }
 
 }
