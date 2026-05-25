@@ -7,6 +7,7 @@ use App\Models\ClaimRewardDetail;
 use App\Models\ClaimRewardHeader;
 use App\Models\KatalogReward;
 use App\Services\Notification;
+use App\Services\PortalNotificationService;
 use App\Services\PpiNotification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -133,7 +134,6 @@ class ClaimRewardController extends Controller
         });
 
         $this->notifyInternalPendingClaim($claim);
-        $this->notifyCustomer($claim, 'Claim Reward Dibuat', "Claim reward {$claim->claim_code} berhasil dibuat dan sedang menunggu proses.");
 
         return response()->json([
             'data' => $this->transformClaim($claim),
@@ -149,7 +149,7 @@ class ClaimRewardController extends Controller
             $claim->processed_at = Carbon::now();
             $this->applyShippingData($claim, $request);
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward sedang diproses.');
+        }, 'Claim reward sedang diproses.', 'claim_reward_process');
     }
 
     public function approve(Request $request)
@@ -158,7 +158,7 @@ class ClaimRewardController extends Controller
             $claim->approved_by = $this->karyawan ?? $request->approved_by ?? null;
             $claim->approved_at = Carbon::now();
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward disetujui dan siap ditindaklanjuti.');
+        }, 'Claim reward disetujui dan siap ditindaklanjuti.', 'claim_reward_approved');
     }
 
     public function reject(Request $request)
@@ -263,7 +263,7 @@ class ClaimRewardController extends Controller
         ];
     }
 
-    protected function handleStatusUpdate(Request $request, array $allowedStatuses, string $nextStatus, callable $callback, string $message)
+    protected function handleStatusUpdate(Request $request, array $allowedStatuses, string $nextStatus, callable $callback, string $message, ?string $notificationFor = null)
     {
         $validator = Validator::make($request->all(), [
             'id' => ['required', 'integer'],
@@ -306,7 +306,9 @@ class ClaimRewardController extends Controller
         $claim->save();
 
         $claim = $claim->fresh(['details']);
-        $this->notifyCustomer($claim, 'Update Claim Reward', $message);
+        if ($notificationFor) {
+            $this->sendClaimRewardNotification($claim, $notificationFor);
+        }
 
         return response()->json([
             'data' => $this->transformClaim($claim),
@@ -337,6 +339,28 @@ class ClaimRewardController extends Controller
         }
     }
 
+    protected function sendClaimRewardNotification(ClaimRewardHeader $claim, string $for): void
+    {
+        if (empty($claim->user_id)) {
+            return;
+        }
+
+        app(PortalNotificationService::class)->send($claim->user_id, $for, [
+            'order_no' => $claim->no_pesanan,
+            'no_pesanan' => $claim->no_pesanan,
+            'customer_name' => $claim->name,
+            'name' => $claim->name,
+            'total_points' => (int) ($claim->total_points ?? 0),
+            'data' => [
+                'claim_id' => $claim->id,
+                'status' => $claim->status,
+                'shipping_method' => $claim->shipping_method,
+                'shipping_courier' => $claim->shipping_courier,
+                'shipping_reference' => $claim->shipping_reference,
+            ],
+        ]);
+    }
+
     protected function buildSummary($query): array
     {
         $rows = $query
@@ -352,22 +376,6 @@ class ClaimRewardController extends Controller
             'shipping' => (int) ($rows[self::STATUS_PROCESSED] ?? 0),
             'completed' => (int) ($rows[self::STATUS_COMPLETED] ?? 0),
         ];
-    }
-
-    protected function notifyCustomer(ClaimRewardHeader $claim, string $title, string $message): void
-    {
-        if (empty($claim->customer_id)) {
-            return;
-        }
-
-        try {
-            PpiNotification::where('id', $claim->customer_id)
-                ->title($title)
-                ->message($message)
-                ->url('/claim-reward')
-                ->send();
-        } catch (\Throwable $exception) {
-        }
     }
 
     protected function transformClaim(ClaimRewardHeader $claim): array
@@ -563,5 +571,13 @@ class ClaimRewardController extends Controller
         }
 
         return in_array($column, $columns, true);
+    }
+
+    public function sendNotification($userId, $for)
+    {
+        $requestData = app('request')->all();
+        $extraData = $requestData['extra_data'] ?? $requestData;
+
+        return app(PortalNotificationService::class)->send($userId, $for, $extraData);
     }
 }
