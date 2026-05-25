@@ -17,7 +17,7 @@ use Yajra\Datatables\Datatables;
 class ClaimRewardController extends Controller
 {
     protected const STATUS_PENDING = 'pending';
-    protected const STATUS_PROCESSED = 'processed';
+    protected const STATUS_PROCESSED = 'shipping';
     protected const STATUS_APPROVED = 'approved';
     protected const STATUS_REJECTED = 'rejected';
     protected const STATUS_COMPLETED = 'completed';
@@ -349,6 +349,7 @@ class ClaimRewardController extends Controller
             'total' => (int) $rows->sum(),
             'pending' => (int) ($rows[self::STATUS_PENDING] ?? 0),
             'approved' => (int) ($rows[self::STATUS_APPROVED] ?? 0),
+            'shipping' => (int) ($rows[self::STATUS_PROCESSED] ?? 0),
             'completed' => (int) ($rows[self::STATUS_COMPLETED] ?? 0),
         ];
     }
