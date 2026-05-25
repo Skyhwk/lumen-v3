@@ -3143,9 +3143,8 @@ class InputParameterController extends Controller
 			$data_parsing = (object) $data_parsing;
 			$data_parsing->use_absorbansi = false;
 			$data_parsing->tipe_data = $tipe_data;
-			// dd($data_parsing);
 			if (!$isO3) {
-				$data_parsing->durasi = $durasiFin;
+				$data_parsing->durasi = floatval($durasiFin);
 				$data_parsing->nilQs = $nilQs;
 				$data_parsing->array_qs = $Qs;
 				$data_parsing->data_total = $datot;
@@ -3167,7 +3166,6 @@ class InputParameterController extends Controller
 				$data_parsing->kb = array_map('floatval', $request->kb);
 			}
 
-			// dd($data_parsing->ks);
 
 			if (count($ks_all) > 0) {
 				$data_parsing->use_absorbansi = true;
@@ -3176,17 +3174,16 @@ class InputParameterController extends Controller
 			if (count($kb_all) > 0) {
 				$data_parsing->kb = $kb_all;
 			}
+			
 			$data_parsing->tekanan = $tekananFin;
 			$data_parsing->suhu = $suhuFin;
             $data_parsing->suhu_array = $suhu;
             $data_parsing->tekanan_array = $tekanan_u;
 			$data_parsing->tanggal_terima = $tgl_terima;
-			// dd($data_parsing);
 			$data_kalkulasi = AnalystFormula::where('function', $function)
 				->where('data', $data_parsing)
 				->where('id_parameter', $data_parameter->id)
 				->process();
-
 			if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
 				return (object)[
 					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
@@ -3202,6 +3199,8 @@ class InputParameterController extends Controller
 					'status' => 500
 				];
 			}
+
+			// dd($data_kalkulasi, 'goni');
 
 			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 306, 307, 308];
 			DB::beginTransaction();
@@ -3235,6 +3234,7 @@ class InputParameterController extends Controller
                                 "blanko" => number_format($blanko,4)
                             ];
                         }, $request->ks, $request->kb);
+
                     }else{
 						$data_shift = [(object)[
 							'sample' => $request->ks,
@@ -3281,10 +3281,10 @@ class InputParameterController extends Controller
 				$data_kalkulasi['no_sampel'] = $request->no_sample;
 				// unset($data_kalkulasi['id_lingkungan_header']);
 				unset($data_kalkulasi['satuan']);
-				// dd($data_kalkulasi);
+				
+				// simpan ke ws value lingkungan 
 				WsValueLingkungan::create($data_kalkulasi);
 
-				// dd('berhasil');
 				DB::commit();
 
 				return (object)[
