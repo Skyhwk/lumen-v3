@@ -14,7 +14,7 @@ class ParameterController extends Controller
 {
     public function index()
     {
-        $aksesMenus = Parameter::where('is_active', true);
+        $aksesMenus = Parameter::where('is_active', true)->where('is_blocked', false)->get();
         return Datatables::of($aksesMenus)->make(true);
     }
 
@@ -103,6 +103,40 @@ class ParameterController extends Controller
     public function getMethod(Request $request){
         $data = Parameter::where('is_active', true)->select('method')->groupBy('method')->get();
         return response()->json(['message' => 'Data hasbeen show', 'data'=>$data], 201);
+    }
+
+    public function blockParameter(Request $request){
+        $idIsInvalid = $request->id == '' || $request->id == null;
+        if($idIsInvalid) {
+            return response()->json(['message' => 'ID parameter is required'], 400);
+        }
+
+        $selectedParameter = Parameter::where('id', $request->id)->first();
+
+        if(!$selectedParameter) {
+            return response()->json(['message' => 'Parameter not found'], 404);
+        }
+        $parameterIsBlocked = $selectedParameter->is_blocked || $selectedParameter->blocked_at != null || $selectedParameter->blocked_by != null;
+        
+        if($parameterIsBlocked && !$selectedParameter->is_blocked) {
+            return response()->json(['message' => 'Parameter is already blocked.'], 500);
+        }
+
+        try {
+            $selectedParameter->blocked_at = Date('Y:m:d H:i:s');
+            $selectedParameter->blocked_by = $this->karyawan;
+            $selectedParameter->is_blocked = true;
+            $selectedParameter->save();
+    
+            return response()->json(['message' => 'Parameter successfully blocked'], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => 'Failed to block parameter: ' . $th->getMessage()], 500);
+        }
+    }
+
+    public function getBlockedParameters(Request $request) {
+        $blockedParameters = Parameter::where('is_blocked', true)->get();
+        return Datatables::of($blockedParameters)->make(true);
     }
 }
 
