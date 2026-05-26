@@ -146,7 +146,7 @@ class FdlSarOnTheSpotController extends Controller
         $data->id_parameter = $request->id_parameter;
         $data->parameter = $request->parameter;
         $data->hasil_uji_array = json_encode($request->hasil_uji_array);
-        $data->hasil_uji = array_sum($request->hasil_uji_array) / count($request->hasil_uji_array);
+        $data->hasil_uji = number_format(array_sum($request->hasil_uji_array) / count($request->hasil_uji_array), 2);
         $data->latitude = $request->lat;
         $data->longitude = $request->long;
         $data->koordinat = $request->koordinat;

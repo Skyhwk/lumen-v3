@@ -104,6 +104,10 @@
 </p>
 
 <p style="font-size:14px; text-align:justify;">
+    Hasil pengujian ini hanya berlaku pada tanggal pengujian yang tercantum dalam lembar hasil pengujian.
+</p>
+
+<p style="font-size:14px; text-align:justify;">
     Demikian surat keterangan hasil pengujian ini dibuat agar dapat dipergunakan sebagaimana mestinya.
 </p>
 
