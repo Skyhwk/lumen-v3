@@ -12,3 +12,4 @@ Homestead.yaml
 composer.lock
 docker-compose.yml
 app/Cache/
+.cursorignore
