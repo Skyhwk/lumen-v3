@@ -78,8 +78,8 @@ class FdlSarOnTheSpotController extends Controller
             $header->nilai_diskon = $nilai_diskon;
             $header->harga_total = $request->harga_total;
             $header->metode_pembayaran = $request->metode_pembayaran;
-            $header->kembalian = $request->kembalian;
-            $header->uang_diterima = $request->uang_diterima;
+            $header->kembalian = (isset($request->kembalian) && $request->kembalian !== null && $request->kembalian !== '') ? $request->kembalian : 0;
+            $header->uang_diterima = (isset($request->uang_diterima) && $request->uang_diterima !== null && $request->uang_diterima !== '') ? $request->uang_diterima : 0;
             $header->created_by = $this->karyawan;
             $header->created_at = Carbon::now();
             $header->save();
