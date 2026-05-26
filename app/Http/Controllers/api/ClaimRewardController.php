@@ -28,7 +28,7 @@ class ClaimRewardController extends Controller
     {
         $data = ClaimRewardHeader::query()
             ->with(['details' => function ($query) {
-                $query->where('is_active', true)->orderBy('id');
+                $query->with('reward')->where('is_active', true)->orderBy('id');
             }])
             ->when($this->hasHeaderColumn('is_active'), fn ($query) => $query->where('is_active', true))
             ->orderByDesc('id');
@@ -130,7 +130,7 @@ class ClaimRewardController extends Controller
             $header->total_points = $totalPoints;
             $header->save();
 
-            return $header->fresh(['details']);
+            return $header->fresh(['details.reward']);
         });
 
         $this->notifyInternalPendingClaim($claim);
@@ -158,6 +158,7 @@ class ClaimRewardController extends Controller
             $claim->approved_by = $this->karyawan ?? $request->approved_by ?? null;
             $claim->approved_at = Carbon::now();
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
+            $this->incrementRewardSold($claim);
         }, 'Claim reward disetujui dan siap ditindaklanjuti.', 'claim_reward_approved');
     }
 
@@ -229,7 +230,7 @@ class ClaimRewardController extends Controller
     {
         $data = ClaimRewardHeader::query()
             ->with(['details' => function ($query) {
-                $query->where('is_active', true)->orderBy('id');
+                $query->with('reward')->where('is_active', true)->orderBy('id');
             }])
             ->where('status', self::STATUS_PENDING)
             ->when($this->hasHeaderColumn('is_active'), fn ($query) => $query->where('is_active', true))
@@ -282,30 +283,37 @@ class ClaimRewardController extends Controller
             ], 422);
         }
 
-        $claim = ClaimRewardHeader::with(['details' => function ($query) {
-            $query->where('is_active', true)->orderBy('id');
-        }])->find($request->id);
+        $claim = DB::connection('portal_customer')->transaction(function () use ($request, $allowedStatuses, $nextStatus, $callback) {
+            $claim = ClaimRewardHeader::with(['details' => function ($query) {
+                $query->with('reward')->where('is_active', true)->orderBy('id');
+            }])->lockForUpdate()->find($request->id);
 
-        if (!$claim) {
-            return response()->json([
-                'message' => 'Claim reward tidak ditemukan',
-                'status' => 404,
-            ], 404);
+            if (!$claim) {
+                return response()->json([
+                    'message' => 'Claim reward tidak ditemukan',
+                    'status' => 404,
+                ], 404);
+            }
+
+            if (!in_array($claim->status, $allowedStatuses, true)) {
+                return response()->json([
+                    'message' => 'Status claim reward tidak bisa diproses dengan aksi ini',
+                    'status' => 422,
+                ], 422);
+            }
+
+            $callback($claim, $request);
+            $claim->status = $nextStatus;
+            $claim->updated_by = $this->karyawan ?? $request->updated_by ?? null;
+            $claim->save();
+
+            return $claim->fresh(['details.reward']);
+        });
+
+        if ($claim instanceof \Illuminate\Http\JsonResponse) {
+            return $claim;
         }
 
-        if (!in_array($claim->status, $allowedStatuses, true)) {
-            return response()->json([
-                'message' => 'Status claim reward tidak bisa diproses dengan aksi ini',
-                'status' => 422,
-            ], 422);
-        }
-
-        $callback($claim, $request);
-        $claim->status = $nextStatus;
-        $claim->updated_by = $this->karyawan ?? $request->updated_by ?? null;
-        $claim->save();
-
-        $claim = $claim->fresh(['details']);
         if ($notificationFor) {
             $this->sendClaimRewardNotification($claim, $notificationFor);
         }
@@ -361,6 +369,23 @@ class ClaimRewardController extends Controller
         ]);
     }
 
+    protected function incrementRewardSold(ClaimRewardHeader $claim): void
+    {
+        $details = $claim->relationLoaded('details')
+            ? $claim->details
+            : $claim->details()->where('is_active', true)->get();
+
+        $details
+            ->groupBy('reward_id')
+            ->each(function ($items, $rewardId) {
+                $qty = (int) $items->sum('qty');
+
+                if ($rewardId && $qty > 0) {
+                    KatalogReward::where('id', $rewardId)->increment('sold', $qty);
+                }
+            });
+    }
+
     protected function buildSummary($query): array
     {
         $rows = $query
@@ -382,7 +407,7 @@ class ClaimRewardController extends Controller
     {
         $details = $claim->relationLoaded('details')
             ? $claim->details
-            : $claim->details()->where('is_active', true)->orderBy('id')->get();
+            : $claim->details()->with('reward')->where('is_active', true)->orderBy('id')->get();
 
         $firstDetail = $details->first();
 
@@ -455,6 +480,17 @@ class ClaimRewardController extends Controller
 
     protected function transformDetail(ClaimRewardDetail $detail): array
     {
+        $snapshot = $detail->reward_snapshot ?? [];
+        $gallery = $snapshot['gallery'] ?? $detail->reward->gallery ?? [];
+        if (is_string($gallery)) {
+            $decodedGallery = json_decode($gallery, true);
+            $gallery = is_array($decodedGallery) ? $decodedGallery : [];
+        }
+        $firstImage = is_array($gallery) && count($gallery) > 0 ? $gallery[0] : [];
+        $imageUrl = is_array($firstImage)
+            ? ($firstImage['imageUrl'] ?? $firstImage['image_url'] ?? $firstImage['image'] ?? null)
+            : null;
+
         return [
             'id' => $detail->id,
             'header_id' => $detail->header_id,
@@ -472,8 +508,14 @@ class ClaimRewardController extends Controller
             'unit_points' => (int) ($detail->unit_points ?? 0),
             'totalPoints' => (int) ($detail->total_points ?? 0),
             'total_points' => (int) ($detail->total_points ?? 0),
-            'rewardSnapshot' => $detail->reward_snapshot ?? [],
-            'reward_snapshot' => $detail->reward_snapshot ?? [],
+            'gallery' => $gallery,
+            'reward_gallery' => $gallery,
+            'imageUrl' => $imageUrl,
+            'image_url' => $imageUrl,
+            'rewardImage' => $imageUrl,
+            'reward_image' => $imageUrl,
+            'rewardSnapshot' => $snapshot,
+            'reward_snapshot' => $snapshot,
         ];
     }
 
