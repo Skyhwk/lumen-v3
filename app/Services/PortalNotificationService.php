@@ -109,7 +109,7 @@ class PortalNotificationService
 
         return [
             'title' => 'Pembelian Berhasil',
-            'body' => trim("Pembelian reward {$customerName}" . ($orderNo ? " dengan nomor {$orderNo}" : '') . ' berhasil dibuat.'),
+            'message' => trim("Pembelian reward {$customerName}" . ($orderNo ? " dengan nomor {$orderNo}" : '') . ' berhasil dibuat.'),
             'url' => '/claim-reward',
             'data' => array_merge([
                 'for' => 'pembelian',
@@ -127,11 +127,11 @@ class PortalNotificationService
         $customerName = $extraData['customer_name'] ?? $extraData['name'] ?? $user->nama_lengkap ?? 'Customer';
 
         return [
-            'title' => trim("Kabar baik, {$customerName}! Claim reward {$orderNo} sudah disetujui."),
-            'body' => 'Silahkan cek secara berkala.',
-            'url' => '/claim-reward',
+            'title' => 'Pesanan Diproses',
+            'message' => trim("Kabar baik, {$customerName}! Claim reward {$orderNo} sudah diproses."),
+            'url' => '/rewards',
             'data' => array_merge([
-                'type' => 'claim_reward',
+                'type' => 'rewards',
                 'screen' => 'HistoryTukarPoin',
                 'order_no' => $orderNo,
                 'status' => 'approved',
@@ -145,11 +145,11 @@ class PortalNotificationService
         $customerName = $extraData['customer_name'] ?? $extraData['name'] ?? $user->nama_lengkap ?? 'Customer';
 
         return [
-            'title' => trim("Reward kamu sudah jalan, {$customerName}! Claim {$orderNo} sedang dalam perjalanan."),
-            'body' => 'Silahkan cek secara berkala.',
-            'url' => '/claim-reward',
+            'title' => 'Pesanan Dikirim',
+            'message' => trim("Reward kamu sudah jalan, {$customerName}! Claim {$orderNo} sedang dalam perjalanan."),
+            'url' => '/rewards',
             'data' => array_merge([
-                'type' => 'claim_reward',
+                'type' => 'rewards',
                 'screen' => 'HistoryTukarPoin',
                 'order_no' => $orderNo,
                 'status' => 'shipping',
