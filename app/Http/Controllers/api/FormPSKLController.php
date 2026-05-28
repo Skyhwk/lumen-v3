@@ -291,7 +291,7 @@ class FormPSKLController extends Controller
             Notification::whereIn('id', $user_TC)
                 ->title('Ticket Form PSKL !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
-                ->url('/form-pskl')
+                ->url('/sales/form-psk3l')
                 ->send();
 
             DB::commit();
@@ -318,7 +318,7 @@ class FormPSKLController extends Controller
         Notification::where('nama_lengkap', $data->created_by)
                 ->title('Form PSKL Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-pskl')
+                ->url('/sales/form-psk3l')
                 ->send();
         return response()->json([
             'success' => true,
@@ -346,7 +346,7 @@ class FormPSKLController extends Controller
                 Notification::where('nama_lengkap', $targetUser)
                     ->title('Form PSKL Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/form-pskl')
+                    ->url('/sales/form-psk3l')
                     ->send();
             }
 
@@ -377,7 +377,7 @@ class FormPSKLController extends Controller
             Notification::where('nama_lengkap', $data->solved_by)
                     ->title('Form PSKL Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/form-pskl')
+                    ->url('/sales/form-psk3l')
                     ->send();
             
             DB::commit();

@@ -299,12 +299,12 @@ class JadwalServices
 
             if ($sales == $admsales) {
                 $message = "Permintaan SP telah di reject oleh admin jadwal, silahkan melakukan request ulang dengan no QT " . $dataReject->no_quotation;
-                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('url')->send();
+                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('/sales/quotation/follow-up-qt')->send();
 
             } else {
                 $message = "Permintaan SP telah di reject oleh admin jadwal, silahkan melakukan request ulang dengan no QT " . $dataReject->no_quotation;
-                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('url')->send();
-                Notification::where('id', $admsales)->title('Reject SP')->message($message)->url('url')->send();
+                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('/sales/quotation/follow-up-qt')->send();
+                Notification::where('id', $admsales)->title('Reject SP')->message($message)->url('/sales/quotation/follow-up-qt')->send();
             }
 
             DB::commit();
@@ -351,11 +351,11 @@ class JadwalServices
 
             if ($sales == $admsales) {
                 $message = "Permintaan SP telah di reject oleh admin jadwal, silahkan melakukan request ulang dengan no QT " . $dataReject->no_quotation;
-                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('url')->send();
+                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('/sales/quotation/follow-up-qt')->send();
             } else {
                 $message = "Permintaan SP telah di reject oleh admin jadwal, silahkan melakukan request ulang dengan no QT " . $dataReject->no_quotation;
-                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('url')->send();
-                Notification::where('id', $admsales)->title('Reject SP')->message($message)->url('url')->send();
+                Notification::where('id', $sales)->title('Reject SP')->message($message)->url('/sales/quotation/follow-up-qt')->send();
+                Notification::where('id', $admsales)->title('Reject SP')->message($message)->url('/sales/quotation/follow-up-qt')->send();
             }
 
             DB::commit();
@@ -639,7 +639,7 @@ class JadwalServices
                 $sales = JadwalServices::on('no_quotation', $dataUpdate->no_quotation)->getQuotation()->sales_id;
                 $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
                 $message = "Perubahan Jadwal No Quotation $dataUpdate->no_quotation telah dirubah dari tanggal $oldDate menjadi $dataUpdate->tanggal";
-                Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
+                Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
 
                 $noqt = $dataUpdate->no_quotation;
             }
@@ -1452,7 +1452,6 @@ class JadwalServices
             $sales = JadwalServices::on('no_quotation', $dataAdd->no_quotation)->getQuotation()->sales_id;
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
-            //Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
             DB::commit();
             return true;
         } catch (Exception $ex) {
@@ -1653,8 +1652,8 @@ class JadwalServices
 
             $sales = JadwalServices::on('no_quotation', $dataParsial->no_quotation)->getQuotation()->sales_id;
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
-            $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
-            Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
+            $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah dilakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
+            Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
             DB::commit();
             return true;
         } catch (Exception $e) {
@@ -1829,8 +1828,8 @@ class JadwalServices
 
             $sales = JadwalServices::on('no_quotation', $dataParsial->no_quotation)->getQuotation()->sales_id;
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
-            $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
-            Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
+            $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah dilakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
+            Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
             DB::commit();
             return true;
         } catch (Exception $e) {

@@ -107,7 +107,7 @@ class ValidatorSPController extends Controller
             $sales = JadwalServices::on('no_quotation', $cek->no_quotation)->getQuotation();
 
             $message = "No Sampling $cek->no_document/$cek->no_quotation Telah direject dari jadwal";
-            Notification::where('id', $sales->sales_id)->title('Jadwal Rejected')->message($message)->url('/sampling-plan')->send();
+            Notification::where('id', $sales->sales_id)->title('Jadwal Rejected')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
 
             DB::commit();
             return response()->json([

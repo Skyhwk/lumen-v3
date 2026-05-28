@@ -128,13 +128,13 @@ class TicketTechnicalControlController extends Controller
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-technical-control')
+                    ->url('/request/ticket-technical-control')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-technical-control')
+                    ->url('/request/ticket-technical-control')
                     ->send();
             }
 
@@ -175,7 +175,7 @@ class TicketTechnicalControlController extends Controller
             Notification::whereIn('id', $user_programming)
                 ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -209,7 +209,7 @@ class TicketTechnicalControlController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -244,7 +244,7 @@ class TicketTechnicalControlController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -278,7 +278,7 @@ class TicketTechnicalControlController extends Controller
             Notification::where('nama_lengkap', $data->solve_by)
                 ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
                 
             DB::commit();
@@ -313,7 +313,7 @@ class TicketTechnicalControlController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -356,13 +356,13 @@ class TicketTechnicalControlController extends Controller
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-technical-control')
+                    ->url('/request/ticket-technical-control')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket Technical Control Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-technical-control')
+                    ->url('/request/ticket-technical-control')
                     ->send();
             }
 
@@ -556,7 +556,7 @@ class TicketTechnicalControlController extends Controller
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Technical Control !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
@@ -565,7 +565,7 @@ class TicketTechnicalControlController extends Controller
             Notification::whereIn('id', $getAtasan)
                 ->title('Ticket Technical Control !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
             DB::commit();
             return response()->json([
@@ -602,13 +602,13 @@ class TicketTechnicalControlController extends Controller
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Technical Control Siap Diproses!')
                 ->message($message)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Technical Control Update')
                 ->message($message)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             DB::commit();
@@ -888,7 +888,7 @@ class TicketTechnicalControlController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Technical Control Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-technical-control')
+                ->url('/request/ticket-technical-control')
                 ->send();
 
             return response()->json([

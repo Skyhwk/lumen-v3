@@ -33,7 +33,7 @@ class PermohonanPsklController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                     ->title('Form PSKL Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/form-pskl')
+                    ->url('/sales/form-psk3l')
                     ->send();
 
             DB::commit();
@@ -64,7 +64,7 @@ class PermohonanPsklController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                     ->title('Form PSKL Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/form-pskl')
+                    ->url('/sales/form-psk3l')
                     ->send();
             
 
@@ -94,7 +94,7 @@ class PermohonanPsklController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                     ->title('Form PSKL Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/form-pskl')
+                    ->url('/sales/form-psk3l')
                     ->send();
 
             DB::commit();
@@ -122,7 +122,7 @@ class PermohonanPsklController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                     ->title('Form PSKL Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/form-pskl')
+                    ->url('/sales/form-psk3l')
                     ->send();
             
             DB::commit();

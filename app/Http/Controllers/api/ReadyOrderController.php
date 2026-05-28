@@ -400,7 +400,7 @@ class ReadyOrderController extends Controller
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
 
-                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
+                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/sales/quotation/ready-order')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
@@ -430,7 +430,7 @@ class ReadyOrderController extends Controller
                 $prosess = self::generateOrderNonKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
-                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
+                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/sales/quotation/ready-order')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             }
         } catch (\Throwable $th) {

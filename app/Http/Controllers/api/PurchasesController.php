@@ -76,13 +76,13 @@ class PurchasesController extends Controller
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Ditolak!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan telah ditolak finance oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . " dengan alasan: {$request->data['reason']}")
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
         } else {
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Ditolak!')
                 ->message("Terdapat beberapa item pada Permintaan Pembelian Barang yang anda ajukan ditolak finance oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . " dengan alasan: {$request->data['reason']}")
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
         }
 
@@ -154,13 +154,13 @@ class PurchasesController extends Controller
         Notification::where('nama_lengkap', $purchaseRequest->created_by)
             ->title('Permintaan Pembelian Barang Didelegasikan!')
             ->message("Permintaan Pembelian Barang yang anda ajukan telah didelegasikan oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . " dan siap diproses oleh {$request->finance_staff}")
-            ->url('/purchase-requests')
+            ->url('/request/purchase-requests')
             ->send();
 
         Notification::where('nama_lengkap', $request->finance_staff)
             ->title('Permintaan Pembelian Barang Didelegasikan!')
             ->message("Terdapat Permintaan Pembelian Barang yang didelegasikan oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . " dan siap diproses oleh Anda")
-            ->url('/purchases')
+            ->url('/finance/purchasing/purchases')
             ->send();
 
         return response()->json(['message' => "Permintaan pembelian berhasil didelegasikan"], 200);
@@ -181,13 +181,13 @@ class PurchasesController extends Controller
             Notification::where('nama_lengkap', $purchaseRequest->created_by)
                 ->title('Permintaan Pembelian Barang Diproses!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan sedang diproses oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
 
             Notification::whereIn('id', $uppers)
                 ->title('Permintaan Pembelian Barang Diproses!')
                 ->message("Permintaan Pembelian Barang sedang diproses oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchases')
+                ->url('/finance/purchasing/purchases')
                 ->send();
         }
 
@@ -199,13 +199,13 @@ class PurchasesController extends Controller
             Notification::where('nama_lengkap', $purchaseRequest->created_by)
                 ->title('Permintaan Pembelian Barang Dipending!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan telah dipending oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
 
             Notification::whereIn('id', $uppers)
                 ->title('Permintaan Pembelian Barang Dipending!')
                 ->message("Permintaan Pembelian Barang telah dipending oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchases')
+                ->url('/finance/purchasing/purchases')
                 ->send();
         }
 
@@ -218,13 +218,13 @@ class PurchasesController extends Controller
             Notification::where('nama_lengkap', $purchaseRequest->created_by)
                 ->title('Permintaan Pembelian Barang Selesai!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan telah dinyatakan selesai oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
 
             Notification::whereIn('id', $uppers)
                 ->title('Permintaan Pembelian Barang Selesai!')
                 ->message("Permintaan Pembelian Barang telah dinyatakan selesai oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchases')
+                ->url('/finance/purchasing/purchases')
                 ->send();
         }
 

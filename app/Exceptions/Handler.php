@@ -115,7 +115,7 @@ class Handler extends ExceptionHandler
     {
         Notification::whereIn('id_department', [7])
             ->title('Database time out Exceeded')
-            ->message('Saat ini terjadi masalah koneksi database (timeout/gone away) di aplikasi pada controller: ' . $exception->getFile() . ' line: ' . $exception->getLine())->url('/monitor-database')->send();
+            ->message('Saat ini terjadi masalah koneksi database (timeout/gone away) di aplikasi pada controller: ' . $exception->getFile() . ' line: ' . $exception->getLine())->url('/programmer/admin-panel/monitor-database')->send();
 
         return response()->json([
             'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',

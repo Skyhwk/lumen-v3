@@ -520,7 +520,7 @@ class QuotationSarController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
             } else {
@@ -541,7 +541,7 @@ class QuotationSarController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
 
@@ -555,7 +555,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -574,7 +574,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -595,7 +595,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -615,7 +615,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -910,7 +910,7 @@ class QuotationSarController extends Controller
             Notification::whereIn('id', $array_id_user)
                 ->title('Penawaran telah diperbarui')
                 ->message('Penawaran dengan nomor ' . $data->no_document . ' telah diperbarui.')
-                ->url('/quote-request')
+                ->url('/sales/quotation/quote-request')
                 ->send();
 
             DB::commit();
@@ -1320,7 +1320,7 @@ class QuotationSarController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
             } else {
@@ -1341,7 +1341,7 @@ class QuotationSarController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
 
@@ -1355,7 +1355,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1374,7 +1374,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1395,7 +1395,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1415,7 +1415,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1742,7 +1742,7 @@ class QuotationSarController extends Controller
             Notification::whereIn('id', $array_id_user)
                 ->title('Penawaran telah diperbarui')
                 ->message('Penawaran dengan nomor ' . $data->no_document . ' telah diperbarui.')
-                ->url('/quote-request')
+                ->url('/sales/quotation/quote-request')
                 ->send();
 
             return response()->json([
@@ -1755,7 +1755,7 @@ class QuotationSarController extends Controller
                 str_contains($e->getMessage(), 'MySQL server has gone away') ||
                 str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
-                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/programmer/admin-panel/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
@@ -2292,7 +2292,7 @@ class QuotationSarController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
 
@@ -2306,7 +2306,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -2325,7 +2325,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -2346,7 +2346,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -2366,7 +2366,7 @@ class QuotationSarController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -2753,7 +2753,7 @@ class QuotationSarController extends Controller
                     ? "Telah terjadi revisi pada nomor quote $dataOld->no_document menjadi $data->no_document dengan nomor order $data_lama->no_order. Oleh karena itu nomor invoice $invoiceNumbersStr akan dikembalikan ke menu generate invoice untuk dilakukan pengecekan."
                     : "Telah terjadi revisi pada nomor quote $dataOld->no_document menjadi $data->no_document dengan nomor order $data_lama->no_order.";
 
-                Notification::where('id_department', 5)->title('Revisi Penawaran')->message($message)->url('/generate-invoice')->send();
+                Notification::where('id_department', 5)->title('Revisi Penawaran')->message($message)->url('/finance/account-receivable/generate-invoice')->send();
 
                 // update persiapan sampel
                 DB::table('persiapan_sampel_header')
@@ -2804,7 +2804,7 @@ class QuotationSarController extends Controller
             Notification::whereIn('id', $array_id_user)
                 ->title('Penawaran telah di revisi')
                 ->message('Penawaran dengan nomor ' . $dataOld->no_document . ' telah di revisi menjadi ' . $data->no_document . '.')
-                ->url('/quote-request')
+                ->url('/sales/quotation/quote-request')
                 ->send();
 
             return response()->json([
@@ -2817,7 +2817,7 @@ class QuotationSarController extends Controller
                 str_contains($e->getMessage(), 'MySQL server has gone away') ||
                 str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
-                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/programmer/admin-panel/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
