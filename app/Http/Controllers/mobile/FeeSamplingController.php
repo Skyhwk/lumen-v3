@@ -58,6 +58,10 @@ class FeeSamplingController extends Controller
             ->where('is_active', true)
             ->first();
 
+        if (!$rekening) {
+            return response()->json(['message' => 'rekening belum di set oleh hrd'], 400);
+        }
+
         $rekening->no_telpon = $data->no_telpon;
 
         return response()->json(['data' => $rekening], 200);
@@ -366,6 +370,12 @@ class FeeSamplingController extends Controller
     {
         DB::beginTransaction();
         try {
+            if ($request->metode_transfer == 'cash') {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Metode Transfer Cash Belum Tersedia',
+                ], 400);
+            }
 
             $cekdata = PengajuanFeeSampling::where('user_id', $this->user_id)
                 ->where('is_approve_finance', 0)
