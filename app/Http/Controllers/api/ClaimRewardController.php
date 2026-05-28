@@ -33,6 +33,20 @@ class ClaimRewardController extends Controller
             ->when($this->hasHeaderColumn('is_active'), fn ($query) => $query->where('is_active', true))
             ->orderByDesc('id');
 
+        $summaryQuery = clone $data;
+
+        $data->when($request->status, function ($query, $status) {
+            if ($status === 'pending_approved') {
+                $query->whereIn('status', ['pending', 'approved']);
+            } elseif ($status === 'processed') {
+                $query->where('status', 'shipping');
+            } elseif ($status === 'completed') {
+                $query->where('status', 'completed');
+            } elseif ($status === 'cancelled_rejected') {
+                $query->whereIn('status', ['cancelled', 'rejected']);
+            }
+        });
+
         if ($request->has('draw')) {
             return Datatables::of($data)
                 ->addColumn('item_count', fn ($claim) => $claim->details->count())
@@ -42,7 +56,7 @@ class ClaimRewardController extends Controller
                 ->addColumn('qty', fn ($claim) => (int) ($claim->total_qty ?? $claim->details->sum('qty')))
                 ->addColumn('total_points', fn ($claim) => (int) ($claim->total_points ?? $claim->details->sum('total_points')))
                 ->addColumn('status_label', fn ($claim) => ucfirst((string) $claim->status))
-                ->with('summary', $this->buildSummary(clone $data))
+                ->with('summary', $this->buildSummary($summaryQuery))
                 ->make(true);
         }
 
