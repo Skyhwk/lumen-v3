@@ -39,7 +39,7 @@ class SendPpiNotificationJob extends Job
     public function handle()
     {
         $host = env('PPI_MQTT_HOST','portal.intilab.com');
-        $port = env('PPI_MQTT_PORT', '1112');
+        $port = env('PPI_MQTT_PORT', '1111');
         $clientID = env('PPI_MQTT_USERNAME', 'admin');
         $username = env('PPI_MQTT_USERNAME', 'admin');
         $password = env('PPI_MQTT_PASSWORD', '');
