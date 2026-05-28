@@ -101,7 +101,9 @@ class ClaimRewardController extends Controller
                     'source' => $request->source ?: 'portal_customer',
                 ],
                 'created_by' => $request->created_by ?: ($this->karyawan ?? null),
+                'created_at' => Carbon::now(),
                 'updated_by' => $request->created_by ?: ($this->karyawan ?? null),
+                'updated_at' => Carbon::now(),
                 'is_active' => true,
             ]);
 
@@ -132,7 +134,9 @@ class ClaimRewardController extends Controller
                         'variants' => $reward->variants ?? [],
                     ],
                     'created_by' => $request->created_by ?: ($this->karyawan ?? null),
+                    'created_at' => Carbon::now(),
                     'updated_by' => $request->created_by ?: ($this->karyawan ?? null),
+                    'updated_at' => Carbon::now(),
                     'is_active' => true,
                 ]);
 
