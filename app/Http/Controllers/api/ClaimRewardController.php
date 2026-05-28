@@ -359,7 +359,7 @@ class ClaimRewardController extends Controller
             Notification::whereIn('id', $targets)
                 ->title('Claim Reward Baru')
                 ->message("Ada claim reward baru {$claim->claim_code} dari {$claim->customer_name}.")
-                ->url('/portal-intilab/poin-member/claim-reward')
+                ->url('/portal-intilab/claim-reward')
                 ->send();
         } catch (\Throwable $exception) {
         }

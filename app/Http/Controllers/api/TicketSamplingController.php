@@ -157,13 +157,13 @@ class TicketSamplingController extends Controller
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Sampling Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-sampling')
+                    ->url('/request/ticket-sampling')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket Sampling Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-sampling')
+                    ->url('/request/ticket-sampling')
                     ->send();
             }
 
@@ -204,7 +204,7 @@ class TicketSamplingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();
@@ -239,7 +239,7 @@ class TicketSamplingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();
@@ -275,7 +275,7 @@ class TicketSamplingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();
@@ -309,7 +309,7 @@ class TicketSamplingController extends Controller
             Notification::where('nama_lengkap', $data->solve_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();
@@ -344,7 +344,7 @@ class TicketSamplingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();
@@ -395,13 +395,13 @@ class TicketSamplingController extends Controller
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Sampling Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-sampling')
+                    ->url('/request/ticket-sampling')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket Sampling Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-sampling')
+                    ->url('/request/ticket-sampling')
                     ->send();
             }
 
@@ -534,7 +534,7 @@ class TicketSamplingController extends Controller
             Notification::whereIn('id', $user_Sampling)
                 ->title('Ticket Sampling !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
@@ -543,7 +543,7 @@ class TicketSamplingController extends Controller
             Notification::whereIn('id', $getAtasan)
                 ->title('Ticket Sampling !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();
@@ -577,13 +577,13 @@ class TicketSamplingController extends Controller
             Notification::whereIn('nama_lengkap', $data->solve_by)
                 ->title('Ticket Sampling Siap Diproses!')
                 ->message($message)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Sampling Update')
                 ->message($message)
-                ->url('/ticket-sampling')
+                ->url('/request/ticket-sampling')
                 ->send();
 
             DB::commit();

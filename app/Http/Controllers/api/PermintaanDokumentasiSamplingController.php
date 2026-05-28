@@ -90,7 +90,7 @@ class PermintaanDokumentasiSamplingController extends Controller
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil mengirim permintaan')
                 ->message('Permintaan Dokumentasi Kegiatan Sampling telah ditambahkan oleh ' . $this->karyawan . ' pada ' . Carbon::now()->translatedFormat('d F Y H:i'))
-                ->url('/permintaan-dokumentasi-sampling')
+                ->url('/request/permintaan-dokumentasi-sampling')
                 ->send();
 
             return response()->json(['message' => 'Requested successfully'], 200);
@@ -166,7 +166,7 @@ class PermintaanDokumentasiSamplingController extends Controller
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil approve permintaan')
                 ->message('Permintaan Dokumentasi Kegiatan Sampling telah diapprove oleh ' . $this->karyawan . ' pada ' . Carbon::now()->translatedFormat('d F Y H:i'))
-                ->url('/permintaan-dokumentasi-sampling')
+                ->url('/request/permintaan-dokumentasi-sampling')
                 ->send();
 
             return response()->json(['message' => 'Berhasil approve permintaan, silahkan tunggu beberapa saat.'], 200);
@@ -190,7 +190,7 @@ class PermintaanDokumentasiSamplingController extends Controller
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil reject permintaan')
                 ->message('Permintaan Dokumentasi Kegiatan Sampling telah direject oleh ' . $this->karyawan . ' pada ' . Carbon::now()->translatedFormat('d F Y H:i'))
-                ->url('/permintaan-dokumentasi-sampling')
+                ->url('/request/permintaan-dokumentasi-sampling')
                 ->send();
 
             return response()->json(['message' => 'Berhasil reject permintaan'], 200);

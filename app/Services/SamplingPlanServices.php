@@ -270,8 +270,8 @@ class SamplingPlanServices
                 $implodePeriode = implode(",", $periodeT);
                 $message1 = "Pesan! \nPermintaan request jadwal dengan no QT $dataInsert->no_quotation dengan periode $implodePeriode , silahkan untuk menjadwalkan  pada menu REQUEST SAMPLING PLAN";
                 $message2 = "Pesan! \nNomor Quotation $dataInsert->no_quotation telah dilakukan permintaan jadwal.";
-                Notification::whereIn('id', $adminJadwal)->title('Request SP')->message($message1)->url('url')->send();
-                Notification::whereIn('id', $sales)->title('Request SP')->message($message2)->url('url')->send();
+                Notification::whereIn('id', $adminJadwal)->title('Request SP')->message($message1)->url('/sampling/jadwal/request-sampling-plan')->send();
+                Notification::whereIn('id', $sales)->title('Request SP')->message($message2)->url('/sales/quotation/follow-up-qt')->send();
                 DB::commit();
                 return true;
             } else {
@@ -414,8 +414,8 @@ class SamplingPlanServices
                 $message2 = "Pesan! \nNomor Quotation $dataInsert->no_quotation telah dilakukan permintaan jadwal.";
                 $adminJadwal = GetAtasan::where('id', 187)->get()->pluck('id');
                 $sales = GetAtasan::where('id', $datau->sales_id)->get()->pluck('id');
-                Notification::whereIn('id', $adminJadwal)->title('Request SP')->message($message1)->url('url')->send();
-                Notification::whereIn('id', $sales)->title('Request SP')->message($message2)->url('url')->send();
+                Notification::whereIn('id', $adminJadwal)->title('Request SP')->message($message1)->url('/sampling/jadwal/request-sampling-plan')->send();
+                Notification::whereIn('id', $sales)->title('Request SP')->message($message2)->url('/sales/quotation/follow-up-qt')->send();
             } else {
                 DB::rollBack();
                 throw new Exception('Something Wrong.!', 401);

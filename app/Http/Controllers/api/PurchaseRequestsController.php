@@ -150,7 +150,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id', json_decode($employee->atasan_langsung))
                 ->title('Permintaan Pembelian Barang!')
                 ->message("Terdapat Permintaan Pembelian Barang baru yang diajukan oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
         }
 
@@ -194,7 +194,7 @@ class PurchaseRequestsController extends Controller
         Notification::whereIn('id', json_decode($employee->atasan_langsung))
             ->title('Permintaan Pembelian Barang!')
             ->message("Terdapat Permintaan Pembelian Barang yang telah direopen oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-            ->url('/purchase-requests')
+            ->url('/request/purchase-requests')
             ->send();
 
         return response()->json(['message' => 'Reopened successfully'], 201);
@@ -248,7 +248,7 @@ class PurchaseRequestsController extends Controller
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Disetujui!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan telah disetujui oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
 
             $parent->finance_status = 'Waiting to Delegate';
@@ -256,7 +256,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id_jabatan', [45, 48])
                 ->title('Permintaan Pembelian Barang Diajukan!')
                 ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$parent->approved_by} pada " . date('d-m-Y'))
-                ->url('/purchases')
+                ->url('/finance/purchasing/purchases')
                 ->send();
         } elseif ($rejectedCount === $total) {
             $parent->status = 'Rejected';
@@ -267,7 +267,7 @@ class PurchaseRequestsController extends Controller
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Ditolak!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan telah ditolak oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . " dengan alasan: " . $request->data['reason'])
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
         } else {
             $parent->status = 'Partially Approved';
@@ -277,7 +277,7 @@ class PurchaseRequestsController extends Controller
             Notification::where('nama_lengkap', $parent->created_by)
                 ->title('Permintaan Pembelian Barang Disetujui sebagian!')
                 ->message("Permintaan Pembelian Barang yang anda ajukan telah disetujui sebagian oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/purchase-requests')
+                ->url('/request/purchase-requests')
                 ->send();
 
             $parent->finance_status = 'Waiting to Delegate';
@@ -285,7 +285,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id_jabatan', [45, 48])
                 ->title('Permintaan Pembelian Barang Diajukan!')
                 ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$parent->approved_by} pada " . date('d-m-Y'))
-                ->url('/purchases')
+                ->url('/finance/purchasing/purchases')
                 ->send();
         }
 

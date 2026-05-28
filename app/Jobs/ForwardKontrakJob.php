@@ -482,14 +482,14 @@ class ForwardKontrakJob extends Job
                 Notification::whereIn('id', $getAtasan)
                     ->title('Ticket Programming Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/sales/quotation/quote-request')
                     ->send();
             }else { // JIka yang membuat quotation itu bukan yang membuat request qr maka kirim ke yang membuat request qr
                 $message = 'Request QR telah diexport ke request quotation';
                 Notification::where('nama_lengkap', $dataH->created_by)
                     ->title('Request QR telah diexport ke request quotation')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/sales/quotation/quote-request')
                     ->send();
             }
 

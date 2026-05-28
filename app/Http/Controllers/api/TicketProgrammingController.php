@@ -133,13 +133,13 @@ class TicketProgrammingController extends Controller
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Programming Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/request/ticket-programming')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket Programming Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/request/ticket-programming')
                     ->send();
             }
 
@@ -180,7 +180,7 @@ class TicketProgrammingController extends Controller
             Notification::whereIn('id', $user_programming)
                 ->title('Ticket Programming Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
@@ -214,7 +214,7 @@ class TicketProgrammingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Programming Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
@@ -249,7 +249,7 @@ class TicketProgrammingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Programming Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
@@ -283,7 +283,7 @@ class TicketProgrammingController extends Controller
             Notification::where('nama_lengkap', $data->solve_by)
                 ->title('Ticket Programming Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
@@ -318,7 +318,7 @@ class TicketProgrammingController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Programming Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
@@ -361,13 +361,13 @@ class TicketProgrammingController extends Controller
                 Notification::whereIn('id', $user_programmer)
                     ->title('Ticket Programming Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/request/ticket-programming')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket Programming Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/request/ticket-programming')
                     ->send();
             }
 
@@ -489,7 +489,7 @@ class TicketProgrammingController extends Controller
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Programming !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
@@ -498,7 +498,7 @@ class TicketProgrammingController extends Controller
             Notification::whereIn('id', $getAtasan)
                 ->title('Ticket Programming !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
@@ -538,13 +538,13 @@ class TicketProgrammingController extends Controller
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Programming Siap Diproses!')
                 ->message($message)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket Programming Update')
                 ->message($message)
-                ->url('/ticket-programming')
+                ->url('/request/ticket-programming')
                 ->send();
 
             DB::commit();
