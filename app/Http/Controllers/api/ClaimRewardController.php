@@ -37,9 +37,9 @@ class ClaimRewardController extends Controller
 
         $data->when($request->status, function ($query, $status) {
             if ($status === 'pending_approved') {
-                $query->whereIn('status', ['pending', 'approved']);
+                $query->where('status', 'pending');
             } elseif ($status === 'processed') {
-                $query->where('status', 'shipping');
+                $query->whereIn('status', ['approved', 'shipping']);
             } elseif ($status === 'completed') {
                 $query->where('status', 'completed');
             } elseif ($status === 'cancelled_rejected') {
