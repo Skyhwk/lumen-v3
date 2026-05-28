@@ -109,7 +109,7 @@ class PortalNotificationService
 
         return [
             'title' => 'Pembelian Berhasil',
-            'message' => trim("Pembelian reward {$customerName}" . ($orderNo ? " dengan nomor {$orderNo}" : '') . ' berhasil dibuat.'),
+            'body' => trim("Pembelian reward {$customerName}" . ($orderNo ? " dengan nomor {$orderNo}" : '') . ' berhasil dibuat.'),
             'url' => '/claim-reward',
             'data' => array_merge([
                 'for' => 'pembelian',
@@ -128,7 +128,7 @@ class PortalNotificationService
 
         return [
             'title' => 'Pesanan Diproses',
-            'message' => trim("Kabar baik, {$customerName}! Claim reward {$orderNo} sudah diproses."),
+            'body' => trim("Kabar baik, {$customerName}! Claim reward {$orderNo} sudah diproses."),
             'url' => '/rewards',
             'data' => array_merge([
                 'type' => 'rewards',
@@ -146,7 +146,7 @@ class PortalNotificationService
 
         return [
             'title' => 'Pesanan Dikirim',
-            'message' => trim("Reward kamu sudah jalan, {$customerName}! Claim {$orderNo} sedang dalam perjalanan."),
+            'body' => trim("Reward kamu sudah jalan, {$customerName}! Claim {$orderNo} sedang dalam perjalanan."),
             'url' => '/rewards',
             'data' => array_merge([
                 'type' => 'rewards',
