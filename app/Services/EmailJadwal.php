@@ -341,7 +341,7 @@ class EmailJadwal
                 $no_penawaran = $dataEmail['client']->no_document;
                 $message = "Nomor QT $no_penawaran " . "\ntelah dijadwalkan dan sudah diapprove dan disampaikan ke client melalui email.";
 
-                Notification::whereIn('id', $idBcc)->title('Jadwal Sampling')->message($message)->url('/sampling-plan')->send();
+                Notification::whereIn('id', $idBcc)->title('Jadwal Sampling')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
 
                 DB::commit();
                 return response()->json([

@@ -512,6 +512,11 @@ class OrderDetail extends Sector
         return $this->hasMany(DetailLingkunganKerja::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
     }
 
+    public function allDetailSenyawaVolatile()
+    {
+        return $this->hasMany(DetailSenyawaVolatile::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
+    }
+
     protected $anyDataLapanganRelations = [
         'detailMicrobiologi',
         'dataLapanganIklimPanas',
@@ -521,6 +526,7 @@ class OrderDetail extends Sector
         'dataLapanganAir',
 
         'allDetailLingkunganHidup',
+        'allDetailSenyawaVolatile',
         'allDetailLingkunganKerja',
         'dataLapanganDirectLain',
         'dataLapanganMedanLM',

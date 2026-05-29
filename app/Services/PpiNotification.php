@@ -16,6 +16,7 @@ class PpiNotification extends Controller
     protected $title;
     protected $message;
     protected $url;
+    protected $data;
 
     public static function where($field, $value)
     {
@@ -56,9 +57,19 @@ class PpiNotification extends Controller
         return $this;
     }
 
+    public function data($data)
+    {
+        $this->data = $data;
+        return $this;
+    }
+
     public function send()
     {
         $users = $this->query->get(['id']);
+
+        if ($users->isEmpty()) {
+            return false;
+        }
 
         $notifications = [];
         foreach ($users as $user) {
@@ -67,6 +78,7 @@ class PpiNotification extends Controller
                 'title' => $this->title,
                 'message' => $this->message,
                 'url' => $this->url,
+                'data' => json_encode($this->data ?? []),
                 'is_read' => false,
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'is_active' => true,
@@ -79,6 +91,7 @@ class PpiNotification extends Controller
             'title' => $this->title,
             'message' => $this->message,
             'url' => $this->url,
+            'data' => $this->data ?? [],
         ];
 
         $array = [

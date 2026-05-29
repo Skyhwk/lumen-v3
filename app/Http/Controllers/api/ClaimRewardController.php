@@ -7,6 +7,7 @@ use App\Models\ClaimRewardDetail;
 use App\Models\ClaimRewardHeader;
 use App\Models\KatalogReward;
 use App\Services\Notification;
+use App\Services\PortalNotificationService;
 use App\Services\PpiNotification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -17,7 +18,7 @@ use Yajra\Datatables\Datatables;
 class ClaimRewardController extends Controller
 {
     protected const STATUS_PENDING = 'pending';
-    protected const STATUS_PROCESSED = 'processed';
+    protected const STATUS_PROCESSED = 'shipping';
     protected const STATUS_APPROVED = 'approved';
     protected const STATUS_REJECTED = 'rejected';
     protected const STATUS_COMPLETED = 'completed';
@@ -27,10 +28,24 @@ class ClaimRewardController extends Controller
     {
         $data = ClaimRewardHeader::query()
             ->with(['details' => function ($query) {
-                $query->where('is_active', true)->orderBy('id');
+                $query->with('reward')->where('is_active', true)->orderBy('id');
             }])
             ->when($this->hasHeaderColumn('is_active'), fn ($query) => $query->where('is_active', true))
             ->orderByDesc('id');
+
+        $summaryQuery = clone $data;
+
+        $data->when($request->status, function ($query, $status) {
+            if ($status === 'pending_approved') {
+                $query->where('status', 'pending');
+            } elseif ($status === 'processed') {
+                $query->whereIn('status', ['approved', 'shipping']);
+            } elseif ($status === 'completed') {
+                $query->where('status', 'completed');
+            } elseif ($status === 'cancelled_rejected') {
+                $query->whereIn('status', ['cancelled', 'rejected']);
+            }
+        });
 
         if ($request->has('draw')) {
             return Datatables::of($data)
@@ -41,7 +56,7 @@ class ClaimRewardController extends Controller
                 ->addColumn('qty', fn ($claim) => (int) ($claim->total_qty ?? $claim->details->sum('qty')))
                 ->addColumn('total_points', fn ($claim) => (int) ($claim->total_points ?? $claim->details->sum('total_points')))
                 ->addColumn('status_label', fn ($claim) => ucfirst((string) $claim->status))
-                ->with('summary', $this->buildSummary(clone $data))
+                ->with('summary', $this->buildSummary($summaryQuery))
                 ->make(true);
         }
 
@@ -86,7 +101,9 @@ class ClaimRewardController extends Controller
                     'source' => $request->source ?: 'portal_customer',
                 ],
                 'created_by' => $request->created_by ?: ($this->karyawan ?? null),
+                'created_at' => Carbon::now()->addHours(7),
                 'updated_by' => $request->created_by ?: ($this->karyawan ?? null),
+                'updated_at' => Carbon::now()->addHours(7),
                 'is_active' => true,
             ]);
 
@@ -117,7 +134,9 @@ class ClaimRewardController extends Controller
                         'variants' => $reward->variants ?? [],
                     ],
                     'created_by' => $request->created_by ?: ($this->karyawan ?? null),
+                    'created_at' => Carbon::now()->addHours(7)->format('Y-m-d H:i:s'),
                     'updated_by' => $request->created_by ?: ($this->karyawan ?? null),
+                    'updated_at' => Carbon::now()->addHours(7)->format('Y-m-d H:i:s'),
                     'is_active' => true,
                 ]);
 
@@ -129,11 +148,10 @@ class ClaimRewardController extends Controller
             $header->total_points = $totalPoints;
             $header->save();
 
-            return $header->fresh(['details']);
+            return $header->fresh(['details.reward']);
         });
 
         $this->notifyInternalPendingClaim($claim);
-        $this->notifyCustomer($claim, 'Claim Reward Dibuat', "Claim reward {$claim->claim_code} berhasil dibuat dan sedang menunggu proses.");
 
         return response()->json([
             'data' => $this->transformClaim($claim),
@@ -149,7 +167,7 @@ class ClaimRewardController extends Controller
             $claim->processed_at = Carbon::now();
             $this->applyShippingData($claim, $request);
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward sedang diproses.');
+        }, 'Claim reward sedang diproses.', 'claim_reward_process');
     }
 
     public function approve(Request $request)
@@ -158,7 +176,8 @@ class ClaimRewardController extends Controller
             $claim->approved_by = $this->karyawan ?? $request->approved_by ?? null;
             $claim->approved_at = Carbon::now();
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward disetujui dan siap ditindaklanjuti.');
+            $this->incrementRewardSold($claim);
+        }, 'Claim reward disetujui dan siap ditindaklanjuti.', 'claim_reward_approved');
     }
 
     public function reject(Request $request)
@@ -229,7 +248,7 @@ class ClaimRewardController extends Controller
     {
         $data = ClaimRewardHeader::query()
             ->with(['details' => function ($query) {
-                $query->where('is_active', true)->orderBy('id');
+                $query->with('reward')->where('is_active', true)->orderBy('id');
             }])
             ->where('status', self::STATUS_PENDING)
             ->when($this->hasHeaderColumn('is_active'), fn ($query) => $query->where('is_active', true))
@@ -263,7 +282,7 @@ class ClaimRewardController extends Controller
         ];
     }
 
-    protected function handleStatusUpdate(Request $request, array $allowedStatuses, string $nextStatus, callable $callback, string $message)
+    protected function handleStatusUpdate(Request $request, array $allowedStatuses, string $nextStatus, callable $callback, string $message, ?string $notificationFor = null)
     {
         $validator = Validator::make($request->all(), [
             'id' => ['required', 'integer'],
@@ -282,31 +301,40 @@ class ClaimRewardController extends Controller
             ], 422);
         }
 
-        $claim = ClaimRewardHeader::with(['details' => function ($query) {
-            $query->where('is_active', true)->orderBy('id');
-        }])->find($request->id);
+        $claim = DB::connection('portal_customer')->transaction(function () use ($request, $allowedStatuses, $nextStatus, $callback) {
+            $claim = ClaimRewardHeader::with(['details' => function ($query) {
+                $query->with('reward')->where('is_active', true)->orderBy('id');
+            }])->lockForUpdate()->find($request->id);
 
-        if (!$claim) {
-            return response()->json([
-                'message' => 'Claim reward tidak ditemukan',
-                'status' => 404,
-            ], 404);
+            if (!$claim) {
+                return response()->json([
+                    'message' => 'Claim reward tidak ditemukan',
+                    'status' => 404,
+                ], 404);
+            }
+
+            if (!in_array($claim->status, $allowedStatuses, true)) {
+                return response()->json([
+                    'message' => 'Status claim reward tidak bisa diproses dengan aksi ini',
+                    'status' => 422,
+                ], 422);
+            }
+
+            $callback($claim, $request);
+            $claim->status = $nextStatus;
+            $claim->updated_by = $this->karyawan ?? $request->updated_by ?? null;
+            $claim->save();
+
+            return $claim->fresh(['details.reward']);
+        });
+
+        if ($claim instanceof \Illuminate\Http\JsonResponse) {
+            return $claim;
         }
 
-        if (!in_array($claim->status, $allowedStatuses, true)) {
-            return response()->json([
-                'message' => 'Status claim reward tidak bisa diproses dengan aksi ini',
-                'status' => 422,
-            ], 422);
+        if ($notificationFor) {
+            $this->sendClaimRewardNotification($claim, $notificationFor);
         }
-
-        $callback($claim, $request);
-        $claim->status = $nextStatus;
-        $claim->updated_by = $this->karyawan ?? $request->updated_by ?? null;
-        $claim->save();
-
-        $claim = $claim->fresh(['details']);
-        $this->notifyCustomer($claim, 'Update Claim Reward', $message);
 
         return response()->json([
             'data' => $this->transformClaim($claim),
@@ -331,10 +359,49 @@ class ClaimRewardController extends Controller
             Notification::whereIn('id', $targets)
                 ->title('Claim Reward Baru')
                 ->message("Ada claim reward baru {$claim->claim_code} dari {$claim->customer_name}.")
-                ->url('/portal-intilab/poin-member/claim-reward')
+                ->url('/portal-intilab/claim-reward')
                 ->send();
         } catch (\Throwable $exception) {
         }
+    }
+
+    protected function sendClaimRewardNotification(ClaimRewardHeader $claim, string $for): void
+    {
+        if (empty($claim->user_id)) {
+            return;
+        }
+
+        app(PortalNotificationService::class)->send($claim->user_id, $for, [
+            'order_no' => $claim->no_pesanan,
+            'no_pesanan' => $claim->no_pesanan,
+            'customer_name' => $claim->name,
+            'name' => $claim->name,
+            'total_points' => (int) ($claim->total_points ?? 0),
+            'data' => [
+                'claim_id' => $claim->id,
+                'status' => $claim->status,
+                'shipping_method' => $claim->shipping_method,
+                'shipping_courier' => $claim->shipping_courier,
+                'shipping_reference' => $claim->shipping_reference,
+            ],
+        ]);
+    }
+
+    protected function incrementRewardSold(ClaimRewardHeader $claim): void
+    {
+        $details = $claim->relationLoaded('details')
+            ? $claim->details
+            : $claim->details()->where('is_active', true)->get();
+
+        $details
+            ->groupBy('reward_id')
+            ->each(function ($items, $rewardId) {
+                $qty = (int) $items->sum('qty');
+
+                if ($rewardId && $qty > 0) {
+                    KatalogReward::where('id', $rewardId)->increment('sold', $qty);
+                }
+            });
     }
 
     protected function buildSummary($query): array
@@ -349,31 +416,16 @@ class ClaimRewardController extends Controller
             'total' => (int) $rows->sum(),
             'pending' => (int) ($rows[self::STATUS_PENDING] ?? 0),
             'approved' => (int) ($rows[self::STATUS_APPROVED] ?? 0),
+            'shipping' => (int) ($rows[self::STATUS_PROCESSED] ?? 0),
             'completed' => (int) ($rows[self::STATUS_COMPLETED] ?? 0),
         ];
-    }
-
-    protected function notifyCustomer(ClaimRewardHeader $claim, string $title, string $message): void
-    {
-        if (empty($claim->customer_id)) {
-            return;
-        }
-
-        try {
-            PpiNotification::where('id', $claim->customer_id)
-                ->title($title)
-                ->message($message)
-                ->url('/claim-reward')
-                ->send();
-        } catch (\Throwable $exception) {
-        }
     }
 
     protected function transformClaim(ClaimRewardHeader $claim): array
     {
         $details = $claim->relationLoaded('details')
             ? $claim->details
-            : $claim->details()->where('is_active', true)->orderBy('id')->get();
+            : $claim->details()->with('reward')->where('is_active', true)->orderBy('id')->get();
 
         $firstDetail = $details->first();
 
@@ -446,6 +498,17 @@ class ClaimRewardController extends Controller
 
     protected function transformDetail(ClaimRewardDetail $detail): array
     {
+        $snapshot = $detail->reward_snapshot ?? [];
+        $gallery = $snapshot['gallery'] ?? $detail->reward->gallery ?? [];
+        if (is_string($gallery)) {
+            $decodedGallery = json_decode($gallery, true);
+            $gallery = is_array($decodedGallery) ? $decodedGallery : [];
+        }
+        $firstImage = is_array($gallery) && count($gallery) > 0 ? $gallery[0] : [];
+        $imageUrl = is_array($firstImage)
+            ? ($firstImage['imageUrl'] ?? $firstImage['image_url'] ?? $firstImage['image'] ?? null)
+            : null;
+
         return [
             'id' => $detail->id,
             'header_id' => $detail->header_id,
@@ -463,8 +526,14 @@ class ClaimRewardController extends Controller
             'unit_points' => (int) ($detail->unit_points ?? 0),
             'totalPoints' => (int) ($detail->total_points ?? 0),
             'total_points' => (int) ($detail->total_points ?? 0),
-            'rewardSnapshot' => $detail->reward_snapshot ?? [],
-            'reward_snapshot' => $detail->reward_snapshot ?? [],
+            'gallery' => $gallery,
+            'reward_gallery' => $gallery,
+            'imageUrl' => $imageUrl,
+            'image_url' => $imageUrl,
+            'rewardImage' => $imageUrl,
+            'reward_image' => $imageUrl,
+            'rewardSnapshot' => $snapshot,
+            'reward_snapshot' => $snapshot,
         ];
     }
 
@@ -562,5 +631,13 @@ class ClaimRewardController extends Controller
         }
 
         return in_array($column, $columns, true);
+    }
+
+    public function sendNotification($userId, $for)
+    {
+        $requestData = app('request')->all();
+        $extraData = $requestData['extra_data'] ?? $requestData;
+
+        return app(PortalNotificationService::class)->send($userId, $for, $extraData);
     }
 }

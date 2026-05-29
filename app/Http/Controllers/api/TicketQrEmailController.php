@@ -155,20 +155,20 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $user_adm_sales)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
 
                 if (!empty($picIds)) {
                     Notification::whereIn('id', $picIds)
                         ->title('Ticket QR E-Mail Update')
                         ->message($message . ' Oleh ' . $this->karyawan)
-                        ->url('/ticket-revisi-qt')
+                        ->url('/request/ticket-quote-request')
                         ->send();
                 }
             }
@@ -206,7 +206,7 @@ class TicketQrEmailController extends Controller
             Notification::whereIn('id', $user_adm_sales)
                 ->title('Ticket QR E-Mail Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             $picIds = DB::table('pic_tiket_revisi_qt')->pluck('sales_id')->toArray();
@@ -214,7 +214,7 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $picIds)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             }
 
@@ -246,7 +246,7 @@ class TicketQrEmailController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket QR E-Mail Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             $picIds = DB::table('pic_tiket_revisi_qt')->pluck('sales_id')->toArray();
@@ -254,7 +254,7 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $picIds)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             }
 
@@ -287,7 +287,7 @@ class TicketQrEmailController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket QR E-Mail Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             $picIds = DB::table('pic_tiket_revisi_qt')->pluck('sales_id')->toArray();
@@ -295,7 +295,7 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $picIds)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             }
 
@@ -328,7 +328,7 @@ class TicketQrEmailController extends Controller
             Notification::where('nama_lengkap', $data->solve_by)
                 ->title('Ticket QR E-Mail Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             $picIds = DB::table('pic_tiket_revisi_qt')->pluck('sales_id')->toArray();
@@ -336,7 +336,7 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $picIds)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             }
 
@@ -369,7 +369,7 @@ class TicketQrEmailController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket QR E-Mail Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             $picIds = DB::table('pic_tiket_revisi_qt')->pluck('sales_id')->toArray();
@@ -377,7 +377,7 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $picIds)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             }
 
@@ -416,13 +416,13 @@ class TicketQrEmailController extends Controller
                 Notification::whereIn('id', $user_adm_sales)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket QR E-Mail Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-revisi-qt')
+                    ->url('/request/ticket-quote-request')
                     ->send();
 
                 $picIds = DB::table('pic_tiket_revisi_qt')->pluck('sales_id')->toArray();
@@ -430,7 +430,7 @@ class TicketQrEmailController extends Controller
                     Notification::whereIn('id', $picIds)
                         ->title('Ticket QR E-Mail Update')
                         ->message($message . ' Oleh ' . $this->karyawan)
-                        ->url('/ticket-revisi-qt')
+                        ->url('/request/ticket-quote-request')
                         ->send();
                 }
             }
@@ -544,7 +544,7 @@ class TicketQrEmailController extends Controller
     //         Notification::whereIn('id', $user_adm_sales)
     //             ->title('Ticket QR E-Mail !')
     //             ->message($message . ' Oleh ' . $this->karyawan)
-    //             ->url('/ticket-revisi-qt')
+    //             ->url('/request/ticket-quote-request')
     //             ->send();
 
     //         $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
@@ -552,7 +552,7 @@ class TicketQrEmailController extends Controller
     //         Notification::whereIn('id', $getAtasan)
     //             ->title('Ticket QR E-Mail !')
     //             ->message($message . ' Oleh ' . $this->karyawan)
-    //             ->url('/ticket-revisi-qt')
+    //             ->url('/request/ticket-quote-request')
     //             ->send();
 
     //         DB::commit();
@@ -679,7 +679,7 @@ class TicketQrEmailController extends Controller
             Notification::whereIn('id', $user_adm_sales)
                 ->title('Ticket QR E-Mail !')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
@@ -687,7 +687,7 @@ class TicketQrEmailController extends Controller
             Notification::whereIn('id', $getAtasan)
                 ->title('Ticket QR E-Mail !')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-revisi-qt')
+                ->url('/request/ticket-quote-request')
                 ->send();
 
             DB::commit();
@@ -760,7 +760,7 @@ class TicketQrEmailController extends Controller
         Notification::where('id', $request->sales_id)
             ->title('Ticket QR E-Mail Update')
             ->message("Ticket QR E-Mail baru telah didelegasikan oleh {$this->karyawan} dan siap diproses oleh anda.")
-            ->url('/ticket-revisi-qt')
+            ->url('/request/ticket-quote-request')
             ->send();
 
         return response()->json([

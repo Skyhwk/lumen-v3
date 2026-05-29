@@ -202,7 +202,7 @@ class RequestQrController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                     ->title('Request QR Disetujui')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/sales/quotation/request-qr')
                     ->send();
             DB::commit();
             return response()->json([
@@ -230,7 +230,7 @@ class RequestQrController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                     ->title('Request QR Ditolak')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-programming')
+                    ->url('/sales/quotation/request-qr')
                     ->send();
             DB::commit();
             return response()->json([
