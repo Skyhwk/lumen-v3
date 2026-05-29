@@ -348,7 +348,7 @@ class CombineLHPService
                         'no_document' => $skppa->no_document,
                         'nama_customer' => $order->nama_perusahaan,
                         'type_document' => 'Surat Keterangan Penyelesaian Pekerjaan Analisa',
-                        'Tanggal_Pengesahan' => Carbon::now()->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Tanggal_Pengesahan' => Carbon::parse($tanggal_analisa_akhir)->locale('id')->isoFormat('DD MMMM YYYY'),
                         'Disahkan_Oleh' => $pengesah->nama_karyawan,
                         'Jabatan' => $pengesah->jabatan_karyawan
                     ]),
