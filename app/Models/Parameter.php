@@ -20,6 +20,7 @@ class Parameter extends Sector
         'method',
         'nilai_minimum',
         'nilai_ketidak_pastian',
+        'is_blocked',
         'created_by',
         'updated_by',
         'deleted_by',

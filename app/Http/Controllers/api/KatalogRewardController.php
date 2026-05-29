@@ -81,6 +81,38 @@ class KatalogRewardController extends Controller
         ]);
     }
 
+    public function destroy(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => ['required', 'integer'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+                'status' => 422,
+            ], 422);
+        }
+
+        $reward = KatalogReward::where('is_active', true)->find($request->id);
+
+        if (!$reward) {
+            return response()->json([
+                'message' => 'Reward tidak ditemukan',
+                'status' => 404,
+            ], 404);
+        }
+
+        $reward->is_active = false;
+        $reward->save();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Reward berhasil dihapus',
+        ]);
+    }
+
     protected function rules(Request $request, bool $isUpdate = false): array
     {
         $idRule = $isUpdate ? ['required', 'integer'] : ['nullable', 'integer'];
