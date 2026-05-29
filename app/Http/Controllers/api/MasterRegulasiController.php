@@ -15,8 +15,24 @@ class MasterRegulasiController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterRegulasi::with(['bakumutu'])->where('is_active', true);
-        return Datatables::of($data)->make(true);
+        $data = MasterRegulasi::with(['bakumutu'])
+            ->selectRaw('master_regulasi.*, (
+                SELECT COUNT(*)
+                FROM master_bakumutu mb
+                INNER JOIN parameter p ON p.id = mb.id_parameter
+                WHERE mb.id_regulasi = master_regulasi.id
+                AND mb.is_active = 1
+                AND p.is_blocked = 1
+            ) as blocked_count')
+            ->where('is_active', true)
+            ->orderBy('master_regulasi.id', 'asc');
+
+        return Datatables::of($data)
+            ->addColumn('is_blocked', function ($row) {
+                return ($row->blocked_count > 0) ? 1 : 0;
+            })
+            ->rawColumns(['is_blocked'])
+            ->make(true);
     }
 
     public function store(Request $request)
@@ -152,7 +168,7 @@ class MasterRegulasiController extends Controller
             ->whereHas('hargaParameter')
             ->where('is_active', true)
             ->where('id_kategori', $request->id_kategori)
-            ->select('id', 'nama_lab', 'nama_regulasi', 'nama_lhp', 'method', 'satuan')
+            ->select('id', 'nama_lab', 'nama_regulasi', 'nama_lhp', 'method', 'satuan', 'is_blocked')
             ->get();
 
         return response()->json([

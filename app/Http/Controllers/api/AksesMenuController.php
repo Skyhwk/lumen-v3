@@ -30,9 +30,18 @@ class AksesMenuController extends Controller
 
     public function store(Request $request)
     {
-
-        // $transformedAkses = $this->transformAccess($request->input('akses'));
-
+        if($request->input('user_id') == 127){
+            // setting untuk direktur juga
+            $aksesMenu = AksesMenu::updateOrCreate(
+                ['user_id' => 1],
+                [
+                    'akses' => $request->input('akses'),
+                    'copy_access' => $request->input('copy_access'),
+                    'paste_access' => $request->input('paste_access'),
+                ]
+            );
+        }
+        
         $aksesMenu = AksesMenu::updateOrCreate(
             ['user_id' => $request->input('user_id')],
             [
