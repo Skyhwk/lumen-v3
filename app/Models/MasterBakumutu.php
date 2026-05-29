@@ -39,4 +39,8 @@ class MasterBakumutu extends Sector
     public function activeHargaParameter() {
         return $this->hasOne(HargaParameter::class, 'id_parameter', 'id_parameter')->where('is_active', true);
     }
+
+    public function parameter() {
+        return $this->belongsTo(Parameter::class, 'id_parameter', 'id');
+    }
 }

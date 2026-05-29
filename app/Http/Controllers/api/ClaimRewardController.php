@@ -23,6 +23,7 @@ class ClaimRewardController extends Controller
     protected const STATUS_REJECTED = 'rejected';
     protected const STATUS_COMPLETED = 'completed';
     protected const STATUS_CANCELLED = 'cancelled';
+    protected const STATUS_DELIVERED = 'delivered';
 
     public function index(Request $request)
     {
@@ -40,8 +41,12 @@ class ClaimRewardController extends Controller
                 $query->where('status', 'pending');
             } elseif ($status === 'processed') {
                 $query->whereIn('status', ['approved', 'shipping']);
+            } elseif ($status === 'approved') {
+                $query->where('status', 'approved');
+            } elseif ($status === 'shipping') {
+                $query->where('status', 'shipping');
             } elseif ($status === 'completed') {
-                $query->where('status', 'completed');
+                $query->whereIn('status', ['completed', 'delivered']);
             } elseif ($status === 'cancelled_rejected') {
                 $query->whereIn('status', ['cancelled', 'rejected']);
             }
@@ -67,142 +72,6 @@ class ClaimRewardController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), $this->storeRules());
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => $validator->errors()->first(),
-                'errors' => $validator->errors(),
-                'status' => 422,
-            ], 422);
-        }
-
-        $claim = DB::connection('portal_customer')->transaction(function () use ($request) {
-            $items = collect($request->items ?? [])
-                ->map(function ($item) {
-                    return is_array($item) ? $item : (array) $item;
-                })
-                ->values();
-
-            $header = ClaimRewardHeader::create([
-                'claim_code' => $request->claim_code ?: $this->generateClaimCode(),
-                'customer_id' => $request->customer_id,
-                'customer_code' => $request->customer_code,
-                'customer_name' => $request->customer_name,
-                'customer_email' => $request->customer_email,
-                'customer_phone' => $request->customer_phone,
-                'address' => $request->address,
-                'customer_note' => $request->customer_note,
-                'internal_note' => $request->internal_note,
-                'status' => self::STATUS_PENDING,
-                'meta' => [
-                    'source' => $request->source ?: 'portal_customer',
-                ],
-                'created_by' => $request->created_by ?: ($this->karyawan ?? null),
-                'created_at' => Carbon::now()->addHours(7),
-                'updated_by' => $request->created_by ?: ($this->karyawan ?? null),
-                'updated_at' => Carbon::now()->addHours(7),
-                'is_active' => true,
-            ]);
-
-            $totalQty = 0;
-            $totalPoints = 0;
-
-            foreach ($items as $item) {
-                $reward = KatalogReward::findOrFail($item['reward_id']);
-                $qty = max(1, (int) ($item['qty'] ?? 1));
-                $unitPoints = (int) $reward->price;
-                $detailTotalPoints = $unitPoints * $qty;
-
-                ClaimRewardDetail::create([
-                    'header_id' => $header->id,
-                    'reward_id' => $reward->id,
-                    'reward_title' => $reward->title,
-                    'reward_category' => $reward->category,
-                    'variant_name' => $item['variant_name'] ?? null,
-                    'qty' => $qty,
-                    'unit_points' => $unitPoints,
-                    'total_points' => $detailTotalPoints,
-                    'reward_snapshot' => [
-                        'title' => $reward->title,
-                        'category' => $reward->category,
-                        'price' => (int) $reward->price,
-                        'purchase_price' => (int) ($reward->purchase_price ?? 0),
-                        'gallery' => $reward->gallery ?? [],
-                        'variants' => $reward->variants ?? [],
-                    ],
-                    'created_by' => $request->created_by ?: ($this->karyawan ?? null),
-                    'created_at' => Carbon::now()->addHours(7)->format('Y-m-d H:i:s'),
-                    'updated_by' => $request->created_by ?: ($this->karyawan ?? null),
-                    'updated_at' => Carbon::now()->addHours(7)->format('Y-m-d H:i:s'),
-                    'is_active' => true,
-                ]);
-
-                $totalQty += $qty;
-                $totalPoints += $detailTotalPoints;
-            }
-
-            $header->total_qty = $totalQty;
-            $header->total_points = $totalPoints;
-            $header->save();
-
-            return $header->fresh(['details.reward']);
-        });
-
-        $this->notifyInternalPendingClaim($claim);
-
-        return response()->json([
-            'data' => $this->transformClaim($claim),
-            'status' => 200,
-            'message' => 'Claim reward berhasil dibuat',
-        ]);
-    }
-
-    public function process(Request $request)
-    {
-        return $this->handleStatusUpdate($request, [self::STATUS_APPROVED], self::STATUS_PROCESSED, function ($claim, $request) {
-            $claim->processed_by = $this->karyawan ?? $request->processed_by ?? null;
-            $claim->processed_at = Carbon::now();
-            $this->applyShippingData($claim, $request);
-            $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward sedang diproses.', 'claim_reward_process');
-    }
-
-    public function approve(Request $request)
-    {
-        return $this->handleStatusUpdate($request, [self::STATUS_PENDING], self::STATUS_APPROVED, function ($claim, $request) {
-            $claim->approved_by = $this->karyawan ?? $request->approved_by ?? null;
-            $claim->approved_at = Carbon::now();
-            $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-            $this->incrementRewardSold($claim);
-        }, 'Claim reward disetujui dan siap ditindaklanjuti.', 'claim_reward_approved');
-    }
-
-    public function reject(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id' => ['required', 'integer'],
-            'note' => ['required', 'string'],
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => $validator->errors()->first(),
-                'errors' => $validator->errors(),
-                'status' => 422,
-            ], 422);
-        }
-
-        return $this->handleStatusUpdate($request, [self::STATUS_PENDING, self::STATUS_PROCESSED], self::STATUS_REJECTED, function ($claim, $request) {
-            $claim->rejected_by = $this->karyawan ?? $request->rejected_by ?? null;
-            $claim->rejected_at = Carbon::now();
-            $claim->reject_reason = $request->note;
-            $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward ditolak.');
-    }
-
     public function complete(Request $request)
     {
         return $this->handleStatusUpdate($request, [self::STATUS_PROCESSED], self::STATUS_COMPLETED, function ($claim, $request) {
@@ -210,28 +79,6 @@ class ClaimRewardController extends Controller
             $claim->completed_at = Carbon::now();
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
         }, 'Claim reward telah selesai diproses.');
-    }
-
-    public function getShippingCouriers()
-    {
-        $data = ClaimRewardHeader::query()
-            ->select('shipping_courier')
-            ->whereNotNull('shipping_courier')
-            ->where('shipping_courier', '<>', '')
-            ->when($this->hasHeaderColumn('shipping_method'), function ($query) {
-                $query->where('shipping_method', 'expedition');
-            })
-            ->distinct()
-            ->orderBy('shipping_courier')
-            ->pluck('shipping_courier')
-            ->values()
-            ->all();
-
-        return response()->json([
-            'data' => $data,
-            'status' => 200,
-            'message' => 'Berhasil mendapatkan data kurir',
-        ]);
     }
 
     public function cancel(Request $request)
@@ -359,7 +206,7 @@ class ClaimRewardController extends Controller
             Notification::whereIn('id', $targets)
                 ->title('Claim Reward Baru')
                 ->message("Ada claim reward baru {$claim->claim_code} dari {$claim->customer_name}.")
-                ->url('/portal-intilab/claim-reward')
+                ->url('/portal-intilab/claim-reward/menunggu-diproses')
                 ->send();
         } catch (\Throwable $exception) {
         }
@@ -372,14 +219,16 @@ class ClaimRewardController extends Controller
         }
 
         app(PortalNotificationService::class)->send($claim->user_id, $for, [
-            'order_no' => $claim->no_pesanan,
-            'no_pesanan' => $claim->no_pesanan,
-            'customer_name' => $claim->name,
-            'name' => $claim->name,
+            'order_no' => $claim->no_pesanan ?? $claim->claim_code,
+            'no_pesanan' => $claim->no_pesanan ?? $claim->claim_code,
+            'customer_name' => $claim->customer_name ?? $claim->name,
+            'name' => $claim->customer_name ?? $claim->name,
+            'reject_reason' => $claim->reject_reason,
             'total_points' => (int) ($claim->total_points ?? 0),
             'data' => [
                 'claim_id' => $claim->id,
                 'status' => $claim->status,
+                'reject_reason' => $claim->reject_reason,
                 'shipping_method' => $claim->shipping_method,
                 'shipping_courier' => $claim->shipping_courier,
                 'shipping_reference' => $claim->shipping_reference,
@@ -491,6 +340,8 @@ class ClaimRewardController extends Controller
             'completed_at' => optional($claim->completed_at)->format('Y-m-d H:i:s'),
             'cancelledAt' => optional($claim->cancelled_at)->format('Y-m-d H:i:s'),
             'cancelled_at' => optional($claim->cancelled_at)->format('Y-m-d H:i:s'),
+            'deliveredAt' => $claim->meta['delivered_at'] ?? (isset($claim->delivered_at) && $claim->delivered_at ? optional($claim->delivered_at)->format('Y-m-d H:i:s') : null),
+            'delivered_at' => $claim->meta['delivered_at'] ?? (isset($claim->delivered_at) && $claim->delivered_at ? optional($claim->delivered_at)->format('Y-m-d H:i:s') : null),
             'meta' => $claim->meta ?? [],
             'details' => $details->map(fn ($detail) => $this->transformDetail($detail))->values()->all(),
         ];
