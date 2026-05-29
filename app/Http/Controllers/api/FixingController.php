@@ -826,7 +826,7 @@ class FixingController extends Controller
         if (!$fee_sampling) {
             return ['error' => 'Data tidak ditemukan', 'code' => 404];
         }
-
+        $tanggal = $fee_sampling->detail_fee->pluck('tanggal')->toArray();
         $master = MasterKaryawan::find($fee_sampling->user_id);
 
         if (!$master || !$master->warna) {
@@ -836,9 +836,7 @@ class FixingController extends Controller
         $history = HistoryLevelSampler::where('user_id', $master->user_id)
             ->latest()
             ->first();
-
         $warnaFinal = $master->warna;
-
         if ($history && !empty($tanggal)) {
             $changeDate = Carbon::parse($history->created_at)->startOfDay();
 
@@ -854,11 +852,10 @@ class FixingController extends Controller
 
             $warnaFinal = $before ? $history->old_warna : $history->new_warna;
         }
-
         $level = MasterFeeSampling::where('warna', $warnaFinal)
             ->where('is_active', true)
             ->first();
-
+        
         if (!$level) {
             return ['error' => 'Level Sampler Tidak Ditemukan', 'code' => 404];
         }
