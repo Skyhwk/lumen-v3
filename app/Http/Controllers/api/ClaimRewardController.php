@@ -78,7 +78,7 @@ class ClaimRewardController extends Controller
             $claim->completed_by = $this->karyawan ?? $request->completed_by ?? null;
             $claim->completed_at = Carbon::now();
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward telah selesai diproses.');
+        }, 'Claim reward telah selesai diproses.', 'claim_reward_completed');
     }
 
     public function cancel(Request $request)
@@ -88,7 +88,7 @@ class ClaimRewardController extends Controller
             $claim->cancelled_at = Carbon::now();
             $claim->cancel_reason = $request->note;
             $claim->internal_note = $this->mergeNotes($claim->internal_note, $request->note);
-        }, 'Claim reward dibatalkan.');
+        }, 'Claim reward dibatalkan.', 'claim_reward_cancelled');
     }
 
     public function getPendingNotifications()
@@ -223,12 +223,14 @@ class ClaimRewardController extends Controller
             'no_pesanan' => $claim->no_pesanan ?? $claim->claim_code,
             'customer_name' => $claim->customer_name ?? $claim->name,
             'name' => $claim->customer_name ?? $claim->name,
-            'reject_reason' => $claim->reject_reason,
+            'reject_reason' => $claim->reject_reason ?? $claim->cancel_reason ?? null,
+            'cancel_reason' => $claim->cancel_reason ?? $claim->reject_reason ?? null,
             'total_points' => (int) ($claim->total_points ?? 0),
             'data' => [
                 'claim_id' => $claim->id,
                 'status' => $claim->status,
-                'reject_reason' => $claim->reject_reason,
+                'reject_reason' => $claim->reject_reason ?? $claim->cancel_reason ?? null,
+                'cancel_reason' => $claim->cancel_reason ?? $claim->reject_reason ?? null,
                 'shipping_method' => $claim->shipping_method,
                 'shipping_courier' => $claim->shipping_courier,
                 'shipping_reference' => $claim->shipping_reference,

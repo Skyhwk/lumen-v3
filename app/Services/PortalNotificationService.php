@@ -95,6 +95,10 @@ class PortalNotificationService
             'claim_reward_delivered' => fn () => $this->buildDeliveredTemplate($extraData, $user),
             'claim_reward_rejected' => fn () => $this->buildRejectedTemplate($extraData, $user),
             'claim_reward_reject' => fn () => $this->buildRejectedTemplate($extraData, $user),
+            'claim_reward_completed' => fn () => $this->buildCompletedTemplate($extraData, $user),
+            'claim_reward_complete' => fn () => $this->buildCompletedTemplate($extraData, $user),
+            'claim_reward_cancelled' => fn () => $this->buildCancelledTemplate($extraData, $user),
+            'claim_reward_cancel' => fn () => $this->buildCancelledTemplate($extraData, $user),
         ];
 
         if (!isset($templates[$key])) {
@@ -196,6 +200,46 @@ class PortalNotificationService
                 'order_no' => $orderNo,
                 'status' => 'rejected',
                 'reject_reason' => $reason,
+            ], $this->normalizeData($extraData['data'] ?? [])),
+        ];
+    }
+
+    protected function buildCompletedTemplate(array $extraData, ?Users $user = null): array
+    {
+        $orderNo = $extraData['order_no'] ?? $extraData['no_pesanan'] ?? $extraData['claim_code'] ?? null;
+        $customerName = $extraData['customer_name'] ?? $extraData['name'] ?? $user->nama_lengkap ?? 'Customer';
+
+        return [
+            'title' => 'Pesanan Selesai',
+            'body' => trim("Kabar baik, {$customerName}! Claim reward {$orderNo} Anda telah selesai diproses."),
+            'url' => '/rewards',
+            'data' => array_merge([
+                'type' => 'rewards',
+                'screen' => 'HistoryTukarPoin',
+                'order_no' => $orderNo,
+                'status' => 'completed',
+            ], $this->normalizeData($extraData['data'] ?? [])),
+        ];
+    }
+
+    protected function buildCancelledTemplate(array $extraData, ?Users $user = null): array
+    {
+        $orderNo = $extraData['order_no'] ?? $extraData['no_pesanan'] ?? $extraData['claim_code'] ?? null;
+        $customerName = $extraData['customer_name'] ?? $extraData['name'] ?? $user->nama_lengkap ?? 'Customer';
+        $reason = $extraData['reject_reason'] ?? $extraData['cancel_reason'] ?? $extraData['data']['reject_reason'] ?? $extraData['data']['cancel_reason'] ?? null;
+
+        $body = "Claim reward {$orderNo} Anda telah dibatalkan" . ($reason ? " dengan alasan: {$reason}." : '.');
+
+        return [
+            'title' => 'Pesanan Dibatalkan',
+            'body' => trim("Halo {$customerName}, " . $body),
+            'url' => '/rewards',
+            'data' => array_merge([
+                'type' => 'rewards',
+                'screen' => 'HistoryTukarPoin',
+                'order_no' => $orderNo,
+                'status' => 'cancelled',
+                'cancel_reason' => $reason,
             ], $this->normalizeData($extraData['data'] ?? [])),
         ];
     }
