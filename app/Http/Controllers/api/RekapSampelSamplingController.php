@@ -350,14 +350,16 @@ class RekapSampelSamplingController extends Controller
             foreach ($data as $item => $value) {
                 
                 if (explode("-", $value->kategori_2)[1] == 'Air') {
-                    $parameter_names = array_map(function ($p) {
-                        return explode(';', $p)[1];
+                    $idParameter = array_map(function ($p) {
+                        return explode(';', $p)[0];
                     }, json_decode($value->parameter) ?? []);
 
                     $id_kategori = explode("-", $value->kategori_2)[0];
                     $params = HargaParameter::where('id_kategori', $id_kategori)
                         ->where('is_active', true)
-                        ->whereIn('nama_parameter', $parameter_names)
+                        ->whereIn('id_parameter', $idParameter)
+                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                         ->get();
 
                     $param_map = [];
@@ -380,14 +382,7 @@ class RekapSampelSamplingController extends Controller
                     // Generate botol dan barcode
                     $botol = [];
 
-                    $ketentuan_botol = [
-                        'ORI' => 1000,
-                        'H2SO4' => 1000,
-                        'M100' => 100,
-                        'HNO3' => 500,
-                        'M1000' => 1000,
-                        'BENTHOS' => 100
-                    ];
+                    $ketentuan_botol = config('ketentuan_botol');
                     
                     foreach ($botol_volumes as $type => $volume) {
                         $typeUpper = strtoupper($type);
@@ -423,8 +418,6 @@ class RekapSampelSamplingController extends Controller
                         * Jika kategori bukan air maka tidak perlu membuat botol
                         * cek jika udara dan emisi maka harus di siapkan kertas penjerap
                         */
-                    
-                    
                     
                     if ($value->kategori_2 == '4-Udara' || $value->kategori_2 == '5-Emisi') {
                     

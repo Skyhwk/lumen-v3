@@ -16,6 +16,7 @@ class HargaParameter extends Sector
         'regen',
         'volume',
         'id_hist',
+        'tanggal_berlaku',
         'created_by',
         'updated_by',
         'deleted_by',
