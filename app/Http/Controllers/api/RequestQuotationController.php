@@ -27,15 +27,11 @@ use App\Models\Parameter;
 use App\Models\Invoice;
 use App\Models\TemplatePaketAnalisa;
 use App\Jobs\RenderPdfPenawaran;
-use App\Services\GeneratePraSampling;
 use App\Services\RenderNonKontrakCopy;
 use App\Services\RenderKontrakCopy;
-use App\Services\RenderNonKontrak;
-use App\Services\RenderKontrak;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
-use App\Services\RenderInvoice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
@@ -194,7 +190,7 @@ class RequestQuotationController extends Controller
                     'status' => '401'
                 ], 401);
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'message' => 'Error: ' . $e->getMessage(),
@@ -386,8 +382,7 @@ class RequestQuotationController extends Controller
             foreach ($bakumutu as $a) {
                 array_push($param, $a->id_parameter . ';' . $a->parameter);
             }
-            // dd($param);
-            /* version 1 */
+            
             $data = Parameter::where('is_active', true)
                 ->where('id_kategori', $category[0])
                 ->get();
@@ -615,26 +610,23 @@ class RequestQuotationController extends Controller
                     $is_paket = $item->is_paket_analisa;
 
 
-                    $parameter = [];
+                    $idParameter = [];
                     foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
+                        array_push($idParameter, explode(';', $par)[0]);
                     }
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
                     }
 
                     $harga_pertitik = (object) [
@@ -1254,7 +1246,7 @@ class RequestQuotationController extends Controller
             //biaya di luar pajak
             $data->biaya_di_luar_pajak = json_encode($diluar_pajak);
             $data->total_biaya_di_luar_pajak = $biaya_diluar_pajak;
-            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : NULL;
+            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : null;
 
             //Grand total sebelum kena diskon
             // dd($grand_total, $harga_total, $total_diskon);
@@ -1291,8 +1283,8 @@ class RequestQuotationController extends Controller
 
             $data->biaya_akhir = $biaya_akhir;
 
-            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : NULL;
-            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : NULL;
+            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : null;
+            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : null;
 
             $data->updated_by = $this->karyawan;
             $data->updated_at = DATE('Y-m-d H:i:s');
@@ -1568,26 +1560,22 @@ class RequestQuotationController extends Controller
                     $is_paket = $item->is_paket_analisa;
 
 
-                    $parameter = [];
-                    foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
+                    $idParameter = array_map(function($par) {
+                        return explode(';', $par)[0];
+                    }, $param);
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
                     }
 
                     $harga_pertitik = (object) [
@@ -2199,7 +2187,7 @@ class RequestQuotationController extends Controller
             //biaya di luar pajak
             $data->biaya_di_luar_pajak = json_encode($diluar_pajak);
             $data->total_biaya_di_luar_pajak = $biaya_diluar_pajak;
-            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : NULL;
+            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : null;
 
             //Grand total sebelum kena diskon
             // dd($grand_total);
@@ -2238,8 +2226,8 @@ class RequestQuotationController extends Controller
 
             $data->biaya_akhir = $biaya_akhir;
 
-            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : NULL;
-            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : NULL;
+            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : null;
+            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : null;
 
 
             $data->created_by = $dataOld->created_by;
@@ -2714,27 +2702,21 @@ class RequestQuotationController extends Controller
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-                    $parameter = [];
+
+                    $idParameter = array_map(function($par) {
+                        return explode(';', $par)[0];
+                    }, $param);
+
                     foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
-
-                    $harga_db = [];
-                    $volume_db = [];
-                    foreach ($parameter as $param_) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
 
                     }
 
@@ -2910,48 +2892,24 @@ class RequestQuotationController extends Controller
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
 
-                        $parameters = [];
-                        $id_parameter = [];
-                        foreach ($sampling->parameter as $item) {
-                            $cek_par = DB::table('parameter')
-                                ->where('id', explode(';', $item)[0])->first();
-                            if ($cek_par) {
-                                $parameters[] = $cek_par->nama_lab;
-                                $id_parameter[] = $cek_par->id;
-                            }
-                        }
-                        // dd('patah')
+                        $idParameter = array_map(function($par) {
+                            return explode(';', $par)[0];
+                        }, $sampling->parameter);
+                        
                         $harga_parameter = [];
                         $volume_parameter = [];
 
-                        foreach ($parameters as $parameter) {
+                        foreach ($idParameter as $idParam) {
                             $ambil_data = HargaParameter::where('id_kategori', $id_kategori)
-                                ->where('nama_parameter', $parameter)
-                                ->orderBy('id', 'ASC')
-                                ->get();
+                                ->where('id_parameter', $idParam)
+                                ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                                ->where('is_active', 1)
+                                ->orderBy('tanggal_berlaku', 'desc')
+                                ->first();
 
-                            if (count($ambil_data) > 1) {
-                                $found = false;
-                                foreach ($ambil_data as $xc => $zx) {
-                                    if (\explode(' ', $zx->created_at)[0] > $informasi_pelanggan->tgl_penawaran) {
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        $found = true;
-                                        break;
-                                    }
-                                    if ((count($ambil_data) - 1) == $xc && !$found) {
-                                        $zx = $ambil_data[0];
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        break;
-                                    }
-                                }
-                            } else if (count($ambil_data) == 1) {
-                                foreach ($ambil_data as $zx) {
-                                    $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
-                                    break;
-                                }
+                            if ($ambil_data) {
+                                $harga_parameter[] = $ambil_data->harga ?? 0;
+                                $volume_parameter[] = $ambil_data->volume ?? 0;
                             } else {
                                 $harga_parameter[] = 0;
                                 $volume_parameter[] = 0;
@@ -4290,27 +4248,22 @@ class RequestQuotationController extends Controller
                     $kategori = $exp[0];
                     $vol = 0;
 
-                    $parameter = [];
-                    foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
+                    $idParameter = array_map(function($par) {
+                        return explode(';', $par)[0];
+                    }, $param);
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
 
                     }
 
@@ -4451,52 +4404,23 @@ class RequestQuotationController extends Controller
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
 
-                        $parameters = [];
-                        $id_parameter = [];
-                        foreach ($sampling->parameter as $item) {
-                            $cek_par = DB::table('parameter')
-                                ->where('id', explode(';', $item)[0])->first();
-                            if ($cek_par) {
-                                $parameters[] = $cek_par->nama_lab;
-                                $id_parameter[] = $cek_par->id;
-                            }
-                        }
+                        $idParameter = array_map(function($par) {
+                            return explode(';', $par)[0];
+                        }, $sampling->parameter);
 
                         $harga_parameter = [];
                         $volume_parameter = [];
 
-                        foreach ($parameters as $parameter) {
+                        foreach ($idParameter as $idParam) {
                             $ambil_data = HargaParameter::where('id_kategori', $id_kategori)
-                                ->where('nama_parameter', $parameter)
-                                ->orderBy('id', 'ASC')
-                                ->get();
+                                ->where('id_parameter', $idParam)
+                                ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                                ->where('is_active', 1)
+                                ->orderBy('tanggal_berlaku', 'desc')
+                                ->first();
 
-                            if (count($ambil_data) > 1) {
-                                $found = false;
-                                foreach ($ambil_data as $xc => $zx) {
-                                    if (\explode(' ', $zx->created_at)[0] > $informasi_pelanggan->tgl_penawaran) {
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        $found = true;
-                                        break;
-                                    }
-                                    if ((count($ambil_data) - 1) == $xc && !$found) {
-                                        $zx = $ambil_data[0];
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        break;
-                                    }
-                                }
-                            } else if (count($ambil_data) == 1) {
-                                foreach ($ambil_data as $zx) {
-                                    $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
-                                    break;
-                                }
-                            } else {
-                                $harga_parameter[] = 0;
-                                $volume_parameter[] = 0;
-                            }
+                            $harga_parameter[] = $ambil_data->harga ?? 0;
+                            $volume_parameter[] = $ambil_data->volume ?? 0;
                         }
 
                         $vol_db = array_sum($volume_parameter);
@@ -6152,7 +6076,7 @@ class RequestQuotationController extends Controller
                     // dd('stop');
                     $processedCount++;
                     DB::commit();
-                } catch (Throwable $e) {
+                } catch (\Throwable $e) {
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
@@ -6172,7 +6096,7 @@ class RequestQuotationController extends Controller
                 'errors' => $errorCount,
                 'total' => $dataList->count()
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return false;
             Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
@@ -6260,7 +6184,7 @@ class RequestQuotationController extends Controller
 
         $data = $query->get();
 
-        return DataTables::of($data)
+        return Datatables::of($data)
             ->editColumn('data_pendukung_sampling', function ($item) {
                 $data = json_decode($item->data_pendukung_sampling, true);
 

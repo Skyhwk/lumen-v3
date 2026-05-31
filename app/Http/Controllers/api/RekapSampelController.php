@@ -12,9 +12,6 @@ use App\Models\MasterKategori;
 use App\Models\MasterSubKategori;
 use App\Models\HargaParameter;
 use App\Models\MasterRegulasi;
-use App\Models\Colorimetri;
-use App\Models\Titrimetri;
-use App\Models\Gravimetri;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Carbon\Carbon;
 use DataTables;
@@ -295,14 +292,16 @@ class RekapSampelController extends Controller
             foreach ($data as $item => $value) {
                 
                 if (explode("-", $value->kategori_2)[1] == 'Air') {
-                    $parameter_names = array_map(function ($p) {
-                        return explode(';', $p)[1];
+                    $idParameter = array_map(function ($p) {
+                        return explode(';', $p)[0];
                     }, json_decode($value->parameter) ?? []);
 
                     $id_kategori = explode("-", $value->kategori_2)[0];
                     $params = HargaParameter::where('id_kategori', $id_kategori)
                         ->where('is_active', true)
-                        ->whereIn('nama_parameter', $parameter_names)
+                        ->whereIn('id_parameter', $idParameter)
+                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                         ->get();
 
                     $param_map = [];
@@ -325,19 +324,11 @@ class RekapSampelController extends Controller
                     // Generate botol dan barcode
                     $botol = [];
 
-                    $ketentuan_botol = [
-                        'ORI' => 1000,
-                        'H2SO4' => 1000,
-                        'M100' => 100,
-                        'HNO3' => 500,
-                        'M1000' => 1000,
-                        'BENTHOS' => 100
-                    ];
+                    $ketentuan_botol = config('ketentuan_botol');
                     
                     foreach ($botol_volumes as $type => $volume) {
                         $typeUpper = strtoupper($type);
                         if (!isset($ketentuan_botol[$typeUpper])) {
-                            // kalau ketentuan botol tidak ditemukan, skip atau kasih default
                             continue;
                         }
                         $koding = $value->koding_sampling . strtoupper(Str::random(5));
