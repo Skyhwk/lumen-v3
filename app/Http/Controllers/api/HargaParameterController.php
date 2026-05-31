@@ -222,7 +222,7 @@ class HargaParameterController extends Controller
                 })
                 ->whereNull('mhp.id')
                 ->where('mp.is_active', true)
-                ->select('mp.id', 'mp.nama_lab', 'mp.nama_regulasi', 'mp.nama_kategori');
+                ->select('mp.id', 'mp.nama_lab', 'mp.nama_regulasi', 'mp.nama_kategori', 'mp.is_blocked');
 
             return Datatables::of($data)
                 ->filterColumn('nama_lab', function ($query, $keyword) {
