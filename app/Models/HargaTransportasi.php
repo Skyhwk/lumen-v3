@@ -1,12 +1,11 @@
 <?php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
+use Carbon\Carbon;
 
 class HargaTransportasi extends Sector
 {
-
     protected $table = 'master_harga_transportasi';
 
     protected $fillable = [
@@ -19,42 +18,57 @@ class HargaTransportasi extends Sector
         'penginapan',
         '24jam',
         'id_hist',
+        'tanggal_berlaku',
         'created_by',
         'updated_by',
         'deleted_by',
         'created_at',
         'updated_at',
         'deleted_at',
-        'is_active'
+        'is_active',
     ];
 
     public $timestamps = false;
 
-    public function scopeWithHistory($query)
+    public static function effectiveDateExpression($alias = 'mht')
     {
-        return $query->leftJoin('master_harga_transportasi as hist', 'master_harga_transportasi.id', '=', 'hist.id_hist')
-                     ->select(
-                        'master_harga_transportasi.id',
-                        'master_harga_transportasi.status',
-                        'master_harga_transportasi.wilayah',
-                        'master_harga_transportasi.transportasi',
-                        'master_harga_transportasi.per_orang',
-                        'master_harga_transportasi.total',
-                        'master_harga_transportasi.tiket',
-                        'master_harga_transportasi.penginapan',
-                        'master_harga_transportasi.24jam',
-                        'master_harga_transportasi.created_by',
-                        'master_harga_transportasi.created_at',
-                        \DB::raw("GROUP_CONCAT(hist.transportasi ORDER BY hist.id DESC SEPARATOR ',') hist_transport"),
-                        \DB::raw("GROUP_CONCAT(hist.per_orang ORDER BY hist.id DESC SEPARATOR ',') hist_per_orang"),
-                        \DB::raw("GROUP_CONCAT(hist.total ORDER BY hist.id DESC SEPARATOR ',') hist_total"),
-                        \DB::raw("GROUP_CONCAT(hist.tiket ORDER BY hist.id DESC SEPARATOR ',') hist_tiket"),
-                        \DB::raw("GROUP_CONCAT(hist.penginapan ORDER BY hist.id DESC SEPARATOR ',') hist_penginapan"),
-                        \DB::raw("GROUP_CONCAT(hist.24jam ORDER BY hist.id DESC SEPARATOR ',') hist_24jam"),
-                        \DB::raw("GROUP_CONCAT(hist.created_at ORDER BY hist.id DESC SEPARATOR ',') tgl")
-                     )
-                     ->groupBy(
-                        'master_harga_transportasi.id'
-                    );
+        return "COALESCE({$alias}.tanggal_berlaku, DATE({$alias}.created_at), '1970-01-01')";
+    }
+
+    public static function getEffectiveForWilayah($wilayah, $tglPenawaran = null)
+    {
+        $date = $tglPenawaran ?: Carbon::today()->toDateString();
+        $effectiveDate = static::effectiveDateExpression('master_harga_transportasi');
+
+        return static::query()
+            ->where('wilayah', $wilayah)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->whereRaw("{$effectiveDate} <= ?", [$date])
+            ->orderByRaw("{$effectiveDate} DESC")
+            ->orderBy('id', 'desc')
+            ->first();
+    }
+
+    public function scopeEffective($query, $date = null)
+    {
+        $date = $date ?: Carbon::today()->toDateString();
+        $effectiveDate = static::effectiveDateExpression('master_harga_transportasi');
+        $effectiveDateSub = static::effectiveDateExpression('mht2');
+
+        return $query
+            ->where('master_harga_transportasi.is_active', true)
+            ->whereNull('master_harga_transportasi.deleted_at')
+            ->whereRaw("{$effectiveDate} <= ?", [$date])
+            ->whereRaw("master_harga_transportasi.id = (
+                SELECT mht2.id FROM master_harga_transportasi mht2
+                WHERE mht2.wilayah = master_harga_transportasi.wilayah
+                AND mht2.status = master_harga_transportasi.status
+                AND mht2.deleted_at IS NULL
+                AND mht2.is_active = true
+                AND {$effectiveDateSub} <= ?
+                ORDER BY {$effectiveDateSub} DESC, mht2.id DESC
+                LIMIT 1
+            )", [$date]);
     }
 }
