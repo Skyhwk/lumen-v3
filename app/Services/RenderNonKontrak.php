@@ -410,6 +410,39 @@ class RenderNonKontrak
                 $total_harga_pengujian += $a->harga_total;
                 $i++;
             }
+
+            $totalBiayaPreparasi = (float) ($data->total_biaya_preparasi ?? 0);
+            $biaya_preparasi = json_decode($data->biaya_preparasi_padatan);
+            if ($biaya_preparasi != null) {
+                $calculatedPreparasi = 0;
+                foreach ($biaya_preparasi as $k => $v) {
+                    if ($lang != 'id') {
+                        $v->deskripsi = str_replace('Perdiem', 'Manpower', $v->deskripsi);
+                        $tranlator = new Translator();
+                        $v->deskripsi = $tranlator->translate($v->deskripsi, 'id', $lang);
+                    }
+
+                    $hargaPreparasi = (float) ($v->harga ?? 0);
+                    $calculatedPreparasi += $hargaPreparasi;
+
+                    $pdf->WriteHTML(
+                        '<tr>
+                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
+                            <td style="font-size: 13px;padding: 5px; font-weight: bold;">' . $v->deskripsi . '</td>
+                            <td style="font-size: 13px; text-align:right;padding: 5px;"></td>
+                            <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($hargaPreparasi) . '</td>
+                            <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($hargaPreparasi) . '</td>
+                        </tr>'
+                    );
+                    $i++;
+                }
+
+                if ($totalBiayaPreparasi <= 0) {
+                    $totalBiayaPreparasi = $calculatedPreparasi;
+                }
+            }
+            $total_harga_pengujian += $totalBiayaPreparasi;
+
             $hargaTransportasiPerdiem = 0;
             $wilayah = explode("-", $data->wilayah, 2);
             if ($data->transportasi > 0 && $data->harga_transportasi_total != null && !is_null($data->transportasi)) {
@@ -450,10 +483,48 @@ class RenderNonKontrak
                 );
                 $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
             }
-            
+
+            $transportAmount = 0;
+            if ($data->transportasi > 0 && $data->harga_transportasi_total != null && !is_null($data->transportasi)) {
+                $transportAmount = $data->harga_transportasi * $data->transportasi;
+            }
+            $perdiemAmount = 0;
+            $jam24Amount = 0;
+            if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
+                $perdiemAmount = (float) $data->harga_perdiem_personil_total;
+            }
+            if (
+                $data->jumlah_orang_24jam > 0 &&
+                $data->jumlah_orang_24jam != "" &&
+                $data->harga_24jam_personil_total != null &&
+                !is_null($data->harga_24jam_personil_total)
+            ) {
+                $jam24Amount = (float) $data->harga_24jam_personil_total;
+            }
+
+            $diluar_pajak = json_decode($data->diluar_pajak);
+            $isTransportOutsideTax = !is_null($diluar_pajak) && ($diluar_pajak->transportasi ?? '') == 'true';
+            $isPerdiemOutsideTax = !is_null($diluar_pajak) && ($diluar_pajak->perdiem ?? '') == 'true';
+            $isPerdiem24OutsideTax = !is_null($diluar_pajak) && ($diluar_pajak->perdiem24jam ?? '') == 'true';
+            $isBiayaLainOutsideTax = !is_null($diluar_pajak) && ($diluar_pajak->biayalain ?? '') == 'true';
+
+            $hargaTransportasiPerdiemTaxable = 0;
+            if (!$isTransportOutsideTax) {
+                $hargaTransportasiPerdiemTaxable += $transportAmount;
+            }
+            if (!$isPerdiemOutsideTax) {
+                $hargaTransportasiPerdiemTaxable += $perdiemAmount;
+            }
+            if (!$isPerdiem24OutsideTax) {
+                $hargaTransportasiPerdiemTaxable += $jam24Amount;
+            }
+            $hargaTransportasiPerdiemNonTaxable = max(0, $hargaTransportasiPerdiem - $hargaTransportasiPerdiemTaxable);
 
             $biaya_lain = json_decode($data->biaya_lain);
-            if ($biaya_lain != null) {
+            if (!is_array($biaya_lain)) {
+                $biaya_lain = [];
+            }
+            if (!empty($biaya_lain)) {
                 $u = '';
                 foreach ($biaya_lain as $k => $v) {
                     if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
@@ -486,27 +557,15 @@ class RenderNonKontrak
                     $u = $i;
                 }
             }
-            $biaya_preparasi = json_decode($data->biaya_preparasi_padatan);
-            if ($biaya_preparasi != null) {
-                // $i = $i + 1;
-                foreach ($biaya_preparasi as $k => $v) {
-                    if ($lang != 'id') {
-                        $v->deskripsi = str_replace('Perdiem', 'Manpower', $v->deskripsi);
-                        $tranlator = new Translator();
-                        $v->deskripsi = $tranlator->translate($v->deskripsi, 'id', $lang);
-                    }
-
-                    $pdf->WriteHTML(
-                        '<tr>
-                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
-                            <td style="font-size: 13px;padding: 5px;">' . __('QT.table.item.expenses.cost') . ' : ' . $v->deskripsi . '</td>
-                            <td style="font-size: 13px; text-align:right;padding: 5px;"></td>
-                            <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->harga) . '</td>
-                            <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->harga) . '</td>
-                        </tr>'
-                    );
+            $totalBiayaLain = (float) ($data->total_biaya_lain ?? 0);
+            if ($totalBiayaLain <= 0 && !empty($biaya_lain)) {
+                $totalBiayaLain = 0;
+                foreach ($biaya_lain as $item) {
+                    $totalBiayaLain += (float) ($item->total_biaya ?? $item->harga ?? 0);
                 }
             }
+            $totalBiayaLainTaxable = $isBiayaLainOutsideTax ? 0 : $totalBiayaLain;
+            $totalBiayaLainNonTaxable = $isBiayaLainOutsideTax ? $totalBiayaLain : 0;
             $pdf->WriteHTML("</tbody></table>");
             $pdf->WriteHTML(
                 '<table width="100%" style="line-height: 2;">
@@ -597,14 +656,29 @@ class RenderNonKontrak
                                 Harga Pengujian
                             </td>
                             <td style="text-align:right;padding:5px;">' . self::rupiah($total_harga_pengujian) . '</td>
-                        </tr> 
-                        <tr>
+                        </tr> '
+            );
+            if ($hargaTransportasiPerdiemTaxable > 0) {
+                $pdf->WriteHTML('<tr>
                             <td style="text-align:center;padding:5px;">
                                 Harga Transportasi Perdiem
                             </td>
-                            <td style="text-align:right;padding:5px;">' . self::rupiah($hargaTransportasiPerdiem) . '</td>
-                        </tr>     
-                        <tr>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($hargaTransportasiPerdiemTaxable) . '</td>
+                        </tr>'
+                );
+            }
+            if ($totalBiayaLainTaxable > 0) {
+                $pdf->WriteHTML(
+                    '<tr>
+                        <td style="text-align:center;padding:5px;">
+                            Harga Lainnya
+                        </td>
+                        <td style="text-align:right;padding:5px;">' . self::rupiah($totalBiayaLainTaxable) . '</td>
+                    </tr>'
+                );
+            }
+            $pdf->WriteHTML(
+                '     <tr>
                             <td style="text-align:center;padding:5px;">
                                 <b>' . strtoupper(__('QT.total.sub')) . '</b>
                             </td>
@@ -643,7 +717,6 @@ class RenderNonKontrak
                     </tr> '
                 );
             }
-            $diluar_pajak = json_decode($data->diluar_pajak);
             if (!is_null($diluar_pajak)) {
                 if ($data->total_discount_transport > 0 && $diluar_pajak->transportasi != 'true') {
                     $pdf->WriteHTML(
@@ -791,6 +864,18 @@ class RenderNonKontrak
                 );
             }
 
+            $diluar_pajak_skip_select = [];
+            if ($hargaTransportasiPerdiemNonTaxable > 0) {
+                $diluar_pajak_skip_select = array_merge($diluar_pajak_skip_select, [
+                    'Biaya Transportasi',
+                    'Biaya Perdiem',
+                    'Biaya Perdiem (24 jam)',
+                ]);
+            }
+            if ($totalBiayaLainNonTaxable > 0) {
+                $diluar_pajak_skip_select[] = 'Biaya Lain';
+            }
+
             $v = json_decode($data->biaya_di_luar_pajak);
             if ($v != null) {
                 if ($v->body != null || $v->select) {
@@ -803,8 +888,27 @@ class RenderNonKontrak
                         </tr> '
                     );
                 }
+                if ($hargaTransportasiPerdiemNonTaxable > 0) {
+                    $pdf->WriteHTML(
+                        '<tr>
+                            <td style="text-align:center;padding:5px;">Harga Transportasi Perdiem</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($hargaTransportasiPerdiemNonTaxable) . '</td>
+                        </tr>'
+                    );
+                }
+                if ($totalBiayaLainNonTaxable > 0) {
+                    $pdf->WriteHTML(
+                        '<tr>
+                            <td style="text-align:center;padding:5px;">Harga Lainnya</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($totalBiayaLainNonTaxable) . '</td>
+                        </tr>'
+                    );
+                }
                 if ($v->select != null) {
                     foreach ($v->select as $k => $c) {
+                        if (in_array($c->deskripsi ?? '', $diluar_pajak_skip_select, true)) {
+                            continue;
+                        }
                         if ($c->harga != null || $c->harga != 0) {
                             if ($lang != 'id') {
                                 $c->deskripsi = str_replace('Perdiem', 'Manpower', $c->deskripsi);
