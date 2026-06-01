@@ -2,17 +2,111 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Hash;
-use App\Http\Controllers\Controller;
+use RuntimeException;
+use InvalidArgumentException;
 
 class Crypto
 {
-    public function encrypt($data){
+    private const SLICE_VERSION = 'v1';
+
+    public function encryptSlice(string $data): string
+    {
+        if ($data === '') {
+            return $data;
+        }
+
+        $key = $this->getSliceKey();
+        $iv = random_bytes(16);
+        $ciphertext = openssl_encrypt($data, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+
+        if ($ciphertext === false) {
+            throw new RuntimeException('Slice encryption failed');
+        }
+
+        return self::SLICE_VERSION . '.' . base64_encode($iv . $ciphertext);
+    }
+
+    public function decryptSlice(string $data, bool $validateTtl = true): string
+    {
+        if ($data === '') {
+            return $data;
+        }
+
+        $prefix = self::SLICE_VERSION . '.';
+        if (strpos($data, $prefix) !== 0) {
+            throw new InvalidArgumentException('Unsupported slice format');
+        }
+
+        $raw = base64_decode(substr($data, strlen($prefix)), true);
+        if ($raw === false || strlen($raw) < 17) {
+            throw new RuntimeException('Invalid slice payload');
+        }
+
+        $iv = substr($raw, 0, 16);
+        $ciphertext = substr($raw, 16);
+        $plaintext = openssl_decrypt($ciphertext, 'aes-256-cbc', $this->getSliceKey(), OPENSSL_RAW_DATA, $iv);
+
+        if ($plaintext === false) {
+            throw new RuntimeException('Slice decryption failed');
+        }
+
+        if ($validateTtl) {
+            $this->validateSliceTimestamp($plaintext);
+        }
+
+        return $plaintext;
+    }
+
+    private function validateSliceTimestamp(string $plaintext): void
+    {
+        $payload = json_decode($plaintext, true);
+
+        if (!is_array($payload) || !isset($payload['ts'])) {
+            throw new RuntimeException('Invalid slice payload');
+        }
+
+        $ttl = (int) env('SLICE_TTL', 300);
+        $age = abs(time() - (int) $payload['ts']);
+
+        if ($age > $ttl) {
+            throw new RuntimeException('Slice expired');
+        }
+    }
+
+    private function getSliceKey(): string
+    {
+        $secret = env('SLICE_SECRET', 'orang kuat orang yang sabar');
+
+        if ($secret === '') {
+            throw new RuntimeException('SLICE_SECRET is not configured');
+        }
+
+        if (strpos($secret, 'base64:') === 0) {
+            $key = base64_decode(substr($secret, 7), true);
+
+            if ($key === false || strlen($key) !== 32) {
+                throw new RuntimeException('SLICE_SECRET base64 value must decode to 32 bytes');
+            }
+
+            return $key;
+        }
+
+        return hash('sha256', $secret, true);
+    }
+
+    /**
+     * Legacy character-substitution encryption.
+     * Used for sip_password and other existing DB records — do not switch to AES without migration.
+     */
+    public function encrypt($data)
+    {
         if ($data != '') {
             if (is_array(str_split($data))) {
                 $convert = '';
                 foreach (str_split($data) as $key => $value) {
-                    if ($value == ' ') $value = "s_PPX1";
+                    if ($value == ' ') {
+                        $value = "s_PPX1";
+                    }
                     $convert .= $this->inids($value);
                 }
                 return $convert;
@@ -21,14 +115,23 @@ class Crypto
         return $data;
     }
 
-    public function decrypt($data){
+    /**
+     * Legacy character-substitution decryption.
+     * Used for sip_password and other existing DB records — do not switch to AES without migration.
+     */
+    public function decrypt($data)
+    {
         if ($data != '') {
             $data = explode('8', $data);
             $convert = '';
             foreach ($data as $value) {
-                if ($value === '') continue;
+                if ($value === '') {
+                    continue;
+                }
                 $val = $this->inids($value . '8', 1);
-                if ($val == 's_PPX1') $val = " ";
+                if ($val == 's_PPX1') {
+                    $val = " ";
+                }
                 $convert .= $val;
             }
             return $convert;
@@ -36,7 +139,8 @@ class Crypto
         return $data;
     }
 
-    protected function inids($string, $decode = 0){
+    protected function inids($string, $decode = 0)
+    {
         $data = array(
             'a' => 'ssp8',
             'b' => 's21s48',
@@ -119,9 +223,9 @@ class Crypto
 
         if ($decode == 0) {
             return $data[$string] ?? $string;
-        } else {
-            $key = array_search($string, $data);
-            return $key !== false ? $key : $string;
         }
+
+        $key = array_search($string, $data);
+        return $key !== false ? $key : $string;
     }
 }
