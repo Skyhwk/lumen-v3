@@ -2704,7 +2704,7 @@ class RequestQuotationController extends Controller
                         return explode(';', $par)[0];
                     }, $param);
 
-                    foreach ($param as $par) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
                             ->where('id_parameter', $idParam)
                             ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
