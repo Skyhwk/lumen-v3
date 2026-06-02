@@ -74,6 +74,7 @@ foreach (glob(__DIR__ . '/../config/*.php') as $file) {
 
 $app->middleware([
     App\Http\Middleware\CorsMiddleware::class,
+    App\Http\Middleware\RateLimitMiddleware::class,
     App\Http\Middleware\Utf8Sanitizer::class
 ]);
 
@@ -81,9 +82,11 @@ $app->routeMiddleware([
     'auth.token' => App\Http\Middleware\CheckToken::class,
     'log.request' => App\Http\Middleware\LogRequest::class,
     'decrypt.slice' => \App\Http\Middleware\DecryptSliceMiddleware::class,
+    'rate.limit' => App\Http\Middleware\RateLimitMiddleware::class,
     'cors' => \App\Http\Middleware\CorsMiddleware::class,
     'auth.customer.token' => App\Http\Middleware\CheckCustomerToken::class,
     'director.auth.token' => App\Http\Middleware\directorApp\ApiTokenAuth::class,
+    'rate.limit.user' => App\Http\Middleware\UserRateLimitMiddleware::class,
 ]);
 
 /*
@@ -109,8 +112,6 @@ $app->register(Telegram\Bot\Laravel\TelegramServiceProvider::class);
 
 $app->register(Illuminate\Cache\CacheServiceProvider::class);
 $app->register(Illuminate\Redis\RedisServiceProvider::class);
-
-$app->register(Laravel\Tinker\TinkerServiceProvider::class);
 
 // Register facades
 $app->withFacades(true, [
