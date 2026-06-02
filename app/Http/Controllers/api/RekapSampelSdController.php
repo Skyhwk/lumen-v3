@@ -25,8 +25,9 @@ class RekapSampelSdController extends Controller
 {
     protected $parameterResultService;
 
-    public function __construct(ParameterResultService $parameterResultService)
+    public function __construct(Request $request, ParameterResultService $parameterResultService)
     {
+        parent::__construct($request);
         $this->parameterResultService = $parameterResultService;
     }
 
