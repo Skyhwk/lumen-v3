@@ -100,7 +100,7 @@ class LingkunganHidupSO2
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
-            'durasi' => $data->durasi,
+            'durasi' => number_format($data->durasi, 2, '.', ''),
             // 'durasi' => $waktu,
             'tekanan_u' => $data->tekanan,
             'suhu' => $data->suhu,
