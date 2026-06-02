@@ -19,8 +19,18 @@ use Exception;
 use Illuminate\Support\Str;
 use Log;
 
+// service cek parameter yang punya hasil
+use App\Services\ParameterResultService;
+
 class RekapSampelSamplingController extends Controller
 {
+    protected $parameterResultService;
+
+    public function __construct(ParameterResultService $parameterResultService)
+    {
+        $this->parameterResultService = $parameterResultService;
+    }
+
     public function index(Request $request)
     {
         $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])
@@ -42,6 +52,25 @@ class RekapSampelSamplingController extends Controller
         }
 
         $data = $data->orderBy('id', 'desc');
+
+        // Batch query — ambil semua no_sampel yang akan ditampilkan
+        $allRows = (clone $data)->get(['no_sampel', 'parameter', 'kategori_2']);
+
+        // Group by kategori_2 lalu batch per kategori
+        $parameterStatusMap = [];
+        $grouped = $allRows->groupBy('kategori_2');
+
+        foreach ($grouped as $kategori2 => $rows) {
+            $noSampelList = $rows->pluck('no_sampel')->toArray();
+            $batchResult = $this->parameterResultService->getNamaYangSudahAdaBatch($noSampelList, $kategori2);
+
+            foreach ($rows as $row) {
+                $parameterRaw = json_decode($row->parameter, true) ?? [];
+                $namaYangSudahAda = $batchResult[$row->no_sampel] ?? [];
+                $parameterStatusMap[$row->no_sampel] = $this->parameterResultService
+                    ->mapParameterWithStatus($parameterRaw, $namaYangSudahAda);
+            }
+        }
 
         return DataTables::of($data)
             ->filterColumn('order_header.no_document', function ($query, $keyword) {
@@ -83,8 +112,11 @@ class RekapSampelSamplingController extends Controller
                     $q->where('created_at', 'like', "%$keyword%");
                 });
             })
+            ->addColumn('parameter_status', function ($row) use ($parameterStatusMap) {
+                return $parameterStatusMap[$row->no_sampel] ?? json_encode([]);
+            })
             ->addIndexColumn()
-            ->rawColumns(['action'])
+            ->rawColumns(['action', 'parameter_status'])
             ->make(true);
     }
 
@@ -318,14 +350,16 @@ class RekapSampelSamplingController extends Controller
             foreach ($data as $item => $value) {
                 
                 if (explode("-", $value->kategori_2)[1] == 'Air') {
-                    $parameter_names = array_map(function ($p) {
-                        return explode(';', $p)[1];
+                    $idParameter = array_map(function ($p) {
+                        return explode(';', $p)[0];
                     }, json_decode($value->parameter) ?? []);
 
                     $id_kategori = explode("-", $value->kategori_2)[0];
                     $params = HargaParameter::where('id_kategori', $id_kategori)
                         ->where('is_active', true)
-                        ->whereIn('nama_parameter', $parameter_names)
+                        ->whereIn('id_parameter', $idParameter)
+                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                         ->get();
 
                     $param_map = [];
@@ -348,14 +382,7 @@ class RekapSampelSamplingController extends Controller
                     // Generate botol dan barcode
                     $botol = [];
 
-                    $ketentuan_botol = [
-                        'ORI' => 1000,
-                        'H2SO4' => 1000,
-                        'M100' => 100,
-                        'HNO3' => 500,
-                        'M1000' => 1000,
-                        'BENTHOS' => 100
-                    ];
+                    $ketentuan_botol = config('ketentuan_botol');
                     
                     foreach ($botol_volumes as $type => $volume) {
                         $typeUpper = strtoupper($type);
@@ -391,8 +418,6 @@ class RekapSampelSamplingController extends Controller
                         * Jika kategori bukan air maka tidak perlu membuat botol
                         * cek jika udara dan emisi maka harus di siapkan kertas penjerap
                         */
-                    
-                    
                     
                     if ($value->kategori_2 == '4-Udara' || $value->kategori_2 == '5-Emisi') {
                     

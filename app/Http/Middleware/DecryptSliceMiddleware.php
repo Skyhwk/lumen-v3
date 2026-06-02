@@ -24,18 +24,19 @@ class DecryptSliceMiddleware
         }
 
         try {
-            // Decrypt the X-Slice header
-            $decryptedSlice = $this->crypto->decrypt($encryptedSlice);
+            $decryptedSlice = $this->crypto->decryptSlice($encryptedSlice);
             $slice = json_decode($decryptedSlice, true);
 
-            if (!$slice || $slice === null) {
+            if (!is_array($slice) || empty($slice['controller']) || empty($slice['function'])) {
                 return response()->json(['message' => 'Invalid request format'], 400);
             }
 
-            // Replace the encrypted X-Slice header with the decrypted slice
             $request->headers->set('X-Slice', json_encode($slice));
         } catch (Exception $e) {
-            return response()->json(['message' => 'Decryption failed: ' . $e->getMessage()], 500);
+            $message = $e->getMessage();
+            $status = strpos($message, 'expired') !== false ? 401 : 400;
+
+            return response()->json(['message' => 'Decryption failed: ' . $message], $status);
         }
 
         return $next($request);

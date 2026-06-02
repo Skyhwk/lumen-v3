@@ -427,7 +427,7 @@ class FixingController extends Controller
 
     public function decrypt(Request $request)
     {
-        $decryptedSlice = Slice::makeDecrypt($request->slice);
+        $decryptedSlice = Slice::makeDecrypt($request->slice, false);
         $route          = json_decode($decryptedSlice);
 
         if (empty($route->controller) || empty($route->function)) {

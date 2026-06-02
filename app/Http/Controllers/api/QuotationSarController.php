@@ -346,13 +346,10 @@ class QuotationSarController extends Controller
             $expOp = explode("-", $payload->data_wilayah->wilayah);
             $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
-            ->orderBy('id', 'ASC')
-            ->get();
-
-            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
-                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-            }) ?? $ambil_data_transport->first();
+            $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                $nama_wilayah,
+                $payload->informasi_pelanggan->tgl_penawaran
+            );
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -1147,13 +1144,10 @@ class QuotationSarController extends Controller
             $expOp = explode("-", $payload->data_wilayah->wilayah);
             $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
-            ->orderBy('id', 'ASC')
-            ->get();
-
-            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
-                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-            }) ?? $ambil_data_transport->first();
+            $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                $nama_wilayah,
+                $payload->informasi_pelanggan->tgl_penawaran
+            );
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -2113,13 +2107,10 @@ class QuotationSarController extends Controller
             //     ->first();
             $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
-                ->orderBy('id', 'ASC')
-                ->get();
-
-            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
-                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-            }) ?? $ambil_data_transport->first();
+            $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                $nama_wilayah,
+                $payload->informasi_pelanggan->tgl_penawaran
+            );
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;

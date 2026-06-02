@@ -408,7 +408,7 @@ class DraftCustomerController extends Controller
 
     public function getWilayah()
     {
-        $wilayah = HargaTransportasi::where('is_active', true)->select('id', 'wilayah')->get();
+        $wilayah = HargaTransportasi::effective()->select('master_harga_transportasi.id', 'master_harga_transportasi.wilayah')->get();
         return response()->json([
             'message' => 'Data wilayah berhasil ditampilkan',
             'data' => $wilayah

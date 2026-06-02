@@ -16,6 +16,7 @@ class HargaParameter extends Sector
         'regen',
         'volume',
         'id_hist',
+        'tanggal_berlaku',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -29,6 +30,7 @@ class HargaParameter extends Sector
     public function scopeWithHistory($query)
     {
         return $query->leftJoin('master_harga_parameter as hist', 'master_harga_parameter.id', '=', 'hist.id_hist')
+            ->leftJoin('parameter as mp', 'master_harga_parameter.id_parameter', '=', 'mp.id')
             ->select(
                 'master_harga_parameter.id',
                 'master_harga_parameter.id_kategori',
@@ -40,6 +42,7 @@ class HargaParameter extends Sector
                 'master_harga_parameter.volume',
                 'master_harga_parameter.created_by',
                 'master_harga_parameter.created_at',
+                \DB::raw('MAX(mp.is_blocked) as is_blocked'),
                 \DB::raw('GROUP_CONCAT(hist.harga ORDER BY hist.id DESC SEPARATOR ",") as hist_harga'),
                 \DB::raw('GROUP_CONCAT(hist.created_at ORDER BY hist.id DESC SEPARATOR ",") as tgl')
             )

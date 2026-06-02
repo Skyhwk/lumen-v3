@@ -16,9 +16,16 @@ use App\Models\Subkontrak;
 use Carbon\Carbon;
 use DataTables;
 use Exception;
-
+use App\Services\ParameterResultService;
 class PerubahanParameterController extends Controller
 {
+    protected $parameterResultService;
+
+    public function __construct(ParameterResultService $parameterResultService)
+    {
+        $this->parameterResultService = $parameterResultService;
+    }
+
     public function index(Request $request)
     {
         // $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])->whereNotNull('tanggal_terima')->where('is_active', 1);
@@ -38,6 +45,29 @@ class PerubahanParameterController extends Controller
             'status' => 'success',
             'data' => $data
         ], 200);
+    }
+
+    public function cekParameter(Request $request)
+    {
+        $data = OrderDetail::select(['no_sampel', 'parameter', 'kategori_2'])
+            ->where('no_sampel', $request->no_sampel)
+            ->where('kategori_2', $request->id_kategori)
+            ->first();
+
+        if (!$data) {
+            return response()->json(['status' => 'error', 'message' => 'Data tidak ditemukan'], 404);
+        }
+
+        $parameterRaw = json_decode($data->parameter, true) ?? [];
+
+        $namaYangSudahAda = $this->parameterResultService->getNamaYangSudahAda(
+            $request->no_sampel,
+            $request->id_kategori
+        );
+
+        $result = $this->parameterResultService->mapParameter($parameterRaw, $namaYangSudahAda);
+
+        return response()->json(['status' => 'success', 'data' => $result]);
     }
 
     public function updatePerubahanParameter(Request $request)
