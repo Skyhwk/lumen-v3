@@ -1484,7 +1484,7 @@ class GenerateInvoiceController extends Controller
             // $inv->filename = $fileName;
             $inv->save();
             DB::commit();
-            
+
             self::generatePDF($request->no_invoice);
 
             return response()->json([
@@ -1589,6 +1589,30 @@ class GenerateInvoiceController extends Controller
 
         return response()->json([
             'success'  => 'Sukses menghapus faktur',
+        ]);
+    }
+
+    public function approveByManager(Request $request)
+    {
+        $inv = Invoice::where('no_invoice', $request->no_invoice)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$inv) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Invoice tidak ditemukan',
+            ], 404);
+        }
+
+        $inv->is_emailed = true;
+        $inv->is_generate = true;
+        $inv->save();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Invoice berhasil di-approve oleh manager',
+            'data' => $inv,
         ]);
     }
 }
