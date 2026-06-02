@@ -151,9 +151,6 @@ class PerubahanParameterController extends Controller
                 
             }
 
-            dd($data);
-
-            dd('selesai loop');
             DB::commit();
             return response()->json([
                 'status' => 'success',
