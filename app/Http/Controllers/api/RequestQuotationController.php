@@ -2704,6 +2704,9 @@ class RequestQuotationController extends Controller
                         return explode(';', $par)[0];
                     }, $param);
 
+                    $harga_db = [];
+                    $volume_db = [];
+
                     foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
                             ->where('id_parameter', $idParam)
