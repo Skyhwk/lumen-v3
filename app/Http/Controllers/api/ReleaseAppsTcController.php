@@ -28,7 +28,7 @@ class ReleaseAppsTcController extends Controller
 
         try {
             $projectDir = '/var/www/javascript/tc-sample';
-            $buildDir   = "$projectDir/build";
+            $buildDir   = "$projectDir/out";
             $deployDir  = '/var/www/html/tc-sample';
             $backupDir  = '/mnt/backup/file/tc-sample/backup-' . date('dmyHi');
 
