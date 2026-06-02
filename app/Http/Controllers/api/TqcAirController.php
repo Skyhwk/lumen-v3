@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
+use App\Models\SampelDiantar;
 use App\Models\LhpsAirHeader;
 use App\Models\HistoryWsValueAir;
 use Illuminate\Http\Request;
@@ -16,7 +17,27 @@ class TqcAirController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('wsValueAir', 'dataLapanganAir','sampelDiantar.detail')->where('is_active', true)->where('status', 1)->where('kategori_2', '1-Air')->orderBy('id', 'desc');
+        $data = OrderDetail::with('wsValueAir', 'dataLapanganAir')
+            ->where('is_active', true)
+            ->where('status', 1)
+            ->where('kategori_2', '1-Air')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $data->each(function ($item) {
+            $query = SampelDiantar::with('detail')
+                ->where('no_order', $item->no_order);
+
+            if (!empty($item->periode)) {
+                $query->where('periode_kontrak', $item->periode);
+            }
+
+            $item->setRelation(
+                'sampelDiantar',
+                $query->first()
+            );
+        });
+
         return Datatables::of($data)->make(true);
     }
 
