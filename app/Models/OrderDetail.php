@@ -639,6 +639,11 @@ class OrderDetail extends Sector
         return $this->belongsTo(LhpsHygieneSanitasiHeader::class, 'cfr', 'no_lhp');
     }
 
+    public function lhps_adverse_odor()
+    {
+        return $this->belongsTo(LhpsAdverseOdorHeader::class, 'cfr', 'no_lhp');
+    }
+
     // barangkali kepakai
     // public function isoBeratMolekul()
     // {
