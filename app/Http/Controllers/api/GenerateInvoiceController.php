@@ -148,6 +148,7 @@ class GenerateInvoiceController extends Controller
     public function index(Request $request)
     {
         try {
+            // dd($request->input('columns.2.search.value'));
 
             $data = Invoice::select(
                 'invoice.no_invoice',
@@ -190,7 +191,29 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.nama_perusahaan) AS nama_customer'),
 
                 // 🔥 INI PENTING
-                DB::raw("COALESCE(MAX(summary_invoice.status_lunas), 'Belum Ada Pembayaran') AS status_lunas"),
+                DB::raw("
+                        CASE
+                            WHEN (
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                            ) <= 0 THEN 'Belum Ada Pembayaran'
+
+                            WHEN (
+                                SUM(invoice.nilai_tagihan) -
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                )
+                            ) < 0 THEN 'Kelebihan Pembayaran'
+
+                            WHEN (
+                                SUM(invoice.nilai_tagihan) -
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                )
+                            ) > 0 THEN 'Belum Lunas'
+
+                            ELSE 'Lunas'
+                        END AS status_lunas
+                    "),
 
                 DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
                 DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
@@ -202,13 +225,10 @@ class GenerateInvoiceController extends Controller
                 ->groupBy('invoice.no_invoice');
 
             // 🔥 FILTER STATUS LUNAS (FIX TOTAL)
-            $status = $request->input('columns.2.search.value');
+            $status = $request->input('columns')[2]['search']['value'] ?? null;
 
             if (!empty($status)) {
-                $data->havingRaw(
-                    "TRIM(COALESCE(MAX(summary_invoice.status_lunas), 'Belum Ada Pembayaran')) = ?",
-                    [trim($status)]
-                );
+                $data->having('status_lunas', '=', trim($status));
             }
 
             $data->where('invoice.is_emailed', false)
