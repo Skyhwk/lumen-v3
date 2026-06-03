@@ -190,7 +190,7 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.nama_perusahaan) AS nama_customer'),
 
                 // 🔥 INI PENTING
-                DB::raw("COALESCE(MAX(summary_invoice.status_lunas), 'Belum Lunas') AS status_lunas"),
+                DB::raw("COALESCE(MAX(summary_invoice.status_lunas), 'Belum Ada Pembayaran') AS status_lunas"),
 
                 DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
                 DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
@@ -206,7 +206,7 @@ class GenerateInvoiceController extends Controller
 
             if (!empty($status)) {
                 $data->havingRaw(
-                    "TRIM(COALESCE(MAX(summary_invoice.status_lunas), 'Belum Lunas')) = ?",
+                    "TRIM(COALESCE(MAX(summary_invoice.status_lunas), 'Belum Ada Pembayaran')) = ?",
                     [trim($status)]
                 );
             }
@@ -1484,7 +1484,7 @@ class GenerateInvoiceController extends Controller
             // $inv->filename = $fileName;
             $inv->save();
             DB::commit();
-            
+
             self::generatePDF($request->no_invoice);
 
             return response()->json([
@@ -1589,6 +1589,30 @@ class GenerateInvoiceController extends Controller
 
         return response()->json([
             'success'  => 'Sukses menghapus faktur',
+        ]);
+    }
+
+    public function approveByManager(Request $request)
+    {
+        $inv = Invoice::where('no_invoice', $request->no_invoice)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$inv) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Invoice tidak ditemukan',
+            ], 404);
+        }
+
+        $inv->is_emailed = true;
+        $inv->is_generate = true;
+        $inv->save();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Invoice berhasil di-approve oleh manager',
+            'data' => $inv,
         ]);
     }
 }

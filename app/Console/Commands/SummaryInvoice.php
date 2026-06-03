@@ -102,17 +102,44 @@ class SummaryInvoice extends Command
                     DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
                     DB::raw('GROUP_CONCAT(DISTINCT invoice.no_order) AS no_orders'),
 
+                    // DB::raw("
+                    //     CASE
+                    //         WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
+                    //         WHEN (
+                    //             SUM(invoice.nilai_tagihan) -
+                    //             (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                    //         ) < 0 THEN 'Kelebihan Pembayaran'
+                    //         WHEN (
+                    //             SUM(invoice.nilai_tagihan) -
+                    //             (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                    //         ) > 0 THEN 'Belum Lunas'
+                    //         ELSE 'Lunas'
+                    //     END AS status_lunas
+                    // ")
+
                     DB::raw("
                         CASE
-                            WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
+                            WHEN (
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                + COALESCE(MAX(w.total_pembayaran), 0)
+                            ) <= 0 THEN 'Belum Ada Pembayaran'
+
                             WHEN (
                                 SUM(invoice.nilai_tagihan) -
-                                (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                    + COALESCE(MAX(w.total_pembayaran), 0)
+                                )
                             ) < 0 THEN 'Kelebihan Pembayaran'
+
                             WHEN (
                                 SUM(invoice.nilai_tagihan) -
-                                (COALESCE(SUM(invoice.nilai_pelunasan), 0) + COALESCE(MAX(w.total_pembayaran), 0))
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                    + COALESCE(MAX(w.total_pembayaran), 0)
+                                )
                             ) > 0 THEN 'Belum Lunas'
+
                             ELSE 'Lunas'
                         END AS status_lunas
                     ")
