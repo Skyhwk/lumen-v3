@@ -34,29 +34,12 @@ class InvoiceController extends Controller
                 $data->where('status_lunas',$statusLunas);
             }
 
-            return Datatables::of($data)
-                ->addColumn('status_lunas', function ($row) {
-                    $nilaiTagihan = (float) ($row->nilai_tagihan ?? 0);
-                    $nilaiPelunasan = (float) ($row->nilai_pelunasan ?? 0);
-                    $sisaTagihan = $nilaiTagihan - $nilaiPelunasan;
-
-                    if ($nilaiTagihan == 0) {
-                        return 'Belum Ada Pembayaran';
-                    }
-
-                    if ($sisaTagihan < 0) {
-                        return 'Kelebihan Pembayaran';
-                    }
-
-                    if ($sisaTagihan > 0) {
-                        return 'Belum Lunas';
-                    }
-
-                    return 'Lunas';
-                })
-                ->make(true);
+            return Datatables::of($data)->make(true);
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'data' => [],
+                'message' => $th->getMessage(),
+            ], 401);
         }
     }
 
