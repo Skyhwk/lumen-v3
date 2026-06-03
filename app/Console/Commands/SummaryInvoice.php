@@ -120,27 +120,26 @@ class SummaryInvoice extends Command
                     DB::raw("
                         CASE
                             WHEN (
-                                COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0)
                                 + COALESCE(MAX(w.total_pembayaran), 0)
                             ) <= 0 THEN 'Belum Ada Pembayaran'
 
                             WHEN (
-                                SUM(invoice.nilai_tagihan) -
-                                (
-                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
-                                    + COALESCE(MAX(w.total_pembayaran), 0)
-                                )
-                            ) < 0 THEN 'Kelebihan Pembayaran'
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0)
+                                + COALESCE(MAX(w.total_pembayaran), 0)
+                            ) < SUM(invoice.nilai_tagihan) THEN 'Belum Lunas'
 
                             WHEN (
-                                SUM(invoice.nilai_tagihan) -
-                                (
-                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
-                                    + COALESCE(MAX(w.total_pembayaran), 0)
-                                )
-                            ) > 0 THEN 'Belum Lunas'
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0)
+                                + COALESCE(MAX(w.total_pembayaran), 0)
+                            ) = SUM(invoice.nilai_tagihan) THEN 'Lunas'
 
-                            ELSE 'Lunas'
+                            WHEN (
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0)
+                                + COALESCE(MAX(w.total_pembayaran), 0)
+                            ) > SUM(invoice.nilai_tagihan) THEN 'Kelebihan Pembayaran'
+
+                            ELSE 'Belum Ada Pembayaran'
                         END AS status_lunas
                     ")
                 ])
