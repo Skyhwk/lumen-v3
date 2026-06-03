@@ -190,7 +190,7 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.nama_perusahaan) AS nama_customer'),
 
                 // 🔥 INI PENTING
-                DB::raw("COALESCE(MAX(summary_invoice.status_lunas), 'Belum Lunas') AS status_lunas"),
+                DB::raw("COALESCE(MAX(summary_invoice.status_lunas), 'Belum Ada Pembayaran') AS status_lunas"),
 
                 DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
                 DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
@@ -206,7 +206,7 @@ class GenerateInvoiceController extends Controller
 
             if (!empty($status)) {
                 $data->havingRaw(
-                    "TRIM(COALESCE(MAX(summary_invoice.status_lunas), 'Belum Lunas')) = ?",
+                    "TRIM(COALESCE(MAX(summary_invoice.status_lunas), 'Belum Ada Pembayaran')) = ?",
                     [trim($status)]
                 );
             }
