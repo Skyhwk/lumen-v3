@@ -32,6 +32,7 @@ use App\Services\RenderKontrakCopy;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Models\TemplateStp;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
@@ -6281,4 +6282,22 @@ class RequestQuotationController extends Controller
             'data' => $data_return
         ], 200);
     }
+
+    public function getIcpUdara (Request $request){
+        $data = TemplateStp::with(['sample'])
+            ->where('is_active', true);
+
+        $data->whereHas('sample', function ($q) use ($request) {
+                $q->where('nama_kategori', 'like', '%' . 'Udara' . '%');
+        });
+        
+        $data->where('name', 'like', '%' . 'ICP' . '%');
+
+        return Datatables::of($data)
+            ->addColumn('sampleName', function ($data) {
+                return $data->sample ? (string) $data->sample->nama_kategori : 'Nama tidak ditemukan';
+            })
+            ->rawColumns(['sampleName'])
+            ->make(true);
+    } 
 }
