@@ -148,6 +148,7 @@ class GenerateInvoiceController extends Controller
     public function index(Request $request)
     {
         try {
+            // dd($request->input('columns.2.search.value'));
 
             $data = Invoice::select(
                 'invoice.no_invoice',
@@ -190,7 +191,29 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.nama_perusahaan) AS nama_customer'),
 
                 // 🔥 INI PENTING
-                DB::raw("COALESCE(MAX(summary_invoice.status_lunas), 'Belum Lunas') AS status_lunas"),
+                DB::raw("
+                        CASE
+                            WHEN (
+                                COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                            ) <= 0 THEN 'Belum Ada Pembayaran'
+
+                            WHEN (
+                                SUM(invoice.nilai_tagihan) -
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                )
+                            ) < 0 THEN 'Kelebihan Pembayaran'
+
+                            WHEN (
+                                SUM(invoice.nilai_tagihan) -
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0) 
+                                )
+                            ) > 0 THEN 'Belum Lunas'
+
+                            ELSE 'Lunas'
+                        END AS status_lunas
+                    "),
 
                 DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
                 DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
@@ -202,13 +225,10 @@ class GenerateInvoiceController extends Controller
                 ->groupBy('invoice.no_invoice');
 
             // 🔥 FILTER STATUS LUNAS (FIX TOTAL)
-            $status = $request->input('columns.2.search.value');
+            $status = $request->input('columns')[2]['search']['value'] ?? null;
 
             if (!empty($status)) {
-                $data->havingRaw(
-                    "TRIM(COALESCE(MAX(summary_invoice.status_lunas), 'Belum Lunas')) = ?",
-                    [trim($status)]
-                );
+                $data->having('status_lunas', '=', trim($status));
             }
 
             $data->where('invoice.is_emailed', false)
@@ -1484,7 +1504,7 @@ class GenerateInvoiceController extends Controller
             // $inv->filename = $fileName;
             $inv->save();
             DB::commit();
-            
+
             self::generatePDF($request->no_invoice);
 
             return response()->json([
@@ -1589,6 +1609,30 @@ class GenerateInvoiceController extends Controller
 
         return response()->json([
             'success'  => 'Sukses menghapus faktur',
+        ]);
+    }
+
+    public function approveByManager(Request $request)
+    {
+        $inv = Invoice::where('no_invoice', $request->no_invoice)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$inv) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Invoice tidak ditemukan',
+            ], 404);
+        }
+
+        $inv->is_emailed = true;
+        $inv->is_generate = true;
+        $inv->save();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Invoice berhasil di-approve oleh manager',
+            'data' => $inv,
         ]);
     }
 }
