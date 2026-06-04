@@ -127,22 +127,4 @@ class TemplateStpController extends Controller
             ], 500);
         }
     }
-
-    public function getIcpUdara (Request $request){
-        $data = TemplateStp::with(['sample'])
-            ->where('is_active', true);
-
-        $data->whereHas('sample', function ($q) use ($request) {
-                $q->where('nama_kategori', 'like', '%' . 'Udara' . '%');
-        });
-        
-        $data->where('name', 'like', '%' . 'ICP' . '%');
-
-        return Datatables::of($data)
-            ->addColumn('sampleName', function ($data) {
-                return $data->sample ? (string) $data->sample->nama_kategori : 'Nama tidak ditemukan';
-            })
-            ->rawColumns(['sampleName'])
-            ->make(true);
-    }
 }
