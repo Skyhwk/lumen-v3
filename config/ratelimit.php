@@ -3,6 +3,7 @@
 return [
     'enabled' => env('RATE_LIMIT_ENABLED', true),
 
+    // IP exact (10.88.209.222) atau prefix wildcard (10.88.*, 192.168.*)
     'whitelist_ips' => array_values(array_filter(array_map('trim', explode(',', env('RATE_LIMIT_WHITELIST_IPS', ''))))),
 
     'rules' => [

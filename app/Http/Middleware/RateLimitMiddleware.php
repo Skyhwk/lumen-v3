@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\RateLimitService;
+use App\Support\RateLimitIpWhitelist;
 use Closure;
 use Illuminate\Http\Request;
 
@@ -33,7 +34,7 @@ class RateLimitMiddleware
         }
 
         $clientIp = $request->ip() ?? 'unknown';
-        if ($this->isWhitelisted($clientIp)) {
+        if (RateLimitIpWhitelist::isWhitelisted($clientIp)) {
             return $next($request);
         }
 
@@ -52,13 +53,6 @@ class RateLimitMiddleware
         $response = $next($request);
 
         return $this->attachRateLimitHeaders($response, $result);
-    }
-
-    private function isWhitelisted(string $clientIp): bool
-    {
-        $whitelist = config('ratelimit.whitelist_ips', []);
-
-        return in_array($clientIp, $whitelist, true);
     }
 
     /**
