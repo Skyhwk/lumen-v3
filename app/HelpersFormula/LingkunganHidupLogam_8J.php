@@ -72,16 +72,15 @@ class LingkunganHidupLogam_8J
         $vl = $data->vl;
         
         $satuan = 'ug/Nm3';
+        $C = count($C) > 0 ? round(array_sum($C) / count($C), 4) : 0;
+        $C15 = count($C15) > 0 ? round(array_sum($C15) / count($C15), 4) : 0;
+        $C16 = count($C16) > 0 ? round(array_sum($C16) / count($C16), 4) : 0;
 
         $data_pershift = [
             'Shift 1' => $C[0] ?? null,
             'Shift 2' => $C[1] ?? null,
             'Shift 3' => $C[2] ?? null
         ];
-
-        $C = count($C) > 0 ? round(array_sum($C) / count($C), 4) : 0;
-        $C15 = count($C15) > 0 ? round(array_sum($C15) / count($C15), 4) : 0;
-        $C16 = count($C16) > 0 ? round(array_sum($C16) / count($C16), 4) : 0;
 
         // dd($C, $C1, $C2);
 
