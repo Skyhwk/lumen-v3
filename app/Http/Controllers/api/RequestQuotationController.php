@@ -27,15 +27,11 @@ use App\Models\Parameter;
 use App\Models\Invoice;
 use App\Models\TemplatePaketAnalisa;
 use App\Jobs\RenderPdfPenawaran;
-use App\Services\GeneratePraSampling;
 use App\Services\RenderNonKontrakCopy;
 use App\Services\RenderKontrakCopy;
-use App\Services\RenderNonKontrak;
-use App\Services\RenderKontrak;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
-use App\Services\RenderInvoice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
@@ -194,7 +190,7 @@ class RequestQuotationController extends Controller
                     'status' => '401'
                 ], 401);
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'message' => 'Error: ' . $e->getMessage(),
@@ -386,8 +382,7 @@ class RequestQuotationController extends Controller
             foreach ($bakumutu as $a) {
                 array_push($param, $a->id_parameter . ';' . $a->parameter);
             }
-            // dd($param);
-            /* version 1 */
+            
             $data = Parameter::where('is_active', true)
                 ->where('id_kategori', $category[0])
                 ->get();
@@ -413,7 +408,10 @@ class RequestQuotationController extends Controller
 
     public function getWilayah(Request $request)
     {
-        $data = HargaTransportasi::where('is_active', true)->where('status', $request->status_wilayah)->select('id', 'wilayah')->get();
+        $data = HargaTransportasi::effective()
+            ->where('status', $request->status_wilayah)
+            ->select('master_harga_transportasi.id', 'master_harga_transportasi.wilayah')
+            ->get();
         return response()->json($data);
     }
 
@@ -615,26 +613,23 @@ class RequestQuotationController extends Controller
                     $is_paket = $item->is_paket_analisa;
 
 
-                    $parameter = [];
+                    $idParameter = [];
                     foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
+                        array_push($idParameter, explode(';', $par)[0]);
                     }
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
                     }
 
                     $harga_pertitik = (object) [
@@ -756,13 +751,10 @@ class RequestQuotationController extends Controller
             $expOp = explode("-", $payload->data_wilayah->wilayah);
             $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
-            ->orderBy('id', 'ASC')
-            ->get();
-
-            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
-                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-            }) ?? $ambil_data_transport->first();
+            $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                $nama_wilayah,
+                $payload->informasi_pelanggan->tgl_penawaran
+            );
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -930,7 +922,7 @@ class RequestQuotationController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
             } else {
@@ -951,7 +943,7 @@ class RequestQuotationController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
 
@@ -965,7 +957,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -984,7 +976,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1005,7 +997,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1025,7 +1017,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1254,7 +1246,7 @@ class RequestQuotationController extends Controller
             //biaya di luar pajak
             $data->biaya_di_luar_pajak = json_encode($diluar_pajak);
             $data->total_biaya_di_luar_pajak = $biaya_diluar_pajak;
-            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : NULL;
+            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : null;
 
             //Grand total sebelum kena diskon
             // dd($grand_total, $harga_total, $total_diskon);
@@ -1291,8 +1283,8 @@ class RequestQuotationController extends Controller
 
             $data->biaya_akhir = $biaya_akhir;
 
-            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : NULL;
-            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : NULL;
+            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : null;
+            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : null;
 
             $data->updated_by = $this->karyawan;
             $data->updated_at = DATE('Y-m-d H:i:s');
@@ -1350,7 +1342,7 @@ class RequestQuotationController extends Controller
             Notification::whereIn('id', $array_id_user)
                 ->title('Penawaran telah diperbarui')
                 ->message('Penawaran dengan nomor ' . $data->no_document . ' telah diperbarui.')
-                ->url('/quote-request')
+                ->url('/sales/quotation/quote-request')
                 ->send();
 
             return response()->json([
@@ -1363,7 +1355,7 @@ class RequestQuotationController extends Controller
                 str_contains($e->getMessage(), 'MySQL server has gone away') ||
                 str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
-                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/programmer/admin-panel/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
@@ -1568,26 +1560,22 @@ class RequestQuotationController extends Controller
                     $is_paket = $item->is_paket_analisa;
 
 
-                    $parameter = [];
-                    foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
+                    $idParameter = array_map(function($par) {
+                        return explode(';', $par)[0];
+                    }, $param);
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
                     }
 
                     $harga_pertitik = (object) [
@@ -1715,13 +1703,10 @@ class RequestQuotationController extends Controller
             //     ->first();
             $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-            $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
-                ->orderBy('id', 'ASC')
-                ->get();
-
-            $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
-                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-            }) ?? $ambil_data_transport->first();
+            $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                $nama_wilayah,
+                $payload->informasi_pelanggan->tgl_penawaran
+            );
 
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
@@ -1894,7 +1879,7 @@ class RequestQuotationController extends Controller
                     Notification::where('id', 19)
                         ->title('Peringatan.')
                         ->message($message)
-                        ->url('/quote-request')
+                        ->url('/sales/quotation/quote-request')
                         ->send();
                 }
 
@@ -1908,7 +1893,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1927,7 +1912,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1948,7 +1933,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -1968,7 +1953,7 @@ class RequestQuotationController extends Controller
                         Notification::where('id', 19)
                             ->title('Peringatan.')
                             ->message($message)
-                            ->url('/quote-request')
+                            ->url('/sales/quotation/quote-request')
                             ->send();
                     }
                 } else {
@@ -2199,7 +2184,7 @@ class RequestQuotationController extends Controller
             //biaya di luar pajak
             $data->biaya_di_luar_pajak = json_encode($diluar_pajak);
             $data->total_biaya_di_luar_pajak = $biaya_diluar_pajak;
-            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : NULL;
+            $data->diluar_pajak = isset($payload->data_diskon->diluar_pajak) ? json_encode($payload->data_diskon->diluar_pajak) : null;
 
             //Grand total sebelum kena diskon
             // dd($grand_total);
@@ -2238,8 +2223,8 @@ class RequestQuotationController extends Controller
 
             $data->biaya_akhir = $biaya_akhir;
 
-            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : NULL;
-            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : NULL;
+            $data->syarat_ketentuan = (isset($payload->syarat_ketentuan) && !empty($payload->syarat_ketentuan)) ? json_encode($payload->syarat_ketentuan) : null;
+            $data->keterangan_tambahan = (isset($payload->keterangan_tambahan) && !empty($payload->keterangan_tambahan)) ? json_encode($payload->keterangan_tambahan) : null;
 
 
             $data->created_by = $dataOld->created_by;
@@ -2355,7 +2340,7 @@ class RequestQuotationController extends Controller
                     ? "Telah terjadi revisi pada nomor quote $dataOld->no_document menjadi $data->no_document dengan nomor order $data_lama->no_order. Oleh karena itu nomor invoice $invoiceNumbersStr akan dikembalikan ke menu generate invoice untuk dilakukan pengecekan."
                     : "Telah terjadi revisi pada nomor quote $dataOld->no_document menjadi $data->no_document dengan nomor order $data_lama->no_order.";
 
-                Notification::where('id_department', 5)->title('Revisi Penawaran')->message($message)->url('/generate-invoice')->send();
+                Notification::where('id_department', 5)->title('Revisi Penawaran')->message($message)->url('/finance/account-receivable/generate-invoice')->send();
 
                 // update persiapan sampel
                 DB::table('persiapan_sampel_header')
@@ -2406,7 +2391,7 @@ class RequestQuotationController extends Controller
             Notification::whereIn('id', $array_id_user)
                 ->title('Penawaran telah di revisi')
                 ->message('Penawaran dengan nomor ' . $dataOld->no_document . ' telah di revisi menjadi ' . $data->no_document . '.')
-                ->url('/quote-request')
+                ->url('/sales/quotation/quote-request')
                 ->send();
 
             return response()->json([
@@ -2419,7 +2404,7 @@ class RequestQuotationController extends Controller
                 str_contains($e->getMessage(), 'MySQL server has gone away') ||
                 str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
-                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/programmer/admin-panel/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
@@ -2714,27 +2699,24 @@ class RequestQuotationController extends Controller
                     $exp = explode("-", $item->kategori_1);
                     $kategori = $exp[0];
                     $vol = 0;
-                    $parameter = [];
-                    foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
+
+                    $idParameter = array_map(function($par) {
+                        return explode(';', $par)[0];
+                    }, $param);
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
 
                     }
 
@@ -2910,48 +2892,24 @@ class RequestQuotationController extends Controller
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
 
-                        $parameters = [];
-                        $id_parameter = [];
-                        foreach ($sampling->parameter as $item) {
-                            $cek_par = DB::table('parameter')
-                                ->where('id', explode(';', $item)[0])->first();
-                            if ($cek_par) {
-                                $parameters[] = $cek_par->nama_lab;
-                                $id_parameter[] = $cek_par->id;
-                            }
-                        }
-                        // dd('patah')
+                        $idParameter = array_map(function($par) {
+                            return explode(';', $par)[0];
+                        }, $sampling->parameter);
+                        
                         $harga_parameter = [];
                         $volume_parameter = [];
 
-                        foreach ($parameters as $parameter) {
+                        foreach ($idParameter as $idParam) {
                             $ambil_data = HargaParameter::where('id_kategori', $id_kategori)
-                                ->where('nama_parameter', $parameter)
-                                ->orderBy('id', 'ASC')
-                                ->get();
+                                ->where('id_parameter', $idParam)
+                                ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                                ->where('is_active', 1)
+                                ->orderBy('tanggal_berlaku', 'desc')
+                                ->first();
 
-                            if (count($ambil_data) > 1) {
-                                $found = false;
-                                foreach ($ambil_data as $xc => $zx) {
-                                    if (\explode(' ', $zx->created_at)[0] > $informasi_pelanggan->tgl_penawaran) {
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        $found = true;
-                                        break;
-                                    }
-                                    if ((count($ambil_data) - 1) == $xc && !$found) {
-                                        $zx = $ambil_data[0];
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        break;
-                                    }
-                                }
-                            } else if (count($ambil_data) == 1) {
-                                foreach ($ambil_data as $zx) {
-                                    $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
-                                    break;
-                                }
+                            if ($ambil_data) {
+                                $harga_parameter[] = $ambil_data->harga ?? 0;
+                                $volume_parameter[] = $ambil_data->volume ?? 0;
                             } else {
                                 $harga_parameter[] = 0;
                                 $volume_parameter[] = 0;
@@ -3067,13 +3025,10 @@ class RequestQuotationController extends Controller
                     // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
                     $nama_wilayah = implode("-", array_slice($expOp, 1));
 
-                    $ambil_data_transport = HargaTransportasi::where('wilayah', $nama_wilayah)
-                        ->orderBy('id', 'ASC')
-                        ->get();
-
-                    $cekOperasional = $ambil_data_transport->first(function ($item) use ($payload) {
-                                return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                            }) ?? $ambil_data_transport->first();
+                    $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                        $nama_wilayah,
+                        $payload->informasi_pelanggan->tgl_penawaran
+                    );
 
                     // START FOR
                     $disc_transport = 0;
@@ -3373,7 +3328,7 @@ class RequestQuotationController extends Controller
                             Notification::where('id', 19)
                                 ->title('Peringatan.')
                                 ->message($message)
-                                ->url('/quote-request')
+                                ->url('/sales/quotation/quote-request')
                                 ->send();
                         }
                     } else {
@@ -3394,7 +3349,7 @@ class RequestQuotationController extends Controller
                             Notification::where('id', 19)
                                 ->title('Peringatan.')
                                 ->message($message)
-                                ->url('/quote-request')
+                                ->url('/sales/quotation/quote-request')
                                 ->send();
                         }
 
@@ -3408,7 +3363,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -3426,7 +3381,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -3448,7 +3403,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -3467,7 +3422,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -3984,7 +3939,7 @@ class RequestQuotationController extends Controller
                 Notification::whereIn('id', $array_id_user)
                     ->title('Penawaran telah diperbarui')
                     ->message('Penawaran dengan nomor ' . $dataH->no_document . ' telah diperbarui.')
-                    ->url('/quote-request')
+                    ->url('/sales/quotation/quote-request')
                     ->send();
 
                 return response()->json([
@@ -4006,7 +3961,7 @@ class RequestQuotationController extends Controller
                 str_contains($th->getMessage(), 'MySQL server has gone away') ||
                 str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
-                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Kontrak atau di Controller Request Quotation bermasalah.!')->url('/programmer/admin-panel/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
@@ -4290,27 +4245,22 @@ class RequestQuotationController extends Controller
                     $kategori = $exp[0];
                     $vol = 0;
 
-                    $parameter = [];
-                    foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
+                    $idParameter = array_map(function($par) {
+                        return explode(';', $par)[0];
+                    }, $param);
 
                     $harga_db = [];
                     $volume_db = [];
-                    foreach ($parameter as $param_) {
+                    foreach ($idParameter as $idParam) {
                         $ambil_data = HargaParameter::where('id_kategori', $kategori)
-                            ->where('nama_parameter', $param_)
-                            ->orderBy('id', 'ASC')
-                            ->get();
+                            ->where('id_parameter', $idParam)
+                            ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                            ->where('is_active', 1)
+                            ->orderBy('tanggal_berlaku', 'desc')
+                            ->first();
 
-
-                        $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
-                            return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                        }) ?? $ambil_data->first();
-
-                        $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $harga_db[] = $ambil_data->harga ?? 0;
+                        $volume_db[] = $ambil_data->volume ?? 0;
 
                     }
 
@@ -4451,52 +4401,23 @@ class RequestQuotationController extends Controller
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
 
-                        $parameters = [];
-                        $id_parameter = [];
-                        foreach ($sampling->parameter as $item) {
-                            $cek_par = DB::table('parameter')
-                                ->where('id', explode(';', $item)[0])->first();
-                            if ($cek_par) {
-                                $parameters[] = $cek_par->nama_lab;
-                                $id_parameter[] = $cek_par->id;
-                            }
-                        }
+                        $idParameter = array_map(function($par) {
+                            return explode(';', $par)[0];
+                        }, $sampling->parameter);
 
                         $harga_parameter = [];
                         $volume_parameter = [];
 
-                        foreach ($parameters as $parameter) {
+                        foreach ($idParameter as $idParam) {
                             $ambil_data = HargaParameter::where('id_kategori', $id_kategori)
-                                ->where('nama_parameter', $parameter)
-                                ->orderBy('id', 'ASC')
-                                ->get();
+                                ->where('id_parameter', $idParam)
+                                ->where('tanggal_berlaku', '<=', $payload->informasi_pelanggan->tgl_penawaran)
+                                ->where('is_active', 1)
+                                ->orderBy('tanggal_berlaku', 'desc')
+                                ->first();
 
-                            if (count($ambil_data) > 1) {
-                                $found = false;
-                                foreach ($ambil_data as $xc => $zx) {
-                                    if (\explode(' ', $zx->created_at)[0] > $informasi_pelanggan->tgl_penawaran) {
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        $found = true;
-                                        break;
-                                    }
-                                    if ((count($ambil_data) - 1) == $xc && !$found) {
-                                        $zx = $ambil_data[0];
-                                        $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
-                                        break;
-                                    }
-                                }
-                            } else if (count($ambil_data) == 1) {
-                                foreach ($ambil_data as $zx) {
-                                    $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
-                                    break;
-                                }
-                            } else {
-                                $harga_parameter[] = 0;
-                                $volume_parameter[] = 0;
-                            }
+                            $harga_parameter[] = $ambil_data->harga ?? 0;
+                            $volume_parameter[] = $ambil_data->volume ?? 0;
                         }
 
                         $vol_db = array_sum($volume_parameter);
@@ -4607,10 +4528,10 @@ class RequestQuotationController extends Controller
                     // $id_wilayah = $expOp[0];
                     // $cekOperasional = HargaTransportasi::where('is_active', true)->where('id', $id_wilayah)->first();
                     $nama_wilayah = implode('-', array_slice($expOp, 1));
-                    $ambil_data_transportasi = HargaTransportasi::where('wilayah', $nama_wilayah)->orderBy('id', 'ASC')->get();
-                    $cekOperasional = $ambil_data_transportasi->first(function ($item) use ($payload) {
-                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
-                    }) ?? $ambil_data_transportasi->first();
+                    $cekOperasional = HargaTransportasi::getEffectiveForWilayah(
+                        $nama_wilayah,
+                        $payload->informasi_pelanggan->tgl_penawaran
+                    );
 
                     // START FOR
                     $disc_transport = 0;
@@ -4910,7 +4831,7 @@ class RequestQuotationController extends Controller
                             Notification::where('id', 19)
                                 ->title('Peringatan.')
                                 ->message($message)
-                                ->url('/quote-request')
+                                ->url('/sales/quotation/quote-request')
                                 ->send();
                         }
                     } else {
@@ -4931,7 +4852,7 @@ class RequestQuotationController extends Controller
                             Notification::where('id', 19)
                                 ->title('Peringatan.')
                                 ->message($message)
-                                ->url('/quote-request')
+                                ->url('/sales/quotation/quote-request')
                                 ->send();
                         }
 
@@ -4945,7 +4866,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -4963,7 +4884,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -4985,7 +4906,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -5004,7 +4925,7 @@ class RequestQuotationController extends Controller
                                 Notification::where('id', 19)
                                     ->title('Peringatan.')
                                     ->message($message)
-                                    ->url('/quote-request')
+                                    ->url('/sales/quotation/quote-request')
                                     ->send();
                             }
                         } else {
@@ -5560,7 +5481,7 @@ class RequestQuotationController extends Controller
                             ? "Telah terjadi revisi pada nomor quote $dataOld->no_document menjadi $no_document dengan nomor order $data_lama->no_order. Oleh karena itu nomor invoice $invoiceNumbersStr akan dikembalikan ke menu generate invoice untuk dilakukan pengecekan."
                             : "Telah terjadi revisi pada nomor quote $dataOld->no_document menjadi $no_document dengan nomor order $data_lama->no_order.";
 
-                        Notification::where('id_department', 5)->title('Revisi Penawaran')->message($message)->url('/generate-invoice')->send();
+                        Notification::where('id_department', 5)->title('Revisi Penawaran')->message($message)->url('/finance/account-receivable/generate-invoice')->send();
 
                         DB::table('persiapan_sampel_header')
                             ->where('no_quotation', $dataOld->no_document)
@@ -5603,7 +5524,7 @@ class RequestQuotationController extends Controller
                 Notification::whereIn('id', $array_id_user)
                     ->title('Penawaran telah di revisi')
                     ->message('Penawaran dengan nomor ' . $dataOld->no_document . ' telah di revisi menjadi ' . $dataH->no_document . '.')
-                    ->url('/quote-request')
+                    ->url('/sales/quotation/quote-request')
                     ->send();
 
                 return response()->json([
@@ -5624,7 +5545,7 @@ class RequestQuotationController extends Controller
                 str_contains($th->getMessage(), 'MySQL server has gone away') ||
                 str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
-                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Kontrak atau di Controller Request Quotation bermasalah.!')->url('/programmer/admin-panel/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
@@ -6152,7 +6073,7 @@ class RequestQuotationController extends Controller
                     // dd('stop');
                     $processedCount++;
                     DB::commit();
-                } catch (Throwable $e) {
+                } catch (\Throwable $e) {
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
@@ -6172,7 +6093,7 @@ class RequestQuotationController extends Controller
                 'errors' => $errorCount,
                 'total' => $dataList->count()
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return false;
             Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
@@ -6260,7 +6181,7 @@ class RequestQuotationController extends Controller
 
         $data = $query->get();
 
-        return DataTables::of($data)
+        return Datatables::of($data)
             ->editColumn('data_pendukung_sampling', function ($item) {
                 $data = json_decode($item->data_pendukung_sampling, true);
 

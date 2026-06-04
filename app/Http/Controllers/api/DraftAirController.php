@@ -9,6 +9,7 @@ use App\Models\LhpsAirDetail;
 use App\Models\LhpsAirCustom;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
+use App\Models\SampelDiantar;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\MasterRegulasi;
@@ -46,12 +47,27 @@ class DraftAirController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('lhps_air', 'orderHeader', 'dataLapanganAir', 'sampleDiantar')
+        $data = OrderDetail::with('lhps_air', 'orderHeader', 'dataLapanganAir')
             ->where('is_approve', false)
             ->where('is_active', true)
             ->where('kategori_2', '1-Air')
             ->where('status', 2)
-            ->orderBy('tanggal_terima', 'desc');
+            ->orderBy('tanggal_terima', 'desc')
+            ->get();
+
+        $data->each(function ($item) {
+            $query = SampelDiantar::with('detail')
+                ->where('no_order', $item->no_order);
+
+            if (!empty($item->periode)) {
+                $query->where('periode_kontrak', $item->periode);
+            }
+
+            $item->setRelation(
+                'sampelDiantar',
+                $query->first()
+            );
+        });
 
         return Datatables::of($data)->make(true);
     }
@@ -542,13 +558,35 @@ class DraftAirController extends Controller
                     ->where('no_sampel', $request->no_sampel)
                     ->first();
 
-                if ($lapanganAir) {
+                // TAMBAHKAN: ambil order detail untuk cek kategori_1
+                $orderDetail = OrderDetail::where('no_sampel', $request->no_sampel)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderDetail && $orderDetail->kategori_1 === 'SD') {
+                    // Kasus SD: ambil dari sampel_diantar
+                    $mainData = array_merge($mainData, $this->handleSD($request->no_sampel, $request->regulasi, $methodsUsed));
+                } else if ($lapanganAir) {
+                    // Kasus non-SD: ambil dari data lapangan
                     $mainData = array_merge($mainData, $this->handleLapangan($lapanganAir, $request->regulasi, $methodsUsed));
                 }
 
-                if ($lapanganAir && !empty($otherRegulations)) {
+                // if ($lapanganAir && !empty($otherRegulations)) {
+                //     foreach ($otherRegulations as $id_regulasi => $data) {
+                //         $acc = array_merge($data, $this->handleLapangan($lapanganAir, $id_regulasi, $methodsUsed));
+                //         $otherRegulations[$id_regulasi] = $acc;
+                //     }
+                // }
+                // Untuk other_regulasi juga harus handle SD
+                if (!empty($otherRegulations)) {
                     foreach ($otherRegulations as $id_regulasi => $data) {
-                        $acc = array_merge($data, $this->handleLapangan($lapanganAir, $id_regulasi, $methodsUsed));
+                        if ($orderDetail && $orderDetail->kategori_1 === 'SD') {
+                            $acc = array_merge($data, $this->handleSD($request->no_sampel, $id_regulasi, $methodsUsed));
+                        } else if ($lapanganAir) {
+                            $acc = array_merge($data, $this->handleLapangan($lapanganAir, $id_regulasi, $methodsUsed));
+                        } else {
+                            $acc = $data;
+                        }
                         $otherRegulations[$id_regulasi] = $acc;
                     }
                 }
@@ -727,6 +765,127 @@ class DraftAirController extends Controller
         return $results;
     }
 
+    private function handleSD($noSampel, $regulasiId, &$methodsUsed = [])
+    {
+        $results = [];
+
+        $orderDetail = OrderDetail::where('no_sampel', $noSampel)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$orderDetail || !$orderDetail->sampelDiantar) return $results;
+
+        // Ambil parsed_internal_data dari sampel_diantar
+        $sampelDiantar = null;
+        foreach ($orderDetail->sampelDiantar->detail as $detail) {
+            $internalData = json_decode(html_entity_decode($detail->internal_data), true);
+            $match = collect($internalData)->firstWhere('no_sampel', $noSampel);
+            if ($match) {
+                $sampelDiantar = $match;
+                break;
+            }
+        }
+
+        if (!$sampelDiantar) return $results;
+
+        $cekPH    = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "128;pH")->first();
+        $cekSuhu  = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "160;Suhu")->first();
+        $cekDebit = OrderDetail::where('no_sampel', $noSampel)->where('parameter', 'LIKE', "%Debit Air%")->first();
+
+        // === pH ===
+        if ($cekPH && !empty($sampelDiantar['ph'])) {
+            $bakumutu = MasterBakumutu::where('parameter', 'pH')
+                ->where('id_regulasi', $regulasiId)
+                ->where('is_active', true)
+                ->first();
+
+            $masterParameter = Parameter::where('nama_lab', 'pH')
+                ->where('id_kategori', 1)
+                ->where('is_active', true)
+                ->first();
+
+            $results[] = [
+                'id'            => 1,
+                'name'          => 'pH',
+                'no_sampel'     => $noSampel,
+                'akr'           => '',
+                'keterangan'    => 'pH',
+                'satuan'        => $bakumutu->satuan ?? '-',
+                'methode'       => $bakumutu->method ?? $masterParameter->method ?? '-',
+                'baku_mutu'     => [$bakumutu->baku_mutu ?? '-'],
+                'hasil'         => $sampelDiantar['ph'],
+                'hasil_koreksi' => '',
+                'status'        => 'AKREDITASI',
+                'hasil_json'    => null,
+            ];
+
+            $methodsUsed[] = $bakumutu->method ?? '-';
+        }
+
+        // === Suhu ===
+        if ($cekSuhu && !empty($sampelDiantar['suhu'])) {
+            $bakumutu = MasterBakumutu::where('parameter', 'Suhu')
+                ->where('id_regulasi', $regulasiId)
+                ->where('is_active', true)
+                ->first();
+
+            $masterParameter = Parameter::where('nama_lab', 'Suhu')
+                ->where('id_kategori', 1)
+                ->where('is_active', true)
+                ->first();
+
+            $results[] = [
+                'id'            => 2,
+                'name'          => 'Suhu',
+                'no_sampel'     => $noSampel,
+                'akr'           => '',
+                'keterangan'    => 'Suhu',
+                'satuan'        => $bakumutu->satuan ?? '°C',
+                'methode'       => $bakumutu->method ?? $masterParameter->method ?? '-',
+                'baku_mutu'     => [$bakumutu->baku_mutu ?? '-'],
+                'hasil'         => $sampelDiantar['suhu'],
+                'hasil_koreksi' => '',
+                'status'        => 'AKREDITASI',
+                'hasil_json'    => null,
+            ];
+
+            $methodsUsed[] = $bakumutu->method ?? '-';
+        }
+
+        // === Debit Air ===
+        if ($cekDebit && !empty($sampelDiantar['debit'])) {
+            $parameters    = json_decode($cekDebit->parameter, true);
+            $parameter = collect($parameters)->first(function($item) {
+                return str_contains($item, 'Debit Air');
+            });
+            $parameterName = explode(';', $parameter)[1] ?? 'Debit Air';
+
+            $bakumutu = MasterBakumutu::where('parameter', $parameterName)
+                ->where('id_regulasi', $regulasiId)
+                ->where('is_active', true)
+                ->first();
+
+            $results[] = [
+                'id'            => 3,
+                'name'          => $parameterName,
+                'no_sampel'     => $noSampel,
+                'akr'           => '',
+                'keterangan'    => 'Debit Air',
+                'satuan'        => $bakumutu->satuan ?? '-',
+                'methode'       => $bakumutu->method ?? 'IKM/ISL/7.2.109 (Perhitungan)',
+                'baku_mutu'     => [$bakumutu->baku_mutu ?? '-'],
+                'hasil'         => $sampelDiantar['debit'],
+                'hasil_koreksi' => '',
+                'status'        => 'AKREDITASI',
+                'hasil_json'    => null,
+            ];
+
+            $methodsUsed[] = $bakumutu->method ?? '-';
+        }
+
+        return $results;
+    }
+
     public function handleGenerateLink(Request $request)
     {
         DB::beginTransaction();
@@ -882,107 +1041,6 @@ class DraftAirController extends Controller
             return response()->json(['message' => $e->getMessage()], 400);
         }
     }
-
-    // public function handleApprove(Request $request, $isManual = true)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         if ($isManual) {
-    //             $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
-
-    //             if (!$konfirmasiLhp) {
-    //                 $konfirmasiLhp = new KonfirmasiLhp();
-    //                 $konfirmasiLhp->created_by = $this->karyawan;
-    //                 $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             } else {
-    //                 $konfirmasiLhp->updated_by = $this->karyawan;
-    //                 $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             }
-
-    //             $konfirmasiLhp->no_lhp = $request->cfr;
-    //             $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
-    //             $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
-    //             $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
-    //             $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
-    //             $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
-    //             $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
-    //             $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
-
-    //             $konfirmasiLhp->save();
-    //         };
-
-    //         $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
-    //             ->where('is_active', true)->firstOrFail();
-
-    //         $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
-    //             ->where('id', $request->id)
-    //             ->where('is_active', true)
-    //             ->firstOrFail();
-
-    //         if ($header != null) {
-    //             $data_order->is_approve = 1;
-    //             $data_order->status = 3;
-    //             $data_order->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             $data_order->approved_by = $this->karyawan;
-    //             $data_order->save();
-
-    //             $header->is_approve = 1;
-    //             $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             $header->approved_by = $this->karyawan;
-
-    //             $header->save();
-
-    //             HistoryAppReject::insert([
-    //                 'no_lhp' => $data_order->cfr,
-    //                 'no_sampel' => $data_order->no_sampel,
-    //                 'kategori_2' => $data_order->kategori_2,
-    //                 'kategori_3' => $data_order->kategori_3,
-    //                 'menu' => 'Draft Air',
-    //                 'status' => 'approve',
-    //                 'approved_at' => Carbon::now(),
-    //                 'approved_by' => $this->karyawan
-    //             ]);
-
-
-    //             if ($header->file_qr == null) {
-    //                 $dataQr = json_decode($qr->data);
-    //                 $dataQr->Tanggal_Pengesahan = Carbon::parse($header->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
-    //                 $dataQr->Disahkan_Oleh = $header->nama_karyawan;
-    //                 $dataQr->Jabatan = $header->jabatan_karyawan;
-    //                 $qr->data = json_encode($dataQr);
-    //                 $qr->save();
-    //             }
-
-    //             $cekDetail = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first();
-    //             $cekLink = LinkLhp::where('no_order', $header->no_order)->where('periode', $periode)->first();
-    //             $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)->where('is_active', true)->first();
-    //             if($cekLink) {
-    //                 $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $cekDetail->periode);
-    //                 $this->dispatch($job);
-    //             }
-
-    //             EmailLhpRilisHelpers::run([
-    //                 'cfr' => $header->no_lhp,
-    //                 'no_order' => $header->no_order,
-    //                 'nama_pic_order' => $orderHeader->nama_pic_order,
-    //                 'nama_perusahaan' => $header->nama_pelanggan,
-    //                 'periode' => $cekDetail->periode,
-    //                 'karyawan' => $this->karyawan
-    //             ]);
-
-    //             DB::commit();
-    //             return response()->json([
-    //                 'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!'
-    //             ], 200);
-    //         }
-    //     } catch (Exception $e) {
-    //         DB::rollBack();
-    //         dd($e);
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //         ], 401);
-    //     }
-    // }
 
     public function handleApprove(Request $request, $isManual = true)
     {
@@ -1177,54 +1235,6 @@ class DraftAirController extends Controller
             ]);
         }
     }
-
-    /* public function handleDownload(Request $request)
-    {
-        try {
-            $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-            if ($header != null && $header->file_lhp == null) {
-                $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-                $custom = LhpsAirCustom::where('id_header', $header->id)->get();
-
-                if ($header->file_qr == null) {
-                    $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
-                    $header->save();
-                    GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
-                }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
-                    }
-                }
-
-                $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-                $this->dispatch($job);
-
-                $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
-                $data = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                $data->file_lhp = $fileName;
-                $data->save();
-
-            } else if ($header != null && $header->file_lhp != null) {
-                $fileName = $header->file_lhp;
-            }
-
-            return response()->json([
-                'file_name' => env('APP_URL') . '/public/dokumen/LHPS/' . $fileName,
-                'message' => 'Download file ' . $request->no_sampel . ' berhasil!'
-            ]);
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => 'Error download file ' . $th->getMessage(),
-            ], 401);
-        }
-    }*/
 
     public function getTechnicalControl(Request $request)
     {

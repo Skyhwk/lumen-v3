@@ -1,8 +1,8 @@
 <?php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
+use Carbon\Carbon;
 
 class Parameter extends Sector
 {
@@ -20,6 +20,7 @@ class Parameter extends Sector
         'method',
         'nilai_minimum',
         'nilai_ketidak_pastian',
+        'is_blocked',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -30,9 +31,17 @@ class Parameter extends Sector
 
     public $timestamps = false;
 
+    /**
+     * Relasi ke hargaParameter:
+     * Mengambil record HargaParameter yang is_active dan tanggal_berlaku <= hari ini,
+     * urut dari yang paling baru.
+     */
     public function hargaParameter()
     {
-        return $this->belongsTo(HargaParameter::class, 'id', 'id_parameter')
-            ->where('is_active', true);
+        // return relasi, bukan langsung ambil data
+        return $this->hasOne(HargaParameter::class, 'id_parameter', 'id')
+            ->where('is_active', true)
+            ->where('tanggal_berlaku', '<=', Carbon::today()->toDateString())
+            ->orderByDesc('tanggal_berlaku');
     }
 }

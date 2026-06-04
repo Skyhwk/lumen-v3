@@ -9,15 +9,14 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Exception;
-use Datatables;
+use Yajra\DataTables\DataTables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, ProcessAfterOrder, UseKuotaService, QuotationService, SendEmail};
+use App\Services\{Notification, GetAtasan, ProcessAfterOrder, QuotationService, SendEmail};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
-use App\Models\ParameterAnalisa;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
@@ -26,20 +25,15 @@ use App\Models\HargaParameter;
 use App\Models\FtcT;
 use App\Models\Ftc;
 use App\Http\Controllers\Controller;
-use App\Helpers\WorkerOperation;
 use App\Jobs\CreateInvoiceJob;
 use App\Jobs\RenderInvoiceJob;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
 use App\Models\DataLapanganSARHeader;
 use App\Models\Invoice;
-use App\Models\HistoryKuotaPengujian;
 use App\Models\JobTask;
-use App\Models\KuotaPengujian;
 use App\Models\LinkRingkasanOrder;
 use App\Models\MasterPelanggan;
-use App\Models\QrPsikologi;
-use App\Services\ReorderNotifierService;
 use Illuminate\Support\Facades\Http;
 use Mpdf;
 
@@ -400,7 +394,7 @@ class ReadyOrderController extends Controller
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
 
-                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
+                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/sales/quotation/ready-order')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
@@ -430,7 +424,7 @@ class ReadyOrderController extends Controller
                 $prosess = self::generateOrderNonKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
-                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
+                Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/sales/quotation/ready-order')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             }
         } catch (\Throwable $th) {
@@ -1346,15 +1340,17 @@ class ReadyOrderController extends Controller
 
                     if (explode("-", $value->kategori_1)[1] == 'Air') {
 
-                        $parameter_names = array_map(function ($p) {
-                            return explode(';', $p)[1];
+                        $idParameter = array_map(function ($p) {
+                            return explode(';', $p)[0];
                         }, $value->parameter);
 
                         $id_kategori = explode("-", $value->kategori_1)[0];
 
                         $params = HargaParameter::where('id_kategori', $id_kategori)
                             ->where('is_active', true)
-                            ->whereIn('nama_parameter', $parameter_names)
+                            ->whereIn('id_parameter', $idParameter)
+                            ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                             ->get();
 
                         $param_map = [];
@@ -1377,16 +1373,7 @@ class ReadyOrderController extends Controller
                         // Generate botol dan barcode
                         $botol = [];
 
-                        $ketentuan_botol = [
-                            'ORI' => 1000,
-                            'H2SO4' => 1000,
-                            'M100' => 100,
-                            'HNO3' => 500,
-                            'M1000' => 1000,
-                            'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10,
-                            'Ori-Kaca-3L' => 3000,
-                        ];
+                        $ketentuan_botol = config('ketentuan_botol');
 
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
@@ -1867,15 +1854,19 @@ class ReadyOrderController extends Controller
 
                     // =================================================================
                     if (explode("-", $value->kategori_1)[1] == 'Air') {
-                        $parameter_names = array_map(function ($p) {
-                            return explode(';', $p)[1];
+
+                        $idParameter = array_map(function ($p) {
+                            return explode(';', $p)[0];
                         }, $value->parameter);
 
                         $id_kategori = explode("-", $value->kategori_1)[0];
+                        
                         $params = HargaParameter::where('id_kategori', $id_kategori)
-                            ->where('is_active', true)
-                            ->whereIn('nama_parameter', $parameter_names)
-                            ->get();
+                        ->where('is_active', true)
+                        ->whereIn('id_parameter', $idParameter)
+                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
+                        ->get();
 
                         $param_map = [];
                         foreach ($params as $param) {
@@ -1889,7 +1880,7 @@ class ReadyOrderController extends Controller
                         if ($invalid->isNotEmpty()) {
                             $names = $invalid->pluck('nama_parameter')->implode(', ');
                             return response()->json([
-                                'message' => 'Regen belum diset untuk parameter ' . $names . ' silahkan hubungi teknis.!'
+                                'message' => 'Regen belum diset untuk parameter ' . $names . ' silahkan hubungi bagian teknis.!'
                             ], 400);
                         }
 
@@ -1907,16 +1898,8 @@ class ReadyOrderController extends Controller
 
                         // Generate botol dan barcode
                         $botol = [];
-                        $ketentuan_botol = [
-                            'ORI' => 1000,
-                            'H2SO4' => 1000,
-                            'M100' => 100,
-                            'HNO3' => 500,
-                            'M1000' => 1000,
-                            'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10,
-                            'Ori-Kaca-3L' => 3000,
-                        ];
+                        $ketentuan_botol = config('ketentuan_botol');
+
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
                                 foreach ($param_map as $p) {
@@ -2449,14 +2432,17 @@ class ReadyOrderController extends Controller
                                 file_put_contents(public_path() . '/barcode/sample/' . \str_replace("/", "-", $no_sample) . '.png', $generator->getBarcode($no_sample, $generator::TYPE_CODE_128, 3, 100));
 
                                 if (explode("-", $value->kategori_1)[1] == 'Air') {
-                                    $parameter_names = array_map(function ($p) {
-                                        return explode(';', $p)[1];
+
+                                    $idParameter = array_map(function ($p) {
+                                        return explode(';', $p)[0];
                                     }, $value->parameter);
 
                                     $id_kategori = explode("-", $value->kategori_1)[0];
                                     $params = HargaParameter::where('id_kategori', $id_kategori)
                                         ->where('is_active', true)
-                                        ->whereIn('nama_parameter', $parameter_names)
+                                        ->whereIn('id_parameter', $idParameter)
+                                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                                         ->get();
 
                                     $param_map = [];
@@ -2478,16 +2464,7 @@ class ReadyOrderController extends Controller
 
                                     // Generate botol dan barcode
                                     $botol = [];
-                                    $ketentuan_botol = [
-                                        'ORI' => 1000,
-                                        'H2SO4' => 1000,
-                                        'M100' => 100,
-                                        'HNO3' => 500,
-                                        'M1000' => 1000,
-                                        'BENTHOS' => 100,
-                                        'BEBAS PYROGEN' => 10,
-                                        'Ori-Kaca-3L' => 3000,
-                                    ];
+                                    $ketentuan_botol = config('ketentuan_botol');
 
                                     foreach ($botol_volumes as $type => $volume) {
                                         if (empty($type)) {
@@ -3215,15 +3192,17 @@ class ReadyOrderController extends Controller
 
                     if (explode("-", $value->kategori_1)[1] == 'Air') {
 
-                        $parameter_names = array_map(function ($p) {
-                            return explode(';', $p)[1];
+                        $idParameter = array_map(function ($p) {
+                            return explode(';', $p)[0];
                         }, $value->parameter);
 
                         $id_kategori = explode("-", $value->kategori_1)[0];
 
                         $params = HargaParameter::where('id_kategori', $id_kategori)
                             ->where('is_active', true)
-                            ->whereIn('nama_parameter', $parameter_names)
+                            ->whereIn('id_parameter', $idParameter)
+                            ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                             ->get();
 
                         $param_map = [];
@@ -3246,16 +3225,7 @@ class ReadyOrderController extends Controller
                         // Generate botol dan barcode
                         $botol = [];
 
-                        $ketentuan_botol = [
-                            'ORI' => 1000,
-                            'H2SO4' => 1000,
-                            'M100' => 100,
-                            'HNO3' => 500,
-                            'M1000' => 1000,
-                            'BENTHOS' => 100,
-                            'BEBAS PYROGEN' => 10,
-                            'Ori-Kaca-3L' => 3000,
-                        ];
+                        $ketentuan_botol = config('ketentuan_botol');
 
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
@@ -3461,6 +3431,7 @@ class ReadyOrderController extends Controller
             // $reorderNotifierService->run($updateHeader, $data_to_log, $bcc, $this->user_id);
 
             $inv = Invoice::where('no_order', $no_order)
+                ->where('is_active', 1)
                 ->orderBy('id', 'asc')
                 ->get();
 
@@ -3472,7 +3443,7 @@ class ReadyOrderController extends Controller
             });
 
             $all_period = $inv->contains(function ($i) {
-                return (float) $i->periode = 'all';
+                return (string) $i->periode === 'all';
             });
 
             if ($all_period) {
@@ -3494,7 +3465,7 @@ class ReadyOrderController extends Controller
                                     'keterangan_tagihan' => $request->keterangan_tagihan ?? 'Tagihan tambahan revisi order',
                                 ]);
 
-                                self::createInvoice($data, $dataQuotation, $newRequest, false);
+                                self::createInvoice($updateHeader, $dataQuotation, $newRequest, false);
                             } else {
                                 // Selisih di bawah/sama dengan 500k, tambahkan ke invoice terakhir
                                 $lastInvoice = $inv->sortByDesc('id')->first();

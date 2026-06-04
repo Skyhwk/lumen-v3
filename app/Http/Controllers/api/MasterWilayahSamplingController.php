@@ -59,7 +59,10 @@ class MasterWilayahSamplingController extends Controller
 
     public function getWilayah()
     {
-        $data = HargaTransportasi::distinct('wilayah')->where('is_active', true)->pluck('wilayah')->toArray();
+        $data = HargaTransportasi::effective()
+            ->distinct()
+            ->pluck('master_harga_transportasi.wilayah')
+            ->toArray();
 
         return response()->json(['data' => $data, 'status' => 200, 'success' => true], 200);
     }

@@ -203,7 +203,7 @@
                         $bagian_semua = '';
                         $bagian_angka = '';
                         $bagian_khusus = '';
-
+                        $bagian_kecuali = '';
                         // Deteksi bagian berdasarkan isi teks
                         foreach ($items as $v) {
                             if (Str::contains(strtolower($v), 'standar')) {
@@ -226,6 +226,8 @@
                             } elseif (Str::contains(strtolower($v), 'partikulat')) {
                                 // Tambahan: khusus untuk partikulat
                                 $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
+                            }  elseif (Str::contains(strtolower($v), 'Kecuali parameter Seng (Zn')) {
+                                $bagian_kecuali = 'Kecuali parameter Seng (Zn) dan Total Sulfur Tereduksi (H₂S)';
                             }
                         }
 
@@ -238,6 +240,7 @@
                                 $bagian_kering,
                                 $bagian_semua,
                                 $bagian_khusus, // diletakkan paling akhir
+                                $bagian_kecuali
                             ]))
                         );
 

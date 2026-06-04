@@ -74,8 +74,8 @@ class CheckToken
             if (!$token) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Token not provided'
-                ], 403);
+                    'message' => 'Token not provided',
+                ], 430);
             }
 
             // Get token data dari cache
@@ -84,18 +84,18 @@ class CheckToken
             if (!$tokenData) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Token is invalid or expired'
-                ], 403);
+                    'message' => 'Token is invalid or expired',
+                ], 430);
             }
 
             if (!$tokenData || $tokenData->is_expired) {
-                return response()->json(['message' => 'Token is invalid or expired.!'], 403);
+                return response()->json(['message' => 'Token is invalid or expired.!'], 430);
             }
     
             $user = $tokenData->user;
     
             if (!$user) {
-                return response()->json(['message' => 'User is inactive'], 403);
+                return response()->json(['message' => 'User is inactive'], 430);
             }
 
             $request->attributes->add(['user' => $user]);
@@ -112,8 +112,8 @@ class CheckToken
             
             return response()->json([
                 'success' => false,
-                'message' => 'Token validation failed'
-            ], 403);
+                'message' => 'Token validation failed',
+            ], 430);
         }
     }
 }

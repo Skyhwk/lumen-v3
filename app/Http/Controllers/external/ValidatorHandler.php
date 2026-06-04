@@ -13,6 +13,7 @@ use App\Models\DataLapanganEmisiKendaraan;
 use App\Models\MasterBakumutu;
 use App\Models\MasterRegulasi;
 use Log;
+use Carbon\Carbon;
 
 
 
@@ -56,7 +57,10 @@ class ValidatorHandler extends BaseController
 									}
 								}
 							}
-							$datas[$key]['tgl_uji'] = DATE('Y-m-d', strtotime($cek_fdl->created_at));
+							$datas[$key]['tgl_uji'] = Carbon::parse($cek_fdl->created_at)
+								->locale('id')
+								->translatedFormat('l, d F Y');
+		
 							$datas[$key]['parameters'][0]['parameter'] = "CO";
 							$datas[$key]['parameters'][0]['hasil'] = $cek_fdl->co . ' %';
 							$datas[$key]['parameters'][0]['status'] = $status_co;
@@ -78,7 +82,9 @@ class ValidatorHandler extends BaseController
 						$data_detail['bahan_bakar'] = $kendaraan->jenis_bbm;
 						$data_detail['kapasitas_cc'] = $kendaraan->cc . ' CC';
 						$data_detail['regulasi'] = $regulasi->peraturan;
-						$data_detail['tgl_uji'] = DATE('Y-m-d', strtotime($cek_fdl->created_at));
+						$data_detail['tgl_uji'] = Carbon::parse($cek_fdl->created_at)
+							->locale('id')
+							->translatedFormat('l, d F Y');
 
 						return response()->json([
 							'detail' => $data_detail,
@@ -125,7 +131,7 @@ class ValidatorHandler extends BaseController
 				if ($cek->type_document != 'signature') {
 					$data = json_decode($cek->data);
 					// dd($data);
-					if (isset($data->Nomor_LHP) || in_array($cek->type_document, ['berita_acara_sampling', 'surat_tugas_pengambilan_sampel', 'coding_sample', 'persiapan_sampel', 'permintaan_dokumentasi_sampling', 'invoice','e_certificate_webinar', 'skppa', 'coc', 'LHP_SAR'])) {
+					if (isset($data->Nomor_LHP) || in_array($cek->type_document, ['berita_acara_sampling', 'surat_tugas_pengambilan_sampel', 'coding_sample', 'persiapan_sampel', 'permintaan_dokumentasi_sampling', 'invoice','e_certificate_webinar', 'skppa', 'coc', 'LHP_SAR', 'skhp_sar'])) {
 						$array = (array) $data;
 					} else {
 						$array = [

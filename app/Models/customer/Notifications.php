@@ -11,11 +11,20 @@ class Notifications extends Sector
     protected $table = 'notification';
     public $timestamps = false;
     protected $fillable = [
-        'karyawan_id',
-        'status',
+        'user_id',
+        'title',
         'message',
         'url',
-        'timestamps',
+        'data',
+        'is_read',
+        'created_at',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'data' => 'array',
+        'is_read' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
 }

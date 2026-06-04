@@ -4,101 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{
-    QuotationKontrakH,
-    QuotationKontrakD,
-    SamplingPlan,
-    QuotationNonKontrak,
-    Jadwal,
-    AnalystFormula,
-    Colorimetri,
-    OrderHeader,
-    OrderDetail,
-    Invoice,
-    PersiapanSampelHeader,
-    PersiapanSampelDetail,
-    LhpsAirHeader,
-    LhpsAirDetail,
-    LhpsAirCustom,
-    MasterBakumutu,
-    HargaParameter,
-    KelengkapanKonfirmasiQs,
-    Parameter,
-    DataLapanganAir,
-    LhpUdaraPsikologiHeader,
-    SampelTidakSelesai,
-    MasterKaryawan,
-    QrDocument,
-    DataLapanganPartikulatMeter,
-    DetailSenyawaVolatile,
-    DetailLingkunganHidup,
-    DataLapanganDirectLain,
-    DetailLingkunganKerja,
-    DetailMicrobiologi,
-    DataLapanganKebisinganPersonal,
-    DataLapanganKebisingan,
-    DataLapanganCahaya,
-    DataLapanganGetaran,
-    DataLapanganGetaranPersonal,
-    DataLapanganIklimPanas,
-    DataLapanganIklimDingin,
-    DataLapanganSwab,
-    DataLapanganErgonomi,
-    DataLapanganDebuPersonal,
-    DataLapanganMedanLM,
-    DataLapanganSinarUV,
-    DataLapanganPsikologi,
-    DataLapanganEmisiKendaraan,
-    DataLapanganEmisiCerobong,
-    DataLapanganIsokinetikHasil,
-    Gravimetri,
-    MasterPelanggan,
-    Titrimetri,
-    WsValueAir, //batas
-    DataLapanganEmisiOrder,
-    DataLapanganIsokinetikBeratMolekul,
-    DataLapanganIsokinetikKadarAir,
-    DataLapanganIsokinetikPenentuanKecepatanLinier,
-    DataLapanganIsokinetikSurveiLapangan,
-    DataLapanganKebisinganBySoundMeter,
-    DataLapanganKecerahan,
-    DataLapanganLapisanMinyak,
-    DataLapanganMicrobiologi,
-    DataLapanganSampah,
-    DataLapanganSenyawaVolatile,
-    DataLapanganUnion,
-    DataLimbah,
-    DataPsikologi,
-    DetailFlowMeter,
-    DetailSoundMeter,
-    DailyQsd,
-    SertifikatWebinarHeader,
-    SertifikatWebinarDetail,
-    LayoutCertificate,
-    JenisFont,
-    TemplateBackground,
-    MasterTargetSales,
-    SarHeader,
-    TemplatePaketAnalisa
+    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirHeader,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,batasDataLapanganEmisiOrder,
 };
 use App\Services\{
-    CombineLHPService,
-    GetAtasan,
-    SamplingPlanServices,
-    RenderSamplingPlan,
-    JadwalServices,
-    RenderInvoice,
-    RenderInvoiceTitik,
-    GeneratePraSampling,
-    GenerateQrDocumentLhp,
-    GenerateWebinarSertificate,
-    LhpTemplate,
-    RandomSalesAssign,
-    SendEmail,
-    GetBawahan,
-    SnapshotPersiapanService,
-    GenerateToken,
-    GenerateDokumenCocService,
-    GenerateStrukSarService
+    CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -885,7 +794,6 @@ class TestingController extends Controller
 
                     return response()->json($tables, 200);
                 case 'update-nodoc':
-
                     $rows = SamplingPlan::where('no_document', 'like', '%ISL/SP/25-I%')->orderBy('no_document')->get(['no_document', 'quotation_id', 'status_quotation', 'id'])->toArray();
                     $num = 0;
                     foreach ($rows as $row) {
@@ -899,7 +807,6 @@ class TestingController extends Controller
                     }
                     return response()->json('berhasil update nodoc', 200);
                 case 'render-doc':
-
                     $rows = SamplingPlan::whereIn('no_document', ['ISL/SP/24-XII/09103597'])
                         ->where('status', 1)
                         ->where('is_active', 1)
@@ -1142,101 +1049,6 @@ class TestingController extends Controller
                                 ->chunk(500, function ($details) use (&$allNoSampel) {
                                     foreach ($details as $value) {
                                         $allNoSampel[] = $value->no_sampel;
-                                        // if (explode("-", $value->kategori_2)[1] == 'Air') {
-                                        //     $parameter_names = array_map(function ($p) {
-                                        //         return explode(';', $p)[1];
-                                        //     }, json_decode($value->parameter) ?? []);
-
-                                        //     $id_kategori = explode("-", $value->kategori_2)[0];
-                                        //     $params = HargaParameter::where('id_kategori', $id_kategori)
-                                        //         ->where('is_active', true)
-                                        //         ->whereIn('nama_parameter', $parameter_names)
-                                        //         ->get();
-
-                                        //     $param_map = [];
-                                        //     foreach ($params as $param) {
-                                        //         $param_map[$param->nama_parameter] = $param;
-                                        //     }
-
-                                        //     $botol_volumes = [];
-                                        //     foreach (json_decode($value->parameter) ?? [] as $parameter) {
-                                        //         $param_name = explode(';', $parameter)[1];
-                                        //         if (isset($param_map[$param_name])) {
-                                        //             $param = $param_map[$param_name];
-                                        //             if (!isset($botol_volumes[$param->regen])) {
-                                        //                 $botol_volumes[$param->regen] = 0;
-                                        //             }
-                                        //             $botol_volumes[$param->regen] += ($param->volume != "" && $param->volume != "-" && $param->volume != null) ? (float) $param->volume : 0;
-                                        //         }
-                                        //     }
-
-                                        //     // Generate botol dan barcode
-                                        //     $botol = [];
-
-                                        //     $ketentuan_botol = [
-                                        //         'ORI' => 1000,
-                                        //         'H2SO4' => 1000,
-                                        //         'M100' => 100,
-                                        //         'HNO3' => 500,
-                                        //         'M1000' => 1000,
-                                        //         'BENTHOS' => 100
-                                        //     ];
-
-                                        //     foreach ($botol_volumes as $type => $volume) {
-                                        //         $typeUpper = strtoupper($type);
-                                        //         if (!isset($ketentuan_botol[$typeUpper])) {
-                                        //             // kalau ketentuan botol tidak ditemukan, skip atau kasih default
-                                        //             continue;
-                                        //         }
-                                        //         $koding = $value->koding_sampling . strtoupper(Str::random(5));
-
-                                        //         // Hitung jumlah botol yang dibutuhkan
-                                        //         $jumlah_botol = ceil($volume / $ketentuan_botol[$typeUpper]);
-
-                                        //         $botol[] = (object) [
-                                        //             'koding' => $koding,
-                                        //             'type_botol' => $type,
-                                        //             'volume' => $volume,
-                                        //             'file' => $koding . '.png',
-                                        //             'disiapkan' => (int) $jumlah_botol
-                                        //         ];
-
-                                        //         if (!file_exists(public_path() . '/barcode/botol')) {
-                                        //             mkdir(public_path() . '/barcode/botol', 0777, true);
-                                        //         }
-
-                                        //         // file_put_contents(public_path() . '/barcode/botol/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
-                                        //         self::generateQR($koding, '/barcode/botol');
-                                        //     }
-
-                                        //     $value->persiapan = json_encode($botol);
-                                        //     $value->save();
-                                        // } else {
-                                        //     if ($value->kategori_2 == '4-Udara' || $value->kategori_2 == '5-Emisi') {
-                                        //         $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
-                                        //             ->whereIn('parameter', json_decode($value->parameter) ?? [])
-                                        //             ->where('is_active', 1)
-                                        //             ->get();
-                                        //         $persiapan = []; // Pastikan inisialisasi array sebelum digunakan
-                                        //         foreach ($cek_ketentuan_parameter as $ketentuan) {
-                                        //             $koding = $value->koding_sampling . strtoupper(Str::random(5));
-                                        //             $persiapan[] = [
-                                        //                 'parameter' => \explode(';', $ketentuan->parameter)[1],
-                                        //                 'disiapkan' => $ketentuan->ketentuan,
-                                        //                 'koding' => $koding,
-                                        //                 'file' => $koding . '.png'
-                                        //             ];
-                                        //             if (!file_exists(public_path() . '/barcode/penjerap')) {
-                                        //                 mkdir(public_path() . '/barcode/penjerap', 0777, true);
-                                        //             }
-                                        //             // file_put_contents(public_path() . '/barcode/penjerap/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
-                                        //             self::generateQR($koding, '/barcode/penjerap');
-                                        //         }
-                                        //         // dd($persiapan, 'persiapan');
-                                        //         $value->persiapan = json_encode($persiapan ?? []);
-                                        //         $value->save();
-                                        //     }
-                                        // }
                                     }
                                 });
                             DB::commit();
@@ -6461,5 +6273,23 @@ class TestingController extends Controller
         $service->generate($data);
         
         return response()->json(['message' => 'Struk SAR has been generated successfully'], 200);
+    }
+
+    public function testPortalNotification(Request $request)
+    {
+        $result = app(PortalNotificationService::class)->send(1, 'claim_reward_approved', [
+            'order_no' => 'TEST-ORDER-001',
+            'customer_name' => 'Testing User',
+            'total_points' => (int) 0,
+            'data' => [
+                'source' => 'TestingController',
+                'test' => true,
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Portal notification test executed',
+            'data' => $result,
+        ]);
     }
 }

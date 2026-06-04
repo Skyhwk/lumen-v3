@@ -19,8 +19,108 @@ use Exception;
 use Illuminate\Support\Str;
 use Log;
 
+// service cek parameter yang punya hasil
+use App\Services\ParameterResultService;
+
 class RekapSampelSamplingController extends Controller
 {
+    protected $parameterResultService;
+
+    public function __construct(Request $request, ParameterResultService $parameterResultService)
+    {
+        parent::__construct($request);
+        $this->parameterResultService = $parameterResultService;
+    }
+
+    // public function index(Request $request)
+    // {
+    //     $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])
+    //         ->where('kategori_1', 'not like', '%Sd%')
+    //         ->where('is_active', 1);
+
+    //     // Filter berdasarkan date range
+    //     if ($request->has('date_start') || $request->has('date_end')) {
+    //         $dateStart = $request->date_start;
+    //         $dateEnd = $request->date_end;
+
+    //         if (!empty($dateStart) && !empty($dateEnd)) {
+    //             $data = $data->whereBetween('tanggal_sampling', [$dateStart, $dateEnd]);
+    //         } elseif (!empty($dateStart)) {
+    //             $data = $data->where('tanggal_sampling', '>=', $dateStart);
+    //         } elseif (!empty($dateEnd)) {
+    //             $data = $data->where('tanggal_sampling', '<=', $dateEnd);
+    //         }
+    //     }
+
+    //     $data = $data->orderBy('id', 'desc');
+
+    //     // Batch query — ambil semua no_sampel yang akan ditampilkan
+    //     $allRows = (clone $data)->get(['no_sampel', 'parameter', 'kategori_2']);
+
+    //     // Group by kategori_2 lalu batch per kategori
+    //     $parameterStatusMap = [];
+    //     $grouped = $allRows->groupBy('kategori_2');
+
+    //     foreach ($grouped as $kategori2 => $rows) {
+    //         $noSampelList = $rows->pluck('no_sampel')->toArray();
+    //         $batchResult = $this->parameterResultService->getNamaYangSudahAdaBatch($noSampelList, $kategori2);
+
+    //         foreach ($rows as $row) {
+    //             $parameterRaw = json_decode($row->parameter, true) ?? [];
+    //             $namaYangSudahAda = $batchResult[$row->no_sampel] ?? [];
+    //             $parameterStatusMap[$row->no_sampel] = $this->parameterResultService
+    //                 ->mapParameterWithStatus($parameterRaw, $namaYangSudahAda);
+    //         }
+    //     }
+
+    //     return DataTables::of($data)
+    //         ->filterColumn('order_header.no_document', function ($query, $keyword) {
+    //             $query->whereHas('orderHeader', function ($q) use ($keyword) {
+    //                 $q->where('no_document', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         ->filterColumn('order_header.email_pic_order', function ($query, $keyword) {
+    //             $query->whereHas('orderHeader', function ($q) use ($keyword) {
+    //                 $q->where('email_pic_order', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         ->filterColumn('order_header.nama_pic_order', function ($query, $keyword) {
+    //             $query->whereHas('orderHeader', function ($q) use ($keyword) {
+    //                 $q->where('nama_pic_order', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         ->filterColumn('order_header.nama_pic_sampling', function ($query, $keyword) {
+    //             $query->whereHas('orderHeader', function ($q) use ($keyword) {
+    //                 $q->where('nama_pic_sampling', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         ->filterColumn('tc_order_detail.updated_tc_at', function ($query, $keyword) {
+    //             $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
+    //                 $q->where('updated_tc_at', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         ->filterColumn('tc_order_detail.updated_tc_by', function ($query, $keyword) {
+    //             $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
+    //                 $q->where('updated_tc_by', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         // Tambahan
+    //         ->addColumn('jadwal_lapangan', function ($row) {
+    //             return $row->union ? $row->union['created_at'] : null;
+    //         })
+    //         ->filterColumn('jadwal_lapangan', function ($query, $keyword) {
+    //             $query->whereHas('union', function ($q) use ($keyword) {
+    //                 $q->where('created_at', 'like', "%$keyword%");
+    //             });
+    //         })
+    //         ->addColumn('parameter_status', function ($row) use ($parameterStatusMap) {
+    //             return $parameterStatusMap[$row->no_sampel] ?? json_encode([]);
+    //         })
+    //         ->addIndexColumn()
+    //         ->rawColumns(['action', 'parameter_status'])
+    //         ->make(true);
+    // }
+
     public function index(Request $request)
     {
         $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])
@@ -30,7 +130,7 @@ class RekapSampelSamplingController extends Controller
         // Filter berdasarkan date range
         if ($request->has('date_start') || $request->has('date_end')) {
             $dateStart = $request->date_start;
-            $dateEnd = $request->date_end;
+            $dateEnd   = $request->date_end;
 
             if (!empty($dateStart) && !empty($dateEnd)) {
                 $data = $data->whereBetween('tanggal_sampling', [$dateStart, $dateEnd]);
@@ -42,6 +142,36 @@ class RekapSampelSamplingController extends Controller
         }
 
         $data = $data->orderBy('id', 'desc');
+
+        // ✅ Ambil hanya kolom yang dibutuhkan + batasi ke page yang sedang ditampilkan
+        $dtRequest   = app(\Yajra\DataTables\Utilities\Request::class);
+        $pageLength  = (int) ($dtRequest->input('length') ?? 10);
+        $pageStart   = (int) ($dtRequest->input('start')  ?? 0);
+
+        // Hanya ambil rows pada halaman aktif saja (bukan seluruh dataset)
+        $pageRows = (clone $data)
+            ->skip($pageStart)
+            ->take($pageLength > 0 ? $pageLength : 10)
+            ->get(['no_sampel', 'parameter', 'kategori_2']);
+
+        // ✅ Group + batch hanya untuk rows di halaman ini
+        $parameterStatusMap = [];
+
+        if ($pageRows->isNotEmpty()) {
+            $grouped = $pageRows->groupBy('kategori_2');
+
+            foreach ($grouped as $kategori2 => $rows) {
+                $noSampelList = $rows->pluck('no_sampel')->unique()->toArray(); // ✅ unique() hindari duplikat
+                $batchResult  = $this->parameterResultService->getNamaYangSudahAdaBatch($noSampelList, $kategori2);
+
+                foreach ($rows as $row) {
+                    $parameterRaw    = json_decode($row->parameter, true) ?? [];
+                    $namaYangSudahAda = $batchResult[$row->no_sampel] ?? [];
+                    $parameterStatusMap[$row->no_sampel] = $this->parameterResultService
+                        ->mapParameterWithStatus($parameterRaw, $namaYangSudahAda);
+                }
+            }
+        }
 
         return DataTables::of($data)
             ->filterColumn('order_header.no_document', function ($query, $keyword) {
@@ -74,7 +204,6 @@ class RekapSampelSamplingController extends Controller
                     $q->where('updated_tc_by', 'like', "%$keyword%");
                 });
             })
-            // Tambahan
             ->addColumn('jadwal_lapangan', function ($row) {
                 return $row->union ? $row->union['created_at'] : null;
             })
@@ -83,8 +212,19 @@ class RekapSampelSamplingController extends Controller
                     $q->where('created_at', 'like', "%$keyword%");
                 });
             })
+            ->addColumn('parameter_status', function ($row) use ($parameterStatusMap) {
+                // ✅ Lazy-compute jika row belum ada di map (misal dari DataTables internal re-query)
+                if (!isset($parameterStatusMap[$row->no_sampel])) {
+                    $batchResult = $this->parameterResultService
+                        ->getNamaYangSudahAdaBatch([$row->no_sampel], $row->kategori_2);
+                    $parameterRaw = json_decode($row->parameter, true) ?? [];
+                    $parameterStatusMap[$row->no_sampel] = $this->parameterResultService
+                        ->mapParameterWithStatus($parameterRaw, $batchResult[$row->no_sampel] ?? []);
+                }
+                return $parameterStatusMap[$row->no_sampel];
+            })
             ->addIndexColumn()
-            ->rawColumns(['action'])
+            ->rawColumns(['action', 'parameter_status'])
             ->make(true);
     }
 
@@ -318,14 +458,16 @@ class RekapSampelSamplingController extends Controller
             foreach ($data as $item => $value) {
                 
                 if (explode("-", $value->kategori_2)[1] == 'Air') {
-                    $parameter_names = array_map(function ($p) {
-                        return explode(';', $p)[1];
+                    $idParameter = array_map(function ($p) {
+                        return explode(';', $p)[0];
                     }, json_decode($value->parameter) ?? []);
 
                     $id_kategori = explode("-", $value->kategori_2)[0];
                     $params = HargaParameter::where('id_kategori', $id_kategori)
                         ->where('is_active', true)
-                        ->whereIn('nama_parameter', $parameter_names)
+                        ->whereIn('id_parameter', $idParameter)
+                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
                         ->get();
 
                     $param_map = [];
@@ -348,14 +490,7 @@ class RekapSampelSamplingController extends Controller
                     // Generate botol dan barcode
                     $botol = [];
 
-                    $ketentuan_botol = [
-                        'ORI' => 1000,
-                        'H2SO4' => 1000,
-                        'M100' => 100,
-                        'HNO3' => 500,
-                        'M1000' => 1000,
-                        'BENTHOS' => 100
-                    ];
+                    $ketentuan_botol = config('ketentuan_botol');
                     
                     foreach ($botol_volumes as $type => $volume) {
                         $typeUpper = strtoupper($type);
@@ -391,8 +526,6 @@ class RekapSampelSamplingController extends Controller
                         * Jika kategori bukan air maka tidak perlu membuat botol
                         * cek jika udara dan emisi maka harus di siapkan kertas penjerap
                         */
-                    
-                    
                     
                     if ($value->kategori_2 == '4-Udara' || $value->kategori_2 == '5-Emisi') {
                     

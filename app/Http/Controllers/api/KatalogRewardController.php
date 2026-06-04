@@ -81,14 +81,41 @@ class KatalogRewardController extends Controller
         ]);
     }
 
+    public function destroy(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => ['required', 'integer'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+                'status' => 422,
+            ], 422);
+        }
+
+        $reward = KatalogReward::where('is_active', true)->find($request->id);
+
+        if (!$reward) {
+            return response()->json([
+                'message' => 'Reward tidak ditemukan',
+                'status' => 404,
+            ], 404);
+        }
+
+        $reward->is_active = false;
+        $reward->save();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Reward berhasil dihapus',
+        ]);
+    }
+
     protected function rules(Request $request, bool $isUpdate = false): array
     {
         $idRule = $isUpdate ? ['required', 'integer'] : ['nullable', 'integer'];
-        $codeUnique = 'unique:portal_customer.katalog_reward,code';
-
-        if ($isUpdate && $request->id) {
-            $codeUnique .= ',' . $request->id;
-        }
 
         return [
             'id' => $idRule,
@@ -100,7 +127,6 @@ class KatalogRewardController extends Controller
             'condition' => ['nullable', 'string', 'max:100'],
             'weight' => ['nullable', 'string', 'max:100'],
             'min_claim' => ['nullable', 'string', 'max:100'],
-            'code' => ['required', 'string', 'max:100', $codeUnique],
             'variants' => ['nullable'],
             'notes' => ['nullable'],
             'existing_gallery' => ['nullable'],
@@ -116,15 +142,53 @@ class KatalogRewardController extends Controller
         $reward->category = trim((string) $request->category);
         $reward->purchase_price = (int) $request->purchase_price;
         $reward->price = $this->calculateRewardPointFromPurchasePrice((int) $request->purchase_price);
-        $reward->sold = (int) ($request->sold ?? 0);
+        $reward->sold = $request->has('sold') ? (int) $request->sold : (int) ($reward->sold ?? 0);
         $reward->condition = trim((string) ($request->condition ?? 'Baru'));
         $reward->weight = trim((string) ($request->weight ?? '-'));
         $reward->min_claim = trim((string) ($request->min_claim ?? '1 pcs'));
-        $reward->code = trim((string) $request->code);
+        $reward->code = $this->generateUniqueRewardCode((string) $request->title, $reward->id);
         $reward->variants = $this->normalizeStringArray($request->variants, ['Default']);
         $reward->notes = $this->normalizeStringArray($request->notes, ['Produk internal untuk kebutuhan katalog reward.']);
         $reward->gallery = $this->storeGallery($request, $reward->gallery ?? []);
         $reward->is_active = true;
+    }
+
+    protected function generateUniqueRewardCode(string $title, ?int $ignoreId = null): string
+    {
+        $baseCode = $this->generateRewardCode($title) ?: 'brg';
+
+        for ($index = 0; $index < 100; $index++) {
+            $suffix = $index === 0 ? '' : (string) $index;
+            $code = substr($baseCode, 0, 10 - strlen($suffix)) . $suffix;
+
+            $exists = KatalogReward::where('code', $code)
+                ->when($ignoreId, fn ($query) => $query->where('id', '<>', $ignoreId))
+                ->exists();
+
+            if (!$exists) {
+                return $code;
+            }
+        }
+
+        return substr($baseCode, 0, 6) . substr((string) time(), -4);
+    }
+
+    protected function generateRewardCode(string $title): string
+    {
+        $normalizedTitle = strtolower(preg_replace('/[^a-zA-Z0-9\s]/', ' ', $title));
+        $words = preg_split('/\s+/', trim($normalizedTitle)) ?: [];
+        $code = '';
+
+        foreach ($words as $word) {
+            if ($word === '') {
+                continue;
+            }
+
+            $digitPart = preg_replace('/\D/', '', $word);
+            $code .= $digitPart !== '' ? $digitPart : (preg_replace('/[aiueo]/', '', $word) ?: substr($word, 0, 1));
+        }
+
+        return substr($code, 0, 10);
     }
 
     protected function normalizeStringArray($value, array $fallback = []): array

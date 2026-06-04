@@ -16,12 +16,12 @@ use App\Models\{
     MasterKategori,
 };
 use Illuminate\Http\Request;
-use App\Http\Controllers\api\CompanyCustomerController;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 use Repository;
 
-
+/**
+ * Dipakai frontend admin LUMEN-V3 / legacy.
+ * Website publik pakai PublicWebsiteController.
+ */
 class WebsiteController extends Controller
 {
     public function mainIndex(Request $request)
@@ -80,7 +80,6 @@ class WebsiteController extends Controller
             $item->meta = json_decode($item->meta);
             return $item;
         });
-
 
         return response()->json([
             'benefits' => Benefits::where('is_active', true)->get(),

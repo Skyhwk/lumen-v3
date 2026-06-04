@@ -298,7 +298,7 @@ class SamplingPlanController extends Controller
                 return $item;
             });
             $allSamplers = $samplers->concat($privateSampler);
-            $allSamplers = $allSamplers->unique('user_id');
+            $allSamplers = $allSamplers->unique('id');
             $allSamplers = $allSamplers->sortBy('nama_display')->values();
 
             return Datatables::of($allSamplers)->make(true);
@@ -933,7 +933,7 @@ class SamplingPlanController extends Controller
             $message = "No QT: " . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh " . $this->karyawan . "\n" . (($temptMessage != '') ? $temptMessage : "");
 
             $atasan = GetAtasan::where('id', $this->user_id)->get();
-            Notification::whereIn('id', $atasan)->title('Cancel QT')->message($message)->url('url')->send();
+            Notification::whereIn('id', $atasan)->title('Cancel QT')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
 
             DB::commit();
             return response()->json([

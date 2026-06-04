@@ -584,7 +584,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $sendNotifTo)
                 ->title('Lembur Telah Dibuat!')
                 ->message('Lembur telah dibuat' . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             if ($this->grade !== 'MANAGER') {
@@ -592,7 +592,7 @@ class LemburController extends Controller
                 Notification::where('id', $atasan)
                     ->title('Lembur divisi ' . $this->department . ' Menunggu Persetujuan!')
                     ->message('Mohon approve sebelum jam 4 sore')
-                    ->url('/form-lembur')
+                    ->url('/request/request-lembur')
                     ->send();
             }
 
@@ -686,7 +686,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $userId)
                 ->title('Form Lembur')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             $title = 'Request Lembur Kamu Telah disetujui HRD!';
@@ -748,7 +748,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $userId)
                 ->title('Form Lembur')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             $title = 'Request Lembur Kamu Tidak disetujui oleh HRD!';
@@ -804,7 +804,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $userId)
                 ->title('Form Lembur')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             DB::commit();
@@ -854,7 +854,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $userId)
                 ->title('Form Lembur')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             $title = 'Request Lembur Kamu Tidak disetujui HRD!';
@@ -912,7 +912,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $userId)
                 ->title('Form Lembur')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             DB::commit();
@@ -965,7 +965,7 @@ class LemburController extends Controller
             Notification::whereIn('id', $userId)
                 ->title('Form Lembur')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/form-lembur')
+                ->url('/request/request-lembur')
                 ->send();
 
             DB::commit();

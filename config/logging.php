@@ -108,6 +108,27 @@ return [
             'days' => 7,
         ],
 
+        'release_apps_sar' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_apps_sar/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
+        'release_apps_analyst' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_apps_analyst/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
+        'release_apps_tc' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_apps_tc/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'release_frontend' => [
             'driver' => 'daily',
             'path' => storage_path('logs/release_frontend/log.log'),

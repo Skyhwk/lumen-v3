@@ -552,13 +552,13 @@ class TicketRLHPController extends Controller
                 Notification::whereIn('id', $user_tc)
                     ->title('Ticket R-LHP Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-rlhp')
+                    ->url('/request/ticket-rlhp')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket R-LHP Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-rlhp')
+                    ->url('/request/ticket-rlhp')
                     ->send();
             }
 
@@ -599,7 +599,7 @@ class TicketRLHPController extends Controller
             Notification::whereIn('id', $user_tc)
                 ->title('Ticket R-LHP Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();
@@ -633,7 +633,7 @@ class TicketRLHPController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket R-LHP Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();
@@ -668,7 +668,7 @@ class TicketRLHPController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket R-LHP Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();
@@ -702,7 +702,7 @@ class TicketRLHPController extends Controller
             Notification::where('nama_lengkap', $data->solve_by)
                 ->title('Ticket R-LHP Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();
@@ -737,7 +737,7 @@ class TicketRLHPController extends Controller
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket R-LHP Update')
                 ->message($message . ' Oleh ' . $this->karyawan)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();
@@ -780,13 +780,13 @@ class TicketRLHPController extends Controller
                 Notification::whereIn('id', $user_tc)
                     ->title('Ticket R-LHP Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-rlhp')
+                    ->url('/request/ticket-rlhp')
                     ->send();
             } else {
                 Notification::where('nama_lengkap', $data->created_by)
                     ->title('Ticket R-LHP Update')
                     ->message($message . ' Oleh ' . $this->karyawan)
-                    ->url('/ticket-rlhp')
+                    ->url('/request/ticket-rlhp')
                     ->send();
             }
 
@@ -920,7 +920,7 @@ class TicketRLHPController extends Controller
             Notification::whereIn('id', $user_tc)
                 ->title('Ticket R-LHP !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Perubahan ' . str_replace('_', ' ', $data->kategori))
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
@@ -929,7 +929,7 @@ class TicketRLHPController extends Controller
             Notification::whereIn('id', $getAtasan)
                 ->title('Ticket R-LHP !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Perubahan ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();
@@ -969,13 +969,13 @@ class TicketRLHPController extends Controller
             Notification::whereIn('id', $user_tc)
                 ->title('Ticket R-LHP Siap Diproses!')
                 ->message($message)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             Notification::where('nama_lengkap', $data->created_by)
                 ->title('Ticket R-LHP Update')
                 ->message($message)
-                ->url('/ticket-rlhp')
+                ->url('/request/ticket-rlhp')
                 ->send();
 
             DB::commit();

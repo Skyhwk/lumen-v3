@@ -19,11 +19,11 @@ use Illuminate\Support\Facades\DB;
 $router->post('/api/gettoken', 'AuthController@gettoken');
 $router->post('/api/cektoken', 'AuthController@checkToken');
 
-$router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'log.request', 'decrypt.slice']], function () use ($router) {
+$router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.user', 'log.request', 'decrypt.slice']], function () use ($router) {
     $router->post('route', 'BaseController@handle');
 });
 
-$router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'log.request', 'decrypt.slice']], function () use ($router) {
+$router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.user', 'log.request', 'decrypt.slice']], function () use ($router) {
     $router->post('mobile', 'BaseMobileController@handle');
 });
 
@@ -99,8 +99,8 @@ $router->group(['prefix' => 'director'], function () use ($router) {
         $router->get('/dashboard/perMenuCount', 'directorApp\DashboardController@perMenuCount');
     });
 });
-
-
+// Print Termal
+$router->get('/mobile/print-termal', 'mobile\PrintTermalController@createPrintJob');
 
 
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);

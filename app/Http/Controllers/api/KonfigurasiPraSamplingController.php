@@ -157,27 +157,25 @@ class KonfigurasiPraSamplingController extends Controller
     }
 
 
-    /* ardan 2025-08-08 */
     public function indexAir()
     {
-       $data = HargaParameter::where('nama_kategori', 'Air')
-        ->where('is_active', true)
-        ->whereNotNull('regen')
-        ->get();
+        $data = HargaParameter::where('id_kategori', '1')
+            ->where('is_active', true)
+            ->whereNotNull('regen')
+            ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
+            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
+            ->get();
 
-
-        return Datatables::of($data)->make(true);
+        return \Datatables::of($data)->make(true);
     }
 
     public function getParameterAir()
     {
-        $kategoriId = MasterKategori::where('nama_kategori', 'Air')->value('id');
-        if (!$kategoriId) {
-            return response()->json([
-                'message' => 'Kategori Air not found',
-            ], 404);
-        }
-        $data = HargaParameter::where('id_kategori', $kategoriId)->where('is_active', true)->get();
+        $data = HargaParameter::where('id_kategori', '1')
+        ->where('is_active', true)
+        ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
+        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
+        ->get();
 
         if ($data) {
             return response()->json([
@@ -194,15 +192,11 @@ class KonfigurasiPraSamplingController extends Controller
     public function getParameterAirCreate()
     {
 
-        $kategoriId = MasterKategori::where('nama_kategori', 'Air')->value('id');
-        if (!$kategoriId) {
-            return response()->json([
-                'message' => 'Kategori Air not found',
-            ], 404);
-        }
-       $data = HargaParameter::where('id_kategori', $kategoriId)
+        $data = HargaParameter::where('id_kategori', '1')
         ->where('is_active', true)
-        ->whereNull('regen')
+        ->whereNotNull('regen')
+        ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
+        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
         ->get();
 
         if ($data) {
@@ -222,10 +216,9 @@ class KonfigurasiPraSamplingController extends Controller
         DB::beginTransaction();
         try {
 
-            $data = HargaParameter::where('id', $request->id)->first();
+            $data = HargaParameter::where('id_parameter', $request->id_parameter)->get();
 
-
-            if (!$data) {
+            if ($data->isEmpty()) {
                 DB::rollBack();
                 return response()->json([
                     'message' => 'Data tidak ditemukan!',
@@ -233,11 +226,13 @@ class KonfigurasiPraSamplingController extends Controller
                 ], 404);
             }
 
-            $data->volume = $request->volume;
-            $data->regen = $request->regen;
-            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-            $data->updated_by = $this->karyawan;
-            $data->save();
+            foreach ($data as $item) {
+                $item->volume = $request->volume;
+                $item->regen = $request->regen;
+                $item->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                $item->updated_by = $this->karyawan;
+                $item->save();
+            }
 
             DB::commit();
             return response()->json([
