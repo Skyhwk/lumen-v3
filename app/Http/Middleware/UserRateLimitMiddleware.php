@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\RateLimitService;
+use App\Support\RateLimitIpWhitelist;
 use Closure;
 use Illuminate\Http\Request;
 
@@ -21,6 +22,11 @@ class UserRateLimitMiddleware
     public function handle(Request $request, Closure $next)
     {
         if (!config('ratelimit.enabled', true)) {
+            return $next($request);
+        }
+
+        $clientIp = $request->ip() ?? 'unknown';
+        if (RateLimitIpWhitelist::isWhitelisted($clientIp)) {
             return $next($request);
         }
 
