@@ -545,8 +545,6 @@ class MesinAbsenHandler extends BaseController
                             ], 400);
                         }
                     }
-
-                    Log::info($request->data);
             
                     $cekKartu = RfidCard::where('kode_kartu', $request->data['rfid'])->where('status', 0)->first();
                     
@@ -560,7 +558,7 @@ class MesinAbsenHandler extends BaseController
                         $this->send_mqtt(json_encode($return));
                     } else {
                         $addKartu = new RfidCard;
-                        $addKartu->kode_kartu = $request->rfid;
+                        $addKartu->kode_kartu = $request->data['rfid'];
                         $addKartu->add_at = DATE('Y-m-d H:i:s');
                         $addKartu->save();
 
