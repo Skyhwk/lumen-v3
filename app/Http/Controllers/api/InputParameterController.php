@@ -2207,6 +2207,14 @@ class InputParameterController extends Controller
 				$data->fp = $request->faktor_pengenceran_baru;
 			}
 
+			// Mg Hardness
+			if ($request->parameter == 'Mg (Hardness)') {
+				$data->v_edta_a = $request->v_edta_a; // Volume titrasi sampel kesadahan total (mL)
+				$data->v_edta_b = $request->v_edta_b; // Volume titrasi sampel kalsium (mL)
+				$data->m_edta = $request->m_edta; // Molaritas EDTA (mmol/ml)
+				$data->vcu = $request->vcu; // Volume Contoh Uji
+			}
+			
 			// Parameter umum
 			$data->vts = $request->vts; // volume titrasi
 			$data->fp = $request->fp; // faktor pengenceran
