@@ -15,6 +15,8 @@ class Payroll extends Sector{
         'karyawan',
         'nik_karyawan',
         'status_karyawan',
+        'id_jabatan',
+        'nama_jabatan',
         'periode_payroll',
         'hari_kerja',
         'tidak_hadir',
