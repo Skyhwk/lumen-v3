@@ -27,30 +27,29 @@ class KalkulasiPayrollController extends Controller
     {
         // dd($request->search);
         $data = PayrollHeader::with('payrolls')
-                ->where('periode_payroll', 'like', $request->search . '%')
-                ->where('is_active', true)
-                ->where('is_approve', false)
-                ->get();
-        
-        
-        return Datatables::of($data)->make(true);       
-        
+            ->where('periode_payroll', 'like', $request->search . '%')
+            ->where('is_active', true)
+            ->where('is_approve', false)
+            ->get();
+
+
+        return Datatables::of($data)->make(true);
     }
 
     public function showDataPayroll(Request $request)
     {
         // dd($request->all());
         // try {
-            $data = Payroll::where('payroll_header_id', $request->id_header)->where('is_active', true)->newQuery();
-            $data = $data->with(['karyawan' => function ($query) {
-                $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan');
-            }, 'department' => function ($query) {
-                $query->select('master_divisi.id', 'nama_divisi');
-            }])
+        $data = Payroll::where('payroll_header_id', $request->id_header)->where('is_active', true)->newQuery();
+        $data = $data->with(['karyawan' => function ($query) {
+            $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan');
+        }, 'department' => function ($query) {
+            $query->select('master_divisi.id', 'nama_divisi');
+        }])
             ->orderBy('nik_karyawan', 'asc');
 
-            // Calculate the total sums for gaji_pokok and tunjangan_kerja
-            $totals = Payroll::where('payroll_header_id', $request->id_header)
+        // Calculate the total sums for gaji_pokok and tunjangan_kerja
+        $totals = Payroll::where('payroll_header_id', $request->id_header)
             ->where('is_active', true)
             ->selectRaw('
                 sum(gaji_pokok) as total_gaji_pokok,
@@ -67,16 +66,16 @@ class KalkulasiPayrollController extends Controller
             ')
             ->first();
 
-            // Prepare DataTable response
-            $response = Datatables::of($data)
+        // Prepare DataTable response
+        $response = Datatables::of($data)
             ->make(true)
             ->getData(); // Get raw data from DataTables
 
-            // Add totals to the response
-            $response->totals = $totals;
+        // Add totals to the response
+        $response->totals = $totals;
 
-            // Return the modified response as JSON
-            return response()->json($response);
+        // Return the modified response as JSON
+        return response()->json($response);
         // } catch (\Exception $e) {
         //     return response()->json([
         //         'data' => [],
@@ -102,8 +101,8 @@ class KalkulasiPayrollController extends Controller
             $workingDays = $workingDaysQuery ? $workingDaysQuery->working_days : 0;
 
             $query = DB::table('master_karyawan')
-            ->select(
-                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
+                ->select(
+                    DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN pph_21.pajak_bulanan ELSE payroll.pajak_pph END, 0), 0) as pajak,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.gaji_pokok ELSE payroll.gaji_pokok END, 0), 0) as gaji_pokok, 
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.tunjangan_kerja ELSE payroll.tunjangan END, 0), 0) as tunjangan_kerja, 
@@ -155,62 +154,62 @@ class KalkulasiPayrollController extends Controller
                 JSON_LENGTH(rekap_masuk_kerja.tanggal) as masuk_kerja,
                 CASE WHEN payroll.id IS NULL THEN ' . $workingDays . ' ELSE payroll.hari_kerja END as hari_kerja,
                 CASE WHEN payroll.id IS NULL THEN (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)) ELSE payroll.tidak_hadir END as tidak_hadir')
-            )
-            ->join('rekap_masuk_kerja', function($join){
-                $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')->where('rekap_masuk_kerja.is_active', true);
-            })
-            ->leftJoin('master_sallary', function($join){
-                $join->on('master_karyawan.nik_karyawan', '=', 'master_sallary.nik_karyawan')->where('master_sallary.is_active', true);
-            })
-            ->leftJoin('bonus_karyawan', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'bonus_karyawan.nik_karyawan')
-                ->where('bonus_karyawan.is_active', true);
-            })
-            ->leftJoin('rekening_karyawan', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'rekening_karyawan.nik_karyawan')
-                ->where('rekening_karyawan.is_active', true);
-            })
-            ->leftJoin('bpjs_tk', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'bpjs_tk.nik_karyawan')->where('bpjs_tk.is_active', true);
-            })
-            ->leftJoin('bpjs_kesehatan', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'bpjs_kesehatan.nik_karyawan')->where('bpjs_kesehatan.bulan_efektif', '<=', $request->periode)->where('bpjs_kesehatan.is_active', true);
-            })
-            ->leftJoin('kasbon', function($join) use ($request) {
-                $join->on('master_karyawan.nik_karyawan', '=', 'kasbon.nik_karyawan')->where('kasbon.is_active', true)
-                     ->where('kasbon.bulan_mulai_pemotongan', '<=', $request->periode);
-            })
-            ->leftJoin('denda_karyawan', function($join) use ($request) {
-                $join->on('master_karyawan.nik_karyawan', '=', 'denda_karyawan.nik_karyawan')->where('denda_karyawan.is_active', true)
-                     ->where('denda_karyawan.bulan_mulai_pemotongan', '<=', $request->periode);
-            })
-            ->leftJoin('pph_21', function($join) use ($request) {
-                $join->on('master_karyawan.nik_karyawan', '=', 'pph_21.nik_karyawan')->where('pph_21.is_active', true)
-                     ->where('pph_21.bulan_mulai_pemotongan', '<=', $request->periode);
-            })
-            ->leftJoin('payroll', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'payroll.nik_karyawan')->where('payroll.periode_payroll', '=', $request->periode)->where('payroll.is_active', '=', true);
-            })
-            ->leftJoin('pencadangan_upah', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'pencadangan_upah.nik_karyawan')
-                     ->where('pencadangan_upah.is_active', true)
-                     ->where('pencadangan_upah.bulan_efektif', '<=', $request->periode_payroll)
-                     ->where('pencadangan_upah.status', 'ONGOING');
-            })
-            ->leftJoin('master_divisi', function($join){
-                $join->on('master_karyawan.id_department', '=', 'master_divisi.id');
-            })
-            ->leftJoin('master_jabatan', function($join){
-                $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id');
-            })
-            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
-            ->orderBy('master_karyawan.nik_karyawan', 'ASC')
-            // ->where('master_karyawan.nik_karyawan', 'ISP232')
-            ->whereRaw(('CASE WHEN master_karyawan.is_active = 0 THEN CAST(NOW() as DATE) <= DATE_ADD(master_karyawan.effective_date, INTERVAL 45 DAY) ELSE master_karyawan.is_active = 1 END'))
-            ->where('rekap_masuk_kerja.bulan', $request->periode_payroll);
+                )
+                ->join('rekap_masuk_kerja', function ($join) {
+                    $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')->where('rekap_masuk_kerja.is_active', true);
+                })
+                ->leftJoin('master_sallary', function ($join) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'master_sallary.nik_karyawan')->where('master_sallary.is_active', true);
+                })
+                ->leftJoin('bonus_karyawan', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'bonus_karyawan.nik_karyawan')
+                        ->where('bonus_karyawan.is_active', true);
+                })
+                ->leftJoin('rekening_karyawan', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'rekening_karyawan.nik_karyawan')
+                        ->where('rekening_karyawan.is_active', true);
+                })
+                ->leftJoin('bpjs_tk', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'bpjs_tk.nik_karyawan')->where('bpjs_tk.is_active', true);
+                })
+                ->leftJoin('bpjs_kesehatan', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'bpjs_kesehatan.nik_karyawan')->where('bpjs_kesehatan.bulan_efektif', '<=', $request->periode)->where('bpjs_kesehatan.is_active', true);
+                })
+                ->leftJoin('kasbon', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'kasbon.nik_karyawan')->where('kasbon.is_active', true)
+                        ->where('kasbon.bulan_mulai_pemotongan', '<=', $request->periode);
+                })
+                ->leftJoin('denda_karyawan', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'denda_karyawan.nik_karyawan')->where('denda_karyawan.is_active', true)
+                        ->where('denda_karyawan.bulan_mulai_pemotongan', '<=', $request->periode);
+                })
+                ->leftJoin('pph_21', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'pph_21.nik_karyawan')->where('pph_21.is_active', true)
+                        ->where('pph_21.bulan_mulai_pemotongan', '<=', $request->periode);
+                })
+                ->leftJoin('payroll', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'payroll.nik_karyawan')->where('payroll.periode_payroll', '=', $request->periode)->where('payroll.is_active', '=', true);
+                })
+                ->leftJoin('pencadangan_upah', function ($join) use ($request) {
+                    $join->on('master_karyawan.nik_karyawan', '=', 'pencadangan_upah.nik_karyawan')
+                        ->where('pencadangan_upah.is_active', true)
+                        ->where('pencadangan_upah.bulan_efektif', '<=', $request->periode_payroll)
+                        ->where('pencadangan_upah.status', 'ONGOING');
+                })
+                ->leftJoin('master_divisi', function ($join) {
+                    $join->on('master_karyawan.id_department', '=', 'master_divisi.id');
+                })
+                ->leftJoin('master_jabatan', function ($join) {
+                    $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id');
+                })
+                ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
+                ->orderBy('master_karyawan.nik_karyawan', 'ASC')
+                // ->where('master_karyawan.nik_karyawan', 'ISP232')
+                ->whereRaw(('CASE WHEN master_karyawan.is_active = 0 THEN CAST(NOW() as DATE) <= DATE_ADD(master_karyawan.effective_date, INTERVAL 45 DAY) ELSE master_karyawan.is_active = 1 END'))
+                ->where('rekap_masuk_kerja.bulan', $request->periode_payroll);
             // ->where('rekap_masuk_kerja.is_active', true);
-            if($request->status_karyawan == 'Supervisor'){
-                $query->where('master_karyawan.grade', strtoupper($request->status_karyawan) );
+            if ($request->status_karyawan == 'Supervisor') {
+                $query->where('master_karyawan.grade', strtoupper($request->status_karyawan));
             } else {
                 $query->where('master_karyawan.status_karyawan', $request->status_karyawan);
                 $query->where('master_karyawan.grade', '<>', 'SUPERVISOR');
@@ -238,8 +237,8 @@ class KalkulasiPayrollController extends Controller
 
             // Prepare DataTable response
             $response = Datatables::of($data)
-            ->make(true)
-            ->getData(); // Get raw data from DataTables
+                ->make(true)
+                ->getData(); // Get raw data from DataTables
 
             // Add totals to the response
             $response->totals = [
@@ -269,12 +268,13 @@ class KalkulasiPayrollController extends Controller
     public function writeData(Request $request)
     {
         DB::beginTransaction();
-        try {        
+        try {
             // dd($request->all());    
             $payroll = new Payroll();
 
             $payroll->nik_karyawan = $request->nik_karyawan;
             $payroll->payroll_header_id = $request->payroll_header_id;
+            $payroll->id_karyawan = $request->id_karyawan;
             $payroll->karyawan = $request->nama_lengkap;
             $payroll->status_karyawan = $request->status_karyawan;
             $payroll->id_jabatan = $request->id_jabatan;
@@ -301,21 +301,21 @@ class KalkulasiPayrollController extends Controller
             $payroll->created_by = $this->karyawan;
             $payroll->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $payroll->save();
-            
+
             // Proses pengurangan kasbon
             // dd(new Kasbon, $request->periode_payroll, $request->nik_karyawan);
             $cek_kasbon = Kasbon::where('nik_karyawan', $request->nik_karyawan)
-            ->where('is_active', true)
-            ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
-            ->where('sisa_tenor', '>', 0)
-            ->first();
-            
-            if($cek_kasbon){
+                ->where('is_active', true)
+                ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
+                ->where('sisa_tenor', '>', 0)
+                ->first();
+
+            if ($cek_kasbon) {
                 // dd($cek_kasbon);
                 $sisa_tenor = $cek_kasbon->sisa_tenor - 1;
                 $cek_kasbon->sisa_tenor = $sisa_tenor;
                 $cek_kasbon->sisa_kasbon = $cek_kasbon->sisa_kasbon - str_replace(['.', ','], '', $request->loan);
-                if($sisa_tenor == 0){
+                if ($sisa_tenor == 0) {
                     $cek_kasbon->status = 'END';
                 }
                 $cek_kasbon->updated_by = $this->karyawan;
@@ -330,11 +330,11 @@ class KalkulasiPayrollController extends Controller
                 ->where('sisa_tenor', '>', 0)
                 ->first();
 
-            if($cek_denda){
+            if ($cek_denda) {
                 $sisa_tenor = $cek_denda->sisa_tenor - 1;
                 $cek_denda->sisa_tenor = $sisa_tenor;
                 $cek_denda->sisa_denda = $cek_denda->sisa_denda - str_replace(['.', ','], '', $request->sanksi);
-                if($sisa_tenor == 0){
+                if ($sisa_tenor == 0) {
                     $cek_denda->status = 'END';
                 }
                 $cek_denda->updated_by = $this->karyawan;
@@ -344,29 +344,29 @@ class KalkulasiPayrollController extends Controller
 
             // proses pengurangan pencadangan upah
             $cek_deposit = PencadanganUpah::where('nik_karyawan', $request->nik_karyawan)
-            ->where('is_active', true)
-            ->where('bulan_efektif', '<=', $request->periode_payroll)
-            ->where('status', 'ONGOING')
-            ->first();
+                ->where('is_active', true)
+                ->where('bulan_efektif', '<=', $request->periode_payroll)
+                ->where('status', 'ONGOING')
+                ->first();
 
             if ($cek_deposit) {
-                if($cek_deposit->tenor_berjalan == $cek_deposit->tenor){
+                if ($cek_deposit->tenor_berjalan == $cek_deposit->tenor) {
                     $cek_deposit->status = 'END';
                 }
-                if($cek_deposit->tenor_berjalan < 0){
-                    if($cek_deposit->tenor_berjalan == '-1'){
+                if ($cek_deposit->tenor_berjalan < 0) {
+                    if ($cek_deposit->tenor_berjalan == '-1') {
                         $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan + 2;
                     } else {
                         $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan + 1;
                     }
                 }
-                if($cek_deposit->tenor_berjalan > 0 && $cek_deposit->nominal_berjalan < 0){
+                if ($cek_deposit->tenor_berjalan > 0 && $cek_deposit->nominal_berjalan < 0) {
                     $cek_deposit->nominal_berjalan = abs($cek_deposit->nominal_berjalan);
                 }
-                if($cek_deposit->tenor_berjalan > 0 && $cek_deposit->tenor_berjalan < $cek_deposit->tenor){
+                if ($cek_deposit->tenor_berjalan > 0 && $cek_deposit->tenor_berjalan < $cek_deposit->tenor) {
                     $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan + 1;
                 }
-                
+
                 $cek_deposit->updated_by = $this->karyawan;
                 $cek_deposit->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 $cek_deposit->save();
@@ -389,7 +389,7 @@ class KalkulasiPayrollController extends Controller
     }
 
     public function canclePayroll(Request $request)
-    {   
+    {
         DB::beginTransaction();
         try {
             $payroll = Payroll::where('id', $request->id)->first();
@@ -402,15 +402,15 @@ class KalkulasiPayrollController extends Controller
 
             // Proses pengembalian kasbon
             $cek_kasbon = Kasbon::where('nik_karyawan', $payroll->nik_karyawan)
-            ->where('is_active', true)
-            ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
-            ->first();
-            
-            if($cek_kasbon){
+                ->where('is_active', true)
+                ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
+                ->first();
+
+            if ($cek_kasbon) {
                 $sisa_tenor = $cek_kasbon->sisa_tenor + 1;
                 $cek_kasbon->sisa_tenor = $sisa_tenor;
                 $cek_kasbon->sisa_kasbon = $cek_kasbon->sisa_kasbon + $cek_kasbon->nominal_potongan;
-                if($cek_kasbon->sisa_tenor > 0){
+                if ($cek_kasbon->sisa_tenor > 0) {
                     $cek_kasbon->status = 'ONGOING';
                 }
                 $cek_kasbon->updated_by = $this->karyawan;
@@ -424,11 +424,11 @@ class KalkulasiPayrollController extends Controller
                 ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
                 ->first();
 
-            if($cek_denda){
+            if ($cek_denda) {
                 $sisa_tenor = $cek_denda->sisa_tenor + 1;
                 $cek_denda->sisa_tenor = $sisa_tenor;
                 $cek_denda->sisa_denda = $cek_denda->sisa_denda + $cek_denda->nominal_potongan;
-                if($cek_denda->sisa_tenor > 0){
+                if ($cek_denda->sisa_tenor > 0) {
                     $cek_denda->status = 'ONGOING';
                 }
                 $cek_denda->updated_by = $this->karyawan;
@@ -438,24 +438,24 @@ class KalkulasiPayrollController extends Controller
 
             // proses pengembalian pencadangan upah
             $cek_deposit = PencadanganUpah::where('nik_karyawan', $payroll->nik_karyawan)
-            ->where('is_active', true)
-            ->where('bulan_efektif', '<=', $request->periode_payroll)
-            ->first();
+                ->where('is_active', true)
+                ->where('bulan_efektif', '<=', $request->periode_payroll)
+                ->first();
 
             if ($cek_deposit) {
                 if ($cek_deposit->tenor_berjalan == $cek_deposit->tenor) {
                     $cek_deposit->status = 'ONGOING';
-                } 
+                }
                 if ($cek_deposit->tenor_berjalan < 0) {
                     $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan - 1;
-                } 
+                }
                 if ($cek_deposit->tenor_berjalan > 0) {
                     $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan - ($cek_deposit->tenor_berjalan == '1' ? 2 : 1);
                     if ($cek_deposit->nominal_berjalan < 0 ||  $cek_deposit->tenor_berjalan < 0) {
                         $cek_deposit->nominal_berjalan = -abs($cek_deposit->nominal_berjalan);
                     }
                 }
-                
+
                 $cek_deposit->updated_by = $this->karyawan;
                 $cek_deposit->updated_at = DATE('Y-m-d H:i:s');
                 $cek_deposit->save();
@@ -479,10 +479,10 @@ class KalkulasiPayrollController extends Controller
     public function showRekapDataHeader(Request $request)
     {
         try {
-            $data = PayrollHeader::leftJoin('payroll', function($join){
-                    $join->on('payroll_header.id', '=', 'payroll.payroll_header_id')
-                        ->where('payroll.is_active', '=', true);
-                })
+            $data = PayrollHeader::leftJoin('payroll', function ($join) {
+                $join->on('payroll_header.id', '=', 'payroll.payroll_header_id')
+                    ->where('payroll.is_active', '=', true);
+            })
                 ->select(
                     'payroll_header.id',
                     'payroll_header.no_document',
@@ -495,7 +495,7 @@ class KalkulasiPayrollController extends Controller
                     DB::raw('SUM(payroll.take_home_pay) as total_take_home_pay, COUNT(payroll.id) as payrolls')
                 )
                 ->where('payroll_header.is_active', true)
-                ->where('payroll_header.status', '=','TRANSFER')
+                ->where('payroll_header.status', '=', 'TRANSFER')
                 ->groupBy(
                     'payroll_header.id',
                     'payroll_header.no_document',
@@ -516,7 +516,8 @@ class KalkulasiPayrollController extends Controller
         }
     }
 
-    private function showRekapData($request){
+    private function showRekapData($request)
+    {
         try {
             $data = Payroll::where('payroll_header_id', $request->id_header)
                 ->where('is_active', true)
@@ -591,25 +592,34 @@ class KalkulasiPayrollController extends Controller
     }
 
     public function generateData(Request $request)
-    {      
+    {
         try {
             $conn_latestPayroll = new PayrollHeader;
             $latestPayroll = PayrollHeader::orderBy('id', 'desc')->first();
-            
+
             $currentYear = date('y');
             $currentMonth = date('m');
-            
+
             $romanMonth = [
-                '01' => 'I', '02' => 'II', '03' => 'III', '04' => 'IV',
-                '05' => 'V', '06' => 'VI', '07' => 'VII', '08' => 'VIII',
-                '09' => 'IX', '10' => 'X', '11' => 'XI', '12' => 'XII'
+                '01' => 'I',
+                '02' => 'II',
+                '03' => 'III',
+                '04' => 'IV',
+                '05' => 'V',
+                '06' => 'VI',
+                '07' => 'VII',
+                '08' => 'VIII',
+                '09' => 'IX',
+                '10' => 'X',
+                '11' => 'XI',
+                '12' => 'XII'
             ];
-            
+
             if ($latestPayroll) {
                 $lastKodePayroll = $latestPayroll->no_document;
                 $lastYear = substr($lastKodePayroll, 8, 2);
                 $lastNumber = intval(substr($lastKodePayroll, -3));
-                
+
                 if ($lastYear == $currentYear) {
                     $newNumber = $lastNumber + 1;
                 } else {
@@ -618,21 +628,22 @@ class KalkulasiPayrollController extends Controller
             } else {
                 $newNumber = 1;
             }
-            
-            $no_document = sprintf("ISL/PRL/%s-%s/%03d", 
-            $currentYear, 
-            $romanMonth[$currentMonth], 
-            $newNumber
-        );
-        
-        $payrollHeader = new PayrollHeader();
-        $payrollHeader->periode_payroll = $request->periode_payroll;
-        $payrollHeader->status_karyawan = $request->status_karyawan;
-        $payrollHeader->keterangan = $request->keterangan;
-        $payrollHeader->no_document = $no_document;
-        $payrollHeader->created_by = $this->karyawan;
-        $payrollHeader->created_at = DATE('Y-m-d H:i:s');
-        $payrollHeader->save();
+
+            $no_document = sprintf(
+                "ISL/PRL/%s-%s/%03d",
+                $currentYear,
+                $romanMonth[$currentMonth],
+                $newNumber
+            );
+
+            $payrollHeader = new PayrollHeader();
+            $payrollHeader->periode_payroll = $request->periode_payroll;
+            $payrollHeader->status_karyawan = $request->status_karyawan;
+            $payrollHeader->keterangan = $request->keterangan;
+            $payrollHeader->no_document = $no_document;
+            $payrollHeader->created_by = $this->karyawan;
+            $payrollHeader->created_at = DATE('Y-m-d H:i:s');
+            $payrollHeader->save();
 
             $message = 'Generate Payroll data successfully';
 
@@ -648,10 +659,11 @@ class KalkulasiPayrollController extends Controller
         }
     }
 
-    public function deleteHeader(Request $request){
+    public function deleteHeader(Request $request)
+    {
         try {
             $data = PayrollHeader::find($request->id);
-            
+
             if (!$data) {
                 return response()->json([
                     'success' => false,
@@ -668,15 +680,16 @@ class KalkulasiPayrollController extends Controller
                 'success' => true,
                 'message' => 'Payroll header data deleted successfully'
             ], 200);
-        } catch (\Throwable $th){
+        } catch (\Throwable $th) {
             return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 
-    public function approveHeader(Request $request){
+    public function approveHeader(Request $request)
+    {
         try {
             $data = PayrollHeader::find($request->id);
-            
+
             if (!$data) {
                 return response()->json([
                     'success' => false,
@@ -693,7 +706,7 @@ class KalkulasiPayrollController extends Controller
                 'success' => true,
                 'message' => 'Payroll header data approved successfully'
             ], 200);
-        } catch (\Throwable $th){
+        } catch (\Throwable $th) {
             return response()->json(['message' => $th->getMessage()], 500);
         }
     }
