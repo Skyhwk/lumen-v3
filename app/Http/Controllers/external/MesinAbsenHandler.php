@@ -12,6 +12,7 @@ use Bluerhinos\phpMQTT;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\SendMqttAccess;
+;
 
 class MesinAbsenHandler extends BaseController
 {
@@ -533,6 +534,18 @@ class MesinAbsenHandler extends BaseController
                     }
 
                 } else if($request->mode == 'ADD'){
+
+                    if (isset($request->data) && is_string($request->data)) {
+                        $decoded = json_decode($request->data, true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            $request->data = $decoded;
+                        } else {
+                            return response()->json([
+                                'message' => 'Invalid data format',
+                            ], 400);
+                        }
+                    }
+            
                     $cekKartu = RfidCard::where('kode_kartu', $request->data['rfid'])->where('status', 0)->first();
                     
                     if($cekKartu!=null){
@@ -545,7 +558,7 @@ class MesinAbsenHandler extends BaseController
                         $this->send_mqtt(json_encode($return));
                     } else {
                         $addKartu = new RfidCard;
-                        $addKartu->kode_kartu = $request->rfid;
+                        $addKartu->kode_kartu = $request->data['rfid'];
                         $addKartu->add_at = DATE('Y-m-d H:i:s');
                         $addKartu->save();
 
