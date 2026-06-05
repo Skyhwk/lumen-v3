@@ -19,9 +19,25 @@ class PenggunaanMobilController extends Controller
 {
     public function index(Request $request)
     {
+        $mode = $request->mode === 'history' ? 'history' : 'active';
+        $today = Carbon::today()->format('Y-m-d');
+
         $data = PenggunaanMobilHeader::with(['mobil', 'driver', 'requester', 'details' => function ($query) {
             $query->where('is_active', true)->orderBy('tanggal_penggunaan');
-        }])->where('is_active', true)->orderByDesc('id');
+        }])->where('is_active', true)
+            ->when($mode === 'active', function ($query) use ($today) {
+                $query->whereHas('details', function ($q) use ($today) {
+                    $q->where('is_active', true)->where('tanggal_penggunaan', '>=', $today);
+                });
+            })
+            ->when($mode === 'history', function ($query) use ($today) {
+                $query->whereHas('details', function ($q) use ($today) {
+                    $q->where('is_active', true)->where('tanggal_penggunaan', '<', $today);
+                })->whereDoesntHave('details', function ($q) use ($today) {
+                    $q->where('is_active', true)->where('tanggal_penggunaan', '>=', $today);
+                });
+            })
+            ->orderByDesc('id');
 
         return Datatables::of($data)
             ->addColumn('tanggal_mulai', function ($row) {
