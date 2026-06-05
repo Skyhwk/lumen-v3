@@ -2143,6 +2143,9 @@ class BasOnlineController extends Controller
                 $boxUnchecked = '&#9744;';
  
                 $isSelesai       = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
+                if(in_array($val->no_sample, ["HCTE012504/443", "HCTE012504/445"])) {
+                    $isSelesai = true;
+                }
                 $selesaiBox      = $isSelesai ? $boxChecked : $boxUnchecked;
                 $belumSelesaiBox = $isSelesai ? $boxUnchecked : $boxChecked;
                 $raw             = $hariTanggal[$val->no_sample] ?? null;
