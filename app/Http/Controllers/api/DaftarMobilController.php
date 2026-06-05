@@ -51,6 +51,10 @@ class DaftarMobilController extends Controller
             'plat_mobil' => ['required', 'string', 'max:30'],
             'merk_mobil' => ['required', 'string', 'max:100'],
             'tipe_mobil' => ['required', 'string', 'max:100'],
+            'nomor_rangka' => ['required', 'string', 'max:100'],
+            'nomor_mesin' => ['required', 'string', 'max:100'],
+            'warna_mobil' => ['required', 'string', 'max:50'],
+            'tahun_perakitan' => ['required', 'integer', 'digits:4'],
             'status_gps' => ['nullable', 'in:0,1,true,false'],
             'is_active' => ['nullable', 'in:0,1,true,false'],
         ]);
@@ -84,6 +88,10 @@ class DaftarMobilController extends Controller
             $data->plat_mobil = $platMobil;
             $data->merk_mobil = trim($request->merk_mobil);
             $data->tipe_mobil = trim($request->tipe_mobil);
+            $data->nomor_rangka = strtoupper(trim($request->nomor_rangka));
+            $data->nomor_mesin = strtoupper(trim($request->nomor_mesin));
+            $data->warna_mobil = trim($request->warna_mobil);
+            $data->tahun_perakitan = $request->tahun_perakitan;
             if ($request->has('status_gps')) {
                 $data->status_gps = $this->toBoolean($request->status_gps);
             }
@@ -101,6 +109,10 @@ class DaftarMobilController extends Controller
             'plat_mobil' => $platMobil,
             'merk_mobil' => trim($request->merk_mobil),
             'tipe_mobil' => trim($request->tipe_mobil),
+            'nomor_rangka' => strtoupper(trim($request->nomor_rangka)),
+            'nomor_mesin' => strtoupper(trim($request->nomor_mesin)),
+            'warna_mobil' => trim($request->warna_mobil),
+            'tahun_perakitan' => $request->tahun_perakitan,
             'status_gps' => false,
             'is_active' => true,
             'created_at' => date('Y-m-d H:i:s'),
