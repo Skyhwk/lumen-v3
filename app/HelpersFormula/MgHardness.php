@@ -15,8 +15,7 @@ class MgHardness
             ) *
             (float)$data->fp;
 
-        // pembulatan jika perlu
-        $rumus = round($rumus, 4);
+        $rumus = number_format($rumus, 4, '.', '');
 
         if (!is_null($mdl) && $rumus < $mdl) {
             $rumus = '<' . $mdl;
