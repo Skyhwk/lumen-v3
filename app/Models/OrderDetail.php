@@ -17,7 +17,30 @@ class OrderDetail extends Sector
 
     public function sampelDiantar()
     {
-        return $this->hasOne(SampelDiantar::class, 'no_order', 'no_order');
+        $relation = $this->hasOne(SampelDiantar::class, 'no_order', 'no_order');
+
+        if (isset($this->periode) && $this->periode !== '') {
+            $relation->where('periode_kontrak', $this->periode);
+        } else {
+            if ($this->exists) {
+                $relation->whereNull('periode_kontrak');
+            }
+        }
+
+        return $relation;
+    }
+
+    public function sampelDiantarByPeriode($periode = null)
+    {
+        $query = $this->sampelDiantar();
+
+        if (!is_null($periode)) {
+            $query->where('periode_kontrak', $periode);
+        } else {
+            $query->whereNull('periode_kontrak');
+        }
+
+        return $query;
     }
 
     public function dataLapanganEmisiKendaraan()
@@ -614,6 +637,11 @@ class OrderDetail extends Sector
     public function lhps_hygene()
     {
         return $this->belongsTo(LhpsHygieneSanitasiHeader::class, 'cfr', 'no_lhp');
+    }
+
+    public function lhps_adverse_odor()
+    {
+        return $this->belongsTo(LhpsAdverseOdorHeader::class, 'cfr', 'no_lhp');
     }
 
     // barangkali kepakai

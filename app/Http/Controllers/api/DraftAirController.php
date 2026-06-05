@@ -9,6 +9,7 @@ use App\Models\LhpsAirDetail;
 use App\Models\LhpsAirCustom;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
+use App\Models\SampelDiantar;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\MasterRegulasi;
@@ -46,12 +47,27 @@ class DraftAirController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('lhps_air', 'orderHeader', 'dataLapanganAir', 'sampelDiantar.detail')
+        $data = OrderDetail::with('lhps_air', 'orderHeader', 'dataLapanganAir')
             ->where('is_approve', false)
             ->where('is_active', true)
             ->where('kategori_2', '1-Air')
             ->where('status', 2)
-            ->orderBy('tanggal_terima', 'desc');
+            ->orderBy('tanggal_terima', 'desc')
+            ->get();
+
+        $data->each(function ($item) {
+            $query = SampelDiantar::with('detail')
+                ->where('no_order', $item->no_order);
+
+            if (!empty($item->periode)) {
+                $query->where('periode_kontrak', $item->periode);
+            }
+
+            $item->setRelation(
+                'sampelDiantar',
+                $query->first()
+            );
+        });
 
         return Datatables::of($data)->make(true);
     }

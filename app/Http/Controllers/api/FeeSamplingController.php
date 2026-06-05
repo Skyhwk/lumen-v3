@@ -13,16 +13,42 @@ use Illuminate\Database\Eloquent\Collection;
 
 class FeeSamplingController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
+    //         $q->where('is_approve', 1);
+    //     }])
+    //         ->where('is_approve_finance', 1)
+    //         ->whereNotNull('transfer_date')
+    //         ->where('is_upload_bukti_pembayaran', 0);
+
+    //     return Datatables::of($data)->make(true);
+    // }
+
     public function index(Request $request)
     {
         $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
-            $q->where('is_approve', 1);
-        }])
+                $q->where('is_approve', 1);
+            }])
             ->where('is_approve_finance', 1)
             ->whereNotNull('transfer_date')
-            ->where('is_upload_bukti_pembayaran', 0);
+            ->where('is_upload_bukti_pembayaran', 0)
+            ->select('pengajuan_fee_sampling.*'); // pastikan select eksplisit
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->filterColumn('tgl_pengajuan', function ($query, $keyword) {
+                $query->whereRaw("DATE_FORMAT(tgl_pengajuan, '%Y-%m-%d') LIKE ?", ["%{$keyword}%"]);
+            })
+            ->filterColumn('created_by', function ($query, $keyword) {
+                $query->whereRaw('LOWER(created_by) LIKE ?', [strtolower("%{$keyword}%")]);
+            })
+            ->filterColumn('total_fee_approve', function ($query, $keyword) {
+                $query->whereRaw('CAST(total_fee_approve AS CHAR) LIKE ?', ["%{$keyword}%"]);
+            })
+            ->filterColumn('status_payment', function ($query, $keyword) {
+                $query->whereRaw('LOWER(status_payment) LIKE ?', [strtolower("%{$keyword}%")]);
+            })
+            ->make(true);
     }
     
     public function uploadFile(Request $request)

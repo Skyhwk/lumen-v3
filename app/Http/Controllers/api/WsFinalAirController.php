@@ -12,6 +12,7 @@ use App\Models\Subkontrak;
 use App\Models\HistoryWsValueAir;
 use App\Models\HistoryAppReject;
 use App\Models\CategorySample;
+use App\Models\SampelDiantar;
 use App\Models\Mdl;
 use App\Http\Controllers\Controller;
 use App\Models\DataLimbah;
@@ -26,13 +27,34 @@ use Carbon\Carbon;
 
 class WsFinalAirController extends Controller
 {
+	// public function index(Request $request)
+	// {
+	// 	$data = OrderDetail::with('wsValueAir', 'dataLapanganAir', 'sampelDiantar.detail')
+	// 		->where('is_active', $request->is_active)
+	// 		->where('kategori_2', '1-Air')
+	// 		->where('status', 0)
+	// 		->whereNotNull('tanggal_terima');
+
+	// 	if ($request->has(['from', 'to'])) {
+	// 		$from = $request->from . '-01';
+	// 		$to = date("Y-m-t", strtotime($request->to . '-01'));
+
+	// 		$data->whereBetween('tanggal_sampling', [$from, $to]);
+	// 	}
+
+	// 	return Datatables::of($data)->make(true);
+	// }
+
 	public function index(Request $request)
 	{
-		$data = OrderDetail::with('wsValueAir', 'dataLapanganAir', 'sampelDiantar.detail')
-			->where('is_active', $request->is_active)
-			->where('kategori_2', '1-Air')
-			->where('status', 0)
-			->whereNotNull('tanggal_terima');
+		$data = OrderDetail::with(
+			'wsValueAir',
+			'dataLapanganAir'
+		)
+		->where('is_active', $request->is_active)
+		->where('kategori_2', '1-Air')
+		->where('status', 0)
+		->whereNotNull('tanggal_terima');
 
 		if ($request->has(['from', 'to'])) {
 			$from = $request->from . '-01';
@@ -40,6 +62,91 @@ class WsFinalAirController extends Controller
 
 			$data->whereBetween('tanggal_sampling', [$from, $to]);
 		}
+
+		$data = $data->get();
+
+		if ($request->has('uji_status')) {
+			$noSampel = $data->pluck('no_sampel')->toArray();
+			$models = [
+				Colorimetri::class,
+				Gravimetri::class,
+				Titrimetri::class,
+				Subkontrak::class,
+			];
+	
+			$subQuery = collect($models)
+				->flatMap(function ($model) use ($noSampel) {
+					$instance = new $model;
+					if (\Illuminate\Support\Facades\Schema::hasColumn($instance->getTable(), 'is_approved')) {
+						return $model::where('is_active', true)->where('is_approved', true)->whereIn('no_sampel', $noSampel)->get(['no_sampel', 'parameter']);
+					} elseif (\Illuminate\Support\Facades\Schema::hasColumn($instance->getTable(), 'is_approve')) {
+						return $model::where('is_active', true)->where('is_approve', true)->whereIn('no_sampel', $noSampel)->get(['no_sampel', 'parameter']);
+					}
+					return $model::where('is_active', true)->whereIn('no_sampel', $noSampel)->get(['no_sampel', 'parameter']);
+				})
+				->groupBy('no_sampel')
+				->map(fn ($items) => $items->pluck('parameter')->implode(','));
+	
+			$parameterExcluded = [
+				'ph', 'suhu', 'suhu (na)', 'dhl', 'debit air', 'debit air (m3/ton)', 
+				'debit air (m3/hari)', 'debit air (l/orang/hari)', 'debit air (l/kg)', 
+				'debit air (l/l)', 'debit air (m3/l)', 'debit air (l/hari)', 
+				'debit air (m3/dtk)', 'debit air (l/dtk)', 'debit air (l/jam)'
+			];
+	
+			$data = $data->filter(function($item) use ($subQuery, $parameterExcluded, $request) {
+				$paramRaw = json_decode($item->parameter, true);
+				$paramAll = collect(is_array($paramRaw) ? $paramRaw : [])
+					->map(function ($p) {
+						$parts = explode(';', $p);
+						return isset($parts[1]) ? trim($parts[1]) : trim($p);
+					});
+				
+				$paramTested = collect();
+				if ($subQuery->has($item->no_sampel)) {
+					$paramTested = collect(explode(',', $subQuery[$item->no_sampel]))
+						->map(fn ($p) => trim($p));
+				}
+	
+				$belumDiuji = $paramAll
+					->diff($paramTested)
+					->reject(fn ($p) => in_array(strtolower($p), $parameterExcluded))
+					->values();
+	
+				$validTotalParams = $paramAll->reject(fn ($p) => in_array(strtolower($p), $parameterExcluded));
+				$totalCount = $validTotalParams->count();
+				$testedCount = $totalCount - $belumDiuji->count();
+				$item->progress = $testedCount . ' / ' . $totalCount;
+	
+				$isLengkap = $belumDiuji->isEmpty();
+	
+				$statusFilter = $request->get('uji_status');
+				if ($statusFilter === 'lengkap') {
+					return $isLengkap;
+				} elseif ($statusFilter === 'belum_lengkap') {
+					return !$isLengkap;
+				}
+	
+				return true;
+			})->values();
+		}
+
+
+		$data->each(function ($item) {
+			$query = SampelDiantar::with('detail')
+				->where('no_order', $item->no_order);
+
+			// kalau periode order_detail ada
+			if (!empty($item->periode)) {
+				$query->where('periode_kontrak', $item->periode);
+			}
+
+			// override relasi sampelDiantar
+			$item->setRelation(
+				'sampelDiantar',
+				$query->first()
+			);
+		});
 
 		return Datatables::of($data)->make(true);
 	}

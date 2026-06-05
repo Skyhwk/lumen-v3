@@ -22,6 +22,9 @@ use Yajra\Datatables\Datatables;
 
 class FdlErgonomiController extends Controller
 {
+    private const VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/video_bahaya_ergonomi/';
+    private const LEGACY_VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/sampling/';
+
     public function index(Request $request)
     {
         try {
@@ -1292,7 +1295,7 @@ class FdlErgonomiController extends Controller
     {
         try {
             $data = DataLapanganErgonomi::findOrFail($request->id);
-            $video = public_path() . '/dokumentasi/sampling/' . $data->video_dokumentasi;
+            $video = $this->getVideoDokumentasiPath($data->video_dokumentasi);
             if (is_file($video)) {
                 unlink($video);
             }
@@ -1302,6 +1305,25 @@ class FdlErgonomiController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => 'Gagal menghapus video.'], 500);
         }
+    }
+
+    private function getVideoDokumentasiPath($filename)
+    {
+        if (!$filename) {
+            return null;
+        }
+
+        $newPath = public_path() . self::VIDEO_DOKUMENTASI_FOLDER . $filename;
+        if (is_file($newPath)) {
+            return $newPath;
+        }
+
+        $legacyPath = public_path() . self::LEGACY_VIDEO_DOKUMENTASI_FOLDER . $filename;
+        if (is_file($legacyPath)) {
+            return $legacyPath;
+        }
+
+        return $newPath;
     }
 
 }
