@@ -1982,7 +1982,11 @@ class RenderInvoice
             if ($dataHead->periode != null && $dataHead->periode != 'all') {
                 $pr = self::tanggal_indonesia($dataHead->periode, 'period');
             } else {
-                $pr = "All Periode";
+                if($dataHead->periode == 'all'){
+                    $pr = "All Periode";
+                } else {
+                    $pr = '';
+                }
             }
 
             $konsultant = $dataHead->nama_perusahaan;
