@@ -103,7 +103,7 @@ class KalkulasiPayrollController extends Controller
 
             $query = DB::table('master_karyawan')
             ->select(
-                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
+                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN pph_21.pajak_bulanan ELSE payroll.pajak_pph END, 0), 0) as pajak,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.gaji_pokok ELSE payroll.gaji_pokok END, 0), 0) as gaji_pokok, 
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.tunjangan_kerja ELSE payroll.tunjangan END, 0), 0) as tunjangan_kerja, 
@@ -203,7 +203,7 @@ class KalkulasiPayrollController extends Controller
             ->leftJoin('master_jabatan', function($join){
                 $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id');
             })
-            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
+            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
             ->orderBy('master_karyawan.nik_karyawan', 'ASC')
             // ->where('master_karyawan.nik_karyawan', 'ISP232')
             ->whereRaw(('CASE WHEN master_karyawan.is_active = 0 THEN CAST(NOW() as DATE) <= DATE_ADD(master_karyawan.effective_date, INTERVAL 45 DAY) ELSE master_karyawan.is_active = 1 END'))
@@ -275,6 +275,7 @@ class KalkulasiPayrollController extends Controller
 
             $payroll->nik_karyawan = $request->nik_karyawan;
             $payroll->payroll_header_id = $request->payroll_header_id;
+            $payroll->id_karyawan = $request->id_karyawan;
             $payroll->karyawan = $request->nama_lengkap;
             $payroll->status_karyawan = $request->status_karyawan;
             $payroll->id_jabatan = $request->id_jabatan;
