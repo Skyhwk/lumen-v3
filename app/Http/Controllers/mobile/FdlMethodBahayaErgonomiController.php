@@ -32,6 +32,9 @@ use Yajra\Datatables\Datatables;
 
 class FdlMethodBahayaErgonomiController extends Controller
 {
+    private const VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/video_bahaya_ergonomi/';
+    private const LEGACY_VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/sampling/';
+
     public function getSample(Request $request)
     {
         $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
@@ -86,7 +89,10 @@ class FdlMethodBahayaErgonomiController extends Controller
             $noSampelSafe = preg_replace('/[^A-Za-z0-9_\-]/', '_', $request->no_sampel);
             $safeName = 'video_' . time() . '_' . $noSampelSafe . '.' . $video->getClientOriginalExtension();
 
-            $destinationPath = public_path() . '/dokumentasi/sampling/';
+            $destinationPath = public_path() . self::VIDEO_DOKUMENTASI_FOLDER;
+            if (!is_dir($destinationPath)) {
+                mkdir($destinationPath, 0777, true);
+            }
             $video->move($destinationPath, $safeName);
             // Simpan referensi ke database
             DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', 8)->update([
@@ -101,6 +107,25 @@ class FdlMethodBahayaErgonomiController extends Controller
         return response()->json([
             'success' => false,
         ]);
+    }
+
+    private function getVideoDokumentasiPath($filename)
+    {
+        if (!$filename) {
+            return null;
+        }
+
+        $newPath = public_path() . self::VIDEO_DOKUMENTASI_FOLDER . $filename;
+        if (is_file($newPath)) {
+            return $newPath;
+        }
+
+        $legacyPath = public_path() . self::LEGACY_VIDEO_DOKUMENTASI_FOLDER . $filename;
+        if (is_file($legacyPath)) {
+            return $legacyPath;
+        }
+
+        return $newPath;
     }
 
     public function store(Request $request)
@@ -622,6 +647,7 @@ class FdlMethodBahayaErgonomiController extends Controller
             $foto_samping_kanan = public_path() . '/dokumentasi/sampling/' . $cek->foto_samping_kanan;
             $foto_depan = public_path() . '/dokumentasi/sampling/' . $cek->foto_depan;
             $foto_belakang = public_path() . '/dokumentasi/sampling/' . $cek->foto_belakang;
+            $video_dokumentasi = $this->getVideoDokumentasiPath($cek->video_dokumentasi);
             if (is_file($foto_samping_kiri)) {
                 unlink($foto_samping_kiri);
             }
@@ -633,6 +659,9 @@ class FdlMethodBahayaErgonomiController extends Controller
             }
             if (is_file($foto_belakang)) {
                 unlink($foto_belakang);
+            }
+            if (is_file($video_dokumentasi)) {
+                unlink($video_dokumentasi);
             }
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Bahaya Ergonomi pada nomor sampel $cek->no_sampel")->save();
             $cek->delete();

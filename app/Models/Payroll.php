@@ -11,9 +11,12 @@ class Payroll extends Sector{
     
     protected $fillable = [
         'payroll_header_id',
+        'id_karyawan',
         'karyawan',
         'nik_karyawan',
         'status_karyawan',
+        'id_jabatan',
+        'nama_jabatan',
         'periode_payroll',
         'hari_kerja',
         'tidak_hadir',

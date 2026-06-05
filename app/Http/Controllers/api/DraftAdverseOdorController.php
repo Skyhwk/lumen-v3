@@ -71,9 +71,9 @@ class DraftAdverseOdorController extends Controller
             ->where('kategori_3', '27-Udara Lingkungan Kerja')
             // ->where('status', 2)
             ->where('parameter', 'LIKE', '%Adverse Odor%')
-            ->whereHas('lhps_adverse_odor', function ($query) {
-                $query->where('is_approved', 0);
-            })
+            // ->whereHas('lhps_adverse_odor', function ($query) {
+            //     $query->where('is_approved', 0);
+            // })
             ->groupBy('cfr')
             ->get();
         $data = $data->map(function ($item) {

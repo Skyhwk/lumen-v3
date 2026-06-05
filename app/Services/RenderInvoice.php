@@ -1979,10 +1979,14 @@ class RenderInvoice
             }
 
             $pr = '';
-            if ($dataHead->periode != null) {
+            if ($dataHead->periode != null && $dataHead->periode != 'all') {
                 $pr = self::tanggal_indonesia($dataHead->periode, 'period');
             } else {
-                $pr = "";
+                if($dataHead->periode == 'all'){
+                    $pr = "All Periode";
+                } else {
+                    $pr = '';
+                }
             }
 
             $konsultant = $dataHead->nama_perusahaan;
