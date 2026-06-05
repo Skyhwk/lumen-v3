@@ -265,6 +265,12 @@ class RequestSamplingPlanRevisiController extends Controller
                 return response()->json(['message' => 'Berhasil menambah jadwal sampling.!', 'status' => 'success'], 200);
             }
         } catch (\Throwable $th) {
+            $logData = [
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'status'  => $th->getCode(),
+            ];
+            Log::channel('sampling')->error("=== addJadwal ===", $logData);
             return response()->json($th);
         }
     }
@@ -303,6 +309,12 @@ class RequestSamplingPlanRevisiController extends Controller
             return response()->json(['data'=>$getLabelStatusSampling],200);
         } catch (\Throwable $th) {
             //throw $th;
+            $logData = [
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'status'  => $th->getCode(),
+            ];
+            Log::channel('sampling')->error("=== getStatusSampling ===", $logData);
             return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
         }
     }
