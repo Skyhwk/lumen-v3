@@ -7,6 +7,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
+use App\Models\Parameter;
 
 use Schema;
 
@@ -49,6 +50,8 @@ class CheckOrderActive extends Command
         $this->info("Start Date : " . $startDate);
         $this->info("End Date   : " . $endDate);
         $this->info("Start to get data headers [".Carbon::now()->toDateTimeString()."]");
+
+        $allParameter = Parameter::select('id', 'nama_lab', 'nama_regulasi')->where('is_active', 1)->get()->keyBy('id')->toArray();
 
         $dataHeaders = OrderHeader::select(
             'id','no_order','id_pelanggan','sales_id',
@@ -150,17 +153,17 @@ class CheckOrderActive extends Command
         $this->info("Total Data Lhp : " . count($dataLhp));
         $this->info("Start to build data [".Carbon::now()->toDateTimeString()."]");
 
-        $orders = $dataHeaders->map(function ($order) use ($dataOrderDetail, $dataLhp) {
+        $orders = $dataHeaders->map(function ($order) use ($dataOrderDetail, $dataLhp, $allParameter) {
             $detailPerOrder = $dataOrderDetail[$order->no_order] ?? [];
             $lhpPerOrder = $dataLhp[$order->no_order] ?? [];
             $orderDate = Carbon::parse($order->tgl_order)->format('Y-m-d');
 
             $dataOrderDetailMapped = collect($detailPerOrder)
                 ->groupBy('periode')
-                ->map(function ($detailsByPeriode, $periode) use ($orderDate, $lhpPerOrder) {
+                ->map(function ($detailsByPeriode, $periode) use ($orderDate, $lhpPerOrder, $allParameter) {
                     $details = $detailsByPeriode
                         ->groupBy('cfr')
-                        ->map(fn ($group) => $this->buildCfrDetail($group, $orderDate, $lhpPerOrder))
+                        ->map(fn ($group) => $this->buildCfrDetail($group, $orderDate, $lhpPerOrder, $allParameter))
                         ->values();
 
                     $totalLhp = $details->count();
@@ -310,7 +313,7 @@ class CheckOrderActive extends Command
         return null;
     }
 
-    private function buildCfrDetail($group, string $orderDate, array $lhpRecords): array
+    private function buildCfrDetail($group, string $orderDate, array $lhpRecords, $allParameter): array
     {
         $group = collect($group);
         $d = $group->first();
@@ -389,8 +392,9 @@ class CheckOrderActive extends Command
             'kategori_1'    => $d['kategori_1'],
             'kategori_2'    => $d['kategori_2'],
             'kategori_3'    => $d['kategori_3'],
-            'parameter'     => json_decode($d['parameter'] ?? '', true),
-            'regulasi'      => json_decode($d['regulasi'] ?? '', true),
+            'parameter'          => json_decode($d['parameter'] ?? '', true),
+            'parameter_regulasi' => $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter),
+            'regulasi'           => json_decode($d['regulasi'] ?? '', true),
             'lhp_rilis'     => (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5),
             'tgl_lhp_rilis' => $tglLhpRilis,
             'steps'         => $steps,
@@ -398,6 +402,26 @@ class CheckOrderActive extends Command
             'categories'    => $group->pluck('kategori_3')->toArray(),
             'sampelNumbers' => $group->pluck('no_sampel')->toArray(),
         ];
+    }
+
+    private function buildParameterRegulasi(?string $parameterJson, array $allParameter): array
+    {
+        $decoded = json_decode($parameterJson ?? '', true);
+        if (!is_array($decoded) || empty($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->map(function ($item) use ($allParameter) {
+                $id = is_string($item) && str_contains($item, ';')
+                    ? explode(';', $item, 2)[0]
+                    : $item;
+
+                return $allParameter[$id]['nama_regulasi'] ?? null;
+            })
+            ->filter()
+            ->values()
+            ->toArray();
     }
 
     private function buildTrackingOrderRecords($dataPembayaran, array $orders): array
