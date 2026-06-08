@@ -37,7 +37,11 @@ class PurchaseOrdersController extends Controller
         if ($scope === 'pending') {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting to Create PO');
         } else {
-            $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
+            $purchaseRequests = $purchaseRequests->whereIn('finance_status', [
+                'On Process',
+                'Waiting Vendor Receipt',
+                'Waiting User Receipt',
+            ])->whereNotNull('po_number');
         }
 
         return DataTables::of($purchaseRequests)
