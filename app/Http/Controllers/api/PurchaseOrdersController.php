@@ -41,6 +41,7 @@ class PurchaseOrdersController extends Controller
                 'On Process',
                 'Waiting Vendor Receipt',
                 'Waiting User Receipt',
+                'Distributing',
             ])->whereNotNull('po_number');
         }
 
@@ -255,7 +256,7 @@ class PurchaseOrdersController extends Controller
                 'ppn_amount' => $ppnAmount,
                 'other_cost' => $otherCost,
                 'grand_total' => $grandTotal,
-                'keterangan' => $request->keterangan,
+                'keterangan' => trim($request->keterangan ?? '') ?: trim(optional($item)->note ?? ''),
                 'phone_fax' => $request->phone_fax ?: '021-5089-8988/89',
                 'pic' => $request->pic,
                 'payment_term' => $request->payment_term ?: 'Setelah Invoice diterima',
@@ -412,6 +413,10 @@ class PurchaseOrdersController extends Controller
 
     private function buildPdf(PurchaseOrderDocument $poDocument): string
     {
+        $purchaseRequest = PurchaseRequest::with('items')->find($poDocument->purchase_request_id);
+        $itemNote = trim(optional(optional($purchaseRequest)->items->first())->note ?? '');
+        $keterangan = trim($poDocument->keterangan ?? '') ?: $itemNote;
+
         $mpdf = new \Mpdf\Mpdf([
             'format' => 'A4',
             'orientation' => 'P',
@@ -433,7 +438,8 @@ class PurchaseOrdersController extends Controller
             'poDateFormatted',
             'approvalDateFormatted',
             'deliveryTimeFormatted',
-            'qrPath'
+            'qrPath',
+            'keterangan'
         ))->render();
 
         $mpdf->WriteHTML($html);
@@ -461,6 +467,10 @@ class PurchaseOrdersController extends Controller
 
         if ($row->finance_status === 'Waiting User Receipt') {
             return 'Waiting User Receipt';
+        }
+
+        if ($row->finance_status === 'Distributing') {
+            return 'Distributing';
         }
 
         if (in_array($row->finance_status, ['Waiting Process', 'Pending'])) {
