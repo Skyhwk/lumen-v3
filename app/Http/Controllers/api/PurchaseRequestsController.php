@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use DataTables;
 
 use Mpdf;
-use App\Services\{Notification, GetBawahan};
+use App\Services\{Notification, GetBawahan, GetAtasan};
 
 use App\Models\{PurchaseRequest, PurchaseRequestItem, MasterKaryawan};
 
@@ -431,18 +431,15 @@ class PurchaseRequestsController extends Controller
             return ['mode' => 'auto', 'approver_ids' => []];
         }
 
-        $atasanIds = json_decode($employee->atasan_langsung, true) ?? [];
-        $atasan = MasterKaryawan::whereIn('id', $atasanIds)->where('is_active', 1)->get();
-
-        $manager = $atasan->firstWhere('grade', 'MANAGER');
+        $manager = $this->findApproverManager($employee);
         if ($manager) {
-            return ['mode' => 'manager', 'approver_ids' => [$manager->id]];
+            return ['mode' => 'manager', 'approver_ids' => [(int) $manager->id]];
         }
 
         if ($employee->grade === 'STAFF') {
-            $supervisor = $atasan->firstWhere('grade', 'SUPERVISOR');
+            $supervisor = $this->findDirectSupervisor($employee);
             if ($supervisor) {
-                return ['mode' => 'supervisor', 'approver_ids' => [$supervisor->id]];
+                return ['mode' => 'supervisor', 'approver_ids' => [(int) $supervisor->id]];
             }
         }
 
@@ -450,7 +447,37 @@ class PurchaseRequestsController extends Controller
             return ['mode' => 'auto', 'approver_ids' => []];
         }
 
-        return ['mode' => 'supervisor', 'approver_ids' => $atasan->pluck('id')->toArray()];
+        $atasanIds = json_decode($employee->atasan_langsung, true) ?? [];
+        $approverIds = MasterKaryawan::whereIn('id', $atasanIds)
+            ->where('is_active', 1)
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+
+        return ['mode' => 'supervisor', 'approver_ids' => $approverIds];
+    }
+
+    private function findApproverManager($employee): ?MasterKaryawan
+    {
+        $chain = GetAtasan::where('id', $employee->id)->get();
+
+        return $chain->first(function ($person) use ($employee) {
+            return (int) $person->id !== (int) $employee->id && $person->grade === 'MANAGER';
+        });
+    }
+
+    private function findDirectSupervisor($employee): ?MasterKaryawan
+    {
+        $atasanIds = json_decode($employee->atasan_langsung, true) ?? [];
+
+        if (empty($atasanIds)) {
+            return null;
+        }
+
+        return MasterKaryawan::whereIn('id', $atasanIds)
+            ->where('is_active', 1)
+            ->where('grade', 'SUPERVISOR')
+            ->first();
     }
 
     private function applyInitialApproval(PurchaseRequest $purchaseRequest, $employee): void
@@ -509,7 +536,7 @@ class PurchaseRequestsController extends Controller
             return false;
         }
 
-        return in_array($viewer->id, $flow['approver_ids'] ?? []);
+        return in_array((int) $viewer->id, array_map('intval', $flow['approver_ids'] ?? []), true);
     }
 
     private function canUserVoid($employee, $purchaseRequest): bool
