@@ -301,14 +301,14 @@ class CreateInvoiceJob extends Job
 
     private function renderInvoice(array $invoiceNumbers, $noDocument)
     {
-        JobTask::insert([
-            'job' => 'RenderInvoice',
-            'status' => 'processing',
-            'no_document' => $noDocument,
-            'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
-        ]);
+        // JobTask::insert([
+        //     'job' => 'RenderInvoice',
+        //     'status' => 'processing',
+        //     'no_document' => $noDocument,
+        //     'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
+        // ]);
 
-        app(Dispatcher::class)->dispatch(new RenderInvoiceJob($invoiceNumbers));
+        // app(Dispatcher::class)->dispatch(new RenderInvoiceJob($invoiceNumbers));
     }
 
     private function acquireLock($lockName)
