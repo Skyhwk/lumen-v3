@@ -52,6 +52,13 @@ class TrackingOrderController extends Controller
     private function buildDatatable(Builder $data)
     {
         return Datatables::of($data)
+            ->filterColumn('status_lhp', function ($query, $keyword) {
+                if ($keyword === '1') {
+                    $query->whereRaw('jumlah_lhp_selesai >= total_lhp');
+                } elseif ($keyword === '0') {
+                    $query->whereRaw('jumlah_lhp_selesai < total_lhp');
+                }
+            })
             ->filterColumn('progress', function ($query, $keyword) {
                 $query->where('progress', 'like', "%{$keyword}%");
             })
