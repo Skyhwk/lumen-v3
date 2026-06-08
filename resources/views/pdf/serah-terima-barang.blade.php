@@ -121,7 +121,6 @@
                 <img class="logo" src="{{ public_path('img/isl_logo.png') }}" alt="ISL">
             </td>
             <td style="vertical-align: top; padding-left: 6px;">
-                <div class="company-name">INTI SURYA LABORATORIUM</div>
             </td>
         </tr>
     </table>
@@ -172,7 +171,10 @@
             <td class="sign-block">
                 <div class="sign-label">Diserahkan Oleh,</div>
                 <div class="sign-name">{{ $handedByName }}</div>
-                <div class="sign-meta">{{ $handedByPosition }}</div>
+                <div class="sign-meta">
+                    {{ $handedByPosition }}<br>
+                    {{ $handedByDivision }}
+                </div>
                 <div class="sign-date">Tgl. {{ $handoverDateFormatted }}</div>
             </td>
             <td style="width: 4%;"></td>
@@ -183,7 +185,7 @@
                     {{ $receivedByPosition }}<br>
                     {{ $receivedByDivision }}
                 </div>
-                <div class="sign-date">Tgl. ........................</div>
+                <div class="sign-date">Tgl. {{ $receivedByDate }}</div>
             </td>
         </tr>
     </table>
