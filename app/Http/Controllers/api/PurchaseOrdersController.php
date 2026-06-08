@@ -37,11 +37,7 @@ class PurchaseOrdersController extends Controller
         if ($scope === 'pending') {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting to Create PO');
         } else {
-            $purchaseRequests = $purchaseRequests->whereIn('finance_status', [
-                'On Process',
-                'Waiting Vendor Receipt',
-                'Waiting User Receipt',
-            ]);
+            $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
         }
 
         return DataTables::of($purchaseRequests)
@@ -186,7 +182,7 @@ class PurchaseOrdersController extends Controller
             ->send();
 
         return response()->json([
-            'message' => 'Purchase Order berhasil diproses. Menunggu penerimaan barang di Goods Receipt.',
+            'message' => 'Purchase Order berhasil diproses. Data dipindahkan ke Goods Receipt.',
         ], 200);
     }
 
