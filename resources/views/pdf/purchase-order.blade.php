@@ -246,7 +246,7 @@
         <tbody>
             <tr>
                 <td>{{ $poDocument->item_name }}</td>
-                <td>{{ $poDocument->keterangan ?: '-' }}</td>
+                <td>{{ $keterangan ?: '-' }}</td>
                 <td class="text-center">{{ number_format($poDocument->quantity, 0, ',', '.') }}</td>
                 <td class="text-right">{{ number_format($poDocument->unit_price, 0, ',', '.') }}</td>
                 <td class="text-right">{{ number_format($poDocument->line_total, 0, ',', '.') }}</td>
@@ -257,9 +257,9 @@
     <table style="margin-top: 10px;">
         <tr>
             <td style="width: 50%; vertical-align: top;">
-                @if($poDocument->keterangan)
+                @if($keterangan)
                     <div class="keterangan-title">KETERANGAN :</div>
-                    <div style="font-size: 9.5px; line-height: 1.4;">{!! nl2br(e($poDocument->keterangan)) !!}</div>
+                    <div style="font-size: 9.5px; line-height: 1.4;">{!! nl2br(e($keterangan)) !!}</div>
                 @endif
 
                 <table class="info-table" style="margin-top: 10px;">
