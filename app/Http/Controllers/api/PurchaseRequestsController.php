@@ -54,11 +54,31 @@ class PurchaseRequestsController extends Controller
             $purchaseRequests = $purchaseRequests->whereIn('created_by', $creator);
         }
 
+        $scope = $request->input('scope', 'ongoing');
+
+        if ($scope === 'completed') {
+            $purchaseRequests = $purchaseRequests->where(function ($query) {
+                $query->where('status', 'Done')
+                    ->orWhere('finance_status', 'Distributed');
+            });
+        } else {
+            $purchaseRequests = $purchaseRequests->where(function ($query) {
+                $query->where(function ($q) {
+                    $q->where('status', '!=', 'Done')
+                        ->where(function ($q2) {
+                            $q2->whereNull('finance_status')
+                                ->orWhere('finance_status', '!=', 'Distributed');
+                        });
+                });
+            });
+        }
+
         return DataTables::of($purchaseRequests)
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
             ->addColumn('can_approve', fn($row) => $this->canUserApprove($employee, $row))
+            ->addColumn('can_void', fn($row) => $this->canUserVoid($employee, $row))
             ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
             ->make(true);
     }
@@ -134,6 +154,12 @@ class PurchaseRequestsController extends Controller
     public function delete(Request $request)
     {
         $purchaseRequest = PurchaseRequest::findOrFail($request->id);
+        $employee = $request->attributes->get('user')->karyawan;
+
+        if (!$this->canUserVoid($employee, $purchaseRequest)) {
+            return response()->json(['message' => 'Permintaan tidak dapat divoid pada tahap ini'], 422);
+        }
+
         $purchaseRequest->deleted_by = $this->karyawan;
         $purchaseRequest->deleted_at = date('Y-m-d H:i:s');
         $purchaseRequest->is_active = false;
@@ -484,6 +510,31 @@ class PurchaseRequestsController extends Controller
         }
 
         return in_array($viewer->id, $flow['approver_ids'] ?? []);
+    }
+
+    private function canUserVoid($employee, $purchaseRequest): bool
+    {
+        if ($purchaseRequest->created_by !== $employee->nama_lengkap) {
+            return false;
+        }
+
+        if ($purchaseRequest->finance_status === 'Rejected') {
+            return true;
+        }
+
+        if (
+            $purchaseRequest->delegated_at
+            || in_array($purchaseRequest->finance_status, ['Waiting Process', 'On Process', 'Pending', 'Distributed'])
+            || $purchaseRequest->status === 'Done'
+        ) {
+            return false;
+        }
+
+        if ($purchaseRequest->status === 'Rejected') {
+            return false;
+        }
+
+        return in_array($purchaseRequest->status, ['Pending', 'Reopened', 'Approved', 'Partially Approved']);
     }
 
     private function handleAttachments(Request $request, $existingAttachmentField)
