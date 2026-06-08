@@ -157,7 +157,11 @@ class LhpKebisinganController extends Controller
                         ->useLampiran(true)
                         ->whereView('DraftKebisinganLh')
                         ->render();
-                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
+                } else if (
+                    $master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || 
+                    $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)' || 
+                    $master_regulasi->deskripsi == 'Kebisingan 24 Jam') 
+                {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($header)
                         ->setDataCustom($custom)
