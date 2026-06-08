@@ -98,7 +98,7 @@ class GenerateDocumentJadwal
             ]);
             DB::commit();
 
-            //$this->emailJadwalSampling($this->email, $quote);
+            $this->emailJadwalSampling($this->email, $quote);
             
             return true;
         } catch (\Throwable $th) {
@@ -157,7 +157,7 @@ class GenerateDocumentJadwal
             ]);
             DB::commit();
 
-            //$this->emailJadwalSampling($this->email, $quote);
+            $this->emailJadwalSampling($this->email, $quote);
 
             return true;
         } catch (\Throwable $th) {
