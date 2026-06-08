@@ -51,49 +51,18 @@
             margin: 15px 0;
         }
 
-        .badge {
-            padding: 4px 10px;
-            color: #fff;
-            font-weight: bold;
-            border-radius: 4px;
-            font-size: 10px;
-            display: inline-block;
-        }
-
-        .bg-Low {
-            background-color: #28a745;
-        }
-
-        .bg-Normal {
-            background-color: #007bff;
-        }
-
-        .bg-Urgent {
-            background-color: #ffc107;
-            color: #212529;
-        }
-
-        .bg-Critical {
-            background-color: #dc3545;
-        }
-
-        .bg-secondary {
-            background-color: #6c757d;
-        }
-
         .data-table {
             margin-top: 10px;
         }
 
         .data-table th,
         .data-table td {
-            border: 1px solid #dee2e6;
+            border: 1px solid #333;
             padding: 6px;
             vertical-align: middle;
         }
 
         .data-table th {
-            background-color: #f8f9fa;
             text-align: center;
             font-weight: bold;
         }
@@ -102,25 +71,66 @@
             text-align: center;
         }
 
-        .table-success td {
-            background-color: #d4edda;
-        }
-
-        .table-danger td {
-            background-color: #f8d7da;
-        }
-
-        .status-note {
-            font-size: 9px;
-            font-style: italic;
-            color: #555;
-            margin-top: 4px;
-        }
-
         .img-preview {
             max-width: 60px;
             max-height: 60px;
             object-fit: contain;
+        }
+
+        .signature-table {
+            margin-top: 40px;
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #333;
+        }
+
+        .signature-table > tbody > tr > td {
+            border: 1px solid #333;
+            padding: 0;
+            vertical-align: top;
+        }
+
+        .signature-inner {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .signature-inner td {
+            border: none;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .signature-label {
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            padding: 12px 8px 8px;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .signature-gap {
+            height: 75px;
+            padding: 0;
+        }
+
+        .signature-footer {
+            border-top: 1px solid #333;
+            padding: 0;
+        }
+
+        .signature-name {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 8px 8px 2px;
+            min-height: 14px;
+        }
+
+        .signature-position {
+            font-size: 9px;
+            color: #444;
+            padding: 0 8px 12px;
+            min-height: 12px;
         }
     </style>
 </head>
@@ -209,23 +219,7 @@
     <table class="layout-table">
         <tr>
             <td class="label" style="width: 15%;">Prioritas</td>
-            <td class="value" style="width: 85%;">: 
-                @php
-                    $bgColors = [
-                        'Low' => '#28a745',
-                        'Normal' => '#007bff',
-                        'Urgent' => '#ffc107',
-                        'Critical' => '#dc3545',
-                    ];
-                    $bgColor = $bgColors[$purchaseRequest->priority] ?: '#6c757d';
-                    $textColor = $purchaseRequest->priority == 'Urgent' ? '#212529' : '#ffffff';
-                @endphp
-
-                <span
-                    style="background-color: {{ $bgColor }}; color: {{ $textColor }}; font-weight: bold; font-size: 10px; border: 4px solid {{ $bgColor }}; border-radius: 4px;">
-                    {{ strtoupper($purchaseRequest->priority) }}
-                </span>
-            </td>
+            <td class="value" style="width: 85%;">: {{ strtoupper($purchaseRequest->priority) }}</td>
         </tr>
         <tr>
             <td class="label" style="width: 15%;">Tujuan</td>
@@ -235,62 +229,89 @@
 
     <hr />
 
-    <h4 style="margin-bottom: 5px; margin-top: 0;">Daftar Permintaan Barang</h4>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th width="5%">No.</th>
-                <th width="15%">Nama Barang</th>
-                <th width="12%">Koding</th>
-                <th width="12%">Merk</th>
-                <th width="5%">Qty</th>
-                <th width="8%">Satuan</th>
-                <th width="23%">Keterangan</th>
-                <th width="15%">Lampiran</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($purchaseRequest->items as $index => $item)
-                @php
-                    $rowClass = '';
-                    $statusText = '';
+    <h4 style="margin-bottom: 5px; margin-top: 0;">Detail Barang</h4>
+    @php
+        $item = $purchaseRequest->items->first();
+        $attachments = [];
 
-                    if ($item->rejected_finance_at || $item->rejected_at) {
-                        $rowClass = 'table-danger';
-                        $rejector = $item->rejected_finance_by ?: $item->rejected_by;
-                        $rejectDate = date('d M Y', strtotime($item->rejected_finance_at ?: $item->rejected_at));
-                        $reason = $item->rejection_finance_note ?: $item->rejection_note;
-                        $statusText = "Ditolak oleh {$rejector} ({$rejectDate}). Alasan: {$reason}";
-                    } elseif ($item->approved_at) {
-                        $rowClass = 'table-success';
-                        $approver = $item->approved_by;
-                        $approveDate = date('d M Y', strtotime($item->approved_at));
-                        $statusText = "Disetujui oleh {$approver} ({$approveDate})";
-                    }
-                @endphp
-                <tr class="{{ $rowClass }}">
-                    <td class="text-center">{{ $index + 1 }}</td>
+        if ($item && $item->attachment) {
+            $decoded = json_decode($item->attachment, true);
+            $attachments = json_last_error() === JSON_ERROR_NONE && is_array($decoded)
+                ? $decoded
+                : [$item->attachment];
+        }
+
+        $signatureWidth = count($signatures ?? []) > 0 ? floor(100 / count($signatures)) : 25;
+    @endphp
+
+    @if ($item)
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th width="5%">No.</th>
+                    <th width="22%">Nama Barang</th>
+                    <th width="12%">Koding</th>
+                    <th width="12%">Merk</th>
+                    <th width="7%">Qty</th>
+                    <th width="8%">Satuan</th>
+                    <th width="22%">Keterangan</th>
+                    <th width="12%">Lampiran</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-center">1</td>
                     <td>{{ $item->item_name }}</td>
-                    <td>{{ $item->item_code ?: '-' }}</td>
-                    <td class="text-center">{{ $item->brand_name ?: '-' }}</td>
+                    <td class="text-center">{{ $item->item_code ?: '-' }}</td>
+                    <td>{{ $item->brand_name ?: '-' }}</td>
                     <td class="text-center">{{ $item->quantity }}</td>
                     <td class="text-center">{{ $item->unit }}</td>
-                    <td>
-                        {{ $item->note ?: '-' }}
-                        @if ($statusText)
-                            <div class="status-note">* {{ $statusText }}</div>
-                        @endif
-                    </td>
+                    <td>{{ $item->note ?: '-' }}</td>
                     <td class="text-center">
-                        @if ($item->attachment && file_exists(public_path('purchase-requests/' . $item->attachment)))
-                            <img src="{{ public_path('purchase-requests/' . $item->attachment) }}" class="img-preview" alt="Lampiran">
+                        @if (!empty($attachments))
+                            @foreach ($attachments as $attachment)
+                                @if (file_exists(public_path('purchase-requests/' . $attachment)))
+                                    <img src="{{ public_path('purchase-requests/' . $attachment) }}" class="img-preview" alt="Lampiran" style="margin-right: 4px;">
+                                @endif
+                            @endforeach
                         @else
-                            <span class="text-muted">-</span>
+                            -
                         @endif
                     </td>
                 </tr>
+            </tbody>
+        </table>
+    @else
+        <p class="text-muted">Tidak ada data barang.</p>
+    @endif
+
+    <table class="signature-table">
+        <tr>
+            @foreach ($signatures as $signature)
+                <td width="{{ $signatureWidth }}%">
+                    <table class="signature-inner">
+                        <tr>
+                            <td class="signature-label"><u>{{ $signature['label'] }}</u></td>
+                        </tr>
+                        <tr>
+                            <td class="signature-gap">&nbsp;</td>
+                        </tr>
+                        <tr>
+                            <td class="signature-footer">
+                                <table class="signature-inner">
+                                    <tr>
+                                        <td class="signature-name">{{ $signature['name'] }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="signature-position">{{ $signature['position'] }}</td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
             @endforeach
-        </tbody>
+        </tr>
     </table>
 
 </body>
