@@ -17,6 +17,16 @@ use Carbon\Carbon;
 
 class InvoiceController extends Controller
 {
+    private const MIN_YEAR = 2024;
+
+    private function resolveYear($year): int
+    {
+        $currentYear = (int) Carbon::now()->year;
+        $year = (int) ($year ?: $currentYear);
+
+        return max(self::MIN_YEAR, min($currentYear, $year));
+    }
+
     public static function generatePDF($noInvoice)
     {
         $render = new RenderInvoice();
@@ -27,11 +37,15 @@ class InvoiceController extends Controller
     public function index(Request $request)
     {
         try {
-            $data = SummaryInvoice::query();
+            $year = $this->resolveYear($request->year);
+
+            $data = SummaryInvoice::query()
+                ->whereYear('tgl_invoice', $year);
+
             $statusLunas = trim((string) $request->input('columns.3.search.value', $request->input('keterangan', '')));
 
             if ($statusLunas !== '') {
-                $data->where('status_lunas',$statusLunas);
+                $data->where('status_lunas', $statusLunas);
             }
 
             return Datatables::of($data)->make(true);

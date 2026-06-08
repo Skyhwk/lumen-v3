@@ -10,6 +10,16 @@ class DraftErgonomiFile extends Sector
 
     public $timestamps = false;
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saving(function ($model) {
+            if (!empty($model->no_sampel)) {
+                $model->no_order = explode('/', $model->no_sampel)[0];
+            }
+        });
+    }
 
     public function order_detail()
     {

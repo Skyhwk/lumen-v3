@@ -516,7 +516,7 @@ class DraftAdverseOdorController extends Controller
                 mkdir($folder, 0777, true);
             }
 
-            $fileName = 'LHP-' . str_replace("/", "-", $request->no_lhp) . '.pdf';
+            $fileName = 'LHP-' . str_replace("/", "-", $request->no_lhp) . 'AO.pdf';
 
             // Simpan file
             $file->move($folder, $fileName);
