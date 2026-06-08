@@ -253,7 +253,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id_jabatan', [45, 48])
                 ->title('Permintaan Pembelian Barang Diajukan!')
                 ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$parent->approved_by} pada " . date('d-m-Y'))
-                ->url('/finance/purchasing/purchases')
+                ->url('/finance/purchasing/purchase-request-approval')
                 ->send();
         }
 
@@ -356,8 +356,12 @@ class PurchaseRequestsController extends Controller
 
     private function resolveDisplayStatus($row): string
     {
-        if ($row->status === 'Rejected' || $row->finance_status === 'Rejected') {
-            return 'Ditolak';
+        if ($row->finance_status === 'Rejected') {
+            return 'Ditolak Purchasing';
+        }
+
+        if ($row->status === 'Rejected') {
+            return 'Ditolak Atasan';
         }
 
         if (in_array($row->status, ['Pending', 'Reopened'])) {
@@ -372,7 +376,13 @@ class PurchaseRequestsController extends Controller
             return 'Dalam Proses';
         }
 
-        if ($row->finance_status === 'Waiting Process') {
+        if ($row->finance_status === 'Waiting Vendor Receipt' || $row->finance_status === 'Waiting User Receipt') {
+            return 'Dalam Proses';
+        }
+
+        if (
+            in_array($row->finance_status, ['Waiting Process', 'Waiting to Create PO', 'PO Created'])
+        ) {
             return 'Menunggu Proses';
         }
 
@@ -501,7 +511,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id_jabatan', [45, 48])
                 ->title('Permintaan Pembelian Barang Diajukan!')
                 ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/finance/purchasing/purchases')
+                ->url('/finance/purchasing/purchase-request-approval')
                 ->send();
 
             return;
@@ -551,7 +561,14 @@ class PurchaseRequestsController extends Controller
 
         if (
             $purchaseRequest->delegated_at
-            || in_array($purchaseRequest->finance_status, ['Waiting Process', 'On Process', 'Pending', 'Distributed'])
+            || in_array($purchaseRequest->finance_status, [
+                'Waiting to Create PO',
+                'PO Created',
+                'Waiting Process',
+                'On Process',
+                'Pending',
+                'Distributed',
+            ])
             || $purchaseRequest->status === 'Done'
         ) {
             return false;
