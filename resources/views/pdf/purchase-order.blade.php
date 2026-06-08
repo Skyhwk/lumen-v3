@@ -25,7 +25,6 @@
 
         .logo {
             height: 45px;
-            padding-bottom: 10px;
         }
 
         .doc-title-wrap {
@@ -176,42 +175,16 @@
         <tr>
             <td style="width: 50%;">
                 <img class="logo" src="{{ public_path('img/isl_logo.png') }}" alt="ISL">
-                <table style="width:80%; border-top:1px solid #000; border-bottom:1px solid #000;">
-                    <tr>
-                        <td style="text-align:left; padding:4px 0;">
-                        <div class="supplier-label">Supplier :</div>
-                        </td>
-                    </tr>
-                </table>
-                <table style="width:80%; margin-top:10px;">
-                    <tr>
-                        <td style="text-align:left; padding:4px 0;">
-                            <div class="supplier-name">{{ $poDocument->supplier_name }}</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="text-align:left;">
-                            <div class="supplier-address">{!! nl2br(e($poDocument->supplier_address)) !!}</div>
-                        </td>
-                    </tr>
-                </table>
             </td>
             <td style="width: 50%;">
-                <table style="width:100%; border-top:1px solid #000; border-bottom:1px solid #000;">
-                    <tr>
-                        <td style="text-align:center; padding:4px 0;">
-                            <span style="
-                                font-size:24px;
-                                font-weight:bold;
-                                letter-spacing:1px;
-                            ">
-                                PURCHASE ORDER
-                            </span>
+                <table style="width:100%;">
+                    <tr style="width:100%; border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important;">
+                        <td style="text-align: center; border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important;">
+                            <div class="doc-title">PURCHASE ORDER</div>
                         </td>
                     </tr>
                 </table>
-
-                <table style="margin-top:8px; width:80%;">
+                <table style="margin-top: 8px; width: 80%;">
                     <tr>
                         <td class="meta-label">No. Form</td>
                         <td class="meta-space">:</td>
@@ -228,10 +201,13 @@
                         <td class="meta-value">{{ $poDateFormatted }}</td>
                     </tr>
                 </table>
-
             </td>
         </tr>
     </table>
+
+    <div class="supplier-label">Supplier :</div>
+    <div class="supplier-name">{{ $poDocument->supplier_name }}</div>
+    <div class="supplier-address">{!! nl2br(e($poDocument->supplier_address)) !!}</div>
 
     <table class="items-table">
         <thead>
@@ -256,7 +232,7 @@
 
     <table style="margin-top: 10px;">
         <tr>
-            <td style="width: 50%; vertical-align: top;">
+            <td style="width: 58%; vertical-align: top;">
                 @if($poDocument->keterangan)
                     <div class="keterangan-title">KETERANGAN :</div>
                     <div style="font-size: 9.5px; line-height: 1.4;">{!! nl2br(e($poDocument->keterangan)) !!}</div>
@@ -297,19 +273,8 @@
                     </tr>
                 </table>
             </td>
-            <td style="width: 10px;">
-            </td>
-            <td style="width: 40%; vertical-align: top; padding-left: 10px;">
+            <td style="width: 42%; vertical-align: top; padding-left: 10px;">
                 <table class="summary-table">
-                    <tr>
-                        <td colspan="2"
-                            style="
-                                border-top:1px solid !important;
-                                height:2px;
-                                padding:0;
-                            ">
-                        </td>
-                    </tr>
                     <tr>
                         <td class="summary-label">Sub Total</td>
                         <td class="summary-value">{{ number_format($poDocument->sub_total, 0, ',', '.') }}</td>
@@ -340,19 +305,14 @@
             <td style="width: 50%;">
             </td>
             <td style="width: 50%; text-align: center;">
-                <table style="width:100%; margin-bottom:10px;">
-                    <tr>
-                        <td>
-                            <div style="padding:30px">Tangerang, {{ $approvalDateFormatted }}</div>
-                        </td>
-                    </tr>
-                </table>
+                <div style="margin-bottom:25px;">Tangerang, {{ $approvalDateFormatted }}</div>
                 <div style="margin-top:15px; display: flex; flex-direction: column; align-items: center;">
                     @if($qrPath && file_exists($qrPath))
                         <img src="{{ $qrPath }}" width="55" height="55" alt="QR Pengesahan" style="margin-bottom:5px;">
                     @endif
                 </div>
             </td>
+       
         </tr>
     </table>
 

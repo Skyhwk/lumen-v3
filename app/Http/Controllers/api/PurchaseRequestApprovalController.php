@@ -35,7 +35,7 @@ class PurchaseRequestApprovalController extends Controller
         if ($scope === 'pending') {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting to Delegate');
         } else {
-            $purchaseRequests = $purchaseRequests->where('finance_status', 'Rejected');
+            $purchaseRequests = $purchaseRequests->whereNotIn('finance_status', ['Waiting to Delegate', 'Rejected']);
         }
 
         return DataTables::of($purchaseRequests)
