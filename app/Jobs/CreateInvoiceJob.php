@@ -140,8 +140,9 @@ class CreateInvoiceJob extends Job
         $ppnSource = $detail ?: $quotation;
         $rekening = ($ppnSource->total_ppn != null || $ppnSource->total_ppn != 0) ? 'ppn' : 'non-ppn';
         $cekRekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
-        $noInvoice = $this->generateNoInvoice($cekRekening, $rekening);
-        $insert = $this->buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, $first, $firstPeriode);
+        $invoiceDate = $this->getInvoiceDate($periode);
+        $noInvoice = $this->generateNoInvoice($cekRekening, $rekening, $invoiceDate);
+        $insert = $this->buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, $first, $firstPeriode, $invoiceDate);
 
         Invoice::insert($insert);
         $this->generateQrInvoice($noInvoice, $insert);
@@ -149,9 +150,9 @@ class CreateInvoiceJob extends Job
         return $noInvoice;
     }
 
-    private function generateNoInvoice($cekRekening, $rekening)
+    private function generateNoInvoice($cekRekening, $rekening, Carbon $invoiceDate)
     {
-        $invoiceYear = Carbon::now()->format('Y');
+        $invoiceYear = $invoiceDate->format('Y');
         $shortYear = substr($invoiceYear, -2);
 
         $lastInvoice = Invoice::where('rekening', $cekRekening)
@@ -170,7 +171,7 @@ class CreateInvoiceJob extends Job
         return "ISL/{$prefix}/{$shortYear}{$no}";
     }
 
-    private function buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, $first, $firstPeriode)
+    private function buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, $first, $firstPeriode, Carbon $invoiceDate)
     {
         $source = $detail ?: $quotation;
         $jadwal = $this->getJadwal($quotation->no_document, $periode);
@@ -220,7 +221,7 @@ class CreateInvoiceJob extends Job
             'tgl_jatuh_tempo' => $tanggalJatuhTempo,
             'keterangan_tambahan' => null,
             'tgl_faktur' => date('Y-m-d H:i:s'),
-            'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
+            'tgl_invoice' => $invoiceDate->format('Y-m-d H:i:s'),
             'nilai_tagihan' => $nilaiTagihan,
             'total_tagihan' => $totalTagihan,
             'rekening' => $cekRekening,
@@ -254,6 +255,19 @@ class CreateInvoiceJob extends Job
         $jadwal = $query->orderBy('tanggal', 'asc')->first();
 
         return $jadwal ? $jadwal->tanggal : Carbon::now()->format('Y-m-d');
+    }
+
+    private function getInvoiceDate($periode = null): Carbon
+    {
+        if ($periode === null) {
+            return Carbon::now();
+        }
+
+        $today = Carbon::now();
+        $periodDate = Carbon::parse($periode . '-01')->startOfDay();
+        $day = min($today->day, $periodDate->daysInMonth);
+
+        return $periodDate->day($day)->setTimeFrom($today);
     }
 
     private function generateQrInvoice($noInvoice, $insert)
