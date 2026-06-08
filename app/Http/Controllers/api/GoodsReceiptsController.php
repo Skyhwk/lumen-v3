@@ -277,7 +277,7 @@ class GoodsReceiptsController extends Controller
         $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
 
         $handoverDate = $purchaseRequest->user_receipt_at ?: date('Y-m-d H:i:s');
-        $handoverDateFormatted = Carbon::parse($handoverDate)->locale('id')->isoFormat('D MMMM YYYY');
+        $handoverDateFormatted = Carbon::parse($handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
 
         $keteranganParts = array_filter([
             $purchaseRequest->request_number,
@@ -302,10 +302,15 @@ class GoodsReceiptsController extends Controller
         if ($handedByPosition === '-') {
             $handedByPosition = 'Purchasing';
         }
+        $handedByDivision = $this->resolveKaryawanDivisi($handedByRecord);
+        if ($handedByDivision === '-') {
+            $handedByDivision = 'Purchasing';
+        }
 
         $receivedByName = $purchaseRequest->created_by;
         $receivedByPosition = $this->resolveKaryawanJabatan($recipient);
         $receivedByDivision = $this->resolveKaryawanDivisi($recipient);
+        $receivedByDate = Carbon::parse($item->completed_at)->locale('id')->isoFormat('D MMMM YYYY H:mm');
 
         $mpdf = new \Mpdf\Mpdf([
             'format' => 'A5',
@@ -327,9 +332,11 @@ class GoodsReceiptsController extends Controller
             'keterangan',
             'handedByName',
             'handedByPosition',
+            'handedByDivision',
             'receivedByName',
             'receivedByPosition',
-            'receivedByDivision'
+            'receivedByDivision',
+            'receivedByDate',
         ))->render();
 
         $mpdf->WriteHTML($html);
