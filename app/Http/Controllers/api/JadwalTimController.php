@@ -50,7 +50,6 @@ class JadwalTimController extends Controller
         ])
             ->select(
                 'parsial',
-                'no_quotation',
                 'nama_perusahaan',
                 'periode',
                 'jam_mulai',
@@ -66,7 +65,6 @@ class JadwalTimController extends Controller
             )
             ->groupBy(
                 'parsial',
-                'no_quotation',
                 'periode',
                 'nama_perusahaan',
                 'durasi',
@@ -122,7 +120,9 @@ class JadwalTimController extends Controller
                     explode(',', $item->sampler)
                 )
                     ->map(fn($s) => trim($s))
-                    ->filter();
+                    ->filter()
+                    ->unique()
+                    ->values();
 
                 // tambahkan driver jika belum ada
                 if (
@@ -150,7 +150,6 @@ class JadwalTimController extends Controller
                 $item->display_sampler = $displaySampler;
                 return $item;
             })
-
             // GROUP BY TIM
             ->groupBy(
                 'team_sampler'
@@ -163,7 +162,6 @@ class JadwalTimController extends Controller
                     'list_pt' =>
                         $group->map( function ($item) {
                             return [
-                                'no_quotation'=> $item->no_quotation,
                                 'nama_perusahaan'=> $item->nama_perusahaan,
                                 'wilayah'=> $item->wilayah,
                                 'sampler'=> $item->display_sampler,
