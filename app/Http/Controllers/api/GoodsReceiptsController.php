@@ -217,8 +217,8 @@ class GoodsReceiptsController extends Controller
         $processorName = ($employee && $employee->nama_lengkap) ? $employee->nama_lengkap : $this->karyawan;
 
         Notification::where('nama_lengkap', $purchaseRequest->created_by)
-            ->title('Barang Sedang Didistribusikan!')
-            ->message("Barang untuk permintaan {$purchaseRequest->request_number} ({$purchaseRequest->handover_number}) sedang didistribusikan oleh {$processorName}. Silakan konfirmasi penerimaan barang.")
+            ->title('Purchase Request Ready!')
+            ->message("Purchase request {$purchaseRequest->request_number} sudah ready dan sedang di distribusikan ke anda oleh {$processorName} ({$purchaseRequest->handover_number}). Silakan konfirmasi penerimaan barang.")
             ->url('/request/purchase-requests')
             ->send();
 
