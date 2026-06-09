@@ -79,6 +79,7 @@ class PurchaseRequestsController extends Controller
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
             ->addColumn('can_approve', fn($row) => $this->canUserApprove($employee, $row))
             ->addColumn('can_void', fn($row) => $this->canUserVoid($employee, $row))
+            ->addColumn('can_receive_goods', fn($row) => $this->canUserReceiveGoods($employee, $row))
             ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
             ->make(true);
     }
@@ -215,6 +216,34 @@ class PurchaseRequestsController extends Controller
         return response()->json(['message' => 'Reopened successfully'], 201);
     }
 
+    public function confirmReceiveGoods(Request $request)
+    {
+        $purchaseRequest = PurchaseRequest::findOrFail($request->id);
+        $employee = $request->attributes->get('user')->karyawan;
+
+        if (!$this->canUserReceiveGoods($employee, $purchaseRequest)) {
+            return response()->json(['message' => 'Permintaan tidak dapat dikonfirmasi penerimaan barang'], 422);
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        $purchaseRequest->finance_status = 'Distributed';
+        $purchaseRequest->status = 'Done';
+        $purchaseRequest->completed_by = $this->karyawan;
+        $purchaseRequest->completed_at = $now;
+        $purchaseRequest->save();
+
+        if ($purchaseRequest->user_receipt_by) {
+            Notification::where('nama_lengkap', $purchaseRequest->user_receipt_by)
+                ->title('Barang Telah Diterima User!')
+                ->message("Barang untuk permintaan {$purchaseRequest->request_number} ({$purchaseRequest->handover_number}) telah diterima oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->url('/finance/purchasing/purchase-report')
+                ->send();
+        }
+
+        return response()->json(['message' => 'Barang berhasil dikonfirmasi diterima'], 200);
+    }
+
     public function process(Request $request)
     {
         $parent = PurchaseRequest::with('items')->findOrFail($request->data['parent_id']);
@@ -253,7 +282,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id_jabatan', [45, 48])
                 ->title('Permintaan Pembelian Barang Diajukan!')
                 ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$parent->approved_by} pada " . date('d-m-Y'))
-                ->url('/finance/purchasing/purchases')
+                ->url('/finance/purchasing/purchase-request-approval')
                 ->send();
         }
 
@@ -356,8 +385,12 @@ class PurchaseRequestsController extends Controller
 
     private function resolveDisplayStatus($row): string
     {
-        if ($row->status === 'Rejected' || $row->finance_status === 'Rejected') {
-            return 'Ditolak';
+        if ($row->finance_status === 'Rejected') {
+            return 'Ditolak Purchasing';
+        }
+
+        if ($row->status === 'Rejected') {
+            return 'Ditolak Atasan';
         }
 
         if (in_array($row->status, ['Pending', 'Reopened'])) {
@@ -368,11 +401,21 @@ class PurchaseRequestsController extends Controller
             return 'Barang Diterima';
         }
 
+        if ($row->finance_status === 'Distributing') {
+            return 'Barang Sedang Didistribusikan';
+        }
+
         if ($row->finance_status === 'On Process' || $row->finance_status === 'Pending') {
             return 'Dalam Proses';
         }
 
-        if ($row->finance_status === 'Waiting Process') {
+        if ($row->finance_status === 'Waiting Vendor Receipt' || $row->finance_status === 'Waiting User Receipt') {
+            return 'Dalam Proses';
+        }
+
+        if (
+            in_array($row->finance_status, ['Waiting Process', 'Waiting to Create PO', 'PO Created'])
+        ) {
             return 'Menunggu Proses';
         }
 
@@ -501,7 +544,7 @@ class PurchaseRequestsController extends Controller
             Notification::whereIn('id_jabatan', [45, 48])
                 ->title('Permintaan Pembelian Barang Diajukan!')
                 ->message("Terdapat Permintaan Pembelian Barang yang diajukan oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
-                ->url('/finance/purchasing/purchases')
+                ->url('/finance/purchasing/purchase-request-approval')
                 ->send();
 
             return;
@@ -551,7 +594,15 @@ class PurchaseRequestsController extends Controller
 
         if (
             $purchaseRequest->delegated_at
-            || in_array($purchaseRequest->finance_status, ['Waiting Process', 'On Process', 'Pending', 'Distributed'])
+            || in_array($purchaseRequest->finance_status, [
+                'Waiting to Create PO',
+                'PO Created',
+                'Waiting Process',
+                'On Process',
+                'Pending',
+                'Distributing',
+                'Distributed',
+            ])
             || $purchaseRequest->status === 'Done'
         ) {
             return false;
@@ -562,6 +613,12 @@ class PurchaseRequestsController extends Controller
         }
 
         return in_array($purchaseRequest->status, ['Pending', 'Reopened', 'Approved', 'Partially Approved']);
+    }
+
+    private function canUserReceiveGoods($employee, $purchaseRequest): bool
+    {
+        return $purchaseRequest->finance_status === 'Distributing'
+            && $purchaseRequest->created_by === $employee->nama_lengkap;
     }
 
     private function handleAttachments(Request $request, $existingAttachmentField)
