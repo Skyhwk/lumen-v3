@@ -21,7 +21,6 @@ class RenderInvoice
 
     public function renderInvoice($noInvoice)
     {
-        DB::beginTransaction();
         try {
             $invoice = Invoice::where('is_active', true)
                 ->where('no_invoice', $noInvoice)
@@ -45,14 +44,14 @@ class RenderInvoice
             $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $invoice->upload_file);
 
             // 3. Update filename final
-            Invoice::where('no_invoice', $noInvoice)->update([
-                'filename' => $filename
-            ]);
+            DB::transaction(function () use ($noInvoice, $filename) {
+                Invoice::where('no_invoice', $noInvoice)->update([
+                    'filename' => $filename
+                ]);
+            });
 
-            DB::commit();
             return true;
         } catch (\Exception $e) {
-            DB::rollBack();
             throw $e;
         }
     }
@@ -1982,7 +1981,7 @@ class RenderInvoice
             if ($dataHead->periode != null && $dataHead->periode != 'all') {
                 $pr = self::tanggal_indonesia($dataHead->periode, 'period');
             } else {
-                if($dataHead->periode == 'all'){
+                if ($dataHead->periode == 'all') {
                     $pr = "All Periode";
                 } else {
                     $pr = '';
@@ -2456,7 +2455,7 @@ class RenderInvoice
     private function mergeInvoiceWithFaktur($invoiceFile, $fakturFile, $uploadFile = null)
     {
         $invoicePath = public_path('invoice/' . $invoiceFile);
-        if($uploadFile) $invoicePath = public_path('invoice-upload/' . $invoiceFile);
+        if ($uploadFile) $invoicePath = public_path('invoice-upload/' . $invoiceFile);
         $fakturPath  = public_path('invoice-faktur/' . $fakturFile);
         if (!file_exists($invoicePath)) {
             throw new \Exception("File invoice tidak ditemukan: {$invoicePath}");
