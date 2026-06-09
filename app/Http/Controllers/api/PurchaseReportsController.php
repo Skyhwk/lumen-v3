@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrderDocument;
+use App\Models\PurchaseOrderDocumentRevision;
 use App\Models\PurchaseReceiptBatch;
 use App\Models\PurchaseRequest;
 use App\Services\KaryawanProfileService;
@@ -97,6 +98,9 @@ class PurchaseReportsController extends Controller
         $poDocuments = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
             ->orderBy('id')
             ->get();
+        $poRevisionHistory = PurchaseOrderDocumentRevision::where('purchase_request_id', $purchaseRequest->id)
+            ->orderByDesc('revised_at')
+            ->get();
         $poDocument = $poDocuments
             ->filter(fn($doc) => !$doc->is_voided)
             ->last() ?: $poDocuments->last();
@@ -165,6 +169,7 @@ class PurchaseReportsController extends Controller
                 ],
                 'purchase_order' => $poDocument ? $this->formatPoDocument($poDocument, $purchaseRequest) : null,
                 'po_void_history' => $voidHistory,
+                'po_revision_history' => $poRevisionHistory,
                 'vendor_receipt' => [
                     'vendor_receipt_at' => $purchaseRequest->vendor_receipt_at,
                     'vendor_receipt_by' => $purchaseRequest->vendor_receipt_by,

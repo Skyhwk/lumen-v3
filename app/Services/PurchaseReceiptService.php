@@ -14,10 +14,22 @@ class PurchaseReceiptService
             return (float) $purchaseRequest->receipt_target_qty;
         }
 
+        $activeProcessedQty = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
+            ->where(function ($query) {
+                $query->where('is_voided', false)->orWhereNull('is_voided');
+            })
+            ->where('po_status', 'active')
+            ->sum('quantity');
+
+        if ((float) $activeProcessedQty > 0) {
+            return (float) $activeProcessedQty;
+        }
+
         $poDocument = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
             ->where(function ($query) {
                 $query->where('is_voided', false)->orWhereNull('is_voided');
             })
+            ->whereIn('po_status', ['draft', 'active'])
             ->latest('id')
             ->first();
 

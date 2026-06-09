@@ -19,4 +19,9 @@ class PurchaseOrderDocument extends Sector
     {
         return $this->belongsTo(MasterSupplier::class, 'supplier_id');
     }
+
+    public function revisions()
+    {
+        return $this->hasMany(PurchaseOrderDocumentRevision::class, 'purchase_order_document_id')->orderByDesc('revision_no');
+    }
 }
