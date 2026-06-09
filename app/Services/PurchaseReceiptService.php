@@ -8,6 +8,40 @@ use App\Models\PurchaseRequest;
 
 class PurchaseReceiptService
 {
+    public static function getPrItemQty(PurchaseRequest $purchaseRequest): float
+    {
+        if (!$purchaseRequest->relationLoaded('items')) {
+            $purchaseRequest->load('items');
+        }
+
+        return (float) optional($purchaseRequest->items->first())->quantity;
+    }
+
+    public static function getAllocatedPoQty(PurchaseRequest $purchaseRequest): float
+    {
+        return round((float) PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
+            ->where(function ($query) {
+                $query->where('is_voided', false)->orWhereNull('is_voided');
+            })
+            ->whereIn('po_status', ['draft', 'active'])
+            ->sum('quantity'), 2);
+    }
+
+    public static function getRemainingPoAllocationQty(PurchaseRequest $purchaseRequest): float
+    {
+        return max(round(self::getPrItemQty($purchaseRequest) - self::getAllocatedPoQty($purchaseRequest), 2), 0);
+    }
+
+    public static function getProcessedActivePoQty(PurchaseRequest $purchaseRequest): float
+    {
+        return round((float) PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
+            ->where(function ($query) {
+                $query->where('is_voided', false)->orWhereNull('is_voided');
+            })
+            ->where('po_status', 'active')
+            ->sum('quantity'), 2);
+    }
+
     public static function resolveTargetQty(PurchaseRequest $purchaseRequest): float
     {
         if (!empty($purchaseRequest->receipt_target_qty) && (float) $purchaseRequest->receipt_target_qty > 0) {
@@ -117,6 +151,24 @@ class PurchaseReceiptService
         $confirmedTotal = (float) $purchaseRequest->user_confirmed_total;
 
         if ($target > 0 && $confirmedTotal >= $target && $vendorTotal >= $target) {
+            if (self::getRemainingPoAllocationQty($purchaseRequest) > 0) {
+                if (self::hasUnconfirmedHandover($purchaseRequest)) {
+                    $purchaseRequest->finance_status = 'Distributing';
+
+                    return;
+                }
+
+                if (self::countPendingUserHandoverBatches($purchaseRequest) > 0) {
+                    $purchaseRequest->finance_status = 'Waiting User Receipt';
+
+                    return;
+                }
+
+                $purchaseRequest->finance_status = 'Waiting to Create PO';
+
+                return;
+            }
+
             $purchaseRequest->finance_status = 'Distributed';
             $purchaseRequest->status = 'Done';
 

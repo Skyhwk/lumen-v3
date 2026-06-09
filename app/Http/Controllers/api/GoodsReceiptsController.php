@@ -35,8 +35,15 @@ class GoodsReceiptsController extends Controller
             ->whereIn('status', ['Approved', 'Partially Approved'])
             ->latest();
 
-        $purchaseRequests = $purchaseRequests
-            ->whereIn('finance_status', ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing']);
+        $processedPoQtySql = '(SELECT COALESCE(SUM(pod.quantity), 0) FROM purchase_order_documents pod WHERE pod.purchase_request_id = purchase_requests.id AND (pod.is_voided = 0 OR pod.is_voided IS NULL) AND pod.po_status = \'active\')';
+
+        $purchaseRequests = $purchaseRequests->where(function ($query) use ($processedPoQtySql) {
+            $query->whereIn('finance_status', ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing'])
+                ->orWhere(function ($sub) use ($processedPoQtySql) {
+                    $sub->whereRaw("{$processedPoQtySql} > 0")
+                        ->whereRaw("COALESCE(vendor_received_total, 0) < {$processedPoQtySql}");
+                });
+        });
 
         $targetQtySql = 'COALESCE(NULLIF(receipt_target_qty, 0), (
             SELECT COALESCE(pod.quantity, pri.quantity, 0)

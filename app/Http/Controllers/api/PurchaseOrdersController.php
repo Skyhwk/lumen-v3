@@ -41,7 +41,10 @@ class PurchaseOrdersController extends Controller
             ->latest();
 
         if ($scope === 'pending') {
-            $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting to Create PO');
+            $purchaseRequests = $purchaseRequests->where(function ($query) {
+                $query->where('finance_status', 'Waiting to Create PO')
+                    ->orWhereRaw($this->remainingPoAllocationSql('>'));
+            });
         } else {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
         }
@@ -673,6 +676,21 @@ class PurchaseOrdersController extends Controller
         return (int) $this->getActivePoDocumentsQuery($purchaseRequestId)->count();
     }
 
+    private function getPrTargetQty(PurchaseRequest $purchaseRequest): float
+    {
+        if (!$purchaseRequest->relationLoaded('items')) {
+            $purchaseRequest->load('items');
+        }
+
+        $itemQty = (float) optional($purchaseRequest->items->first())->quantity;
+
+        if ($itemQty > 0) {
+            return $itemQty;
+        }
+
+        return PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+    }
+
     private function getAllocatedPoQty(PurchaseRequest $purchaseRequest): float
     {
         return round((float) $this->getActivePoDocumentsQuery($purchaseRequest->id)->sum('quantity'), 2);
@@ -680,7 +698,7 @@ class PurchaseOrdersController extends Controller
 
     private function getRemainingPoQty(PurchaseRequest $purchaseRequest): float
     {
-        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $targetQty = $this->getPrTargetQty($purchaseRequest);
 
         return max(round($targetQty - $this->getAllocatedPoQty($purchaseRequest), 2), 0);
     }
@@ -732,25 +750,36 @@ class PurchaseOrdersController extends Controller
         $purchaseRequest->po_number = $latestPo->po_number ?? $purchaseRequest->po_number;
         $processedQty = round((float) $activePos->where('po_status', 'active')->sum('quantity'), 2);
 
-        if ($remainingQty > 0) {
-            $purchaseRequest->finance_status = 'Waiting to Create PO';
-        } elseif ($draftCount > 0) {
-            $purchaseRequest->finance_status = 'On Process';
-        } elseif ($activeCount > 0) {
-            $purchaseRequest->finance_status = 'Waiting Vendor Receipt';
+        if ($activeCount > 0) {
+            $purchaseRequest->receipt_target_qty = $processedQty;
             $purchaseRequest->po_approved_by = $latestPo->processed_by ?? $purchaseRequest->po_approved_by;
             $purchaseRequest->po_approved_at = $latestPo->processed_at ?? $purchaseRequest->po_approved_at;
-            $purchaseRequest->receipt_target_qty = $processedQty;
+
             if (!$this->hasVendorReceiptActivity($purchaseRequest)) {
                 $purchaseRequest->vendor_received_total = 0;
                 $purchaseRequest->user_handed_total = 0;
                 $purchaseRequest->user_confirmed_total = 0;
+                $purchaseRequest->finance_status = 'Waiting Vendor Receipt';
+            } else {
+                PurchaseReceiptService::syncFinanceStatus($purchaseRequest);
             }
+        } elseif ($draftCount > 0) {
+            $purchaseRequest->finance_status = 'On Process';
+        } elseif ($remainingQty > 0) {
+            $purchaseRequest->finance_status = 'Waiting to Create PO';
         }
 
         $purchaseRequest->processed_by = $purchaseRequest->po_created_by;
         $purchaseRequest->processed_at = $purchaseRequest->po_created_at;
         $purchaseRequest->save();
+    }
+
+    private function remainingPoAllocationSql(string $operator): string
+    {
+        $itemQtySql = '(SELECT COALESCE(pri.quantity, 0) FROM purchase_request_items pri WHERE pri.purchase_request_id = purchase_requests.id ORDER BY pri.id ASC LIMIT 1)';
+        $allocatedQtySql = '(SELECT COALESCE(SUM(pod.quantity), 0) FROM purchase_order_documents pod WHERE pod.purchase_request_id = purchase_requests.id AND (pod.is_voided = 0 OR pod.is_voided IS NULL) AND pod.po_status IN (\'draft\', \'active\'))';
+
+        return "{$itemQtySql} - {$allocatedQtySql} {$operator} 0";
     }
 
     private function snapshotPoRevision(PurchaseOrderDocument $poDocument, ?string $reason): void
