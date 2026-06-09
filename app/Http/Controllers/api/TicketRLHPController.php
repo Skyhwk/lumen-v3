@@ -15,6 +15,7 @@ use App\Models\LhpsMedanLMHeader;
 use App\Models\LhpsMicrobiologiHeader;
 use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpUdaraPsikologiHeader;
+use App\Models\LhpsPadatanHeader;
 use App\Models\MasterKaryawan;
 use App\Models\OrderDetail;
 use App\Models\ParameterFdl;
@@ -177,14 +178,15 @@ class TicketRLHPController extends Controller
 
     public function searchLhp(Request $request)
     {
-        $data = OrderDetail::with(['orderHeader', 'lhps_air', 'lhps_ling', 'lhps_emisi_c', 'lhps_emisi_isokinetik'])
+        $data = OrderDetail::with(['orderHeader', 'lhps_air', 'lhps_ling', 'lhps_emisi_c', 'lhps_emisi_isokinetik', 'lhps_padatan'])
             ->where('is_active', true)
             ->where('cfr', $request->no_lhp)
             ->where(function ($q) {
                 $q->whereHas('lhps_air')
                     ->orWhereHas('lhps_ling')
                     ->orWhereHas('lhps_emisi_c')
-                    ->orWhereHas('lhps_emisi_isokinetik');
+                    ->orWhereHas('lhps_emisi_isokinetik')
+                    ->orWhereHas('lhps_padatan');
             })
             ->first();
 
@@ -193,6 +195,7 @@ class TicketRLHPController extends Controller
             $hasLing   = $data->relationLoaded('lhps_ling') && $data->lhps_ling;
             $hasEmisiC = $data->relationLoaded('lhps_emisi_c') && $data->lhps_emisi_c;
             $hasEmisiI = $data->relationLoaded('lhps_emisi_isokinetik') && $data->lhps_emisi_isokinetik;
+            $hasPadatan = $data->relationLoaded('lhps_padatan') && $data->lhps_padatan;
 
             /**
              * Kalau cuma punya lhps_ling saja
@@ -236,6 +239,10 @@ class TicketRLHPController extends Controller
 
             if ($hasEmisiI) {
                 $data->detailParameter = $data->lhps_emisi_isokinetik->lhpsEmisiIsokinetikDetail;
+            }
+
+            if ($hasPadatan) {
+                $data->detailParameter = $data->lhps_padatan->lhpsPadatanDetail;
             }
 
             // $arrayModels = [
