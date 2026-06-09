@@ -67,6 +67,11 @@ class GoodsReceiptsController extends Controller
                             ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
                             ->whereNotNull('handover_number')
                             ->whereNull('completed_at');
+                    })->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('purchase_receipt_batches')
+                            ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
+                            ->whereNotNull('handover_number');
                     });
                 });
         }
@@ -80,6 +85,7 @@ class GoodsReceiptsController extends Controller
             ->addColumn('user_confirmed_total', fn($row) => $row->user_confirmed_total ?? 0)
             ->addColumn('pending_user_handover_count', fn($row) => PurchaseReceiptService::countPendingUserHandoverBatches($row))
             ->addColumn('can_create_user_receipt', fn($row) => PurchaseReceiptService::hasPendingUserHandoverBatch($row))
+            ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatches($row))
             ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan($row->employee))
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
             ->addColumn('finance_display_status', fn($row) => $this->resolveDisplayStatus($row, $scope))
@@ -109,8 +115,14 @@ class GoodsReceiptsController extends Controller
             ->get()
             ->map(fn($batch) => PurchaseReceiptService::formatBatch($batch, self::ATTACHMENT_DIR));
 
-        if ($pendingBatches->isEmpty()) {
-            return response()->json(['message' => 'Belum ada batch tanda terima vendor yang siap diserahkan ke user'], 422);
+        $handoverHistory = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNotNull('handover_number')
+            ->orderByDesc('batch_no')
+            ->get()
+            ->map(fn($batch) => PurchaseReceiptService::formatBatch($batch, self::ATTACHMENT_DIR));
+
+        if ($pendingBatches->isEmpty() && $handoverHistory->isEmpty()) {
+            return response()->json(['message' => 'Belum ada data serah terima user'], 422);
         }
 
         return response()->json([
@@ -123,6 +135,7 @@ class GoodsReceiptsController extends Controller
                 'vendor_received_total' => $purchaseRequest->vendor_received_total ?? 0,
                 'user_confirmed_total' => $purchaseRequest->user_confirmed_total ?? 0,
                 'remaining_qty' => max(round($targetQty - (float) ($purchaseRequest->user_confirmed_total ?? 0), 2), 0),
+                'can_create_user_receipt' => PurchaseReceiptService::hasPendingUserHandoverBatch($purchaseRequest),
                 'recipient' => [
                     'nama_lengkap' => $purchaseRequest->created_by,
                     'jabatan' => $this->resolveKaryawanJabatan($recipient),
@@ -136,6 +149,7 @@ class GoodsReceiptsController extends Controller
                     'note' => $item->note ?? '',
                 ],
                 'pending_batches' => $pendingBatches,
+                'handover_history' => $handoverHistory,
             ],
             'message' => 'Data serah terima user berhasil dimuat',
         ], 200);

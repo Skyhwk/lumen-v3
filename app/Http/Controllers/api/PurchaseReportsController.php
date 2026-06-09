@@ -34,6 +34,55 @@ class PurchaseReportsController extends Controller
             ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan($row->employee))
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
             ->addColumn('finance_display_status', fn() => 'Completed')
+            ->filterColumn('item_name', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('item_name', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('quantity', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('quantity', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('requester_name', function ($query, $keyword) {
+                $query->where('created_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('requester_jabatan', function ($query, $keyword) {
+                $query->whereHas('employee', function ($sub) use ($keyword) {
+                    $sub->where(function ($inner) use ($keyword) {
+                        $inner->where('jabatan', 'like', "%{$keyword}%")
+                            ->orWhereHas('jabatan', function ($jabatan) use ($keyword) {
+                                $jabatan->where('nama_jabatan', 'like', "%{$keyword}%");
+                            });
+                    });
+                });
+            })
+            ->filterColumn('requester_divisi', function ($query, $keyword) {
+                $query->whereHas('employee', function ($sub) use ($keyword) {
+                    $sub->where(function ($inner) use ($keyword) {
+                        $inner->where('department', 'like', "%{$keyword}%")
+                            ->orWhereHas('divisi', function ($divisi) use ($keyword) {
+                                $divisi->where('nama_divisi', 'like', "%{$keyword}%");
+                            });
+                    });
+                });
+            })
+            ->filterColumn('vendor_receipt_qty', function ($query, $keyword) {
+                $query->where(function ($sub) use ($keyword) {
+                    $sub->where('vendor_received_total', 'like', "%{$keyword}%")
+                        ->orWhere('vendor_receipt_qty', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('finance_display_status', function ($query, $keyword) {
+                $normalized = strtolower(trim($keyword));
+                $allowed = ['completed', 'selesai', 'distributed', 'distribusi'];
+                if (!in_array($normalized, $allowed, true) && stripos('completed', $keyword) === false) {
+                    $query->whereRaw('1 = 0');
+                }
+            })
+            ->filterColumn('completed_at', function ($query, $keyword) {
+                $query->where('completed_at', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
@@ -75,6 +124,12 @@ class PurchaseReportsController extends Controller
                     'vendor_received_total' => $purchaseRequest->vendor_received_total,
                     'user_handed_total' => $purchaseRequest->user_handed_total,
                     'user_confirmed_total' => $purchaseRequest->user_confirmed_total,
+                    'completed_at' => $purchaseRequest->completed_at,
+                    'completed_by' => $purchaseRequest->completed_by,
+                    'po_created_by' => $purchaseRequest->po_created_by,
+                    'po_created_at' => $purchaseRequest->po_created_at,
+                    'po_approved_by' => $purchaseRequest->po_approved_by,
+                    'po_approved_at' => $purchaseRequest->po_approved_at,
                 ],
                 'requester' => $purchaseRequest->employee
                     ? [
@@ -96,12 +151,17 @@ class PurchaseReportsController extends Controller
                 'purchase_request' => [
                     'created_by' => $purchaseRequest->created_by,
                     'created_at' => $purchaseRequest->created_at,
+                    'status' => $purchaseRequest->status,
+                    'finance_status' => $purchaseRequest->finance_status,
                     'approved_by' => $purchaseRequest->approved_by,
                     'approved_at' => $purchaseRequest->approved_at,
                     'delegated_by' => $purchaseRequest->delegated_by,
                     'delegated_at' => $purchaseRequest->delegated_at,
                     'processed_by' => $purchaseRequest->processed_by,
                     'processed_at' => $purchaseRequest->processed_at,
+                    'rejected_finance_by' => $purchaseRequest->rejected_finance_by,
+                    'rejected_finance_at' => $purchaseRequest->rejected_finance_at,
+                    'rejection_finance_note' => $purchaseRequest->rejection_finance_note,
                 ],
                 'purchase_order' => $poDocument ? $this->formatPoDocument($poDocument, $purchaseRequest) : null,
                 'po_void_history' => $voidHistory,
@@ -115,6 +175,7 @@ class PurchaseReportsController extends Controller
                 ],
                 'handover' => [
                     'handover_number' => $purchaseRequest->handover_number,
+                    'user_handover_qty' => $purchaseRequest->vendor_receipt_qty,
                     'user_receipt_at' => $purchaseRequest->user_receipt_at,
                     'user_receipt_by' => $purchaseRequest->user_receipt_by,
                     'user_receipt_note' => $purchaseRequest->user_receipt_note,

@@ -166,6 +166,13 @@ class PurchaseReceiptService
             ->count();
     }
 
+    public static function countHandoverBatches(PurchaseRequest $purchaseRequest): int
+    {
+        return (int) PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNotNull('handover_number')
+            ->count();
+    }
+
     public static function formatBatch(PurchaseReceiptBatch $batch, string $attachmentDirectory): array
     {
         $attachments = self::parseAttachments($batch->vendor_receipt_attachments);
