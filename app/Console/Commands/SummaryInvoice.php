@@ -124,15 +124,17 @@ class SummaryInvoice extends Command
                                 + COALESCE(MAX(w.total_pembayaran), 0)
                             ) <= 0 THEN 'Belum Ada Pembayaran'
 
-                            WHEN (
-                                COALESCE(MAX(invoice.nilai_pelunasan), 0)
-                                + COALESCE(MAX(w.total_pembayaran), 0)
-                            ) < SUM(invoice.nilai_tagihan) THEN 'Belum Lunas'
+                            WHEN ABS(
+                                (
+                                    COALESCE(MAX(invoice.nilai_pelunasan), 0)
+                                    + COALESCE(MAX(w.total_pembayaran), 0)
+                                ) - SUM(invoice.nilai_tagihan)
+                            ) <= 10 THEN 'Lunas'
 
                             WHEN (
                                 COALESCE(MAX(invoice.nilai_pelunasan), 0)
                                 + COALESCE(MAX(w.total_pembayaran), 0)
-                            ) = SUM(invoice.nilai_tagihan) THEN 'Lunas'
+                            ) < SUM(invoice.nilai_tagihan) THEN 'Belum Lunas'
 
                             WHEN (
                                 COALESCE(MAX(invoice.nilai_pelunasan), 0)
