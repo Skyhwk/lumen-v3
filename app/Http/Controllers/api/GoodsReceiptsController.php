@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
+use App\Models\PurchaseReceiptBatch;
 use App\Models\PurchaseRequest;
-use App\Services\Notification;
+use App\Services\{KaryawanProfileService, Notification, PurchaseReceiptService};
 use Carbon\Carbon;
 use DataTables;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class GoodsReceiptsController extends Controller
@@ -28,22 +30,59 @@ class GoodsReceiptsController extends Controller
     {
         $scope = $request->input('scope', 'pending');
 
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
             ->where('is_active', true)
             ->whereIn('status', ['Approved', 'Partially Approved'])
             ->latest();
 
+        $purchaseRequests = $purchaseRequests
+            ->whereIn('finance_status', ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing']);
+
+        $targetQtySql = 'COALESCE(NULLIF(receipt_target_qty, 0), (
+            SELECT COALESCE(pod.quantity, pri.quantity, 0)
+            FROM purchase_request_items pri
+            LEFT JOIN purchase_order_documents pod ON pod.purchase_request_id = purchase_requests.id
+                AND (pod.is_voided = 0 OR pod.is_voided IS NULL)
+            WHERE pri.purchase_request_id = purchase_requests.id
+            ORDER BY pod.id DESC, pri.id ASC
+            LIMIT 1
+        ), 0)';
+
         if ($scope === 'pending') {
-            $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting Vendor Receipt');
+            $purchaseRequests = $purchaseRequests->whereRaw("COALESCE(vendor_received_total, 0) < {$targetQtySql}");
         } else {
-            $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting User Receipt');
+            $purchaseRequests = $purchaseRequests
+                ->whereRaw("COALESCE(user_confirmed_total, 0) < {$targetQtySql}")
+                ->whereRaw('COALESCE(vendor_received_total, 0) > 0')
+                ->where(function ($query) {
+                    $query->whereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('purchase_receipt_batches')
+                            ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
+                            ->whereNull('handover_number')
+                            ->whereNotNull('vendor_receipt_at');
+                    })->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('purchase_receipt_batches')
+                            ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
+                            ->whereNotNull('handover_number')
+                            ->whereNull('completed_at');
+                    });
+                });
         }
 
         return DataTables::of($purchaseRequests)
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
-            ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
+            ->addColumn('quantity', fn($row) => $row->receipt_target_qty ?: optional($row->items->first())->quantity)
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
-            ->addColumn('finance_display_status', fn($row) => $this->resolveDisplayStatus($row))
+            ->addColumn('vendor_received_total', fn($row) => $row->vendor_received_total ?? 0)
+            ->addColumn('remaining_vendor_qty', fn($row) => PurchaseReceiptService::getRemainingVendorQty($row))
+            ->addColumn('user_confirmed_total', fn($row) => $row->user_confirmed_total ?? 0)
+            ->addColumn('pending_user_handover_count', fn($row) => PurchaseReceiptService::countPendingUserHandoverBatches($row))
+            ->addColumn('can_create_user_receipt', fn($row) => PurchaseReceiptService::hasPendingUserHandoverBatch($row))
+            ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan($row->employee))
+            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
+            ->addColumn('finance_display_status', fn($row) => $this->resolveDisplayStatus($row, $scope))
             ->make(true);
     }
 
@@ -51,13 +90,28 @@ class GoodsReceiptsController extends Controller
     {
         $purchaseRequest = PurchaseRequest::with(['items', 'employee'])->findOrFail($request->id);
 
-        if ($purchaseRequest->finance_status !== 'Waiting User Receipt') {
+        if (!in_array($purchaseRequest->finance_status, ['Waiting User Receipt', 'Distributing'])) {
             return response()->json(['message' => 'Permintaan tidak dalam status menunggu serah terima ke user'], 422);
         }
 
-        $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
+        if ((float) ($purchaseRequest->vendor_received_total ?? 0) <= 0) {
+            return response()->json(['message' => 'Tanda terima user hanya dapat dibuat setelah ada tanda terima vendor'], 422);
+        }
 
+        $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
         $item = $purchaseRequest->items->first();
+        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+
+        $pendingBatches = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNull('handover_number')
+            ->whereNotNull('vendor_receipt_at')
+            ->orderBy('batch_no')
+            ->get()
+            ->map(fn($batch) => PurchaseReceiptService::formatBatch($batch, self::ATTACHMENT_DIR));
+
+        if ($pendingBatches->isEmpty()) {
+            return response()->json(['message' => 'Belum ada batch tanda terima vendor yang siap diserahkan ke user'], 422);
+        }
 
         return response()->json([
             'data' => [
@@ -65,6 +119,10 @@ class GoodsReceiptsController extends Controller
                 'po_number' => $purchaseRequest->po_number,
                 'request_number' => $purchaseRequest->request_number,
                 'purpose' => $purchaseRequest->purpose,
+                'target_qty' => $targetQty,
+                'vendor_received_total' => $purchaseRequest->vendor_received_total ?? 0,
+                'user_confirmed_total' => $purchaseRequest->user_confirmed_total ?? 0,
+                'remaining_qty' => max(round($targetQty - (float) ($purchaseRequest->user_confirmed_total ?? 0), 2), 0),
                 'recipient' => [
                     'nama_lengkap' => $purchaseRequest->created_by,
                     'jabatan' => $this->resolveKaryawanJabatan($recipient),
@@ -73,10 +131,11 @@ class GoodsReceiptsController extends Controller
                 'item' => [
                     'item_code' => $item->item_code ?? '',
                     'item_name' => $item->item_name ?? '',
-                    'quantity' => $purchaseRequest->vendor_receipt_qty ?? ($item->quantity ?? ''),
+                    'quantity' => $targetQty,
                     'unit' => $item->unit ?? '',
                     'note' => $item->note ?? '',
                 ],
+                'pending_batches' => $pendingBatches,
             ],
             'message' => 'Data serah terima user berhasil dimuat',
         ], 200);
@@ -121,11 +180,21 @@ class GoodsReceiptsController extends Controller
 
         $purchaseRequest = PurchaseRequest::findOrFail($request->id);
 
-        if ($purchaseRequest->finance_status !== 'Waiting Vendor Receipt') {
-            return response()->json(['message' => 'Permintaan tidak dalam status menunggu tanda terima vendor'], 422);
+        if (!in_array($purchaseRequest->finance_status, ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing'])) {
+            return response()->json(['message' => 'Permintaan tidak dalam status penerimaan vendor'], 422);
         }
 
-        $attachments = $this->handleAttachments($request, $purchaseRequest->vendor_receipt_attachments);
+        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $remainingQty = PurchaseReceiptService::getRemainingVendorQty($purchaseRequest);
+        $receiptQty = (float) $request->vendor_receipt_qty;
+
+        if ($receiptQty > $remainingQty) {
+            return response()->json([
+                'message' => "Qty diterima melebihi sisa penerimaan ({$remainingQty})",
+            ], 422);
+        }
+
+        $attachments = $this->handleAttachments($request, null);
         if ($attachments === false) {
             return response()->json(['message' => 'Lampiran harus berupa gambar dengan ukuran maksimal 2MB per file'], 422);
         }
@@ -133,24 +202,43 @@ class GoodsReceiptsController extends Controller
         $employee = $request->attributes->get('user')->karyawan;
         $now = date('Y-m-d H:i:s');
 
-        $purchaseRequest->finance_status = 'Waiting User Receipt';
-        $purchaseRequest->vendor_receipt_at = $now;
-        $purchaseRequest->vendor_receipt_by = $this->karyawan;
-        $purchaseRequest->vendor_delivery_note = $request->vendor_delivery_note;
-        $purchaseRequest->vendor_receipt_qty = $request->vendor_receipt_qty;
-        $purchaseRequest->vendor_receipt_note = $request->vendor_receipt_note;
-        $purchaseRequest->vendor_receipt_attachments = $this->encodeAttachments($attachments);
-        $purchaseRequest->save();
+        PurchaseReceiptBatch::create([
+            'purchase_request_id' => $purchaseRequest->id,
+            'batch_no' => PurchaseReceiptService::getNextBatchNo($purchaseRequest->id),
+            'vendor_receipt_qty' => $receiptQty,
+            'vendor_delivery_note' => $request->vendor_delivery_note,
+            'vendor_receipt_note' => $request->vendor_receipt_note,
+            'vendor_receipt_attachments' => $this->encodeAttachments($attachments),
+            'vendor_receipt_by' => $this->karyawan,
+            'vendor_receipt_at' => $now,
+            'created_at' => $now,
+        ]);
+
+        if (empty($purchaseRequest->receipt_target_qty)) {
+            $purchaseRequest->receipt_target_qty = $targetQty;
+        }
+
+        PurchaseReceiptService::refreshTotals($purchaseRequest);
 
         $processorName = ($employee && $employee->nama_lengkap) ? $employee->nama_lengkap : $this->karyawan;
+        $isPartial = (float) $purchaseRequest->vendor_received_total < $targetQty;
+        $partialLabel = $isPartial ? ' (parsial)' : '';
 
         Notification::where('nama_lengkap', $purchaseRequest->created_by)
-            ->title('Barang dari Vendor Diterima!')
-            ->message("Barang untuk permintaan {$purchaseRequest->request_number} (PO {$purchaseRequest->po_number}) telah diterima dari vendor oleh {$processorName} pada " . date('d-m-Y'))
+            ->title('Barang dari Vendor Diterima' . $partialLabel . '!')
+            ->message("Barang sebanyak {$receiptQty} untuk permintaan {$purchaseRequest->request_number} (PO {$purchaseRequest->po_number}) telah diterima dari vendor oleh {$processorName} pada " . date('d-m-Y'))
             ->url('/request/purchase-requests')
             ->send();
 
-        return response()->json(['message' => 'Tanda terima barang dari vendor berhasil disimpan'], 200);
+        return response()->json([
+            'message' => $isPartial
+                ? 'Tanda terima parsial vendor berhasil disimpan. Sisa barang dapat diterima pada pengiriman berikutnya.'
+                : 'Tanda terima barang dari vendor berhasil disimpan',
+            'data' => [
+                'vendor_received_total' => $purchaseRequest->vendor_received_total,
+                'remaining_vendor_qty' => PurchaseReceiptService::getRemainingVendorQty($purchaseRequest),
+            ],
+        ], 200);
     }
 
     public function updateVendorReceipt(Request $request)
@@ -190,6 +278,7 @@ class GoodsReceiptsController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'id' => 'required',
+            'batch_id' => 'required|integer',
             'user_receipt_note' => 'nullable|string',
         ]);
 
@@ -199,33 +288,59 @@ class GoodsReceiptsController extends Controller
 
         $purchaseRequest = PurchaseRequest::with(['items'])->findOrFail($request->id);
 
-        if ($purchaseRequest->finance_status !== 'Waiting User Receipt') {
+        if (!in_array($purchaseRequest->finance_status, ['Waiting User Receipt', 'Distributing'])) {
             return response()->json(['message' => 'Permintaan tidak dalam status menunggu serah terima ke user'], 422);
+        }
+
+        if ((float) ($purchaseRequest->vendor_received_total ?? 0) <= 0) {
+            return response()->json(['message' => 'Tanda terima user hanya dapat dibuat setelah ada tanda terima vendor'], 422);
+        }
+
+        if (!PurchaseReceiptService::hasPendingUserHandoverBatch($purchaseRequest)) {
+            return response()->json(['message' => 'Belum ada batch tanda terima vendor yang siap diserahkan ke user'], 422);
+        }
+
+        $batch = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->where('id', $request->batch_id)
+            ->whereNull('handover_number')
+            ->whereNotNull('vendor_receipt_at')
+            ->first();
+
+        if (!$batch) {
+            return response()->json(['message' => 'Batch tanda terima vendor tidak ditemukan atau sudah diserahkan'], 422);
         }
 
         $employee = $request->attributes->get('user')->karyawan;
         $now = date('Y-m-d H:i:s');
 
-        $purchaseRequest->handover_number = $this->generateHandoverNumber();
-        $purchaseRequest->finance_status = 'Distributing';
-        $purchaseRequest->user_receipt_at = $now;
-        $purchaseRequest->user_receipt_by = $this->karyawan;
-        $purchaseRequest->user_receipt_note = $request->user_receipt_note;
-        $purchaseRequest->save();
+        $batch->handover_number = $this->generateHandoverNumber();
+        $batch->user_handover_qty = $batch->vendor_receipt_qty;
+        $batch->user_receipt_at = $now;
+        $batch->user_receipt_by = $this->karyawan;
+        $batch->user_receipt_note = $request->user_receipt_note;
+        $batch->save();
 
-        $pdfContent = $this->buildHandoverPdf($purchaseRequest, $employee);
+        PurchaseReceiptService::refreshTotals($purchaseRequest);
+
+        $pdfContent = $this->buildHandoverPdf($purchaseRequest, $batch, $employee);
         $processorName = ($employee && $employee->nama_lengkap) ? $employee->nama_lengkap : $this->karyawan;
+        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $isPartial = (float) $purchaseRequest->user_confirmed_total < $targetQty
+            || (float) $purchaseRequest->vendor_received_total < $targetQty;
 
         Notification::where('nama_lengkap', $purchaseRequest->created_by)
-            ->title('Purchase Request Ready!')
-            ->message("Purchase request {$purchaseRequest->request_number} sudah ready dan sedang di distribusikan ke anda oleh {$processorName} ({$purchaseRequest->handover_number}). Silakan konfirmasi penerimaan barang.")
+            ->title('Purchase Request Ready' . ($isPartial ? ' (Parsial)' : '') . '!')
+            ->message("Purchase request {$purchaseRequest->request_number} sebanyak {$batch->user_handover_qty} siap diserahkan oleh {$processorName} ({$batch->handover_number}). Silakan konfirmasi penerimaan barang.")
             ->url('/request/purchase-requests')
             ->send();
 
         return response()->json([
-            'message' => 'Dokumen serah terima berhasil dibuat',
+            'message' => $isPartial
+                ? 'Dokumen serah terima parsial berhasil dibuat'
+                : 'Dokumen serah terima berhasil dibuat',
             'data' => [
-                'handover_number' => $purchaseRequest->handover_number,
+                'handover_number' => $batch->handover_number,
+                'batch_id' => $batch->id,
                 'pdf' => base64_encode($pdfContent),
             ],
         ], 200);
@@ -235,16 +350,23 @@ class GoodsReceiptsController extends Controller
     {
         $purchaseRequest = PurchaseRequest::with(['items'])->findOrFail($request->id);
 
-        if (empty($purchaseRequest->handover_number)) {
+        $batch = $request->batch_id
+            ? PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)->findOrFail($request->batch_id)
+            : PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+                ->whereNotNull('handover_number')
+                ->latest('id')
+                ->first();
+
+        if (!$batch || empty($batch->handover_number)) {
             return response()->json(['message' => 'Dokumen serah terima belum tersedia'], 422);
         }
 
         $handedBy = MasterKaryawan::with('jabatan')
-            ->where('nama_lengkap', $purchaseRequest->user_receipt_by)
+            ->where('nama_lengkap', $batch->user_receipt_by)
             ->where('is_active', true)
             ->first();
 
-        $pdfContent = $this->buildHandoverPdf($purchaseRequest, $handedBy);
+        $pdfContent = $this->buildHandoverPdf($purchaseRequest, $batch, $handedBy);
 
         return response()->json([
             'message' => 'PDF serah terima berhasil digenerate',
@@ -258,45 +380,52 @@ class GoodsReceiptsController extends Controller
         $month = self::ROMAN_MONTHS[date('m')];
         $prefix = "ISL/PB/{$year}-{$month}/";
 
-        $latest = PurchaseRequest::where('handover_number', 'like', $prefix . '%')
+        $latestBatch = PurchaseReceiptBatch::where('handover_number', 'like', $prefix . '%')
+            ->orderByRaw('CAST(SUBSTRING_INDEX(handover_number, "/", -1) AS UNSIGNED) DESC')
+            ->first();
+
+        $latestPr = PurchaseRequest::where('handover_number', 'like', $prefix . '%')
             ->orderByRaw('CAST(SUBSTRING_INDEX(handover_number, "/", -1) AS UNSIGNED) DESC')
             ->first();
 
         $nextNumber = 1;
-        if ($latest && $latest->handover_number) {
-            $lastPart = substr($latest->handover_number, strrpos($latest->handover_number, '/') + 1);
-            $nextNumber = (int) $lastPart + 1;
+        foreach ([$latestBatch, $latestPr] as $latest) {
+            if ($latest && !empty($latest->handover_number)) {
+                $lastPart = substr($latest->handover_number, strrpos($latest->handover_number, '/') + 1);
+                $nextNumber = max($nextNumber, (int) $lastPart + 1);
+            }
         }
 
         return $prefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
 
-    private function buildHandoverPdf(PurchaseRequest $purchaseRequest, $handedByEmployee): string
+    private function buildHandoverPdf(PurchaseRequest $purchaseRequest, PurchaseReceiptBatch $batch, $handedByEmployee): string
     {
         $item = $purchaseRequest->items->first();
         $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
 
-        $handoverDate = $purchaseRequest->user_receipt_at ?: date('Y-m-d H:i:s');
+        $handoverDate = $batch->user_receipt_at ?: date('Y-m-d H:i:s');
         $handoverDateFormatted = Carbon::parse($handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
 
         $keteranganParts = array_filter([
             $purchaseRequest->request_number,
             $purchaseRequest->po_number ? 'PO: ' . $purchaseRequest->po_number : null,
+            'Batch #' . $batch->batch_no,
             $purchaseRequest->purpose,
             $item->note ?? null,
-            $purchaseRequest->vendor_receipt_note ? 'Catatan Vendor: ' . $purchaseRequest->vendor_receipt_note : null,
-            $purchaseRequest->user_receipt_note ? 'Catatan Serah Terima: ' . $purchaseRequest->user_receipt_note : null,
+            $batch->vendor_receipt_note ? 'Catatan Vendor: ' . $batch->vendor_receipt_note : null,
+            $batch->user_receipt_note ? 'Catatan Serah Terima: ' . $batch->user_receipt_note : null,
         ]);
 
-        $handoverNumber = $purchaseRequest->handover_number;
+        $handoverNumber = $batch->handover_number;
         $itemCode = $item->item_code ?? '';
         $itemName = $item->item_name ?? '';
-        $quantity = $purchaseRequest->vendor_receipt_qty ?? ($item->quantity ?? '');
+        $quantity = $batch->user_handover_qty ?? $batch->vendor_receipt_qty;
         $unit = $item->unit ?? '';
         $itemNote = $item->note ?? '';
         $keterangan = implode("\n", $keteranganParts);
 
-        $handedByName = ($handedByEmployee && $handedByEmployee->nama_lengkap) ? $handedByEmployee->nama_lengkap : ($purchaseRequest->user_receipt_by ?: '-');
+        $handedByName = ($handedByEmployee && $handedByEmployee->nama_lengkap) ? $handedByEmployee->nama_lengkap : ($batch->user_receipt_by ?: '-');
         $handedByRecord = $this->findKaryawanByName($handedByName);
         $handedByPosition = $this->resolveKaryawanJabatan($handedByRecord);
         if ($handedByPosition === '-') {
@@ -310,7 +439,7 @@ class GoodsReceiptsController extends Controller
         $receivedByName = $purchaseRequest->created_by;
         $receivedByPosition = $this->resolveKaryawanJabatan($recipient);
         $receivedByDivision = $this->resolveKaryawanDivisi($recipient);
-        $receivedByDate = Carbon::parse($item->completed_at)->locale('id')->isoFormat('D MMMM YYYY H:mm');
+        $receivedByDate = Carbon::parse($batch->completed_at ?: $handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
 
         $mpdf = new \Mpdf\Mpdf([
             'format' => 'A5',
@@ -484,16 +613,28 @@ class GoodsReceiptsController extends Controller
         return '-';
     }
 
-    private function resolveDisplayStatus($row): string
+    private function resolveDisplayStatus($row, string $scope = 'pending'): string
     {
-        if ($row->finance_status === 'Waiting Vendor Receipt') {
+        $target = (float) ($row->receipt_target_qty ?? 0);
+        $vendorTotal = (float) ($row->vendor_received_total ?? 0);
+        $confirmedTotal = (float) ($row->user_confirmed_total ?? 0);
+
+        if ($scope === 'pending') {
+            if ($vendorTotal > 0 && $vendorTotal < $target) {
+                return 'Partial Vendor Receipt';
+            }
+
             return 'Waiting Vendor Receipt';
         }
 
-        if ($row->finance_status === 'Waiting User Receipt') {
-            return 'Waiting User Receipt';
+        if ($confirmedTotal > 0 && $confirmedTotal < $target) {
+            return 'Partial User Receipt';
         }
 
-        return $row->finance_status ?: '-';
+        if ($row->finance_status === 'Distributing') {
+            return 'Waiting User Confirm';
+        }
+
+        return 'Waiting User Receipt';
     }
 }

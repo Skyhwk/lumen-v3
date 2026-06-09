@@ -19,4 +19,9 @@ class PurchaseRequest extends Sector
     {
         return $this->belongsTo(MasterKaryawan::class, 'created_by', 'nama_lengkap');
     }
+
+    public function receiptBatches()
+    {
+        return $this->hasMany(PurchaseReceiptBatch::class, 'purchase_request_id')->orderBy('batch_no');
+    }
 }

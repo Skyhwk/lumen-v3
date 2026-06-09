@@ -225,23 +225,44 @@ class PurchaseRequestsController extends Controller
             return response()->json(['message' => 'Permintaan tidak dapat dikonfirmasi penerimaan barang'], 422);
         }
 
+        $batchQuery = \App\Models\PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNotNull('handover_number')
+            ->whereNull('completed_at')
+            ->orderBy('batch_no');
+
+        $batch = $request->batch_id
+            ? $batchQuery->where('id', $request->batch_id)->first()
+            : $batchQuery->first();
+
+        if (!$batch) {
+            return response()->json(['message' => 'Tidak ada serah terima yang menunggu konfirmasi'], 422);
+        }
+
         $now = date('Y-m-d H:i:s');
 
-        $purchaseRequest->finance_status = 'Distributed';
-        $purchaseRequest->status = 'Done';
-        $purchaseRequest->completed_by = $this->karyawan;
-        $purchaseRequest->completed_at = $now;
-        $purchaseRequest->save();
+        $batch->completed_by = $this->karyawan;
+        $batch->completed_at = $now;
+        $batch->save();
+
+        $purchaseRequest = \App\Services\PurchaseReceiptService::refreshTotals($purchaseRequest);
+
+        $targetQty = \App\Services\PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $isComplete = (float) $purchaseRequest->user_confirmed_total >= $targetQty
+            && (float) $purchaseRequest->vendor_received_total >= $targetQty;
 
         if ($purchaseRequest->user_receipt_by) {
             Notification::where('nama_lengkap', $purchaseRequest->user_receipt_by)
-                ->title('Barang Telah Diterima User!')
-                ->message("Barang untuk permintaan {$purchaseRequest->request_number} ({$purchaseRequest->handover_number}) telah diterima oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->title($isComplete ? 'Barang Telah Diterima User!' : 'Barang Parsial Diterima User!')
+                ->message("Barang sebanyak {$batch->user_handover_qty} untuk permintaan {$purchaseRequest->request_number} ({$batch->handover_number}) telah diterima oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
                 ->url('/finance/purchasing/purchase-report')
                 ->send();
         }
 
-        return response()->json(['message' => 'Barang berhasil dikonfirmasi diterima'], 200);
+        return response()->json([
+            'message' => $isComplete
+                ? 'Seluruh barang berhasil dikonfirmasi diterima'
+                : 'Penerimaan parsial berhasil dikonfirmasi. Menunggu sisa barang.',
+        ], 200);
     }
 
     public function process(Request $request)
@@ -618,7 +639,8 @@ class PurchaseRequestsController extends Controller
     private function canUserReceiveGoods($employee, $purchaseRequest): bool
     {
         return $purchaseRequest->finance_status === 'Distributing'
-            && $purchaseRequest->created_by === $employee->nama_lengkap;
+            && $purchaseRequest->created_by === $employee->nama_lengkap
+            && \App\Services\PurchaseReceiptService::hasUnconfirmedHandover($purchaseRequest);
     }
 
     private function handleAttachments(Request $request, $existingAttachmentField)

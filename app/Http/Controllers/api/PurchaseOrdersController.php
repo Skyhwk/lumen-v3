@@ -9,7 +9,7 @@ use App\Models\{
     PurchaseOrderDocument,
     PurchaseRequest,
 };
-use App\Services\{GenerateQrDocumentPo, Notification};
+use App\Services\{GenerateQrDocumentPo, KaryawanProfileService, Notification, PurchaseReceiptService};
 use Carbon\Carbon;
 use DataTables;
 use Illuminate\Http\Request;
@@ -28,7 +28,7 @@ class PurchaseOrdersController extends Controller
     {
         $scope = $request->input('scope', 'pending');
 
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
             ->where('is_active', true)
             ->whereIn('status', ['Approved', 'Partially Approved'])
             ->where('finance_status', '!=', 'Rejected')
@@ -49,6 +49,7 @@ class PurchaseOrdersController extends Controller
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
+            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
             ->addColumn('finance_display_status', fn($row) => $this->resolveFinanceDisplayStatus($row))
             ->addColumn('has_po', fn($row) => !empty($row->po_number))
             ->make(true);
@@ -101,9 +102,11 @@ class PurchaseOrdersController extends Controller
         }
 
         $purchaseRequest = PurchaseRequest::with(['items', 'employee'])->findOrFail($request->id);
-        $poDocument = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
-            ->latest('id')
-            ->firstOrFail();
+        $poDocument = $this->getActivePoDocument($purchaseRequest->id);
+
+        if (!$poDocument) {
+            return response()->json(['message' => 'Dokumen PO aktif tidak ditemukan'], 404);
+        }
 
         return response()->json([
             'data' => [
@@ -145,11 +148,95 @@ class PurchaseOrdersController extends Controller
             return response()->json(['message' => 'PO hanya dapat diubah saat status On Process'], 422);
         }
 
-        $poDocument = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
-            ->latest('id')
-            ->firstOrFail();
+        $poDocument = $this->getActivePoDocument($purchaseRequest->id);
+
+        if (!$poDocument) {
+            return response()->json(['message' => 'Dokumen PO aktif tidak ditemukan'], 404);
+        }
 
         return $this->storePoDocument($request, $purchaseRequest, false, $poDocument);
+    }
+
+    public function voidPo(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required',
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        $purchaseRequest = PurchaseRequest::findOrFail($request->id);
+
+        if (!in_array($purchaseRequest->finance_status, ['On Process', 'Waiting Vendor Receipt'], true)) {
+            return response()->json([
+                'message' => 'PO hanya dapat di-void sebelum barang diterima dari vendor',
+            ], 422);
+        }
+
+        if (!$purchaseRequest->po_number) {
+            return response()->json(['message' => 'Nomor PO tidak ditemukan'], 422);
+        }
+
+        $poDocument = $this->getActivePoDocument($purchaseRequest->id);
+
+        if (!$poDocument) {
+            return response()->json(['message' => 'Dokumen PO aktif tidak ditemukan'], 404);
+        }
+
+        $employee = $request->attributes->get('user')->karyawan;
+        $now = date('Y-m-d H:i:s');
+        $voidFromStatus = $purchaseRequest->finance_status;
+        $voidedPoNumber = $purchaseRequest->po_number;
+
+        DB::beginTransaction();
+
+        try {
+            $poDocument->is_voided = true;
+            $poDocument->voided_by = $this->karyawan;
+            $poDocument->voided_at = $now;
+            $poDocument->void_reason = trim($request->reason);
+            $poDocument->void_from_finance_status = $voidFromStatus;
+            $poDocument->save();
+
+            $purchaseRequest->finance_status = 'Waiting to Create PO';
+            $purchaseRequest->po_number = null;
+            $purchaseRequest->po_created_by = null;
+            $purchaseRequest->po_created_at = null;
+            $purchaseRequest->po_approved_by = null;
+            $purchaseRequest->po_approved_at = null;
+            $purchaseRequest->processed_by = null;
+            $purchaseRequest->processed_at = null;
+            $purchaseRequest->save();
+
+            $voidedByName = ($employee && $employee->nama_lengkap) ? $employee->nama_lengkap : $this->karyawan;
+
+            Notification::where('nama_lengkap', $purchaseRequest->created_by)
+                ->title('Purchase Order Di-void')
+                ->message("PO {$voidedPoNumber} untuk permintaan {$purchaseRequest->request_number} telah di-void oleh {$voidedByName} pada " . date('d-m-Y') . ". Alasan: {$poDocument->void_reason}")
+                ->url('/request/purchase-requests')
+                ->send();
+
+            Notification::whereIn('id_jabatan', [56, 57])
+                ->title('PO Di-void — Siap Dibuat Ulang')
+                ->message("PO {$voidedPoNumber} ({$purchaseRequest->request_number}) di-void oleh {$voidedByName}. Permintaan kembali ke antrian pembuatan PO.")
+                ->url('/finance/purchasing/purchase-order')
+                ->send();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Purchase Order berhasil di-void. Permintaan kembali ke antrian pembuatan PO.',
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Gagal void Purchase Order: ' . $th->getMessage(),
+            ], 500);
+        }
     }
 
     public function processPo(Request $request)
@@ -160,7 +247,7 @@ class PurchaseOrdersController extends Controller
             return response()->json(['message' => $validator->errors()->first()], 422);
         }
 
-        $purchaseRequest = PurchaseRequest::findOrFail($request->id);
+        $purchaseRequest = PurchaseRequest::with('items')->findOrFail($request->id);
 
         if ($purchaseRequest->finance_status !== 'On Process') {
             return response()->json(['message' => 'PO hanya dapat diproses saat status On Process'], 422);
@@ -176,6 +263,10 @@ class PurchaseOrdersController extends Controller
         $purchaseRequest->finance_status = 'Waiting Vendor Receipt';
         $purchaseRequest->po_approved_by = $this->karyawan;
         $purchaseRequest->po_approved_at = $now;
+        $purchaseRequest->receipt_target_qty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $purchaseRequest->vendor_received_total = 0;
+        $purchaseRequest->user_handed_total = 0;
+        $purchaseRequest->user_confirmed_total = 0;
         $purchaseRequest->save();
 
         $processorName = ($employee && $employee->nama_lengkap) ? $employee->nama_lengkap : $this->karyawan;
@@ -339,9 +430,14 @@ class PurchaseOrdersController extends Controller
         }
 
         $purchaseRequest = PurchaseRequest::findOrFail($request->id);
-        $poDocument = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
-            ->latest('id')
-            ->firstOrFail();
+        $poDocumentId = $request->input('po_document_id');
+        $poDocument = $poDocumentId
+            ? PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)->findOrFail($poDocumentId)
+            : $this->getActivePoDocument($purchaseRequest->id);
+
+        if (!$poDocument) {
+            return response()->json(['message' => 'Dokumen PO tidak ditemukan'], 404);
+        }
 
         $pdfString = $this->buildPdf($poDocument);
 
@@ -445,6 +541,16 @@ class PurchaseOrdersController extends Controller
         $mpdf->WriteHTML($html);
 
         return $mpdf->Output('', 'S');
+    }
+
+    private function getActivePoDocument(int $purchaseRequestId): ?PurchaseOrderDocument
+    {
+        return PurchaseOrderDocument::where('purchase_request_id', $purchaseRequestId)
+            ->where(function ($query) {
+                $query->where('is_voided', false)->orWhereNull('is_voided');
+            })
+            ->latest('id')
+            ->first();
     }
 
     private function resolveFinanceDisplayStatus($row): string
