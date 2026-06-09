@@ -78,7 +78,7 @@ class TicketSamplingController extends Controller
             $isFullAccess = (
                 in_array($department, [14]) &&
                 !in_array($this->user_id, [10, 15, 93, 123])
-            ) || in_array($this->user_id, [39, 127, 13]);
+            ) || in_array($this->user_id, [39, 127, 13, 96]); // ID BIMA, ID Mas Dedi, ID Bu Suci, ID PUSPA
 
             // Departemen yang handle ticket (SAMPLING & TECHNICAL ASSURANCE)
             $isHandlerDept = in_array($department, [14, 16, 22, 7]); // ganti dengan ID aslinya
