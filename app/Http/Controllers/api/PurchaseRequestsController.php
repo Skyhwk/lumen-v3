@@ -9,12 +9,14 @@ use Illuminate\Http\Request;
 use DataTables;
 
 use Mpdf;
-use App\Services\{Notification, GetBawahan, GetAtasan};
+use App\Services\{KaryawanProfileService, Notification, GetBawahan, GetAtasan, PurchaseReceiptService};
 
-use App\Models\{PurchaseRequest, PurchaseRequestItem, MasterKaryawan};
+use App\Models\{PurchaseReceiptBatch, PurchaseRequest, PurchaseRequestItem, MasterKaryawan};
 
 class PurchaseRequestsController extends Controller
 {
+    private const VENDOR_ATTACHMENT_DIR = 'goods-receipt/vendor';
+
     private const ROMAN_MONTHS = [
         '01' => 'I', '02' => 'II', '03' => 'III', '04' => 'IV',
         '05' => 'V', '06' => 'VI', '07' => 'VII', '08' => 'VIII',
@@ -77,11 +79,102 @@ class PurchaseRequestsController extends Controller
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
+            ->addColumn('receipt_target_qty', fn($row) => PurchaseReceiptService::resolveTargetQty($row))
+            ->addColumn('receipt_progress', fn($row) => $this->formatReceiptProgress($row))
+            ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatches($row))
+            ->addColumn('unconfirmed_handover_count', fn($row) => $this->countUnconfirmedHandovers($row))
             ->addColumn('can_approve', fn($row) => $this->canUserApprove($employee, $row))
             ->addColumn('can_void', fn($row) => $this->canUserVoid($employee, $row))
             ->addColumn('can_receive_goods', fn($row) => $this->canUserReceiveGoods($employee, $row))
             ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
             ->make(true);
+    }
+
+    public function show(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+
+        $purchaseRequest = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
+            ->where('is_active', true)
+            ->findOrFail($request->id);
+
+        if ($employee->grade === 'STAFF' && $purchaseRequest->created_by !== $employee->nama_lengkap) {
+            return response()->json(['message' => 'Anda tidak memiliki akses ke permintaan ini'], 403);
+        }
+
+        if ($employee->grade === 'SUPERVISOR' || $employee->grade === 'MANAGER') {
+            $creator = GetBawahan::where('id', $employee->id)->get()->pluck('nama_lengkap')->toArray();
+            $creator[] = $employee->nama_lengkap;
+
+            if (!in_array($purchaseRequest->created_by, $creator, true)) {
+                return response()->json(['message' => 'Anda tidak memiliki akses ke permintaan ini'], 403);
+            }
+        }
+
+        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $receiptBatches = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->orderBy('batch_no')
+            ->get()
+            ->map(fn($batch) => PurchaseReceiptService::formatBatch($batch, self::VENDOR_ATTACHMENT_DIR));
+
+        $pendingConfirmBatches = $receiptBatches
+            ->filter(fn($batch) => !empty($batch['handover_number']) && empty($batch['completed_at']))
+            ->values();
+
+        $handoverHistory = $receiptBatches
+            ->filter(fn($batch) => !empty($batch['handover_number']))
+            ->values();
+
+        if ($handoverHistory->isEmpty() && $purchaseRequest->handover_number) {
+            $handoverHistory = collect([[
+                'id' => null,
+                'batch_no' => 1,
+                'vendor_receipt_qty' => $purchaseRequest->vendor_receipt_qty,
+                'vendor_delivery_note' => $purchaseRequest->vendor_delivery_note,
+                'vendor_receipt_note' => $purchaseRequest->vendor_receipt_note,
+                'vendor_receipt_by' => $purchaseRequest->vendor_receipt_by,
+                'vendor_receipt_at' => $purchaseRequest->vendor_receipt_at,
+                'attachments' => array_map(function ($filename) {
+                    return [
+                        'filename' => $filename,
+                        'url' => self::VENDOR_ATTACHMENT_DIR . '/' . $filename,
+                    ];
+                }, PurchaseReceiptService::parseAttachments($purchaseRequest->vendor_receipt_attachments)),
+                'handover_number' => $purchaseRequest->handover_number,
+                'user_handover_qty' => $purchaseRequest->vendor_receipt_qty,
+                'user_receipt_note' => $purchaseRequest->user_receipt_note,
+                'user_receipt_by' => $purchaseRequest->user_receipt_by,
+                'user_receipt_at' => $purchaseRequest->user_receipt_at,
+                'completed_by' => $purchaseRequest->completed_by,
+                'completed_at' => $purchaseRequest->completed_at,
+                'is_partial' => false,
+            ]]);
+        }
+
+        if ($receiptBatches->isEmpty() && (float) ($purchaseRequest->vendor_received_total ?? $purchaseRequest->vendor_receipt_qty ?? 0) > 0) {
+            $receiptBatches = $handoverHistory;
+        }
+
+        return response()->json([
+            'data' => [
+                'purchase_request' => $purchaseRequest,
+                'requester_jabatan' => KaryawanProfileService::resolveJabatan($purchaseRequest->employee),
+                'requester_divisi' => KaryawanProfileService::resolveDivisi($purchaseRequest->employee),
+                'receipt_summary' => [
+                    'target_qty' => $targetQty,
+                    'vendor_received_total' => $purchaseRequest->vendor_received_total ?? 0,
+                    'user_handed_total' => $purchaseRequest->user_handed_total ?? 0,
+                    'user_confirmed_total' => $purchaseRequest->user_confirmed_total ?? 0,
+                    'remaining_confirm_qty' => max(round($targetQty - (float) ($purchaseRequest->user_confirmed_total ?? 0), 2), 0),
+                    'remaining_vendor_qty' => PurchaseReceiptService::getRemainingVendorQty($purchaseRequest),
+                ],
+                'receipt_batches' => $receiptBatches,
+                'handover_history' => $handoverHistory,
+                'pending_confirm_batches' => $pendingConfirmBatches,
+                'can_receive_goods' => $this->canUserReceiveGoods($employee, $purchaseRequest),
+            ],
+            'message' => 'Detail permintaan berhasil diambil',
+        ], 200);
     }
 
     public function save(Request $request)
@@ -225,23 +318,44 @@ class PurchaseRequestsController extends Controller
             return response()->json(['message' => 'Permintaan tidak dapat dikonfirmasi penerimaan barang'], 422);
         }
 
+        $batchQuery = \App\Models\PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNotNull('handover_number')
+            ->whereNull('completed_at')
+            ->orderBy('batch_no');
+
+        $batch = $request->batch_id
+            ? $batchQuery->where('id', $request->batch_id)->first()
+            : $batchQuery->first();
+
+        if (!$batch) {
+            return response()->json(['message' => 'Tidak ada serah terima yang menunggu konfirmasi'], 422);
+        }
+
         $now = date('Y-m-d H:i:s');
 
-        $purchaseRequest->finance_status = 'Distributed';
-        $purchaseRequest->status = 'Done';
-        $purchaseRequest->completed_by = $this->karyawan;
-        $purchaseRequest->completed_at = $now;
-        $purchaseRequest->save();
+        $batch->completed_by = $this->karyawan;
+        $batch->completed_at = $now;
+        $batch->save();
+
+        $purchaseRequest = \App\Services\PurchaseReceiptService::refreshTotals($purchaseRequest);
+
+        $targetQty = \App\Services\PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $isComplete = (float) $purchaseRequest->user_confirmed_total >= $targetQty
+            && (float) $purchaseRequest->vendor_received_total >= $targetQty;
 
         if ($purchaseRequest->user_receipt_by) {
             Notification::where('nama_lengkap', $purchaseRequest->user_receipt_by)
-                ->title('Barang Telah Diterima User!')
-                ->message("Barang untuk permintaan {$purchaseRequest->request_number} ({$purchaseRequest->handover_number}) telah diterima oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
+                ->title($isComplete ? 'Barang Telah Diterima User!' : 'Barang Parsial Diterima User!')
+                ->message("Barang sebanyak {$batch->user_handover_qty} untuk permintaan {$purchaseRequest->request_number} ({$batch->handover_number}) telah diterima oleh {$employee->nama_lengkap} pada " . date('d-m-Y'))
                 ->url('/finance/purchasing/purchase-report')
                 ->send();
         }
 
-        return response()->json(['message' => 'Barang berhasil dikonfirmasi diterima'], 200);
+        return response()->json([
+            'message' => $isComplete
+                ? 'Seluruh barang berhasil dikonfirmasi diterima'
+                : 'Penerimaan parsial berhasil dikonfirmasi. Menunggu sisa barang.',
+        ], 200);
     }
 
     public function process(Request $request)
@@ -398,10 +512,24 @@ class PurchaseRequestsController extends Controller
         }
 
         if ($row->status === 'Done' || $row->finance_status === 'Distributed') {
+            $target = PurchaseReceiptService::resolveTargetQty($row);
+            $confirmed = (float) ($row->user_confirmed_total ?? 0);
+
+            if ($target > 0 && $confirmed > 0) {
+                return "Barang Diterima ({$confirmed}/{$target})";
+            }
+
             return 'Barang Diterima';
         }
 
         if ($row->finance_status === 'Distributing') {
+            $target = PurchaseReceiptService::resolveTargetQty($row);
+            $confirmed = (float) ($row->user_confirmed_total ?? 0);
+
+            if ($target > 0 && $confirmed > 0 && $confirmed < $target) {
+                return "Barang Parsial — Konfirmasi ({$confirmed}/{$target})";
+            }
+
             return 'Barang Sedang Didistribusikan';
         }
 
@@ -618,7 +746,28 @@ class PurchaseRequestsController extends Controller
     private function canUserReceiveGoods($employee, $purchaseRequest): bool
     {
         return $purchaseRequest->finance_status === 'Distributing'
-            && $purchaseRequest->created_by === $employee->nama_lengkap;
+            && $purchaseRequest->created_by === $employee->nama_lengkap
+            && PurchaseReceiptService::hasUnconfirmedHandover($purchaseRequest);
+    }
+
+    private function formatReceiptProgress($row): string
+    {
+        $target = PurchaseReceiptService::resolveTargetQty($row);
+        if ($target <= 0) {
+            return '-';
+        }
+
+        $confirmed = (float) ($row->user_confirmed_total ?? 0);
+
+        return "{$confirmed}/{$target}";
+    }
+
+    private function countUnconfirmedHandovers($row): int
+    {
+        return (int) PurchaseReceiptBatch::where('purchase_request_id', $row->id)
+            ->whereNotNull('handover_number')
+            ->whereNull('completed_at')
+            ->count();
     }
 
     private function handleAttachments(Request $request, $existingAttachmentField)
