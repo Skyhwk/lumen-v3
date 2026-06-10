@@ -1969,6 +1969,18 @@ class RenderInvoice
             $area = '';
 
             $customInvoice = json_decode($dataHead->custom_invoice);
+            if (
+                !is_object($customInvoice)
+                || empty($customInvoice->data)
+                || !is_array($customInvoice->data)
+                || !isset($customInvoice->data[0])
+                || !is_object($customInvoice->data[0])
+                || !isset($customInvoice->harga)
+                || !is_object($customInvoice->harga)
+            ) {
+                throw new \RuntimeException("Data custom invoice {$noInvoice} tidak valid atau kosong.");
+            }
+
             if ($customInvoice->data[0]->id_cabang == 1) {
                 $area = 'Tangerang';
             } elseif ($customInvoice->data[0]->id_cabang == 4) {
@@ -2343,14 +2355,11 @@ class RenderInvoice
             $filePath = public_path('invoice/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
             return $fileName;
-        } catch (\Exception $e) {
-            return response()->json(
-                [
-                    "message" => $e->getMessage(),
-                    "line" => $e->getLine(),
-                    "file" => $e->getFile(),
-                ],
-                401
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                "Gagal render custom invoice {$noInvoice}: {$e->getMessage()}",
+                0,
+                $e
             );
         }
     }
