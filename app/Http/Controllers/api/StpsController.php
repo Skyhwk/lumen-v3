@@ -13,6 +13,7 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use App\Models\PersiapanSampelHeader;
 use App\Models\QrDocument;
+use App\Models\PengesahanStps;
 
 use Carbon\Carbon;
 
@@ -20,6 +21,8 @@ use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\Parameter;
 use Mpdf;
+
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class StpsController extends Controller
 {
@@ -1377,6 +1380,37 @@ class StpsController extends Controller
             $no_document = $noDocument;
             $tanggal = $request->jadwal;
 
+            //logic pengesahan
+            $noPengesahan = str_replace('/','_',$no_document);
+            $latestPengesahan = PengesahanStps::orderByDesc('berlaku_mulai')->first();
+            $path = public_path() . "/qr_documents/" . $noPengesahan . '.svg';
+            
+            
+            if (!file_exists($path)) {
+                $link = 'https://www.intilab.com/validation/';
+                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+                QrCode::size(200)->generate($link . $unique, $path);
+                $dataQr = [
+                    'type_document' => 'stps',
+                    'kode_qr' => $unique,
+                    'file' => $noPengesahan,
+                    'data' => json_encode([
+                        'no_document' => $no_document,
+                        'nama_customer' => $perusahaan,
+                        'type_document' => 'Surat Tugas Pengambilan Sampel',
+                        'Tanggal_Pengesahan' => Carbon::parse($tanggal)->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Disahkan_Oleh' => $latestPengesahan->nama_karyawan,
+                        'Jabatan' => $latestPengesahan->jabatan_karyawan
+                    ]),
+                    'created_at' => Carbon::now(),
+                    'created_by' => 'System',
+                ];
+
+                DB::table('qr_documents')->insert($dataQr);
+                // self::generatePDF($request->no_invoice);
+            }
+
             $html = '';
             if (str_contains($request->sampler, ',')) {
                 $datsa = explode(",", $request->sampler);
@@ -1505,21 +1539,18 @@ class StpsController extends Controller
 
             $pdf->WriteHTML('<table width="100%" style="margin-top:10px;">
                 <tr>
-                    <td width="60%" style="font-size: 10px;">QT : ' . $dataPenawaran->no_document . '</td>
-                    <td style="font-size: 10px;text-align:center;">
-                        <span>Tangerang, ' . self::tanggal_indonesia(date('Y-m-d')) . '</span><br>
-                        <span><b>Manajer Teknis</b></span><br><br><br>
+                    <td width="60%" style="font-size: 10px; vertical-align: top;">QT : ' . $dataPenawaran->no_document . '</td>
+                    <td style="font-size: 10px;text-align:center; vertical-align: top;">
+                        <span>Tangerang, ' . self::tanggal_indonesia($tanggal) . '</span><br>
+                        <span><b>' . ($latestPengesahan ? $latestPengesahan->jabatan_karyawan : 'Manajer Teknis') . '</b></span><br>
+                        <img src="' . $path . '" width="60px" height="60px" /><br>
                     </td>
                 </tr>
-                <tr><td></td><td></td></tr>
-                <tr><td></td><td></td></tr>
-                <tr><td></td><td></td></tr>
-                <tr><td></td><td></td></tr>
-                <tr><td></td><td></td></tr>
-                <tr><td></td><td></td></tr>
                 <tr>
-                    <td style="font-size: 10px;">Waktu tiba di lokasi : ' . $request->jadwal_jam_mulai . '</td>
-                    <td style="font-size: 10px;text-align:center;">&nbsp;&nbsp;&nbsp;(..............................................)</td>
+                    <td style="font-size: 10px; vertical-align: bottom;">Waktu tiba di lokasi : ' . $request->jadwal_jam_mulai . '</td>
+                    <td style="font-size: 10px;text-align:center; vertical-align: bottom;">
+                        <span><b><u>' . ($latestPengesahan ? $latestPengesahan->nama_karyawan : '') . '</u></b></span>
+                    </td>
                 </tr>
             </table>');
 
@@ -1653,9 +1684,12 @@ class StpsController extends Controller
             return $fileName;
             // return response($pdf->Output('', 'I'));
         } catch (\Throwable $th) {
-            dd($th);
+
             return response()->json([
                 'message' => 'Data STPS tidak bisa dicetak karena data tidak sinkron dengan data jadwal.!',
+                "line" =>$th->getLine(),
+                'pesan' =>$th->getMessage(),
+                'file' =>$th->getFile()
             ], 500);
         }
     }
