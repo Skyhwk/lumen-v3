@@ -602,9 +602,9 @@ class PurchaseRequestsController extends Controller
             return ['mode' => 'auto', 'approver_ids' => []];
         }
 
-        $manager = $this->findApproverManager($employee);
-        if ($manager) {
-            return ['mode' => 'manager', 'approver_ids' => [(int) $manager->id]];
+        $managerIds = $this->findApproverManagers($employee);
+        if (!empty($managerIds)) {
+            return ['mode' => 'manager', 'approver_ids' => $managerIds];
         }
 
         if ($employee->grade === 'STAFF') {
@@ -628,13 +628,17 @@ class PurchaseRequestsController extends Controller
         return ['mode' => 'supervisor', 'approver_ids' => $approverIds];
     }
 
-    private function findApproverManager($employee): ?MasterKaryawan
+    private function findApproverManagers($employee): array
     {
         $chain = GetAtasan::where('id', $employee->id)->get();
 
-        return $chain->first(function ($person) use ($employee) {
-            return (int) $person->id !== (int) $employee->id && $person->grade === 'MANAGER';
-        });
+        return $chain
+            ->filter(fn($person) => (int) $person->id !== (int) $employee->id && $person->grade === 'MANAGER')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     private function findDirectSupervisor($employee): ?MasterKaryawan
