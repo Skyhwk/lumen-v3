@@ -23,6 +23,45 @@ use App\Services\GetBawahan;
 
 class TicketProgrammingController extends Controller
 {
+    private const PENDING_SOLVE_LIMIT = 10;
+
+    private function countPendingSolveTicketsForUser(): int
+    {
+        return TicketProgramming::where('created_by', $this->karyawan)
+            ->where('status', 'SOLVE')
+            ->where('is_active', true)
+            ->count();
+    }
+
+    private function pendingSolveBlockedMessage(): string
+    {
+        return 'Terdapat lebih dari 10 ticket belum diselesaikan. Apakah ticket sudah selesai atau belum? '
+            . 'Silahkan update terlebih dahulu melalui cara klik View, pastikan kondisi sudah Solve dan klik Done '
+            . 'maka ticket akan dianggap selesai.';
+    }
+
+    public function checkPendingSolveTickets(Request $request)
+    {
+        try {
+            $count = $this->countPendingSolveTicketsForUser();
+
+            return response()->json([
+                'success' => true,
+                'count' => $count,
+                'limit' => self::PENDING_SOLVE_LIMIT,
+                'is_blocked' => $count > self::PENDING_SOLVE_LIMIT,
+                'message' => $count > self::PENDING_SOLVE_LIMIT
+                    ? $this->pendingSolveBlockedMessage()
+                    : null,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function index(Request $request)
     {
         try {
@@ -406,6 +445,16 @@ class TicketProgrammingController extends Controller
         DB::beginTransaction();
         try {
             if (empty($request->id)) {
+                $pendingSolveCount = $this->countPendingSolveTicketsForUser();
+                if ($pendingSolveCount > self::PENDING_SOLVE_LIMIT) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $this->pendingSolveBlockedMessage(),
+                        'count' => $pendingSolveCount,
+                        'limit' => self::PENDING_SOLVE_LIMIT,
+                    ], 422);
+                }
+
                 $data = new TicketProgramming();
                 $data->request_by = $this->karyawan;
                 $data->created_by = $this->karyawan;
