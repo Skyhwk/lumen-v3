@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class DirectpartikulatPM {
+class DirectPartikulatPM {
     public function index($data, $id_parameter, $mdl) {
         $measurements = [];
         
