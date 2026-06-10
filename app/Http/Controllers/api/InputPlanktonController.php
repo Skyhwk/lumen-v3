@@ -67,7 +67,7 @@ class InputPlanktonController extends Controller
             $header->created_by = $this->karyawan;
             $header->save();
 
-            WsValueAir::insert([
+            WsValueAir::create([
                 'id_subkontrak' => $header->id,
                 'no_sampel' => $request->no_sampel,
                 'hasil_json' => json_encode($data_kalkulasi['result']),

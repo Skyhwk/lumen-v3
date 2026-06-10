@@ -5,9 +5,11 @@ namespace App\Http\Controllers\api;
 use App\Models\TicketProgramming;
 use App\Models\MasterKaryawan;
 use App\Models\AksesMenu;
+use App\Models\TicketProgrammingConversation;
 // use App\Models\User;
 use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
+use App\Services\TicketProgrammingConversationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +23,45 @@ use App\Services\GetBawahan;
 
 class TicketProgrammingController extends Controller
 {
+    private const PENDING_SOLVE_LIMIT = 10;
+
+    private function countPendingSolveTicketsForUser(): int
+    {
+        return TicketProgramming::where('created_by', $this->karyawan)
+            ->where('status', 'SOLVE')
+            ->where('is_active', true)
+            ->count();
+    }
+
+    private function pendingSolveBlockedMessage(): string
+    {
+        return 'Terdapat lebih dari 10 ticket belum diselesaikan. Apakah ticket sudah selesai atau belum? '
+            . 'Silahkan update terlebih dahulu melalui cara klik View, pastikan kondisi sudah Solve dan klik Done '
+            . 'maka ticket akan dianggap selesai.';
+    }
+
+    public function checkPendingSolveTickets(Request $request)
+    {
+        try {
+            $count = $this->countPendingSolveTicketsForUser();
+
+            return response()->json([
+                'success' => true,
+                'count' => $count,
+                'limit' => self::PENDING_SOLVE_LIMIT,
+                'is_blocked' => $count > self::PENDING_SOLVE_LIMIT,
+                'message' => $count > self::PENDING_SOLVE_LIMIT
+                    ? $this->pendingSolveBlockedMessage()
+                    : null,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function index(Request $request)
     {
         try {
@@ -36,6 +77,9 @@ class TicketProgrammingController extends Controller
                         } else {
                             return 'File not found';
                         }
+                    })
+                    ->addColumn('unread_count', function ($row) {
+                        return TicketProgrammingConversationService::getUnreadCount($row->id, $this->user_id);
                     })
                     ->make(true);
             } else {
@@ -57,6 +101,9 @@ class TicketProgrammingController extends Controller
                     ->addColumn('can_approve', function ($row) use ($getBawahan) {
                         // comment
                         return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+                    })
+                    ->addColumn('unread_count', function ($row) {
+                        return TicketProgrammingConversationService::getUnreadCount($row->id, $this->user_id);
                     })
                     ->make(true);
             }
@@ -143,6 +190,8 @@ class TicketProgrammingController extends Controller
                     ->send();
             }
 
+            TicketProgrammingConversationService::notifyConversationClosed($data, $this->karyawan);
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -183,6 +232,8 @@ class TicketProgrammingController extends Controller
                 ->url('/request/ticket-programming')
                 ->send();
 
+            TicketProgrammingConversationService::notifyConversationClosed($data, $this->karyawan);
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -216,6 +267,8 @@ class TicketProgrammingController extends Controller
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/request/ticket-programming')
                 ->send();
+
+            TicketProgrammingConversationService::notifyConversationClosed($data, $this->karyawan);
 
             DB::commit();
             return response()->json([
@@ -251,6 +304,8 @@ class TicketProgrammingController extends Controller
                 ->message($message . ' Oleh ' . $this->karyawan)
                 ->url('/request/ticket-programming')
                 ->send();
+
+            TicketProgrammingConversationService::notifyConversationClosed($data, $this->karyawan);
 
             DB::commit();
             return response()->json([
@@ -390,6 +445,16 @@ class TicketProgrammingController extends Controller
         DB::beginTransaction();
         try {
             if (empty($request->id)) {
+                $pendingSolveCount = $this->countPendingSolveTicketsForUser();
+                if ($pendingSolveCount > self::PENDING_SOLVE_LIMIT) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $this->pendingSolveBlockedMessage(),
+                        'count' => $pendingSolveCount,
+                        'limit' => self::PENDING_SOLVE_LIMIT,
+                    ], 422);
+                }
+
                 $data = new TicketProgramming();
                 $data->request_by = $this->karyawan;
                 $data->created_by = $this->karyawan;
@@ -440,6 +505,20 @@ class TicketProgrammingController extends Controller
                     ], 404);
                 }
 
+                if ($data->created_by !== $this->karyawan) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Hanya pembuat ticket yang dapat mengubah ticket ini',
+                    ], 403);
+                }
+
+                if ($data->status !== 'WAITING PROCESS') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ticket tidak dapat diubah karena sudah diproses',
+                    ], 422);
+                }
+
                 if ($request->hasFile('dokumentasi')) {
                     $dir_dokumentasi = "ticket";
 
@@ -479,6 +558,16 @@ class TicketProgrammingController extends Controller
             }
 
             $data->save();
+
+            if (empty($request->id)) {
+                TicketProgrammingConversationService::createMessage(
+                    $data,
+                    $this->user_id,
+                    $this->karyawan,
+                    TicketProgrammingConversationService::resolveSenderRole($this->department),
+                    $request->details
+                );
+            }
 
             $user_programmer = MasterKaryawan::where('id_department', 7)
                 ->whereNotIn('id', [10, 15, 93, 123])
@@ -557,6 +646,179 @@ class TicketProgrammingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal Proses Ticket Programming: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getConversations(Request $request)
+    {
+        try {
+            $ticket = TicketProgramming::find($request->ticket_id);
+            if (!$ticket) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket tidak ditemukan',
+                ], 404);
+            }
+
+            $existingCount = TicketProgrammingConversation::where('ticket_programming_id', $ticket->id)->count();
+            if ($existingCount === 0) {
+                $filePath = public_path('ticket_programming/' . $ticket->filename);
+                if (file_exists($filePath) && is_file($filePath)) {
+                    $initialContent = file_get_contents($filePath);
+                    if (!empty(trim(strip_tags($initialContent)))) {
+                        TicketProgrammingConversation::create([
+                            'ticket_programming_id' => $ticket->id,
+                            'sender_id' => null,
+                            'sender_name' => $ticket->request_by,
+                            'sender_role' => 'requester',
+                            'message' => $initialContent,
+                            'created_at' => $ticket->request_time ?? Carbon::now()->format('Y-m-d H:i:s'),
+                        ]);
+                    }
+                }
+            }
+
+            $conversations = TicketProgrammingConversation::where('ticket_programming_id', $ticket->id)
+                ->orderBy('id', 'asc')
+                ->get()
+                ->map(function ($item) {
+                    return TicketProgrammingConversationService::formatConversation($item, $this->user_id);
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $conversations,
+                'is_closed' => TicketProgrammingConversationService::isConversationClosed($ticket->status),
+                'is_open' => TicketProgrammingConversationService::isConversationOpen($ticket->status),
+                'message' => 'Conversation berhasil diambil',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function sendConversation(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $message = trim($request->message ?? '');
+            $hasAttachment = $request->hasFile('attachment');
+
+            if (empty($request->ticket_id) || (empty($message) && !$hasAttachment)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket ID dan pesan atau lampiran wajib diisi',
+                ], 422);
+            }
+
+            $ticket = TicketProgramming::find($request->ticket_id);
+            if (!$ticket) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket tidak ditemukan',
+                ], 404);
+            }
+
+            if (TicketProgrammingConversationService::isConversationClosed($ticket->status)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket sudah ditutup, tidak dapat mengirim pesan',
+                ], 422);
+            }
+
+            if (!TicketProgrammingConversationService::isConversationOpen($ticket->status)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Conversation belum dibuka. Ticket harus diproses terlebih dahulu',
+                ], 422);
+            }
+
+            $attachmentFilename = null;
+            if ($hasAttachment) {
+                $file = $request->file('attachment');
+                $allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+                $ext = strtolower($file->getClientOriginalExtension());
+
+                if (!in_array($ext, $allowedExt)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Format lampiran harus jpg, jpeg, png, gif, atau webp',
+                    ], 422);
+                }
+
+                if ($file->getSize() > 2097152) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ukuran lampiran maksimal 2MB',
+                    ], 422);
+                }
+
+                $dir = 'ticket_programming/conversation';
+                if (!file_exists(public_path($dir))) {
+                    mkdir(public_path($dir), 0777, true);
+                }
+
+                $attachmentFilename = 'CONV_' . $ticket->nomor_ticket . '_' . time() . '.' . $ext;
+                $file->move(public_path($dir), $attachmentFilename);
+            }
+
+            $conversation = TicketProgrammingConversationService::createMessage(
+                $ticket,
+                $this->user_id,
+                $this->karyawan,
+                TicketProgrammingConversationService::resolveSenderRole($this->department),
+                $message ?: '[Lampiran gambar]',
+                $attachmentFilename
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'data' => TicketProgrammingConversationService::formatConversation($conversation, $this->user_id),
+                'message' => 'Pesan berhasil dikirim',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengirim pesan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function markConversationRead(Request $request)
+    {
+        try {
+            if (empty($request->ticket_id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket ID wajib diisi',
+                ], 422);
+            }
+
+            $ticket = TicketProgramming::find($request->ticket_id);
+            if (!$ticket) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket tidak ditemukan',
+                ], 404);
+            }
+
+            TicketProgrammingConversationService::markAsRead($request->ticket_id, $this->user_id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Conversation ditandai sudah dibaca',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
             ], 500);
         }
     }

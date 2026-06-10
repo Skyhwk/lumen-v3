@@ -408,7 +408,11 @@ class GenerateInvoiceController extends Controller
             foreach ($orders as $key => $value) {
                 $getDetail = OrderHeader::select('order_header.biaya_akhir', 'invoice.periode', 'invoice.custom_invoice', 'invoice.is_custom')
                     ->where('order_header.no_order', $value)
-                    ->leftJoin('invoice', 'invoice.no_order', '=', 'order_header.no_order')
+                    ->leftJoin('invoice', function ($join) use ($request) {
+                        $join->on('invoice.no_order', '=', 'order_header.no_order')
+                            ->where('invoice.no_invoice', $request->no_invoice)
+                            ->where('invoice.is_active', true);
+                    })
                     ->where('order_header.is_active', true)
                     ->first();
 
@@ -422,25 +426,21 @@ class GenerateInvoiceController extends Controller
                     $nilaiTagihan = $bagiHarga + $simpanHarga;
                 }
 
-                $customInvoice = null;
+                $encodedCustomInvoice = $getDetail->custom_invoice;
                 if ($getDetail->is_custom) {
                     $customInvoice = json_decode($getDetail->custom_invoice, true);
 
-                    if (isset($customInvoice['data']) && is_array($customInvoice['data'])) {
-                        foreach ($customInvoice['data'] as &$dataItem) {
-                            if (isset($dataItem['no_order']) && $dataItem['no_order'] === $value) {
-                                // Update nilai_tagihan
-                                if (isset($customInvoice['harga'])) {
-                                    $customInvoice['harga']['nilai_tagihan'] = preg_replace('/[Rp., ]/', '', $request->nilai_tagihan);
-                                    $customInvoice['harga']['sisa_tagihan'] = $customInvoice['harga']['total_custom'] + $customInvoice['harga']['total_ppn'] - $customInvoice['harga']['total_diskon'] - $customInvoice['harga']['nilai_tagihan'];
-                                }
-                                break;
-                            }
-                        }
+                    if (!is_array($customInvoice) || empty($customInvoice['data']) || !isset($customInvoice['harga'])) {
+                        throw new \RuntimeException('Data custom invoice tidak valid. Silakan custom ulang invoice sebelum diperbarui.');
                     }
-                }
 
-                $encodedCustomInvoice = json_encode($customInvoice);
+                    $customInvoice['harga']['nilai_tagihan'] = preg_replace('/[Rp., ]/', '', $request->nilai_tagihan);
+                    $customInvoice['harga']['sisa_tagihan'] = $customInvoice['harga']['total_custom']
+                        + $customInvoice['harga']['total_ppn']
+                        - $customInvoice['harga']['total_diskon']
+                        - $customInvoice['harga']['nilai_tagihan'];
+                    $encodedCustomInvoice = json_encode($customInvoice);
+                }
 
                 $update = [
                     'periode' => $request->periode_kontrak,

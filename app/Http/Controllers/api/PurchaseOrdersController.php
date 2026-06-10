@@ -41,10 +41,9 @@ class PurchaseOrdersController extends Controller
             ->latest();
 
         if ($scope === 'pending') {
-            $purchaseRequests = $purchaseRequests->where(function ($query) {
-                $query->where('finance_status', 'Waiting to Create PO')
-                    ->orWhereRaw($this->remainingPoAllocationSql('>'));
-            });
+            $purchaseRequests = $purchaseRequests
+                ->where('finance_status', 'Waiting to Create PO')
+                ->whereRaw($this->remainingPoAllocationSql('>'));
         } else {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
         }
@@ -58,7 +57,7 @@ class PurchaseOrdersController extends Controller
             ->addColumn('allocated_po_qty', fn($row) => $this->getAllocatedPoQty($row))
             ->addColumn('remaining_po_qty', fn($row) => $this->getRemainingPoQty($row))
             ->addColumn('active_po_count', fn($row) => $this->countActivePoDocuments($row->id))
-            ->addColumn('can_create_po', fn($row) => $this->getRemainingPoQty($row) > 0)
+            ->addColumn('can_create_po', fn($row) => $row->finance_status === 'Waiting to Create PO' && $this->getRemainingPoQty($row) > 0)
             ->addColumn('has_po', fn($row) => $this->countActivePoDocuments($row->id) > 0)
             ->make(true);
     }
