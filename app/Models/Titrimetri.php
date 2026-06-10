@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
+use App\Models\Concerns\SyncsWsValueAirFromChild;
 
 class Titrimetri extends Sector
 {
+    use SyncsWsValueAirFromChild;
     protected $table = "titrimetri";
     public $timestamps = false;
 
