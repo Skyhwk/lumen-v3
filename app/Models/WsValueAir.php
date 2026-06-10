@@ -12,6 +12,54 @@ class WsValueAir extends Sector
 
     protected $guarded = [];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saving(function (WsValueAir $model) {
+            $resolved = $model->resolveParameterFromChild();
+            if ($resolved !== null) {
+                $model->parameter = $resolved;
+            }
+        });
+    }
+
+    /**
+     * Ambil parameter dari child (colorimetri, titrimetri, gravimetri, subkontrak).
+     */
+    public function resolveParameterFromChild(): ?string
+    {
+        if ($this->id_colorimetri) {
+            $parameter = Colorimetri::where('id', $this->id_colorimetri)->value('parameter');
+            if ($parameter !== null) {
+                return $parameter;
+            }
+        }
+
+        if ($this->id_titrimetri) {
+            $parameter = Titrimetri::where('id', $this->id_titrimetri)->value('parameter');
+            if ($parameter !== null) {
+                return $parameter;
+            }
+        }
+
+        if ($this->id_gravimetri) {
+            $parameter = Gravimetri::where('id', $this->id_gravimetri)->value('parameter');
+            if ($parameter !== null) {
+                return $parameter;
+            }
+        }
+
+        if ($this->id_subkontrak) {
+            $parameter = Subkontrak::where('id', $this->id_subkontrak)->value('parameter');
+            if ($parameter !== null) {
+                return $parameter;
+            }
+        }
+
+        return null;
+    }
+
     public function titrimetri() {
         return $this->belongsTo('App\Models\Titrimetri', 'id_titrimetri', 'id')->where('is_active', true);
     }
