@@ -391,7 +391,7 @@ class PurchaseRequestApprovalService
         }
 
         return $current
-            ? "Menunggu Persetujuan Atasan (Lapis " . ($step + 1) . "/{$total}) — {$current['nama_lengkap']}"
-            : "Menunggu Persetujuan Atasan (Lapis {$step}/{$total})";
+            ? "Menunggu Persetujuan Atasan — {$current['nama_lengkap']}"
+            : "Menunggu Persetujuan Atasan";
     }
 }

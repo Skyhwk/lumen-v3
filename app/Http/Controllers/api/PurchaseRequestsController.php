@@ -496,7 +496,7 @@ class PurchaseRequestsController extends Controller
                 if ($nextApprover) {
                     Notification::where('id', $nextApprover['id'])
                         ->title('Permintaan Pembelian Barang!')
-                        ->message("Terdapat Permintaan Pembelian Barang yang menunggu persetujuan Anda (Lapis " . ($parent->approval_step + 1) . '/' . count($chain) . ") dari {$parent->created_by} pada " . date('d-m-Y'))
+                        ->message("Terdapat Permintaan Pembelian Barang yang menunggu persetujuan Anda dari {$parent->created_by} pada " . date('d-m-Y'))
                         ->url('/request/purchase-requests')
                         ->send();
                 }
