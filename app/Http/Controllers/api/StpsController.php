@@ -1381,7 +1381,7 @@ class StpsController extends Controller
             $tanggal = $request->jadwal;
 
             //logic pengesahan
-            $noPengesahan = str_replace('/','_',$no_document);
+            $noPengesahan = 'pengesahan_'. str_replace('/','_',$no_document);
             $latestPengesahan = PengesahanDokumenSampling::orderByDesc('berlaku_mulai')->first();
             $path = public_path() . "/qr_documents/" . $noPengesahan . '.svg';
             
