@@ -102,18 +102,10 @@ class PurchaseRequestsController extends Controller
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
-            ->addColumn('display_status', fn() => 'Void - Tolak Barang')
-            ->filterColumn('item_name', function ($query, $keyword) {
-                $query->whereHas('items', function ($sub) use ($keyword) {
-                    $sub->where('item_name', 'like', "%{$keyword}%");
-                });
-            })
-            ->filterColumn('goods_void_note', function ($query, $keyword) {
-                $query->where('goods_void_note', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('goods_voided_by', function ($query, $keyword) {
-                $query->where('goods_voided_by', 'like', "%{$keyword}%");
-            })
+            ->addColumn('receipt_target_qty', fn($row) => PurchaseReceiptService::resolveTargetQty($row))
+            ->addColumn('receipt_progress', fn($row) => $this->formatReceiptProgress($row))
+            ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatches($row))
+            ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
             ->make(true);
     }
 
