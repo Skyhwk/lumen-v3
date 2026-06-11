@@ -35,7 +35,7 @@ class FdlSarOnTheSpotController extends Controller
             ->where('status_order', 'done')
             ->where('created_at', '>=', $endate)
             ->where('created_at', '<=', $date)
-            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
             ->orderByDesc('created_at')
             ->get();
 
