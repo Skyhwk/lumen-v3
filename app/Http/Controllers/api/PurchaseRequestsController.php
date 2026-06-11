@@ -485,9 +485,7 @@ class PurchaseRequestsController extends Controller
                 $parent->finance_status = null;
 
                 $nextApprover = PurchaseRequestApprovalService::getCurrentApprover($parent);
-                $layerLabel = count($chain) > 1
-                    ? ' (Lapis ' . ($parent->approval_step + 1) . '/' . count($chain) . ')'
-                    : '';
+                $layerLabel = '';
 
                 Notification::where('nama_lengkap', $parent->created_by)
                     ->title('Permintaan Pembelian Barang — Persetujuan Bertahap')
@@ -752,9 +750,7 @@ class PurchaseRequestsController extends Controller
 
         $chain = PurchaseRequestApprovalService::parseChain($purchaseRequest->approval_chain);
         $step = (int) ($purchaseRequest->approval_step ?? 0);
-        $layerLabel = count($chain) > 1
-            ? ' (Lapis ' . ($step + 1) . '/' . count($chain) . ')'
-            : '';
+        $layerLabel = '';
 
         $actionLabel = $isReopen ? 'telah direopen' : 'baru';
 
