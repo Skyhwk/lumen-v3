@@ -32,6 +32,10 @@ class GoodsReceiptsController extends Controller
 
         $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
             ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('is_goods_voided', false)
+                    ->orWhereNull('is_goods_voided');
+            })
             ->whereIn('status', ['Approved', 'Partially Approved'])
             ->latest();
 

@@ -260,6 +260,7 @@ class PurchaseReceiptService
             'user_receipt_note' => $batch->user_receipt_note,
             'user_receipt_by' => $batch->user_receipt_by,
             'user_receipt_at' => $batch->user_receipt_at,
+            'user_confirm_note' => $batch->user_confirm_note,
             'completed_by' => $batch->completed_by,
             'completed_at' => $batch->completed_at,
             'is_partial' => true,
