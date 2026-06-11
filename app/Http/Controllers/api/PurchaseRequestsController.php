@@ -40,6 +40,11 @@ class PurchaseRequestsController extends Controller
     public function index(Request $request)
     {
         $employee = $request->attributes->get('user')->karyawan;
+        $scope = $request->input('scope', 'ongoing');
+
+        if ($scope === 'void') {
+            return $this->indexVoidRequests($employee);
+        }
 
         $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
             ->where('is_active', true)
@@ -49,18 +54,7 @@ class PurchaseRequestsController extends Controller
             })
             ->latest();
 
-        if ($employee->grade === 'STAFF') {
-            $purchaseRequests = $purchaseRequests->where('created_by', $employee->nama_lengkap);
-        }
-
-        if ($employee->grade === 'SUPERVISOR' || $employee->grade === 'MANAGER') {
-            $creator = GetBawahan::where('id', $employee->id)->get()->pluck('nama_lengkap')->toArray();
-            $creator[] = $employee->nama_lengkap;
-
-            $purchaseRequests = $purchaseRequests->whereIn('created_by', $creator);
-        }
-
-        $scope = $request->input('scope', 'ongoing');
+        $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
 
         if ($scope === 'completed') {
             $purchaseRequests = $purchaseRequests->where(function ($query) {
@@ -93,6 +87,50 @@ class PurchaseRequestsController extends Controller
             ->addColumn('can_receive_goods', fn($row) => $this->canUserReceiveGoods($employee, $row))
             ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
             ->make(true);
+    }
+
+    private function indexVoidRequests($employee)
+    {
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
+            ->where('is_active', true)
+            ->where('is_goods_voided', true)
+            ->latest('goods_voided_at');
+
+        $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
+
+        return DataTables::of($purchaseRequests)
+            ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
+            ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
+            ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
+            ->addColumn('display_status', fn() => 'Void - Tolak Barang')
+            ->filterColumn('item_name', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('item_name', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('goods_void_note', function ($query, $keyword) {
+                $query->where('goods_void_note', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('goods_voided_by', function ($query, $keyword) {
+                $query->where('goods_voided_by', 'like', "%{$keyword}%");
+            })
+            ->make(true);
+    }
+
+    private function applyEmployeeScope($query, $employee)
+    {
+        if ($employee->grade === 'STAFF') {
+            return $query->where('created_by', $employee->nama_lengkap);
+        }
+
+        if ($employee->grade === 'SUPERVISOR' || $employee->grade === 'MANAGER') {
+            $creator = GetBawahan::where('id', $employee->id)->get()->pluck('nama_lengkap')->toArray();
+            $creator[] = $employee->nama_lengkap;
+
+            return $query->whereIn('created_by', $creator);
+        }
+
+        return $query;
     }
 
     public function show(Request $request)
@@ -407,14 +445,14 @@ class PurchaseRequestsController extends Controller
         Notification::whereIn('id_jabatan', [45, 48])
             ->title('Purchase Request Di-void (Tolak Barang)!')
             ->message("Permintaan {$purchaseRequest->request_number} divoid karena user menolak barang oleh {$employee->nama_lengkap} pada " . date('d-m-Y') . ". Alasan: {$voidNote}")
-            ->url('/finance/purchasing/purchase-request-void')
+            ->url('/request/purchase-requests')
             ->send();
 
         if ($purchaseRequest->user_receipt_by) {
             Notification::where('nama_lengkap', $purchaseRequest->user_receipt_by)
                 ->title('Purchase Request Di-void (Tolak Barang)!')
                 ->message("Permintaan {$purchaseRequest->request_number} divoid karena user menolak barang. Alasan: {$voidNote}")
-                ->url('/finance/purchasing/purchase-request-void')
+                ->url('/request/purchase-requests')
                 ->send();
         }
 
