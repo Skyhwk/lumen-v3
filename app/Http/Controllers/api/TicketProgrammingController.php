@@ -556,15 +556,15 @@ class TicketProgrammingController extends Controller
 
             $data->save();
 
-            if (empty($request->id)) {
-                TicketProgrammingConversationService::createMessage(
-                    $data,
-                    $this->user_id,
-                    $this->karyawan,
-                    TicketProgrammingConversationService::resolveSenderRole($this->department),
-                    $request->details
-                );
-            }
+            // if (empty($request->id)) {
+            //     TicketProgrammingConversationService::createMessage(
+            //         $data,
+            //         $this->user_id,
+            //         $this->karyawan,
+            //         TicketProgrammingConversationService::resolveSenderRole($this->department),
+            //         $request->details
+            //     );
+            // }
 
             $user_programmer = MasterKaryawan::where('id_department', 7)
                 ->whereNotIn('id', [10, 15, 93, 123])
