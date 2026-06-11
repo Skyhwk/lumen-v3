@@ -1586,6 +1586,9 @@ class StpsController extends Controller
                 </tr>
                 <tr>
                     <td style="font-size: 10px; vertical-align: bottom;">Waktu tiba di lokasi : ' . $request->jadwal_jam_mulai . '</td>
+                    <td style="font-size: 10px;text-align:center; vertical-align: bottom;">
+                        ' . $statusLabel . '
+                    </td>
                 </tr>
             </table>');
 
