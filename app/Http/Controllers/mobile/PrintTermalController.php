@@ -2,15 +2,12 @@
 namespace App\Http\Controllers\mobile;
 
 use App\Models\SarHeader;
-use App\Models\SarDetail;
-use App\Models\ProsesFdlSar;
 use App\Models\ParameterSar;
 
 use Carbon\Carbon;
 use Laravel\Lumen\Routing\Controller;
 use Illuminate\Http\Request;
 
-use App\Services\GenerateStrukSarService;
 Carbon::setLocale('id'); // Set locale ke Indonesia untuk format tanggal
 
 class PrintTermalController extends Controller

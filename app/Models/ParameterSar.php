@@ -15,4 +15,9 @@ class ParameterSar extends Sector
         return $this->hasOne(HargaParameter::class, 'id_parameter', 'id_parameter')
             ->where('is_active', true);
     }
+
+    public function parameterMaster()
+    {
+        return $this->belongsTo(Parameter::class, 'id_parameter', 'id');
+    }
 }
