@@ -1561,7 +1561,7 @@ class StpsController extends Controller
                 
                 // CASE 1: Sudah disahkan — tampilkan QR + nama lengkap
                 $signatureImage = '<img src="' . $path . '" width="60px" height="60px" /><br>';
-                $namaPenandatangan = $latestPengesahan->nama_karyawan;
+                $namaPenandatangan = '';
                 $statusLabel = '';
             } elseif ($latestPengesahan) {
                 // CASE 2: Ada konfigurasi pengesahan tapi file QR belum ada — belum disahkan
@@ -1587,7 +1587,7 @@ class StpsController extends Controller
                 <tr>
                     <td style="font-size: 10px; vertical-align: bottom;">Waktu tiba di lokasi : ' . $request->jadwal_jam_mulai . '</td>
                     <td style="font-size: 10px;text-align:center; vertical-align: bottom;">
-                        ' . $statusLabel . '
+                        <span><b><u>' . $namaPenandatangan . '</u></b></span>' . $statusLabel . '
                     </td>
                 </tr>
             </table>');
