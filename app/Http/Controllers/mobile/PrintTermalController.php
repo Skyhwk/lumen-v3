@@ -172,7 +172,7 @@ class PrintTermalController extends Controller
                         KETERANGAN
                     </div>
                     <div>
-                        * = Hasil Uji melebihi ambang batas nilai rujukan
+                        * = HASIL UJI melebihi nilai rujukan
                     </div>
                 </div>
     
@@ -222,7 +222,7 @@ class PrintTermalController extends Controller
                     Terima kasih telah melakukan pengujian di<br>
                     <strong>PT. Inti Surya Laboratorium</strong><br>
                     T: 021-5088-9889<br>
-                    contact@intilab.com
+                    sales@intilab.com
                 </div>
     
                 <!-- EXTRA SPACE BUAT SOBEK -->
