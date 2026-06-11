@@ -924,6 +924,7 @@ class WsFinalAirController extends Controller
 				$data->status = 1;
 				$data->keterangan_1 = $request->keterangan_1;
 				$data->save();
+				\App\Services\WsFinalApprovalService::finalizeSample($data, true, $this->karyawan);
 
 				if($request->data_limbah){
 					DataLimbah::create([

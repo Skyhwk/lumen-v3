@@ -627,6 +627,7 @@ class WSFinalUdaraMedanMagnetController extends Controller
                 ->update([
                     'lhps' => 1,
                 ]);
+            \App\Services\WsFinalApprovalService::finalizeSamples($orderDetails, true, $this->karyawan);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',
