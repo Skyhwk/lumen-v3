@@ -11,11 +11,8 @@ use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
 use App\Services\TicketProgrammingConversationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 use App\Services\Notification;
@@ -661,23 +658,23 @@ class TicketProgrammingController extends Controller
                 ], 404);
             }
 
-            $existingCount = TicketProgrammingConversation::where('ticket_programming_id', $ticket->id)->count();
-            if ($existingCount === 0) {
-                $filePath = public_path('ticket_programming/' . $ticket->filename);
-                if (file_exists($filePath) && is_file($filePath)) {
-                    $initialContent = file_get_contents($filePath);
-                    if (!empty(trim(strip_tags($initialContent)))) {
-                        TicketProgrammingConversation::create([
-                            'ticket_programming_id' => $ticket->id,
-                            'sender_id' => null,
-                            'sender_name' => $ticket->request_by,
-                            'sender_role' => 'requester',
-                            'message' => $initialContent,
-                            'created_at' => $ticket->request_time ?? Carbon::now()->format('Y-m-d H:i:s'),
-                        ]);
-                    }
-                }
-            }
+            // $existingCount = TicketProgrammingConversation::where('ticket_programming_id', $ticket->id)->count();
+            // if ($existingCount === 0) {
+            //     $filePath = public_path('ticket_programming/' . $ticket->filename);
+            //     if (file_exists($filePath) && is_file($filePath)) {
+            //         $initialContent = file_get_contents($filePath);
+            //         if (!empty(trim(strip_tags($initialContent)))) {
+            //             TicketProgrammingConversation::create([
+            //                 'ticket_programming_id' => $ticket->id,
+            //                 'sender_id' => null,
+            //                 'sender_name' => $ticket->request_by,
+            //                 'sender_role' => 'requester',
+            //                 'message' => $initialContent,
+            //                 'created_at' => $ticket->request_time ?? Carbon::now()->format('Y-m-d H:i:s'),
+            //             ]);
+            //         }
+            //     }
+            // }
 
             $conversations = TicketProgrammingConversation::where('ticket_programming_id', $ticket->id)
                 ->orderBy('id', 'asc')
