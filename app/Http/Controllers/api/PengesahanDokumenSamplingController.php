@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\PengesahanStps;
+use App\Models\PengesahanDokumenSampling;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -15,12 +15,12 @@ use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 
 
-class PengesahanStpsController extends Controller
+class PengesahanDokumenSamplingController extends Controller
 {
     public function index()
     {
         $now = carbon::now(); // waktu sekarang
-        $data = PengesahanStps::all();
+        $data = PengesahanDokumenSampling::all();
 
         // cari tanggal mulai paling besar yg <= now
         $latest = $data
@@ -40,7 +40,7 @@ class PengesahanStpsController extends Controller
     {
         DB::beginTransaction();
         try {
-            PengesahanStps::create([
+            PengesahanDokumenSampling::create([
                 'user_id' => $request->user_id,
                 'nama_karyawan' => $request->nama_karyawan,
                 'jabatan_karyawan' => $request->jabatan_karyawan,
@@ -68,7 +68,7 @@ class PengesahanStpsController extends Controller
         $allKaryawan = MasterKaryawan::where('is_active', true)
             ->get();
 
-        $latestPengesahan = PengesahanStps::orderByDesc('berlaku_mulai')->first();
+        $latestPengesahan = PengesahanDokumenSampling::orderByDesc('berlaku_mulai')->first();
         if ($latestPengesahan === null) {
             // Lakukan sesuatu jika data kosong
             $latestPengesahan = null;

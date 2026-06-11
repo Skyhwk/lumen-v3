@@ -13,7 +13,7 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use App\Models\PersiapanSampelHeader;
 use App\Models\QrDocument;
-use App\Models\PengesahanStps;
+use App\Models\PengesahanDokumenSampling;
 
 use Carbon\Carbon;
 
@@ -1382,7 +1382,7 @@ class StpsController extends Controller
 
             //logic pengesahan
             $noPengesahan = str_replace('/','_',$no_document);
-            $latestPengesahan = PengesahanStps::orderByDesc('berlaku_mulai')->first();
+            $latestPengesahan = PengesahanDokumenSampling::orderByDesc('berlaku_mulai')->first();
             $path = public_path() . "/qr_documents/" . $noPengesahan . '.svg';
             
             
