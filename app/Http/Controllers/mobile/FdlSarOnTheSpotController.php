@@ -16,7 +16,10 @@ class FdlSarOnTheSpotController extends Controller
 {
     public function indexOnproccess(Request $request)
     {
-        $data = SarOnthespotHeader::with('detail', 'hasilUji')->where('status_order', 'onproccess')->get();
+        $data = SarOnthespotHeader::with('detail', 'hasilUji')
+            ->where('status_order', 'onproccess')
+            ->orderByDesc('created_at')
+            ->get();
         return response()->json([
             'message' => 'success',
             'data' => $data
@@ -32,6 +35,8 @@ class FdlSarOnTheSpotController extends Controller
             ->where('status_order', 'done')
             ->where('created_at', '>=', $endate)
             ->where('created_at', '<=', $date)
+            ->orderByDesc('id')
+            ->orderByDesc('created_at')
             ->get();
 
         return response()->json([
@@ -43,9 +48,31 @@ class FdlSarOnTheSpotController extends Controller
 
     public function listParameter(Request $request)
     {
-        $data = ParameterSar::with('hargaParameter:id_parameter,harga')->where('is_active', true)
-        ->select('id_parameter as id', 'id_parameter', 'nama_lab', 'nama_regulasi', 'nilai_rujukan')
-        ->get();
+        $data = ParameterSar::with([
+            'hargaParameter:id_parameter,harga,id_kategori,nama_kategori',
+            'parameterMaster:id,nama_kategori,id_kategori',
+        ])
+            ->where('is_active', true)
+            ->select('id', 'id_parameter', 'nama_lab', 'nama_regulasi', 'nilai_rujukan')
+            ->get()
+            ->map(function ($item) {
+                $namaKategori = optional($item->hargaParameter)->nama_kategori
+                    ?: optional($item->parameterMaster)->nama_kategori;
+                $idKategori = optional($item->hargaParameter)->id_kategori
+                    ?: optional($item->parameterMaster)->id_kategori;
+
+                return [
+                    'id' => $item->id_parameter,
+                    'id_parameter' => $item->id_parameter,
+                    'nama_lab' => $item->nama_lab,
+                    'nama_regulasi' => $item->nama_regulasi,
+                    'nilai_rujukan' => $item->nilai_rujukan,
+                    'nama_kategori' => $namaKategori ?: 'Lainnya',
+                    'id_kategori' => $idKategori,
+                    'harga_parameter' => $item->hargaParameter,
+                ];
+            })
+            ->values();
 
         return response()->json([
             'message' => 'success',

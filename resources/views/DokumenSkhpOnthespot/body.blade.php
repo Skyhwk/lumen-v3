@@ -92,7 +92,7 @@
     <tfoot>
         <tr>
             <td colspan="4" style="border:1px solid #000; padding:5px; text-align:center;">
-            ( ↑ ) Hasil Uji melebihi ambang batas nilai rujukan
+            ( ↑ ) bihi ambang batas nilai rujukan
             </td>
         </tr>
     </tfoot>
