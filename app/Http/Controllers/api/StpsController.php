@@ -1580,15 +1580,12 @@ class StpsController extends Controller
                     <td width="60%" style="font-size: 10px; vertical-align: top;">QT : ' . $dataPenawaran->no_document . '</td>
                     <td style="font-size: 10px;text-align:center; vertical-align: top;">
                         <span>Tangerang, ' . self::tanggal_indonesia($tanggal) . '</span><br>
-                        <span><b>' . $jabatanPenandatangan . '</b></span><br>
+                        <span></span><br>
                         ' . $signatureImage . '
                     </td>
                 </tr>
                 <tr>
                     <td style="font-size: 10px; vertical-align: bottom;">Waktu tiba di lokasi : ' . $request->jadwal_jam_mulai . '</td>
-                    <td style="font-size: 10px;text-align:center; vertical-align: bottom;">
-                        <span><b><u>' . $namaPenandatangan . '</u></b></span>' . $statusLabel . '
-                    </td>
                 </tr>
             </table>');
 
