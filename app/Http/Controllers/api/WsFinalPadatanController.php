@@ -39,6 +39,29 @@ class WsFinalPadatanController extends Controller
 			$data->whereBetween('tanggal_sampling', [$from, $to]);
 		}
 
+		$data = $data->orderBy('tanggal_sampling')->get();
+		$progressBySample = \App\Services\WsFinalApprovalService::progressBySample($data);
+
+		$data = $data->filter(function ($item) use ($progressBySample, $request) {
+			$progress = $progressBySample[$item->no_sampel] ?? [
+				'tested' => 0,
+				'total' => 0,
+				'is_complete' => false,
+			];
+
+			$item->progress = $progress['tested'] . ' / ' . $progress['total'];
+
+			if ($request->uji_status === 'lengkap') {
+				return $progress['is_complete'];
+			}
+
+			if ($request->uji_status === 'belum_lengkap') {
+				return !$progress['is_complete'];
+			}
+
+			return true;
+		})->values();
+
 		return Datatables::of($data)->make(true);
 	}
 

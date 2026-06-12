@@ -4,15 +4,16 @@ namespace App\Services;
 
 use App\Models\DataLapanganAir;
 use App\Models\OrderDetail;
-use App\Models\WsFinalApprovalHeader;
+use App\Models\Parameter;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class WsFinalApprovalService
 {
+    private static $parameterRegulationCache = [];
+
     private const PARAMETER_SOURCES = [
         \App\Models\Colorimetri::class,
         \App\Models\DebuPersonalHeader::class,
@@ -49,12 +50,16 @@ class WsFinalApprovalService
             return;
         }
 
-        if (self::isParameterSource($source)) {
-            $headerId = self::upsertHeader($orderDetail);
-            $parameterLab = self::stringValue($source->getAttribute('parameter'));
+        $headerId = self::upsertHeader($orderDetail);
+        $parameterLab = self::stringValue($source->getAttribute('parameter'));
 
+        if (self::isParameterSource($source)) {
             if ($parameterLab !== null) {
-                $parameterRegulasi = self::findParameterRegulasi($orderDetail, $parameterLab) ?: '';
+                $parameterRegulasi = self::findParameterRegulasi(
+                    $orderDetail,
+                    $parameterLab,
+                    $source
+                ) ?: '';
 
                 DB::table('ws_final_approval_detail')->updateOrInsert([
                     'ws_final_approval_header_id' => $headerId,
@@ -65,19 +70,53 @@ class WsFinalApprovalService
                     'hasil' => self::limit(self::extractResult($source), 50),
                 ]);
             }
+        } else {
+            self::deleteParameterDetail($headerId, $parameterLab);
+            return;
         }
 
         self::refreshApprovalStatus($orderDetail);
     }
 
+    public static function rejectParameter(Model $source): void
+    {
+        $noSampel = self::stringValue($source->getAttribute('no_sampel'));
+        $parameterLab = self::stringValue($source->getAttribute('parameter'));
+
+        if ($noSampel === null || $parameterLab === null) {
+            return;
+        }
+
+        $orderDetail = self::findOrderDetail($noSampel);
+        if (!$orderDetail) {
+            return;
+        }
+
+        self::deleteParameterDetail(self::upsertHeader($orderDetail), $parameterLab);
+    }
+
     public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
     {
-        self::upsertHeader($orderDetail);
+        $headerId = self::upsertHeader($orderDetail);
 
-        if ($approved) {
-            self::syncApprovedParameters($orderDetail->no_sampel);
-            self::syncAirFieldParameters($orderDetail);
+        if (!$approved) {
+            DB::table('ws_final_approval_detail')
+                ->where('ws_final_approval_header_id', $headerId)
+                ->delete();
+
+            DB::table('ws_final_approval_header')
+                ->where('id', $headerId)
+                ->update([
+                    'is_approved' => 0,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                ]);
+
+            return;
         }
+
+        self::syncApprovedParameters($orderDetail->no_sampel);
+        self::syncAirFieldParameters($orderDetail);
 
         self::refreshApprovalStatus($orderDetail, $approvedBy);
     }
@@ -89,6 +128,80 @@ class WsFinalApprovalService
                 self::finalizeSample($orderDetail, $approved, $approvedBy);
             }
         }
+    }
+
+    public static function progressBySample(iterable $orderDetails): array
+    {
+        $orderDetails = collect($orderDetails)
+            ->filter(function ($orderDetail) {
+                return $orderDetail instanceof OrderDetail && $orderDetail->no_sampel;
+            })
+            ->values();
+
+        $noSampel = $orderDetails->pluck('no_sampel')->unique()->values();
+        $approvedBySample = collect();
+
+        foreach (self::PARAMETER_SOURCES as $modelClass) {
+            if (!class_exists($modelClass)) {
+                continue;
+            }
+
+            $model = new $modelClass();
+            $table = $model->getTable();
+
+            if (!Schema::hasColumn($table, 'no_sampel') || !Schema::hasColumn($table, 'parameter')) {
+                continue;
+            }
+
+            $approvalColumn = self::approvalColumn($table);
+            if ($approvalColumn === null) {
+                continue;
+            }
+
+            $query = $modelClass::whereIn('no_sampel', $noSampel)
+                ->where($approvalColumn, 1);
+
+            if (Schema::hasColumn($table, 'is_active')) {
+                $query->where('is_active', true);
+            }
+
+            $query->get(['no_sampel', 'parameter'])
+                ->each(function (Model $source) use ($approvedBySample) {
+                    $sample = $source->getAttribute('no_sampel');
+                    $parameters = $approvedBySample->get($sample, []);
+                    $parameters[] = $source->getAttribute('parameter');
+                    $approvedBySample->put($sample, $parameters);
+                });
+        }
+
+        return $orderDetails->mapWithKeys(function (OrderDetail $orderDetail) use ($approvedBySample) {
+            $required = collect(self::arrayValue($orderDetail->parameter))
+                ->map(function ($parameter) {
+                    return self::normalizeParameter($parameter);
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+            $approved = collect($approvedBySample->get($orderDetail->no_sampel, []))
+                ->map(function ($parameter) {
+                    return self::normalizeParameter($parameter);
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+            $tested = $required->intersect($approved)->count();
+            $total = $required->count();
+
+            return [
+                $orderDetail->no_sampel => [
+                    'tested' => $tested,
+                    'total' => $total,
+                    'is_complete' => $total > 0 && $tested === $total,
+                ],
+            ];
+        })->all();
     }
 
     private static function upsertHeader(OrderDetail $orderDetail, array $approval = []): int
@@ -104,39 +217,27 @@ class WsFinalApprovalService
             'nama_titik' => self::limit($orderDetail->keterangan_1, 50),
         ], $approval);
 
-        $headerId = WsFinalApprovalHeader::where('no_sampel', $orderDetail->no_sampel)
-            ->orderBy('id')
-            ->value('id');
+        $columns = array_keys($row);
+        $quotedColumns = implode(', ', array_map(function ($column) {
+            return "`{$column}`";
+        }, $columns));
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+        $updates = implode(', ', array_map(function ($column) {
+            return "`{$column}` = VALUES(`{$column}`)";
+        }, array_filter($columns, function ($column) {
+            return $column !== 'no_sampel';
+        })));
 
-        if ($headerId) {
-            DB::table('ws_final_approval_header')
-                ->where('id', $headerId)
-                ->update($row);
+        DB::statement(
+            "INSERT INTO `ws_final_approval_header` ({$quotedColumns})
+             VALUES ({$placeholders})
+             ON DUPLICATE KEY UPDATE
+                `id` = LAST_INSERT_ID(`id`),
+                {$updates}",
+            array_values($row)
+        );
 
-            return (int) $headerId;
-        }
-
-        try {
-            return (int) DB::table('ws_final_approval_header')->insertGetId($row);
-        } catch (QueryException $e) {
-            if ((int) ($e->errorInfo[1] ?? 0) !== 1062) {
-                throw $e;
-            }
-
-            $headerId = WsFinalApprovalHeader::where('no_sampel', $orderDetail->no_sampel)
-                ->orderBy('id')
-                ->value('id');
-
-            if (!$headerId) {
-                throw $e;
-            }
-
-            DB::table('ws_final_approval_header')
-                ->where('id', $headerId)
-                ->update($row);
-
-            return (int) $headerId;
-        }
+        return (int) DB::connection()->getPdo()->lastInsertId();
     }
 
     private static function findOrderDetail(string $noSampel): ?OrderDetail
@@ -147,15 +248,36 @@ class WsFinalApprovalService
             ->first();
     }
 
+    private static function deleteParameterDetail(int $headerId, ?string $parameterLab): void
+    {
+        if ($parameterLab !== null) {
+            DB::table('ws_final_approval_detail')
+                ->where('ws_final_approval_header_id', $headerId)
+                ->where('parameter_lab', self::limit($parameterLab, 70))
+                ->delete();
+        }
+
+        DB::table('ws_final_approval_header')
+            ->where('id', $headerId)
+            ->update([
+                'is_approved' => 0,
+                'approved_by' => null,
+                'approved_at' => null,
+            ]);
+    }
+
     private static function isParameterSource(Model $source): bool
     {
-        return $source->getAttribute('no_sampel')
-            && $source->getAttribute('parameter')
-            && (
-                (int) $source->getAttribute('lhps') === 1
-                || (int) $source->getAttribute('is_approve') === 1
-                || (int) $source->getAttribute('is_approved') === 1
-            );
+        if (!$source->getAttribute('no_sampel') || !$source->getAttribute('parameter')) {
+            return false;
+        }
+
+        if (array_key_exists('lhps', $source->getAttributes())) {
+            return (int) $source->getAttribute('lhps') === 1;
+        }
+
+        return (int) $source->getAttribute('is_approve') === 1
+            || (int) $source->getAttribute('is_approved') === 1;
     }
 
     private static function syncApprovedParameters(string $noSampel): void
@@ -390,21 +512,59 @@ class WsFinalApprovalService
         return null;
     }
 
-    private static function findParameterRegulasi(OrderDetail $orderDetail, string $parameterLab): ?string
+    private static function findParameterRegulasi(
+        OrderDetail $orderDetail,
+        string $parameterLab,
+        ?Model $source = null
+    ): ?string
     {
-        $parameters = self::arrayValue($orderDetail->parameter);
-        $regulations = self::arrayValue($orderDetail->regulasi);
+        $headerParameters = collect(self::arrayValue($orderDetail->parameter))
+            ->map(function ($parameter) {
+                $value = self::stringValue($parameter) ?: '';
+                $parts = explode(';', $value, 2);
 
-        foreach ($parameters as $index => $parameter) {
-            $parameterName = self::stripIdentifier($parameter);
-            if (strcasecmp($parameterName, self::stripIdentifier($parameterLab)) === 0) {
-                return isset($regulations[$index])
-                    ? self::stringValue($regulations[$index])
-                    : self::stringValue($regulations);
-            }
+                return [
+                    'id' => isset($parts[1]) && ctype_digit(trim($parts[0]))
+                        ? (int) trim($parts[0])
+                        : null,
+                    'nama_lab' => trim(isset($parts[1]) ? $parts[1] : $parts[0]),
+                ];
+            })
+            ->filter(function ($parameter) {
+                return $parameter['id'] !== null;
+            })
+            ->values();
+
+        $sourceParameterId = $source
+            ? self::numericValue($source->getAttribute('id_parameter'))
+            : null;
+
+        if ($sourceParameterId !== null
+            && $headerParameters->contains('id', $sourceParameterId)
+        ) {
+            return self::parameterRegulationName($sourceParameterId);
         }
 
-        return self::stringValue($regulations);
+        $normalizedParameterLab = self::normalizeParameter($parameterLab);
+        $headerParameter = $headerParameters->first(function ($parameter) use ($normalizedParameterLab) {
+            return self::normalizeParameter($parameter['nama_lab']) === $normalizedParameterLab;
+        });
+
+        if (!$headerParameter) {
+            return null;
+        }
+
+        return self::parameterRegulationName($headerParameter['id']);
+    }
+
+    private static function parameterRegulationName(int $parameterId): ?string
+    {
+        if (!array_key_exists($parameterId, self::$parameterRegulationCache)) {
+            self::$parameterRegulationCache[$parameterId] = Parameter::where('id', $parameterId)
+                ->value('nama_regulasi');
+        }
+
+        return self::$parameterRegulationCache[$parameterId];
     }
 
     private static function arrayValue($value): array
@@ -447,6 +607,11 @@ class WsFinalApprovalService
         }
 
         return json_encode($value, JSON_UNESCAPED_UNICODE);
+    }
+
+    private static function numericValue($value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private static function stripIdentifier($value): string

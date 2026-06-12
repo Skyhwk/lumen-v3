@@ -20,8 +20,13 @@ class OrderDetail extends Sector
                 return;
             }
 
-            $approved = in_array((int) $orderDetail->status, [1, 2], true);
-            WsFinalApprovalService::finalizeSample($orderDetail, $approved);
+            $status = (int) $orderDetail->status;
+
+            if (in_array($status, [1, 2], true)) {
+                WsFinalApprovalService::finalizeSample($orderDetail, true);
+            } elseif ($status === 0) {
+                WsFinalApprovalService::finalizeSample($orderDetail, false);
+            }
         });
     }
 
