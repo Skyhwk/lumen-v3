@@ -119,11 +119,13 @@ class TqcSwabTesController extends Controller
         foreach ($orderDetails as $orderDetail) {
             $header = SwabTestHeader::with('ws_udara')
                 ->where('no_sampel', $orderDetail->no_sampel)
+                ->where('is_active', 1)
                 ->get();
 
             if ($header->isEmpty()) {
                 $header = MicrobioHeader::with('ws_udara')
                     ->where('no_sampel', $orderDetail->no_sampel)
+                    ->where('is_active', 1)
                     ->get();
             }
 
