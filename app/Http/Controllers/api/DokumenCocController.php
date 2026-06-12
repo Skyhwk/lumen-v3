@@ -14,24 +14,37 @@ class DokumenCocController extends Controller
 {
     public function generateDokumenCoc(Request $request)
     {
-        $no_lhp = $request->no_lhp;
+        try {
+            $no_lhp = $request->no_lhp;
 
-        $dokumenCoc = DokumenCoc::where('no_lhp', $no_lhp)->first();
-        if ($dokumenCoc) {
+            $dokumenCoc = DokumenCoc::where('no_lhp', $no_lhp)->first();
+            if ($dokumenCoc) {
+                return response()->json([
+                    'message'  => 'Berhasil mendapatkan data COC',
+                    'filename' => $dokumenCoc->filename,
+                ], 200);
+            }
+
+            $service = new GenerateDokumenCocService($no_lhp);
+            // Jika kode di bawah ini crash, dia akan lompat ke blok catch
+            $filename = $service->generate();
+
+            if (!$filename) return response()->json(['message' => 'Dokumen tidak tersedia'], 401);
+
             return response()->json([
-                'message'  => 'Berhasil mendapatkan data COC',
-                'filename' => $dokumenCoc->filename,
+                'message'  => 'Berhasil generate data COC',
+                'filename' => $filename,
             ], 200);
+
+        } catch (\Throwable $th) {
+            // Tangkap error aslinya agar kita tahu apa yang rusak di dalam proses generate
+            \Log::error('Crash saat generate COC V3: ' . $th->getMessage() . ' Line: ' . $th->getLine());
+            
+            return response()->json([
+                'message' => 'Terjadi kerusakan saat proses pembuatan dokumen di server V3',
+                'error'   => $th->getMessage()
+            ], 500); 
+            // Jika response ini yang muncul, fix masalahnya ada di dalam GenerateDokumenCocService!
         }
-
-        $service = new GenerateDokumenCocService($no_lhp);
-        $filename = $service->generate();
-
-        if (!$filename) return response()->json(['message' => 'Dokumen tidak tersedia'], 401);
-
-        return response()->json([
-            'message'  => 'Berhasil generate data COC',
-            'filename' => $filename,
-        ], 200);
     }
 }

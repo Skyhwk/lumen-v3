@@ -1438,22 +1438,24 @@ class AppsBasController extends Controller
         ];
         // dd($selectedDetail)
 
-        // Cari data detail yang cocok dengan nomor sampel
-        foreach ($detailDocuments as $detail) {
-            if (is_array($detail['no_sampel']) && !empty($detail['no_sampel'])) {
-                $detailNoSampelSorted = $detail['no_sampel'];
-                sort($detailNoSampelSorted);
+        // Cari data detail yang cocok dengan nomor sampel (ambil dari index terakhir)
+        if (is_array($detailDocuments)) {
+            foreach (array_reverse($detailDocuments) as $detail) {
+                if (isset($detail['no_sampel']) && is_array($detail['no_sampel']) && !empty($detail['no_sampel'])) {
+                    $detailNoSampelSorted = $detail['no_sampel'];
+                    sort($detailNoSampelSorted);
 
-                $requestedSampelsSorted = $requestedSampels;
-                sort($requestedSampelsSorted);
+                    $requestedSampelsSorted = $requestedSampels;
+                    sort($requestedSampelsSorted);
 
-                // if ($detailNoSampelSorted === $requestedSampelsSorted) {
-                //     $selectedDetail = $detail;
-                //     break;
-                // }
-                if (!empty(array_intersect($detail['no_sampel'], $requestedSampels))) {
-                    $selectedDetail = $detail;
-                    break;
+                    // if ($detailNoSampelSorted === $requestedSampelsSorted) {
+                    //     $selectedDetail = $detail;
+                    //     break;
+                    // }
+                    if (!empty(array_intersect($detail['no_sampel'], $requestedSampels))) {
+                        $selectedDetail = $detail;
+                        break;
+                    }
                 }
             }
         }

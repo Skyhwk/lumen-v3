@@ -19,6 +19,7 @@ use App\Models\PerbantuanSampler;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
+use Illuminate\Support\Facades\Log;
 
 class RequestSamplingPlanController extends Controller
 {
@@ -219,6 +220,13 @@ class RequestSamplingPlanController extends Controller
                 ], 200);
             }
         } catch (\Throwable $e) {
+            $logData = [
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
+                'status'  => $ex->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== rejectJadwal ===", $logData);
             return response()->json([
                 "message" => $e->getMessage(),
                 "status" => "error"
@@ -301,6 +309,13 @@ class RequestSamplingPlanController extends Controller
             return response()->json(['data'=>$getLabelStatusSampling],200);
         } catch (\Throwable $th) {
             //throw $th;
+            $logData = [
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'status'  => $th->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== getStatusSampling ===", $logData);
             return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
         }
     }

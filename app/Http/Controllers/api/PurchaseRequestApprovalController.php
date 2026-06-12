@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{PurchaseRequest};
-use App\Services\Notification;
+use App\Services\{KaryawanProfileService, Notification};
 use DataTables;
 use Illuminate\Http\Request;
 
@@ -27,7 +27,7 @@ class PurchaseRequestApprovalController extends Controller
     {
         $scope = $request->input('scope', 'pending');
 
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
             ->where('is_active', true)
             ->whereIn('status', ['Approved', 'Partially Approved'])
             ->latest();
@@ -42,6 +42,7 @@ class PurchaseRequestApprovalController extends Controller
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
+            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
             ->addColumn('finance_display_status', fn($row) => $this->resolveFinanceDisplayStatus($row))
             ->make(true);
     }

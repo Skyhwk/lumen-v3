@@ -46,6 +46,7 @@ class GenerateSkhpSarOnthespotService
             $body = view('TemplateEmail.skhpSarOnthespot', ['data' => $header])->render();
 
             SendEmail::where('to', $header->email)
+                ->where('bcc', ['reiko@intilab.com', 'winda@intilab.com'])
                 ->where('subject', $subject)
                 ->where('body', $body)
                 ->where('attachment', [[

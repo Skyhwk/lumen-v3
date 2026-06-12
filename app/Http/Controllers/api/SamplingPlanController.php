@@ -38,21 +38,6 @@ class SamplingPlanController extends Controller
     {
         
         $active = $request->is_active == '' ? true : $request->is_active;
-
-        // $data = Jadwal::with([
-        //     'samplingPlan:id,created_at,filename,is_active',
-        //     'samplingPlan' => function ($query) {
-        //         $query->WithTypeModelSub();
-        //     },
-        // ])
-        //     ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi','durasi_personal', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 
-        //     DB::raw('MAX(created_by) as created_by'), 
-        //     DB::raw('MIN(created_at) as created_at'), // Ambil waktu buat paling awal
-        //     DB::raw('MAX(updated_at) as updated_at'), // Ambil waktu update paling baru
-        //     DB::raw('MAX(updated_by) as updated_by') ) // Ambil user update terakhir)
-        //     ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang')
-        //     ->whereNotNull('no_quotation')
-        //     ->where('is_active', $active);
         $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
         'samplingPlan' => function ($query) {
             $query->WithTypeModelSub();
@@ -303,6 +288,13 @@ class SamplingPlanController extends Controller
 
             return Datatables::of($allSamplers)->make(true);
         } catch (\Exception $e) {
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== getsamplerApi ===", $logData);
             return response()->json([
                 'message' => $e->getMessage(),
                 'status'  => '401',
@@ -385,6 +377,13 @@ class SamplingPlanController extends Controller
                 'status'  => '200',
             ], 200);
         } catch (\Exception $e) {
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== insertCutiSampler ===", $logData);
             return response()->json([
                 'message' => $e->getMessage(),
                 'status'  => $e->getCode(),
@@ -428,6 +427,13 @@ class SamplingPlanController extends Controller
                 'success' => true,
             ], 200);
         } catch (\Exception $e) {
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== insertDriver ===", $logData);
             return response()->json([
                 'message' => $e->getMessage(),
                 'status'  => $e->getCode(),
@@ -451,6 +457,13 @@ class SamplingPlanController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== deleteDriver ===", $logData);
             return response()->json([
                 'message' => $e->getMessage(),
                 'status'  => $e->getCode(),
@@ -640,6 +653,13 @@ class SamplingPlanController extends Controller
                 'status'   => $resonse_code,
             ], 200);
         } catch (\Exception $ex) {
+            $logData = [
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
+                'status'  => $ex->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== getSingleJadwal ===", $logData);
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line'    => $ex->getLine(),
@@ -651,7 +671,6 @@ class SamplingPlanController extends Controller
 
     public function updateJadwal(Request $request)
     {
-
         try {
             // ========================================================
             // 1. SNAPSHOT BEFORE: Tarik data sebelum ada perubahan apa-apa
@@ -757,6 +776,13 @@ class SamplingPlanController extends Controller
             }
         } catch (\Exception $ex) {
             //throw $th;
+            $logData = [
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
+                'status'  => $ex->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== updateJadwal ===", $logData);
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line'    => $ex->getLine(),
@@ -850,6 +876,13 @@ class SamplingPlanController extends Controller
                 ], 400);
             }
         } catch (\Exception $e) {
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== insertParsial ===", $logData);
             return response()->json([
                 'message' => $e->getMessage(),
                 'status'  => '401',
@@ -942,6 +975,13 @@ class SamplingPlanController extends Controller
             ], 200);
         } catch (\Exception $ex) {
             DB::rollback();
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== cancelJadwal ===", $logData);
             $templateMessage = "Error : " . $ex->getMessage() . "\nLine : " . $ex->getLine() . "\nFile : " . $ex->getFile() . "\n pada method cancelJadwal";
             return response()->json($templateMessage, 401);
         }
@@ -1139,6 +1179,13 @@ class SamplingPlanController extends Controller
             }
         } catch (\Exception $e) {
             DB::rollBack();
+            $logData = [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== sendReEmail ===", $logData);
             return response()->json([
                 'message' => $e->getMessage(),
                 'status'  => 'failed',
@@ -1201,6 +1248,13 @@ class SamplingPlanController extends Controller
 
         } catch (\Throwable $th) {
             // Jangan dd() di API production, return error message
+            $logData = [
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'status'  => $th->getCode(),
+                'status'  => '401',
+            ];
+            Log::channel('sampling')->error("=== checkDocumentStatus ===", $logData);
             return response()->json(['message' => $th->getMessage()], 500);
         }
     }

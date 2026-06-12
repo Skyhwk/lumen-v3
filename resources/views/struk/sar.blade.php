@@ -179,7 +179,7 @@
         </tr>
         <tr>
             <td>
-                <b>↗</b> = Hasil Uji melebihi ambang batas nilai rujukan<br>
+                <b>↗</b> = HASIL UJI melebihi nilai rujukan<br>
             </td>
         </tr>
     </table>
@@ -203,7 +203,7 @@
 
     <table width="100%">
         <tr>
-            <td align="center">Terima kasih telah melakukan pengujian di<br />PT. Inti Surya Laboratorium<br /><br />T: 021-5088-9889 / contact@intilab.com</td>
+            <td align="center">Terima kasih telah melakukan pengujian di<br />PT. Inti Surya Laboratorium<br /><br />T: 021-5088-9889 / sales@intilab.com</td>
         </tr>
     </table>
 </body>

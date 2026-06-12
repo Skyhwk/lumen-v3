@@ -2879,15 +2879,15 @@ class ReadyOrderController extends Controller
         // Http::post('http://127.0.0.1:2999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
 
         // Job Laraval
-        // JobTask::insert([
-        //     'job' => 'RenderInvoice',
-        //     'status' => 'processing',
-        //     'no_document' => $no_document,
-        //     'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
-        // ]);
+        JobTask::insert([
+            'job' => 'RenderInvoice',
+            'status' => 'processing',
+            'no_document' => $no_document,
+            'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
+        ]);
 
-        // $job = new RenderInvoiceJob($invoice_numbers);
-        // $this->dispatch($job);
+        $job = new RenderInvoiceJob($invoice_numbers);
+        $this->dispatch($job);
     }
 
     // private static function generatePDF($noInvoice)

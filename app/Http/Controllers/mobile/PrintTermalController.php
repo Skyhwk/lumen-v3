@@ -2,15 +2,12 @@
 namespace App\Http\Controllers\mobile;
 
 use App\Models\SarHeader;
-use App\Models\SarDetail;
-use App\Models\ProsesFdlSar;
 use App\Models\ParameterSar;
 
 use Carbon\Carbon;
 use Laravel\Lumen\Routing\Controller;
 use Illuminate\Http\Request;
 
-use App\Services\GenerateStrukSarService;
 Carbon::setLocale('id'); // Set locale ke Indonesia untuk format tanggal
 
 class PrintTermalController extends Controller
@@ -172,7 +169,7 @@ class PrintTermalController extends Controller
                         KETERANGAN
                     </div>
                     <div>
-                        * = Hasil Uji melebihi ambang batas nilai rujukan
+                        * = HASIL UJI melebihi nilai rujukan
                     </div>
                 </div>
     
@@ -222,7 +219,7 @@ class PrintTermalController extends Controller
                     Terima kasih telah melakukan pengujian di<br>
                     <strong>PT. Inti Surya Laboratorium</strong><br>
                     T: 021-5088-9889<br>
-                    contact@intilab.com
+                    sales@intilab.com
                 </div>
     
                 <!-- EXTRA SPACE BUAT SOBEK -->

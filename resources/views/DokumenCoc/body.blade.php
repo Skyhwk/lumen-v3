@@ -125,7 +125,7 @@
                     @foreach ($parameter as $item)
                         <tr>
                             <td style="padding: 1px 0; font-size: 12px">
-                                {{ count($regulasi) > 1 ? '- ' : '' }}{{ preg_replace('/^\d+;/', '', $item) }}
+                                {{ count($parameter) > 1 ? '- ' : '' }}{{ preg_replace('/^\d+;/', '', $item) }}
                             </td>
                         </tr>
                     @endforeach

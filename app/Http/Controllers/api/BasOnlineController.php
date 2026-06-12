@@ -1664,7 +1664,206 @@ class BasOnlineController extends Controller
         }
     }
 
+    public function regenerateBasFromLastEntryBypass(Request $request)
+    {
+        try {
+            // ── Ambil PersiapanSampelHeader ──────────────────────────
+            $requestSamples = explode(",", $request->kategori);
+            $requestSamples = array_map(function ($item) {
+                preg_match('/(\d+)$/', trim($item), $matches);
+                return $matches[1] ?? null;
+            }, $requestSamples);
+            $requestSamples = array_filter($requestSamples);
 
+            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
+                ->where('no_quotation', $request->no_document)
+                ->where('tanggal_sampling', $request->tanggal_sampling)
+                ->where('is_active', true)
+                ->where(function ($q) use ($requestSamples) {
+                    foreach ($requestSamples as $sample) {
+                        $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
+                    }
+                })->first();
+
+            if (!$persiapanHeaderKategori) {
+                return response()->json(['message' => 'Data persiapan sampel tidak ditemukan.'], 404);
+            }
+
+            // ── Ambil entry terakhir dari detail_bas_documents ────────
+            $allDocuments = json_decode($persiapanHeaderKategori->detail_bas_documents ?? '[]', true) ?? [];
+
+            if (empty($allDocuments)) {
+                return response()->json([
+                    'message' => 'Belum ada data BAS yang tersimpan. Generate BAS terlebih dahulu.',
+                ], 404);
+            }
+
+            $lastEntry = end($allDocuments);
+            $lastIndex = count($allDocuments) - 1;
+
+            // ── Ambil no_sampel dari entry terakhir ───────────────────
+            $noKatSample = $lastEntry['no_sampel'] ?? [];
+            $noSample = [];
+            foreach ($noKatSample as $nosampel) {
+                $noSample[] = $request->no_order . '/' . $nosampel;
+            }
+
+            if (empty($noSample)) {
+                return response()->json(['message' => 'Data no_sampel di entry terakhir kosong.'], 422);
+            }
+
+            // ── Ambil data pendukung dari DB ──────────────────────────
+            $infoSampling = json_decode($request->info_sampling, true);
+
+            $orderH = OrderHeader::where('no_document', $request->no_document)
+                ->where('no_order', $request->no_order)
+                ->first();
+
+            if (!$orderH) {
+                return response()->json(['message' => 'Data order tidak ditemukan.'], 404);
+            }
+
+            $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
+                ->where('quotation_id', $infoSampling['id_request'])
+                ->where('status_quotation', $infoSampling['status_quotation'])
+                ->where('is_active', true)
+                ->first();
+
+            if (!$sp) {
+                return response()->json(['message' => 'Data sampling plan tidak ditemukan.'], 401);
+            }
+
+            $jadwal = Jadwal::select([
+                    'id_sampling', 'kategori', 'tanggal', 'durasi',
+                    'jam_mulai', 'jam_selesai',
+                    DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler'),
+                    DB::raw('GROUP_CONCAT(id SEPARATOR ",") AS batch_id'),
+                ])
+                ->where('id_sampling', $sp->id)
+                ->where('tanggal', $request->tanggal_sampling)
+                ->where('is_active', true)
+                ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai'])
+                ->get()->pluck('tanggal');
+
+            if ($jadwal->isEmpty()) {
+                return response()->json(['message' => 'Data jadwal tidak ditemukan.'], 401);
+            }
+
+            $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
+                ->where([
+                    ['id_sampling', '=', $sp->id],
+                    ['tanggal', '=', $request->tanggal_sampling],
+                    ['is_active', '=', true],
+                ])->get();
+
+            $orderD = OrderDetail::with(['codingSampling'])
+                ->where('id_order_header', $orderH->id)
+                ->where('no_order', $request->no_order)
+                ->whereIn('no_sampel', $noSample)
+                ->whereIn('tanggal_sampling', $jadwal)
+                ->get();
+
+            // ── Build data_sampling ───────────────────────────────────
+            $dataSampling = [];
+            $datParam     = [];
+            foreach ($orderD as $vv) {
+                $dataSampling[] = (object) [
+                    'no_sample'             => $vv->no_sampel,
+                    'kategori_2'            => $vv->kategori_2,
+                    'kategori_3'            => $vv->kategori_3,
+                    'nama_perusahaan'       => $vv->nama_perusahaan,
+                    'koding_sampling'       => $vv->koding_sampling,
+                    'file_koding_sample'    => $vv->file_koding_sampel,
+                    'file_koding_sampling'  => $vv->file_koding_sampling,
+                    'konsultan'             => $vv->orderHeader->konsultan,
+                    'tanggal_sampling'      => $vv->tanggal_sampling,
+                    'keterangan_1'          => $vv->keterangan_1,
+                    'jumlah_label'          => $vv->codingSampling->jumlah_label ?? null,
+                    'status_sampling'       => $vv->kategori_1,
+                    'id'                    => $vv->id,
+                    'id_order_header'       => $vv->id_order_header,
+                    'id_req_header'         => $infoSampling['id_request'],
+                    'id_req_detail'         => $request->id_req_detail,
+                    'periode_kontrak'       => $vv->periode,
+                    'tgl_order'             => $orderH->tanggal_order,
+                    'botol'                 => $vv->botol,
+                    'parameter'             => $vv->parameter,
+                    'no_order'              => $vv->orderHeader->no_order,
+                    'no_document'           => $request->no_document,
+                ];
+
+                if ($vv->codingSampling) {
+                    $datParam[] = $vv->codingSampling;
+                }
+            }
+
+            // ── Status sampling (BYPASS) ──────────────────────────────
+            $status      = [];
+            $hariTanggal = [];
+            foreach ($dataSampling as $sample) {
+                // BYPASS: Semua dianggap selesai
+                $status[$sample->no_sample] = 'selesai';
+
+                $dataLapangan = $this->getDataLapangan(
+                    $sample->kategori_2,
+                    $sample->kategori_3,
+                    $sample->no_sample,
+                    $sample->parameter
+                );
+
+                if ($dataLapangan && $dataLapangan->created_at) {
+                    $hariTanggal[$sample->no_sample] = $dataLapangan->created_at;
+                } else {
+                    $hariTanggal[$sample->no_sample] = \Carbon\Carbon::now();
+                }
+            }
+
+            // ── Siapkan data untuk PDF ────────────────────────────────
+            $persiapanForPdf = clone $persiapanHeaderKategori;
+            $persiapanForPdf->detail_bas_documents = json_encode([$lastEntry]);
+            $orderH->detail_bas_documents = json_encode([$lastEntry]);
+
+            // Selalu buat nama baru agar tidak terkena cache browser
+            $microtime   = sprintf("%.0f", microtime(true) * 1000000);
+            $filenameNew = str_replace(
+                ["/", " "],
+                "_",
+                'BAS_' . trim($orderH->no_document) . '_' . trim($orderH->nama_perusahaan) . '_' . $microtime . '.pdf'
+            );
+
+            // ── Generate PDF ──────────────────────────────────────────
+            self::cetakBASPDF2(
+                $orderH,
+                $dataSampling,
+                $datParam,
+                $persiapanForPdf,
+                null,
+                $filenameNew,
+                $samplerJadwal,
+                $status,
+                $hariTanggal,
+                $lastEntry
+            );
+
+            // ── Update entry terakhir ─────────────────────────────────
+            $allDocuments[$lastIndex]['filename']           = $filenameNew;
+            $allDocuments[$lastIndex]['tanggal_regenerate'] = \Carbon\Carbon::now()->toDateTimeString();
+
+            $persiapanHeaderKategori->update([
+                'detail_bas_documents' => json_encode(array_values($allDocuments)),
+            ]);
+
+            return response()->json([$filenameNew], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+            ], 500);
+        }
+    }
+
+    
     // ============================================================
     // FUNGSI PRIVATE: cetakBASPDF2
     // PERUBAHAN UTAMA:

@@ -162,11 +162,13 @@ class FeeSalesMonthly
                     function ($_, $category) use ($quotations, $targetCategory) {
                         $target = $targetCategory[$category];
                         $achieved = $quotations->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))->count();
+                        
+                        $calculated = $target && $achieved ? floor($achieved / $target) : 0;
 
                         return [
                             'target' => $target,
                             'achieved' => $achieved,
-                            'point' => $target && $achieved ? floor($achieved / $target) : 0,
+                            'point' => $calculated > 3 ? 3 : $calculated,
                         ];
                     }
                 );

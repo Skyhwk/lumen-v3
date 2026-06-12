@@ -1066,7 +1066,7 @@ class WsFinalUdaraAgkaKumanController extends Controller
 				'success' => true,
 				'status' => 200,
 			], 200);
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return response()->json([
 				'message' => $e->getMessage(),
@@ -1112,7 +1112,7 @@ class WsFinalUdaraAgkaKumanController extends Controller
 					'success' => false,
 				], 401);
 			}
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollback();
 			return response()->json([
 				'message' => $e->getMessage()
@@ -1541,7 +1541,7 @@ class WsFinalUdaraAgkaKumanController extends Controller
 
 			}
 
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return response()->json([
 				'message' => $e->getMessage(),
@@ -1574,7 +1574,7 @@ class WsFinalUdaraAgkaKumanController extends Controller
 				]);
 
 			}
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return response()->json([
 				'message' => $e->getMessage(),
@@ -1583,47 +1583,4 @@ class WsFinalUdaraAgkaKumanController extends Controller
 		}
 	}
 
-	// 	public function AddSubKontrak(Request $request)
-// 	{
-// 		DB::beginTransaction();
-// 		try {
-// 			$data = new Subkontrak();
-// 			$data->no_sampel = $request->no_sampel;
-// 			$data->category_id = $request->category;
-// 			$data->parameter = $request->parameter;
-// 			$data->jenis_pengujian = $request->jenis_pengujian;
-// 			$data->is_active = true;
-// 			$data->is_approve = 1;
-// 			$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-// 			$data->approved_by = $this->karyawan;
-// 			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-// 			$data->created_by = $this->karyawan;
-// 			$data->save();
-// 			// dd($data);
-// 			if ($request->category == 1) {
-// 				$ws = new WsValueAir();
-// 				$ws->no_sampel = $request->no_sampel;
-// 				$ws->id_subkontrak = $data->id;
-// 				$ws->hasil = $request->hasil;
-// 				$ws->is_active = true;
-// 				$ws->status = 0;
-// 				$ws->save();
-// 			}
-
-	// 			DB::commit();
-// 			return response()->json([
-// 				'message' => 'Data Berhasil Disimpan',
-// 				'status' => 200,
-// 				'success' => true
-// 			], 200);
-// 		} catch (exception $e) {
-// 			DB::rollback();
-// 			return response()->json([
-// 				'message' => $e->getMessage(),
-// 				'status' => 500,
-// 				'line' => $e->getLine()
-// 			], 500);
-// 		}
-// 	}
-// }
 }
