@@ -173,7 +173,7 @@ class FdlSarOnTheSpotController extends Controller
         $data->id_parameter = $request->id_parameter;
         $data->parameter = $request->parameter;
         $data->hasil_uji_array = json_encode($request->hasil_uji_array);
-        $data->hasil_uji = number_format(array_sum($request->hasil_uji_array) / count($request->hasil_uji_array), 2);
+        $data->hasil_uji = $this->averageHasilUji($request->hasil_uji_array);
         $data->latitude = $request->lat;
         $data->longitude = $request->long;
         $data->koordinat = $request->koordinat;
@@ -228,6 +228,43 @@ class FdlSarOnTheSpotController extends Controller
                 'data' => null,
             ], 400);
         }
+    }
+
+    private function averageHasilUji($values): string
+    {
+        if (!is_array($values) || count($values) === 0) {
+            return '';
+        }
+
+        $entries = [];
+        foreach ($values as $value) {
+            $normalized = str_replace(',', '.', trim((string) $value));
+            if (!is_numeric($normalized)) {
+                continue;
+            }
+
+            $decimals = 0;
+            if (str_contains($normalized, '.')) {
+                $decimals = strlen(explode('.', $normalized, 2)[1] ?? '');
+            }
+
+            $entries[] = [
+                'num' => (float) $normalized,
+                'decimals' => $decimals,
+            ];
+        }
+
+        if (count($entries) === 0) {
+            return '';
+        }
+
+        $sum = array_sum(array_column($entries, 'num'));
+        $count = count($entries);
+        $maxDecimals = max(array_column($entries, 'decimals'));
+        $precision = min($maxDecimals + strlen((string) $count) + 1, 10);
+        $formatted = number_format($sum / $count, $precision, '.', '');
+
+        return rtrim(rtrim($formatted, '0'), '.');
     }
 
 }
