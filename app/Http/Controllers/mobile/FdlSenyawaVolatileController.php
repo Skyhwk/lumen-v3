@@ -435,6 +435,7 @@ class FdlSenyawaVolatileController extends Controller
                     $a == "Cyclohexanone" ||
                     $a == "EA" ||
                     $a == "Ethanol" ||
+                    $a == "Etanol" ||
                     $a == "HCL" ||
                     $a == "HCL (8 Jam)" ||
                     $a == "HF" ||
