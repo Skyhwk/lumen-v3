@@ -14,7 +14,7 @@ use App\Services\GetBawahan;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
-class MonitoringLhpController extends Controller
+class LhpTerlambatController extends Controller
 {
     public function index(Request $request)
     {
