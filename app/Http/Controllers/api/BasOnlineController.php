@@ -68,14 +68,22 @@ class BasOnlineController extends Controller
 {
     public function index(Request $request)
     {
-       try {
+        try {
 
-            $existingWork = DB::table('persiapan_sampel_header')
-            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded', 'is_printed')
-            ->where('is_active', true)
-            ->whereNotNull('detail_bas_documents')
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
-            ->get();
+            $existingWork = PersiapanSampelHeader::select(
+                'no_order',
+                'tanggal_sampling',
+                'sampler_jadwal',
+                'is_downloaded',
+                'is_printed'
+            )
+                ->withExists([
+                    'notCompleted as is_not_completed'
+                ])
+                ->where('is_active', true)
+                ->whereNotNull('detail_bas_documents')
+                ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+                ->get();
             $doneList = [];
             // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
@@ -85,51 +93,68 @@ class BasOnlineController extends Controller
                     $cleanName = strtolower(trim($name));
                     if (empty($cleanName)) continue;
                     // Kuncinya: Order + Tanggal + Nama Orang
-                    $key = sprintf('%s|%s|%s', 
-                        trim($row->no_order), 
-                        trim($row->tanggal_sampling), 
+                    $key = sprintf(
+                        '%s|%s|%s',
+                        trim($row->no_order),
+                        trim($row->tanggal_sampling),
                         $cleanName
                     );
-                    $doneList[$key] =[
+                    $doneList[$key] = [
                         'is_proccess' => true,
                         'is_downloaded' => $row->is_downloaded,
-                        'is_printed' => $row->is_printed
+                        'is_printed' => $row->is_printed,
+                        'is_not_completed' => $row->is_not_completed,
                     ];
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
             $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
             $isOrangPusat = in_array("1", $myPrivileges);
-            $query =OrderDetail::query();
+            $query = OrderDetail::query();
             $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
-                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
-                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling', 
-                        'no_tlp_pic_sampling', 'jabatan_pic_sampling', 'jabatan_pic_order', 'is_revisi'
+                        'id',
+                        'tanggal_order',
+                        'nama_perusahaan',
+                        'konsultan',
+                        'no_document',
+                        'alamat_sampling',
+                        'nama_pic_order',
+                        'nama_pic_sampling',
+                        'no_tlp_pic_sampling',
+                        'jabatan_pic_sampling',
+                        'jabatan_pic_order',
+                        'is_revisi'
                     ]);
                 },
                 'orderHeader.samplingPlan' => function ($q) {
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
-                    ->where('is_active', true); // Pastikan plan aktif
+                        ->where('is_active', true); // Pastikan plan aktif
                 },
                 'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
-                        'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
+                        'id_sampling',
+                        'kategori',
+                        'tanggal',
+                        'durasi',
+                        'jam_mulai',
+                        'jam_selesai',
+                        'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
                         DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
                     ])
-                    ->where('is_active', true)
-                    ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                        ->where('is_active', true)
+                        ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
                     if (!$isOrangPusat) {
                         $q->whereIn('id_cabang', $myPrivileges);
                     }
                 }
             ])
-            ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
-            ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
-            ->get(); // Hati-hati, load semua ke memori
+                ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
+                ->where('is_active', true)
+                ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+                ->get(); // Hati-hati, load semua ke memori
 
             // 2. Mapping Manual (High Performance PHP Array)
             $cabangMap = [
@@ -142,7 +167,9 @@ class BasOnlineController extends Controller
 
             foreach ($data as $item) {
                 // Early exit jika relasi tidak lengkap
-                if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {continue;}
+                if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {
+                    continue;
+                }
                 $orderHeader = $item->orderHeader;
                 $periode = $item->periode ?? '';
                 $targetPlan = null;
@@ -150,7 +177,7 @@ class BasOnlineController extends Controller
                 if ($periode) {
                     $targetPlan = $orderHeader->sampling->firstWhere('periode_kontrak', $periode);
                 }
-                
+
                 // Prioritas 2: Jika tidak ada periode spesifik, atau tidak ketemu, ambil yang pertama
                 if (!$targetPlan) {
                     $targetPlan = $orderHeader->sampling->first();
@@ -180,42 +207,45 @@ class BasOnlineController extends Controller
                 foreach ($targetPlan->jadwal as $schedule) {
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
                     if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
-                        continue; 
+                        continue;
                     }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
-                     // LOGIKA FILTER DETIL (ATOMIC CHECK)
+                    // LOGIKA FILTER DETIL (ATOMIC CHECK)
                     // 2. Cek Satu Per Satu (ABSENSI)
                     $currentSamplers = explode(',', $schedule->sampler ?? '');
                     $pendingSamplers = [];
-                    $statusRow =[
-                        "is_process" =>0,
-                        "is_downloaded" =>0,
-                        'is_printed' =>0
+                    $statusRow = [
+                        "is_process" => 0,
+                        "is_downloaded" => 0,
+                        'is_printed' => 0,
+                        'is_not_completed' => false,
                     ];
                     foreach ($currentSamplers as $singleSampler) {
                         $cleanTargetName = strtolower(trim($singleSampler));
                         if (empty($cleanTargetName)) continue;
 
-                        $checkKey = sprintf('%s|%s|%s', 
-                            trim($item->no_order), 
-                            trim($schedule->tanggal), 
+                        $checkKey = sprintf(
+                            '%s|%s|%s',
+                            trim($item->no_order),
+                            trim($schedule->tanggal),
                             $cleanTargetName
                         );
 
                         // Logic: Jika TIDAK ADA di doneList, berarti dia BELUM selesai -> Masukkan ke pending
                         if (isset($doneList[$checkKey])) {
                             $pendingSamplers[] = trim($singleSampler);
-                            $dataDb =$doneList[$checkKey];
-                            $statusRow['is_downloaded']    = $dataDb['is_downloaded']; 
+                            $dataDb = $doneList[$checkKey];
+                            $statusRow['is_downloaded']    = $dataDb['is_downloaded'];
                             $statusRow['is_printed'] = $dataDb['is_printed'];
+                            $statusRow['is_not_completed'] = $dataDb['is_not_completed'];
                         }
                     }
                     // 3. Keputusan Akhir untuk Row Ini
                     // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
                     if (empty($pendingSamplers)) {
-                        continue; 
+                        continue;
                     }
 
                     // 4. Update Tampilan Sampler
@@ -227,9 +257,9 @@ class BasOnlineController extends Controller
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
                     // Key Unik untuk Grouping (Composite Key)
-                    $key = $orderHeader->no_document . '|' . 
-                        $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
+                    $key = $orderHeader->no_document . '|' .
+                        $item->no_order . '|' .
+                        $schedule->tanggal . '|' .
                         $schedule->jam_mulai . '|' .
                         $kategori; // Key dipersingkat agar hash lebih cepat
 
@@ -237,7 +267,7 @@ class BasOnlineController extends Controller
                         // Jika data sudah ada, gabungkan Sampler-nya saja
                         $existingSamplers = explode(',', $groupedData[$key]['sampler']);
                         $newSamplers = explode(',', $schedule->sampler ?? '');
-                        
+
                         // Merge & Unique
                         $merged = array_unique(array_merge($existingSamplers, $newSamplers));
                         $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
@@ -262,6 +292,7 @@ class BasOnlineController extends Controller
                             'nama_cabang'        => $namaCabang,
                             'is_downloaded'      => (int)$statusRow['is_downloaded'],
                             'is_printed'      => (int)$statusRow['is_printed'],
+                            'not_completed' => (bool) $statusRow['is_not_completed'],
                         ];
                     }
                 }
@@ -289,7 +320,6 @@ class BasOnlineController extends Controller
                     return $collection;
                 })
                 ->make(true);
-
         } catch (\Exception $ex) {
             return response()->json([
                 'message' => $ex->getMessage(),
@@ -298,20 +328,20 @@ class BasOnlineController extends Controller
         }
     }
 
-    public function indexRekap (Request $request)
+    public function indexRekap(Request $request)
     {
         try {
-            
+
             $existingWork = DB::table('persiapan_sampel_header')
-            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal','is_downloaded','is_printed')
-            ->where('is_active', true)
-            
-            ->whereNotNull('detail_bas_documents')
-            ->whereBetween('tanggal_sampling', [
+                ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded', 'is_printed')
+                ->where('is_active', true)
+
+                ->whereNotNull('detail_bas_documents')
+                ->whereBetween('tanggal_sampling', [
                     $request->periode_awal,
                     $request->periode_akhir
                 ])
-            ->get();
+                ->get();
             $doneList = [];
             // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
@@ -321,12 +351,13 @@ class BasOnlineController extends Controller
                     $cleanName = strtolower(trim($name));
                     if (empty($cleanName)) continue;
                     // Kuncinya: Order + Tanggal + Nama Orang
-                    $key = sprintf('%s|%s|%s', 
-                        trim($row->no_order), 
-                        trim($row->tanggal_sampling), 
+                    $key = sprintf(
+                        '%s|%s|%s',
+                        trim($row->no_order),
+                        trim($row->tanggal_sampling),
                         $cleanName
                     );
-                    $doneList[$key] =[
+                    $doneList[$key] = [
                         'is_proccess' => true,
                         'is_downloaded' => $row->is_downloaded,
                         'is_printed' => $row->is_printed
@@ -336,39 +367,54 @@ class BasOnlineController extends Controller
             // 1. Ambil Data (Eager Loading Optimized)
             $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
             $isOrangPusat = in_array("1", $myPrivileges);
-            $query =OrderDetail::query();
+            $query = OrderDetail::query();
             $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
-                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
-                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling', 
-                        'no_tlp_pic_sampling', 'jabatan_pic_sampling', 'jabatan_pic_order', 'is_revisi'
+                        'id',
+                        'tanggal_order',
+                        'nama_perusahaan',
+                        'konsultan',
+                        'no_document',
+                        'alamat_sampling',
+                        'nama_pic_order',
+                        'nama_pic_sampling',
+                        'no_tlp_pic_sampling',
+                        'jabatan_pic_sampling',
+                        'jabatan_pic_order',
+                        'is_revisi'
                     ]);
                 },
                 'orderHeader.samplingPlan' => function ($q) {
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
-                    ->where('is_active', true); // Pastikan plan aktif
+                        ->where('is_active', true); // Pastikan plan aktif
                 },
                 'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
-                        'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
+                        'id_sampling',
+                        'kategori',
+                        'tanggal',
+                        'durasi',
+                        'jam_mulai',
+                        'jam_selesai',
+                        'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
                         DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
                     ])
-                    ->where('is_active', true)
-                    ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                        ->where('is_active', true)
+                        ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
                     if (!$isOrangPusat) {
                         $q->whereIn('id_cabang', $myPrivileges);
                     }
                 }
             ])
-            ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
-            ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [
+                ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
+                ->where('is_active', true)
+                ->whereBetween('tanggal_sampling', [
                     $request->periode_awal,
                     $request->periode_akhir
                 ])
-            ->get(); // Hati-hati, load semua ke memori
+                ->get(); // Hati-hati, load semua ke memori
 
             // 2. Mapping Manual (High Performance PHP Array)
             $cabangMap = [
@@ -381,7 +427,9 @@ class BasOnlineController extends Controller
 
             foreach ($data as $item) {
                 // Early exit jika relasi tidak lengkap
-                if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {continue;}
+                if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {
+                    continue;
+                }
                 $orderHeader = $item->orderHeader;
                 $periode = $item->periode ?? '';
                 $targetPlan = null;
@@ -389,7 +437,7 @@ class BasOnlineController extends Controller
                 if ($periode) {
                     $targetPlan = $orderHeader->sampling->firstWhere('periode_kontrak', $periode);
                 }
-                
+
                 // Prioritas 2: Jika tidak ada periode spesifik, atau tidak ketemu, ambil yang pertama
                 if (!$targetPlan) {
                     $targetPlan = $orderHeader->sampling->first();
@@ -419,42 +467,43 @@ class BasOnlineController extends Controller
                 foreach ($targetPlan->jadwal as $schedule) {
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
                     if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
-                        continue; 
+                        continue;
                     }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
-                     // LOGIKA FILTER DETIL (ATOMIC CHECK)
+                    // LOGIKA FILTER DETIL (ATOMIC CHECK)
                     // 2. Cek Satu Per Satu (ABSENSI)
                     $currentSamplers = explode(',', $schedule->sampler ?? '');
                     $pendingSamplers = [];
                     // Variabel untuk menandai status baris ini
-                    $statusRow =[
-                        "is_process" =>0,
-                        "is_downloaded" =>0,
-                        'is_printed' =>0
+                    $statusRow = [
+                        "is_process" => 0,
+                        "is_downloaded" => 0,
+                        'is_printed' => 0
                     ];
                     foreach ($currentSamplers as $singleSampler) {
                         $cleanTargetName = strtolower(trim($singleSampler));
                         if (empty($cleanTargetName)) continue;
 
-                        $checkKey = sprintf('%s|%s|%s', 
-                            trim($item->no_order), 
-                            trim($schedule->tanggal), 
+                        $checkKey = sprintf(
+                            '%s|%s|%s',
+                            trim($item->no_order),
+                            trim($schedule->tanggal),
                             $cleanTargetName
                         );
 
-                       // CEK STATUS
+                        // CEK STATUS
                         if (isset($doneList[$checkKey])) {
                             $pendingSamplers[] = trim($singleSampler);
-                            $dataDb =$doneList[$checkKey];
-                            $statusRow['is_downloaded']    = $dataDb['is_downloaded']; 
+                            $dataDb = $doneList[$checkKey];
+                            $statusRow['is_downloaded']    = $dataDb['is_downloaded'];
                             $statusRow['is_printed'] = $dataDb['is_printed'];
                         }
                     }
-                    
+
                     if (empty($pendingSamplers)) {
-                        continue; 
+                        continue;
                     }
 
                     // 4. Update Tampilan Sampler
@@ -466,9 +515,9 @@ class BasOnlineController extends Controller
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
                     // Key Unik untuk Grouping (Composite Key)
-                    $key = $orderHeader->no_document . '|' . 
-                        $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
+                    $key = $orderHeader->no_document . '|' .
+                        $item->no_order . '|' .
+                        $schedule->tanggal . '|' .
                         $schedule->jam_mulai . '|' .
                         $kategori; // Key dipersingkat agar hash lebih cepat
 
@@ -476,7 +525,7 @@ class BasOnlineController extends Controller
                         // Jika data sudah ada, gabungkan Sampler-nya saja
                         $existingSamplers = explode(',', $groupedData[$key]['sampler']);
                         $newSamplers = explode(',', $schedule->sampler ?? '');
-                        
+
                         // Merge & Unique
                         $merged = array_unique(array_merge($existingSamplers, $newSamplers));
                         $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
@@ -510,7 +559,6 @@ class BasOnlineController extends Controller
             // Karena data sudah berupa Array, kita bungkus dengan collect()
             return DataTables::of(collect(array_values($groupedData)))
                 ->make(true);
-
         } catch (\Exception $ex) {
             return response()->json([
                 'message' => $ex->getMessage(),
@@ -624,10 +672,8 @@ class BasOnlineController extends Controller
                     $matchedDocument = [];
                     foreach ($bsDocument as $index => $doc) {
                         array_push($matchedDocument, $doc->filename);
-
                     }
                     $bsDocument = $matchedDocument;
-
                 }
             } else {
                 $bsDocument = null;
@@ -668,7 +714,7 @@ class BasOnlineController extends Controller
                     $dat_param[] = $vv->codingSampling;
                 }
             }
-           
+
             $dataPdf = self::cetakBASPDF($orderH, $data_sampling, $dat_param, $bsDocument, $psHeader);
             return $dataPdf;
             // return response()->json([
@@ -682,13 +728,12 @@ class BasOnlineController extends Controller
                 'line' => $e->getLine(),
             ], 401);
         }
-
     }
 
     private function cetakBASPDF($dataHeader, $dataSampling, $dataParam, $bsDocument, $psh)
     {
         try {
-          
+
             if (!$psh) {
                 return response()->json([
                     'message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!',
@@ -1155,37 +1200,36 @@ class BasOnlineController extends Controller
             $requestSamples = array_filter($requestSamples);
 
             $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
-            ->where('no_quotation', $request->no_document)
-            ->where('tanggal_sampling', $request->tanggal_sampling)
-            ->where('is_active', true)
-            ->where(function ($q) use ($requestSamples) {
-                foreach ($requestSamples as $sample) {
-                    $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
-                }
-            })->first();
-            
+                ->where('no_quotation', $request->no_document)
+                ->where('tanggal_sampling', $request->tanggal_sampling)
+                ->where('is_active', true)
+                ->where(function ($q) use ($requestSamples) {
+                    foreach ($requestSamples as $sample) {
+                        $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
+                    }
+                })->first();
+
             if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
                 $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
                 if (!empty($dataBas) && is_array($dataBas)) {
                     $dataBas = end($dataBas);
                 }
-               
+
                 return $dataBas["filename"];
-                
             }
 
-            if($persiapanHeaderKategori->is_emailed_bas == 0 && $persiapanHeaderKategori->detail_bas_documents != null){
+            if ($persiapanHeaderKategori->is_emailed_bas == 0 && $persiapanHeaderKategori->detail_bas_documents != null) {
                 $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
                 if (!empty($dataBas) && is_array($dataBas)) {
                     $dataBas = end($dataBas);
                 }
-               
+
                 return $dataBas["filename"];
             }
-            
+
             $noSample = json_decode($persiapanHeaderKategori->no_sampel, true);
-            
-          
+
+
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
@@ -1246,21 +1290,21 @@ class BasOnlineController extends Controller
                 'no_order' => $request->no_order,
                 'no_quotation' => $request->no_document,
                 'tanggal_sampling' => $request->tanggal_sampling,
-                'is_active' =>1,
+                'is_active' => 1,
             ])->get();
-           
-            
+
+
             $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-            
+
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {
                 $orderH->detail_bas_documents = json_encode([]);
             }
-            
+
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
                 ->where('id_order_header', $orderH->id)
@@ -1327,7 +1371,7 @@ class BasOnlineController extends Controller
             $status = [];
             $hariTanggal = [];
             foreach ($data_sampling as $sample) {
-                
+
                 $dataLapangan = $this->getDataLapangan(
                     $sample->kategori_2,
                     $sample->kategori_3,
@@ -1340,8 +1384,8 @@ class BasOnlineController extends Controller
 
                 if ($sample->kategori_2 === "1-Air") {
                     $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    
-                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
+
+                    if (in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
                         $status[$sample->no_sample] = 'selesai';
                     } else {
                         $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
@@ -1359,7 +1403,6 @@ class BasOnlineController extends Controller
                         $hariTanggal[$sample->no_sample] = null;
                     }
                 }
-
             }
 
             // dd($status);
@@ -1367,7 +1410,7 @@ class BasOnlineController extends Controller
             //     $orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal
             // ]);
 
-            
+
             // dd($persiapanHeader);
             $dataPdf = self::cetakBASPDF2($orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal);
             return $dataPdf;
@@ -1379,45 +1422,43 @@ class BasOnlineController extends Controller
             ], 401);
         }
     }
-    
-    public function isDownladed (Request $request)
+
+    public function isDownladed(Request $request)
     {
         try {
-            $DB = PersiapanSampelHeader::where('no_quotation',$request->nomor_quotation)
-            ->where('tanggal_sampling',$request->jadwal)
-            ->where('sampler_jadwal',$request->sampler)
-            ->where('is_active',true)
-            ->first();
-            if($DB != NULL){
+            $DB = PersiapanSampelHeader::where('no_quotation', $request->nomor_quotation)
+                ->where('tanggal_sampling', $request->jadwal)
+                ->where('sampler_jadwal', $request->sampler)
+                ->where('is_active', true)
+                ->first();
+            if ($DB != NULL) {
                 $DB->is_downloaded = true;
                 $DB->save();
-                return response()->json(["message"=>"succes","status"=>true],200);
+                return response()->json(["message" => "succes", "status" => true], 200);
             }
-            
         } catch (\Throwable $th) {
-            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
         }
     }
-    public function isPrinted (Request $request)
+    public function isPrinted(Request $request)
     {
         try {
-            $DB = PersiapanSampelHeader::where('no_quotation',$request->nomor_quotation)
-            ->where('tanggal_sampling',$request->jadwal)
-            ->where('sampler_jadwal',$request->sampler)
-            ->where('is_active',true)
-            ->first();
-            if($DB != NULL){
+            $DB = PersiapanSampelHeader::where('no_quotation', $request->nomor_quotation)
+                ->where('tanggal_sampling', $request->jadwal)
+                ->where('sampler_jadwal', $request->sampler)
+                ->where('is_active', true)
+                ->first();
+            if ($DB != NULL) {
                 $DB->is_printed = true;
                 $DB->save();
-                return response()->json(["message"=>"succes","status"=>true],200);
+                return response()->json(["message" => "succes", "status" => true], 200);
             }
-            
         } catch (\Throwable $th) {
-            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
         }
     }
 
-   public function regenerateBasFromLastEntry(Request $request)
+    public function regenerateBasFromLastEntry(Request $request)
     {
         try {
             // ── Ambil PersiapanSampelHeader ──────────────────────────
@@ -1487,11 +1528,15 @@ class BasOnlineController extends Controller
             }
 
             $jadwal = Jadwal::select([
-                    'id_sampling', 'kategori', 'tanggal', 'durasi',
-                    'jam_mulai', 'jam_selesai',
-                    DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler'),
-                    DB::raw('GROUP_CONCAT(id SEPARATOR ",") AS batch_id'),
-                ])
+                'id_sampling',
+                'kategori',
+                'tanggal',
+                'durasi',
+                'jam_mulai',
+                'jam_selesai',
+                DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler'),
+                DB::raw('GROUP_CONCAT(id SEPARATOR ",") AS batch_id'),
+            ])
                 ->where('id_sampling', $sp->id)
                 ->where('tanggal', $request->tanggal_sampling)
                 ->where('is_active', true)
@@ -1611,7 +1656,6 @@ class BasOnlineController extends Controller
             ]);
 
             return response()->json([$filenameNew], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -1846,24 +1890,24 @@ class BasOnlineController extends Controller
                 'message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!',
             ], 401);
         }
- 
+
         $noDocument    = explode('/', $psh->no_document);
         $noDocument[1] = 'BAS';
         $noDocument    = implode('/', $noDocument);
- 
+
         $qr_img = '';
         $qr = QrDocument::where('id_document', $psh->id)
             ->where('type_document', 'berita_acara_sampling')
             ->whereJsonContains('data->no_document', $noDocument)
             ->first();
- 
+
         if ($qr) {
             $qr_data = json_decode($qr->data, true);
             if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
                 $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
             }
         }
- 
+
         $mpdfConfig = [
             'mode'                => 'utf-8',
             'format'              => [216, 305],
@@ -1875,14 +1919,14 @@ class BasOnlineController extends Controller
             'orientation'         => 'P',
         ];
         $pdf = new Mpdf($mpdfConfig);
- 
+
         $microtime = sprintf("%.0f", microtime(true) * 1000000);
         $filename  = $file_name
             ? $file_name
             : str_replace(["/", " "], "_", 'BAS_' . trim($dataHeader->no_document) . '_' . trim($dataHeader->nama_perusahaan) . '_' . $microtime . '.pdf');
- 
+
         $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
- 
+
         $selectedDetail = [
             'catatan'           => '',
             'informasi_teknis'  => '',
@@ -1890,26 +1934,38 @@ class BasOnlineController extends Controller
             'waktu_selesai'     => '',
             'tanda_tangan'      => [],
         ];
- 
+
         if (!empty($detailDocuments) && is_array($detailDocuments)) {
             $lastDetail = end($detailDocuments);
             if (is_array($lastDetail)) {
                 $selectedDetail = array_merge($selectedDetail, $lastDetail);
             }
         }
- 
+
         $namaHari = [
-            'Sunday'    => 'Minggu', 'Monday'  => 'Senin',  'Tuesday'  => 'Selasa',
-            'Wednesday' => 'Rabu',   'Thursday' => 'Kamis', 'Friday'   => 'Jumat',
+            'Sunday'    => 'Minggu',
+            'Monday'  => 'Senin',
+            'Tuesday'  => 'Selasa',
+            'Wednesday' => 'Rabu',
+            'Thursday' => 'Kamis',
+            'Friday'   => 'Jumat',
             'Saturday'  => 'Sabtu',
         ];
         $namaBulan = [
-            'January'  => 'Januari',  'February' => 'Februari', 'March'    => 'Maret',
-            'April'    => 'April',    'May'       => 'Mei',      'June'     => 'Juni',
-            'July'     => 'Juli',     'August'    => 'Agustus',  'September'=> 'September',
-            'October'  => 'Oktober',  'November'  => 'November', 'December' => 'Desember',
+            'January'  => 'Januari',
+            'February' => 'Februari',
+            'March'    => 'Maret',
+            'April'    => 'April',
+            'May'       => 'Mei',
+            'June'     => 'Juni',
+            'July'     => 'Juli',
+            'August'    => 'Agustus',
+            'September' => 'September',
+            'October'  => 'Oktober',
+            'November'  => 'November',
+            'December' => 'Desember',
         ];
- 
+
         $footer = [
             'odd' => [
                 'C' => ['content' => 'Hal {PAGENO} dari {nbpg}', 'font-size' => 6, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#606060'],
@@ -1918,7 +1974,7 @@ class BasOnlineController extends Controller
                 'line' => -1,
             ],
         ];
- 
+
         $css = '
             .custom  { padding: 5px; font-size: 12px; font-weight: bold; border: 1px solid #000000; text-align: center; }
             .custom2 { padding-top: 8px; font-size: 12px; }
@@ -1933,13 +1989,13 @@ class BasOnlineController extends Controller
             .table     { width: 100%; border-collapse: collapse; }
             .table td, .table th { padding: 8px; font-size: 10px; border: 1px solid #000; }
         ';
- 
+
         $pdf->SetDisplayMode('fullpage');
         $pdf->setFooter($footer);
- 
+
         // ── Apply CSS global sekali di awal ───────────────────────────
         $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
- 
+
         $tanggalSampling = $dataSampling[0]->tanggal_sampling ?? null;
         $hariInggris     = date('l', strtotime($tanggalSampling));
         $bulanInggris    = date('F', strtotime($tanggalSampling));
@@ -1947,10 +2003,10 @@ class BasOnlineController extends Controller
         $tanggalNumber   = date('d', strtotime($tanggalSampling));
         $bulan           = $namaBulan[$bulanInggris];
         $tahun           = date('Y', strtotime($tanggalSampling));
- 
+
         $waktuMulai   = $selectedDetail['waktu_mulai']  ?? '';
         $waktuSelesai = $selectedDetail['waktu_selesai'] ?? '';
- 
+
         if (!empty($waktuSelesai)) {
             $carbon      = Carbon::parse($waktuSelesai)->locale('id');
             $jam         = $carbon->format('H');
@@ -1960,34 +2016,33 @@ class BasOnlineController extends Controller
         } else {
             $jam = $menit = $hariSelesai = $tanggal = '';
         }
- 
+
         // ── Tentukan daftar sampler ───────────────────────────────────
         $sampleSamplerMap = [];
- 
+
         if ($lastEntry !== null) {
             // MODE REGENERATE: ambil sampler dari data yang tersimpan
             $tandaTanganEntry = $lastEntry['tanda_tangan'] ?? [];
- 
+
             $semuaSamplerUnik = array_values(array_filter(
                 array_map(
                     fn($ttd) => (isset($ttd['role']) && $ttd['role'] === 'sampler') ? trim($ttd['nama']) : null,
                     $tandaTanganEntry
                 )
             ));
- 
+
             if (empty($semuaSamplerUnik)) {
                 $semuaSamplerUnik = ['Petugas Sampler'];
             }
- 
+
             foreach ($dataSampling as $sampling) {
                 $sampleSamplerMap[$sampling->no_sample] = $semuaSamplerUnik;
             }
- 
+
             $samplerKeyGabungan = implode(', ', $semuaSamplerUnik);
             $samplingBySampler  = [
                 $samplerKeyGabungan => $dataSampling,
             ];
- 
         } else {
             // MODE GENERATE PERTAMA: logika dari jadwal DB
             $samplerKategoriMap = [];
@@ -2007,7 +2062,7 @@ class BasOnlineController extends Controller
                     }
                 }
             }
- 
+
             $semuaSampler = [];
             foreach ($samplerJadwal as $jadwalItem) {
                 $namaArr = explode(',', $jadwalItem->sampler);
@@ -2017,46 +2072,46 @@ class BasOnlineController extends Controller
             }
             $semuaSamplerUnik = array_unique(array_filter($semuaSampler));
             sort($semuaSamplerUnik);
- 
+
             $samplerKeyGabungan = !empty($semuaSamplerUnik) ? implode(', ', $semuaSamplerUnik) : 'Petugas Sampler';
             $samplingBySampler  = [];
- 
+
             foreach ($dataSampling as $sampling) {
                 $sampleParts  = explode('/', $sampling->no_sample);
                 $sampleNumber = count($sampleParts) >= 2 ? end($sampleParts) : null;
- 
+
                 if ($sampleNumber && isset($samplerKategoriMap[$sampleNumber])) {
                     $assignedSamplers = $samplerKategoriMap[$sampleNumber];
                 } else {
                     $keyFirst         = array_key_first($samplerKategoriMap);
                     $assignedSamplers = $keyFirst ? $samplerKategoriMap[$keyFirst] : array_values($semuaSamplerUnik);
                 }
- 
+
                 $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
- 
+
                 $samplerKey = count($assignedSamplers) > 2
                     ? implode(', ', $assignedSamplers)
                     : implode(' & ', $assignedSamplers);
- 
+
                 if (!isset($samplingBySampler[$samplerKey])) {
                     $samplingBySampler[$samplerKey] = [];
                 }
                 $samplingBySampler[$samplerKey][] = $sampling;
             }
         }
- 
+
         // ── Render PDF ────────────────────────────────────────────────
         $isFirstPage = true;
- 
+
         foreach ($samplingBySampler as $samplerName => $samplerSamplingData) {
             if (!$isFirstPage) {
                 $pdf->AddPage();
             }
             $isFirstPage = false;
- 
+
             $firstSample      = $samplerSamplingData[0];
             $samplersDiHeader = $sampleSamplerMap[$firstSample->no_sample] ?? $semuaSamplerUnik;
- 
+
             // Build petugasSamList
             $petugasSamList = '';
             if (!empty($samplersDiHeader)) {
@@ -2071,7 +2126,7 @@ class BasOnlineController extends Controller
             } else {
                 $petugasSamList = '............................ (Petugas sampling)';
             }
- 
+
             $header = '
                 <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
                     <tr>
@@ -2125,31 +2180,31 @@ class BasOnlineController extends Controller
                     </tr>
                 </table>
             ';
- 
+
             // ── FIX: Tidak ada WriteHTML('<!DOCTYPE html>...<body>') di sini ──
             // CSS sudah di-apply sekali via HEADER_CSS di atas.
             // Cukup set header dan langsung tulis konten tabel.
             $pdf->SetHTMLHeader($header);
- 
+
             $p = 1;
             $pdf->WriteHTML('<table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-top: 12px;">');
- 
+
             foreach ($samplerSamplingData as $val) {
                 $dataSampelTidakSelesai = SampelTidakSelesai::where('no_sampel', $val->no_sample)
                     ->where('no_order', $val->no_order)->first();
- 
+
                 $dat          = explode("-", $val->kategori_3);
                 $boxChecked   = '&#9745;';
                 $boxUnchecked = '&#9744;';
- 
+
                 $isSelesai       = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
-                if(in_array($val->no_sample, ["HCTE012504/443", "HCTE012504/445"])) {
+                if (in_array($val->no_sample, ["HCTE012504/443", "HCTE012504/445"])) {
                     $isSelesai = true;
                 }
                 $selesaiBox      = $isSelesai ? $boxChecked : $boxUnchecked;
                 $belumSelesaiBox = $isSelesai ? $boxUnchecked : $boxChecked;
                 $raw             = $hariTanggal[$val->no_sample] ?? null;
- 
+
                 if ($isSelesai) {
                     $tanggalHtml   = "Hari/Tanggal : ....................................";
                     $sisa_sampling = "Sisa Sampling : .................................... Titik";
@@ -2163,14 +2218,14 @@ class BasOnlineController extends Controller
                         $sisa_sampling = "Sisa Sampling : 1 Titik";
                     }
                 }
- 
+
                 $alasan        = $dataSampelTidakSelesai->alasan ?? '';
                 $alasanLainnya = !in_array($alasan, [
                     "Dibatalkan oleh pihak pelanggan",
                     "Terbatas/kendala waktu/cuaca",
                     "Titik sampling tidak/belum siap",
                 ]) && isset($dataSampelTidakSelesai->alasan);
- 
+
                 $pdf->WriteHTML('
                 <tr>
                     <td class="custom" width="10">' . $p++ . '</td>
@@ -2221,15 +2276,15 @@ class BasOnlineController extends Controller
                 </tr>
                 ');
             }
- 
+
             $pdf->WriteHTML('</table>');
         }
- 
+
         // ── Halaman Footer: Catatan, Informasi Teknis, Tanda Tangan ──
         $catatan         = $selectedDetail['catatan']          ?? '';
         $informasiTeknis = $selectedDetail['informasi_teknis'] ?? '';
         $tandaTangan     = $selectedDetail['tanda_tangan']     ?? [];
- 
+
         $signatureData = [];
         if (!empty($tandaTangan) && is_array($tandaTangan)) {
             $signatureData = array_map(fn($sig) => [
@@ -2238,10 +2293,10 @@ class BasOnlineController extends Controller
                 'tanda_tangan' => $sig['tanda_tangan'],
             ], $tandaTangan);
         }
- 
+
         $samplers   = array_filter($signatureData, fn($s) => ($s['role'] ?? '') === 'sampler');
         $pelanggans = array_filter($signatureData, fn($s) => ($s['role'] ?? '') === 'pelanggan');
- 
+
         $samplerHtml = '';
         if (!empty($samplers)) {
             foreach (array_values($samplers) as $index => $sampler) {
@@ -2270,7 +2325,7 @@ class BasOnlineController extends Controller
                     <td width="3"></td>
                 </tr>';
         }
- 
+
         $pelangganHtml = '';
         if (!empty($pelanggans)) {
             foreach (array_values($pelanggans) as $index => $pelanggan) {
@@ -2299,12 +2354,12 @@ class BasOnlineController extends Controller
                     <td width="3"></td>
                 </tr>';
         }
- 
+
         $dotLine = '...........................................................................................................................................................................................................................................................';
- 
+
         $catatanHtml = $catatan ?: str_repeat('<tr><td style="padding-bottom: 13px;">' . $dotLine . '</td></tr>', 9);
         $infoTekHtml = $informasiTeknis ?: str_repeat('<tr><td style="padding-bottom: 13px;">' . $dotLine . '</td></tr>', 9);
- 
+
         // ── FIX: Tidak ada </body></html> di sini karena tidak ada
         //         <!DOCTYPE html><html><body> yang dibuka sebelumnya.
         //         mPDF tidak memerlukan wrapper HTML untuk WriteHTML fragment.
@@ -2376,19 +2431,19 @@ class BasOnlineController extends Controller
                 </tr>
             </table>
         ');
- 
+
         // ── Simpan file PDF ───────────────────────────────────────────
         $path = public_path('dokumen/bas');
         if (!file_exists($path)) {
             mkdir($path, 0777, true);
         }
- 
+
         $pdf->Output($path . '/' . $filename, 'F');
         return response()->json([$filename], 200);
     }
 
 
-    
+
     private function getDataLapangan($kategori_2, $kategori_3, $no_sample, $parameter)
     {
         $data = null;
@@ -2543,7 +2598,7 @@ class BasOnlineController extends Controller
     {
         try {
             $parametersRaw = json_decode($sample->parameter);
-            
+
             // Panggil sekali di luar loop, bukan di dalam array_reduce
             $requiredParameters = collect($this->getRequiredParameters())
                 ->where('category', $sample->kategori_2);
@@ -2613,7 +2668,7 @@ class BasOnlineController extends Controller
     }
     private function verifyStatus($sample_number, $parameter)
     {
-        
+
         if (empty($parameter['model'])) {
             return null;
         }
@@ -2623,7 +2678,7 @@ class BasOnlineController extends Controller
         $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
-        
+
         $environmentModels = [
             DetailLingkunganHidup::class,
             DetailLingkunganKerja::class,
@@ -2654,26 +2709,26 @@ class BasOnlineController extends Controller
 
     private function handleEnvironmentModel($sample_number, $parameter, $model, $model2, $model3)
     {
-        
+
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
-        
-        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)','Kelembaban','Suhu'], true);
+
+        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 'Kelembaban', 'Suhu'], true);
         if (!$hasPMParameter) {
             $model3 = null;
         }
-       
-        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi' ) {    
-           
-            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3);
+
+        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi') {
+
+            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         } else {
             return $this->handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         }
     }
 
-    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3)
+    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3)
     {
-        
+
         // Suhu / Kelembaban: kembalikan model instance (first) atau null
         if (in_array($paramName, ['Suhu', 'Kelembaban', 'Laju Ventilasi', 'Laju Ventilasi (8 Jam)'], true)) {
             // Mapping nama kolom
@@ -2732,7 +2787,7 @@ class BasOnlineController extends Controller
                 $found = $model3::where('no_sampel', $sample_number)
                     ->whereNotNull($searchColumn)
                     ->first();
-                
+
                 if ($found) {
                     return $found;
                 }
@@ -2761,7 +2816,7 @@ class BasOnlineController extends Controller
         }
         return null;
     }
-    
+
     private function handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3)
     {
         if ($paramName === null) {
@@ -4725,9 +4780,44 @@ class BasOnlineController extends Controller
 
         // $padatanParam tetap hardcode karena fixed, tidak perlu masuk DB
         $padatanParam = [
-            "Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F",
-            "NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride",
-            "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"
+            "Al",
+            "Sb",
+            "Ag",
+            "As",
+            "Ba",
+            "Fe",
+            "B",
+            "Cd",
+            "Ca",
+            "Co",
+            "Mn",
+            "Na",
+            "Ni",
+            "Hg",
+            "Se",
+            "Zn",
+            "Tl",
+            "Cu",
+            "Sn",
+            "Pb",
+            "Ti",
+            "Cr",
+            "V",
+            "F",
+            "NO2",
+            "Cr6+",
+            "Mo",
+            "NO3",
+            "CN",
+            "Sulfida",
+            "Cl-",
+            "OG",
+            "Chloride",
+            "E.Coli (MM)",
+            "Salmonella (MM)",
+            "Shigella Sp. (MM)",
+            "Vibrio Ch (MM)",
+            "S.Aureus"
         ];
 
         foreach ($padatanParam as $value) {
@@ -4901,7 +4991,7 @@ class BasOnlineController extends Controller
     public function traceParameter(Request $request)
     {
         $parameterName = $request->input('parameter');
-        
+
         $models = [
             DataLapanganAir::class,
             DataLapanganDebuPersonal::class,
@@ -4966,7 +5056,7 @@ class BasOnlineController extends Controller
             'model'          => $found[0] ?? null,
             'model2'         => $found[1] ?? null,
             'model_basename' => class_basename($found[0]),
-            'model2_basename'=> isset($found[1]) ? class_basename($found[1]) : null,
+            'model2_basename' => isset($found[1]) ? class_basename($found[1]) : null,
         ]);
     }
 
@@ -4976,7 +5066,7 @@ class BasOnlineController extends Controller
         // header('Access-Control-Allow-Origin: *');
         // header('Access-Control-Allow-Methods: *');
         // header('Access-Control-Allow-Headers: *');
-        
+
         $validator = Validator::make($request->all(), [
             'list_parameter'                  => 'required|array',
             'list_parameter.*.parameter'      => 'required|string',
@@ -4991,14 +5081,30 @@ class BasOnlineController extends Controller
         }
         $validated = $validator->validated();
         $models = [
-            DataLapanganAir::class, DataLapanganDebuPersonal::class, DataLapanganDirectLain::class,
-            DataLapanganEmisiCerobong::class, DataLapanganEmisiKendaraan::class, DataLapanganGetaran::class,
-            DataLapanganGetaranPersonal::class, DataLapanganIklimDingin::class, DataLapanganIklimPanas::class,
-            DataLapanganIsokinetikHasil::class, DataLapanganKebisingan::class, DataLapanganKebisinganPersonal::class,
-            DataLapanganMedanLM::class, DataLapanganMicrobiologi::class, DataLapanganPartikulatMeter::class,
-            DataLapanganPsikologi::class, DataLapanganSinarUv::class, DataLapanganSwab::class,
-            DataLapanganErgonomi::class, DataLapanganCahaya::class, DetailLingkunganHidup::class,
-            DetailLingkunganKerja::class, DetailMicrobiologi::class, DetailSenyawaVolatile::class,
+            DataLapanganAir::class,
+            DataLapanganDebuPersonal::class,
+            DataLapanganDirectLain::class,
+            DataLapanganEmisiCerobong::class,
+            DataLapanganEmisiKendaraan::class,
+            DataLapanganGetaran::class,
+            DataLapanganGetaranPersonal::class,
+            DataLapanganIklimDingin::class,
+            DataLapanganIklimPanas::class,
+            DataLapanganIsokinetikHasil::class,
+            DataLapanganKebisingan::class,
+            DataLapanganKebisinganPersonal::class,
+            DataLapanganMedanLM::class,
+            DataLapanganMicrobiologi::class,
+            DataLapanganPartikulatMeter::class,
+            DataLapanganPsikologi::class,
+            DataLapanganSinarUv::class,
+            DataLapanganSwab::class,
+            DataLapanganErgonomi::class,
+            DataLapanganCahaya::class,
+            DetailLingkunganHidup::class,
+            DetailLingkunganKerja::class,
+            DetailMicrobiologi::class,
+            DetailSenyawaVolatile::class,
         ];
 
         foreach ($request->list_parameter as $item) {
@@ -5011,8 +5117,8 @@ class BasOnlineController extends Controller
             foreach ($models as $modelClass) {
                 try {
                     if ($modelClass::where('parameter', trim($parameterName))->exists()) {
-                            $found[] = $modelClass;
-                        }
+                        $found[] = $modelClass;
+                    }
                 } catch (\Exception $e) {
                     continue;
                 }
@@ -5020,13 +5126,13 @@ class BasOnlineController extends Controller
 
             // 2. Cari apakah parameter dengan kategori ini SUDAH ADA (Tanpa mempedulikan model)
             $existingParam = RequiredParameters::where('parameter', trim($parameterName))
-                                   ->where('category', trim($category))
-                                   ->first();
+                ->where('category', trim($category))
+                ->first();
 
             if ($existingParam) {
                 $existingParam->required_count = $requiredCount;
                 $messages = [];
-                
+
                 foreach ($found as $foundModel) {
                     if ($existingParam->model === $foundModel || $existingParam->model2 === $foundModel) {
                         // Sudah terdaftar di model1 atau model2, skip
@@ -5040,7 +5146,6 @@ class BasOnlineController extends Controller
                         $existingParam->model2 = $foundModel;
                         break;
                     }
-
                 }
 
                 $existingParam->save();
@@ -5069,7 +5174,6 @@ class BasOnlineController extends Controller
                 'data' => $parameters,
                 'message' => 'Berhasil mengambil data parameter'
             ], 200);
-
         } catch (\Exception $e) {
             // Tangkap error jika terjadi masalah di database
             return response()->json([
@@ -5090,7 +5194,6 @@ class BasOnlineController extends Controller
                 'data' => $categories,
                 'message' => 'Berhasil mengambil data master kategori'
             ], 200);
-
         } catch (\Exception $e) {
             // Tangkap error jika terjadi masalah di database
             return response()->json([
@@ -5102,15 +5205,15 @@ class BasOnlineController extends Controller
 
     public function listParameter(Request $request)
     {
-        try{
+        try {
 
-            $parameters = Parameter::select('id','nama_lab')->where('is_active', true)->get();
+            $parameters = Parameter::select('id', 'nama_lab')->where('is_active', true)->get();
             return response()->json([
                 'status' => 'success',
                 'data' => $parameters,
                 'message' => 'Berhasil mengambil data parameter'
             ], 200);
-        }catch (\Exception $e) {
+        } catch (\Exception $e) {
             // Tangkap error jika terjadi masalah di database
             return response()->json([
                 'status' => 'error',
@@ -5159,5 +5262,4 @@ class BasOnlineController extends Controller
             ], 500);
         }
     }
-
 }

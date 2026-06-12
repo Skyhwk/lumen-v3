@@ -1318,6 +1318,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 PartikulatHeader::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
             }
     
+            \App\Services\WsFinalApprovalService::finalizeSamples($orderDetails, true, $this->karyawan);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',

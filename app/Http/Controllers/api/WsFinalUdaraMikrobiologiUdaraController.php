@@ -1012,6 +1012,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
                     'lhps' => 1,
                 ]);
 
+            \App\Services\WsFinalApprovalService::finalizeSamples($orderDetails, true, $this->karyawan);
             DB::commit();
 
             return response()->json([

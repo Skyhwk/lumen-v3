@@ -653,11 +653,11 @@ class ReadyOrderController extends Controller
 
             $type = 'kontrak';
 
-            if(explode('/', $dataQuotation->no_document)[1] == 'QT'){
+            if (explode('/', $dataQuotation->no_document)[1] == 'QT') {
                 $type = 'non_kontrak';
             }
 
-            if($dataQuotation->status_sampling == 'SAR'){
+            if ($dataQuotation->status_sampling == 'SAR') {
                 self::executeSAR($dataQuotation->no_document, $type);
             }
 
@@ -1860,13 +1860,13 @@ class ReadyOrderController extends Controller
                         }, $value->parameter);
 
                         $id_kategori = explode("-", $value->kategori_1)[0];
-                        
+
                         $params = HargaParameter::where('id_kategori', $id_kategori)
-                        ->where('is_active', true)
-                        ->whereIn('id_parameter', $idParameter)
-                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
-                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
-                        ->get();
+                            ->where('is_active', true)
+                            ->whereIn('id_parameter', $idParameter)
+                            ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
+                            ->get();
 
                         $param_map = [];
                         foreach ($params as $param) {
@@ -2754,6 +2754,9 @@ class ReadyOrderController extends Controller
     {
         $detail = $dataQuotation->detail()->where('periode_kontrak', $periode)->first();
         $rekening = ($detail->total_ppn != null || $detail->total_ppn != 0) ? 'ppn' : 'non-ppn';
+        $today = Carbon::now();
+        $invoiceDate = Carbon::parse($periode . '-01')->startOfDay();
+        $invoiceDate->day(min($today->day, $invoiceDate->daysInMonth))->setTimeFrom($today);
 
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->where('periode', $periode)->orderBy('tanggal', 'asc')->first();
         if (empty($jadwal)) {
@@ -2765,7 +2768,7 @@ class ReadyOrderController extends Controller
         $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(90)->format('Y-m-d');
         $cek_rekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
 
-        $invoiceYear = Carbon::now()->format('Y');
+        $invoiceYear = $invoiceDate->format('Y');
         $shortYear = substr($invoiceYear, -2);
 
         $lastInvoice = Invoice::where('rekening', $cek_rekening)
@@ -2812,7 +2815,7 @@ class ReadyOrderController extends Controller
             'tgl_jatuh_tempo' => $tanggal_jatuh_tempo,
             'keterangan_tambahan' => null,
             'tgl_faktur' => DATE('Y-m-d H:i:s'),
-            'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
+            'tgl_invoice' => $invoiceDate->format('Y-m-d H:i:s'),
             'nilai_tagihan' => $first ? $nilai_tagihan : $detail->biaya_akhir - $tagihan_awal,
             'total_tagihan' => $first ? $detail->biaya_akhir : $detail->biaya_akhir - $tagihan_awal,
             'rekening' => $cek_rekening,
@@ -3891,9 +3894,8 @@ class ReadyOrderController extends Controller
                 'updated_by' => $this->karyawan,
             ]
         );
-
     }
-    
+
     public function regenerateSarPdf(Request $request)
     {
         try {

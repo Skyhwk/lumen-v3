@@ -2,6 +2,7 @@
 namespace App\Models;
 
 use App\Models\Sector;
+use App\Services\WsFinalApprovalService;
 
 class OrderDetail extends Sector
 {
@@ -9,6 +10,20 @@ class OrderDetail extends Sector
     public $timestamps = false;
 
     protected $guarded = [];
+
+    protected static function booted()
+    {
+        parent::booted();
+
+        static::saved(function (OrderDetail $orderDetail) {
+            if (!$orderDetail->wasChanged('status')) {
+                return;
+            }
+
+            $approved = in_array((int) $orderDetail->status, [1, 2], true);
+            WsFinalApprovalService::finalizeSample($orderDetail, $approved);
+        });
+    }
 
     public function orderHeader()
     {
