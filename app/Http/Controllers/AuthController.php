@@ -14,6 +14,8 @@ use Validator;
 use Exception;
 use Laravel\Lumen\Routing\Controller as BaseController;
 use Carbon\Carbon;
+use App\Models\DashboardComponent;
+use App\Models\SetAksesDashboard;
 
 class AuthController extends BaseController
 {
@@ -129,12 +131,28 @@ class AuthController extends BaseController
         $wiseList = MenuFdl::where('is_active', 1)->where('is_wiseList', 1)->get();
 
         $strukture_menu = Menu::where('is_active', true)->orderBy('menu', 'asc')->get();
+
+        $dashboardOwner =  DashboardComponent::where('owner_id', $karyawan->id)->where('is_active', 1)->get();
+        $dashboardAccess = SetAksesDashboard::whereJsonContains(
+                'user_list',
+                $karyawan->nama_lengkap
+            )->whereNull('deleted_at')->get();
+
+        $dashboardAccess->transform(function($item) {
+            $component = DashboardComponent::where('nama_dashboard', $item->nama_dashboard)->first();
+            $item->nama_komponen = $component ? $component->nama_komponen : null;
+            return $item;
+        });
+
+        $dashboard = $dashboardOwner->merge($dashboardAccess)->unique('nama_dashboard')->values();
+        
         $response = response()->json([
             'dept' => $karyawan->department,
             'image' => $karyawan->image,
             'email' => $karyawan->email,
             'access' => $keys,
             'strukture_menu' => $strukture_menu,
+            'dashboard' => $dashboard,
             'name' => $karyawan->nama_lengkap,
             'pos' => $karyawan->jabatan,
             'grade' => $karyawan->grade,
