@@ -132,7 +132,10 @@ class AuthController extends BaseController
 
         $strukture_menu = Menu::where('is_active', true)->orderBy('menu', 'asc')->get();
 
-        $dashboardOwner =  DashboardComponent::where('owner_id', $karyawan->id)->where('is_active', 1)->get();
+        $dashboardOwner =  DashboardComponent::where(function($query) use ($karyawan) {
+            $query->where('owner_id', $karyawan->id)
+                  ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$karyawan->id]);
+        })->where('is_active', 1)->get();
         $dashboardAccess = SetAksesDashboard::whereJsonContains(
                 'user_list',
                 $karyawan->nama_lengkap

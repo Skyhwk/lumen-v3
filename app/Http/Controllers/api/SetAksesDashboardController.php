@@ -27,7 +27,10 @@ protected $fillable = [
             if($userHaveAllAccess) {
                 $DashboardComponent = DashboardComponent::where('is_active', 1)->get();
             } else {
-                $DashboardComponent = DashboardComponent::where('owner_id', '=', $this->user_id)->where('is_active', 1)->get();
+                $DashboardComponent = DashboardComponent::where(function($query) {
+                    $query->where('owner_id', '=', $this->user_id)
+                          ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$this->user_id]);
+                })->where('is_active', 1)->get();
             }
 
             $DashboardComponent->transform(function($component) {
@@ -51,9 +54,10 @@ protected $fillable = [
             //     $this->karyawan
             // )->get();
 
-            $dashboardOwner = DashboardComponent::where('is_active', 1)->where(
-                'owner_id', $this->user_id
-            )->get();
+            $dashboardOwner = DashboardComponent::where('is_active', 1)->where(function($query) {
+                $query->where('owner_id', $this->user_id)
+                      ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$this->user_id]);
+            })->get();
 
             $dashboardAccess = SetAksesDashboard::whereJsonContains(
                 'user_list',

@@ -46,7 +46,10 @@ protected $fillable = [
     
                 return DataTables::of($DashboardComponent)->make(true);
             } else {
-                $DashboardComponent = DashboardComponent::where('owner_id', '=', $this->user_id)->where('is_active', 1)->get();
+                $DashboardComponent = DashboardComponent::where(function($query) {
+                    $query->where('owner_id', '=', $this->user_id)
+                          ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$this->user_id]);
+                })->where('is_active', 1)->get();
                 return DataTables::of($DashboardComponent)->make(true);
             }
         } catch (\Throwable $th) {
@@ -158,9 +161,20 @@ protected $fillable = [
 
     public function getBawahan(Request $request)
     {
-        $owner_id = $request->owner_id;
-        $subordinates = GetBawahan::where('id', $owner_id)->get()->pluck('user_id')->toArray();
-        unset($subordinates[array_search($owner_id, $subordinates)]);
+        $owner_ids = explode(',', $request->owner_id);
+        $allSubordinates = collect([]);
+
+        foreach ($owner_ids as $owner_id) {
+            if (!empty($owner_id)) {
+                $sub = GetBawahan::where('id', $owner_id)->get();
+                $allSubordinates = $allSubordinates->merge($sub);
+            }
+        }
+
+        $subordinateUserIds = $allSubordinates->pluck('user_id')->unique()->toArray();
+        $managerUserIds = MasterKaryawan::whereIn('id', $owner_ids)->pluck('user_id')->toArray();
+        $subordinates = array_diff($subordinateUserIds, $managerUserIds);
+
         $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)->where('master_karyawan.is_active', 1)
                 ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
                 ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
