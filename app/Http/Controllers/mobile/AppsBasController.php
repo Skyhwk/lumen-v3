@@ -2346,7 +2346,9 @@ class AppsBasController extends Controller
                     ->first();
 
                 if ($matchedParameter == null) {
-                    throw new \Exception("Kemungkinan Parameter.$parameterName. Belum Terdaftar di RequiredParameters Hub IT");
+                    $errorMessage = "Parameter '{$parameterName}' pada sampel '{$sample->no_sample}' Belum Terdaftar di RequiredParameters Hub IT";
+                    \Illuminate\Support\Facades\Log::error($errorMessage);
+                    throw new \Exception($errorMessage);
                 }
                 $carry[] = $matchedParameter;
                 return $carry;
@@ -2400,11 +2402,12 @@ class AppsBasController extends Controller
 
     private function verifyStatus($sample_number, $parameter)
     {
-        if (empty($parameter['model'])) {
-            return true;
-        }
+        try {
+            if (empty($parameter['model'])) {
+                return true;
+            }
 
-        $model = $parameter['model'];
+            $model = $parameter['model'];
         $model2 = isset($parameter['model2']) ? $parameter['model2'] : null;
         $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
@@ -2424,7 +2427,11 @@ class AppsBasController extends Controller
         if ($paramName === 'Opasitas (Solar)') {
             $queryN = $model::where('no_sampel', $sample_number)->first();
             if ($queryN == null) {
-                $query = $model2::where('no_sampel', $sample_number);
+                if ($model2 != null) {
+                    $query = $model2::where('no_sampel', $sample_number);
+                } else {
+                    return null;
+                }
             }
         }
         $modelsWithParameter = [
@@ -2442,6 +2449,14 @@ class AppsBasController extends Controller
             return $query;
         }
         return null;
+        } catch (\Throwable $th) {
+            \Illuminate\Support\Facades\Log::error("Error in verifyStatus: " . $th->getMessage(), [
+                'no_sampel' => $sample_number,
+                'parameter' => $parameter,
+                'line' => $th->getLine()
+            ]);
+            throw $th;
+        }
     }
 
     private function handleEnvironmentModel($sample_number, $parameter, $model, $model2, $model3)
