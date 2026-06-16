@@ -3371,28 +3371,34 @@ class InputParameterController extends Controller
 			$ks_all = [];
 			$kb_all = [];
 
-			// ✅ Deteksi tipe TSP yang sekelompok dengan Pb
-			$pb_tipe_tsp = null;
+			// ✅ Tentukan nama parameter untuk query data lapangan
+			$parame_query = $parame;
+			$pb_tipe_tsp  = null;
 
 			if ($datlapanganh != null || $datlapangank != null || $datlapanganV != null) {
 
-				// ✅ Tentukan nama parameter untuk query data lapangan
-				$parame_query = $parame;
 				if ($parame == 'Pb') {
-					$cekTSP = collect()
+					$cekParameter = collect()
 						->merge(DetailLingkunganHidup::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailLingkunganKerja::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->pluck('parameter'));
 
-					if ($cekTSP->contains('TSP (24 Jam)')) {
-						$pb_tipe_tsp    = '24 Jam';
-						$parame_query   = 'TSP (24 Jam)'; // ✅ ambil data lapangan punya TSP 24 Jam
-					} elseif ($cekTSP->contains('TSP (8 Jam)')) {
-						$pb_tipe_tsp    = '8 Jam';
-						$parame_query   = 'TSP (8 Jam)';  // ✅ ambil data lapangan punya TSP 8 Jam
+					if ($cekParameter->contains('TSP (24 Jam)')) {
+						$pb_tipe_tsp  = '24 Jam';
+						$parame_query = 'TSP (24 Jam)';
+					} elseif ($cekParameter->contains('TSP (8 Jam)')) {
+						$pb_tipe_tsp  = '8 Jam';
+						$parame_query = 'TSP (8 Jam)';
+					} elseif ($cekParameter->contains('TSP')) {
+						$parame_query = 'TSP';
+					} elseif ($cekParameter->contains('Pb (24 Jam)')) {
+						$pb_tipe_tsp  = '24 Jam';
+						$parame_query = 'Pb (24 Jam)';
+					} elseif ($cekParameter->contains('Pb (8 Jam)')) {
+						$pb_tipe_tsp  = '8 Jam';
+						$parame_query = 'Pb (8 Jam)';
 					} else {
-						$pb_tipe_tsp    = null;
-						$parame_query   = 'TSP';           // ✅ ambil data lapangan punya TSP biasa
+						$parame_query = 'Pb'; // fallback ke Pb sendiri
 					}
 				}
 
@@ -3422,9 +3428,8 @@ class InputParameterController extends Controller
 
 						$nilQs = '';
 						if ($datot > 0 || $datot != '') {
-							$parameterExplode = explode(' ', $data_parameter->nama_lab);
-							$is8Jam = count($parameterExplode) > 1 ? strpos($parameterExplode[1], '8J') !== false : false;
-
+							$namaForIs8Jam = $parame == 'Pb' ? $parame_query : $data_parameter->nama_lab;
+							$is8Jam = str_contains($namaForIs8Jam, '8 Jam') || str_contains($namaForIs8Jam, '8J');
 							foreach ($datapangan as $keye => $vale) {
 								$absorbansi = !is_null($vale->absorbansi) ? json_decode($vale->absorbansi) : null;
 								$dat = json_decode($vale->pengukuran);
@@ -3542,11 +3547,10 @@ class InputParameterController extends Controller
 								// ✅ Cek apakah masuk kondisi 8 Jam
 								$is8JamDurasi = $is8Jam
 									|| ($parame == 'Pb' && $pb_tipe_tsp == '8 Jam');
-
 								if ($is24Jam) {
 									$l25 = '';
 									if (count($lingHidup) > 0) {
-										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengambilan);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3557,7 +3561,7 @@ class InputParameterController extends Controller
 										}
 									}
 									if (count($lingKerja) > 0) {
-										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3568,7 +3572,7 @@ class InputParameterController extends Controller
 										}
 									}
 									if (count($lingVolatile) > 0) {
-										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3579,8 +3583,23 @@ class InputParameterController extends Controller
 										}
 									}
 								} elseif ($is8JamDurasi) {
-									// ✅ Untuk Pb sekelompok TSP 8 Jam, durasi ikut 8 jam (480 menit)
-									$durasiFin = 8 * 60;
+									if (count($lingHidup) > 0) {
+										$durasiFin = 3 * $durasiFin;
+									}else{
+										$durasiFin = 3 * 60;
+									}
+
+									if (count($lingKerja) > 0) {
+										$durasiFin = 3 * $durasiFin;
+									}else{
+										$durasiFin = 3 * 60;
+									}
+
+									if (count($lingVolatile) > 0) {
+										$durasiFin = 3 * $durasiFin;
+									}else{
+										$durasiFin = 3 * 60;
+									}
 								}
 
 								$tekananFin = str_replace(",", "", number_format(array_sum($tekanan_u) / $datot, 1));

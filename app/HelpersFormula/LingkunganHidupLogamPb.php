@@ -53,9 +53,9 @@ class LingkunganHidupLogamPb
         $satuan = '';
 
         $Vstd = $data->nilQs * $data->durasi;
-        if($data->tipe_data == 'ulk') {
+        if($data->tipe_data == 'ambient') {
             $Vstd = $data->nilQs * $data->durasi;
-        }else if($data->tipe_data == 'ambient') {
+        }else if($data->tipe_data == 'ulk') {
             $Vstd = $data->average_flow * $data->durasi;
         }
         if ((int) $Vstd <= 0) {

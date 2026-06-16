@@ -14,29 +14,89 @@ use Yajra\Datatables\Datatables;
 
 class IcpUdaraController extends Controller
 {
+    // 20-03-2025
     // public function index(Request $request){
-    //     $data = LingkunganHeader::with('ws_value', 'order_detail')
-    //     ->where('is_approved', $request->approve)
-    //     ->where('is_active', true)
-    //     ->where('template_stp', $request->template_stp);
-    //     // ->orderBy('created_at', 'desc');
-    //     return Datatables::of($data)->make(true);
+    //     $data = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
+    //         ->where('is_approved', $request->approve)
+    //         ->where('lingkungan_header.is_active', true)
+    //         ->where('template_stp', $request->template_stp)
+    //         ->select('lingkungan_header.*')
+    //          ->orderByRaw("
+    //             CASE 
+    //                 WHEN tanggal_terima IS NULL THEN 1
+    //                 ELSE 0
+    //             END,
+    //             tanggal_terima DESC
+    //         ");
+    //     return Datatables::of($data)
+    //         ->editColumn('data_pershift', function ($data) {
+    //             return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
+    //         })
+    //         ->editColumn('data_shift', function ($data) {
+    //             return $data->data_shift ? json_decode($data->data_shift, true) : null;
+    //         })
+    //         ->addColumn('tanggal_terima', function ($item) {
+    //             return $item->order_detail->tanggal_terima ?? '-';
+    //         })
+
+    //         ->addColumn('kategori_3', function ($item) {
+    //             return $item->order_detail->kategori_3 ?? '-';
+    //         })
+
+    //         ->filterColumn('tanggal_terima', function ($query, $keyword) {
+    //             $query->whereHas('order_detail', function ($query) use ($keyword) {
+    //                 $query->where('tanggal_terima', 'like', "%{$keyword}%");
+    //             });
+    //         })
+
+    //         ->filterColumn('kategori_3', function ($query, $keyword) {
+    //             $query->whereHas('order_detail', function ($query) use ($keyword) {
+    //                 $query->where('kategori_3', 'like', "%{$keyword}%");
+    //             });
+    //         })
+
+    //         ->filter(function ($query) use ($request) {
+
+    //             if ($request->has('columns')) {
+    //                 $columns = $request->get('columns');
+
+    //                 foreach ($columns as $column) {
+
+    //                     if (!empty($column['search']['value'])) {
+
+    //                         $columnName = $column['name'] ?: $column['data'];
+    //                         $searchValue = $column['search']['value'];
+
+    //                         // HANYA BOLEH FILTER KOLOM colorimetri
+    //                         if (in_array($columnName, [
+    //                             'parameter',
+    //                             'jenis_pengujian',
+    //                             'created_at'
+    //                         ])) {
+    //                             $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
+    //                         }
+
+    //                     }
+    //                 }
+    //             }
+    //         })
+    //     ->make(true);
     // }
 
-    // 20-03-2025
+    // 16-06-2026
     public function index(Request $request){
         $data = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
             ->where('template_stp', $request->template_stp)
-            ->select('lingkungan_header.*')
-             ->orderByRaw("
+            ->orderByRaw("
                 CASE 
                     WHEN tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
                 tanggal_terima DESC
             ");
+
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
@@ -47,49 +107,45 @@ class IcpUdaraController extends Controller
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
             })
-
             ->addColumn('kategori_3', function ($item) {
                 return $item->order_detail->kategori_3 ?? '-';
             })
-
+            ->addColumn('type_fdl', function ($item) {
+                if($item->order_detail->kategori_3 == "27-Udara Lingkungan Kerja")
+                    return "ulk";
+                else {
+                    return "ambient";
+                }
+            })
             ->filterColumn('tanggal_terima', function ($query, $keyword) {
                 $query->whereHas('order_detail', function ($query) use ($keyword) {
                     $query->where('tanggal_terima', 'like', "%{$keyword}%");
                 });
             })
-
             ->filterColumn('kategori_3', function ($query, $keyword) {
                 $query->whereHas('order_detail', function ($query) use ($keyword) {
                     $query->where('kategori_3', 'like', "%{$keyword}%");
                 });
             })
-
             ->filter(function ($query) use ($request) {
-
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
-
                     foreach ($columns as $column) {
-
                         if (!empty($column['search']['value'])) {
-
-                            $columnName = $column['name'] ?: $column['data'];
+                            $columnName  = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
-
-                            // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
                                 'parameter',
                                 'jenis_pengujian',
                                 'created_at'
                             ])) {
-                                $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
+                                $query->where("lingkungan_header.$columnName", 'like', "%{$searchValue}%");
                             }
-
                         }
                     }
                 }
             })
-        ->make(true);
+            ->make(true);
     }
 
     public function approveData(Request $request){
