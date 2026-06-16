@@ -204,6 +204,68 @@ class WsFinalApprovalService
         })->all();
     }
 
+    public static function appendProgressAndFilter(iterable $rows, $request)
+    {
+        $rows = collect($rows)->values();
+        $samples = $rows
+            ->flatMap(function ($row) {
+                return self::sampleNamesFromRow($row);
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
+            ->where('is_active', true)
+            ->get();
+
+        $progressBySample = self::progressBySample($orderDetails);
+
+        return $rows->filter(function ($row) use ($progressBySample, $request) {
+            $summary = collect(self::sampleNamesFromRow($row))
+                ->reduce(function ($carry, $sample) use ($progressBySample) {
+                    $progress = $progressBySample[$sample] ?? [
+                        'tested' => 0,
+                        'total' => 0,
+                        'is_complete' => false,
+                    ];
+
+                    $carry['tested'] += $progress['tested'];
+                    $carry['total'] += $progress['total'];
+
+                    return $carry;
+                }, ['tested' => 0, 'total' => 0]);
+
+            $row->progress = $summary['tested'] . ' / ' . $summary['total'];
+            $isComplete = $summary['total'] > 0 && $summary['tested'] === $summary['total'];
+
+            if ($request->uji_status === 'lengkap') {
+                return $isComplete;
+            }
+
+            if ($request->uji_status === 'belum_lengkap') {
+                return !$isComplete;
+            }
+
+            return true;
+        })->values();
+    }
+
+    private static function sampleNamesFromRow($row): array
+    {
+        $value = data_get($row, 'no_sampel');
+
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        return collect(explode(',', (string) $value))
+            ->map(fn ($sample) => trim($sample))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     private static function upsertHeader(OrderDetail $orderDetail, array $approval = []): int
     {
         $row = array_merge([
