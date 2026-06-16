@@ -3546,7 +3546,7 @@ class InputParameterController extends Controller
 								if ($is24Jam) {
 									$l25 = '';
 									if (count($lingHidup) > 0) {
-										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengambilan);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3557,7 +3557,7 @@ class InputParameterController extends Controller
 										}
 									}
 									if (count($lingKerja) > 0) {
-										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3568,7 +3568,7 @@ class InputParameterController extends Controller
 										}
 									}
 									if (count($lingVolatile) > 0) {
-										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
