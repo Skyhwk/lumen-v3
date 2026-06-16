@@ -3371,59 +3371,34 @@ class InputParameterController extends Controller
 			$ks_all = [];
 			$kb_all = [];
 
-			// ✅ Deteksi tipe TSP yang sekelompok dengan Pb
-			$pb_tipe_tsp = null;
+			// ✅ Tentukan nama parameter untuk query data lapangan
+			$parame_query = $parame;
+			$pb_tipe_tsp  = null;
 
 			if ($datlapanganh != null || $datlapangank != null || $datlapanganV != null) {
 
-				// ✅ Tentukan nama parameter untuk query data lapangan
-				$parame_query = $parame;
-				if (str_contains($parame, 'Pb')) {
+				if ($parame == 'Pb') {
 					$cekParameter = collect()
 						->merge(DetailLingkunganHidup::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailLingkunganKerja::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->pluck('parameter'));
 
-					$pb_tipe_tsp = null;
-
-					// =====================================
-					// PB 24 JAM
-					// =====================================
-					if (str_contains($parame, '24 Jam')) {
-
-						if ($cekParameter->contains('TSP (24 Jam)')) {
-							$pb_tipe_tsp = '24 Jam';
-							$parame_query = 'TSP (24 Jam)';
-						} else {
-							$parame_query = 'Pb (24 Jam)';
-						}
-
-					// =====================================
-					// PB 8 JAM
-					// =====================================
-					} elseif (str_contains($parame, '8 Jam')) {
-
-						if ($cekParameter->contains('TSP (8 Jam)')) {
-							$pb_tipe_tsp = '8 Jam';
-							$parame_query = 'TSP (8 Jam)';
-						} else {
-							$parame_query = 'Pb (8 Jam)';
-						}
-
-					// =====================================
-					// PB SESAAT / DEFAULT
-					// =====================================
+					if ($cekParameter->contains('TSP (24 Jam)')) {
+						$pb_tipe_tsp  = '24 Jam';
+						$parame_query = 'TSP (24 Jam)';
+					} elseif ($cekParameter->contains('TSP (8 Jam)')) {
+						$pb_tipe_tsp  = '8 Jam';
+						$parame_query = 'TSP (8 Jam)';
+					} elseif ($cekParameter->contains('TSP')) {
+						$parame_query = 'TSP';
+					} elseif ($cekParameter->contains('Pb (24 Jam)')) {
+						$pb_tipe_tsp  = '24 Jam';
+						$parame_query = 'Pb (24 Jam)';
+					} elseif ($cekParameter->contains('Pb (8 Jam)')) {
+						$pb_tipe_tsp  = '8 Jam';
+						$parame_query = 'Pb (8 Jam)';
 					} else {
-
-						if (
-							$cekParameter->contains('TSP')
-						) {
-							$parame_query = $cekParameter->contains('TSP')
-								? 'TSP'
-								: 'Pb';
-						} else {
-							$parame_query = $parame;
-						}
+						$parame_query = 'Pb'; // fallback ke Pb sendiri
 					}
 				}
 
