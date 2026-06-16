@@ -3378,21 +3378,52 @@ class InputParameterController extends Controller
 
 				// ✅ Tentukan nama parameter untuk query data lapangan
 				$parame_query = $parame;
-				if ($parame == 'Pb') {
-					$cekTSP = collect()
+				if (str_contains($parame, 'Pb')) {
+					$cekParameter = collect()
 						->merge(DetailLingkunganHidup::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailLingkunganKerja::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->pluck('parameter'));
 
-					if ($cekTSP->contains('TSP (24 Jam)')) {
-						$pb_tipe_tsp    = '24 Jam';
-						$parame_query   = 'TSP (24 Jam)'; // ✅ ambil data lapangan punya TSP 24 Jam
-					} elseif ($cekTSP->contains('TSP (8 Jam)')) {
-						$pb_tipe_tsp    = '8 Jam';
-						$parame_query   = 'TSP (8 Jam)';  // ✅ ambil data lapangan punya TSP 8 Jam
+					$pb_tipe_tsp = null;
+
+					// =====================================
+					// PB 24 JAM
+					// =====================================
+					if (str_contains($parame, '24 Jam')) {
+
+						if ($cekParameter->contains('TSP (24 Jam)')) {
+							$pb_tipe_tsp = '24 Jam';
+							$parame_query = 'TSP (24 Jam)';
+						} else {
+							$parame_query = 'Pb (24 Jam)';
+						}
+
+					// =====================================
+					// PB 8 JAM
+					// =====================================
+					} elseif (str_contains($parame, '8 Jam')) {
+
+						if ($cekParameter->contains('TSP (8 Jam)')) {
+							$pb_tipe_tsp = '8 Jam';
+							$parame_query = 'TSP (8 Jam)';
+						} else {
+							$parame_query = 'Pb (8 Jam)';
+						}
+
+					// =====================================
+					// PB SESAAT / DEFAULT
+					// =====================================
 					} else {
-						$pb_tipe_tsp    = null;
-						$parame_query   = 'TSP';           // ✅ ambil data lapangan punya TSP biasa
+
+						if (
+							$cekParameter->contains('TSP')
+						) {
+							$parame_query = $cekParameter->contains('TSP')
+								? 'TSP'
+								: 'Pb';
+						} else {
+							$parame_query = $parame;
+						}
 					}
 				}
 
