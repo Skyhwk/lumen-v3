@@ -27,9 +27,9 @@ class DirectLain {
         $satuan = NULL;
 
         // Daftar parameter
-        $paramO2  = ["O2"];
         $paramCO2 = ["CO2", "CO2 (24 Jam)", "CO2 (8 Jam)" , "CO2 8J (LK)", "CO2 (UA)"];
-        $paramVoc = ["VOC", "VOC (8 Jam)"];
+        $paramO2  = ["O2" ,"O2 (8 Jam)"];
+        $paramVoc = ["VOC", "VOC (8 Jam)" , "TVOC 8J (LK-mg)"];
         $paramCO  = ["C O", "CO (8 Jam)", "CO (6 Jam)", "CO (24 Jam)", "CO 6J", "CO (UA)"];
 
         // Hanya proses kalau jumlah data valid
