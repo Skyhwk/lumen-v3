@@ -20,7 +20,6 @@ class LingkunganHidupLogamPb
         } else {
             $kb = $data->kb;
         }
-
         $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;

@@ -3601,7 +3601,6 @@ class InputParameterController extends Controller
 										$durasiFin = 3 * 60;
 									}
 								}
-
 								$tekananFin = str_replace(",", "", number_format(array_sum($tekanan_u) / $datot, 1));
 								$suhuFin    = str_replace(",", "", number_format(array_sum($suhu) / $datot, 1));
 							}

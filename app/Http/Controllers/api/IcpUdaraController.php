@@ -86,8 +86,8 @@ class IcpUdaraController extends Controller
     // 16-06-2026
     public function index(Request $request){
         $data = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
-            ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
+            ->where('is_approved', $request->approve)
             ->where('template_stp', $request->template_stp)
             ->orderByRaw("
                 CASE 
