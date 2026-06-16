@@ -3378,21 +3378,52 @@ class InputParameterController extends Controller
 
 				// ✅ Tentukan nama parameter untuk query data lapangan
 				$parame_query = $parame;
-				if ($parame == 'Pb') {
-					$cekTSP = collect()
+				if (str_contains($parame, 'Pb')) {
+					$cekParameter = collect()
 						->merge(DetailLingkunganHidup::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailLingkunganKerja::where('no_sampel', $request->no_sample)->pluck('parameter'))
 						->merge(DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->pluck('parameter'));
 
-					if ($cekTSP->contains('TSP (24 Jam)')) {
-						$pb_tipe_tsp    = '24 Jam';
-						$parame_query   = 'TSP (24 Jam)'; // ✅ ambil data lapangan punya TSP 24 Jam
-					} elseif ($cekTSP->contains('TSP (8 Jam)')) {
-						$pb_tipe_tsp    = '8 Jam';
-						$parame_query   = 'TSP (8 Jam)';  // ✅ ambil data lapangan punya TSP 8 Jam
+					$pb_tipe_tsp = null;
+
+					// =====================================
+					// PB 24 JAM
+					// =====================================
+					if (str_contains($parame, '24 Jam')) {
+
+						if ($cekParameter->contains('TSP (24 Jam)')) {
+							$pb_tipe_tsp = '24 Jam';
+							$parame_query = 'TSP (24 Jam)';
+						} else {
+							$parame_query = 'Pb (24 Jam)';
+						}
+
+					// =====================================
+					// PB 8 JAM
+					// =====================================
+					} elseif (str_contains($parame, '8 Jam')) {
+
+						if ($cekParameter->contains('TSP (8 Jam)')) {
+							$pb_tipe_tsp = '8 Jam';
+							$parame_query = 'TSP (8 Jam)';
+						} else {
+							$parame_query = 'Pb (8 Jam)';
+						}
+
+					// =====================================
+					// PB SESAAT / DEFAULT
+					// =====================================
 					} else {
-						$pb_tipe_tsp    = null;
-						$parame_query   = 'TSP';           // ✅ ambil data lapangan punya TSP biasa
+
+						if (
+							$cekParameter->contains('TSP')
+						) {
+							$parame_query = $cekParameter->contains('TSP')
+								? 'TSP'
+								: 'Pb';
+						} else {
+							$parame_query = $parame;
+						}
 					}
 				}
 
@@ -3546,7 +3577,7 @@ class InputParameterController extends Controller
 								if ($is24Jam) {
 									$l25 = '';
 									if (count($lingHidup) > 0) {
-										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengambilan);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3557,7 +3588,7 @@ class InputParameterController extends Controller
 										}
 									}
 									if (count($lingKerja) > 0) {
-										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
@@ -3568,7 +3599,7 @@ class InputParameterController extends Controller
 										}
 									}
 									if (count($lingVolatile) > 0) {
-										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame_query)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
 											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam   = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
