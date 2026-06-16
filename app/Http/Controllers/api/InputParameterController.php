@@ -3428,9 +3428,8 @@ class InputParameterController extends Controller
 
 						$nilQs = '';
 						if ($datot > 0 || $datot != '') {
-							$parameterExplode = explode(' ', $data_parameter->nama_lab);
-							$is8Jam = count($parameterExplode) > 1 ? strpos($parameterExplode[1], '8J') !== false : false;
-
+							$namaForIs8Jam = $parame == 'Pb' ? $parame_query : $data_parameter->nama_lab;
+							$is8Jam = str_contains($namaForIs8Jam, '8 Jam') || str_contains($namaForIs8Jam, '8J');
 							foreach ($datapangan as $keye => $vale) {
 								$absorbansi = !is_null($vale->absorbansi) ? json_decode($vale->absorbansi) : null;
 								$dat = json_decode($vale->pengukuran);
@@ -3548,7 +3547,6 @@ class InputParameterController extends Controller
 								// ✅ Cek apakah masuk kondisi 8 Jam
 								$is8JamDurasi = $is8Jam
 									|| ($parame == 'Pb' && $pb_tipe_tsp == '8 Jam');
-
 								if ($is24Jam) {
 									$l25 = '';
 									if (count($lingHidup) > 0) {
@@ -3585,10 +3583,24 @@ class InputParameterController extends Controller
 										}
 									}
 								} elseif ($is8JamDurasi) {
-									// ✅ Untuk Pb sekelompok TSP 8 Jam, durasi ikut 8 jam (480 menit)
-									$durasiFin = 8 * 60;
-								}
+									if (count($lingHidup) > 0) {
+										$durasiFin = 3 * $durasiFin;
+									}else{
+										$durasiFin = 3 * 60;
+									}
 
+									if (count($lingKerja) > 0) {
+										$durasiFin = 3 * $durasiFin;
+									}else{
+										$durasiFin = 3 * 60;
+									}
+
+									if (count($lingVolatile) > 0) {
+										$durasiFin = 3 * $durasiFin;
+									}else{
+										$durasiFin = 3 * 60;
+									}
+								}
 								$tekananFin = str_replace(",", "", number_format(array_sum($tekanan_u) / $datot, 1));
 								$suhuFin    = str_replace(",", "", number_format(array_sum($suhu) / $datot, 1));
 							}

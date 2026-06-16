@@ -20,7 +20,6 @@ class LingkunganHidupLogamPb
         } else {
             $kb = $data->kb;
         }
-
         $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
@@ -53,9 +52,9 @@ class LingkunganHidupLogamPb
         $satuan = '';
 
         $Vstd = $data->nilQs * $data->durasi;
-        if($data->tipe_data == 'ulk') {
+        if($data->tipe_data == 'ambient') {
             $Vstd = $data->nilQs * $data->durasi;
-        }else if($data->tipe_data == 'ambient') {
+        }else if($data->tipe_data == 'ulk') {
             $Vstd = $data->average_flow * $data->durasi;
         }
         if ((int) $Vstd <= 0) {
