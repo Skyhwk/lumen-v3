@@ -42,8 +42,8 @@ class PurchaseOrdersController extends Controller
 
         if ($scope === 'pending') {
             $purchaseRequests = $purchaseRequests
-                ->where('finance_status', 'Waiting to Create PO')
-                ->whereRaw($this->remainingPoAllocationSql('>'));
+                ->whereRaw($this->remainingPoAllocationSql('>'))
+                ->whereNotIn('finance_status', ['Rejected', 'Void', 'Distributed']);
         } else {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
         }
@@ -82,7 +82,7 @@ class PurchaseOrdersController extends Controller
                 $query->whereRaw("({$itemQtySql} - {$allocatedQtySql}) like ?", ["%{$keyword}%"]);
             })
             ->addColumn('active_po_count', fn($row) => $this->countActivePoDocuments($row->id))
-            ->addColumn('can_create_po', fn($row) => $row->finance_status === 'Waiting to Create PO' && $this->getRemainingPoQty($row) > 0)
+            ->addColumn('can_create_po', fn($row) => $this->canCreateAdditionalPo($row))
             ->addColumn('has_po', fn($row) => $this->countActivePoDocuments($row->id) > 0)
             ->make(true);
     }
@@ -251,14 +251,11 @@ class PurchaseOrdersController extends Controller
 
         $purchaseRequest = PurchaseRequest::with('items')->findOrFail($request->id);
 
-        if ($purchaseRequest->finance_status !== 'Waiting to Create PO') {
+        if (!$this->canCreateAdditionalPo($purchaseRequest)) {
             return response()->json(['message' => 'Permintaan tidak dalam status siap dibuat PO'], 422);
         }
 
         $remainingQty = $this->getRemainingPoQty($purchaseRequest);
-        if ($remainingQty <= 0) {
-            return response()->json(['message' => 'Seluruh qty PR sudah dialokasikan ke PO'], 422);
-        }
 
         if ((float) $request->quantity > $remainingQty) {
             return response()->json([
@@ -779,6 +776,19 @@ class PurchaseOrdersController extends Controller
         $targetQty = $this->getPrTargetQty($purchaseRequest);
 
         return max(round($targetQty - $this->getAllocatedPoQty($purchaseRequest), 2), 0);
+    }
+
+    private function canCreateAdditionalPo(PurchaseRequest $purchaseRequest): bool
+    {
+        if (!$purchaseRequest->is_active || $this->getRemainingPoQty($purchaseRequest) <= 0) {
+            return false;
+        }
+
+        if (in_array($purchaseRequest->finance_status, ['Rejected', 'Void', 'Distributed'], true)) {
+            return false;
+        }
+
+        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
     }
 
     private function hasVendorReceiptActivity(PurchaseRequest $purchaseRequest): bool
