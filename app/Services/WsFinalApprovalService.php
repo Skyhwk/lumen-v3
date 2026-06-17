@@ -14,6 +14,23 @@ class WsFinalApprovalService
 {
     private static $parameterRegulationCache = [];
 
+    private const KPGI_FIELD_SOURCES = [
+        13 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        14 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        15 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        16 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        17 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        18 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        19 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        20 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        21 => [\App\Models\DataLapanganIklimPanas::class, \App\Models\DataLapanganIklimDingin::class],
+        23 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        24 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        25 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        26 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        28 => [\App\Models\DataLapanganCahaya::class],
+    ];
+
     private const PARAMETER_SOURCES = [
         \App\Models\Colorimetri::class,
         \App\Models\DebuPersonalHeader::class,
@@ -174,7 +191,24 @@ class WsFinalApprovalService
                 });
         }
 
-        return $orderDetails->mapWithKeys(function (OrderDetail $orderDetail) use ($approvedBySample) {
+        $fieldSamples = self::kpgiFieldSamples($orderDetails);
+
+        return $orderDetails->mapWithKeys(function (OrderDetail $orderDetail) use ($approvedBySample, $fieldSamples) {
+            $kpgiCategoryId = self::kpgiCategoryId($orderDetail);
+
+            if ($kpgiCategoryId !== null) {
+                $sampleKey = $kpgiCategoryId . '|' . $orderDetail->no_sampel;
+                $tested = isset($fieldSamples[$sampleKey]) ? 1 : 0;
+
+                return [
+                    $orderDetail->no_sampel => [
+                        'tested' => $tested,
+                        'total' => 1,
+                        'is_complete' => $tested === 1,
+                    ],
+                ];
+            }
+
             $required = collect(self::arrayValue($orderDetail->parameter))
                 ->map(function ($parameter) {
                     return self::normalizeParameter($parameter);
@@ -202,6 +236,58 @@ class WsFinalApprovalService
                 ],
             ];
         })->all();
+    }
+
+    private static function kpgiFieldSamples($orderDetails): array
+    {
+        $fieldSamples = [];
+        $samplesByCategory = collect($orderDetails)
+            ->mapToGroups(function (OrderDetail $orderDetail) {
+                $categoryId = self::kpgiCategoryId($orderDetail);
+
+                return $categoryId === null
+                    ? []
+                    : [$categoryId => $orderDetail->no_sampel];
+            });
+
+        foreach ($samplesByCategory as $categoryId => $samples) {
+            $samples = collect($samples)->filter()->unique()->values();
+
+            foreach (self::KPGI_FIELD_SOURCES[$categoryId] ?? [] as $modelClass) {
+                if (!class_exists($modelClass)) {
+                    continue;
+                }
+
+                $model = new $modelClass();
+                $table = $model->getTable();
+
+                if (!Schema::hasColumn($table, 'no_sampel')) {
+                    continue;
+                }
+
+                $query = $modelClass::whereIn('no_sampel', $samples);
+
+                if (Schema::hasColumn($table, 'is_active')) {
+                    $query->where('is_active', true);
+                }
+
+                $query->pluck('no_sampel')
+                    ->each(function ($sample) use (&$fieldSamples, $categoryId) {
+                        $fieldSamples[$categoryId . '|' . $sample] = true;
+                    });
+            }
+        }
+
+        return $fieldSamples;
+    }
+
+    private static function kpgiCategoryId(OrderDetail $orderDetail): ?int
+    {
+        $categoryId = self::numericValue(strtok((string) $orderDetail->kategori_3, '-'));
+
+        return $categoryId !== null && array_key_exists($categoryId, self::KPGI_FIELD_SOURCES)
+            ? $categoryId
+            : null;
     }
 
     public static function appendProgressAndFilter(iterable $rows, $request)
