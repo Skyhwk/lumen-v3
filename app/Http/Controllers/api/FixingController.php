@@ -10,6 +10,7 @@ use App\Models\AksesMenu;
 use App\Models\ExpiredLink;
 use App\Models\GenerateLink;
 use App\Models\HistoryLevelSampler;
+use App\Models\Invoice;
 use App\Models\Jadwal;
 use App\Models\JobTask;
 use App\Models\MasterFeeSampling;
@@ -34,6 +35,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -855,7 +857,7 @@ class FixingController extends Controller
         $level = MasterFeeSampling::where('warna', $warnaFinal)
             ->where('is_active', true)
             ->first();
-        
+
         if (!$level) {
             return ['error' => 'Level Sampler Tidak Ditemukan', 'code' => 404];
         }
@@ -1017,5 +1019,203 @@ class FixingController extends Controller
         }
 
         return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
+
+    public function fixInvoiceNumber(Request $request)
+    {
+
+        $oldInvoiceNumber = trim($request->no_invoice);
+        $targetYear = (string) $request->tahun;
+        $lockName = 'invoice-fix-' . $targetYear;
+        $lockAcquired = false;
+        $transactionStarted = false;
+
+        try {
+            $lockResult = DB::select('SELECT GET_LOCK(?, 30) AS acquired', [$lockName]);
+            $lockAcquired = isset($lockResult[0]) && (int) $lockResult[0]->acquired === 1;
+
+            if (!$lockAcquired) {
+                return response()->json([
+                    'message' => 'Gagal mendapatkan lock untuk generate nomor invoice.',
+                ], 423);
+            }
+
+            $invoice = Invoice::where('no_invoice', $oldInvoiceNumber)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$invoice) {
+                return response()->json([
+                    'message' => 'Invoice tidak ditemukan atau tidak aktif.',
+                ], 404);
+            }
+
+            $newInvoiceNumber = $this->generateFixedInvoiceNumber($invoice, $targetYear);
+
+            if ($newInvoiceNumber === $oldInvoiceNumber) {
+                return response()->json([
+                    'message' => 'Nomor invoice sudah sesuai dengan tahun yang dipilih.',
+                    'data' => [
+                        'old_invoice' => $oldInvoiceNumber,
+                        'new_invoice' => $newInvoiceNumber,
+                    ],
+                ], 200);
+            }
+
+            $exists = Invoice::where('no_invoice', $newInvoiceNumber)
+                ->where('id', '!=', $invoice->id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'message' => "Nomor invoice {$newInvoiceNumber} sudah digunakan.",
+                ], 422);
+            }
+
+            DB::beginTransaction();
+            $transactionStarted = true;
+
+            $updatedTables = [];
+            $updatedTables['invoice'] = Invoice::where('id', $invoice->id)->update([
+                'no_invoice' => $newInvoiceNumber,
+                'tgl_invoice' => $this->replaceYear($invoice->tgl_invoice, $targetYear),
+                'filename' => null,
+                'is_generate' => 0,
+            ]);
+
+            foreach ($this->invoiceReferenceTables() as $table) {
+                $updated = $this->updateInvoiceReference($table, 'no_invoice', $oldInvoiceNumber, $newInvoiceNumber);
+                if ($updated > 0) {
+                    $updatedTables[$table] = $updated;
+                }
+            }
+
+            $this->updateInvoiceQrDocument($oldInvoiceNumber, $newInvoiceNumber, $invoice, $targetYear);
+
+            DB::commit();
+            $transactionStarted = false;
+
+            $render = new RenderInvoice();
+            $render->renderInvoice($newInvoiceNumber);
+
+            return response()->json([
+                'message' => "Nomor invoice berhasil diubah menjadi {$newInvoiceNumber} dan invoice sudah dirender ulang.",
+                'data' => [
+                    'old_invoice' => $oldInvoiceNumber,
+                    'new_invoice' => $newInvoiceNumber,
+                    'updated_tables' => $updatedTables,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            if ($transactionStarted) {
+                DB::rollBack();
+            }
+
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        } finally {
+            if ($lockAcquired) {
+                DB::select('SELECT RELEASE_LOCK(?)', [$lockName]);
+            }
+        }
+    }
+
+    private function generateFixedInvoiceNumber(Invoice $invoice, string $targetYear): string
+    {
+        $rekening = $invoice->rekening == '4976688988' ? 'ppn' : 'non-ppn';
+        $shortYear = substr($targetYear, -2);
+
+        $lastInvoice = Invoice::where('rekening', $invoice->rekening)
+            ->where('id', '!=', $invoice->id)
+            ->whereYear('tgl_invoice', $targetYear)
+            ->where('no_invoice', 'like', '%' . $shortYear . '%')
+            ->orderBy('no_invoice', 'desc')
+            ->value('no_invoice');
+
+        $prefix = $rekening == 'ppn' ? 'INV' : 'IV';
+        $defaultNo = $targetYear == '2024'
+            ? ($rekening == 'ppn' ? '06767' : '00531')
+            : '00001';
+
+        $no = $lastInvoice ? str_pad(intval(substr($lastInvoice, -5)) + 1, 5, '0', STR_PAD_LEFT) : $defaultNo;
+
+        return "ISL/{$prefix}/{$shortYear}{$no}";
+    }
+
+    private function replaceYear($date, string $targetYear): string
+    {
+        $invoiceDate = $date ? Carbon::parse($date) : Carbon::now();
+        $day = min($invoiceDate->day, Carbon::create((int) $targetYear, $invoiceDate->month, 1)->daysInMonth);
+
+        return $invoiceDate
+            ->setYear((int) $targetYear)
+            ->setDay($day)
+            ->format('Y-m-d H:i:s');
+    }
+
+    private function invoiceReferenceTables(): array
+    {
+        return [
+            'record_pembayaran_invoice',
+            'sales_in_detail',
+            'withdraw',
+            'summary_invoice',
+            'billing_list_detail',
+            'distribusi_invoice_detail',
+            'claim_fee_external',
+            'claim_fee_external_expense',
+            'claim_fee_external_tax',
+        ];
+    }
+
+    private function updateInvoiceReference(string $table, string $column, string $oldInvoiceNumber, string $newInvoiceNumber): int
+    {
+        if (!Schema::hasTable($table) || !Schema::hasColumn($table, $column)) {
+            return 0;
+        }
+
+        return DB::table($table)
+            ->where($column, $oldInvoiceNumber)
+            ->update([$column => $newInvoiceNumber]);
+    }
+
+    private function updateInvoiceQrDocument(string $oldInvoiceNumber, string $newInvoiceNumber, Invoice $invoice, string $targetYear): void
+    {
+        if (!Schema::hasTable('qr_documents')) {
+            return;
+        }
+
+        $oldFile = str_replace('/', '_', $oldInvoiceNumber);
+        $newFile = str_replace('/', '_', $newInvoiceNumber);
+        $qr = DB::table('qr_documents')
+            ->where('type_document', 'invoice')
+            ->where('file', $oldFile)
+            ->first();
+
+        if (!$qr) {
+            return;
+        }
+
+        $data = json_decode($qr->data, true) ?: [];
+        $data['no_document'] = $newInvoiceNumber;
+        $data['Tanggal_Pengesahan'] = Carbon::parse($this->replaceYear($invoice->tgl_invoice, $targetYear))
+            ->locale('id')
+            ->isoFormat('DD MMMM YYYY');
+
+        DB::table('qr_documents')
+            ->where('id', $qr->id)
+            ->update([
+                'file' => $newFile,
+                'data' => json_encode($data),
+            ]);
+
+        $oldPath = public_path('qr_documents/' . $oldFile . '.svg');
+        $newPath = public_path('qr_documents/' . $newFile . '.svg');
+
+        if (file_exists($oldPath) && !file_exists($newPath)) {
+            @rename($oldPath, $newPath);
+        }
     }
 }
