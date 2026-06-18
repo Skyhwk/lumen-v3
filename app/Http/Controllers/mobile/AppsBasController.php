@@ -98,24 +98,17 @@ class AppsBasController extends Controller
                 ->where('is_active', true)
                 ->where('kategori_1', '!=', 'SD');
             if ($isProgrammer) {
-                // $orderDetail->whereBetween('tanggal_sampling', [
-                //     Carbon::now()->subDays(8)->toDateString(),
-                //     Carbon::now()->toDateString()
-                // ]);
                 $orderDetail->whereBetween('tanggal_sampling', [
-                    Carbon::parse('2025-09-01')->toDateString(),
-                    Carbon::parse('2025-09-10')->toDateString()
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
                 ]);
             } else {
-                // $orderDetail->whereBetween('tanggal_sampling', [
-                //     // "2025-04-31",
-                //     Carbon::now()->subDays(8)->toDateString(),
-                //     Carbon::now()->toDateString()
-                // ]);
                 $orderDetail->whereBetween('tanggal_sampling', [
-                    Carbon::parse('2025-09-01')->toDateString(),
-                    Carbon::parse('2025-09-10')->toDateString()
+                    // "2025-04-31",
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
                 ]);
+                
             }
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
 
