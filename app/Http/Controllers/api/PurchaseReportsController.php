@@ -46,6 +46,33 @@ class PurchaseReportsController extends Controller
             ->filterColumn('goods_voided_by', function ($query, $keyword) {
                 $query->where('goods_voided_by', 'like', "%{$keyword}%");
             })
+            ->filterColumn('request_number', function ($query, $keyword) {
+                $query->where('purchase_requests.request_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('po_number', function ($query, $keyword) {
+                $query->where('purchase_requests.po_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('requester_divisi', function ($query, $keyword) {
+                $query->whereHas('employee.divisi', function ($sub) use ($keyword) {
+                    $sub->where('nama_divisi', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('quantity', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('quantity', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('unit', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('unit', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('tanggal_kedatangan', function ($query, $keyword) {
+                $query->where('purchase_requests.tanggal_kedatangan', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('goods_voided_at', function ($query, $keyword) {
+                $query->where('purchase_requests.goods_voided_at', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
@@ -118,6 +145,20 @@ class PurchaseReportsController extends Controller
             })
             ->filterColumn('completed_at', function ($query, $keyword) {
                 $query->where('completed_at', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('request_number', function ($query, $keyword) {
+                $query->where('purchase_requests.request_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('handover_number', function ($query, $keyword) {
+                $query->where('purchase_requests.handover_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('po_number', function ($query, $keyword) {
+                $query->where('purchase_requests.po_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('unit', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('unit', 'like', "%{$keyword}%");
+                });
             })
             ->make(true);
     }
