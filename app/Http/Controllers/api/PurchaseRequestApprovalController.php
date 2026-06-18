@@ -44,6 +44,31 @@ class PurchaseRequestApprovalController extends Controller
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
             ->addColumn('finance_display_status', fn($row) => $this->resolveFinanceDisplayStatus($row))
+            ->filterColumn('item_name', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('item_name', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('quantity', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('quantity', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('unit', function ($query, $keyword) {
+                $query->whereHas('items', function ($sub) use ($keyword) {
+                    $sub->where('unit', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('requester_divisi', function ($query, $keyword) {
+                $query->whereHas('employee', function ($sub) use ($keyword) {
+                    $sub->where(function ($inner) use ($keyword) {
+                        $inner->where('department', 'like', "%{$keyword}%")
+                            ->orWhereHas('divisi', function ($divisi) use ($keyword) {
+                                $divisi->where('nama_divisi', 'like', "%{$keyword}%");
+                            });
+                    });
+                });
+            })
             ->make(true);
     }
 
