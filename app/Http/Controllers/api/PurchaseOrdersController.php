@@ -42,22 +42,47 @@ class PurchaseOrdersController extends Controller
 
         if ($scope === 'pending') {
             $purchaseRequests = $purchaseRequests
-                ->where('finance_status', 'Waiting to Create PO')
-                ->whereRaw($this->remainingPoAllocationSql('>'));
+                ->whereRaw($this->remainingPoAllocationSql('>'))
+                ->whereNotIn('finance_status', ['Rejected', 'Void', 'Distributed']);
         } else {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
         }
 
         return DataTables::of($purchaseRequests)
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
+            ->filterColumn('item_name', function($query, $keyword) {
+                $query->whereHas('items', function($q) use ($keyword) {
+                    $q->where('item_name', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
+            ->filterColumn('quantity', function($query, $keyword) {
+                $query->whereHas('items', function($q) use ($keyword) {
+                    $q->where('quantity', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
+            ->filterColumn('unit', function($query, $keyword) {
+                $query->whereHas('items', function($q) use ($keyword) {
+                    $q->where('unit', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
+            ->filterColumn('requester_divisi', function($query, $keyword) {
+                $query->whereHas('employee.divisi', function($q) use ($keyword) {
+                    $q->where('nama_divisi', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('finance_display_status', fn($row) => $this->resolveFinanceDisplayStatus($row))
             ->addColumn('allocated_po_qty', fn($row) => $this->getAllocatedPoQty($row))
             ->addColumn('remaining_po_qty', fn($row) => $this->getRemainingPoQty($row))
+            ->filterColumn('remaining_po_qty', function($query, $keyword) {
+                $itemQtySql = '(SELECT COALESCE(pri.quantity, 0) FROM purchase_request_items pri WHERE pri.purchase_request_id = purchase_requests.id ORDER BY pri.id ASC LIMIT 1)';
+                $allocatedQtySql = '(SELECT COALESCE(SUM(pod.quantity), 0) FROM purchase_order_documents pod WHERE pod.purchase_request_id = purchase_requests.id AND (pod.is_voided = 0 OR pod.is_voided IS NULL) AND pod.po_status IN (\'draft\', \'active\'))';
+                $query->whereRaw("({$itemQtySql} - {$allocatedQtySql}) like ?", ["%{$keyword}%"]);
+            })
             ->addColumn('active_po_count', fn($row) => $this->countActivePoDocuments($row->id))
-            ->addColumn('can_create_po', fn($row) => $row->finance_status === 'Waiting to Create PO' && $this->getRemainingPoQty($row) > 0)
+            ->addColumn('can_create_po', fn($row) => $this->canCreateAdditionalPo($row))
             ->addColumn('has_po', fn($row) => $this->countActivePoDocuments($row->id) > 0)
             ->make(true);
     }
@@ -74,20 +99,74 @@ class PurchaseOrdersController extends Controller
         return DataTables::of($poDocuments)
             ->addColumn('purchase_request_id', fn($row) => $row->purchase_request_id)
             ->addColumn('request_number', fn($row) => optional($row->purchaseRequest)->request_number)
+            ->filterColumn('request_number', function($query, $keyword) {
+                $query->whereHas('purchaseRequest', function($q) use ($keyword) {
+                    $q->where('request_number', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('item_name', fn($row) => $row->item_name ?: optional(optional($row->purchaseRequest)->items->first())->item_name)
+            ->filterColumn('item_name', function($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where('purchase_order_documents.item_name', 'like', "%{$keyword}%")
+                      ->orWhereHas('purchaseRequest.items', function($subQ) use ($keyword) {
+                          $subQ->where('item_name', 'like', "%{$keyword}%");
+                      });
+                });
+            })
             ->addColumn('pr_quantity', fn($row) => optional(optional($row->purchaseRequest)->items->first())->quantity)
+            ->filterColumn('pr_quantity', function($query, $keyword) {
+                $query->whereHas('purchaseRequest.items', function($q) use ($keyword) {
+                    $q->where('quantity', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('unit', fn($row) => $row->unit ?: optional(optional($row->purchaseRequest)->items->first())->unit)
+            ->filterColumn('unit', function($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where('purchase_order_documents.unit', 'like', "%{$keyword}%")
+                      ->orWhereHas('purchaseRequest.items', function($subQ) use ($keyword) {
+                          $subQ->where('unit', 'like', "%{$keyword}%");
+                      });
+                });
+            })
             ->addColumn('purpose', fn($row) => optional($row->purchaseRequest)->purpose)
+            ->filterColumn('purpose', function($query, $keyword) {
+                $query->whereHas('purchaseRequest', function($q) use ($keyword) {
+                    $q->where('purpose', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('priority', fn($row) => optional($row->purchaseRequest)->priority)
+            ->filterColumn('priority', function($query, $keyword) {
+                $query->whereHas('purchaseRequest', function($q) use ($keyword) {
+                    $q->where('priority', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('created_by', fn($row) => optional($row->purchaseRequest)->created_by)
+            ->filterColumn('created_by', function($query, $keyword) {
+                $query->whereHas('purchaseRequest', function($q) use ($keyword) {
+                    $q->where('created_by', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi(optional($row->purchaseRequest)->employee))
+            ->filterColumn('requester_divisi', function($query, $keyword) {
+                $query->whereHas('purchaseRequest.employee.divisi', function($q) use ($keyword) {
+                    $q->where('nama_divisi', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('po_display_status', fn($row) => $this->resolvePoDisplayStatus($row))
             ->addColumn('revision_no', fn($row) => $row->revision_no ?? 1)
+            ->filterColumn('revision_no', function($query, $keyword) {
+                $query->whereHas('purchaseRequest', function($q) use ($keyword) {
+                    $q->where('revision_no', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('can_update', fn($row) => $row->po_status === 'draft')
             ->addColumn('can_process', fn($row) => $row->po_status === 'draft')
             ->addColumn('can_revise', fn($row) => $this->canRevisePoDocument($row))
             ->addColumn('can_void', fn($row) => in_array($row->po_status, ['draft', 'active'], true))
             ->addColumn('po_created_at', fn($row) => $row->created_at)
+            ->filterColumn('po_created_at', function($query, $keyword) {
+                $query->where('purchase_order_documents.created_at', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
@@ -172,14 +251,11 @@ class PurchaseOrdersController extends Controller
 
         $purchaseRequest = PurchaseRequest::with('items')->findOrFail($request->id);
 
-        if ($purchaseRequest->finance_status !== 'Waiting to Create PO') {
+        if (!$this->canCreateAdditionalPo($purchaseRequest)) {
             return response()->json(['message' => 'Permintaan tidak dalam status siap dibuat PO'], 422);
         }
 
         $remainingQty = $this->getRemainingPoQty($purchaseRequest);
-        if ($remainingQty <= 0) {
-            return response()->json(['message' => 'Seluruh qty PR sudah dialokasikan ke PO'], 422);
-        }
 
         if ((float) $request->quantity > $remainingQty) {
             return response()->json([
@@ -700,6 +776,19 @@ class PurchaseOrdersController extends Controller
         $targetQty = $this->getPrTargetQty($purchaseRequest);
 
         return max(round($targetQty - $this->getAllocatedPoQty($purchaseRequest), 2), 0);
+    }
+
+    private function canCreateAdditionalPo(PurchaseRequest $purchaseRequest): bool
+    {
+        if (!$purchaseRequest->is_active || $this->getRemainingPoQty($purchaseRequest) <= 0) {
+            return false;
+        }
+
+        if (in_array($purchaseRequest->finance_status, ['Rejected', 'Void', 'Distributed'], true)) {
+            return false;
+        }
+
+        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
     }
 
     private function hasVendorReceiptActivity(PurchaseRequest $purchaseRequest): bool

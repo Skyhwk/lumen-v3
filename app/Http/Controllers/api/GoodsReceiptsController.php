@@ -89,8 +89,26 @@ class GoodsReceiptsController extends Controller
 
         return DataTables::of($purchaseRequests)
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
+            ->filterColumn('item_name', function($query, $keyword) {
+                $query->whereHas('items', function($q) use ($keyword) {
+                    $q->where('item_name', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('quantity', fn($row) => $row->receipt_target_qty ?: optional($row->items->first())->quantity)
+            ->filterColumn('quantity', function($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where('purchase_requests.receipt_target_qty', 'like', "%{$keyword}%")
+                      ->orWhereHas('items', function($subQ) use ($keyword) {
+                          $subQ->where('quantity', 'like', "%{$keyword}%");
+                      });
+                });
+            })
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
+            ->filterColumn('unit', function($query, $keyword) {
+                $query->whereHas('items', function($q) use ($keyword) {
+                    $q->where('unit', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('vendor_received_total', fn($row) => $row->vendor_received_total ?? 0)
             ->addColumn('remaining_vendor_qty', fn($row) => PurchaseReceiptService::getRemainingVendorQty($row))
             ->addColumn('user_confirmed_total', fn($row) => $row->user_confirmed_total ?? 0)
@@ -99,7 +117,27 @@ class GoodsReceiptsController extends Controller
             ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatches($row))
             ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan($row->employee))
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
+            ->filterColumn('requester_divisi', function($query, $keyword) {
+                $query->whereHas('employee.divisi', function($q) use ($keyword) {
+                    $q->where('nama_divisi', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('finance_display_status', fn($row) => $this->resolveDisplayStatus($row, $scope))
+            ->filterColumn('request_number', function($query, $keyword) {
+                $query->where('purchase_requests.request_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('po_number', function($query, $keyword) {
+                $query->where('purchase_requests.po_number', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('created_by', function($query, $keyword) {
+                $query->where('purchase_requests.created_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('po_approved_at', function($query, $keyword) {
+                $query->where('purchase_requests.po_approved_at', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('vendor_receipt_at', function($query, $keyword) {
+                $query->where('purchase_requests.vendor_receipt_at', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
