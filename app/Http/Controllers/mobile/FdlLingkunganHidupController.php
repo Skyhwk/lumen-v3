@@ -15,6 +15,7 @@ use App\Models\MasterKategori;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\ParameterFdl;
+use App\Models\TemplateStp;
 use App\Services\InsertActivityFdl;
 
 // SERVICE
@@ -235,6 +236,31 @@ class FdlLingkunganHidupController extends Controller
         $param = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->groupBy('parameter')->get();
 
         $listParameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_hidup')->where('is_active', 1)->first();
+
+        $parameter_icp = TemplateStp::select("param")
+            ->where('is_active', 1)
+            ->where('category_id', '4')
+            ->where('name', 'ICP')
+            ->first();
+
+        $excludeParam = [
+            "Kelembaban",
+            "Suhu",
+            "Laju Ventilasi",
+            "Laju Ventilasi (8 Jam)",
+            "Tekanan Udara (LK)",
+            "Tekanan Udara",
+            "Kecepatan Angin"
+        ];
+
+        if ($parameter_icp) {
+            $icpParams = json_decode($parameter_icp->param, true);
+
+            if (is_array($icpParams)) {
+                $excludeParam = array_merge($excludeParam, $icpParams);
+            }
+        }
+
         $parNonSes = array();
         foreach ($param as $value) {
             // pengecualian untuk Dustfall
@@ -327,8 +353,18 @@ class FdlLingkunganHidupController extends Controller
         // Jalankan array_diff seperti biasa
         $filtered_param = array_values(array_diff($nilai_param2_filtered, $lh_parameter_filtered));
 
-        // Tambahkan kembali Dustfall jika ada
-        if (in_array('Dustfall', $nilai_param2)) {
+        $filtered_param = array_values(
+            array_diff($nilai_param2_filtered, $lh_parameter_filtered)
+        );
+
+        $filtered_param = array_values(
+            array_diff($filtered_param, $excludeParam)
+        );
+
+        if (
+            in_array('Dustfall', $nilai_param2) &&
+            !in_array('Dustfall', $filtered_param)
+        ) {
             $filtered_param[] = 'Dustfall';
         }
 
@@ -368,7 +404,7 @@ class FdlLingkunganHidupController extends Controller
                 // 'important_keyword' => $importantKeyword,
                 'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
                 'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                // 'parameter_no2' => $parameter_no2
+                'final_param' => $filtered_param
 
             ], 200);
             $this->resultx = 'get shift sample lingkuhan hidup success';
@@ -384,7 +420,7 @@ class FdlLingkunganHidupController extends Controller
                 // 'important_keyword' => $importantKeyword,
                 'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
                 'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                // 'parameter_no2' => $parameter_no2
+                'final_param' => $filtered_param
             ], 200);
         }
     }
