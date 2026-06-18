@@ -628,7 +628,7 @@ class WsFinalApprovalService
 
     private static function extractResult(Model $source): ?string
     {
-        foreach (['hasil', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
+        foreach (['hasil', 'hasil1', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
             $value = $source->getAttribute($field);
             if ($value !== null && $value !== '') {
                 return self::stringValue($value);
@@ -649,7 +649,7 @@ class WsFinalApprovalService
                 continue;
             }
 
-            foreach (['hasil', 'nilai', 'C', 'C1', 'C2'] as $field) {
+            foreach (['hasil', 'hasil1', 'nilai', 'C', 'C1', 'C2'] as $field) {
                 $result = $value->getAttribute($field);
                 if ($result !== null && $result !== '') {
                     return self::stringValue($result);
