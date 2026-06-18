@@ -61,6 +61,9 @@ class WsFinalApprovalService
         }
 
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
         $parameterLab = self::stringValue($source->getAttribute('parameter'));
 
         if (self::isParameterSource($source)) {
@@ -118,6 +121,9 @@ class WsFinalApprovalService
         }
 
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
 
         if (!$approved) {
             DB::table('ws_final_approval_detail')
@@ -297,6 +303,10 @@ class WsFinalApprovalService
 
     private static function upsertHeader(OrderDetail $orderDetail, array $approval = []): int
     {
+        if (!Schema::hasTable('ws_final_approval_header')) {
+            return 0;
+        }
+
         $row = array_merge([
             'no_order' => self::limit($orderDetail->no_order, 50),
             'no_sampel' => self::limit($orderDetail->no_sampel, 50),
@@ -341,6 +351,10 @@ class WsFinalApprovalService
 
     private static function deleteParameterDetail(int $headerId, ?string $parameterLab): void
     {
+        if ($headerId === 0 || !Schema::hasTable('ws_final_approval_header')) {
+            return;
+        }
+
         if ($parameterLab !== null) {
             DB::table('ws_final_approval_detail')
                 ->where('ws_final_approval_header_id', $headerId)
@@ -411,6 +425,9 @@ class WsFinalApprovalService
         }
 
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
 
         foreach (self::airFieldParameterValues($orderDetail, $fieldData) as $parameterLab => $result) {
             DB::table('ws_final_approval_detail')->updateOrInsert([
@@ -430,6 +447,9 @@ class WsFinalApprovalService
     private static function refreshApprovalStatus(OrderDetail $orderDetail, ?string $approvedBy = null): void
     {
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
         $required = collect(self::arrayValue($orderDetail->parameter))
             ->map(function ($parameter) {
                 return self::normalizeParameter($parameter);

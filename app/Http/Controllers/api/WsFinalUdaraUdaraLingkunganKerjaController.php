@@ -1843,160 +1843,85 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 
 
-                // Upsert header berdasarkan no_sampel
-
-                $existingHeader = DB::table('ws_final_approval_header')
-
-                    ->where('no_sampel', $data->no_sampel)
-
-                    ->first();
-
-
-
-                if ($existingHeader) {
-
-                    DB::table('ws_final_approval_header')
-
+                if (\Illuminate\Support\Facades\Schema::hasTable('ws_final_approval_header')) {
+                    // Upsert header berdasarkan no_sampel
+                    $existingHeader = DB::table('ws_final_approval_header')
                         ->where('no_sampel', $data->no_sampel)
-
-                        ->update([
-
-                            'is_approved' => 1,
-
-                            'approved_by' => substr($this->karyawan, 0, 100),
-
-                            'approved_at' => Carbon::now(),
-
-                        ]);
-
-                    $headerId = $existingHeader->id;
-
-                } else {
-
-                    $headerId = DB::table('ws_final_approval_header')->insertGetId([
-
-                        'no_order'     => substr($data->no_order, 0, 50),
-
-                        'no_sampel'    => substr($data->no_sampel, 0, 50),
-
-                        'periode'      => substr($data->periode ?? '', 0, 50),
-
-                        'parameter'    => $data->parameter,
-
-                        'kategori'     => 'Udara',
-
-                        'sub_kategori' => 'Udara Lingkungan Kerja',
-
-                        'regulasi'     => $data->regulasi,
-
-                        'nama_titik'   => substr($data->keterangan_1 ?? '', 0, 50),
-
-                        'is_approved'  => 1,
-
-                        'approved_by'  => substr($this->karyawan, 0, 100),
-
-                        'approved_at'  => Carbon::now(),
-
-                    ]);
-
-                }
-
-
-
-                // Proses detail_data jika dikirim dari frontend
-
-                if ($request->filled('detail_data') && is_array($request->detail_data)) {
-
-                    foreach ($request->detail_data as $detail) {
-
-                        $parameterLab = isset($detail['parameter']) ? trim($detail['parameter']) : null;
-
-                        if (!$parameterLab) {
-
-                            continue;
-
-                        }
-
-
-
-                        // Ambil nama regulasi dari master_parameter
-
-                        $parameterRegulasi = '';
-
-                        $parameterId       = isset($detail['id_parameter']) ? $detail['id_parameter'] : null;
-
-                        if ($parameterId) {
-
-                            $parameterRegulasi = Db::table('parameter')
-
-                                ->where('id', $parameterId)
-
-                                ->value('nama_regulasi') ?? '';
-
-                        } else {
-
-                            $parameterRegulasi = Db::table('parameter')
-
-                                ->where('nama_lab', $parameterLab)
-
-                                ->where('id_kategori', 4)
-
-                                ->value('nama_regulasi') ?? '';
-
-                        }
-
-
-
-                        $hasil = isset($detail['nilai_uji']) ? trim($detail['nilai_uji']) : '';
-
-
-
-                        // Cek apakah detail sudah ada, jika ada update, jika belum insert
-
-                        $existingDetail = DB::table('ws_final_approval_detail')
-
-                            ->where('ws_final_approval_header_id', $headerId)
-
-                            ->where('parameter_lab', substr($parameterLab, 0, 70))
-
-                            ->first();
-
-
-
-                        if ($existingDetail) {
-
-                            DB::table('ws_final_approval_detail')
-
-                                ->where('id', $existingDetail->id)
-
-                                ->update([
-
-                                    'parameter_regulasi' => substr($parameterRegulasi, 0, 100),
-
-                                    'hasil'              => substr($hasil, 0, 50),
-
-                                ]);
-
-                        } else {
-
-                            DB::table('ws_final_approval_detail')->insert([
-
-                                'ws_final_approval_header_id' => $headerId,
-
-                                'no_sampel'                   => $data->no_sampel,
-
-                                'parameter_lab'               => substr($parameterLab, 0, 70),
-
-                                'parameter_regulasi'          => substr($parameterRegulasi, 0, 100),
-
-                                'hasil'                       => substr($hasil, 0, 50),
-
+                        ->first();
+
+                    if ($existingHeader) {
+                        DB::table('ws_final_approval_header')
+                            ->where('no_sampel', $data->no_sampel)
+                            ->update([
+                                'is_approved' => 1,
+                                'approved_by' => substr($this->karyawan, 0, 100),
+                                'approved_at' => Carbon::now(),
                             ]);
-
-                        }
-
+                        $headerId = $existingHeader->id;
+                    } else {
+                        $headerId = DB::table('ws_final_approval_header')->insertGetId([
+                            'no_order'     => substr($data->no_order, 0, 50),
+                            'no_sampel'    => substr($data->no_sampel, 0, 50),
+                            'periode'      => substr($data->periode ?? '', 0, 50),
+                            'parameter'    => $data->parameter,
+                            'kategori'     => 'Udara',
+                            'sub_kategori' => 'Udara Lingkungan Kerja',
+                            'regulasi'     => $data->regulasi,
+                            'nama_titik'   => substr($data->keterangan_1 ?? '', 0, 50),
+                            'is_approved'  => 1,
+                            'approved_by'  => substr($this->karyawan, 0, 100),
+                            'approved_at'  => Carbon::now(),
+                        ]);
                     }
 
+                    // Proses detail_data jika dikirim dari frontend
+                    if ($request->filled('detail_data') && is_array($request->detail_data)) {
+                        foreach ($request->detail_data as $detail) {
+                            $parameterLab = isset($detail['parameter']) ? trim($detail['parameter']) : null;
+                            if (!$parameterLab) {
+                                continue;
+                            }
+
+                            // Ambil nama regulasi dari master_parameter
+                            $parameterRegulasi = '';
+                            $parameterId       = isset($detail['id_parameter']) ? $detail['id_parameter'] : null;
+                            if ($parameterId) {
+                                $parameterRegulasi = Db::table('parameter')
+                                    ->where('id', $parameterId)
+                                    ->value('nama_regulasi') ?? '';
+                            } else {
+                                $parameterRegulasi = Db::table('parameter')
+                                    ->where('nama_lab', $parameterLab)
+                                    ->where('id_kategori', 4)
+                                    ->value('nama_regulasi') ?? '';
+                            }
+
+                            $hasil = isset($detail['nilai_uji']) ? trim($detail['nilai_uji']) : '';
+
+                            // Cek apakah detail sudah ada, jika ada update, jika belum insert
+                            $existingDetail = DB::table('ws_final_approval_detail')
+                                ->where('ws_final_approval_header_id', $headerId)
+                                ->where('parameter_lab', substr($parameterLab, 0, 70))
+                                ->first();
+
+                            if ($existingDetail) {
+                                DB::table('ws_final_approval_detail')
+                                    ->where('id', $existingDetail->id)
+                                    ->update([
+                                        'parameter_regulasi' => substr($parameterRegulasi, 0, 100),
+                                        'hasil'              => substr($hasil, 0, 50),
+                                    ]);
+                            } else {
+                                DB::table('ws_final_approval_detail')->insert([
+                                    'ws_final_approval_header_id' => $headerId,
+                                    'no_sampel'                   => $data->no_sampel,
+                                    'parameter_lab'               => substr($parameterLab, 0, 70),
+                                    'parameter_regulasi'          => substr($parameterRegulasi, 0, 100),
+                                    'hasil'                       => substr($hasil, 0, 50),
+                                ]);
+                            }
+                        }
+                    }
                 }
 
 
