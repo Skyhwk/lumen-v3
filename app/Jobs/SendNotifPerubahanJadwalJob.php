@@ -7,6 +7,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\MasterKaryawan;
 use App\Services\GetAtasan;
 use App\Services\SendEmail;
+use Illuminate\Support\Facades\Log;
 
 class SendNotifPerubahanJadwalJob extends Job
 {
@@ -28,14 +29,14 @@ class SendNotifPerubahanJadwalJob extends Job
                       ?: QuotationNonKontrak::where('no_document', $this->noQuotation)->first();
 
             if (!$quotation) {
-                \Log::warning('SendNotifPerubahanJadwalJob: quotation tidak ditemukan', [
+                Log::channel('sampling')->warning('SendNotifPerubahanJadwalJob: quotation tidak ditemukan', [
                     'no_quotation' => $this->noQuotation,
                 ]);
                 return;
             }
 
             if (empty($quotation->sales_id)) {
-                \Log::warning('SendNotifPerubahanJadwalJob: sales_id kosong', [
+                Log::channel('sampling')->warning('SendNotifPerubahanJadwalJob: sales_id kosong', [
                     'no_quotation' => $this->noQuotation,
                 ]);
                 return;
@@ -43,7 +44,7 @@ class SendNotifPerubahanJadwalJob extends Job
 
             $sales = MasterKaryawan::where('id', $quotation->sales_id)->first();
             if (!$sales || empty($sales->email)) {
-                \Log::warning('SendNotifPerubahanJadwalJob: sales/email tidak ditemukan', [
+                Log::channel('sampling')->warning('SendNotifPerubahanJadwalJob: sales/email tidak ditemukan', [
                     'no_quotation' => $this->noQuotation,
                     'sales_id'     => $quotation->sales_id,
                 ]);
@@ -78,7 +79,7 @@ class SendNotifPerubahanJadwalJob extends Job
 
             $htmlBody = $this->renderHtml($sales->nama_lengkap);
 
-            \Log::info('SendNotifPerubahanJadwalJob: mencoba kirim', [
+            Log::info('SendNotifPerubahanJadwalJob: mencoba kirim', [
                 'to'      => $emailSales,
                 'subject' => $subject,
             ]);
@@ -91,12 +92,12 @@ class SendNotifPerubahanJadwalJob extends Job
                 ->noReply()
                 ->send();
 
-            \Log::info('SendNotifPerubahanJadwalJob: berhasil dikirim', [
+            Log::channel('sampling')->info('SendNotifPerubahanJadwalJob: berhasil dikirim', [
                 'no_quotation' => $this->noQuotation,
             ]);
 
         } catch (\Throwable $e) {
-            \Log::error('SendNotifPerubahanJadwalJob gagal: ' . $e->getMessage()
+            Log::channel('sampling')->error('SendNotifPerubahanJadwalJob gagal: ' . $e->getMessage()
                 . ' — ' . $e->getFile() . ':' . $e->getLine());
         }
     }
