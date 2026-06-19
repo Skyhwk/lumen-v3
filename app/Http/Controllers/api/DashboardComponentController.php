@@ -39,7 +39,7 @@ protected $fillable = [
     public function getDashboardList(Request $request)
     {
         try {
-            $userHaveAllAccess = $this->user_id === 1 || $this->user_id === 127 || $this->user_id === 1010;
+            $userHaveAllAccess = $this->user_id === 1 || $this->user_id === 127;
         
             if($userHaveAllAccess) {
                 $DashboardComponent = DashboardComponent::where('is_active', 1)->get();
