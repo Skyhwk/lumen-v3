@@ -2659,6 +2659,10 @@ class ReadyOrderController extends Controller
 
     public function createInvoice($dataOrderHeader, $dataQuotation, $request, $first = true)
     {
+        if ($this->moneyValue($dataQuotation->biaya_akhir) <= 0) {
+            return;
+        }
+
         $rekening = ($dataQuotation->total_ppn != null || $dataQuotation->total_ppn != 0) ? 'ppn' : 'non-ppn';
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->orderBy('tanggal', 'asc')->first();
 
@@ -2753,6 +2757,10 @@ class ReadyOrderController extends Controller
     public function createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $periode, $first = true, $firstPeriode = false)
     {
         $detail = $dataQuotation->detail()->where('periode_kontrak', $periode)->first();
+        if (!$detail || $this->moneyValue($detail->biaya_akhir) <= 0) {
+            return;
+        }
+
         $rekening = ($detail->total_ppn != null || $detail->total_ppn != 0) ? 'ppn' : 'non-ppn';
         $today = Carbon::now();
         $invoiceDate = Carbon::parse($periode . '-01')->startOfDay();
@@ -2874,6 +2882,10 @@ class ReadyOrderController extends Controller
     private function generateInvoice($no_order, $no_document)
     {
         $invoice_numbers = Invoice::where('no_order', $no_order)->where('is_active', 1)->get()->pluck('no_invoice')->toArray();
+
+        if (count($invoice_numbers) === 0) {
+            return;
+        }
 
         // Python::call('render-invoice', ['invoice_numbers' => $invoice_numbers]);
         // Http::post('http://127.0.0.1:2999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
@@ -3698,6 +3710,10 @@ class ReadyOrderController extends Controller
         $amount,
         $firstPeriode
     ) {
+        if ($this->moneyValue($amount) <= 0) {
+            return;
+        }
+
         $newRequest = clone $request;
         $newRequest->merge([
             'tagihan_awal' => $amount,
@@ -3727,6 +3743,11 @@ class ReadyOrderController extends Controller
             $lastInvoice->updated_at    = Carbon::now()->format('Y-m-d H:i:s');
             $lastInvoice->save();
         }
+    }
+
+    private function moneyValue($value): int
+    {
+        return (int) preg_replace('/[^\d-]/', '', (string) ($value ?? 0));
     }
 
     public function randomstr($str)

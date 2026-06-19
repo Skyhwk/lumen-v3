@@ -59,6 +59,17 @@ class CreateInvoiceJob extends Job
             DB::beginTransaction();
             $transactionStarted = true;
 
+            if ($this->moneyValue($quotation->biaya_akhir) <= 0) {
+                Log::info('CreateInvoiceJob: biaya akhir quotation 0, invoice tidak dibuat.', [
+                    'no_order' => $orderHeader->no_order,
+                    'no_document' => $quotation->no_document,
+                    'biaya_akhir' => $quotation->biaya_akhir,
+                ]);
+
+                DB::commit();
+                return;
+            }
+
             if ($this->quotationType === 'kontrak' && ($this->payload['jenis_tagihan'] ?? null) === 'periode') {
                 $createdInvoices = $this->createKontrakPeriodeInvoices($orderHeader, $quotation);
             } else {
@@ -101,7 +112,7 @@ class CreateInvoiceJob extends Job
         $createdInvoices = [];
         $createdInvoices[] = $this->insertInvoice($orderHeader, $quotation, null, true);
 
-        if ((int) str_replace(',', '', $quotation->biaya_akhir) > $this->tagihanAwal()) {
+        if ($this->moneyValue($quotation->biaya_akhir) > $this->tagihanAwal()) {
             $createdInvoices[] = $this->insertInvoice($orderHeader, $quotation, null, false);
         }
 
@@ -114,9 +125,21 @@ class CreateInvoiceJob extends Job
         $periode = $quotation->detail->pluck('periode_kontrak')->toArray();
 
         foreach ($periode as $key => $value) {
+            $detail = $quotation->detail->firstWhere('periode_kontrak', $value);
+
+            if (!$detail || $this->moneyValue($detail->biaya_akhir) <= 0) {
+                Log::info('CreateInvoiceJob: biaya akhir periode kontrak 0, invoice periode tidak dibuat.', [
+                    'no_document' => $quotation->no_document,
+                    'periode' => $value,
+                    'biaya_akhir' => $detail ? $detail->biaya_akhir : null,
+                ]);
+
+                continue;
+            }
+
             $createdInvoices[] = $this->insertInvoice($orderHeader, $quotation, $value, true, $key == 0);
 
-            if ($key == 0 && isset($quotation->detail[0]) && (int) $quotation->detail[0]->biaya_akhir > $this->tagihanAwal()) {
+            if ($key == 0 && isset($quotation->detail[0]) && $this->moneyValue($quotation->detail[0]->biaya_akhir) > $this->tagihanAwal()) {
                 $createdInvoices[] = $this->insertInvoice($orderHeader, $quotation, $value, false, true);
             }
         }
@@ -181,12 +204,13 @@ class CreateInvoiceJob extends Job
         $tagihanAwal = $this->tagihanAwal();
         $nilaiTagihan = 0;
         $totalTagihan = 0;
+        $biayaAkhir = $this->moneyValue($source->biaya_akhir);
         if($firstPeriode) {
-            $nilaiTagihan = $first ? $tagihanAwal : $source->biaya_akhir - $tagihanAwal;
-            $totalTagihan = $first ? $tagihanAwal : $source->biaya_akhir - $tagihanAwal;
+            $nilaiTagihan = $first ? $tagihanAwal : $biayaAkhir - $tagihanAwal;
+            $totalTagihan = $first ? $tagihanAwal : $biayaAkhir - $tagihanAwal;
         } else {
-            $nilaiTagihan = $source->biaya_akhir;
-            $totalTagihan = $source->biaya_akhir;
+            $nilaiTagihan = $biayaAkhir;
+            $totalTagihan = $biayaAkhir;
         }
         $periodeInvoice = $periode;
 
@@ -235,7 +259,7 @@ class CreateInvoiceJob extends Job
             'jabatan_pic' => $orderHeader->jabatan_pic_order,
             'ppnbm' => $source->total_diskon,
             'ppn' => $source->total_ppn,
-            'piutang' => $first ? $source->biaya_akhir : $source->biaya_akhir - $tagihanAwal,
+            'piutang' => $first ? $biayaAkhir : $biayaAkhir - $tagihanAwal,
             'created_by' => 'System',
             'created_at' => date('Y-m-d H:i:s'),
             'is_emailed' => 0,
@@ -329,6 +353,11 @@ class CreateInvoiceJob extends Job
 
     private function tagihanAwal()
     {
-        return (int) str_replace(',', '', $this->payload['tagihan_awal'] ?? 0);
+        return $this->moneyValue($this->payload['tagihan_awal'] ?? 0);
+    }
+
+    private function moneyValue($value): int
+    {
+        return (int) preg_replace('/[^\d-]/', '', (string) ($value ?? 0));
     }
 }

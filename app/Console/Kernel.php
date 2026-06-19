@@ -20,6 +20,7 @@ use App\Console\Commands\CheckOrderActive;
 use App\Console\Commands\SummaryInvoice;
 use App\Console\Commands\CalculatePoinCustomer;
 use App\Console\Commands\CalculateParameter;
+use App\Console\Commands\GenerateWsFinalApproval;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -47,6 +48,7 @@ class Kernel extends ConsoleKernel
         Commands\SummaryInvoice::class,
         Commands\CalculatePoinCustomer::class,
         Commands\CalculateParameter::class,
+        Commands\GenerateWsFinalApproval::class,
     ];
 
     /**

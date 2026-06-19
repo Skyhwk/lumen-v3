@@ -906,14 +906,15 @@ class WsFinalUdaraKebisinganController extends Controller
                 ]);
             }
 
-            KebisinganHeader::whereIn('no_sampel', $request->no_sampel_list)
-                ->update([
-                    'lhps' => 1,
-                ]);
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Data berhasil diapprove.',
+            KebisinganHeader::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'lhps' => 1,
+                ]);
+
+            \App\Services\WsFinalApprovalService::finalizeSamples($orderDetails, true, $this->karyawan);
+            DB::commit();
+            return response()->json([
+                'message' => 'Data berhasil diapprove.',
                 'success' => true,
             ], 200);
         } catch (\Throwable $th) {

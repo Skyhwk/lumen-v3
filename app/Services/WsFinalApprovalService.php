@@ -37,6 +37,11 @@ class WsFinalApprovalService
         \App\Models\Titrimetri::class,
     ];
 
+    public static function parameterSourceClasses(): array
+    {
+        return self::PARAMETER_SOURCES;
+    }
+
     public static function syncParameter(Model $source): void
     {
         $noSampel = $source->getAttribute('no_sampel');
@@ -63,6 +68,7 @@ class WsFinalApprovalService
 
                 DB::table('ws_final_approval_detail')->updateOrInsert([
                     'ws_final_approval_header_id' => $headerId,
+                    'no_sampel' => $noSampel,
                     'parameter_lab' => self::limit($parameterLab, 70),
                 ], [
                     'no_sampel' => $noSampel,
@@ -71,7 +77,7 @@ class WsFinalApprovalService
                 ]);
             }
         } else {
-            self::deleteParameterDetail($headerId, $parameterLab);
+            self::deleteParameterDetail($headerId, $noSampel, $parameterLab);
             return;
         }
 
@@ -92,7 +98,7 @@ class WsFinalApprovalService
             return;
         }
 
-        self::deleteParameterDetail(self::upsertHeader($orderDetail), $parameterLab);
+        self::deleteParameterDetail(self::upsertHeader($orderDetail), $noSampel, $parameterLab);
     }
 
     public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
@@ -115,8 +121,10 @@ class WsFinalApprovalService
             return;
         }
 
-        self::syncApprovedParameters($orderDetail->no_sampel);
-        self::syncAirFieldParameters($orderDetail);
+        foreach (self::lhpOrderDetails($orderDetail) as $detail) {
+            self::syncApprovedParameters($detail->no_sampel);
+            self::syncAirFieldParameters($detail);
+        }
 
         self::refreshApprovalStatus($orderDetail, $approvedBy);
     }
@@ -268,16 +276,56 @@ class WsFinalApprovalService
 
     private static function upsertHeader(OrderDetail $orderDetail, array $approval = []): int
     {
+        $orderDetails = self::lhpOrderDetails($orderDetail);
+        $headerKeyColumn = self::headerKeyColumn();
+        $headerKeyValue = self::headerKeyValue($orderDetail);
+
+        $requiredParameterCount = $orderDetails
+            ->flatMap(function (OrderDetail $detail) {
+                return collect(self::arrayValue($detail->parameter))
+                    ->map(function ($parameter) use ($detail) {
+                        return self::sampleParameterKey($detail->no_sampel, $parameter);
+                    });
+            })
+            ->filter()
+            ->unique()
+            ->count();
+
         $row = array_merge([
             'no_order' => self::limit($orderDetail->no_order, 50),
-            'no_sampel' => self::limit($orderDetail->no_sampel, 50),
+            $headerKeyColumn => self::limit($headerKeyValue, 50),
             'periode' => self::limit($orderDetail->periode, 50),
-            'parameter' => self::jsonValue($orderDetail->parameter),
+            'parameter' => self::jsonValue(
+                $orderDetails
+                    ->flatMap(fn (OrderDetail $detail) => self::arrayValue($detail->parameter))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all()
+            ),
             'kategori' => self::limit(self::categoryName($orderDetail->kategori_2), 70),
             'sub_kategori' => self::limit(self::categoryName($orderDetail->kategori_3), 70),
-            'regulasi' => self::jsonValue($orderDetail->regulasi),
-            'nama_titik' => self::limit($orderDetail->keterangan_1, 50),
+            'regulasi' => self::jsonValue(
+                $orderDetails
+                    ->flatMap(fn (OrderDetail $detail) => self::arrayValue($detail->regulasi))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all()
+            ),
+            'nama_titik' => self::limit(
+                $orderDetails
+                    ->pluck('keterangan_1')
+                    ->filter()
+                    ->unique()
+                    ->implode(', '),
+                50
+            ),
         ], $approval);
+
+        if (Schema::hasColumn('ws_final_approval_header', 'jumlah_parameter')) {
+            $row['jumlah_parameter'] = $requiredParameterCount;
+        }
 
         $columns = array_keys($row);
         $quotedColumns = implode(', ', array_map(function ($column) {
@@ -287,7 +335,7 @@ class WsFinalApprovalService
         $updates = implode(', ', array_map(function ($column) {
             return "`{$column}` = VALUES(`{$column}`)";
         }, array_filter($columns, function ($column) {
-            return $column !== 'no_sampel';
+            return $column !== self::headerKeyColumn();
         })));
 
         DB::statement(
@@ -310,11 +358,44 @@ class WsFinalApprovalService
             ->first();
     }
 
-    private static function deleteParameterDetail(int $headerId, ?string $parameterLab): void
+    private static function lhpOrderDetails(OrderDetail $orderDetail)
+    {
+        $noLhp = self::headerKeyValue($orderDetail);
+
+        if (!$noLhp) {
+            return collect([$orderDetail]);
+        }
+
+        $query = OrderDetail::where('is_active', true);
+
+        if (self::stringValue($orderDetail->cfr)) {
+            $query->where('cfr', $noLhp);
+        } else {
+            $query->where('no_sampel', $orderDetail->no_sampel);
+        }
+
+        return $query->orderBy('id')->get();
+    }
+
+    private static function headerKeyColumn(): string
+    {
+        return Schema::hasColumn('ws_final_approval_header', 'no_lhp')
+            ? 'no_lhp'
+            : 'no_sampel';
+    }
+
+    private static function headerKeyValue(OrderDetail $orderDetail): ?string
+    {
+        return self::stringValue($orderDetail->cfr)
+            ?: self::stringValue($orderDetail->no_sampel);
+    }
+
+    private static function deleteParameterDetail(int $headerId, ?string $noSampel, ?string $parameterLab): void
     {
         if ($parameterLab !== null) {
             DB::table('ws_final_approval_detail')
                 ->where('ws_final_approval_header_id', $headerId)
+                ->where('no_sampel', $noSampel)
                 ->where('parameter_lab', self::limit($parameterLab, 70))
                 ->delete();
         }
@@ -386,6 +467,7 @@ class WsFinalApprovalService
         foreach (self::airFieldParameterValues($orderDetail, $fieldData) as $parameterLab => $result) {
             DB::table('ws_final_approval_detail')->updateOrInsert([
                 'ws_final_approval_header_id' => $headerId,
+                'no_sampel' => $orderDetail->no_sampel,
                 'parameter_lab' => self::limit($parameterLab, 70),
             ], [
                 'no_sampel' => $orderDetail->no_sampel,
@@ -401,31 +483,44 @@ class WsFinalApprovalService
     private static function refreshApprovalStatus(OrderDetail $orderDetail, ?string $approvedBy = null): void
     {
         $headerId = self::upsertHeader($orderDetail);
-        $required = collect(self::arrayValue($orderDetail->parameter))
-            ->map(function ($parameter) {
-                return self::normalizeParameter($parameter);
+        $orderDetails = self::lhpOrderDetails($orderDetail);
+
+        $required = $orderDetails
+            ->flatMap(function (OrderDetail $detail) {
+                return collect(self::arrayValue($detail->parameter))
+                    ->map(function ($parameter) use ($detail) {
+                        return self::sampleParameterKey($detail->no_sampel, $parameter);
+                    });
             })
             ->filter()
             ->unique()
             ->values();
 
-        $approvedParameters = self::approvedParameterNames($orderDetail->no_sampel);
+        $approvedParameters = collect();
 
-        if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'air') {
-            $fieldData = self::approvedAirFieldData($orderDetail->no_sampel);
+        foreach ($orderDetails as $detail) {
+            $approvedParameters = $approvedParameters->merge(
+                collect(self::approvedParameterNames($detail->no_sampel))
+                    ->map(function ($parameter) use ($detail) {
+                        return self::sampleParameterKey($detail->no_sampel, $parameter);
+                    })
+            );
 
-            if ($fieldData) {
-                $approvedParameters = array_merge(
-                    $approvedParameters,
-                    array_keys(self::airFieldParameterValues($orderDetail, $fieldData))
-                );
+            if (mb_strtolower((string) self::categoryName($detail->kategori_2)) === 'air') {
+                $fieldData = self::approvedAirFieldData($detail->no_sampel);
+
+                if ($fieldData) {
+                    $approvedParameters = $approvedParameters->merge(
+                        collect(array_keys(self::airFieldParameterValues($detail, $fieldData)))
+                            ->map(function ($parameter) use ($detail) {
+                                return self::sampleParameterKey($detail->no_sampel, $parameter);
+                            })
+                    );
+                }
             }
         }
 
-        $approved = collect($approvedParameters)
-            ->map(function ($parameter) {
-                return self::normalizeParameter($parameter);
-            })
+        $approved = $approvedParameters
             ->filter()
             ->unique()
             ->values();
@@ -542,7 +637,11 @@ class WsFinalApprovalService
 
     private static function extractResult(Model $source): ?string
     {
-        foreach (['hasil', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
+        foreach (['hasil', 'hasil1', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
+            if (!array_key_exists($field, $source->getAttributes())) {
+                continue;
+            }
+
             $value = $source->getAttribute($field);
             if ($value !== null && $value !== '') {
                 return self::stringValue($value);
@@ -563,7 +662,11 @@ class WsFinalApprovalService
                 continue;
             }
 
-            foreach (['hasil', 'nilai', 'C', 'C1', 'C2'] as $field) {
+            foreach (['hasil', 'hasil1', 'nilai', 'C', 'C1', 'C2'] as $field) {
+                if (!array_key_exists($field, $value->getAttributes())) {
+                    continue;
+                }
+
                 $result = $value->getAttribute($field);
                 if ($result !== null && $result !== '') {
                     return self::stringValue($result);
@@ -687,6 +790,11 @@ class WsFinalApprovalService
     private static function normalizeParameter($value): string
     {
         return mb_strtolower(trim(self::stripIdentifier($value)));
+    }
+
+    private static function sampleParameterKey($noSampel, $parameter): string
+    {
+        return self::stringValue($noSampel) . '|' . self::normalizeParameter($parameter);
     }
 
     private static function categoryName($value): ?string

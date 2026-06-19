@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
+use Illuminate\Support\Facades\Schema;
 
 class WsFinalApprovalHeader extends Sector
 {
@@ -42,7 +43,18 @@ class WsFinalApprovalHeader extends Sector
 
     public function scopeByNoSampel($query, string $noSampel)
     {
-        return $query->where('no_sampel', $noSampel);
+        return $query->where(
+            Schema::hasColumn($this->table, 'no_sampel') ? 'no_sampel' : 'no_lhp',
+            $noSampel
+        );
+    }
+
+    public function scopeByNoLhp($query, string $noLhp)
+    {
+        return $query->where(
+            Schema::hasColumn($this->table, 'no_lhp') ? 'no_lhp' : 'no_sampel',
+            $noLhp
+        );
     }
 
     public function markAsApproved(string $approvedBy): bool
