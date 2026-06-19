@@ -17,6 +17,7 @@ use App\Models\MasterKategori;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\ParameterFdl;
+use App\Models\TemplateStp;
 
 // SERVICE
 use App\Services\SendTelegram;
@@ -207,6 +208,30 @@ class FdlLingkunganKerjaController extends Controller
                 "NO2", "NO2 (24 Jam)", "NO2 (8 Jam)", "NO2 (6 Jam)", "NOx", "NO2 8J (LK-pm)","NO2 8J (LK-µg)","NO2 SS (LK-pm)","NO2 SS (LK-µg)"
             ];
 
+            $parameter_icp = TemplateStp::select("param")
+                ->where('is_active', 1)
+                ->where('category_id', '4')
+                ->where('name', 'ICP')
+                ->first();
+
+            $excludeParam = [
+                "Kelembaban",
+                "Suhu",
+                "Laju Ventilasi",
+                "Laju Ventilasi (8 Jam)",
+                "Tekanan Udara (LK)",
+                "Tekanan Udara",
+                "Kecepatan Angin"
+            ];
+
+            if ($parameter_icp) {
+                $icpParams = json_decode($parameter_icp->param, true);
+
+                if (is_array($icpParams)) {
+                    $excludeParam = array_merge($excludeParam, $icpParams);
+                }
+            }
+
             $data = DetailLingkunganKerja::where('no_sampel', $request->no_sample);
             // dd($data);
             $lk_parameter = DetailLingkunganKerja::where('no_sampel', $request->no_sample);
@@ -284,9 +309,18 @@ class FdlLingkunganKerjaController extends Controller
             $filtered_param = array_values(array_diff($nilai_param2, $lk_parameter));
 
             // Buat output JSON yang sesuai
-            $param_fin = json_encode($filtered_param);
+            $param_fin = $filtered_param;
             $parameterList = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','lingkungan_kerja')->first();
             $parameterVolatile = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile_lk')->first();
+
+            // Exclude parameter yang tidak diinginkan dari $parameterList
+            $parameterListArray = json_decode($parameterList->parameters, true);
+            $filtered_param = array_values(
+                array_diff(
+                    array_intersect($filtered_param, $parameterListArray),
+                    $excludeParam
+                )
+            );
             if ($data) {
                 return response()->json([
                     'non'      => 1,
@@ -299,7 +333,7 @@ class FdlLingkunganKerjaController extends Controller
                     'cuaca'          => $data->cuaca,
                     'ventilasi'      => $data->laju_ventilasi,
                     'intensitas'     => $data->intensitas,
-                    'aktifitas'     => $data->aktifitas,
+                    'aktifitas'      => $data->aktifitas,
                     'jarak'          => $data->jarak_sumber_cemaran,
                     'suhu'           => $data->suhu,
                     'kelem'          => $data->kelembapan,
@@ -313,13 +347,14 @@ class FdlLingkunganKerjaController extends Controller
                     'foto_lok'       => $data->foto_lokasi_sampel,
                     'foto_kon'       => $data->foto_kondisi_sampel,
                     'foto_lain'      => $data->foto_lain,
-                    'param' => json_decode($param_fin, true),
+                    'param' => $param_fin,
                     'parameterList' => json_decode($parameterList->parameters,true),
                     'is_filled' => true,
                     // 'important_keyword' => $importantKeyword,
                     'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
                     'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                    'parameter_no2' => $parameter_no2
+                    'parameter_no2' => $parameter_no2,
+                    'final_param' => $filtered_param
                 ], 200);
                 $this->resultx = 'get shift sample lingkungan kerja success';
             } else {
@@ -327,13 +362,14 @@ class FdlLingkunganKerjaController extends Controller
                     'no_sample'    => $po->no_sampel,
                     'keterangan' => $po->keterangan_1,
                     'id_ket' => explode('-', $po->kategori_3)[0],
-                    'param' => json_decode($param_fin, true),
+                    'param' => $param_fin,
                     'parameterList' => json_decode($parameterList->parameters,true),
                     'is_filled' => false,
                     // 'important_keyword' => $importantKeyword,
                     'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
                     'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                    'parameter_no2' => $parameter_no2
+                    'parameter_no2' => $parameter_no2,
+                    'final_param' => $filtered_param
                 ], 200);
             }
         } catch (\Exception $th) {
