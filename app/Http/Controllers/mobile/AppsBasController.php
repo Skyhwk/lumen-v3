@@ -58,6 +58,7 @@ use App\Models\DetailSenyawaVolatile;
 use App\Models\SampelTidakSelesai;
 use App\Models\QrDocument;
 use App\Models\RequiredParameters;
+use App\Models\TemplateStp;
 use Illuminate\Support\Str;
 
 use App\Services\SendEmail;
@@ -70,7 +71,10 @@ class AppsBasController extends Controller
 {
     public function index(Request $request)
     {
+        // Set limit memory lebih besar secara sementara untuk proses data besar
+        ini_set('memory_limit', '512M');
         try {
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index START - User: {$this->karyawan} - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             // Filter data untuk hanya mendapatkan data yang memiliki 'sampler' sesuai dengan $this->karyawan
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)->whereIn('id_jabatan', [41, 42])->exists();
@@ -104,10 +108,13 @@ class AppsBasController extends Controller
                     Carbon::now()->subDays(8)->toDateString(),
                     Carbon::now()->toDateString()
                 ]);
+                
             }
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
 
             $orderDetail = $orderDetail->get()->toArray();
+
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index After Query - Count: " . count($orderDetail) . " - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             $formattedData = array_reduce($orderDetail, function ($carry, $item) {
                 if (empty($item['order_header']) || empty($item['order_header']['sampling']))
@@ -166,6 +173,9 @@ class AppsBasController extends Controller
 
                 return array_merge($carry, $results);
             }, []);
+
+            unset($orderDetail); // Free up memory
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index After FormattedData - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             $groupedData = [];
 
@@ -228,6 +238,9 @@ class AppsBasController extends Controller
                 }
             }
 
+            unset($formattedData); // Free up memory
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index After GroupedData - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+
             // dd($groupedData);
 
             // Buat final result: 1 data per sampler
@@ -242,18 +255,32 @@ class AppsBasController extends Controller
             }
 
             $finalResult = array_values($finalResult);
+            unset($groupedData);
+
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index After FinalResult - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             // Ambil semua no_order dari hasil akhir
             $orderNos = array_column($finalResult, 'no_order');
 
-            // Ambil data catatan, informasi teknis, dan tanda_tangan_bas dari tabel PersiapanSampelHeader berdasarkan no_order
+            // OPTIMASI: Eager Load PersiapanSampelHeader untuk mencegah N+1 Query (Loop yang bikin OOM & Lemot)
+            $jadwalList = array_unique(array_column($finalResult, 'jadwal'));
+
+            $persiapanHeadersData = PersiapanSampelHeader::whereIn('no_order', $orderNos)
+                ->whereIn('tanggal_sampling', $jadwalList)
+                ->where('is_active', true)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->groupBy(function($item) {
+                    return $item->no_order . '_' . $item->tanggal_sampling;
+                });
 
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
-                $persiapanHeaders = PersiapanSampelHeader::where('no_order', $item['no_order'])->where('is_active', true)->where('tanggal_sampling', $item['jadwal'])->orderBy('id', 'desc')->first();
+                $headerList = $persiapanHeadersData->get($item['no_order'] . '_' . $item['jadwal']);
+                $header = $headerList ? $headerList->first() : null;
+
                 // dd($persiapanHeaders);
-                if (isset($persiapanHeaders)) {
-                    $header = $persiapanHeaders;
+                if (isset($header)) {
                     // dd($item);
                     if ($header->detail_bas_documents) {
                         $item['detail_bas_documents'] = json_decode($header->detail_bas_documents, true);
@@ -334,10 +361,10 @@ class AppsBasController extends Controller
                                 'tanda_tangan_lama' => $ttd['tanda_tangan']
                             ];
                         }, $ttd_bas);
-                        $signature = array_filter($signature, function ($item) {
-                            return $item !== null;
+                        $signature = array_filter($signature, function ($i) {
+                            return $i !== null;
                         });
-                        $item['tanda_tangan_bas'] = $signature;
+                        $item['tanda_tangan_bas'] = array_values($signature);
                     } else {
                         $item['tanda_tangan_bas'] = [];
                     }
@@ -351,6 +378,9 @@ class AppsBasController extends Controller
                 }
             }
             unset($item);
+            unset($persiapanHeadersData); // Free up memory
+
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index After EagerLoad Data - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             if ($isProgrammer) {
                 $filteredResult = $finalResult;
@@ -362,6 +392,7 @@ class AppsBasController extends Controller
 
             // Reindex array setelah filter jika diperlukan
             $filteredResult = array_values($filteredResult);
+            unset($finalResult);
 
             // Jika tidak ada hasil yang sesuai, bisa mengembalikan pesan atau melakukan tindakan lain
             if (count($filteredResult) === 0) {
@@ -388,70 +419,78 @@ class AppsBasController extends Controller
                 }
             }
 
-            $orderD = OrderDetail::where('no_order', $request->no_order)
-                ->where('is_active', true)
-                ->where('tanggal_sampling', $request->tanggal_sampling)
-                ->get()
-                ->map(function ($item) {
-                    return (object) $item->toArray(); // ubah ke stdClass
-                });
+            if ($request->has('no_order') && $request->has('tanggal_sampling')) {
+                $orderD = OrderDetail::where('no_order', $request->no_order)
+                    ->where('is_active', true)
+                    ->where('tanggal_sampling', $request->tanggal_sampling)
+                    ->get()
+                    ->map(function ($item) {
+                        return (object) $item->toArray(); // ubah ke stdClass
+                    });
 
-            if (!$orderD->isEmpty()) {
-                $detail_sampling_sampel = [];
+                if (!$orderD->isEmpty()) {
+                    $detail_sampling_sampel = [];
 
-                foreach ($orderD as $key => $item) {
-                    $item->no_sample = $item->no_sampel;
-                    if ($item->kategori_2 === "1-Air") {
-                        $exists = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
-                        $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
-                        $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
-                        $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
-                        $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
-                        $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
+                    // OPTIMASI: Eager Load queries in loop DataLapanganAir and SampelTidakSelesai
+                    $noSampelList = $orderD->pluck('no_sampel')->unique()->toArray();
+                    
+                    $dataAirExists = DataLapanganAir::whereIn('no_sampel', $noSampelList)->pluck('no_sampel')->toArray();
+                    $sampelTidakSelesaiList = SampelTidakSelesai::whereIn('no_sampel', $noSampelList)->pluck('no_sampel')->toArray();
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
-                        $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
+                    foreach ($orderD as $key => $item) {
+                        $item->no_sample = $item->no_sampel;
+                        $isAirExist = in_array($item->no_sample, $dataAirExists);
+                        $isTidakSelesai = in_array($item->no_sample, $sampelTidakSelesaiList);
 
-                    } else {
-                        $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
-                        $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
-                        $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
-                        $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
-                        $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
+                        if ($item->kategori_2 === "1-Air") {
+                            $detail_sampling_sampel[$key]['status'] = $isAirExist ? 'selesai' : 'belum selesai';
+                            $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
+                            $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
+                            $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
+                            $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
-                        $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-                    }
-                }
-                // dd($detail_sampling_sampel);
+                            $detail_sampling_sampel[$key]['status_sampel'] = $isTidakSelesai;
 
-                // Gabungkan detail_sampling_sampel ke filteredResult
-                foreach ($filteredResult as $key => $value) {
-                    $kategoriItems = explode(',', $value['kategori']);
+                        } else {
+                            $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
+                            $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
+                            $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
+                            $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
+                            $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                    $matchedDetails = [];
-
-                    foreach ($kategoriItems as $item) {
-                        $parts = explode('-', $item);
-                        $nomor = trim(end($parts));
-
-                        $katNoOrder = $value['no_order'] . '/' . $nomor;
-
-                        foreach ($detail_sampling_sampel as $detail) {
-                            if ($detail['no_sampel'] === $katNoOrder) {
-                                $matchedDetails[] = $detail;
-                                break;
-                            }
+                            $detail_sampling_sampel[$key]['status_sampel'] = $isTidakSelesai;
                         }
                     }
-                    $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
-                }
 
+                    // Gabungkan detail_sampling_sampel ke filteredResult
+                    foreach ($filteredResult as $key => $value) {
+                        $kategoriItems = explode(',', $value['kategori']);
+
+                        $matchedDetails = [];
+
+                        foreach ($kategoriItems as $item) {
+                            $parts = explode('-', $item);
+                            $nomor = trim(end($parts));
+
+                            $katNoOrder = $value['no_order'] . '/' . $nomor;
+
+                            foreach ($detail_sampling_sampel as $detail) {
+                                if ($detail['no_sampel'] === $katNoOrder) {
+                                    $matchedDetails[] = $detail;
+                                    break;
+                                }
+                            }
+                        }
+                        $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
+                    }
+                }
             }
+
+            \Illuminate\Support\Facades\Log::info("AppsBasController::index END - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             return DataTables::of($filteredResult)->make(true);
         } catch (\Exception $ex) {
-            dd($ex);
+            \Illuminate\Support\Facades\Log::error("AppsBasController::index ERROR: " . $ex->getMessage() . " on line " . $ex->getLine());
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
@@ -2325,10 +2364,22 @@ class AppsBasController extends Controller
 
     }
 
-    private function getStatusSampling($sample) // return selesai / blm selesai
+    private function getStatusSampling($sample)
     {
         try {
             $parametersRaw = json_decode($sample->parameter);
+            
+            // 1. Panggil data Template ICP di luar loop (sekali saja agar query ringan)
+            // Pastikan Anda sudah meng-import: use App\Models\TemplateStp; di atas class
+            $templateIcp = TemplateStp::where('name', 'icp')
+                ->where('category_id', 4)
+                ->first();
+                
+            $icpParameters = [];
+            if ($templateIcp && $templateIcp->param) {
+                // Decode array JSON seperti $a yang Anda berikan tadi
+                $icpParameters = json_decode($templateIcp->param, true) ?? [];
+            }
             
             // Panggil sekali di luar loop, bukan di dalam array_reduce
             $requiredParameters = collect($this->getRequiredParameters())
@@ -2341,14 +2392,12 @@ class AppsBasController extends Controller
                     return $carry;
                 }
 
-                $matchedParameter = $requiredParameters  // <-- pakai variable yang sudah di-cache
+                $matchedParameter = $requiredParameters
                     ->where('parameter', $parameterName)
                     ->first();
 
                 if ($matchedParameter == null) {
-                    $errorMessage = "Parameter '{$parameterName}' pada sampel '{$sample->no_sample}' Belum Terdaftar di RequiredParameters Hub IT";
-                    \Illuminate\Support\Facades\Log::error($errorMessage);
-                    throw new \Exception($errorMessage);
+                    throw new Exception("Kemungkinan Parameter.{$parameterName}. Belum Terdaftar di RequiredParameters Hub IT");
                 }
                 $carry[] = $matchedParameter;
                 return $carry;
@@ -2367,21 +2416,42 @@ class AppsBasController extends Controller
             $status = 'selesai';
             if (!empty($parameters)) {
                 $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
+                
                 foreach ($parameters as $parameter) {
+                    $paramName = $parameter['parameter']; // Ambil nama parameter untuk mempermudah pengecekan
+
                     if ($parameter['category'] == '6-Padatan') {
                         continue;
                     }
-                    if (in_array($parameter['parameter'], $parameterBypass)) {
+                    
+                    if (in_array($paramName, $parameterBypass)) {
                         continue;
                     }
 
-                    if ($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)') {
+                    if ($sample->no_sample == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
                         continue;
                     }
 
                     if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
                         continue;
                     }
+
+                    // --- LOGIKA BYPASS ICP TEMPLATE ---
+                    // Cek apakah parameter saat ini ada di dalam list JSON Template ICP
+                    if (in_array($paramName, $icpParameters)) {
+                        
+                        // Validasi Regex: Cari kata "jam" atau angka bergandengan huruf "j" (seperti 8j, 24j)
+                        // /i = case-insensitive (Jam, jam, 8J, 8j akan terdeteksi)
+                        if (!preg_match('/(jam|\d+j)/i', $paramName)) {
+                            
+                            // Jika TIDAK MENGANDUNG "jam" atau "8j", maka BYPASS (dianggap selesai).
+                            continue; 
+                        }
+                        
+                        // Jika MENGANDUNG "jam" atau "8j" (misal: "Pb 8J (IKM-ICP-LK)"), 
+                        // kode akan mengabaikan blok if ini dan tetap lanjut diperiksa di bawah oleh verifyStatus.
+                    }
+                    // ----------------------------------
 
                     $verified = $this->verifyStatus($sample->no_sample, $parameter);
 
@@ -2396,7 +2466,7 @@ class AppsBasController extends Controller
 
             return $status;
         } catch (\Exception $th) {
-            throw new \Exception($th->getMessage());
+            throw new Exception($th->getMessage());
         }
     }
 
