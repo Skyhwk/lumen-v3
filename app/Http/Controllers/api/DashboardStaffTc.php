@@ -161,11 +161,11 @@ class DashboardStaffTc extends Controller
                 $maxHariKeterlambatan = 0;
                 foreach ($orderSelesaiTahun as $order) {
                     try {
-                        $tglTerima = Carbon::parse($order->tanggal_terima);
-                        $tglApproved = Carbon::parse($order->approved_at);
-                        $hariKerja = $this->hitungHariKerja($tglTerima, $tglApproved, $kalenderLengkap);
-                        if ($hariKerja > $maxHariKeterlambatan) {
-                            $maxHariKeterlambatan = $hariKerja;
+                        $tglTerima = Carbon::parse($order->tanggal_terima)->startOfDay();
+                        $tglApproved = Carbon::parse($order->approved_at)->startOfDay();
+                        $selisihHari = $tglTerima->diffInDays($tglApproved);
+                        if ($selisihHari > $maxHariKeterlambatan) {
+                            $maxHariKeterlambatan = $selisihHari;
                         }
                     } catch (\Exception $e) {
                         continue;
@@ -214,7 +214,7 @@ class DashboardStaffTc extends Controller
                     ->where('status', 3)
                     ->whereNotNull('approved_at')
                     ->whereNotNull('approved_by')
-                    ->whereRaw("DATE_FORMAT(tanggal_terima, '%Y-%m') = ?", [$filterBulan])
+                    ->whereRaw("DATE_FORMAT(approved_at, '%Y-%m') = ?", [$filterBulan])
                     ->get(['no_sampel', 'cfr', 'tanggal_terima', 'approved_at', 'approved_by', 'created_at', 'updated_at']);
 
                 if ($orderBulan->count() > 0) {
