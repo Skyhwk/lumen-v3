@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{
-    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirHeader,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,
+    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,LhpsAdverseOdorHeader,LhpsAirHeader,LhpsEmisiCHeader,LhpsEmisiHeader,LhpsEmisiIsokinetikHeader,LhpsErgonomiHeader,LhpsGetaranHeader,LhpsHygieneSanitasiHeader,LhpsIklimHeader,LhpsKebisinganHeader,LhpsKebisinganPersonalHeader,LhpsLingHeader,LhpsMedanLMHeader,LhpsMicrobiologiHeader,LhpsPadatanHeader,LhpsPencahayaanHeader,LhpsSinarUVHeader,LhpsSwabTesHeader,RekapLiburKalender
 };
 use App\Services\{
     CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService
@@ -25,6 +25,7 @@ use GuzzleHttp\Exception\ClientException;
 use Mpdf;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use Illuminate\Support\Facades\Schema;
 
 Carbon::setLocale('id');
 
@@ -139,9 +140,148 @@ class TestingController extends Controller
 
     public function show(Request $request)
     {
-
+        // Tambahkan ini di baris paling atas fungsi dekripsi kamu
+        
         try {
             switch ($request->menu) {
+                case 'dahboar-lhp':
+                    //step 1 ambil data kalender perusahaan
+                    $dbKalenderPerusahaan = RekapLiburKalender::where('tahun', date('Y'))
+                        ->where('is_active', 1)
+                        ->first();
+
+                    if ($dbKalenderPerusahaan == null) {
+                        return response()->json(['message' => 'kalender kerja belum di setting'], 401);
+                    }
+
+                    $kalenderPerusahaan = json_decode($dbKalenderPerusahaan->tanggal, true);
+
+                    $hariIni = date('Y-m-d'); 
+                    $bulanIni = date('Y-m');  
+
+                    if (!isset($kalenderPerusahaan[$bulanIni])) {
+                        return response()->json(['message' => 'Jadwal kalender untuk bulan ini belum tersedia'], 404);
+                    }
+
+                    $hariKerjaBulanIni = $kalenderPerusahaan[$bulanIni];
+                    $indexHariKerja = array_search($hariIni, $hariKerjaBulanIni);
+
+                    if ($indexHariKerja !== false) {
+                        $hariKerjaKe = $indexHariKerja + 1; 
+
+                        $tanggalHariKerjaLalu = array_slice($hariKerjaBulanIni, 0, $hariKerjaKe);
+                        $tanggalAwal = $hariKerjaBulanIni[0];
+
+                        // =========================================================
+                        // PERBAIKAN 1: Query Database Aman dari Jam/Waktu
+                        // =========================================================
+                        // Kita ganti whereIn menjadi orWhereDate agar Laravel otomatis memotong 
+                        // bagian jam di database dan hanya mencocokkan tanggalnya saja.
+                        $listOrder = OrderDetail::where(function ($query) use ($tanggalHariKerjaLalu) {
+                            foreach ($tanggalHariKerjaLalu as $tgl) {
+                                $query->orWhereDate('tanggal_terima', $tgl);
+                            }
+                        })
+                        ->where('is_active', true) 
+                        ->get(['no_sampel', 'status', 'tanggal_terima']); 
+
+                        // =========================================================
+                        // PERBAIKAN 2: Filter Status "Belum Selesai" Lebih Longgar
+                        // =========================================================
+                        // 1. KLASIFIKASI KUMULATIF 
+                        $selesaiDraft_All = $listOrder->where('status', 2)->pluck('no_sampel')->values();
+                        $siapRilis_All = $listOrder->where('status', 3)->pluck('no_sampel')->values();
+                        
+                        $prosesAnalis_All = $listOrder->filter(function($item) { return $item->status == 0; })->pluck('no_sampel')->values();
+                        $menungguTqc_All = $listOrder->filter(function($item) { return $item->status == 1; })->pluck('no_sampel')->values();
+
+                        // =========================================================
+                        // PERBAIKAN 3: Filter Current Day Aman dari Objek Carbon
+                        // =========================================================
+                        $listOrderHariIni = $listOrder->filter(function ($order) use ($hariIni) {
+                            if (empty($order->tanggal_terima)) return false;
+                            try {
+                                $tanggalStr = is_object($order->tanggal_terima) 
+                                    ? $order->tanggal_terima->format('Y-m-d') 
+                                    : \Carbon\Carbon::parse($order->tanggal_terima)->format('Y-m-d');
+                                return $tanggalStr === $hariIni;
+                            } catch (\Exception $e) {
+                                return false;
+                            }
+                        });
+
+                        // 2. KLASIFIKASI CURRENT DAY
+                        $selesaiDraft_Today = $listOrderHariIni->where('status', 2)->pluck('no_sampel')->values();
+                        $siapRilis_Today = $listOrderHariIni->where('status', 3)->pluck('no_sampel')->values();
+                        
+                        $prosesAnalis_Today = $listOrderHariIni->filter(function($item) { return $item->status == 0; })->pluck('no_sampel')->values();
+                        $menungguTqc_Today = $listOrderHariIni->filter(function($item) { return $item->status == 1; })->pluck('no_sampel')->values();
+
+                        // =========================================================
+                        // 4. RANGKAI RESPONSE JSON
+                        // =========================================================
+                        return response()->json([
+                            'status_hari' => 'Hari Kerja',
+                            'hari_kerja_ke' => $hariKerjaKe,
+                            'rentang_waktu' => [
+                                'tanggal_awal' => $tanggalAwal,
+                                'tanggal_sekarang' => $hariIni
+                            ],
+                            'total_sampel_keseluruhan' => $listOrder->count(),
+                            
+                            'rekap_kumulatif_awal_bulan' => [
+                                'sudah_selesai_draft' => [
+                                    'jumlah' => $selesaiDraft_All->count(),
+                                    'daftar_no_sampel' => $selesaiDraft_All
+                                ],
+                                'siap_rilis_10_hari' => [
+                                    'jumlah' => $siapRilis_All->count(),
+                                    'daftar_no_sampel' => $siapRilis_All
+                                ],
+                                'proses_analis' => [
+                                    'jumlah' => $prosesAnalis_All->count(),
+                                    'daftar_no_sampel' => $prosesAnalis_All
+                                ],
+                                'menunggu_tqc' => [
+                                    'jumlah' => $menungguTqc_All->count(),
+                                    'daftar_no_sampel' => $menungguTqc_All
+                                ]
+                            ],
+
+                            'rekap_khusus_hari_ini' => [
+                                'total_sampel_hari_ini' => $listOrderHariIni->count(),
+                                'sudah_selesai_draft' => [
+                                    'jumlah' => $selesaiDraft_Today->count(),
+                                    'daftar_no_sampel' => $selesaiDraft_Today
+                                ],
+                                'siap_rilis' => [
+                                    'jumlah' => $siapRilis_Today->count(),
+                                    'daftar_no_sampel' => $siapRilis_Today
+                                ],
+                                'proses_analis' => [
+                                    'jumlah' => $prosesAnalis_Today->count(),
+                                    'daftar_no_sampel' => $prosesAnalis_Today
+                                ],
+                                'menunggu_tqc' => [
+                                    'jumlah' => $menungguTqc_Today->count(),
+                                    'daftar_no_sampel' => $menungguTqc_Today
+                                ]
+                            ],
+                            'debug_tanggal_fetched' => $listOrder->pluck('tanggal_terima')->map(function($d) {
+                                return is_object($d) ? $d->format('Y-m-d H:i:s') : (string)$d;
+                            })->unique()->values()
+                        ]);
+
+                    } else {
+                        // ... handling libur (sama seperti sebelumnya) ...
+                        return response()->json([
+                            'tanggal_sekarang' => $hariIni,
+                            'status' => 'Libur',
+                            'message' => 'Hari ini bukan hari kerja (Sabtu/Minggu/Libur Nasional)'
+                        ], 400);
+                    }
+                    
+                    break;
                 case 'contract-order':
                     // 1. Ambil data Order per Perusahaan
                     $subTahun = substr($request->year, -2);
