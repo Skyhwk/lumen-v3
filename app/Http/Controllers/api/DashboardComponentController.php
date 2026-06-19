@@ -162,9 +162,17 @@ protected $fillable = [
     public function getBawahan(Request $request)
     {
         $owner_ids = explode(',', $request->owner_id);
+        $loggedInUserId = $this->user_id;
+
+        if (in_array((string)$loggedInUserId, $owner_ids) || in_array((int)$loggedInUserId, $owner_ids)) {
+            $target_owner_ids = [$loggedInUserId];
+        } else {
+            $target_owner_ids = $owner_ids;
+        }
+
         $allSubordinates = collect([]);
 
-        foreach ($owner_ids as $owner_id) {
+        foreach ($target_owner_ids as $owner_id) {
             if (!empty($owner_id)) {
                 $sub = GetBawahan::where('id', $owner_id)->get();
                 $allSubordinates = $allSubordinates->merge($sub);
@@ -172,7 +180,7 @@ protected $fillable = [
         }
 
         $subordinateUserIds = $allSubordinates->pluck('user_id')->unique()->toArray();
-        $managerUserIds = MasterKaryawan::whereIn('id', $owner_ids)->pluck('user_id')->toArray();
+        $managerUserIds = MasterKaryawan::whereIn('id', $target_owner_ids)->pluck('user_id')->toArray();
         $subordinates = array_diff($subordinateUserIds, $managerUserIds);
 
         $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)->where('master_karyawan.is_active', 1)
