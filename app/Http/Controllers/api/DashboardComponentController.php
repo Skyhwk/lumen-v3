@@ -39,7 +39,7 @@ protected $fillable = [
     public function getDashboardList(Request $request)
     {
         try {
-            $userHaveAllAccess = $this->user_id === 1 || $this->user_id === 127;
+            $userHaveAllAccess = $this->user_id === 1 || $this->user_id === 127 || $this->user_id === 1010;
         
             if($userHaveAllAccess) {
                 $DashboardComponent = DashboardComponent::where('is_active', 1)->get();
@@ -161,32 +161,40 @@ protected $fillable = [
 
     public function getBawahan(Request $request)
     {
-        $owner_ids = explode(',', $request->owner_id);
         $loggedInUserId = $this->user_id;
 
-        if (in_array((string)$loggedInUserId, $owner_ids) || in_array((int)$loggedInUserId, $owner_ids)) {
-            $target_owner_ids = [$loggedInUserId];
+        if ($loggedInUserId == 1 || $loggedInUserId == 127) {
+            $data = MasterKaryawan::where('master_karyawan.is_active', 1)
+                    ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
+                    ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
+                    ->get();
         } else {
-            $target_owner_ids = $owner_ids;
-        }
+            $owner_ids = explode(',', $request->owner_id);
 
-        $allSubordinates = collect([]);
-
-        foreach ($target_owner_ids as $owner_id) {
-            if (!empty($owner_id)) {
-                $sub = GetBawahan::where('id', $owner_id)->get();
-                $allSubordinates = $allSubordinates->merge($sub);
+            if (in_array((string)$loggedInUserId, $owner_ids) || in_array((int)$loggedInUserId, $owner_ids)) {
+                $target_owner_ids = [$loggedInUserId];
+            } else {
+                $target_owner_ids = $owner_ids;
             }
+
+            $allSubordinates = collect([]);
+
+            foreach ($target_owner_ids as $owner_id) {
+                if (!empty($owner_id)) {
+                    $sub = GetBawahan::where('id', $owner_id)->get();
+                    $allSubordinates = $allSubordinates->merge($sub);
+                }
+            }
+
+            $subordinateUserIds = $allSubordinates->pluck('user_id')->unique()->toArray();
+            $managerUserIds = MasterKaryawan::whereIn('id', $target_owner_ids)->pluck('user_id')->toArray();
+            $subordinates = array_diff($subordinateUserIds, $managerUserIds);
+
+            $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)->where('master_karyawan.is_active', 1)
+                    ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
+                    ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
+                    ->get();
         }
-
-        $subordinateUserIds = $allSubordinates->pluck('user_id')->unique()->toArray();
-        $managerUserIds = MasterKaryawan::whereIn('id', $target_owner_ids)->pluck('user_id')->toArray();
-        $subordinates = array_diff($subordinateUserIds, $managerUserIds);
-
-        $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)->where('master_karyawan.is_active', 1)
-                ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
-                ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
-                ->get();
 
         return response()->json([
             'message' => 'get data bawahan success.',
