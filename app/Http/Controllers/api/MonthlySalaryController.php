@@ -74,14 +74,14 @@ class MonthlySalaryController extends Controller
     {
         try {
             // Cek akses berdasarkan jabatan
-            // if (!$this->hasAccess()) {
-            //     return response()->json([
-            //         'data' => [],
-            //         'recordsTotal' => 0,
-            //         'recordsFiltered' => 0,
-            //         'message' => 'Anda tidak memiliki akses ke halaman ini',
-            //     ], 200);
-            // }
+            if (!$this->hasAccess()) {
+                return response()->json([
+                    'data' => [],
+                    'recordsTotal' => 0,
+                    'recordsFiltered' => 0,
+                    'message' => 'Anda tidak memiliki akses ke halaman ini',
+                ], 200);
+            }
 
             // Ambil ID bawahan (null jika devMode)
             $bawahanIds = $this->getBawahanIds();
@@ -147,12 +147,12 @@ class MonthlySalaryController extends Controller
     {
         try {
             // Cek akses berdasarkan jabatan
-            // if (!$this->hasAccess()) {
-            //     return response()->json([
-            //         'data' => [],
-            //         'message' => 'Anda tidak memiliki akses',
-            //     ], 200);
-            // }
+            if (!$this->hasAccess()) {
+                return response()->json([
+                    'data' => [],
+                    'message' => 'Anda tidak memiliki akses',
+                ], 200);
+            }
 
             // Ambil ID bawahan (null jika devMode)
             $bawahanIds = $this->getBawahanIds();
