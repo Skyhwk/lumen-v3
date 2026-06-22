@@ -132,6 +132,7 @@ class AuthController extends BaseController
 
         $strukture_menu = Menu::where('is_active', true)->orderBy('menu', 'asc')->get();
 
+        $userId = $karyawan->id;
         $dashboardOwner =  DashboardComponent::where(function($query) use ($karyawan) {
             $query->where('owner_id', $karyawan->id)
                   ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$karyawan->id]);
@@ -148,6 +149,21 @@ class AuthController extends BaseController
         });
 
         $dashboard = $dashboardOwner->merge($dashboardAccess)->unique('nama_dashboard')->values();
+
+        $dashboard = $dashboard->filter(function($item) use ($userId) {
+            $userVisibility = null;
+            if ($item instanceof SetAksesDashboard) {
+                $userVisibility = $item->user_visibility;
+            } else {
+                $akses = SetAksesDashboard::where('nama_dashboard', $item->nama_dashboard)->whereNull('deleted_at')->first();
+                $userVisibility = $akses ? $akses->user_visibility : null;
+            }
+            
+            if (is_array($userVisibility) && isset($userVisibility[$userId])) {
+                return (bool)$userVisibility[$userId] !== false;
+            }
+            return true;
+        })->values();
         
         $response = response()->json([
             'dept' => $karyawan->department,
