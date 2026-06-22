@@ -401,7 +401,7 @@ class OrderDetail extends Sector
 
     public function swabOnMicrobio()
     {
-        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('microbio_header.parameter', 'like', "%Swab%");
+        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('microbio_header.parameter', 'like', "%Swab%")->where('is_active', true);
     }
 
     public function ergonomiHeader()
