@@ -37,15 +37,10 @@ class MonthlySalaryController extends Controller
             return false;
         }
 
-        $karyawan = MasterKaryawan::where('id', $this->user_id)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$karyawan) {
-            return false;
-        }
-
-        return in_array($karyawan->id_jabatan, $this->allowedJabatanIds);
+        return MasterKaryawan::where('id', $this->user_id)
+        ->where('is_active', true)
+        ->whereIn('grade', ['MANAGER', 'DIREKSI'])
+        ->exists();
     }
 
     /**
