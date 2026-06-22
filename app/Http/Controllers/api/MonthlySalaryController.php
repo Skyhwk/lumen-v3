@@ -62,7 +62,7 @@ class MonthlySalaryController extends Controller
             return [];
         }
 
-        $bawahan = GetBawahan::where('id', $this->user_id)->get();
+        $bawahan = GetBawahan::where('id', 127)->get();
 
         return $bawahan->pluck('id')->toArray();
     }
@@ -74,17 +74,18 @@ class MonthlySalaryController extends Controller
     {
         try {
             // Cek akses berdasarkan jabatan
-            if (!$this->hasAccess()) {
-                return response()->json([
-                    'data' => [],
-                    'recordsTotal' => 0,
-                    'recordsFiltered' => 0,
-                    'message' => 'Anda tidak memiliki akses ke halaman ini',
-                ], 200);
-            }
+            // if (!$this->hasAccess()) {
+            //     return response()->json([
+            //         'data' => [],
+            //         'recordsTotal' => 0,
+            //         'recordsFiltered' => 0,
+            //         'message' => 'Anda tidak memiliki akses ke halaman ini',
+            //     ], 200);
+            // }
 
             // Ambil ID bawahan (null jika devMode)
             $bawahanIds = $this->getBawahanIds();
+            
 
             $query = PayrollHeader::select(
                 'payroll_header.*',
@@ -146,28 +147,30 @@ class MonthlySalaryController extends Controller
     {
         try {
             // Cek akses berdasarkan jabatan
-            if (!$this->hasAccess()) {
-                return response()->json([
-                    'data' => [],
-                    'message' => 'Anda tidak memiliki akses',
-                ], 200);
-            }
+            // if (!$this->hasAccess()) {
+            //     return response()->json([
+            //         'data' => [],
+            //         'message' => 'Anda tidak memiliki akses',
+            //     ], 200);
+            // }
 
             // Ambil ID bawahan (null jika devMode)
             $bawahanIds = $this->getBawahanIds();
-
+            
             $id_header = $request->id_header;
 
             // Jika id_header tidak dikirim, cari header berdasarkan periode (default bulan ini)
+            $headerIds = [];
             if (empty($id_header)) {
-                $periode = $request->periode_payroll ?: date('Y-m');
-                $header = \App\Models\PayrollHeader::where('periode_payroll', 'like', $periode . '%')
+                $periode = $request->periode_payroll;
+                
+                $headers = PayrollHeader::where('periode_payroll', $periode)
                     ->where('is_active', true)
                     ->where('status', 'TRANSFER')
-                    ->orderBy('id', 'desc')
-                    ->first();
+                    ->pluck('id')
+                    ->toArray();
 
-                if (!$header) {
+                if (empty($headers)) {
                     return response()->json([
                         'data' => [],
                         'recordsTotal' => 0,
@@ -176,10 +179,12 @@ class MonthlySalaryController extends Controller
                         'totals' => []
                     ]);
                 }
-                $id_header = $header->id;
+                $headerIds = $headers;
+            } else {
+                $headerIds = [$id_header];
             }
-
-            $data = Payroll::where('payroll_header_id', $id_header)
+            
+            $data = Payroll::whereIn('payroll_header_id', $headerIds)
                 ->where('is_active', true)
                 ->when($bawahanIds !== null, function ($query) use ($bawahanIds) {
                     $query->whereIn('id_karyawan', $bawahanIds);
@@ -192,7 +197,7 @@ class MonthlySalaryController extends Controller
                 ->orderBy('nik_karyawan', 'asc');
 
             // Calculate totals
-            $totals = Payroll::where('payroll_header_id', $id_header)
+            $totals = Payroll::whereIn('payroll_header_id', $headerIds)
                 ->where('is_active', true)
                 ->when($bawahanIds !== null, function ($query) use ($bawahanIds) {
                     $query->whereIn('id_karyawan', $bawahanIds);
