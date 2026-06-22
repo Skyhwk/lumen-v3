@@ -62,7 +62,7 @@ class MonthlySalaryController extends Controller
             return [];
         }
 
-        $bawahan = GetBawahan::where('id', 127)->get();
+        $bawahan = GetBawahan::where('id', $this->user_id)->get();
 
         return $bawahan->pluck('id')->toArray();
     }
