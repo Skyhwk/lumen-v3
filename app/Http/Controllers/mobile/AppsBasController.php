@@ -74,7 +74,7 @@ class AppsBasController extends Controller
         // Set limit memory lebih besar secara sementara untuk proses data besar
         ini_set('memory_limit', '512M');
         try {
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index START - User: {$this->karyawan} - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index START - User: {$this->karyawan} - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             // Filter data untuk hanya mendapatkan data yang memiliki 'sampler' sesuai dengan $this->karyawan
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)->whereIn('id_jabatan', [41, 42])->exists();
@@ -114,7 +114,7 @@ class AppsBasController extends Controller
 
             $orderDetail = $orderDetail->get()->toArray();
 
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index After Query - Count: " . count($orderDetail) . " - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index After Query - Count: " . count($orderDetail) . " - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             $formattedData = array_reduce($orderDetail, function ($carry, $item) {
                 if (empty($item['order_header']) || empty($item['order_header']['sampling']))
@@ -175,7 +175,7 @@ class AppsBasController extends Controller
             }, []);
 
             unset($orderDetail); // Free up memory
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index After FormattedData - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index After FormattedData - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             $groupedData = [];
 
@@ -239,7 +239,7 @@ class AppsBasController extends Controller
             }
 
             unset($formattedData); // Free up memory
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index After GroupedData - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index After GroupedData - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             // dd($groupedData);
 
@@ -257,7 +257,7 @@ class AppsBasController extends Controller
             $finalResult = array_values($finalResult);
             unset($groupedData);
 
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index After FinalResult - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index After FinalResult - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             // Ambil semua no_order dari hasil akhir
             $orderNos = array_column($finalResult, 'no_order');
@@ -380,7 +380,7 @@ class AppsBasController extends Controller
             unset($item);
             unset($persiapanHeadersData); // Free up memory
 
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index After EagerLoad Data - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index After EagerLoad Data - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             if ($isProgrammer) {
                 $filteredResult = $finalResult;
@@ -486,7 +486,7 @@ class AppsBasController extends Controller
                 }
             }
 
-            \Illuminate\Support\Facades\Log::info("AppsBasController::index END - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
+            // \Illuminate\Support\Facades\Log::info("AppsBasController::index END - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             return DataTables::of($filteredResult)->make(true);
         } catch (\Exception $ex) {
