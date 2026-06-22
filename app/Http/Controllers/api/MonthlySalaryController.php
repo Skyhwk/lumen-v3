@@ -25,6 +25,24 @@ class MonthlySalaryController extends Controller
     private $allowedJabatanIds = [1,2,3,10,15,26,30,40,45,46,47,48,91,97,99,102,108,111,118,127,128,134,136,139,140,142,147,152,154,157];
 
     /**
+     * Cache instance Karyawan login
+     */
+    private $currentUser = null;
+
+    /**
+     * Ambil data karyawan yang sedang login
+     */
+    private function getCurrentUser()
+    {
+        if ($this->currentUser === null && $this->user_id) {
+            $this->currentUser = MasterKaryawan::where('id', $this->user_id)
+                ->where('is_active', true)
+                ->first();
+        }
+        return $this->currentUser;
+    }
+
+    /**
      * Cek apakah user yang login memiliki akses berdasarkan id_jabatan
      */
     private function hasAccess()
@@ -37,15 +55,13 @@ class MonthlySalaryController extends Controller
             return false;
         }
 
-        return MasterKaryawan::where('id', $this->user_id)
-        ->where('is_active', true)
-        ->whereIn('grade', ['MANAGER', 'DIREKSI'])
-        ->exists();
+        $user = $this->getCurrentUser();
+        return $user && in_array($user->grade, ['MANAGER', 'DIREKSI']);
     }
 
     /**
      * Ambil ID bawahan user yang login (menggunakan atasan_langsung)
-     * Jika devMode aktif, return null (tidak filter)
+     * Jika devMode aktif atau user adalah DIREKSI, return null (tidak filter)
      */
     private function getBawahanIds()
     {
@@ -55,6 +71,11 @@ class MonthlySalaryController extends Controller
 
         if (!$this->user_id) {
             return [];
+        }
+
+        $user = $this->getCurrentUser();
+        if ($user && $user->grade === 'DIREKSI') {
+            return null; // DIREKSI tidak memfilter bawahan, bisa melihat semua data salary
         }
 
         $bawahan = GetBawahan::where('id', $this->user_id)->get();
