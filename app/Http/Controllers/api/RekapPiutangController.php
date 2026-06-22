@@ -20,6 +20,23 @@ class RekapPiutangController extends Controller
         $year = $request->input('year', date('Y'));
 
         try {
+            // Hitung piutang yang jatuh tempo hari ini (tanggal sekarang)
+            $today = Carbon::today()->toDateString();
+            $dueTodayInvoices = Invoice::with(['recordPembayaran', 'recordWithdraw'])
+                ->selectRaw('no_invoice, SUM(nilai_tagihan) as nilai_tagihan')
+                ->where('tgl_jatuh_tempo', $today)
+                ->where('is_active', true)
+                ->groupBy('no_invoice')
+                ->get();
+
+            $dueTodayTotal = 0.0;
+            foreach ($dueTodayInvoices as $inv) {
+                $nilai_tagihan = (float)$inv->nilai_tagihan;
+                $nilai_pembayaran = (float)($inv->recordPembayaran->sum('nilai_pembayaran') ?? 0) + (float)($inv->recordWithdraw->sum('nilai_pembayaran') ?? 0);
+                $piutang = max(0, floor($nilai_tagihan - $nilai_pembayaran));
+                $dueTodayTotal += $piutang;
+            }
+
             // Ambil seluruh invoice aktif dalam tahun terkait, dengan relasi pembayaran & withdraw
             $invoices = Invoice::with(['recordPembayaran', 'recordWithdraw'])
                 ->selectRaw('no_invoice, SUM(nilai_tagihan) as nilai_tagihan, tgl_invoice, tgl_jatuh_tempo, COALESCE(MAX(nama_perusahaan)) AS nama_customer')
@@ -95,7 +112,8 @@ class RekapPiutangController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $result
+                'data' => $result,
+                'due_today_total' => $dueTodayTotal
             ]);
         } catch (\Exception $e) {
             return response()->json([

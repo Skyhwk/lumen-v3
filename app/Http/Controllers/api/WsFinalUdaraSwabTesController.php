@@ -17,6 +17,7 @@ use App\Models\Subkontrak;
 use App\Models\SwabTestHeader;
 use App\Models\WsValueLingkungan;
 use App\Models\WsValueUdara;
+use App\Models\MdlUdara;
 use Carbon\Carbon;
 use Datatables;
 use Illuminate\Http\Request;
@@ -155,46 +156,114 @@ class WsFinalUdaraSwabTesController extends Controller
             }
 
             $getSatuan = new HelperSatuan;
+            $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
 
-            return Datatables::of($merge)
-                ->addColumn('nilai_uji', function ($item) use ($getSatuan) {
-                    // ambil satuan dan index (boleh null)
-                    $satuan = $item->satuan ?? null;
-                    $index  = $getSatuan->udara($satuan);
-
-                    // pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
-                    $source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
-                    if (! $source) {
-                        return 'noWs';
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
                     }
+                }
 
-                    $hasil = is_array($source) ? $source : $source->toArray();
-                    $has   = function ($key) use ($hasil) {
-                        return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
-                    };
-                    if ($index === null) {
-                        for ($i = 1; $i <= 17; $i++) {
-                            $k = "f_koreksi_{$i}";
-                            if ($has($k)) {
-                                return $hasil[$k];
-                            }
+                return $hasilUji;
+            };
 
-                        }
-                        for ($i = 1; $i <= 17; $i++) {
-                            $k = "hasil{$i}";
-                            if ($has($k)) {
-                                return $hasil[$k];
-                            }
+			return Datatables::of($merge)
+				->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
+					// ambil satuan dan index (boleh null)
+					$satuan = $item->satuan ?? null;
+					$index  = $getSatuan->udara($satuan);
 
-                        }
+					// pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
+					$source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+					if (!$source) return 'noWs';
 
-                        // kalau semua gagal
-                        return '-';
-                    }
+					// pastikan array
+					$hasil = is_array($source) ? $source : $source->toArray();
+					// helper kecil: cek tersedia dan tidak kosong
+					$has = function ($key) use ($hasil) {
+						return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
+					};
 
-                    return '-';
-                })
-                ->make(true);
+					// jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
+					if ($index === null) {
+						// 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
+						if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
+
+						for ($i = 1; $i <= 16; $i++) {
+							$k = "f_koreksi_c{$i}";
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+						}
+
+
+						// 2) C (tanpa nomor) lalu C1..C16
+						if ($has('C')) return $hasil['C'];
+						for ($i = 1; $i <= 16; $i++) {
+							$k = "C{$i}";
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+						}
+
+						// 3) f_koreksi_1..f_koreksi_17
+						for ($i = 1; $i <= 17; $i++) {
+							$k = "f_koreksi_{$i}";
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+						}
+
+						// 4) hasil1..hasil17
+						for ($i = 1; $i <= 17; $i++) {
+							$k = "hasil{$i}";
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+						}
+
+						// kalau semua gagal
+						return '-';
+					}
+
+					$CIndex = $index == 1 ? '' : $index - 1;
+					// bila index diketahui, cek urutan preferensi khusus index itu
+					$keysToTry = [
+						"f_koreksi_c{$index}", // contoh: f_koreksi_c3
+						"C{$CIndex}",           // contoh: C3
+						"f_koreksi_{$index}",  // contoh: f_koreksi_3
+						"hasil{$index}"
+					];
+
+					if ($index == 17) {
+						foreach ($keysToTry as $k) {
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+					} if ($index == 15) {
+						foreach ($keysToTry as $k) {
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+					} if ($index == 16) {
+						foreach ($keysToTry as $k) {
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+					} else {
+						foreach ($keysToTry as $k) {
+							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+						}
+					}
+
+					return '-';
+				})
+				->make(true);
 
         } catch (\Throwable $th) {
             DB::rollBack();
