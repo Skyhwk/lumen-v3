@@ -127,49 +127,29 @@ class MasterTargetSalesController extends Controller
 
     public function getKategori()
     {
+        $rawKategori = config('kategori.non_id');
+
         $kategori = [
-            'AIR' => [
-                'AIR LIMBAH', //-> limbah, domestik, industri
-                'AIR BERSIH',
-                'AIR MINUM',
-                'AIR SUNGAI',
-                'AIR LAUT',
-                'AIR LAINNYA'
-            ],
-            'UDARA' => [
-                'UDARA AMBIENT',
-                'UDARA LINGKUNGAN KERJA',
-                'KEBISINGAN',
-                'PENCAHAYAAN',
-                'GETARAN',
-                'IKLIM KERJA',
-                'UDARA LAINNYA'
-            ],
-            'EMISI' => [
-                'EMISI SUMBER BERGERAK',
-                'EMISI SUMBER TIDAK BERGERAK',
-                'EMISI ISOKINETIK'
-            ]
+            'AIR' => [],
+            'UDARA' => [],
+            'EMISI' => []
         ];
 
-        $harga = [
-            'AIR LIMBAH' => config('harga_kategori.HARGA_AIR_LIMBAH'), //-> limbah, domestik, industri
-            'AIR BERSIH' => config('harga_kategori.HARGA_AIR_BERSIH'),
-            'AIR MINUM' => config('harga_kategori.HARGA_AIR_MINUM'),
-            'AIR SUNGAI' => config('harga_kategori.HARGA_AIR_SUNGAI'),
-            'AIR LAUT' => config('harga_kategori.HARGA_AIR_LAUT'),
-            'AIR LAINNYA' => config('harga_kategori.HARGA_AIR_LAINNYA'),
-            'UDARA AMBIENT' => config('harga_kategori.HARGA_UDARA_AMBIENT'),
-            'UDARA LINGKUNGAN KERJA' => config('harga_kategori.HARGA_UDARA_LINGKUNGAN_KERJA'),
-            'KEBISINGAN' => config('harga_kategori.HARGA_KEBISINGAN'),
-            'PENCAHAYAAN' => config('harga_kategori.HARGA_PENCAHAYAAN'),
-            'GETARAN' => config('harga_kategori.HARGA_GETARAN'),
-            'IKLIM KERJA' => config('harga_kategori.HARGA_IKLIM_KERJA'),
-            'UDARA LAINNYA' => config('harga_kategori.HARGA_UDARA_LAINNYA'),
-            'EMISI SUMBER BERGERAK' => config('harga_kategori.HARGA_EMISI_SUMBER_BERGERAK'), // Emisi Kendaraan (Bensin), Emisi Kendaraan (Solar), Emisi Kendaraan (Gas)
-            'EMISI SUMBER TIDAK BERGERAK' => config('harga_kategori.HARGA_EMISI_SUMBER_TIDAK_BERGERAK'),
-            'EMISI ISOKINETIK' => config('harga_kategori.HARGA_EMISI_ISOKINETIK')
-        ];
+        foreach (array_keys($rawKategori) as $key) {
+            if (strpos($key, 'AIR') === 0) {
+                $kategori['AIR'][] = $key;
+            } elseif (strpos($key, 'EMISI') === 0) {
+                $kategori['EMISI'][] = $key;
+            } else {
+                $kategori['UDARA'][] = $key;
+            }
+        }
+
+        $harga = [];
+        foreach (config('harga_kategori') as $k => $v) {
+            $cleanedKey = trim(str_replace('_', ' ', str_replace('HARGA', '', $k)));
+            $harga[$cleanedKey] = $v;
+        }
 
         $idBawahan = GetBawahan::where('id', 890)->get()->pluck('id')->toArray();
 
