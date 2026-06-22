@@ -8,8 +8,10 @@ return [
         ],
         'AIR BERSIH' => [
             'Air Bersih',
-            'Air Higiene Sanitasi',
             'Air Reverse Osmosis',
+        ],
+        'AIR HYGIENE SANITASI'=> [
+            'Air Higiene Sanitasi'
         ],
         'AIR MINUM' => [
             'Air Minum',
@@ -20,9 +22,11 @@ return [
         'AIR LAUT' => [
             'Air Laut',
         ],
+        'AIR KHUSUS'=> [
+            'Air Khusus',
+        ],
         'AIR LAINNYA' => [
             'Air Tanah',
-            'Air Khusus',
             'Air Kolam Renang',
             'Air Danau',
             'Air Permukaan',
@@ -55,13 +59,17 @@ return [
             'Iklim Kerja',
         ],
         'UDARA LAINNYA' => [
-            'Ergonomi',
             'Udara Angka Kuman',
             'Kebauan',
             'Udara Swab Test',
             'Udara Umum',
-            'Psikologi',
             'Kualitas Udara Dalam Ruang',
+        ],
+        'PSIKOLOGI' => [
+            'Psikologi',
+        ],
+        'ERGONOMI'=> [
+            'Ergonomi',
         ],
         'EMISI SUMBER BERGERAK' => [
             'Emisi Kendaraan',
@@ -84,9 +92,11 @@ return [
         ],
         'AIR BERSIH' => [
             '1-Air Bersih',
-            '63-Air Higiene Sanitasi',
-            '62-Air Higiene Sanitasi',
             '117-Air Reverse Osmosis',
+        ],
+        'AIR HYGIENE SANITASI'=> [
+            '63-Air Higiene Sanitasi',
+            '62-Air Higiene Sanitasi'
         ],
         'AIR MINUM' => [
             '4-Air Minum',
@@ -97,9 +107,11 @@ return [
         'AIR LAUT' => [
             '5-Air Laut',
         ],
+        'AIR KHUSUS'=> [
+            '64-Air Khusus'
+        ],
         'AIR LAINNYA' => [
             '72-Air Tanah',
-            '64-Air Khusus',
             '40-Air Kolam Renang',
             '56-Air Danau',
             '6-Air Permukaan',
@@ -132,13 +144,17 @@ return [
             '21-Iklim Kerja',
         ],
         'UDARA LAINNYA' => [
-            '53-Ergonomi',
             '12-Udara Angka Kuman',
             '22-Kebauan',
             '46-Udara Swab Test',
             '29-Udara Umum',
-            '118-Psikologi',
             '26-Kualitas Udara Dalam Ruang',
+        ],
+        'PSIKOLOGI' => [
+            '118-Psikologi',
+        ],
+        'ERGONOMI'=> [
+            '53-Ergonomi'
         ],
         'EMISI SUMBER BERGERAK' => [
             '30-Emisi Kendaraan',
