@@ -6,7 +6,7 @@ use App\Models\PayrollHeader;
 use App\Models\Payroll;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
-use App\Services\GetBawahan;
+use App\Services\GetBawahanAll;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
@@ -78,7 +78,7 @@ class MonthlySalaryController extends Controller
             return null; // DIREKSI tidak memfilter bawahan, bisa melihat semua data salary
         }
 
-        $bawahan = GetBawahan::where('id', $this->user_id)->get();
+        $bawahan = GetBawahanAll::where('id', $this->user_id)->get();
 
         return $bawahan->pluck('id')->toArray();
     }
@@ -182,7 +182,7 @@ class MonthlySalaryController extends Controller
                 
                 $headers = PayrollHeader::where('periode_payroll', $periode)
                     ->where('is_active', true)
-                    ->where('status', 'TRANSFER')
+                    // ->where('status', 'TRANSFER')
                     ->pluck('id')
                     ->toArray();
 
@@ -206,7 +206,7 @@ class MonthlySalaryController extends Controller
                     $query->whereIn('id_karyawan', $bawahanIds);
                 })
                 ->with(['karyawan' => function ($query) {
-                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan');
+                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active');
                 }, 'department' => function ($query) {
                     $query->select('master_divisi.id', 'nama_divisi');
                 }])
