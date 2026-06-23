@@ -10,12 +10,11 @@ use App\Models\AccessDoor;
 use Illuminate\Http\Request;
 use App\Models\MasterCabang;
 use App\Models\MasterDivisi;
+// use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 
 class SetAccessDoorController extends Controller
 {
-    protected $uri = "http://apps.intilab.com/v3/public/api/iot-intilab?mode=sync&token=intilab_jaya&device=";
-
     public function index(Request $request)
     {
         $where = ['devices.is_active' => true];
@@ -81,7 +80,7 @@ class SetAccessDoorController extends Controller
         $mqtt = new phpMQTT('apps.intilab.com', '1111', 'Admin');
 
         if ($mqtt->connect(true, null, '', '')) {
-            $mqtt->publish('/intilab/iot/multidevice', $data, 0);
+            $mqtt->publish('/intilab/iot/multidevices', $data, 0);
             $mqtt->close();
 
             return true;
@@ -110,7 +109,7 @@ class SetAccessDoorController extends Controller
                         $new = $this->newMethod(json_encode((object) [
                             'topic' => 'add_user',
                             'device' => $request->kode_device,
-                            'data' => $this->uri . $request->kode_device,
+                            'data' => $request->karyawan,
                         ]));
                     }
 
@@ -130,7 +129,7 @@ class SetAccessDoorController extends Controller
                     $new = $this->newMethod(json_encode((object) [
                         'topic' => 'add_user',
                         'device' => $request->kode_device,
-                        'data' => $this->uri . $request->kode_device,
+                        'data' => $request->karyawan,
                     ]));
     
                     return response()->json(['message' => 'Saved Successfully'], 200);
@@ -159,7 +158,7 @@ class SetAccessDoorController extends Controller
                 $new = $this->newMethod(json_encode((object) [
                     'topic' => 'delete_user',
                     'device' => $request->kode_device,
-                    'data' => $this->uri . $request->kode_device,
+                    'data' => $request->karyawan,
                 ]));
 
                 return response()->json(['message' => 'Deleted Successfully'], 200);
@@ -183,13 +182,14 @@ class SetAccessDoorController extends Controller
                     'kode_rfid' => explode("-", $item['karyawan'])[0],
                     'kode_mesin' => $item['kode_device']
                 ])->delete();
+
+                $new = $this->newMethod(json_encode((object) [
+                    'topic' => 'delete_user',
+                    'device' => $item['kode_device'],
+                    'data' => $item['karyawan'],
+                ]));
             }
 
-            $new = $this->newMethod(json_encode((object) [
-                'topic' => 'delete_user',
-                'device' => $request->selectedEmployees[0]['kode_device'],
-                'data' => $this->uri . $request->selectedEmployees[0]['kode_device'],
-            ]));
             return response()->json(['message' => 'Deleted Successfully'], 200);
         } catch (\Exception $ex) {
             return response()->json(['message' => $ex->getMessage()], 500);
