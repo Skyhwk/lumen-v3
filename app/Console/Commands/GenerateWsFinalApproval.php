@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Schema;
 class GenerateWsFinalApproval extends Command
 {
     protected $signature = 'wsfinal:generate
+        {--month= : Proses 1 bulan saja format YYYY-MM}
+        {--all-months : Proses per bulan dari Januari tahun berjalan sampai bulan ini}
         {--from= : Tanggal awal format YYYY-MM-DD, default 1 Januari tahun berjalan}
         {--to= : Tanggal akhir format YYYY-MM-DD, default hari ini}
         {--chunk=50 : Jumlah header/LHP per proses}
@@ -23,19 +25,28 @@ class GenerateWsFinalApproval extends Command
 
     public function handle()
     {
-        $from = $this->option('from')
-            ? Carbon::parse($this->option('from'))->startOfDay()
-            : Carbon::now()->startOfYear()->startOfDay();
-
-        $to = $this->option('to')
-            ? Carbon::parse($this->option('to'))->endOfDay()
-            : Carbon::now()->endOfDay();
-
         $chunk = max((int) $this->option('chunk'), 1);
         $progressEvery = max((int) $this->option('progress-every'), 1);
         $approvedBy = (string) $this->option('approved-by');
         $dryRun = (bool) $this->option('dry-run');
 
+        $failed = 0;
+        foreach ($this->ranges() as $range) {
+            $failed += $this->processRange(
+                $range['from'],
+                $range['to'],
+                $chunk,
+                $progressEvery,
+                $approvedBy,
+                $dryRun
+            );
+        }
+
+        return $failed > 0 ? 1 : 0;
+    }
+
+    private function processRange(Carbon $from, Carbon $to, int $chunk, int $progressEvery, string $approvedBy, bool $dryRun): int
+    {
         $this->info(sprintf(
             '[WsFinalGenerate] Start from %s to %s%s',
             $from->format('Y-m-d'),
@@ -64,7 +75,7 @@ class GenerateWsFinalApproval extends Command
 
                 foreach ($orderDetails as $orderDetail) {
                     try {
-                        WsFinalApprovalService::finalizeSample($orderDetail, true, $approvedBy);
+                        WsFinalApprovalService::finalizeLhp($orderDetail, true, $approvedBy);
                         $processed++;
                     } catch (\Throwable $th) {
                         $failed++;
@@ -100,7 +111,49 @@ class GenerateWsFinalApproval extends Command
             $failed
         ));
 
-        return $failed > 0 ? 1 : 0;
+        return $failed;
+    }
+
+    private function ranges(): array
+    {
+        if ($this->option('month')) {
+            $month = Carbon::createFromFormat('!Y-m', $this->option('month'));
+
+            return [[
+                'from' => $month->copy()->startOfMonth(),
+                'to' => $month->copy()->endOfMonth(),
+            ]];
+        }
+
+        if ($this->option('all-months')) {
+            $current = Carbon::now()->startOfYear();
+            $end = Carbon::now()->startOfMonth();
+            $ranges = [];
+
+            while ($current->lte($end)) {
+                $ranges[] = [
+                    'from' => $current->copy()->startOfMonth(),
+                    'to' => $current->copy()->endOfMonth(),
+                ];
+
+                $current->addMonth();
+            }
+
+            return $ranges;
+        }
+
+        $from = $this->option('from')
+            ? Carbon::parse($this->option('from'))->startOfDay()
+            : Carbon::now()->startOfYear()->startOfDay();
+
+        $to = $this->option('to')
+            ? Carbon::parse($this->option('to'))->endOfDay()
+            : Carbon::now()->endOfDay();
+
+        return [[
+            'from' => $from,
+            'to' => $to,
+        ]];
     }
 
     private function approvedWsFinalOrderDetailIds(Carbon $from, Carbon $to)
