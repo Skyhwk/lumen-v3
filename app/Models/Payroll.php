@@ -48,7 +48,7 @@ class Payroll extends Sector{
 
     public function karyawan()
     {
-        return $this->belongsTo('App\Models\MasterKaryawan','nik_karyawan', 'nik_karyawan');
+        return $this->belongsTo('App\Models\MasterKaryawan','id_karyawan', 'id');
     }
 
     public function department()
