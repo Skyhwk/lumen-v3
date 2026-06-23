@@ -146,11 +146,6 @@ class AuthController extends BaseController
                     ->where('id_dashboard_component', $component->id)
                     ->first();
             }
-            if (!$akses) {
-                $akses = SetAksesDashboard::whereNull('deleted_at')
-                    ->where('nama_dashboard', $component->nama_dashboard)
-                    ->first();
-            }
 
             $visibility = $akses ? ($akses->user_visibility ?? []) : [];
             $component->dashboard_component_id = $component->id;
