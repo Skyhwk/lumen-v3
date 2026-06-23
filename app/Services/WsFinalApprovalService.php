@@ -819,12 +819,12 @@ class WsFinalApprovalService
 
             if (Schema::hasTable('ws_final_approval_header')) {
                 $existingHeader = DB::table('ws_final_approval_header')
-                    ->where('no_lhp', $orderDetail->no_sampel)
+                    ->where('no_lhp', $orderDetail->cfr)
                     ->first();
 
                 if ($existingHeader) {
                     DB::table('ws_final_approval_header')
-                        ->where('no_lhp', $orderDetail->no_sampel)
+                        ->where('no_lhp', $orderDetail->cfr)
                         ->update([
                             'is_approved' => 1,
                             'approved_by' => self::limit($karyawan, 100),
@@ -834,7 +834,7 @@ class WsFinalApprovalService
                 } else {
                     $headerId = DB::table('ws_final_approval_header')->insertGetId([
                         'no_order'     => self::limit($orderDetail->no_order, 50),
-                        'no_lhp'       => self::limit($orderDetail->no_sampel, 50),
+                        'no_lhp'       => self::limit($orderDetail->cfr, 50),
                         'periode'      => self::limit($orderDetail->periode ?? '', 50),
                         'parameter'    => self::jsonValue($orderDetail->parameter),
                         'kategori'     => self::limit($kategori, 70),
