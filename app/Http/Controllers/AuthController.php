@@ -139,10 +139,20 @@ class AuthController extends BaseController
                   ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$karyawan->id]);
         })->where('is_active', 1)->get();
 
-        $dashboardOwner->transform(function($component) {
+         $dashboardOwner->transform(function($component) use ($karyawan) {
+            $akses = null;
+            if (Schema::hasColumn('set_akses_dashboard', 'id_dashboard_component')) {
+                $akses = SetAksesDashboard::whereNull('deleted_at')
+                    ->where('id_dashboard_component', $component->id)
+                    ->first();
+            }
+
+            $visibility = $akses ? ($akses->user_visibility ?? []) : [];
             $component->dashboard_component_id = $component->id;
             $component->user_list = [];
-            $component->user_visibility_status = true;
+            $component->user_visibility_status = array_key_exists((string) $karyawan->id, $visibility)
+                ? (bool) $visibility[(string) $karyawan->id]
+                : true;
 
             return $component;
         });
