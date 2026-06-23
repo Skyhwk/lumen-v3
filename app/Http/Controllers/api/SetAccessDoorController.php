@@ -85,7 +85,7 @@ class SetAccessDoorController extends Controller
         $mqtt = new phpMQTT('apps.intilab.com', '1111', 'Admin');
 
         if ($mqtt->connect(true, null, '', '')) {
-            $mqtt->publish('/intilab/iot/multidevices', $data, 0);
+            $mqtt->publish('/intilab/iot/multidevice', $data, 0);
             $mqtt->close();
 
             return true;
