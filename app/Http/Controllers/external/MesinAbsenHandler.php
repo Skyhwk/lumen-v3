@@ -382,6 +382,9 @@ class MesinAbsenHandler extends BaseController
                     
                     $result = $this->generateAccessBin($data, $filepath);
                     
+                    Log::info("Name Device: " . $nameDevice);
+                    Log::info("Mode: " . $mode);
+                    Log::info("Path: " . "http://apps.intilab.com/v3/public/iot/" . $deviceCode . "/access.bin");
                     return response()->json([
                         'nameDevice' => $nameDevice,
                         'mode' => $mode,
