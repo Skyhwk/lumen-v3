@@ -322,7 +322,6 @@ class MesinAbsenHandler extends BaseController
                     $mesinAbsen = MesinAbsen::where('kode_mesin', $deviceCode)->first();
                     
                     if($mesinAbsen == null){
-                        // Mode Access Door
                         $data = DB::table('access_door')
                             ->join('rfid_card', 'access_door.kode_rfid', '=', 'rfid_card.kode_kartu')
                             ->join('master_karyawan', 'rfid_card.userid', '=', 'master_karyawan.id')
@@ -336,10 +335,14 @@ class MesinAbsenHandler extends BaseController
                         
                         $devices = DB::table('devices')
                             ->where('kode_device', $deviceCode)
+                            ->where('is_active', 1)
                             ->first();
 
                         $nameDevice = $devices->nama_device ?? 'Unknown Device';
-                        $mode = $devices->mode ? $this->array_mode[$devices->mode] : $this->array_mode['normal'];
+                        
+                        $modeKey = $devices->mode ?? 'normal';
+                        $mode = isset($this->array_mode[strtolower($modeKey)]) ? $this->array_mode[strtolower($modeKey)] : $this->array_mode['normal'];
+                
                     } else {
                         // Mode Attendance
                         if ($mesinAbsen->id_cabang == 1) {
@@ -364,30 +367,21 @@ class MesinAbsenHandler extends BaseController
                             ->get();
                     }
 
-                    // DEBUG: Log jumlah data
-                    // \Log::info("Device: {$deviceCode}, Data count: " . count($data));
-                    
-                    // Cek jika data kosong
                     if (count($data) == 0) {
                         \Log::warning("No data found for device: {$deviceCode}");
                     }
 
-                    // Path folder per device
                     $deviceFolder = public_path('iot/' . $deviceCode);
-                    
-                    // Pastikan folder device ada
+
                     if (!file_exists($deviceFolder)) {
                         mkdir($deviceFolder, 0755, true);
                         \Log::info("Created folder: {$deviceFolder}");
                     }
                     
-                    // File selalu bernama "access.bin"
                     $filepath = $deviceFolder . '/access.bin';
                     
-                    // Generate binary file
                     $result = $this->generateAccessBin($data, $filepath);
                     
-        
                     return response()->json([
                         'nameDevice' => $nameDevice,
                         'mode' => $mode,
