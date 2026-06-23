@@ -171,6 +171,12 @@ class ReleasePortalCustomerController extends Controller
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
+    public function indexReleaseMobilePpi(Request $request)
+    {
+        $releaseSystem = ReleaseSystem::where('system', 'Mobile PPI')->get();
+        return response()->json(['success' => true, 'data' => $releaseSystem], 200);
+    }
+
     public function releaseFrontendPpi(Request $request)
     {
         DB::beginTransaction();
@@ -234,6 +240,75 @@ class ReleasePortalCustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Frontend PPI gagal dirilis!',
+                'logs'    => $outputLog,
+                'error'   => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    public function releaseMobilePpi(Request $request)
+    {
+        DB::beginTransaction();
+        $outputLog = [];
+
+        $startTime = Carbon::now();
+        try {
+            $response = Http::post('https://portal.intilab.com/api/release-mobile-ppi', []);
+            $body = $response->json();
+            if($body['success']){
+                $outputLog[] = [
+                    'command' => $body['logs'],
+                    'output'  => $body['message'],
+                    'error'   => '',
+                    'success' => true
+                ];
+
+                $endTime = Carbon::now();
+                $duration = $endTime->diffInSeconds($startTime); // hasil dalam detik
+
+                ReleaseSystem::create([
+                    'system'        => 'Mobile PPI',
+                    'proses_by'     => $this->karyawan,
+                    'proses_at'     => $startTime,
+                    'done_at'       => $endTime,
+                    'duration_sec'  => $duration // pastikan kolom ini ada di tabel
+                ]);
+
+                DB::commit();
+
+                Log::channel('release_backend')->info('Portal Customer berhasil dirilis!', $outputLog);
+                return response()->json([
+                    'success'  => true,
+                    'message'  => 'Mobile PPI berhasil dirilis!',
+                    'duration' => $duration . ' detik',
+                    'logs'     => $outputLog
+                ]);
+            }
+            else{
+                $outputLog[] = [
+                    'command' => $body['logs'],
+                    'output'  => $body['message'],
+                    'error'   => $body['error'],
+                    'success' => false
+                ];
+
+                DB::rollBack();
+
+                Log::channel('release_backend')->error('Mobile PPI gagal dirilis!', $outputLog);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Mobile PPI gagal dirilis!',
+                    'logs'    => $outputLog,
+                    'error'   => $body['error']
+                ], 400);
+            }
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            Log::channel('release_backend')->error('Mobile PPI gagal dirilis!', $outputLog);
+            return response()->json([
+                'success' => false,
+                'message' => 'Mobile PPI gagal dirilis!',
                 'logs'    => $outputLog,
                 'error'   => $th->getMessage()
             ], 500);

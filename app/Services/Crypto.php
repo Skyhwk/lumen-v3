@@ -65,6 +65,9 @@ class Crypto
             throw new RuntimeException('Invalid slice payload');
         }
 
+        // TTL sementara dinonaktifkan — aktifkan kembali nanti dengan uncomment blok di bawah
+        return;
+
         $ttl = (int) env('SLICE_TTL', 300);
         $age = abs(time() - (int) $payload['ts']);
 

@@ -1077,11 +1077,15 @@ class DraftEmisiSumberBergerakController extends Controller
                     'approved_by' => $this->karyawan
                 ]);
 
+                $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $data->tanggal_lhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $this->karyawan;
-                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $dataQr->Disahkan_Oleh = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+                    $dataQr->Jabatan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }

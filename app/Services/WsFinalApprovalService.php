@@ -67,7 +67,20 @@ class WsFinalApprovalService
             return;
         }
 
+        // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
+        if ($orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'tidak bergerak')
+        )) {
+            return;
+        }
+
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
         $parameterLab = self::stringValue($source->getAttribute('parameter'));
 
         if (self::isParameterSource($source)) {
@@ -114,7 +127,20 @@ class WsFinalApprovalService
 
     public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
     {
+        // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
+        if ($orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'tidak bergerak')
+        )) {
+            return;
+        }
+
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
 
         if (!$approved) {
             DB::table('ws_final_approval_detail')
@@ -158,6 +184,15 @@ class WsFinalApprovalService
         $noSampel = $orderDetails->pluck('no_sampel')->unique()->values();
         $approvedBySample = collect();
 
+        $isLingkunganKerja = $orderDetails->contains(function ($od) {
+            return $od->kategori_3 && (
+                str_contains(strtolower($od->kategori_3), 'lingkungan kerja') || 
+                str_contains(strtolower($od->kategori_3), 'lingkungan hidup') || 
+                str_contains(strtolower($od->kategori_3), 'ambient') || 
+                str_contains(strtolower($od->kategori_3), 'tidak bergerak')
+            );
+        });
+
         foreach (self::PARAMETER_SOURCES as $modelClass) {
             if (!class_exists($modelClass)) {
                 continue;
@@ -170,7 +205,7 @@ class WsFinalApprovalService
                 continue;
             }
 
-            $approvalColumn = self::approvalColumn($table);
+            $approvalColumn = self::approvalColumn($table, $isLingkunganKerja);
             if ($approvalColumn === null) {
                 continue;
             }
@@ -354,9 +389,13 @@ class WsFinalApprovalService
 
     private static function upsertHeader(OrderDetail $orderDetail, array $approval = []): int
     {
+        if (!Schema::hasTable('ws_final_approval_header')) {
+            return 0;
+        }
+
         $row = array_merge([
             'no_order' => self::limit($orderDetail->no_order, 50),
-            'no_sampel' => self::limit($orderDetail->no_sampel, 50),
+            'no_lhp' => self::limit($orderDetail->cfr, 50),
             'periode' => self::limit($orderDetail->periode, 50),
             'parameter' => self::jsonValue($orderDetail->parameter),
             'kategori' => self::limit(self::categoryName($orderDetail->kategori_2), 70),
@@ -373,7 +412,7 @@ class WsFinalApprovalService
         $updates = implode(', ', array_map(function ($column) {
             return "`{$column}` = VALUES(`{$column}`)";
         }, array_filter($columns, function ($column) {
-            return $column !== 'no_sampel';
+            return $column !== 'no_lhp';
         })));
 
         DB::statement(
@@ -398,6 +437,10 @@ class WsFinalApprovalService
 
     private static function deleteParameterDetail(int $headerId, ?string $parameterLab): void
     {
+        if ($headerId === 0 || !Schema::hasTable('ws_final_approval_header')) {
+            return;
+        }
+
         if ($parameterLab !== null) {
             DB::table('ws_final_approval_detail')
                 ->where('ws_final_approval_header_id', $headerId)
@@ -468,6 +511,9 @@ class WsFinalApprovalService
         }
 
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
 
         foreach (self::airFieldParameterValues($orderDetail, $fieldData) as $parameterLab => $result) {
             DB::table('ws_final_approval_detail')->updateOrInsert([
@@ -487,6 +533,9 @@ class WsFinalApprovalService
     private static function refreshApprovalStatus(OrderDetail $orderDetail, ?string $approvedBy = null): void
     {
         $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
         $required = collect(self::arrayValue($orderDetail->parameter))
             ->map(function ($parameter) {
                 return self::normalizeParameter($parameter);
@@ -615,9 +664,13 @@ class WsFinalApprovalService
         return $value;
     }
 
-    private static function approvalColumn(string $table): ?string
+    private static function approvalColumn(string $table, bool $isLingkunganKerja = false): ?string
     {
-        foreach (['lhps', 'is_approve', 'is_approved'] as $column) {
+        $columns = $isLingkunganKerja
+            ? ['is_approve', 'is_approved', 'lhps']
+            : ['lhps', 'is_approve', 'is_approved'];
+
+        foreach ($columns as $column) {
             if (Schema::hasColumn($table, $column)) {
                 return $column;
             }
@@ -803,5 +856,151 @@ class WsFinalApprovalService
         }
 
         return $request->header('token');
+    }
+
+    public static function validateAndApprove(array $data, ?string $karyawan): array
+    {
+        $id = $data['id'] ?? null;
+        $keterangan_1 = $data['keterangan_1'] ?? null;
+        $detailData = $data['detail_data'] ?? [];
+
+        if (!$id) {
+            return [
+                'success' => false,
+                'message' => 'Data Not Found.!',
+                'status' => 401
+            ];
+        }
+
+        DB::beginTransaction();
+        try {
+            $orderDetail = OrderDetail::where('id', $id)->first();
+            if (!$orderDetail) {
+                DB::rollBack();
+                return [
+                    'success' => false,
+                    'message' => 'Data Not Found.!',
+                    'status' => 401
+                ];
+            }
+
+            $orderDetail->status = 1;
+            $orderDetail->keterangan_1 = $keterangan_1;
+            $orderDetail->save();
+
+            $kategori = self::categoryName($orderDetail->kategori_2);
+            $subKategori = self::categoryName($orderDetail->kategori_3);
+            $menu = 'WS Final ' . ($kategori ?? 'Udara');
+
+            \App\Models\HistoryAppReject::insert([
+                'no_lhp'      => $orderDetail->cfr,
+                'no_sampel'   => $orderDetail->no_sampel,
+                'kategori_2'  => $orderDetail->kategori_2,
+                'kategori_3'  => $orderDetail->kategori_3,
+                'menu'        => $menu,
+                'status'      => 'approve',
+                'approved_at' => Carbon::now(),
+                'approved_by' => $karyawan,
+            ]);
+
+            if (Schema::hasTable('ws_final_approval_header')) {
+                $existingHeader = DB::table('ws_final_approval_header')
+                    ->where('no_lhp', $orderDetail->cfr)
+                    ->first();
+
+                if ($existingHeader) {
+                    DB::table('ws_final_approval_header')
+                        ->where('no_lhp', $orderDetail->cfr)
+                        ->update([
+                            'is_approved' => 1,
+                            'approved_by' => self::limit($karyawan, 100),
+                            'approved_at' => Carbon::now(),
+                        ]);
+                    $headerId = $existingHeader->id;
+                } else {
+                    $headerId = DB::table('ws_final_approval_header')->insertGetId([
+                        'no_order'     => self::limit($orderDetail->no_order, 50),
+                        'no_lhp'       => self::limit($orderDetail->cfr, 50),
+                        'periode'      => self::limit($orderDetail->periode ?? '', 50),
+                        'parameter'    => self::jsonValue($orderDetail->parameter),
+                        'kategori'     => self::limit($kategori, 70),
+                        'sub_kategori' => self::limit($subKategori, 70),
+                        'regulasi'     => self::jsonValue($orderDetail->regulasi),
+                        'nama_titik'   => self::limit($keterangan_1, 50),
+                        'is_approved'  => 1,
+                        'approved_by'  => self::limit($karyawan, 100),
+                        'approved_at'  => Carbon::now(),
+                    ]);
+                }
+
+                if (!empty($detailData) && is_array($detailData)) {
+                    // Extract id_kategori from kategori_2 (e.g. "4-Udara" -> 4, "5-Emisi" -> 5)
+                    $idKategori = 4;
+                    if ($orderDetail->kategori_2) {
+                        $idKategori = (int) explode('-', $orderDetail->kategori_2)[0];
+                    }
+
+                    foreach ($detailData as $detail) {
+                        $parameterLab = isset($detail['parameter']) ? trim($detail['parameter']) : null;
+                        if (!$parameterLab) {
+                            continue;
+                        }
+
+                        $parameterRegulasi = '';
+                        $parameterId       = isset($detail['id_parameter']) ? $detail['id_parameter'] : null;
+                        if ($parameterId) {
+                            $parameterRegulasi = DB::table('parameter')
+                                ->where('id', $parameterId)
+                                ->value('nama_regulasi') ?? '';
+                        } else {
+                            $parameterRegulasi = DB::table('parameter')
+                                ->where('nama_lab', $parameterLab)
+                                ->where('id_kategori', $idKategori)
+                                ->value('nama_regulasi') ?? '';
+                        }
+
+                        $hasil = isset($detail['nilai_uji']) ? trim($detail['nilai_uji']) : '';
+
+                        $existingDetail = DB::table('ws_final_approval_detail')
+                            ->where('ws_final_approval_header_id', $headerId)
+                            ->where('parameter_lab', self::limit($parameterLab, 70))
+                            ->first();
+
+                        if ($existingDetail) {
+                            DB::table('ws_final_approval_detail')
+                                ->where('id', $existingDetail->id)
+                                ->update([
+                                    'parameter_regulasi' => self::limit($parameterRegulasi, 100),
+                                    'hasil'              => self::limit($hasil, 50),
+                                ]);
+                        } else {
+                            DB::table('ws_final_approval_detail')->insert([
+                                'ws_final_approval_header_id' => $headerId,
+                                'no_sampel'                   => $orderDetail->no_sampel,
+                                'parameter_lab'               => self::limit($parameterLab, 70),
+                                'parameter_regulasi'          => self::limit($parameterRegulasi, 100),
+                                'hasil'                       => self::limit($hasil, 50),
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'message' => 'Data hasbeen Approved.!',
+                'status'  => 200,
+            ];
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'status'  => 400,
+            ];
+        }
     }
 }

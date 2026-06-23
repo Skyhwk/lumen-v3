@@ -14,6 +14,10 @@ use Validator;
 use Exception;
 use Laravel\Lumen\Routing\Controller as BaseController;
 use Carbon\Carbon;
+use App\Models\DashboardComponent;
+use App\Models\SetAksesDashboard;
+use App\Models\DashboardUserOrder;
+use Illuminate\Support\Facades\Schema;
 
 class AuthController extends BaseController
 {
@@ -129,12 +133,79 @@ class AuthController extends BaseController
         $wiseList = MenuFdl::where('is_active', 1)->where('is_wiseList', 1)->get();
 
         $strukture_menu = Menu::where('is_active', true)->orderBy('menu', 'asc')->get();
+
+        $dashboardOwner =  DashboardComponent::where(function($query) use ($karyawan) {
+            $query->where('owner_id', $karyawan->id)
+                  ->orWhereRaw("FIND_IN_SET(?, owner_id)", [$karyawan->id]);
+        })->where('is_active', 1)->get();
+
+         $dashboardOwner->transform(function($component) use ($karyawan) {
+            $akses = null;
+            if (Schema::hasColumn('set_akses_dashboard', 'id_dashboard_component')) {
+                $akses = SetAksesDashboard::whereNull('deleted_at')
+                    ->where('id_dashboard_component', $component->id)
+                    ->first();
+            }
+
+            $visibility = $akses ? ($akses->user_visibility ?? []) : [];
+            $component->dashboard_component_id = $component->id;
+            $component->user_list = [];
+            $component->user_visibility_status = array_key_exists((string) $karyawan->id, $visibility)
+                ? (bool) $visibility[(string) $karyawan->id]
+                : true;
+
+            return $component;
+        });
+
+        $dashboardAccess = SetAksesDashboard::whereJsonContains(
+                'user_list',
+                $karyawan->nama_lengkap
+            )->whereNull('deleted_at')->get();
+
+        $dashboardAccess->transform(function($item) use ($karyawan) {
+            $component = null;
+
+            if (!empty($item->id_dashboard_component)) {
+                $component = DashboardComponent::where('id', $item->id_dashboard_component)
+                    ->where('is_active', 1)
+                    ->first();
+            }
+
+            if (!$component) {
+                $component = DashboardComponent::where('nama_dashboard', $item->nama_dashboard)
+                    ->where('is_active', 1)
+                    ->orderBy('id', 'desc')
+                    ->first();
+            }
+
+            $visibility = $item->user_visibility ?? [];
+            $item->dashboard_component_id = $component ? $component->id : ($item->id_dashboard_component ?? $item->id);
+            $item->nama_komponen = $component ? $component->nama_komponen : null;
+            $item->nama_dashboard = $component ? $component->nama_dashboard : $item->nama_dashboard;
+            $item->owner_id = $component ? $component->owner_id : ($item->owner_id ?? null);
+            $item->user_visibility_status = array_key_exists((string) $karyawan->id, $visibility)
+                ? (bool) $visibility[(string) $karyawan->id]
+                : true;
+
+            return $item;
+        });
+
+        $dashboard = $dashboardOwner->merge($dashboardAccess)
+            ->filter(function($item) {
+                return !empty($item->nama_komponen) && $item->user_visibility_status !== false;
+            })
+            ->unique('dashboard_component_id')
+            ->values();
+
+        $dashboard = $this->applyDashboardOrder($dashboard, $karyawan->id);
+        
         $response = response()->json([
             'dept' => $karyawan->department,
             'image' => $karyawan->image,
             'email' => $karyawan->email,
             'access' => $keys,
             'strukture_menu' => $strukture_menu,
+            'dashboard' => $dashboard,
             'name' => $karyawan->nama_lengkap,
             'pos' => $karyawan->jabatan,
             'grade' => $karyawan->grade,
@@ -153,6 +224,50 @@ class AuthController extends BaseController
         $this->logRequest($request, $response->getContent(), $karyawan->nama_lengkap);
 
         return $response;
+    }
+
+    private function applyDashboardOrder($dashboard, $userId)
+    {
+        if (!Schema::hasTable('dashboard_user_orders')) {
+            return $dashboard->sortBy(function ($item) {
+                $dashboardId = (int) ($item->dashboard_component_id ?? $item->id_dashboard_component ?? $item->id);
+
+                return sprintf('%06d-%06d', $this->getDefaultDashboardOrder($item), $dashboardId);
+            })->values()->map(function ($item, $index) {
+                $item->sort_order = $index;
+
+                return $item;
+            });
+        }
+
+        $savedOrder = DashboardUserOrder::where('user_id', $userId)->first();
+        $order = $savedOrder ? ($savedOrder->dashboard_order ?? []) : [];
+        $orderMap = array_flip(array_map('intval', $order));
+
+        return $dashboard->sortBy(function ($item) use ($orderMap) {
+            $dashboardId = (int) ($item->dashboard_component_id ?? $item->id_dashboard_component ?? $item->id);
+            $savedOrderIndex = array_key_exists($dashboardId, $orderMap) ? $orderMap[$dashboardId] : null;
+            $defaultOrderIndex = $this->getDefaultDashboardOrder($item);
+
+            return sprintf('%06d-%06d', $savedOrderIndex ?? $defaultOrderIndex, $dashboardId);
+        })->values()->map(function ($item, $index) {
+            $item->sort_order = $index;
+
+            return $item;
+        });
+    }
+
+    private function getDefaultDashboardOrder($item)
+    {
+        $defaultOrder = [
+            'DashboardSales' => 1,
+            'DashboardAdmSampling' => 2,
+            'DashboardStaffTc' => 3,
+            'DashboardAnalist' => 4,
+            'DashboardHRD' => 5,
+        ];
+
+        return $defaultOrder[$item->nama_komponen ?? ''] ?? 999999;
     }
 
     private function logRequest($request, $result, $name_req = null)

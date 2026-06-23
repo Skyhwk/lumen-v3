@@ -541,6 +541,7 @@ class FdlDirectLainController extends Controller
         $form1 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','tvoc_voc_hcho_h2co_durasi')->where('kategori','4-Udara')->first();
         $form2 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co2_durasi')->where('kategori','4-Udara')->first();
         $form3 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co_durasi')->where('kategori','4-Udara')->first();
+        $form4 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','o2_durasi')->where('kategori','4-Udara')->first();
         $sesaat_1 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','voc_sesaat')->where('kategori','4-Udara')->first();
         $sesaat_2 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','h2co_hcho_sesaat')->where('kategori','4-Udara')->first();
         $sesaat_3 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co2_sesaat')->where('kategori','4-Udara')->first();
@@ -551,6 +552,7 @@ class FdlDirectLainController extends Controller
                 'pengukuran_1' => $form1->parameters != null ? json_decode($form1->parameters, true) : [],
                 'pengukuran_2' => $form2->parameters != null ? json_decode($form2->parameters, true) : [],
                 'pengukuran_3' => $form3->parameters != null ? json_decode($form3->parameters, true) : [],
+                'pengukuran_4' => $form4->parameters != null ? json_decode($form4->parameters, true) : [],
                 'sesaat_1' => $sesaat_1->parameters != null ? json_decode($sesaat_1->parameters, true) : [],
                 'sesaat_2' => $sesaat_2->parameters != null ? json_decode($sesaat_2->parameters, true) : [],
                 'sesaat_3' => $sesaat_3->parameters != null ? json_decode($sesaat_3->parameters, true) : [],

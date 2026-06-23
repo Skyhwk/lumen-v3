@@ -73,6 +73,23 @@ class PurchaseRequestsController extends Controller
             });
         }
 
+        return $this->purchaseRequestDataTable($purchaseRequests, $employee);
+    }
+
+    private function indexVoidRequests($employee)
+    {
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
+            ->where('is_active', true)
+            ->where('is_goods_voided', true)
+            ->latest('goods_voided_at');
+
+        $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
+
+        return $this->purchaseRequestDataTable($purchaseRequests, $employee);
+    }
+
+    private function purchaseRequestDataTable($purchaseRequests, $employee)
+    {
         return DataTables::of($purchaseRequests)
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
             ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
@@ -86,26 +103,28 @@ class PurchaseRequestsController extends Controller
             ->addColumn('can_void', fn($row) => $this->canUserVoid($employee, $row))
             ->addColumn('can_receive_goods', fn($row) => $this->canUserReceiveGoods($employee, $row))
             ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
-            ->make(true);
-    }
-
-    private function indexVoidRequests($employee)
-    {
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
-            ->where('is_active', true)
-            ->where('is_goods_voided', true)
-            ->latest('goods_voided_at');
-
-        $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
-
-        return DataTables::of($purchaseRequests)
-            ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
-            ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
-            ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
-            ->addColumn('receipt_target_qty', fn($row) => PurchaseReceiptService::resolveTargetQty($row))
-            ->addColumn('receipt_progress', fn($row) => $this->formatReceiptProgress($row))
-            ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatches($row))
-            ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
+            ->filterColumn('request_number', fn($query, $keyword) => $query->where('request_number', 'like', "%{$keyword}%"))
+            ->filterColumn('item_name', fn($query, $keyword) => $query->whereHas('items', function ($q) use ($keyword) {
+                $q->where('item_name', 'like', "%{$keyword}%");
+            }))
+            ->filterColumn('receipt_progress', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('receipt_target_qty', 'like', "%{$keyword}%")
+                        ->orWhere('vendor_received_total', 'like', "%{$keyword}%")
+                        ->orWhere('user_handed_total', 'like', "%{$keyword}%")
+                        ->orWhere('user_confirmed_total', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('quantity', fn($query, $keyword) => $query->whereHas('items', function ($q) use ($keyword) {
+                $q->where('quantity', 'like', "%{$keyword}%");
+            }))
+            ->filterColumn('unit', fn($query, $keyword) => $query->whereHas('items', function ($q) use ($keyword) {
+                $q->where('unit', 'like', "%{$keyword}%");
+            }))
+            ->filterColumn('purpose', fn($query, $keyword) => $query->where('purpose', 'like', "%{$keyword}%"))
+            ->filterColumn('priority', fn($query, $keyword) => $query->where('priority', 'like', "%{$keyword}%"))
+            ->filterColumn('created_by', fn($query, $keyword) => $query->where('created_by', 'like', "%{$keyword}%"))
+            ->filterColumn('created_at', fn($query, $keyword) => $query->where('created_at', 'like', "%{$keyword}%"))
             ->make(true);
     }
 
