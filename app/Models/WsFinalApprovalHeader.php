@@ -41,7 +41,7 @@ class WsFinalApprovalHeader extends Sector
 
     public function scopeByNoSampel($query, string $noSampel)
     {
-        return $query->where('no_sampel', $noSampel);
+        return $query->where('no_lhp', $noSampel);
     }
 
     public function markAsApproved(string $approvedBy): bool
