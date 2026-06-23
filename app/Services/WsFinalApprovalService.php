@@ -773,7 +773,7 @@ class WsFinalApprovalService
         $satuan = self::resolveSatuan($source, $orderDetail);
 
         if ($isIsokinetik) {
-            $result = self::extractFirstFilledAttribute($source, ['hasil_isokinetik']);
+            $result = self::extractIsokinetikResult($source);
             if ($result !== null) {
                 return $result;
             }
@@ -782,17 +782,6 @@ class WsFinalApprovalService
         $udaraResult = self::extractUdaraRelationResult($source, $satuan);
         if ($udaraResult !== null) {
             return $udaraResult;
-        }
-
-        foreach (['hasil', 'hasil1', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
-            if (!array_key_exists($field, $source->getAttributes())) {
-                continue;
-            }
-
-            $value = $source->getAttribute($field);
-            if ($value !== null && $value !== '') {
-                return self::stringValue($value);
-            }
         }
 
         foreach (['ws_value', 'ws_udara', 'ws_value_linkungan', 'ws_value_cerobong'] as $relation) {
@@ -810,7 +799,7 @@ class WsFinalApprovalService
             }
 
             if ($isIsokinetik) {
-                $result = self::extractFirstFilledAttribute($value, ['hasil_isokinetik']);
+                $result = self::extractIsokinetikResult($value);
                 if ($result !== null) {
                     return $result;
                 }
@@ -836,7 +825,49 @@ class WsFinalApprovalService
             }
         }
 
+        foreach (['hasil', 'hasil1', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
+            if (!array_key_exists($field, $source->getAttributes())) {
+                continue;
+            }
+
+            $value = $source->getAttribute($field);
+            if ($value !== null && $value !== '') {
+                $value = self::stringValue($value);
+                if (!self::rejectPlaceholderResult($value)) {
+                    return $value;
+                }
+            }
+        }
+
         return null;
+    }
+
+    private static function extractIsokinetikResult(Model $value): ?string
+    {
+        $result = self::extractFirstFilledAttribute($value, [
+            'f_koreksi_c', 'f_koreksi_c1', 'f_koreksi_c2', 'f_koreksi_c3', 'f_koreksi_c4', 'f_koreksi_c5',
+            'C', 'C1', 'C2', 'C3', 'C4', 'C5',
+        ]);
+
+        if ($result !== null) {
+            return $result;
+        }
+
+        $raw = self::extractFirstFilledAttribute($value, ['hasil_isokinetik']);
+        if ($raw === null || $raw === '[]') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return self::rejectPlaceholderResult($raw) ? null : $raw;
+        }
+
+        if (empty($decoded)) {
+            return null;
+        }
+
+        return self::jsonValue($decoded);
     }
 
     private static function extractUdaraRelationResult(Model $source, ?string $satuan = null): ?string
@@ -936,11 +967,17 @@ class WsFinalApprovalService
 
             $value = $model->getAttribute($field);
             if ($value !== null && $value !== '') {
-                return self::stringValue($value);
+                $value = self::stringValue($value);
+                return self::rejectPlaceholderResult($value) ? null : $value;
             }
         }
 
         return null;
+    }
+
+    private static function rejectPlaceholderResult(?string $value): bool
+    {
+        return $value !== null && in_array(mb_strtolower(trim($value)), ['nows'], true);
     }
 
     private static function resolveSatuan(Model $source, ?OrderDetail $orderDetail): ?string
