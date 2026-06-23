@@ -412,55 +412,61 @@ class MesinAbsenHandler extends BaseController
             if (file_exists($filepath)) {
                 unlink($filepath);
             }
-            
+
+            // Jika data kosong (null, [], dsb.), tetap buat file kosong (tidak ada akses)
+            if (empty($data) || count($data) === 0) {
+                // Buat file kosong
+                $handle = fopen($filepath, 'wb');
+                if ($handle) {
+                    fclose($handle);
+                } else {
+                    \Log::error("Cannot create empty access.bin file: " . $filepath);
+                    throw new \Exception("Cannot create empty access.bin file: " . $filepath);
+                }
+                return true;
+            }
+
             $handle = fopen($filepath, 'wb');
-            
             if (!$handle) {
                 \Log::error("Cannot create file: " . $filepath);
                 throw new \Exception("Cannot create file: " . $filepath);
             }
-            
+
             $recordCount = 0;
-            
+
             foreach ($data as $record) {
                 // Pastikan data tidak null
                 $empId = isset($record->employee_id) ? (string)$record->employee_id : '';
                 $rfidCode = isset($record->rfid) ? (string)$record->rfid : '';
                 $name = isset($record->full_name) ? (string)$record->full_name : '';
-                
-                // DEBUG: Log setiap record
-                // \Log::debug("Record: EmpID={$empId}, RFID={$rfidCode}, Name={$name}");
-                
+
                 // employee_id - 16 bytes
                 $employeeId = str_pad(substr($empId, 0, 15), 16, "\0");
                 fwrite($handle, $employeeId);
-                
+
                 // rfid - 16 bytes
                 $rfid = str_pad(substr($rfidCode, 0, 15), 16, "\0");
                 fwrite($handle, $rfid);
-                
+
                 // full_name - 32 bytes
                 $fullName = str_pad(substr($name, 0, 31), 32, "\0");
                 fwrite($handle, $fullName);
-                
+
                 $recordCount++;
             }
-            
+
             fclose($handle);
-            
+
             // Verifikasi file
             $filesize = file_exists($filepath) ? filesize($filepath) : 0;
             $expectedSize = $recordCount * 64;
-            
-            // \Log::info("Generated access.bin: {$filepath}");
-            // \Log::info("Records: {$recordCount}, Size: {$filesize} bytes, Expected: {$expectedSize} bytes");
-            
+
             if ($filesize != $expectedSize) {
                 \Log::warning("File size mismatch! Expected: {$expectedSize}, Got: {$filesize}");
             }
-            
+
             return true;
-            
+
         } catch (\Exception $e) {
             \Log::error("generateAccessBin Error: " . $e->getMessage());
             throw $e;
