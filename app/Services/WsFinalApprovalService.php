@@ -309,7 +309,7 @@ class WsFinalApprovalService
 
         $row = array_merge([
             'no_order' => self::limit($orderDetail->no_order, 50),
-            'no_lhp' => self::limit($orderDetail->no_sampel, 50),
+            'no_lhp' => self::limit($orderDetail->cfr, 50),
             'periode' => self::limit($orderDetail->periode, 50),
             'parameter' => self::jsonValue($orderDetail->parameter),
             'kategori' => self::limit(self::categoryName($orderDetail->kategori_2), 70),
