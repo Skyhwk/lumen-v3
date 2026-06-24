@@ -119,6 +119,8 @@ class AuthController extends BaseController
             $keys = [];
         }
 
+        $keys = $this->filterNonEmailAccess($keys);
+
         // id = 1 ==> Direktur
         // id = 127 ==> Administrator
         // id = 152 ==> Patah
@@ -132,7 +134,10 @@ class AuthController extends BaseController
         
         $wiseList = MenuFdl::where('is_active', 1)->where('is_wiseList', 1)->get();
 
-        $strukture_menu = Menu::where('is_active', true)->orderBy('menu', 'asc')->get();
+        $strukture_menu = Menu::where('is_active', true)
+            ->whereRaw('LOWER(menu) != ?', ['email'])
+            ->orderBy('menu', 'asc')
+            ->get();
 
         $dashboardOwner =  DashboardComponent::where(function($query) use ($karyawan) {
             $query->where('owner_id', $karyawan->id)
@@ -224,6 +229,37 @@ class AuthController extends BaseController
         $this->logRequest($request, $response->getContent(), $karyawan->nama_lengkap);
 
         return $response;
+    }
+
+    private function filterNonEmailAccess($access): array
+    {
+        if (!is_array($access)) {
+            return [];
+        }
+
+        return array_values(array_filter($access, function ($item) {
+            if (!is_array($item)) {
+                return true;
+            }
+
+            $parent = strtolower((string) ($item['parent'] ?? ''));
+            $name = strtolower((string) ($item['name'] ?? ''));
+            $path = (string) ($item['path'] ?? '');
+
+            if ($name === 'email') {
+                return false;
+            }
+
+            if ($parent === 'email' || strpos($parent, 'email/') === 0) {
+                return false;
+            }
+
+            if ($path !== '' && strpos($path, '/email') === 0) {
+                return false;
+            }
+
+            return true;
+        }));
     }
 
     private function applyDashboardOrder($dashboard, $userId)
