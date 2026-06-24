@@ -119,7 +119,11 @@ class RequestSamplingPlanRevisiController extends Controller
         $target = (float) str_replace(',', '', $target ?? 0);
         $biayaAkhir = $this->ambilBiayaAkhir($row);
 
-        if ($target <= 0 || $biayaAkhir <= 0) {
+        if ($biayaAkhir <= 0) {
+            return '0.00%';
+        }
+
+        if ($target <= 0) {
             return '-';
         }
 
