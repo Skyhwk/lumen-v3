@@ -138,7 +138,7 @@ class RequestSamplingPlanController extends Controller
         }
 
         if ($target <= 0) {
-            return '-';
+            return '0.00%';
         }
 
         $persentase = ($biayaAkhir / $target) * 100;
