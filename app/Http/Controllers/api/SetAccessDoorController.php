@@ -53,12 +53,6 @@ class SetAccessDoorController extends Controller
 
     public function getAllKaryawan()
     {
-        // $karyawans = MasterKaryawan::with('rfid')
-        //     ->where('is_active', true)
-        //     ->whereHas('rfid', fn($q) => $q->where('status', 0))
-        //     ->orderBy('nama_lengkap')
-        //     ->get();
-
         $karyawans = RfidCard::with('karyawan')
             ->whereHas('karyawan', fn($q) => $q->where('is_active', true)->orderBy('nama_lengkap'))
             ->where('status', 0)
@@ -81,6 +75,20 @@ class SetAccessDoorController extends Controller
         return false;
     }
 
+    private function newMethod($data)
+    {
+        $mqtt = new phpMQTT('apps.intilab.com', '1111', 'Admin');
+
+        if ($mqtt->connect(true, null, '', '')) {
+            $mqtt->publish('/intilab/iot/multidevice', $data, 0);
+            $mqtt->close();
+
+            return true;
+        }
+
+        return false;
+    }
+
     public function save(Request $request)
     {
         try {
@@ -92,13 +100,17 @@ class SetAccessDoorController extends Controller
                             'device' => $request->kode_device,
                             'data' => $karyawan,
                         ]));
-            
-                        if ($mqtt) {
-                            $accessDoor = new AccessDoor;
-                            $accessDoor->kode_rfid = explode("-", $karyawan)[0];
-                            $accessDoor->kode_mesin = $request->kode_device;
-                            $accessDoor->save();
-                        }
+
+                        $accessDoor = new AccessDoor;
+                        $accessDoor->kode_rfid = explode("-", $karyawan)[0];
+                        $accessDoor->kode_mesin = $request->kode_device;
+                        $accessDoor->save();
+
+                        $new = $this->newMethod(json_encode((object) [
+                            'topic' => 'add_user',
+                            'device' => $request->kode_device,
+                            'data' => $request->karyawan,
+                        ]));
                     }
 
                     return response()->json(['message' => 'Saved Successfully'], 200);
@@ -108,15 +120,19 @@ class SetAccessDoorController extends Controller
                         'device' => $request->kode_device,
                         'data' => $request->karyawan,
                     ]));
-        
-                    if ($mqtt) {
-                        $accessDoor = new AccessDoor;
-                        $accessDoor->kode_rfid = explode("-", $request->karyawan)[0];
-                        $accessDoor->kode_mesin = $request->kode_device;
-                        $accessDoor->save();
-        
-                        return response()->json(['message' => 'Saved Successfully'], 200);
-                    }
+
+                    $accessDoor = new AccessDoor;
+                    $accessDoor->kode_rfid = explode("-", $request->karyawan)[0];
+                    $accessDoor->kode_mesin = $request->kode_device;
+                    $accessDoor->save();
+
+                    $new = $this->newMethod(json_encode((object) [
+                        'topic' => 'add_user',
+                        'device' => $request->kode_device,
+                        'data' => $request->karyawan,
+                    ]));
+    
+                    return response()->json(['message' => 'Saved Successfully'], 200);
                 }
             }
         } catch (\Exception $ex) {
@@ -138,6 +154,12 @@ class SetAccessDoorController extends Controller
                     'kode_rfid' => explode("-", $request->karyawan)[0],
                     'kode_mesin' => $request->kode_device
                 ])->delete();
+
+                $new = $this->newMethod(json_encode((object) [
+                    'topic' => 'delete_user',
+                    'device' => $request->kode_device,
+                    'data' => $request->karyawan,
+                ]));
 
                 return response()->json(['message' => 'Deleted Successfully'], 200);
             }
@@ -161,9 +183,13 @@ class SetAccessDoorController extends Controller
                     'kode_mesin' => $item['kode_device']
                 ])->delete();
 
-                // if ($mqtt) {
-                // }
+                $new = $this->newMethod(json_encode((object) [
+                    'topic' => 'delete_user',
+                    'device' => $item['kode_device'],
+                    'data' => $item['karyawan'],
+                ]));
             }
+
             return response()->json(['message' => 'Deleted Successfully'], 200);
         } catch (\Exception $ex) {
             return response()->json(['message' => $ex->getMessage()], 500);

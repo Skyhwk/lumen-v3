@@ -6,7 +6,7 @@ use App\Models\PayrollHeader;
 use App\Models\Payroll;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
-use App\Services\GetBawahan;
+use App\Services\GetBawahanAll;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
@@ -25,6 +25,24 @@ class MonthlySalaryController extends Controller
     private $allowedJabatanIds = [1,2,3,10,15,26,30,40,45,46,47,48,91,97,99,102,108,111,118,127,128,134,136,139,140,142,147,152,154,157];
 
     /**
+     * Cache instance Karyawan login
+     */
+    private $currentUser = null;
+
+    /**
+     * Ambil data karyawan yang sedang login
+     */
+    private function getCurrentUser()
+    {
+        if ($this->currentUser === null && $this->user_id) {
+            $this->currentUser = MasterKaryawan::where('id', $this->user_id)
+                ->where('is_active', true)
+                ->first();
+        }
+        return $this->currentUser;
+    }
+
+    /**
      * Cek apakah user yang login memiliki akses berdasarkan id_jabatan
      */
     private function hasAccess()
@@ -37,15 +55,13 @@ class MonthlySalaryController extends Controller
             return false;
         }
 
-        return MasterKaryawan::where('id', $this->user_id)
-        ->where('is_active', true)
-        ->whereIn('grade', ['MANAGER', 'DIREKSI'])
-        ->exists();
+        $user = $this->getCurrentUser();
+        return $user && in_array($user->grade, ['MANAGER', 'DIREKSI']);
     }
 
     /**
      * Ambil ID bawahan user yang login (menggunakan atasan_langsung)
-     * Jika devMode aktif, return null (tidak filter)
+     * Jika devMode aktif atau user adalah DIREKSI, return null (tidak filter)
      */
     private function getBawahanIds()
     {
@@ -57,7 +73,12 @@ class MonthlySalaryController extends Controller
             return [];
         }
 
-        $bawahan = GetBawahan::where('id', $this->user_id)->get();
+        $user = $this->getCurrentUser();
+        if ($user && $user->grade === 'DIREKSI') {
+            return null; // DIREKSI tidak memfilter bawahan, bisa melihat semua data salary
+        }
+
+        $bawahan = GetBawahanAll::where('id', $this->user_id)->get();
 
         return $bawahan->pluck('id')->toArray();
     }
@@ -161,7 +182,7 @@ class MonthlySalaryController extends Controller
                 
                 $headers = PayrollHeader::where('periode_payroll', $periode)
                     ->where('is_active', true)
-                    ->where('status', 'TRANSFER')
+                    // ->where('status', 'TRANSFER')
                     ->pluck('id')
                     ->toArray();
 
@@ -185,7 +206,7 @@ class MonthlySalaryController extends Controller
                     $query->whereIn('id_karyawan', $bawahanIds);
                 })
                 ->with(['karyawan' => function ($query) {
-                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan');
+                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active');
                 }, 'department' => function ($query) {
                     $query->select('master_divisi.id', 'nama_divisi');
                 }])
