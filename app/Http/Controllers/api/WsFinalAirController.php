@@ -915,56 +915,25 @@ class WsFinalAirController extends Controller
 
 	public function validasiApproveWSApi(Request $request)
 	{
+		$result = \App\Services\WsFinalApprovalService::validateAndApprove($request->all(), $this->karyawan);
 
-		DB::beginTransaction();
-		try {
-			if ($request->id) {
-
-				$data = OrderDetail::where('id', $request->id)->first();
-				$data->status = 1;
-				$data->keterangan_1 = $request->keterangan_1;
-				$data->save();
-				\App\Services\WsFinalApprovalService::finalizeSample($data, true, $this->karyawan);
-
-				if($request->data_limbah){
-					DataLimbah::create([
-						'no_sampel' => $data->no_sampel,
-						'status_limbah' => $request->status_limbah == '1' ? 'Memenuhi Baku Mutu' : 'Tidak Memenuhi Baku Mutu',
-						'created_by' => $this->karyawan,
-						'created_at' => Carbon::now()
-					]);
-				}
-
-				HistoryAppReject::insert([
-					'no_lhp' => $data->cfr,
+		if ($result['success'] && $request->data_limbah) {
+			$data = OrderDetail::where('id', $request->id)->first();
+			if ($data) {
+				DataLimbah::create([
 					'no_sampel' => $data->no_sampel,
-					'kategori_2' => $data->kategori_2,
-					'kategori_3' => $data->kategori_3,
-					'menu' => 'WS Final Air',
-					'status' => 'approve',
-					'approved_at' => Carbon::now(),
-					'approved_by' => $this->karyawan
+					'status_limbah' => $request->status_limbah == '1' ? 'Memenuhi Baku Mutu' : 'Tidak Memenuhi Baku Mutu',
+					'created_by' => $this->karyawan,
+					'created_at' => Carbon::now()
 				]);
-				DB::commit();
-				$this->resultx = 'Data hasbeen Approved.!';
-				return response()->json([
-					'message' => $this->resultx,
-					'status' => 200,
-					'success' => true,
-				], 200);
-			} else {
-				return response()->json([
-					'message' => 'Data Not Found.!',
-					'status' => 401,
-					'success' => false,
-				], 401);
 			}
-		} catch (Exception $e) {
-			DB::rollback();
-			return response()->json([
-				'message' => $e->getMessage()
-			], 401);
 		}
+
+		return response()->json([
+			'message' => $result['message'],
+			'status'  => $result['status'],
+			'success' => $result['success'] ?? false,
+		], $result['status']);
 	}
 
 	public function AddSubKontrak(Request $request)
