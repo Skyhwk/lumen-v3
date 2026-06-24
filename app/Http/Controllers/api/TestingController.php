@@ -2287,6 +2287,8 @@ class TestingController extends Controller
                         DetailSoundMeter::class
                     ];
                     $noSampelCari = $request->input('no_sampel');
+
+                    // ===== 1. Tracing Data Lapangan (existing logic) =====
                     $results = [];
                     foreach ($models as $modelClass) {
                         $dataFound = $modelClass::where('no_sampel', $noSampelCari)->get();
@@ -2302,9 +2304,82 @@ class TestingController extends Controller
                             }
                         }
                     }
+
+                    // ===== 2. Cek apakah parameter sudah terdaftar di RequiredParameters =====
+                    $sample = OrderDetail::where('no_sampel', $noSampelCari)->first();
+
+                    $registrationCheck = [];
+                    if ($sample && $sample->parameter) {
+                        $parametersRaw = json_decode($sample->parameter);
+
+                        // Ambil ICP template (sekali saja)
+                        $templateIcp = \App\Models\TemplateStp::where('name', 'icp')
+                            ->where('category_id', 4)
+                            ->first();
+
+                        $icpParameters = [];
+                        if ($templateIcp && $templateIcp->param) {
+                            $icpParameters = json_decode($templateIcp->param, true) ?? [];
+                        }
+
+                        // Ambil RequiredParameters sesuai kategori_2 sample
+                        $requiredParameters = \App\Models\RequiredParameters::all()->map(function ($item) {
+                            return [
+                                'parameter'     => $item->parameter,
+                                'requiredCount' => $item->required_count,
+                                'category'      => $item->category,
+                                'model'         => $item->model,
+                                'model2'        => $item->model2,
+                            ];
+                        });
+
+                        $filteredRequired = collect($requiredParameters)
+                            ->where('category', $sample->kategori_2);
+
+                        $registered = [];
+                        $unregistered = [];
+
+                        if (is_array($parametersRaw)) {
+                            foreach ($parametersRaw as $item) {
+                                $parameterName = explode(";", $item)[1] ?? null;
+                                if (!$parameterName) continue;
+
+                                $matched = $filteredRequired
+                                    ->where('parameter', $parameterName)
+                                    ->first();
+
+                                if ($matched) {
+                                    $registered[] = [
+                                        'parameter' => $parameterName,
+                                        'category'  => $matched['category'],
+                                        'model'     => $matched['model'],
+                                        'status'    => 'TERDAFTAR',
+                                    ];
+                                } else {
+                                    $unregistered[] = [
+                                        'parameter'   => $parameterName,
+                                        'kategori_2'  => $sample->kategori_2,
+                                        'status'      => 'BELUM TERDAFTAR',
+                                    ];
+                                }
+                            }
+                        }
+
+                        $registrationCheck = [
+                            'no_sampel'            => $noSampelCari,
+                            'kategori_2'           => $sample->kategori_2,
+                            'total_parameter'      => count($registered) + count($unregistered),
+                            'total_terdaftar'      => count($registered),
+                            'total_belum_terdaftar' => count($unregistered),
+                            'registered'           => $registered,
+                            'unregistered'         => $unregistered,
+                        ];
+                    }
+
                     return response()->json([
-                        'total_found' => count($results),
-                        'data' => $results
+                        'total_found_data_lapangan' => count($results),
+                        'data_lapangan'             => $results,
+                        'parameter_registration'    => $registrationCheck,
                     ]);
                 case 'missing-qrcode':
                     try {
