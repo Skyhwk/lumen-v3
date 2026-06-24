@@ -889,32 +889,46 @@ class InternalMailService
             @\imap_timeout(\IMAP_CLOSETIMEOUT, 10);
         }
 
+        $pathsToTry = [$path];
+        $fallbackPath = $this->buildImapSslFallbackPath($settings, $path);
+        if ($fallbackPath !== null && $fallbackPath !== $path) {
+            $pathsToTry[] = $fallbackPath;
+        }
+
         $previousHandler = set_error_handler(function () {
             return true;
         });
 
         try {
-            $connection = @\imap_open(
-                $path,
-                $settings['email'],
-                $settings['password'],
-                0,
-                1,
-                ['DISABLE_AUTHENTICATOR' => 'GSSAPI']
-            );
+            $error = 'Unknown IMAP error';
 
-            if (!$connection) {
-                $error = $this->collectImapError();
-                if ($this->isAuthError($error)) {
-                    $this->recordAuthFailure(
-                        'Autentikasi email gagal. Periksa email/password di Setting Mail, atau tunggu 5 menit jika akun terkunci.'
-                    );
+            foreach ($pathsToTry as $tryPath) {
+                $connection = @\imap_open(
+                    $tryPath,
+                    $settings['email'],
+                    $settings['password'],
+                    0,
+                    1,
+                    ['DISABLE_AUTHENTICATOR' => 'GSSAPI']
+                );
+
+                if ($connection) {
+                    $this->clearAuthBlock();
+                    return $connection;
                 }
-                throw new \RuntimeException('Koneksi IMAP gagal: ' . $error);
+
+                $error = $this->collectImapError();
+                if (!$this->isSslNegotiationError($error)) {
+                    break;
+                }
             }
 
-            $this->clearAuthBlock();
-            return $connection;
+            if ($this->isAuthError($error)) {
+                $this->recordAuthFailure(
+                    'Autentikasi email gagal. Periksa email/password di Setting Mail, atau tunggu 5 menit jika akun terkunci.'
+                );
+            }
+            throw new \RuntimeException('Koneksi IMAP gagal: ' . $error);
         } finally {
             restore_error_handler($previousHandler);
             $this->clearImapErrors();
@@ -993,13 +1007,61 @@ class InternalMailService
 
     private function buildImapSecurityFlag(array $settings): string
     {
+        $port = (int) ($settings['incoming']['port'] ?? 0);
+        $protocol = $settings['protocol'] ?? 'imap';
         $security = $this->mapImapSecurity($settings['incoming']['connection_security'] ?? 'SSL');
+
+        $implicitPort = $protocol === 'pop3' ? 995 : 993;
+        $plainPort = $protocol === 'pop3' ? 110 : 143;
+
+        if ($port === $implicitPort) {
+            $security = 'ssl';
+        } elseif ($port === $plainPort && $security === 'ssl') {
+            $security = 'tls';
+        } elseif ($security === 'notls' && $port === $implicitPort) {
+            $security = 'ssl';
+        }
 
         if (!self::shouldValidateMailCert($settings) && in_array($security, ['ssl', 'tls'], true)) {
             $security .= '/novalidate-cert';
         }
 
         return $security;
+    }
+
+    private function buildImapSslFallbackPath(array $settings, string $path): ?string
+    {
+        $port = (int) ($settings['incoming']['port'] ?? 0);
+        $protocol = $settings['protocol'] ?? 'imap';
+        $implicitPort = $protocol === 'pop3' ? 995 : 993;
+
+        if ($port === $implicitPort || !preg_match('/^\{[^}]+\}(.*)$/s', $path, $matches)) {
+            return null;
+        }
+
+        $fallbackSettings = $settings;
+        $fallbackSettings['incoming']['port'] = $implicitPort;
+        $fallbackSettings['incoming']['connection_security'] = 'SSL';
+
+        return $this->buildMailboxPath($fallbackSettings, $matches[1]);
+    }
+
+    private function isSslNegotiationError(string $error): bool
+    {
+        $needles = [
+            'SSL negotiation failed',
+            'TLS/SSL failure',
+            'Certificate failure',
+            'Self signed certificate',
+        ];
+
+        foreach ($needles as $needle) {
+            if (stripos($error, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function configurePhpmailerSslForSettings(PHPMailer $mail, array $settings): void
