@@ -15,14 +15,18 @@ use App\Models\QuotationNonKontrak;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
+use App\Models\MasterTargetPenjadwalan;
 use App\Models\PerbantuanSampler;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class RequestSamplingPlanController extends Controller
 {
+    private array $targetPenjadwalanCache = [];
+
     public function index(Request $request)
     {
         $data = SamplingPlan::withTypeModelSub()
@@ -49,6 +53,9 @@ class RequestSamplingPlanController extends Controller
             ->orderBy('id', 'DESC');
 
         return Datatables::of($data)
+            ->addColumn('persentase', function ($row) {
+                return $this->hitungPersentaseTargetPenjadwalan($row);
+            })
             ->filterColumn('created_at', function ($query, $keyword) {
                 $query->where('created_at', 'like', '%' . $keyword . '%');
             })
@@ -98,6 +105,102 @@ class RequestSamplingPlanController extends Controller
                 $query->where('created_by', 'like', '%' . $keyword . '%');
             })
             ->make(true);
+    }
+
+    private function hitungPersentaseTargetPenjadwalan($row): string
+    {
+        $tanggalOpsi = $this->isKontrakQuotation($row)
+            ? $row->periode_kontrak
+            : (
+                $this->ambilTanggalDariOpsi($row->opsi_1)
+                ?: $this->ambilTanggalDariOpsi($row->opsi_2)
+                ?: $this->ambilTanggalDariOpsi($row->opsi_3 ?? null)
+            );
+
+        if (!$tanggalOpsi) {
+            return '-';
+        }
+
+        try {
+            $tanggal = Carbon::parse($tanggalOpsi);
+        } catch (\Throwable $th) {
+            return '-';
+        }
+
+        $kolomBulan = $this->namaKolomBulan($tanggal->month);
+        $target = $this->ambilTargetPenjadwalan($tanggal->year, $kolomBulan);
+
+        $target = (float) str_replace(',', '', $target ?? 0);
+        $biayaAkhir = $this->ambilBiayaAkhir($row);
+
+        if ($target <= 0 || $biayaAkhir <= 0) {
+            return '-';
+        }
+
+        $persentase = ($biayaAkhir / $target) * 100;
+
+        return number_format(floor($persentase * 100) / 100, 2) . '%';
+    }
+
+    private function isKontrakQuotation($row): bool
+    {
+        return $row->status_quotation === 'kontrak'
+            || strpos($row->no_quotation ?? '', '/QTC/') !== false
+            || strpos($row->no_document ?? '', '/QTC/') !== false;
+    }
+
+    private function ambilTanggalDariOpsi(?string $opsi): ?string
+    {
+        if (!$opsi) {
+            return null;
+        }
+
+        return preg_match('/\d{4}-\d{2}-\d{2}/', $opsi, $matches) ? $matches[0] : null;
+    }
+
+    private function ambilBiayaAkhir($row): float
+    {
+        if ($row->status_quotation === 'kontrak' && $row->quotationKontrak) {
+            $detail = collect($row->quotationKontrak->detail ?? [])
+                ->firstWhere('periode_kontrak', $row->periode_kontrak);
+
+            return (float) ($detail->biaya_akhir ?? $row->quotationKontrak->biaya_akhir ?? 0);
+        }
+
+        return (float) ($row->quotation->biaya_akhir ?? 0);
+    }
+
+    private function ambilTargetPenjadwalan(int $tahun, string $kolomBulan): float
+    {
+        if (!array_key_exists($tahun, $this->targetPenjadwalanCache)) {
+            $this->targetPenjadwalanCache[$tahun] = MasterTargetPenjadwalan::where('tahun', $tahun)
+                ->where('is_active', true)
+                ->first();
+        }
+
+        $target = $this->targetPenjadwalanCache[$tahun]->{$kolomBulan} ?? 0;
+
+        return (float) str_replace(',', '', $target);
+    }
+
+    private function namaKolomBulan(int $bulan): string
+    {
+        $bulanMap = [
+            1 => 'januari',
+            2 => 'februari',
+            3 => 'maret',
+            4 => 'april',
+            5 => 'mei',
+            6 => 'juni',
+            7 => 'juli',
+            8 => 'agustus',
+            9 => 'september',
+            10 => 'oktober',
+            11 => 'november',
+            12 => 'desember',
+        ];
+
+        return $bulanMap[$bulan];
     }
 
     public function getPraNomorSample(Request $request)
