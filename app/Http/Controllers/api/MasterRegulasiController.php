@@ -88,7 +88,7 @@ class MasterRegulasiController extends Controller
             } else {
                 // Create new regulasi
                 $dataregulasi = $request->only([
-                    'peraturan',
+                    // 'peraturan',
                     'deskripsi',
                     'id_kategori',
                 ]);
@@ -99,6 +99,7 @@ class MasterRegulasiController extends Controller
                 }
 
                 $cek_kategori = MasterKategori::where('id', $request->id_kategori)->first();
+                $dataregulasi['peraturan'] = trim($request->peraturan);
                 $dataregulasi['nama_kategori'] = trim($cek_kategori->nama_kategori);
                 $dataregulasi['created_by'] = $this->karyawan;
                 $dataregulasi['created_at'] = DATE('Y-m-d H:i:s');
