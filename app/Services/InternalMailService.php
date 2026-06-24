@@ -237,6 +237,7 @@ class InternalMailService
             : $this->normalizeRecipientField($mail->bcc ?? null);
 
         $fromDisplay = $fromList[0]['display'] ?? $this->formatAddress($mail->fromName, $mail->fromAddress);
+        $ownEmail = $settings['email'] ?? null;
 
         return [
             'id'        => (int) $uid,
@@ -248,6 +249,7 @@ class InternalMailService
             'cc_list'   => $ccList,
             'bcc'       => $this->joinRecipientDisplays($bccList),
             'bcc_list'  => $bccList,
+            'reply'     => $this->buildReplyRecipients($fromList, $toList, $ccList, $ownEmail),
             'subject'   => $this->decodeHeader($mail->subject ?? ''),
             'date'      => $mail->date ?? null,
             'size'      => $this->formatSize((int) ($mail->size ?? 0)),
@@ -373,19 +375,19 @@ class InternalMailService
 
         $mail->setFrom($settings['email'], $settings['full_name'] ?? $settings['email']);
 
-        foreach ($this->parseRecipients($data['to'] ?? '') as $recipient) {
-            $mail->addAddress($recipient);
+        foreach ($this->parseRecipientEntries($data['to'] ?? '') as $recipient) {
+            $mail->addAddress($recipient['email'], $recipient['name'] !== $recipient['email'] ? $recipient['name'] : '');
         }
 
         if (!empty($data['cc'])) {
-            foreach ($this->parseRecipients($data['cc']) as $cc) {
-                $mail->addCC($cc);
+            foreach ($this->parseRecipientEntries($data['cc']) as $cc) {
+                $mail->addCC($cc['email'], $cc['name'] !== $cc['email'] ? $cc['name'] : '');
             }
         }
 
         if (!empty($data['bcc'])) {
-            foreach ($this->parseRecipients($data['bcc']) as $bcc) {
-                $mail->addBCC($bcc);
+            foreach ($this->parseRecipientEntries($data['bcc']) as $bcc) {
+                $mail->addBCC($bcc['email'], $bcc['name'] !== $bcc['email'] ? $bcc['name'] : '');
             }
         }
 
@@ -1264,9 +1266,83 @@ class InternalMailService
 
     private function parseRecipients(string $recipients): array
     {
-        return array_values(array_filter(array_map('trim', preg_split('/[,;]/', $recipients)), function ($item) {
+        return array_column($this->parseRecipientEntries($recipients), 'email');
+    }
+
+    private function parseRecipientEntries(string $recipients): array
+    {
+        $recipients = trim($recipients);
+        if ($recipients === '') {
+            return [];
+        }
+
+        $entries = [];
+        $parsed = @\imap_rfc822_parse_adrlist($recipients, 'localhost');
+        if ($parsed) {
+            foreach ($parsed as $addr) {
+                if (empty($addr->mailbox) || empty($addr->host) || $addr->host === '.') {
+                    continue;
+                }
+
+                $email = strtolower($addr->mailbox . '@' . $addr->host);
+                $name = isset($addr->personal) ? trim($this->decodeHeader($addr->personal), " \t\"") : '';
+                $entry = $this->makeRecipientEntry($name !== '' ? $name : null, $email);
+                if ($entry) {
+                    $entries[] = $entry;
+                }
+            }
+        }
+
+        if (!empty($entries)) {
+            return $this->uniqueRecipients($entries);
+        }
+
+        foreach ($this->splitRecipientString($recipients) as $part) {
+            $entry = $this->makeRecipientEntryFromDisplay($part);
+            if (!$entry) {
+                $entry = $this->makeRecipientEntry(null, $part);
+            }
+            if ($entry) {
+                $entries[] = $entry;
+            }
+        }
+
+        return $this->uniqueRecipients($entries);
+    }
+
+    private function splitRecipientString(string $raw): array
+    {
+        return array_values(array_filter(array_map('trim', preg_split('/[,;]/', $raw)), function ($item) {
             return $item !== '' && $item !== ',';
         }));
+    }
+
+    private function buildReplyRecipients(array $fromList, array $toList, array $ccList, ?string $ownEmail): array
+    {
+        $toEntry = $fromList[0] ?? null;
+        $to = $toEntry['email'] ?? '';
+
+        $exclude = [];
+        if ($ownEmail) {
+            $exclude[] = strtolower(trim($ownEmail));
+        }
+        if ($to !== '') {
+            $exclude[] = strtolower($to);
+        }
+
+        $ccParts = [];
+        foreach ($this->uniqueRecipients(array_merge($toList, $ccList)) as $recipient) {
+            $email = strtolower($recipient['email'] ?? '');
+            if ($email === '' || in_array($email, $exclude, true)) {
+                continue;
+            }
+            $ccParts[] = $recipient['email'];
+        }
+
+        return [
+            'to' => $to,
+            'cc' => implode(', ', $ccParts),
+        ];
     }
 
     private function fetchHeaderAddresses(string $imapFolder, int $uid, array $settings): array
@@ -1323,17 +1399,7 @@ class InternalMailService
         }
 
         if (is_string($value)) {
-            $items = [];
-            foreach ($this->parseRecipients($value) as $part) {
-                $entry = $this->makeRecipientEntry(null, $part);
-                if (!$entry) {
-                    $entry = $this->makeRecipientEntryFromDisplay($part);
-                }
-                if ($entry) {
-                    $items[] = $entry;
-                }
-            }
-            return $items;
+            return $this->parseRecipientEntries($value);
         }
 
         if (is_object($value)) {
@@ -1388,6 +1454,18 @@ class InternalMailService
         $display = trim($display);
         if ($display === '' || $display === ',') {
             return null;
+        }
+
+        if (preg_match('/^"([^"]*)"\s*<([^>]+)>$/', $display, $matches)) {
+            $name = trim($matches[1]);
+            $email = trim($matches[2]);
+            return $this->makeRecipientEntry($name !== '' ? $name : null, $email);
+        }
+
+        if (preg_match('/^([^<]+?)<([^>]+)>$/', $display, $matches)) {
+            $name = trim($matches[1], " \t\"");
+            $email = trim($matches[2]);
+            return $this->makeRecipientEntry($name !== '' ? $name : null, $email);
         }
 
         if (preg_match('/^"?(.*?)"?\s*<([^>]+)>$/', $display, $matches)) {
