@@ -14,10 +14,18 @@ class EmbedSpreadsheet extends Sector
 
     protected $fillable = [
         'nama_formulir',
-        'url',
+        'source',
+        'url_form',
         'type',
         'created_by',
         'updated_by',
         'deleted_by'
     ];
+
+    protected $appends = ['url'];
+
+    public function getUrlAttribute()
+    {
+        return $this->source ?: $this->url_form;
+    }
 }

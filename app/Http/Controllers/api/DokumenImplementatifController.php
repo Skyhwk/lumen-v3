@@ -8,11 +8,11 @@ use App\Models\EmbedSpreadsheet;
 use Yajra\DataTables\Facades\DataTables;
 use DB;
 
-class ImplementatifDataController extends Controller
+class DokumenImplementatifController extends Controller
 {
     public function index(Request $request)
     {
-        $data = EmbedSpreadsheet::query()->where('type', 'link')
+        $data = EmbedSpreadsheet::query()->where('type', 'dokumen')
             ->select([
                 'id',
                 'nama_formulir',
@@ -115,6 +115,21 @@ class ImplementatifDataController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function download($filename)
+    {
+        try {
+            $filePath = base_path('public/uploads/documents/' . $filename);
+
+            if (!file_exists($filePath)) {
+                return response()->json(['message' => 'File tidak ditemukan.'], 404);
+            }
+
+            return response()->download($filePath, $filename);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal mengunduh file: ' . $e->getMessage()], 500);
         }
     }
 }

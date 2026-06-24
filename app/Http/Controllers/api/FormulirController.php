@@ -8,18 +8,18 @@ use App\Models\EmbedSpreadsheet;
 use Yajra\DataTables\Facades\DataTables;
 use DB;
 
-class ImplementatifDataController extends Controller
+class FormulirController extends Controller
 {
     public function index(Request $request)
     {
-        $data = EmbedSpreadsheet::query()->where('type', 'link')
+        $data = EmbedSpreadsheet::query()
             ->select([
                 'id',
                 'nama_formulir',
                 'source',
                 'url_form',
                 'source as Source',
-                'url_form as Link Form',
+                'url_form as Link Spreadsheet',
                 'type',
                 'created_by',
                 'updated_by',
@@ -116,5 +116,16 @@ class ImplementatifDataController extends Controller
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
         }
+    }
+
+    public function download($filename)
+    {
+        $filePath = public_path('uploads/documents/' . $filename);
+
+        if (!file_exists($filePath)) {
+            abort(404);
+        }
+
+        return response()->download($filePath);
     }
 }

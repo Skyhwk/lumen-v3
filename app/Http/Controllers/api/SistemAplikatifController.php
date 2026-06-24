@@ -12,7 +12,22 @@ class SistemAplikatifController extends Controller
 {
     public function index(Request $request)
     {
-        $data = EmbedSpreadsheet::query();
+        $data = EmbedSpreadsheet::query()
+            ->select([
+                'id',
+                'nama_formulir',
+                'source',
+                'url_form',
+                'source as Source',
+                'url_form as Link Spreadsheet',
+                'type',
+                'created_by',
+                'updated_by',
+                'created_at',
+                'updated_at',
+                'deleted_by',
+                'deleted_at'
+            ]);
         return DataTables::of($data)->make(true);
     }
 
@@ -28,6 +43,9 @@ class SistemAplikatifController extends Controller
                 'updated_by'    => $this->karyawan,
             ];
 
+            $source = $request->source ?? $request->url;
+            $url_form = $request->url_form ?? $request->url;
+
             if ($request->type === 'Dokumen') {
                 if ($request->hasFile('file')) {
                     $file = $request->file('file');
@@ -38,15 +56,20 @@ class SistemAplikatifController extends Controller
                     }
                     $file->move($destinationPath, $filename);
                     
-                    $data['url'] = $file->getClientOriginalName();
+                    $data['source'] = $filename;
                 } else if ($id) {
                     $old = EmbedSpreadsheet::find($id);
                     if ($old) {
-                        $data['url'] = $old->url;
+                        $data['source'] = $old->source;
+                        $data['url_form'] = $old->url_form;
                     }
                 }
+                if ($request->has('url_form')) {
+                    $data['url_form'] = $request->url_form;
+                }
             } else {
-                $data['url'] = $request->url;
+                $data['source'] = $source;
+                $data['url_form'] = $url_form;
             }
 
             if ($id == null || $id == '') {
