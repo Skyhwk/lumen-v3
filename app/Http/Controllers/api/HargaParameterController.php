@@ -205,8 +205,8 @@ class HargaParameterController extends Controller
                 $newParam = new HargaParameter;
                 $newParam->id_kategori = $parameterOld->id_kategori;
                 $newParam->id_parameter = $parameterOld->id_parameter;
-                $newParam->nama_parameter = $parameterOld->nama_parameter;
-                $newParam->nama_kategori = $parameterOld->nama_kategori;
+                $newParam->nama_parameter = trim($parameterOld->nama_parameter);
+                $newParam->nama_kategori = trim($parameterOld->nama_kategori);
                 $newParam->harga = str_replace('.', '', $request->harga);
                 $newParam->regen = $parameterOld->regen;
                 $newParam->volume = $parameterOld->volume;
@@ -232,10 +232,10 @@ class HargaParameterController extends Controller
                 }
 
                 $parameter = new HargaParameter;
-                $parameter->nama_kategori = $ambil_parameter->nama_kategori;
+                $parameter->nama_kategori = trim($ambil_parameter->nama_kategori);
                 $parameter->id_kategori = $ambil_parameter->id_kategori;
                 $parameter->id_parameter = $request->id_parameter;
-                $parameter->nama_parameter = $ambil_parameter->nama_lab;
+                $parameter->nama_parameter = trim($ambil_parameter->nama_lab);
                 $parameter->harga = ($request->harga != '') ? str_replace('.', '', $request->harga) : '0.00';
                 $parameter->tanggal_berlaku = $tanggalBerlaku;
                 $parameter->created_by = $this->karyawan;
