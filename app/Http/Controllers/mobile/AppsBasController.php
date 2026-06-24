@@ -7,6 +7,7 @@ use Exception;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
 
 use Illuminate\Support\Collection; // ++ Abu
@@ -2397,6 +2398,7 @@ class AppsBasController extends Controller
                     ->first();
 
                 if ($matchedParameter == null) {
+                    Log::error("Kemungkinan Parameter: " . $parameterName);
                     throw new Exception("Kemungkinan Parameter.{$parameterName}. Belum Terdaftar di RequiredParameters Hub IT");
                 }
                 $carry[] = $matchedParameter;
