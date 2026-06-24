@@ -15,6 +15,15 @@ class ImplementatifDataController extends Controller
         $data = EmbedSpreadsheet::query()->where('type', 'link');
         return DataTables::of($data)->make(true);
     }
+    public function getDataById(Request $request)
+    {
+        try {
+            $data = EmbedSpreadsheet::find($request->id);
+            return response()->json($data, 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
 
     public function store(Request $request)
     {
