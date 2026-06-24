@@ -369,6 +369,7 @@ class InternalMailService
         $mail->SMTPSecure = $this->mapSmtpSecurity($settings['outgoing']['connection_security'] ?? 'TLS');
         $mail->Port = (int) $settings['outgoing']['port'];
         $mail->CharSet = 'UTF-8';
+        $this->configurePhpmailerSsl($mail, $settings);
 
         $mail->setFrom($settings['email'], $settings['full_name'] ?? $settings['email']);
 
@@ -977,7 +978,7 @@ class InternalMailService
 
     private function buildMailboxPath(array $settings, string $folder = ''): string
     {
-        $security = $this->mapImapSecurity($settings['incoming']['connection_security'] ?? 'SSL');
+        $security = $this->buildImapSecurityFlag($settings);
         $protocol = $settings['protocol'] ?? 'imap';
 
         return sprintf(
@@ -988,6 +989,51 @@ class InternalMailService
             $security,
             $folder
         );
+    }
+
+    private function buildImapSecurityFlag(array $settings): string
+    {
+        $security = $this->mapImapSecurity($settings['incoming']['connection_security'] ?? 'SSL');
+
+        if (!self::shouldValidateMailCert($settings) && in_array($security, ['ssl', 'tls'], true)) {
+            $security .= '/novalidate-cert';
+        }
+
+        return $security;
+    }
+
+    public static function configurePhpmailerSslForSettings(PHPMailer $mail, array $settings): void
+    {
+        if (self::shouldValidateMailCert($settings)) {
+            return;
+        }
+
+        $mail->SMTPOptions = [
+            'ssl' => [
+                'verify_peer'       => false,
+                'verify_peer_name'  => false,
+                'allow_self_signed' => true,
+            ],
+        ];
+    }
+
+    private function configurePhpmailerSsl(PHPMailer $mail, array $settings): void
+    {
+        self::configurePhpmailerSslForSettings($mail, $settings);
+    }
+
+    private static function shouldValidateMailCert(array $settings): bool
+    {
+        if (filter_var(env('MAIL_IMAP_NOVALIDATE_CERT', false), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        $incoming = $settings['incoming'] ?? [];
+        if (array_key_exists('validate_cert', $incoming)) {
+            return filter_var($incoming['validate_cert'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        return true;
     }
 
     private function mapImapSecurity(string $security): string

@@ -61,6 +61,7 @@ class SettingMailController extends Controller
                 $mail->Password = $data['password'];
                 $mail->SMTPSecure = $data['outgoing']['connection_security'];
                 $mail->Port = $data['outgoing']['port'];
+                InternalMailService::configurePhpmailerSslForSettings($mail, $data);
 
                 $mail->setFrom($data['email'], $data['full_name']);
                 $mail->addAddress($data['email'], $data['full_name']);
