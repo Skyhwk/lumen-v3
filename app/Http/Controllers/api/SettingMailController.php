@@ -14,7 +14,15 @@ class SettingMailController extends Controller
     public function index(Request $request)
     {
         try {
-            $data = Repository::dir('setting_mail')->key($this->karyawan)->get();
+            $key = (string) $this->user_id;
+            $data = Repository::dir('setting_mail')->key($key)->get();
+            if (empty($data) && $this->karyawan) {
+                $legacy = Repository::dir('setting_mail')->key($this->karyawan)->get();
+                if (!empty($legacy)) {
+                    Repository::dir('setting_mail')->key($key)->save($legacy);
+                    $data = $legacy;
+                }
+            }
             return response()->json(['data' => $data, 'message' => 'Data berhasil diambil'], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -25,8 +33,8 @@ class SettingMailController extends Controller
     {
         try {
             $data = $request->all();
-            Repository::dir('setting_mail')->key($this->karyawan)->save(json_encode($data));
-            InternalMailService::clearAuthBlockFor($this->karyawan);
+            Repository::dir('setting_mail')->key((string) $this->user_id)->save(json_encode($data));
+            InternalMailService::clearAuthBlockFor((int) $this->user_id, $this->karyawan);
             return response()->json(['message' => 'Data berhasil disimpan'], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -36,7 +44,11 @@ class SettingMailController extends Controller
     public function testconnection(Request $request)
     {
         try {
-            $data = Repository::dir('setting_mail')->key($this->karyawan)->get();
+            $key = (string) $this->user_id;
+            $data = Repository::dir('setting_mail')->key($key)->get();
+            if (empty($data) && $this->karyawan) {
+                $data = Repository::dir('setting_mail')->key($this->karyawan)->get();
+            }
 
             if ($data) {
                 $data = json_decode($data, true);
@@ -58,7 +70,7 @@ class SettingMailController extends Controller
                 $mail->Body = 'This is a test email to verify your email settings.';
 
                 if ($mail->send()) {
-                    InternalMailService::clearAuthBlockFor($this->karyawan);
+                    InternalMailService::clearAuthBlockFor((int) $this->user_id, $this->karyawan);
                     return response()->json(['message' => 'Koneksi email berhasil.'], 200);
                 } else {
                     return response()->json(['message' => 'Koneksi email gagal.'], 401);

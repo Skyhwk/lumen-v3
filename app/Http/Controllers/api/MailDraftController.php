@@ -10,7 +10,7 @@ class MailDraftController extends Controller
 {
     private function mail(): InternalMailService
     {
-        return new InternalMailService($this->karyawan);
+        return new InternalMailService((int) $this->user_id, $this->karyawan);
     }
 
     public function index(Request $request)

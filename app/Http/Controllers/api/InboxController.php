@@ -10,7 +10,7 @@ class InboxController extends Controller
 {
     private function mail(): InternalMailService
     {
-        return new InternalMailService($this->karyawan);
+        return new InternalMailService((int) $this->user_id, $this->karyawan);
     }
 
     public function index(Request $request)
@@ -20,10 +20,11 @@ class InboxController extends Controller
             $perPage = min(50, max(1, (int) $request->input('per_page', 30)));
             $query = $request->input('query');
             $forceRefresh = filter_var($request->input('force_refresh', false), FILTER_VALIDATE_BOOLEAN);
+            $skipSync = filter_var($request->input('skip_sync', false), FILTER_VALIDATE_BOOLEAN);
             $sort = $request->input('sort');
             $filter = $request->input('filter');
 
-            $result = $this->mail()->fetchList('inbox', $page, $perPage, $query, $forceRefresh, $sort, $filter);
+            $result = $this->mail()->fetchList('inbox', $page, $perPage, $query, $forceRefresh, $sort, $filter, $skipSync);
 
             return response()->json($result, 200);
         } catch (\Throwable $e) {

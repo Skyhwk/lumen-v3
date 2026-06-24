@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\DB;
 use PhpImap\Mailbox;
 use PHPMailer\PHPMailer\PHPMailer;
 use Repository;
@@ -10,7 +11,9 @@ class InternalMailService
 {
     private const CACHE_TTL = 120;
     private const AUTH_COOLDOWN = 300;
-    private const MAX_CACHE_ITEMS = 300;
+    private const INITIAL_SYNC_LIMIT = 500;
+    private const CHUNK_SYNC_LIMIT = 200;
+    private const TAIL_SYNC_LIMIT = 50;
 
     private const FOLDER_MAP = [
         'inbox'  => ['INBOX'],
@@ -20,16 +23,47 @@ class InternalMailService
         'draft'  => ['Drafts', '[Gmail]/Drafts'],
     ];
 
-    private string $karyawan;
+    private int $idKaryawan;
+    private ?string $legacyKey;
 
-    public function __construct(string $karyawan)
+    public function __construct(int $idKaryawan, ?string $legacyKey = null)
     {
-        $this->karyawan = $karyawan;
+        if ($idKaryawan <= 0) {
+            throw new \RuntimeException('ID karyawan tidak valid');
+        }
+
+        $this->idKaryawan = $idKaryawan;
+        $this->legacyKey = $legacyKey;
+    }
+
+    private function storageKey(): string
+    {
+        return (string) $this->idKaryawan;
+    }
+
+    private function readRepository(string $dir): ?string
+    {
+        $raw = Repository::dir($dir)->key($this->storageKey())->get();
+        if (!empty($raw) || empty($this->legacyKey)) {
+            return $raw ?: null;
+        }
+
+        $legacy = Repository::dir($dir)->key($this->legacyKey)->get();
+        if (!empty($legacy)) {
+            Repository::dir($dir)->key($this->storageKey())->save($legacy);
+        }
+
+        return $legacy ?: null;
+    }
+
+    private function writeRepository(string $dir, string $value): void
+    {
+        Repository::dir($dir)->key($this->storageKey())->save($value);
     }
 
     public function getSettings(): ?array
     {
-        $raw = Repository::dir('setting_mail')->key($this->karyawan)->get();
+        $raw = $this->readRepository('setting_mail');
         if (empty($raw)) {
             return null;
         }
@@ -39,26 +73,17 @@ class InternalMailService
 
     public function checkUpdates(string $folder = 'inbox'): array
     {
-        $cache = $this->getCache($folder);
-        $meta = $cache['meta'] ?? [];
+        $meta = $this->getFolderMeta($folder) ?? [];
 
         if ($block = $this->getAuthBlock()) {
             return [
                 'changed'       => false,
                 'unread_count'  => (int) ($meta['unread_count'] ?? 0),
                 'total'         => (int) ($meta['total'] ?? 0),
+                'new_count'     => 0,
                 'needs_refresh' => false,
                 'error'         => $block['message'],
                 'auth_blocked'  => true,
-            ];
-        }
-
-        if (!empty($meta['synced_at']) && (time() - (int) $meta['synced_at']) < self::CACHE_TTL) {
-            return [
-                'changed'       => false,
-                'unread_count'  => (int) ($meta['unread_count'] ?? 0),
-                'total'         => (int) ($meta['total'] ?? 0),
-                'needs_refresh' => false,
             ];
         }
 
@@ -69,24 +94,31 @@ class InternalMailService
                 'changed'       => false,
                 'unread_count'  => (int) ($meta['unread_count'] ?? 0),
                 'total'         => (int) ($meta['total'] ?? 0),
+                'new_count'     => 0,
                 'needs_refresh' => false,
                 'error'         => $e->getMessage(),
                 'auth_blocked'  => $this->isAuthError($e->getMessage()),
             ];
         }
 
+        $prevTotal = (int) ($meta['total'] ?? 0);
         $changed = empty($meta)
-            || (int) ($meta['total'] ?? 0) !== (int) $status['total']
+            || $prevTotal !== (int) $status['total']
             || (int) ($meta['unread_count'] ?? 0) !== (int) $status['unread_count']
             || (int) ($meta['uidnext'] ?? 0) !== (int) $status['uidnext'];
 
-        $stale = empty($meta['synced_at']) || (time() - (int) $meta['synced_at']) > self::CACHE_TTL;
+        $newCount = max(0, (int) $status['total'] - $prevTotal);
+
+        if ($changed && $folder !== 'inbox') {
+            $this->updateFolderMetaCounts($folder, $status);
+        }
 
         return [
             'changed'       => $changed,
             'unread_count'  => (int) $status['unread_count'],
             'total'         => (int) $status['total'],
-            'needs_refresh' => $changed || $stale,
+            'new_count'     => $newCount,
+            'needs_refresh' => $changed && $folder === 'inbox',
         ];
     }
 
@@ -97,43 +129,59 @@ class InternalMailService
         ?string $query = null,
         bool $forceRefresh = false,
         ?string $sort = null,
-        ?string $filter = null
+        ?string $filter = null,
+        bool $skipSync = false
     ): array {
         if ($folder === 'local_draft') {
             return $this->fetchLocalDrafts($page, $perPage, $query, $sort);
         }
 
-        $cache = $this->getCache($folder);
-        $meta = $cache['meta'] ?? [];
-        $stale = empty($meta['synced_at']) || (time() - (int) $meta['synced_at']) > self::CACHE_TTL;
-
-        if (!$forceRefresh && !$stale && !empty($cache['emails']) && empty($query)) {
-            return $this->paginateEmails($cache['emails'], $page, $perPage, $meta, $sort, $filter);
-        }
+        $meta = $this->getFolderMeta($folder);
+        $indexedCount = (int) ($meta['indexed_count'] ?? 0);
+        $hasIndex = $indexedCount > 0;
+        $stale = empty($meta) || empty($meta['synced_at'])
+            || (time() - strtotime($meta['synced_at'])) > self::CACHE_TTL;
 
         if ($block = $this->getAuthBlock()) {
-            if (!empty($cache['emails'])) {
-                $result = $this->paginateEmails($cache['emails'], $page, $perPage, $meta, $sort, $filter);
+            if ($hasIndex) {
+                $result = $this->queryEmailList($folder, $page, $perPage, $sort, $filter, $query, $meta);
                 $result['error'] = $block['message'];
                 return $result;
             }
             throw new \RuntimeException($block['message']);
         }
 
-        try {
-            $emails = $this->syncFromServer($folder, $query);
-        } catch (\Throwable $e) {
-            if (!empty($cache['emails'])) {
-                $result = $this->paginateEmails($cache['emails'], $page, $perPage, $meta, $sort, $filter);
-                $result['error'] = $e->getMessage();
-                return $result;
+        $syncError = null;
+        $newCount = 0;
+
+        if (!$skipSync && empty($query)) {
+            try {
+                if ($forceRefresh) {
+                    $newCount = $this->syncFolderIndex($folder, true);
+                } elseif (!$hasIndex) {
+                    $newCount = $this->syncFolderIndex($folder, false);
+                } elseif ($stale) {
+                    $newCount = $this->syncFolderIndex($folder, false);
+                } else {
+                    $this->ensurePageIndexed($folder, $page, $perPage);
+                }
+                $meta = $this->getFolderMeta($folder) ?? $meta;
+            } catch (\Throwable $e) {
+                $syncError = $e->getMessage();
+                if (!$hasIndex) {
+                    throw $e;
+                }
             }
-            throw $e;
         }
 
-        $meta = $this->getCache($folder)['meta'] ?? [];
+        $result = $this->queryEmailList($folder, $page, $perPage, $sort, $filter, $query, $meta);
+        $result['new_count'] = $newCount;
+        $result['from_cache'] = $skipSync;
+        if ($syncError) {
+            $result['error'] = $syncError;
+        }
 
-        return $this->paginateEmails($emails, $page, $perPage, $meta, $sort, $filter);
+        return $result;
     }
 
     public function getDetail(string $folder, $uid): array
@@ -148,7 +196,7 @@ class InternalMailService
         }
 
         $imapFolder = $this->resolveImapFolder($folder);
-        $dirAttachments = public_path('email/' . $this->karyawan . '/attachments');
+        $dirAttachments = public_path('email/' . $this->storageKey() . '/attachments');
 
         if (!is_dir($dirAttachments)) {
             mkdir($dirAttachments, 0775, true);
@@ -170,7 +218,7 @@ class InternalMailService
             $attachments[] = [
                 'filename' => $attachment->name,
                 'size'     => $this->formatSize((int) ($attachment->size ?? 0)),
-                'url'      => env('APP_URL') . '/public/email/' . $this->karyawan . '/attachments/' . end($pathParts),
+                'url'      => env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . end($pathParts),
             ];
         }
 
@@ -221,7 +269,7 @@ class InternalMailService
 
         @\imap_close($connection);
         $this->clearImapErrors();
-        $this->updateCachedEmailFlag($folder, $uid, $seen);
+        $this->updateIndexedEmailFlag($folder, $uid, $seen);
     }
 
     public function moveToTrash(string $folder, $uid): void
@@ -241,7 +289,7 @@ class InternalMailService
         \imap_expunge($connection);
         \imap_close($connection);
 
-        $this->removeFromCache($fromFolder, $uid);
+        $this->removeFromIndex($fromFolder, $uid);
         $this->clearCache($toFolder);
     }
 
@@ -255,7 +303,7 @@ class InternalMailService
 
         \imap_expunge($connection);
         \imap_close($connection);
-        $this->removeFromCache($folder, $uid);
+        $this->removeFromIndex($folder, $uid);
     }
 
     public function emptyTrash(): array
@@ -368,7 +416,7 @@ class InternalMailService
         ];
 
         $drafts[$id] = $draft;
-        Repository::dir('mail_draft')->key($this->karyawan)->save(json_encode(array_values($drafts)));
+        $this->writeRepository('mail_draft', json_encode(array_values($drafts)));
 
         return $draft;
     }
@@ -377,7 +425,7 @@ class InternalMailService
     {
         $drafts = $this->getLocalDraftList();
         unset($drafts[$id]);
-        Repository::dir('mail_draft')->key($this->karyawan)->save(json_encode(array_values($drafts)));
+        $this->writeRepository('mail_draft', json_encode(array_values($drafts)));
     }
 
     private function fetchMailboxStatus(string $folder): array
@@ -402,12 +450,15 @@ class InternalMailService
         return $this->normalizeStatus($status);
     }
 
-    private function syncFromServer(string $folder, ?string $query = null): array
+    private function syncFolderIndex(string $folder, bool $forceFull = false): int
     {
         $settings = $this->getSettings();
         if (!$settings) {
             throw new \RuntimeException('Setting email belum dikonfigurasi');
         }
+
+        $meta = $this->getFolderMeta($folder);
+        $beforeUid = $this->resolveLastUid($folder, $meta);
 
         $imapFolder = $this->resolveImapFolder($folder);
         $path = $this->buildMailboxPath($settings, $imapFolder);
@@ -416,37 +467,401 @@ class InternalMailService
         $statusObj = @\imap_status($connection, $path, \SA_MESSAGES | \SA_UNSEEN | \SA_UIDNEXT);
         $status = $statusObj ? $this->normalizeStatus($statusObj) : ['total' => 0, 'unread_count' => 0, 'uidnext' => 0];
 
-        $searchCriteria = $query ? 'TEXT "' . addslashes($query) . '"' : 'ALL';
-        $messageNumbers = @\imap_search($connection, $searchCriteria, \SE_UID);
+        $indexedCount = (int) ($meta['indexed_count'] ?? 0);
+        $lastUid = $beforeUid;
 
-        $emails = [];
-        if ($messageNumbers) {
-            rsort($messageNumbers);
-            $messageNumbers = array_slice($messageNumbers, 0, self::MAX_CACHE_ITEMS);
+        if ($forceFull) {
+            $this->clearIndexRows($folder);
+            $indexedCount = 0;
+            $lastUid = 0;
+        }
 
-            foreach ($messageNumbers as $uid) {
-                $overview = @\imap_fetch_overview($connection, (string) $uid, \FT_UID);
-                if (empty($overview[0])) {
-                    continue;
-                }
+        if ($indexedCount === 0) {
+            $this->fetchAndStoreBySequence($connection, $folder, self::INITIAL_SYNC_LIMIT, $status);
+        } else {
+            $this->fetchAndStoreBySequence($connection, $folder, self::TAIL_SYNC_LIMIT, $status);
 
-                $item = $overview[0];
-                $emails[] = [
-                    'id'      => (int) $uid,
-                    'from'    => $this->decodeHeader($item->from ?? ''),
-                    'subject' => $this->decodeHeader($item->subject ?? '') ?: '(Tidak ada subjek)',
-                    'date'    => isset($item->date) ? date('c', strtotime($item->date)) : null,
-                    'size'    => $this->formatSize((int) ($item->size ?? 0)),
-                    'is_seen' => ((int) ($item->seen ?? 0)) === 1,
-                ];
+            if ($lastUid > 0 && (int) $status['uidnext'] > $lastUid + 1) {
+                $this->fetchAndStoreByUidRange($connection, $folder, $lastUid + 1, (int) $status['uidnext'] - 1, $status);
             }
         }
 
         @\imap_close($connection);
         $this->clearImapErrors();
-        $this->saveCache($folder, $emails, $status);
 
-        return $emails;
+        return $this->countNewUidsSince($folder, $beforeUid);
+    }
+
+    private function countNewUidsSince(string $folder, int $sinceUid): int
+    {
+        if ($sinceUid <= 0) {
+            return 0;
+        }
+
+        return (int) DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->where('uid', '>', $sinceUid)
+            ->count();
+    }
+
+    private function resolveLastUid(string $folder, ?array $meta): int
+    {
+        $lastUid = (int) ($meta['last_uid'] ?? 0);
+        if ($lastUid > 0) {
+            return $lastUid;
+        }
+
+        $maxUid = DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->max('uid');
+
+        return (int) ($maxUid ?? 0);
+    }
+
+    private function ensurePageIndexed(string $folder, int $page, int $perPage): void
+    {
+        $meta = $this->getFolderMeta($folder);
+        if (!$meta) {
+            return;
+        }
+
+        $needed = $page * $perPage;
+        $indexedCount = (int) ($meta['indexed_count'] ?? 0);
+        $total = (int) ($meta['total'] ?? 0);
+        $minSeq = (int) ($meta['min_seq'] ?? 0);
+
+        if ($needed <= $indexedCount || $indexedCount >= $total || $minSeq <= 1) {
+            return;
+        }
+
+        $settings = $this->getSettings();
+        if (!$settings) {
+            return;
+        }
+
+        $imapFolder = $this->resolveImapFolder($folder);
+        $path = $this->buildMailboxPath($settings, $imapFolder);
+        $connection = $this->openConnection($settings, $path);
+
+        $chunkStart = max(1, $minSeq - self::CHUNK_SYNC_LIMIT);
+        $statusObj = @\imap_status($connection, $path, \SA_MESSAGES | \SA_UNSEEN | \SA_UIDNEXT);
+        $status = $statusObj ? $this->normalizeStatus($statusObj) : [];
+        $this->fetchAndStoreSequenceRange($connection, $folder, $chunkStart, $minSeq - 1, array_merge($meta, $status));
+
+        @\imap_close($connection);
+        $this->clearImapErrors();
+    }
+
+    private function fetchAndStoreBySequence($connection, string $folder, int $limit, array $status): void
+    {
+        $total = (int) @\imap_num_msg($connection);
+        if ($total <= 0) {
+            $this->saveFolderMeta($folder, array_merge($status, [
+                'last_uid'      => 0,
+                'min_seq'       => 0,
+                'max_seq'       => 0,
+                'indexed_count' => 0,
+            ]));
+            return;
+        }
+
+        $start = max(1, $total - $limit + 1);
+        $this->fetchAndStoreSequenceRange($connection, $folder, $start, $total, $status);
+    }
+
+    private function fetchAndStoreSequenceRange($connection, string $folder, int $start, int $end, array $status): void
+    {
+        if ($start > $end || $end < 1) {
+            return;
+        }
+
+        $overviews = @\imap_fetch_overview($connection, "{$start}:{$end}") ?: [];
+        $rows = $this->mapOverviewsToRows($folder, $overviews);
+
+        if (!empty($rows)) {
+            $this->upsertEmailRows($folder, $rows);
+        }
+
+        $meta = $this->getFolderMeta($folder) ?? [];
+        $uids = array_column($rows, 'uid');
+        $lastUid = !empty($uids) ? max($uids) : (int) ($meta['last_uid'] ?? 0);
+        $existingMin = (int) ($meta['min_seq'] ?? 0);
+
+        $this->saveFolderMeta($folder, array_merge($status, [
+            'last_uid'      => max((int) ($meta['last_uid'] ?? 0), $lastUid),
+            'min_seq'       => $existingMin > 0 ? min($existingMin, $start) : $start,
+            'max_seq'       => max((int) ($meta['max_seq'] ?? 0), $end),
+            'indexed_count' => $this->countIndexRows($folder),
+        ]));
+    }
+
+    private function fetchAndStoreByUidRange($connection, string $folder, int $fromUid, int $toUid, array $status): void
+    {
+        if ($fromUid > $toUid) {
+            $this->saveFolderMeta($folder, array_merge($this->getFolderMeta($folder) ?? [], $status));
+            return;
+        }
+
+        $uids = @\imap_search($connection, 'UID ' . $fromUid . ':' . $toUid, \SE_UID) ?: [];
+        if (empty($uids)) {
+            $this->saveFolderMeta($folder, array_merge($this->getFolderMeta($folder) ?? [], $status));
+            return;
+        }
+
+        rsort($uids);
+        $rows = [];
+        foreach ($uids as $uid) {
+            $overview = @\imap_fetch_overview($connection, (string) $uid, \FT_UID);
+            if (empty($overview[0])) {
+                continue;
+            }
+            $mapped = $this->mapOverviewsToRows($folder, [$overview[0]]);
+            if (!empty($mapped[0])) {
+                $rows[] = $mapped[0];
+            }
+        }
+
+        if (!empty($rows)) {
+            $this->upsertEmailRows($folder, $rows);
+        }
+
+        $meta = $this->getFolderMeta($folder) ?? [];
+        $this->saveFolderMeta($folder, array_merge($meta, $status, [
+            'last_uid'      => max((int) ($meta['last_uid'] ?? 0), $toUid),
+            'indexed_count' => $this->countIndexRows($folder),
+        ]));
+    }
+
+    private function mapOverviewsToRows(string $folder, array $overviews): array
+    {
+        $rows = [];
+        foreach ($overviews as $item) {
+            $uid = (int) ($item->uid ?? 0);
+            if ($uid <= 0) {
+                continue;
+            }
+
+            $from = $this->decodeHeader($item->from ?? '');
+            $to = $this->decodeHeader($item->to ?? '');
+
+            $rows[] = [
+                'uid'        => $uid,
+                'seq_num'    => (int) ($item->msgno ?? 0),
+                'from_addr'  => $from,
+                'to_addr'    => $to ?: null,
+                'subject'    => $this->decodeHeader($item->subject ?? '') ?: '(Tidak ada subjek)',
+                'email_date' => isset($item->date) ? date('Y-m-d H:i:s', strtotime($item->date)) : null,
+                'size_bytes' => (int) ($item->size ?? 0),
+                'is_seen'    => ((int) ($item->seen ?? 0)) === 1,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function getFolderMeta(string $folder): ?array
+    {
+        $row = DB::table('mail_folder_meta')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->first();
+
+        return $row ? (array) $row : null;
+    }
+
+    private function saveFolderMeta(string $folder, array $data): void
+    {
+        $payload = [
+            'id_karyawan'   => $this->idKaryawan,
+            'folder'        => $folder,
+            'total'         => (int) ($data['total'] ?? 0),
+            'unread_count'  => (int) ($data['unread_count'] ?? 0),
+            'uidnext'       => (int) ($data['uidnext'] ?? 0),
+            'last_uid'      => (int) ($data['last_uid'] ?? 0),
+            'min_seq'       => (int) ($data['min_seq'] ?? 0),
+            'max_seq'       => (int) ($data['max_seq'] ?? 0),
+            'indexed_count' => (int) ($data['indexed_count'] ?? $this->countIndexRows($folder)),
+            'synced_at'     => date('Y-m-d H:i:s'),
+        ];
+
+        DB::table('mail_folder_meta')->updateOrInsert(
+            ['id_karyawan' => $this->idKaryawan, 'folder' => $folder],
+            $payload
+        );
+    }
+
+    private function updateFolderMetaCounts(string $folder, array $status): void
+    {
+        $meta = $this->getFolderMeta($folder) ?? [];
+        $this->saveFolderMeta($folder, array_merge($meta, $status));
+    }
+
+    private function upsertEmailRows(string $folder, array $rows): void
+    {
+        foreach ($rows as $row) {
+            DB::table('mail_list_index')->updateOrInsert(
+                [
+                    'id_karyawan' => $this->idKaryawan,
+                    'folder'   => $folder,
+                    'uid'      => (int) $row['uid'],
+                ],
+                [
+                    'seq_num'    => (int) ($row['seq_num'] ?? 0),
+                    'from_addr'  => $row['from_addr'] ?? '',
+                    'to_addr'    => $row['to_addr'] ?? null,
+                    'subject'    => $row['subject'] ?? '',
+                    'email_date' => $row['email_date'] ?? null,
+                    'size_bytes' => (int) ($row['size_bytes'] ?? 0),
+                    'is_seen'    => !empty($row['is_seen']),
+                ]
+            );
+        }
+    }
+
+    private function countIndexRows(string $folder): int
+    {
+        return (int) DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->count();
+    }
+
+    private function clearIndexRows(string $folder): void
+    {
+        DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->delete();
+    }
+
+    private function removeFromIndex(string $folder, $uid): void
+    {
+        DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->where('uid', (int) $uid)
+            ->delete();
+
+        $meta = $this->getFolderMeta($folder);
+        if ($meta) {
+            $total = max(0, (int) $meta['total'] - 1);
+            $this->saveFolderMeta($folder, array_merge($meta, [
+                'total'         => $total,
+                'indexed_count' => max(0, (int) $meta['indexed_count'] - 1),
+            ]));
+        }
+    }
+
+    private function updateIndexedEmailFlag(string $folder, $uid, bool $seen): void
+    {
+        DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->where('uid', (int) $uid)
+            ->update(['is_seen' => $seen]);
+
+        $meta = $this->getFolderMeta($folder);
+        if ($meta && isset($meta['unread_count'])) {
+            $unread = (int) $meta['unread_count'];
+            if ($seen && $unread > 0) {
+                $unread--;
+            } elseif (!$seen) {
+                $unread++;
+            }
+            $this->saveFolderMeta($folder, array_merge($meta, ['unread_count' => $unread]));
+        }
+    }
+
+    private function queryEmailList(
+        string $folder,
+        int $page,
+        int $perPage,
+        ?string $sort,
+        ?string $filter,
+        ?string $query,
+        ?array $meta
+    ): array {
+        $meta = $meta ?? $this->getFolderMeta($folder) ?? [];
+        $builder = DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder);
+
+        if ($query) {
+            $like = '%' . addcslashes($query, '%_\\') . '%';
+            $builder->where(function ($q) use ($like) {
+                $q->where('subject', 'like', $like)
+                    ->orWhere('from_addr', 'like', $like)
+                    ->orWhere('to_addr', 'like', $like);
+            });
+        }
+
+        if ($filter === 'unread') {
+            $builder->where('is_seen', false);
+        } elseif ($filter === 'read') {
+            $builder->where('is_seen', true);
+        }
+
+        $sort = $sort ?: 'date_desc';
+        switch ($sort) {
+            case 'date_asc':
+                $builder->orderBy('email_date', 'asc')->orderBy('uid', 'asc');
+                break;
+            case 'unread_first':
+                $builder->orderBy('is_seen', 'asc')->orderBy('email_date', 'desc')->orderBy('uid', 'desc');
+                break;
+            case 'sender_asc':
+                $builder->orderBy('from_addr', 'asc');
+                break;
+            case 'sender_desc':
+                $builder->orderBy('from_addr', 'desc');
+                break;
+            case 'subject_asc':
+                $builder->orderBy('subject', 'asc');
+                break;
+            case 'subject_desc':
+                $builder->orderBy('subject', 'desc');
+                break;
+            case 'date_desc':
+            default:
+                $builder->orderBy('email_date', 'desc')->orderBy('uid', 'desc');
+                break;
+        }
+
+        $listTotal = $builder->count();
+        $mailboxTotal = (int) ($meta['total'] ?? $listTotal);
+
+        if ($filter === 'unread') {
+            $mailboxTotal = (int) ($meta['unread_count'] ?? $listTotal);
+        } elseif ($filter === 'read') {
+            $mailboxTotal = max(0, (int) ($meta['total'] ?? $listTotal) - (int) ($meta['unread_count'] ?? 0));
+        } elseif ($query) {
+            $mailboxTotal = $listTotal;
+        }
+
+        $offset = max(0, ($page - 1) * $perPage);
+        $rows = $builder->offset($offset)->limit($perPage)->get();
+
+        $emails = [];
+        foreach ($rows as $row) {
+            $emails[] = [
+                'id'      => (int) $row->uid,
+                'from'    => $row->from_addr,
+                'to'      => $row->to_addr,
+                'subject' => $row->subject,
+                'date'    => $row->email_date ? date('c', strtotime($row->email_date)) : null,
+                'size'    => $this->formatSize((int) $row->size_bytes),
+                'is_seen' => (bool) $row->is_seen,
+            ];
+        }
+
+        return [
+            'emails'       => $emails,
+            'total'        => $mailboxTotal,
+            'unread_count' => (int) ($meta['unread_count'] ?? 0),
+            'indexed'      => (int) ($meta['indexed_count'] ?? $listTotal),
+        ];
     }
 
     private function connect(string $folder)
@@ -465,6 +880,13 @@ class InternalMailService
     private function openConnection(array $settings, string $path)
     {
         $this->assertNotAuthBlocked();
+
+        if (function_exists('imap_timeout')) {
+            @\imap_timeout(\IMAP_OPENTIMEOUT, 10);
+            @\imap_timeout(\IMAP_READTIMEOUT, 20);
+            @\imap_timeout(\IMAP_WRITETIMEOUT, 10);
+            @\imap_timeout(\IMAP_CLOSETIMEOUT, 10);
+        }
 
         $previousHandler = set_error_handler(function () {
             return true;
@@ -594,94 +1016,13 @@ class InternalMailService
         return $map[$security] ?? PHPMailer::ENCRYPTION_STARTTLS;
     }
 
-    private function getCache(string $folder): array
-    {
-        $raw = Repository::dir('mail_' . $folder)->key($this->karyawan)->get();
-        if (empty($raw)) {
-            return ['meta' => [], 'emails' => []];
-        }
-
-        return json_decode($raw, true) ?: ['meta' => [], 'emails' => []];
-    }
-
-    private function saveCache(string $folder, array $emails, array $meta): void
-    {
-        $meta['synced_at'] = time();
-        Repository::dir('mail_' . $folder)->key($this->karyawan)->save(json_encode([
-            'meta'   => $meta,
-            'emails' => $emails,
-        ]));
-    }
-
     private function clearCache(string $folder): void
     {
-        Repository::dir('mail_' . $folder)->key($this->karyawan)->save(json_encode([
-            'meta'   => [],
-            'emails' => [],
-        ]));
-    }
-
-    private function updateCachedEmailFlag(string $folder, $uid, bool $seen): void
-    {
-        $cache = $this->getCache($folder);
-        foreach ($cache['emails'] as &$email) {
-            if ((int) $email['id'] === (int) $uid) {
-                $email['is_seen'] = $seen;
-                break;
-            }
-        }
-        unset($email);
-
-        if ($seen && isset($cache['meta']['unread_count']) && $cache['meta']['unread_count'] > 0) {
-            $cache['meta']['unread_count']--;
-        }
-
-        Repository::dir('mail_' . $folder)->key($this->karyawan)->save(json_encode($cache));
-    }
-
-    private function removeFromCache(string $folder, $uid): void
-    {
-        $cache = $this->getCache($folder);
-        $cache['emails'] = array_values(array_filter(
-            $cache['emails'],
-            function ($email) use ($uid) {
-                return (int) $email['id'] !== (int) $uid;
-            }
-        ));
-
-        if (isset($cache['meta']['total']) && $cache['meta']['total'] > 0) {
-            $cache['meta']['total']--;
-        }
-
-        Repository::dir('mail_' . $folder)->key($this->karyawan)->save(json_encode($cache));
-    }
-
-    private function paginateEmails(
-        array $emails,
-        int $page,
-        int $perPage,
-        array $meta,
-        ?string $sort = null,
-        ?string $filter = null
-    ): array {
-        if (!empty($meta) && empty($meta['synced_at'])) {
-            $meta['synced_at'] = time();
-        }
-
-        $unreadCount = (int) ($meta['unread_count'] ?? count(array_filter($emails, function ($e) {
-            return empty($e['is_seen']);
-        })));
-
-        $emails = $this->applyListOptions($emails, $sort, $filter);
-
-        $total = count($emails);
-        $offset = max(0, ($page - 1) * $perPage);
-
-        return [
-            'emails'       => array_slice($emails, $offset, $perPage),
-            'total'        => $total,
-            'unread_count' => $unreadCount,
-        ];
+        $this->clearIndexRows($folder);
+        DB::table('mail_folder_meta')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->delete();
     }
 
     private function applyListOptions(array $emails, ?string $sort, ?string $filter): array
@@ -768,7 +1109,7 @@ class InternalMailService
 
     private function getLocalDraftList(): array
     {
-        $raw = Repository::dir('mail_draft')->key($this->karyawan)->get();
+        $raw = $this->readRepository('mail_draft');
         if (empty($raw)) {
             return [];
         }
@@ -1043,10 +1384,16 @@ class InternalMailService
         return round($bytes / 1048576, 1) . ' MB';
     }
 
-    public static function clearAuthBlockFor(string $karyawan): void
+    public static function clearAuthBlockFor(int $idKaryawan, ?string $legacyKey = null): void
     {
-        Repository::dir('mail_auth_block')->key($karyawan)->save('');
-        Repository::dir('mail_folder_cache')->key($karyawan)->save('');
+        $key = (string) $idKaryawan;
+        Repository::dir('mail_auth_block')->key($key)->save('');
+        Repository::dir('mail_folder_cache')->key($key)->save('');
+
+        if ($legacyKey) {
+            Repository::dir('mail_auth_block')->key($legacyKey)->save('');
+            Repository::dir('mail_folder_cache')->key($legacyKey)->save('');
+        }
     }
 
     private function normalizeStatus($status): array
@@ -1060,7 +1407,7 @@ class InternalMailService
 
     private function getAuthBlock(): ?array
     {
-        $raw = Repository::dir('mail_auth_block')->key($this->karyawan)->get();
+        $raw = $this->readRepository('mail_auth_block');
         if (empty($raw)) {
             return null;
         }
@@ -1076,7 +1423,7 @@ class InternalMailService
 
     private function recordAuthFailure(string $message): void
     {
-        Repository::dir('mail_auth_block')->key($this->karyawan)->save(json_encode([
+        $this->writeRepository('mail_auth_block', json_encode([
             'until'   => time() + self::AUTH_COOLDOWN,
             'message' => $message,
         ]));
@@ -1084,7 +1431,7 @@ class InternalMailService
 
     private function clearAuthBlock(): void
     {
-        Repository::dir('mail_auth_block')->key($this->karyawan)->save('');
+        $this->writeRepository('mail_auth_block', '');
     }
 
     private function assertNotAuthBlocked(): void
@@ -1135,7 +1482,7 @@ class InternalMailService
 
     private function getFolderCache(): array
     {
-        $raw = Repository::dir('mail_folder_cache')->key($this->karyawan)->get();
+        $raw = $this->readRepository('mail_folder_cache');
         if (empty($raw)) {
             return [];
         }
@@ -1145,6 +1492,6 @@ class InternalMailService
 
     private function saveFolderCache(array $cache): void
     {
-        Repository::dir('mail_folder_cache')->key($this->karyawan)->save(json_encode($cache));
+        $this->writeRepository('mail_folder_cache', json_encode($cache));
     }
 }

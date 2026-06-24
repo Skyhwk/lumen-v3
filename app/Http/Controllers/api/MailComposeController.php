@@ -11,7 +11,7 @@ class MailComposeController extends Controller
     public function send(Request $request)
     {
         try {
-            $mail = new InternalMailService($this->karyawan);
+            $mail = new InternalMailService((int) $this->user_id, $this->karyawan);
             $mail->sendEmail($request->all());
 
             return response()->json(['message' => 'Email berhasil dikirim'], 200);
