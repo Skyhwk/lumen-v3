@@ -73,6 +73,17 @@ class InternalMailService
 
     public function checkUpdates(string $folder = 'inbox'): array
     {
+        if (!$this->getSettings()) {
+            return [
+                'changed'        => false,
+                'unread_count'   => 0,
+                'total'          => 0,
+                'new_count'      => 0,
+                'needs_refresh'  => false,
+                'not_configured' => true,
+            ];
+        }
+
         $meta = $this->getFolderMeta($folder) ?? [];
 
         if ($block = $this->getAuthBlock()) {
@@ -134,6 +145,10 @@ class InternalMailService
     ): array {
         if ($folder === 'local_draft') {
             return $this->fetchLocalDrafts($page, $perPage, $query, $sort);
+        }
+
+        if (!$this->getSettings()) {
+            return $this->emptyListNotConfigured();
         }
 
         $meta = $this->getFolderMeta($folder);
@@ -429,6 +444,18 @@ class InternalMailService
         $drafts = $this->getLocalDraftList();
         unset($drafts[$id]);
         $this->writeRepository('mail_draft', json_encode(array_values($drafts)));
+    }
+
+    private function emptyListNotConfigured(): array
+    {
+        return [
+            'emails'         => [],
+            'total'          => 0,
+            'unread_count'   => 0,
+            'indexed'        => 0,
+            'new_count'      => 0,
+            'not_configured' => true,
+        ];
     }
 
     private function fetchMailboxStatus(string $folder): array
