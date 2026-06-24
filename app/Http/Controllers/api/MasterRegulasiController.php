@@ -48,7 +48,7 @@ class MasterRegulasiController extends Controller
                     return response()->json(['message' => 'Regulasi tidak ditemukan'], 404);
                 }
 
-                $dataregulasi->peraturan = $request->peraturan;
+                $dataregulasi->peraturan = trim($request->peraturan);
                 $dataregulasi->deskripsi = $request->deskripsi;
                 $dataregulasi->updated_by = $this->karyawan;
                 $dataregulasi->updated_at = $timestamp;
@@ -88,7 +88,7 @@ class MasterRegulasiController extends Controller
             } else {
                 // Create new regulasi
                 $dataregulasi = $request->only([
-                    'peraturan',
+                    // 'peraturan',
                     'deskripsi',
                     'id_kategori',
                 ]);
@@ -99,7 +99,8 @@ class MasterRegulasiController extends Controller
                 }
 
                 $cek_kategori = MasterKategori::where('id', $request->id_kategori)->first();
-                $dataregulasi['nama_kategori'] = $cek_kategori->nama_kategori;
+                $dataregulasi['peraturan'] = trim($request->peraturan);
+                $dataregulasi['nama_kategori'] = trim($cek_kategori->nama_kategori);
                 $dataregulasi['created_by'] = $this->karyawan;
                 $dataregulasi['created_at'] = DATE('Y-m-d H:i:s');
 
