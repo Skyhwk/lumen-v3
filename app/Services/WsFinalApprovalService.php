@@ -133,15 +133,15 @@ class WsFinalApprovalService
 
                 DB::table('ws_final_approval_detail')->updateOrInsert([
                     'ws_final_approval_header_id' => $headerId,
+                    'no_sampel' => $noSampel,
                     'parameter_lab' => self::limit($parameterLab, 70),
                 ], [
-                    'no_sampel' => $noSampel,
                     'parameter_regulasi' => self::limit($parameterRegulasi, 100),
                     'hasil' => self::limit(self::extractResult($source), 50),
                 ]);
             }
         } else {
-            self::deleteParameterDetail($headerId, $parameterLab);
+            self::deleteParameterDetail($headerId, $parameterLab, $noSampel);
             return;
         }
 
@@ -180,7 +180,7 @@ class WsFinalApprovalService
             return;
         }
 
-        self::deleteParameterDetail(self::upsertHeader($orderDetail), $parameterLab);
+        self::deleteParameterDetail(self::upsertHeader($orderDetail), $parameterLab, $noSampel);
     }
 
     public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
@@ -516,7 +516,7 @@ class WsFinalApprovalService
         return self::$orderDetailCache[$noSampel];
     }
 
-    private static function deleteParameterDetail(int $headerId, ?string $parameterLab): void
+    private static function deleteParameterDetail(int $headerId, ?string $parameterLab, string $noSampel): void
     {
         if ($headerId === 0 || !self::hasTableCached('ws_final_approval_header')) {
             return;
@@ -525,6 +525,7 @@ class WsFinalApprovalService
         if ($parameterLab !== null) {
             DB::table('ws_final_approval_detail')
                 ->where('ws_final_approval_header_id', $headerId)
+                ->where('no_sampel', $noSampel)
                 ->where('parameter_lab', self::limit($parameterLab, 70))
                 ->delete();
         }
@@ -603,9 +604,9 @@ class WsFinalApprovalService
         foreach (self::airFieldParameterValues($orderDetail, $fieldData) as $parameterLab => $result) {
             DB::table('ws_final_approval_detail')->updateOrInsert([
                 'ws_final_approval_header_id' => $headerId,
+                'no_sampel' => $orderDetail->no_sampel,
                 'parameter_lab' => self::limit($parameterLab, 70),
             ], [
-                'no_sampel' => $orderDetail->no_sampel,
                 'parameter_regulasi' => self::limit(
                     self::findParameterRegulasi($orderDetail, $parameterLab) ?: '',
                     100
@@ -1052,6 +1053,7 @@ class WsFinalApprovalService
 
                         $existingDetail = DB::table('ws_final_approval_detail')
                             ->where('ws_final_approval_header_id', $headerId)
+                            ->where('no_sampel', $orderDetail->no_sampel)
                             ->where('parameter_lab', self::limit($parameterLab, 70))
                             ->first();
 
