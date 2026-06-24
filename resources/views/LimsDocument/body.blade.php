@@ -1,5 +1,6 @@
 @php
     $pdfService = app(\App\Services\RenderLimsPsDocumentPdf::class);
+    $verification = $document->approvals->where('action', 'verify')->first();
     $approvals = $document->approvals->where('action', 'approve')->values();
     $legalization = $document->approvals->where('action', 'legalize')->first();
     $pengesahanDate = $document->tanggal_pengesahan ?? optional($legalization)->approved_at;
@@ -37,6 +38,15 @@
                 <td>{{ $document->jabatan_penyusun ?? '-' }}</td>
                 <td>{{ $pdfService->formatIndonesianDate($document->created_at) }}</td>
             </tr>
+
+            @if($verification)
+                <tr>
+                    <td class="auth-role">Diverifikasi Oleh</td>
+                    <td>{{ $verification->nama }}</td>
+                    <td>{{ $verification->jabatan ?? '-' }}</td>
+                    <td>{{ $pdfService->formatIndonesianDate($verification->approved_at) }}</td>
+                </tr>
+            @endif
 
             @if($approvals->isNotEmpty())
                 @foreach($approvals as $index => $approval)

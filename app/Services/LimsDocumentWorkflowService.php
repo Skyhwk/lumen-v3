@@ -34,6 +34,67 @@ class LimsDocumentWorkflowService
         ];
     }
 
+    public function getVerificationDefaults($karyawan, ?string $fallbackName = null, ?LimsDocument $document = null): array
+    {
+        $defaults = [
+            'nama_pengesahan' => config('pengesahanlims.nama_verifikator', ''),
+            'jabatan_pengesah' => config('pengesahanlims.jabatan_verifikator', ''),
+            'tanggal_pengesahan' => Carbon::today()->format('Y-m-d'),
+        ];
+
+        if ($defaults['nama_pengesahan'] !== '') {
+            return $defaults;
+        }
+
+        $candidateName = trim($karyawan->nama_lengkap ?? $fallbackName ?? '');
+        $candidateJabatan = trim($karyawan->jabatan ?? '');
+
+        if ($candidateName === '') {
+            return $defaults;
+        }
+
+        if ($document && $this->isSameAsComposer($document, $candidateName)) {
+            return $defaults;
+        }
+
+        return [
+            'nama_pengesahan' => $candidateName,
+            'jabatan_pengesah' => $candidateJabatan,
+            'tanggal_pengesahan' => Carbon::today()->format('Y-m-d'),
+        ];
+    }
+
+    /**
+     * Verifikator tidak boleh sama dengan penyusun dokumen.
+     */
+    public function isSameAsComposer(LimsDocument $document, ?string $nama): bool
+    {
+        $composerName = trim($document->disusun_oleh ?? '');
+        $verifierName = trim($nama ?? '');
+
+        if ($composerName === '' || $verifierName === '') {
+            return false;
+        }
+
+        return strcasecmp($verifierName, $composerName) === 0;
+    }
+
+    public function hasVerification(LimsDocument $document): bool
+    {
+        $document->loadMissing('approvals');
+
+        return $document->approvals->where('action', 'verify')->isNotEmpty();
+    }
+
+    public function canUserVerify(LimsDocument $document): bool
+    {
+        if ($document->status === 'legalized') {
+            return false;
+        }
+
+        return !$this->hasVerification($document);
+    }
+
     public function getComposerDefaults($karyawan, ?string $fallbackName = null): array
     {
         return [
@@ -51,6 +112,7 @@ class LimsDocumentWorkflowService
                 'can_approve' => $this->isManager($karyawan),
                 'pengesahan' => $this->getPengesahanDefaults(),
                 'persetujuan' => $this->getApprovalDefaults($karyawan, $fallbackName),
+                'verifikasi' => $this->getVerificationDefaults($karyawan, $fallbackName),
             ]
         );
     }
@@ -107,7 +169,10 @@ class LimsDocumentWorkflowService
         return $document->status !== 'legalized';
     }
 
-    public function canUserDelete(LimsDocument $document): bool
+    /**
+     * Dokumen belum boleh diubah/dihapus setelah diverifikasi atau disetujui.
+     */
+    public function canModifyDocument(LimsDocument $document): bool
     {
         if ($document->status === 'legalized') {
             return false;
@@ -115,6 +180,16 @@ class LimsDocumentWorkflowService
 
         $document->loadMissing('approvals');
 
-        return $document->approvals->where('action', 'approve')->isEmpty();
+        return $document->approvals->whereIn('action', ['approve', 'verify'])->isEmpty();
+    }
+
+    public function canUserUpdate(LimsDocument $document): bool
+    {
+        return $this->canModifyDocument($document);
+    }
+
+    public function canUserDelete(LimsDocument $document): bool
+    {
+        return $this->canModifyDocument($document);
     }
 }
