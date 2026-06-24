@@ -8,7 +8,6 @@ use App\Models\MesinAbsen;
 use App\Models\LogDoor;
 use App\Models\RfidCard;
 use App\Models\Absensi;
-use Bluerhinos\phpMQTT;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\SendMqttAccess;
@@ -602,7 +601,7 @@ class MesinAbsenHandler extends BaseController
 
     private function send_mqtt($data)
     {
-        $mqtt = new phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
+        $mqtt = new \phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
         if ($mqtt->connect(true, null, '', '')) {
             $mqtt->publish('/intilab/iot/multidevice', $data, 0);
             $mqtt->close();
