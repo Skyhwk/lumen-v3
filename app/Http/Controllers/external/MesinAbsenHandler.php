@@ -367,14 +367,14 @@ class MesinAbsenHandler extends BaseController
                     }
 
                     if (count($data) == 0) {
-                        \Log::warning("No data found for device: {$deviceCode}");
+                        // \Log::warning("No data found for device: {$deviceCode}");
                     }
 
                     $deviceFolder = public_path('iot/' . $deviceCode);
 
                     if (!file_exists($deviceFolder)) {
                         mkdir($deviceFolder, 0755, true);
-                        \Log::info("Created folder: {$deviceFolder}");
+                        // \Log::info("Created folder: {$deviceFolder}");
                     }
                     
                     $filepath = $deviceFolder . '/access.bin';
