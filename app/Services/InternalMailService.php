@@ -216,6 +216,20 @@ class InternalMailService
             }
         }
 
+        if ($folder === 'inbox' && $filter === 'unread' && empty($query) && !$skipSync) {
+            try {
+                $result = $this->fetchUnreadListFromImap($folder, $page, $perPage, $sort, $meta);
+                $result['new_count'] = $newCount;
+                $result['from_cache'] = false;
+                if ($syncError) {
+                    $result['error'] = $syncError;
+                }
+                return $result;
+            } catch (\Throwable $e) {
+                $syncError = $syncError ?: $e->getMessage();
+            }
+        }
+
         $result = $this->queryEmailList($folder, $page, $perPage, $sort, $filter, $query, $meta);
         $result['new_count'] = $newCount;
         $result['from_cache'] = $skipSync;
@@ -1005,6 +1019,115 @@ class InternalMailService
             ->where('folder', $folder)
             ->where('uid', (int) $uid)
             ->update(['is_seen' => $seen]);
+    }
+
+    private function fetchUnreadListFromImap(
+        string $folder,
+        int $page,
+        int $perPage,
+        ?string $sort,
+        ?array $meta
+    ): array {
+        $connection = $this->connect($folder);
+
+        try {
+            $uids = $this->searchUnreadUids($connection, $sort);
+            $total = count($uids);
+            $offset = max(0, ($page - 1) * $perPage);
+            $pageUids = array_slice($uids, $offset, $perPage);
+
+            $rows = [];
+            foreach ($pageUids as $uid) {
+                $overview = @\imap_fetch_overview($connection, (string) $uid, \FT_UID);
+                if (empty($overview[0])) {
+                    continue;
+                }
+                $mapped = $this->mapOverviewsToRows($folder, [$overview[0]]);
+                if (!empty($mapped[0])) {
+                    $rows[] = $mapped[0];
+                }
+            }
+
+            if (!empty($rows)) {
+                $this->upsertEmailRows($folder, $rows);
+            }
+
+            $rowsByUid = [];
+            foreach ($rows as $row) {
+                $rowsByUid[(int) $row['uid']] = $row;
+            }
+
+            $emails = [];
+            foreach ($pageUids as $uid) {
+                $uid = (int) $uid;
+                if (!isset($rowsByUid[$uid])) {
+                    continue;
+                }
+                $row = $rowsByUid[$uid];
+                $emails[] = [
+                    'id'      => $uid,
+                    'from'    => $row['from_addr'],
+                    'to'      => $row['to_addr'],
+                    'subject' => $row['subject'],
+                    'date'    => $row['email_date'] ? date('c', strtotime($row['email_date'])) : null,
+                    'size'    => $this->formatSize((int) $row['size_bytes']),
+                    'is_seen' => false,
+                ];
+            }
+
+            $imapUnread = (int) ($meta['unread_count'] ?? 0);
+
+            return [
+                'emails'       => $emails,
+                'total'        => max($total, $imapUnread),
+                'unread_count' => $imapUnread > 0 ? $imapUnread : $total,
+                'indexed'      => (int) ($meta['indexed_count'] ?? 0),
+            ];
+        } finally {
+            @\imap_close($connection);
+            $this->clearImapErrors();
+        }
+    }
+
+    private function searchUnreadUids($connection, ?string $sort): array
+    {
+        [$criteria, $reverse] = $this->resolveImapSortCriteria($sort);
+
+        $uids = @\imap_sort($connection, $criteria, $reverse ? 1 : 0, \SE_UID, 'UNSEEN');
+        if (is_array($uids) && !empty($uids)) {
+            return array_map('intval', $uids);
+        }
+
+        $uids = @\imap_search($connection, 'UNSEEN', \SE_UID) ?: [];
+        $uids = array_map('intval', $uids);
+
+        if (($sort ?? 'date_desc') === 'date_asc') {
+            sort($uids);
+        } else {
+            rsort($uids);
+        }
+
+        return $uids;
+    }
+
+    private function resolveImapSortCriteria(?string $sort): array
+    {
+        switch ($sort) {
+            case 'date_asc':
+                return [SORTDATE, false];
+            case 'sender_asc':
+                return [SORTFROM, false];
+            case 'sender_desc':
+                return [SORTFROM, true];
+            case 'subject_asc':
+                return [SORTSUBJECT, false];
+            case 'subject_desc':
+                return [SORTSUBJECT, true];
+            case 'unread_first':
+            case 'date_desc':
+            default:
+                return [SORTDATE, true];
+        }
     }
 
     private function queryEmailList(
