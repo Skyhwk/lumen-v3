@@ -237,9 +237,213 @@ class SoundMeterController extends Controller
         }
     }
 
+    private function getKondisiLapanganItems($data)
+    {
+        if (!$data || !$data->kondisi_lapangan_json) {
+            return [];
+        }
+
+        $items = json_decode($data->kondisi_lapangan_json, true);
+
+        return is_array($items) ? $items : [];
+    }
+
+    private function findOrCreateDataLapanganSoundMeter($noSampel)
+    {
+        $noSampel = strtoupper(trim($noSampel));
+
+        $data = DataLapanganKebisinganBySoundMeter::where('no_sampel', $noSampel)->first();
+
+        if (!$data) {
+            $data = new DataLapanganKebisinganBySoundMeter();
+            $data->no_sampel = $noSampel;
+            $data->kondisi_lapangan_json = json_encode([]);
+            $data->mqtt_status = 'waiting';
+            $data->created_by = $this->karyawan;
+            $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->save();
+        }
+
+        return $data;
+    }
+
+    private function saveMonitoringKondisiPhotos(Request $request, $noSampel)
+    {
+        $files = $request->file('photos', []);
+
+        if (!is_array($files)) {
+            $files = [$files];
+        }
+
+        $destinationPath = public_path() . '/dokumentasi/sampling/';
+        if (!is_dir($destinationPath)) {
+            mkdir($destinationPath, 0775, true);
+        }
+
+        $savedFiles = [];
+        $safeSample = preg_replace('/[^A-Za-z0-9_-]/', '_', strtoupper(trim($noSampel)));
+
+        foreach ($files as $index => $file) {
+            if (!$file || !$file->isValid()) {
+                continue;
+            }
+
+            $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+            if (!in_array($extension, ['jpg', 'jpeg', 'png', 'webp'])) {
+                $extension = 'jpg';
+            }
+
+            $fileName = date('YmdHis') . '_' . $safeSample . '_monitoring_' . ($index + 1) . '_' . uniqid() . '.' . $extension;
+            $file->move($destinationPath, $fileName);
+
+            $savedFiles[] = [
+                'id' => uniqid('foto_', true),
+                'name' => $file->getClientOriginalName(),
+                'file' => $fileName,
+                'path' => 'dokumentasi/sampling/' . $fileName,
+            ];
+        }
+
+        return $savedFiles;
+    }
+
+    public function getMonitoringKondisiLapangan(Request $request)
+    {
+        if (!$request->no_sampel) {
+            return response()->json([
+                'message' => 'Nomor sampel wajib diisi'
+            ], 422);
+        }
+
+        try {
+            $data = $this->findOrCreateDataLapanganSoundMeter($request->no_sampel);
+
+            return response()->json([
+                'message' => 'Success Get Data',
+                'data' => [
+                    'id' => $data->id,
+                    'no_sampel' => $data->no_sampel,
+                    'kondisi_lapangan_json' => $this->getKondisiLapanganItems($data),
+                    'mqtt_status' => $data->mqtt_status ?? 'waiting',
+                    'last_mqtt_message_at' => $data->last_mqtt_message_at,
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+
+    public function appendMonitoringKondisiLapangan(Request $request)
+    {
+        if (!$request->no_sampel) {
+            return response()->json([
+                'message' => 'Nomor sampel wajib diisi'
+            ], 422);
+        }
+
+        if (!$request->event) {
+            return response()->json([
+                'message' => 'Event kondisi lapangan wajib diisi'
+            ], 422);
+        }
+
+        $eventPayload = is_array($request->event) ? $request->event : json_decode($request->event, true);
+
+        if (!is_array($eventPayload)) {
+            return response()->json([
+                'message' => 'Format event kondisi lapangan tidak valid'
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $data = $this->findOrCreateDataLapanganSoundMeter($request->no_sampel);
+            $items = $this->getKondisiLapanganItems($data);
+            $event = $eventPayload;
+
+            if (!isset($event['created_at']) || $event['created_at'] == null) {
+                $event['created_at'] = Carbon::now()->format('Y-m-d H:i:s');
+            }
+
+            if (!isset($event['created_by']) || $event['created_by'] == null) {
+                $event['created_by'] = $this->karyawan;
+            }
+
+            $uploadedPhotos = $this->saveMonitoringKondisiPhotos($request, $data->no_sampel);
+            if (count($uploadedPhotos) > 0) {
+                $event['photos'] = $uploadedPhotos;
+            }
+
+            $items[] = $event;
+
+            $data->kondisi_lapangan_json = json_encode($items);
+            $data->mqtt_status = $request->mqtt_status ?? $data->mqtt_status ?? 'waiting';
+            $data->last_mqtt_message_at = $request->last_mqtt_message_at ?? $data->last_mqtt_message_at;
+            $data->updated_by = $this->karyawan;
+            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->save();
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Kondisi lapangan berhasil disimpan',
+                'data' => [
+                    'id' => $data->id,
+                    'no_sampel' => $data->no_sampel,
+                    'kondisi_lapangan_json' => $items,
+                    'mqtt_status' => $data->mqtt_status,
+                    'last_mqtt_message_at' => $data->last_mqtt_message_at,
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+
+    public function updateMonitoringMqttStatus(Request $request)
+    {
+        if (!$request->no_sampel) {
+            return response()->json([
+                'message' => 'Nomor sampel wajib diisi'
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $data = $this->findOrCreateDataLapanganSoundMeter($request->no_sampel);
+            $data->mqtt_status = $request->mqtt_status ?? 'waiting';
+            $data->last_mqtt_message_at = $request->last_mqtt_message_at ?? $data->last_mqtt_message_at;
+            $data->updated_by = $this->karyawan;
+            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->save();
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Status MQTT berhasil diupdate',
+                'data' => [
+                    'no_sampel' => $data->no_sampel,
+                    'mqtt_status' => $data->mqtt_status,
+                    'last_mqtt_message_at' => $data->last_mqtt_message_at,
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
     public function getDeviceRunning(Request $request){
         $devices = DeviceIntilabRunning::where('is_active', true)->where('type', 'Sound Meter')->where('start_by', $this->karyawan)->get();
         
         return response()->json(['data' => $devices], 200);
     }
 }
+

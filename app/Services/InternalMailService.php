@@ -17,7 +17,7 @@ class InternalMailService
 
     private const FOLDER_MAP = [
         'inbox'  => ['INBOX'],
-        'outbox' => ['Sent', 'Sent Items', 'Sent Messages', '[Gmail]/Sent Mail'],
+        'outbox' => ['Sent', 'Sent Items', 'Sent Messages', 'Sent Mail', 'INBOX.Sent', 'INBOX/Sent', '[Gmail]/Sent Mail'],
         'trash'  => ['Trash', 'Deleted Items', 'Deleted Messages', '[Gmail]/Trash'],
         'spam'   => ['Junk', 'Spam', 'Junk E-mail', '[Gmail]/Spam'],
         'draft'  => ['Drafts', '[Gmail]/Drafts'],
@@ -415,7 +415,120 @@ class InternalMailService
             throw new \RuntimeException('Gagal mengirim email');
         }
 
-        $this->clearCache('outbox');
+        try {
+            $this->saveSentCopyToImap($mail);
+            $this->syncFolderIndex('outbox', false);
+        } catch (\Throwable $e) {
+            // Email sudah terkirim via SMTP; outbox akan disinkronkan saat folder dibuka
+        }
+    }
+
+    private function saveSentCopyToImap(PHPMailer $mail): void
+    {
+        $settings = $this->getSettings();
+        if (!$settings) {
+            return;
+        }
+
+        $message = $mail->getSentMIMEMessage();
+        if ($message === '') {
+            return;
+        }
+
+        $message = preg_replace("/(?<!\r)\n/", "\r\n", str_replace("\r\n", "\n", $message));
+        $message = rtrim($message) . "\r\n";
+
+        foreach ($this->resolveOutboxFolderCandidates() as $imapFolder) {
+            if ($this->tryAppendToFolder($settings, $imapFolder, $message)) {
+                $cached = $this->getFolderCache();
+                $cached['outbox'] = $imapFolder;
+                $this->saveFolderCache($cached);
+                return;
+            }
+        }
+
+        $this->createAndAppendSentFolder($settings, self::FOLDER_MAP['outbox'][0], $message);
+    }
+
+    private function resolveOutboxFolderCandidates(): array
+    {
+        $cached = $this->getFolderCache();
+        $candidates = self::FOLDER_MAP['outbox'];
+
+        if (!empty($cached['outbox'])) {
+            return array_values(array_unique(array_merge([$cached['outbox']], $candidates)));
+        }
+
+        return $candidates;
+    }
+
+    private function tryAppendToFolder(array $settings, string $imapFolder, string $message): bool
+    {
+        $path = $this->buildMailboxPath($settings, $imapFolder);
+        $previousHandler = set_error_handler(function () {
+            return true;
+        });
+
+        try {
+            $connection = @\imap_open(
+                $path,
+                $settings['email'],
+                $settings['password'],
+                0,
+                1,
+                ['DISABLE_AUTHENTICATOR' => 'GSSAPI']
+            );
+
+            if (!$connection) {
+                return false;
+            }
+
+            $appended = @\imap_append($connection, $path, $message, '\\Seen');
+            @\imap_close($connection);
+            $this->clearImapErrors();
+
+            return (bool) $appended;
+        } finally {
+            restore_error_handler($previousHandler);
+        }
+    }
+
+    private function createAndAppendSentFolder(array $settings, string $imapFolder, string $message): void
+    {
+        $basePath = $this->buildMailboxPath($settings, '');
+        $fullPath = $basePath . $imapFolder;
+        $previousHandler = set_error_handler(function () {
+            return true;
+        });
+
+        try {
+            $connection = @\imap_open(
+                $basePath,
+                $settings['email'],
+                $settings['password'],
+                \OP_HALFOPEN,
+                1,
+                ['DISABLE_AUTHENTICATOR' => 'GSSAPI']
+            );
+
+            if (!$connection) {
+                return;
+            }
+
+            @\imap_createmailbox($connection, $fullPath);
+
+            if (@\imap_reopen($connection, $fullPath)) {
+                @\imap_append($connection, $fullPath, $message, '\\Seen');
+                $cached = $this->getFolderCache();
+                $cached['outbox'] = $imapFolder;
+                $this->saveFolderCache($cached);
+            }
+
+            @\imap_close($connection);
+            $this->clearImapErrors();
+        } finally {
+            restore_error_handler($previousHandler);
+        }
     }
 
     public function saveLocalDraft(array $data): array
