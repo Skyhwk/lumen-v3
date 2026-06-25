@@ -124,6 +124,18 @@ class InternalMailService
         }
 
         $newCount = $this->estimateNewMessageCount($meta, $status);
+        $previousIndexedUnread = $hasIndex
+            ? $this->countIndexedUnread($folder)
+            : (int) ($meta['unread_count'] ?? 0);
+
+        if ($folder === 'inbox' && $newCount > 0) {
+            try {
+                $this->syncFolderIndex($folder, false);
+                $this->recalculateIndexedUnreadMeta($folder);
+            } catch (\Throwable $e) {
+                // Lanjut dengan fallback unread di bawah
+            }
+        }
 
         if ($changed) {
             if ($folder === 'inbox') {
@@ -133,9 +145,14 @@ class InternalMailService
             }
         }
 
+        $unreadCount = $this->getDisplayUnreadCount($folder, $status);
+        if ($folder === 'inbox' && $newCount > 0 && $unreadCount <= $previousIndexedUnread) {
+            $unreadCount = $previousIndexedUnread + $newCount;
+        }
+
         return [
             'changed'       => $changed,
-            'unread_count'  => $this->getDisplayUnreadCount($folder, $status),
+            'unread_count'  => $unreadCount,
             'total'         => (int) $status['total'],
             'new_count'     => $newCount,
             'needs_refresh' => $changed && $folder === 'inbox',
