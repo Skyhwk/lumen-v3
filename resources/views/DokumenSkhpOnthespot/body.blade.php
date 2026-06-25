@@ -1,5 +1,6 @@
 @php
     use Carbon\Carbon;
+    use App\Helpers\RujukanHelpers;
     Carbon::setLocale('id');
 
     function formatTanggalSkhp($date)
@@ -20,6 +21,13 @@
         ['label' => 'Tanggal Order', 'value' => formatTanggalSkhp($data->created_at)],
         ['label' => 'Lokasi Pengambilan', 'value' => $data->lokasi_pengambilan ?? '-']
     ];
+
+    function renderCaretUpHtml($color = '#000')
+    {
+        return '<span style="display:inline-block;width:0;height:0;margin-left:2px;vertical-align:middle;border-left:3px solid transparent;border-right:3px solid transparent;border-bottom:5px solid ' . $color . ';"></span>';
+    }
+
+    $caretUpIndicator = renderCaretUpHtml();
 
     $tanggalSelesai = formatTanggalSkhp($data->tanggal_selesai ?? now());
 @endphp
@@ -72,13 +80,13 @@
                     {{ $item->parameter ?? '-' }}
                 </td>
                 <td style="border:1px solid #000; padding:5px; text-align:center;">
-                    {{ $item->hasil_uji ?? '-' }} 
-                    @if ($item->hasil_uji > optional($item->acuan)->nilai_rujukan)
-                        <span style="color:red;"> ↑</span>
+                    {{ RujukanHelpers::formatHasilUjiValue($item->hasil_uji) }}
+                    @if (RujukanHelpers::isMelebihiRujukan($item->hasil_uji, optional($item->acuan)->nilai_rujukan))
+                        {!! $caretUpIndicator !!}
                     @endif
                 </td>
                 <td style="border:1px solid #000; padding:5px; text-align:center;">
-                    {{ optional($item->acuan)->nilai_rujukan ?? '-' }}
+                    {{ RujukanHelpers::formatRujukanDisplay(optional($item->acuan)->nilai_rujukan) }}
                 </td>
             </tr>
         @empty
@@ -92,7 +100,7 @@
     <tfoot>
         <tr>
             <td colspan="4" style="border:1px solid #000; padding:5px; text-align:center;">
-            ( ↑ ) bihi ambang batas nilai rujukan
+            {!! $caretUpIndicator !!} HASIL UJI melebihi nilai rujukan
             </td>
         </tr>
     </tfoot>
