@@ -545,7 +545,6 @@ class GoodsReceiptsController extends Controller
         }
 
         $item = $purchaseRequest->items->first();
-        $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
 
         $handoverDate = $batch->user_receipt_at ?: date('Y-m-d H:i:s');
         $handoverDateFormatted = Carbon::parse($handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
@@ -581,10 +580,19 @@ class GoodsReceiptsController extends Controller
             $handedByDivision = 'Purchasing';
         }
 
-        $receivedByName = $purchaseRequest->created_by;
-        $receivedByPosition = $this->resolveKaryawanJabatan($recipient);
-        $receivedByDivision = $this->resolveKaryawanDivisi($recipient);
-        $receivedByDate = Carbon::parse($batch->completed_at ?: $handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
+        $isUserConfirmed = !empty($batch->completed_at);
+        if ($isUserConfirmed) {
+            $receivedByRecord = $this->findKaryawanByName($batch->completed_by ?: $purchaseRequest->created_by);
+            $receivedByName = $batch->completed_by ?: $purchaseRequest->created_by;
+            $receivedByPosition = $this->resolveKaryawanJabatan($receivedByRecord);
+            $receivedByDivision = $this->resolveKaryawanDivisi($receivedByRecord);
+            $receivedByDate = Carbon::parse($batch->completed_at)->locale('id')->isoFormat('D MMMM YYYY H:mm');
+        } else {
+            $receivedByName = '';
+            $receivedByPosition = '';
+            $receivedByDivision = '';
+            $receivedByDate = '';
+        }
 
         $mpdf = new \Mpdf\Mpdf([
             'format' => 'A5',
@@ -611,6 +619,7 @@ class GoodsReceiptsController extends Controller
             'receivedByPosition',
             'receivedByDivision',
             'receivedByDate',
+            'isUserConfirmed',
         ))->render();
 
         $mpdf->WriteHTML($html);

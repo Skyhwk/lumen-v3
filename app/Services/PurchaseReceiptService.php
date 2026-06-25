@@ -9,6 +9,38 @@ use Illuminate\Support\Collection;
 
 class PurchaseReceiptService
 {
+    public const PENDING_USER_ACCEPTANCE_LIMIT = 15;
+
+    public static function countPendingUserAcceptanceRequests(string $requesterName): int
+    {
+        return (int) PurchaseRequest::where('is_active', true)
+            ->where('created_by', $requesterName)
+            ->where(function ($query) {
+                $query->where('is_goods_voided', false)
+                    ->orWhereNull('is_goods_voided');
+            })
+            ->where('finance_status', 'Distributing')
+            ->whereHas('receiptBatches', function ($batchQuery) {
+                $batchQuery->whereNotNull('handover_number')
+                    ->whereNull('completed_at');
+            })
+            ->count();
+    }
+
+    public static function getPendingUserAcceptanceBlockMessage(string $requesterName): ?string
+    {
+        $pendingCount = self::countPendingUserAcceptanceRequests($requesterName);
+
+        if ($pendingCount < self::PENDING_USER_ACCEPTANCE_LIMIT) {
+            return null;
+        }
+
+        return 'Pengajuan ditolak sistem karena masih ada '
+            . $pendingCount
+            . ' permintaan pembelian yang sudah didistribusikan tetapi belum diterima/dikonfirmasi oleh Anda. '
+            . 'Silakan selesaikan konfirmasi penerimaan barang terlebih dahulu.';
+    }
+
     public static function getPrItemQty(PurchaseRequest $purchaseRequest): float
     {
         if (!$purchaseRequest->relationLoaded('items')) {
