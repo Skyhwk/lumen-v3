@@ -24,15 +24,9 @@ class CorsMiddleware
 
         $response = $next($request);
 
-        if (method_exists($response, 'header')) {
-            $response->header('Access-Control-Allow-Origin', '*');
-            $response->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-            $response->header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Authorization, token, X-Slice');
-        } else {
-            $response->headers->set('Access-Control-Allow-Origin', '*');
-            $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Authorization, token, X-Slice');
-        }
+        $response->header('Access-Control-Allow-Origin', '*');
+        $response->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        $response->header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Authorization, token, X-Slice');
 
         return $response;
     }
