@@ -11,7 +11,7 @@ use App\Models\Absensi;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\SendMqttAccess;
-;
+use phpMQTT;
 
 class MesinAbsenHandler extends BaseController
 {
@@ -601,7 +601,7 @@ class MesinAbsenHandler extends BaseController
 
     private function send_mqtt($data)
     {
-        $mqtt = new \phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
+        $mqtt = new phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
         if ($mqtt->connect(true, null, '', '')) {
             $mqtt->publish('/intilab/iot/multidevice', $data, 0);
             $mqtt->close();
