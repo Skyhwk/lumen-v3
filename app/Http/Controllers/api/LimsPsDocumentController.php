@@ -55,6 +55,20 @@ class LimsPsDocumentController extends Controller
         ], 200);
     }
 
+    public function getVerificationDefaults(Request $request)
+    {
+        $karyawan = $request->attributes->get('user')->karyawan ?? null;
+        $document = null;
+
+        if ($request->filled('id') && $request->filled('menu_slug')) {
+            $document = $this->findActiveDocument($request->id, $request->menu_slug);
+        }
+
+        return response()->json([
+            'data' => $this->workflow->getVerificationDefaults($karyawan, $this->karyawan, $document),
+        ], 200);
+    }
+
     public function index(Request $request)
     {
         $menuSlug = $request->menu_slug;
@@ -81,7 +95,8 @@ class LimsPsDocumentController extends Controller
             ->addColumn('sub_header', fn($row) => $row->sub_header_dokumen)
             ->addColumn('revisi', fn($row) => $row->revisian)
             ->addColumn('status_label', fn($row) => $this->resolveStatusLabel($row))
-            ->addColumn('can_update', fn($row) => $row->status !== self::STATUS_LEGALIZED)
+            ->addColumn('can_update', fn($row) => $this->workflow->canUserUpdate($row))
+            ->addColumn('can_verify', fn($row) => $this->workflow->canUserVerify($row))
             ->addColumn('can_approve', function ($row) use ($request) {
                 $karyawan = $request->attributes->get('user')->karyawan ?? null;
 
@@ -136,6 +151,12 @@ class LimsPsDocumentController extends Controller
 
                 if ($document->status === self::STATUS_LEGALIZED) {
                     return response()->json(['message' => 'Dokumen yang sudah disahkan tidak dapat diubah'], 422);
+                }
+
+                $document->load('approvals');
+
+                if (!$this->workflow->canUserUpdate($document)) {
+                    return response()->json(['message' => 'Dokumen yang sudah diverifikasi atau disetujui tidak dapat diubah'], 422);
                 }
 
                 $oldContentFile = $document->content_file;
@@ -222,6 +243,47 @@ class LimsPsDocumentController extends Controller
         }
 
         $karyawan = $request->attributes->get('user')->karyawan ?? null;
+
+        if ($action === 'verify') {
+            if ($this->workflow->hasVerification($document)) {
+                return response()->json(['message' => 'Dokumen sudah diverifikasi'], 422);
+            }
+
+            foreach (['nama_pengesahan', 'jabatan_pengesah', 'tanggal_pengesahan'] as $field) {
+                if (!$request->filled($field)) {
+                    return response()->json(['message' => ucfirst(str_replace('_', ' ', $field)) . ' wajib diisi'], 422);
+                }
+            }
+
+            if ($this->workflow->isSameAsComposer($document, $request->nama_pengesahan)) {
+                return response()->json(['message' => 'Verifikator tidak boleh sama dengan penyusun dokumen'], 422);
+            }
+
+            DB::beginTransaction();
+
+            try {
+                $tanggalVerifikasi = Carbon::parse($request->tanggal_pengesahan);
+
+                LimsDocumentApproval::create([
+                    'lims_document_id' => $document->id,
+                    'action' => 'verify',
+                    'nama' => $request->nama_pengesahan,
+                    'jabatan' => $request->jabatan_pengesah,
+                    'approved_at' => $tanggalVerifikasi,
+                    'approved_by' => $this->karyawan,
+                    'step' => 0,
+                    'is_active' => true,
+                ]);
+
+                DB::commit();
+
+                return response()->json(['message' => 'Dokumen berhasil diverifikasi'], 200);
+            } catch (\Exception $e) {
+                DB::rollBack();
+
+                return response()->json(['message' => $e->getMessage()], 500);
+            }
+        }
 
         if ($action === 'approve') {
             if (!$this->workflow->isManager($karyawan)) {
@@ -327,8 +389,8 @@ class LimsPsDocumentController extends Controller
 
         $document->load('approvals');
 
-        if ($document->approvals->where('action', 'approve')->isNotEmpty()) {
-            return response()->json(['message' => 'Dokumen yang sudah disetujui tidak dapat dihapus'], 422);
+        if ($document->approvals->whereIn('action', ['approve', 'verify'])->isNotEmpty()) {
+            return response()->json(['message' => 'Dokumen yang sudah diverifikasi atau disetujui tidak dapat dihapus'], 422);
         }
 
         DB::beginTransaction();
@@ -381,6 +443,10 @@ class LimsPsDocumentController extends Controller
 
         if ($approvalCount > 0) {
             return "Disetujui ({$approvalCount})";
+        }
+
+        if ($this->workflow->hasVerification($document)) {
+            return 'Terverifikasi';
         }
 
         return 'Menunggu Persetujuan';

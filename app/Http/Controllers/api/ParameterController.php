@@ -27,9 +27,9 @@ class ParameterController extends Controller
 
                 if ($parameter) {
 
-                    $parameter->nama_lab = $request->nama_lab;
-                    $parameter->nama_lhp = $request->nama_lhp;
-                    $parameter->nama_regulasi = $request->nama_regulasi;
+                    $parameter->nama_lab = trim($request->nama_lab);
+                    $parameter->nama_lhp = trim($request->nama_lhp);
+                    $parameter->nama_regulasi = trim($request->nama_regulasi);
 
                     if($request->method!='')$parameter->method = $request->method;
                     if($request->satuan!='')$parameter->satuan = $request->satuan;
@@ -53,9 +53,9 @@ class ParameterController extends Controller
                     $parameter->nama_kategori = $cek_kategori->nama_kategori;
                     $parameter->id_kategori = $request->id_kategori;
 
-                    $parameter->nama_lab = $request->nama_lab;
-                    $parameter->nama_lhp = $request->nama_lhp;
-                    $parameter->nama_regulasi = $request->nama_regulasi;
+                    $parameter->nama_lab = trim($request->nama_lab);
+                    $parameter->nama_lhp = trim($request->nama_lhp);
+                    $parameter->nama_regulasi = trim($request->nama_regulasi);
 
                     if($request->method!='')$parameter->method = $request->method;
                     if($request->satuan!='')$parameter->satuan = $request->satuan;

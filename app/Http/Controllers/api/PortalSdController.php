@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use App\Models\{
     OrderHeader,
@@ -136,6 +137,12 @@ class PortalSdController extends Controller
             }
         } catch (\Exception $ex) {
             //throw $th;
+            Log::error('PortalSdController methodsearch', [
+                'message' => $ex->getMessage(),
+                'line'    => $ex->getLine(),
+                'file'    => $ex->getFile(),
+                'request' => $request->all(),
+            ]);
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),

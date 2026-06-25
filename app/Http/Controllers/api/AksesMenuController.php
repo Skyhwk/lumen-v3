@@ -87,7 +87,9 @@ class AksesMenuController extends Controller
     public function getMenu(Request $request){
         $userId = $this->user_id;
         
-        $data = Menu::where('is_active', true)->get();
+        $data = Menu::where('is_active', true)
+            ->whereRaw('LOWER(menu) != ?', ['email'])
+            ->get();
 
         $transformedData = $data->map(function ($item) {
             $children = collect($item->submenu)->map(function ($submenu) {
