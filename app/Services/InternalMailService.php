@@ -118,10 +118,14 @@ class InternalMailService
             || (int) ($meta['unread_count'] ?? 0) !== (int) $status['unread_count']
             || (int) ($meta['uidnext'] ?? 0) !== (int) $status['uidnext'];
 
-        $newCount = max(0, (int) $status['total'] - $prevTotal);
+        $newCount = $this->estimateNewMessageCount($meta, $status);
 
-        if ($changed && $folder !== 'inbox') {
-            $this->updateFolderMetaCounts($folder, $status);
+        if ($changed) {
+            if ($folder === 'inbox') {
+                $this->updateFolderStatusFromImap($folder, $status);
+            } else {
+                $this->updateFolderMetaCounts($folder, $status);
+            }
         }
 
         return [
@@ -141,7 +145,8 @@ class InternalMailService
         bool $forceRefresh = false,
         ?string $sort = null,
         ?string $filter = null,
-        bool $skipSync = false
+        bool $skipSync = false,
+        bool $incrementalSync = false
     ): array {
         if ($folder === 'local_draft') {
             return $this->fetchLocalDrafts($page, $perPage, $query, $sort);
@@ -175,7 +180,7 @@ class InternalMailService
                     $newCount = $this->syncFolderIndex($folder, true);
                 } elseif (!$hasIndex) {
                     $newCount = $this->syncFolderIndex($folder, false);
-                } elseif ($stale) {
+                } elseif ($stale || $incrementalSync) {
                     $newCount = $this->syncFolderIndex($folder, false);
                 } else {
                     $this->ensurePageIndexed($folder, $page, $perPage);
@@ -839,6 +844,40 @@ class InternalMailService
     {
         $meta = $this->getFolderMeta($folder) ?? [];
         $this->saveFolderMeta($folder, array_merge($meta, $status));
+    }
+
+    private function updateFolderStatusFromImap(string $folder, array $status): void
+    {
+        if (empty($this->getFolderMeta($folder))) {
+            return;
+        }
+
+        DB::table('mail_folder_meta')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->update([
+                'total'        => (int) ($status['total'] ?? 0),
+                'unread_count' => (int) ($status['unread_count'] ?? 0),
+                'uidnext'      => (int) ($status['uidnext'] ?? 0),
+            ]);
+    }
+
+    private function estimateNewMessageCount(?array $meta, array $status): int
+    {
+        if (empty($meta)) {
+            return 0;
+        }
+
+        $prevUidNext = (int) ($meta['uidnext'] ?? 0);
+        $currUidNext = (int) ($status['uidnext'] ?? 0);
+
+        if ($prevUidNext > 0 && $currUidNext > $prevUidNext) {
+            return $currUidNext - $prevUidNext;
+        }
+
+        $prevTotal = (int) ($meta['total'] ?? 0);
+
+        return max(0, (int) ($status['total'] ?? 0) - $prevTotal);
     }
 
     private function upsertEmailRows(string $folder, array $rows): void

@@ -21,10 +21,11 @@ class InboxController extends Controller
             $query = $request->input('query');
             $forceRefresh = filter_var($request->input('force_refresh', false), FILTER_VALIDATE_BOOLEAN);
             $skipSync = filter_var($request->input('skip_sync', false), FILTER_VALIDATE_BOOLEAN);
+            $incrementalSync = filter_var($request->input('incremental_sync', false), FILTER_VALIDATE_BOOLEAN);
             $sort = $request->input('sort');
             $filter = $request->input('filter');
 
-            $result = $this->mail()->fetchList('inbox', $page, $perPage, $query, $forceRefresh, $sort, $filter, $skipSync);
+            $result = $this->mail()->fetchList('inbox', $page, $perPage, $query, $forceRefresh, $sort, $filter, $skipSync, $incrementalSync);
 
             return response()->json($result, 200);
         } catch (\Throwable $e) {
