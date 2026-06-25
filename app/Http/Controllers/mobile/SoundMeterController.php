@@ -281,7 +281,6 @@ class SoundMeterController extends Controller
         }
 
         $savedFiles = [];
-        $safeSample = preg_replace('/[^A-Za-z0-9_-]/', '_', strtoupper(trim($noSampel)));
 
         foreach ($files as $index => $file) {
             if (!$file || !$file->isValid()) {
@@ -293,7 +292,7 @@ class SoundMeterController extends Controller
                 $extension = 'jpg';
             }
 
-            $fileName = date('YmdHis') . '_' . $safeSample . '_monitoring_' . ($index + 1) . '_' . uniqid() . '.' . $extension;
+            $fileName = date('YmdHis') . '_' . $this->user_id . '4' . ($index + 1) . '.' . $extension;
             $file->move($destinationPath, $fileName);
 
             $savedFiles[] = [
@@ -446,4 +445,6 @@ class SoundMeterController extends Controller
         return response()->json(['data' => $devices], 200);
     }
 }
+
+
 
