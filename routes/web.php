@@ -19,9 +19,6 @@ use Illuminate\Support\Facades\DB;
 $router->post('/api/gettoken', 'AuthController@gettoken');
 $router->post('/api/cektoken', 'AuthController@checkToken');
 
-$router->get('/api/formulir/download/{filename}', 'api\FormulirController@download');
-$router->get('/api/dokumen-implementatif/download/{filename}', 'api\DokumenImplementatifController@download');
-
 $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.user', 'log.request', 'decrypt.slice']], function () use ($router) {
     $router->post('route', 'BaseController@handle');
 });
