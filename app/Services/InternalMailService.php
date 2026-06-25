@@ -113,10 +113,15 @@ class InternalMailService
         }
 
         $prevTotal = (int) ($meta['total'] ?? 0);
+        $hasIndex = $this->countIndexRows($folder) > 0;
         $changed = empty($meta)
             || $prevTotal !== (int) $status['total']
-            || (int) ($meta['unread_count'] ?? 0) !== (int) $status['unread_count']
             || (int) ($meta['uidnext'] ?? 0) !== (int) $status['uidnext'];
+
+        if (!$hasIndex) {
+            $changed = $changed
+                || (int) ($meta['unread_count'] ?? 0) !== (int) $status['unread_count'];
+        }
 
         $newCount = $this->estimateNewMessageCount($meta, $status);
 
@@ -130,7 +135,7 @@ class InternalMailService
 
         return [
             'changed'       => $changed,
-            'unread_count'  => (int) $status['unread_count'],
+            'unread_count'  => $this->getDisplayUnreadCount($folder, $status),
             'total'         => (int) $status['total'],
             'new_count'     => $newCount,
             'needs_refresh' => $changed && $folder === 'inbox',
@@ -192,6 +197,11 @@ class InternalMailService
                     throw $e;
                 }
             }
+        }
+
+        if ($folder === 'inbox' && $hasIndex) {
+            $this->recalculateIndexedUnreadMeta($folder);
+            $meta = $this->getFolderMeta($folder) ?? $meta;
         }
 
         $result = $this->queryEmailList($folder, $page, $perPage, $sort, $filter, $query, $meta);
@@ -821,16 +831,23 @@ class InternalMailService
 
     private function saveFolderMeta(string $folder, array $data): void
     {
+        $indexedCount = (int) ($data['indexed_count'] ?? $this->countIndexRows($folder));
+        $unreadCount = (int) ($data['unread_count'] ?? 0);
+
+        if ($indexedCount > 0) {
+            $unreadCount = $this->countIndexedUnread($folder);
+        }
+
         $payload = [
             'id_karyawan'   => $this->idKaryawan,
             'folder'        => $folder,
             'total'         => (int) ($data['total'] ?? 0),
-            'unread_count'  => (int) ($data['unread_count'] ?? 0),
+            'unread_count'  => $unreadCount,
             'uidnext'       => (int) ($data['uidnext'] ?? 0),
             'last_uid'      => (int) ($data['last_uid'] ?? 0),
             'min_seq'       => (int) ($data['min_seq'] ?? 0),
             'max_seq'       => (int) ($data['max_seq'] ?? 0),
-            'indexed_count' => (int) ($data['indexed_count'] ?? $this->countIndexRows($folder)),
+            'indexed_count' => $indexedCount,
             'synced_at'     => date('Y-m-d H:i:s'),
         ];
 
@@ -856,10 +873,16 @@ class InternalMailService
             ->where('id_karyawan', $this->idKaryawan)
             ->where('folder', $folder)
             ->update([
-                'total'        => (int) ($status['total'] ?? 0),
-                'unread_count' => (int) ($status['unread_count'] ?? 0),
-                'uidnext'      => (int) ($status['uidnext'] ?? 0),
+                'total'   => (int) ($status['total'] ?? 0),
+                'uidnext' => (int) ($status['uidnext'] ?? 0),
             ]);
+
+        if ($this->countIndexRows($folder) <= 0) {
+            DB::table('mail_folder_meta')
+                ->where('id_karyawan', $this->idKaryawan)
+                ->where('folder', $folder)
+                ->update(['unread_count' => (int) ($status['unread_count'] ?? 0)]);
+        }
     }
 
     private function estimateNewMessageCount(?array $meta, array $status): int
@@ -910,6 +933,42 @@ class InternalMailService
             ->count();
     }
 
+    private function countIndexedUnread(string $folder): int
+    {
+        return (int) DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->where('is_seen', false)
+            ->count();
+    }
+
+    private function getDisplayUnreadCount(string $folder, ?array $imapStatus = null): int
+    {
+        if ($this->countIndexRows($folder) > 0) {
+            return $this->countIndexedUnread($folder);
+        }
+
+        if ($imapStatus !== null) {
+            return (int) ($imapStatus['unread_count'] ?? 0);
+        }
+
+        $meta = $this->getFolderMeta($folder);
+
+        return (int) ($meta['unread_count'] ?? 0);
+    }
+
+    private function recalculateIndexedUnreadMeta(string $folder): void
+    {
+        if (empty($this->getFolderMeta($folder))) {
+            return;
+        }
+
+        DB::table('mail_folder_meta')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->update(['unread_count' => $this->countIndexedUnread($folder)]);
+    }
+
     private function clearIndexRows(string $folder): void
     {
         DB::table('mail_list_index')
@@ -945,14 +1004,8 @@ class InternalMailService
             ->update(['is_seen' => $seen]);
 
         $meta = $this->getFolderMeta($folder);
-        if ($meta && isset($meta['unread_count'])) {
-            $unread = (int) $meta['unread_count'];
-            if ($seen && $unread > 0) {
-                $unread--;
-            } elseif (!$seen) {
-                $unread++;
-            }
-            $this->saveFolderMeta($folder, array_merge($meta, ['unread_count' => $unread]));
+        if ($meta) {
+            $this->recalculateIndexedUnreadMeta($folder);
         }
     }
 
@@ -1014,11 +1067,7 @@ class InternalMailService
         $listTotal = $builder->count();
         $mailboxTotal = (int) ($meta['total'] ?? $listTotal);
 
-        if ($filter === 'unread') {
-            $mailboxTotal = (int) ($meta['unread_count'] ?? $listTotal);
-        } elseif ($filter === 'read') {
-            $mailboxTotal = max(0, (int) ($meta['total'] ?? $listTotal) - (int) ($meta['unread_count'] ?? 0));
-        } elseif ($query) {
+        if ($filter === 'unread' || $filter === 'read' || $query) {
             $mailboxTotal = $listTotal;
         }
 
@@ -1041,7 +1090,7 @@ class InternalMailService
         return [
             'emails'       => $emails,
             'total'        => $mailboxTotal,
-            'unread_count' => (int) ($meta['unread_count'] ?? 0),
+            'unread_count' => $this->getDisplayUnreadCount($folder),
             'indexed'      => (int) ($meta['indexed_count'] ?? $listTotal),
         ];
     }
