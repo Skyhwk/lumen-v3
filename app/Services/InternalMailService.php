@@ -15,6 +15,9 @@ class InternalMailService
     private const INITIAL_SYNC_LIMIT = 500;
     private const CHUNK_SYNC_LIMIT = 200;
     private const TAIL_SYNC_LIMIT = 50;
+    private const BACKFILL_MAX_ITERATIONS = 4;
+    private const BACKFILL_TIME_BUDGET = 25;
+    private const UID_VERIFY_BATCH = 50;
 
     private const FOLDER_MAP = [
         'inbox'  => ['INBOX'],
@@ -188,19 +191,33 @@ class InternalMailService
 
         $syncError = null;
         $newCount = 0;
+        $backfillState = ['syncing' => false, 'index_ready' => true];
+        $didMailboxSync = false;
 
         if (!$skipSync && empty($query)) {
             try {
                 if ($forceRefresh) {
                     $newCount = $this->syncFolderIndex($folder, true);
+                    $this->reconcileIndexWithImap($folder);
+                    $didMailboxSync = true;
                 } elseif (!$hasIndex) {
                     $newCount = $this->syncFolderIndex($folder, false);
+                    $didMailboxSync = true;
                 } elseif ($stale || $incrementalSync) {
                     $newCount = $this->syncFolderIndex($folder, false);
-                } else {
-                    $this->ensurePageIndexed($folder, $page, $perPage);
+                    $didMailboxSync = true;
                 }
+
+                if ($filter !== 'unread') {
+                    $backfillState = $this->ensurePageIndexed($folder, $page, $perPage);
+                }
+
                 $meta = $this->getFolderMeta($folder) ?? $meta;
+
+                if ($didMailboxSync && $meta && (int) ($meta['indexed_count'] ?? 0) > (int) ($meta['total'] ?? 0)) {
+                    $this->reconcileIndexWithImap($folder);
+                    $meta = $this->getFolderMeta($folder) ?? $meta;
+                }
             } catch (\Throwable $e) {
                 $syncError = $e->getMessage();
                 if (!$hasIndex) {
@@ -209,7 +226,7 @@ class InternalMailService
             }
         }
 
-        if ($folder === 'inbox' && !$skipSync) {
+        if ($folder === 'inbox' && !$skipSync && !$didMailboxSync) {
             try {
                 $this->refreshFolderUnreadFromImap($folder);
                 $meta = $this->getFolderMeta($folder) ?? $meta;
@@ -221,8 +238,11 @@ class InternalMailService
         if ($folder === 'inbox' && $filter === 'unread' && !$skipSync) {
             try {
                 $result = $this->fetchUnreadListFromImap($folder, $page, $perPage, $sort, $meta, $query);
+                $result = $this->attachIndexMeta($result, $meta ?? [], $folder);
                 $result['new_count'] = $newCount;
                 $result['from_cache'] = false;
+                $result['syncing'] = false;
+                $result['index_ready'] = true;
                 if ($syncError) {
                     $result['error'] = $syncError;
                 }
@@ -235,6 +255,8 @@ class InternalMailService
         $result = $this->queryEmailList($folder, $page, $perPage, $sort, $filter, $query, $meta);
         $result['new_count'] = $newCount;
         $result['from_cache'] = $skipSync;
+        $result['syncing'] = $backfillState['syncing'] ?? false;
+        $result['index_ready'] = $backfillState['index_ready'] ?? true;
         if ($syncError) {
             $result['error'] = $syncError;
         }
@@ -609,12 +631,17 @@ class InternalMailService
     private function emptyListNotConfigured(): array
     {
         return [
-            'emails'         => [],
-            'total'          => 0,
-            'unread_count'   => 0,
-            'indexed'        => 0,
-            'new_count'      => 0,
-            'not_configured' => true,
+            'emails'          => [],
+            'total'           => 0,
+            'mailbox_total'   => 0,
+            'unread_count'    => 0,
+            'indexed_unread'  => 0,
+            'indexed'         => 0,
+            'index_complete'  => false,
+            'new_count'       => 0,
+            'syncing'         => false,
+            'index_ready'     => true,
+            'not_configured'  => true,
         ];
     }
 
@@ -710,11 +737,11 @@ class InternalMailService
         return (int) ($maxUid ?? 0);
     }
 
-    private function ensurePageIndexed(string $folder, int $page, int $perPage): void
+    private function ensurePageIndexed(string $folder, int $page, int $perPage): array
     {
         $meta = $this->getFolderMeta($folder);
         if (!$meta) {
-            return;
+            return ['syncing' => false, 'index_ready' => false];
         }
 
         $needed = $page * $perPage;
@@ -722,26 +749,66 @@ class InternalMailService
         $total = (int) ($meta['total'] ?? 0);
         $minSeq = (int) ($meta['min_seq'] ?? 0);
 
-        if ($needed <= $indexedCount || $indexedCount >= $total || $minSeq <= 1) {
-            return;
+        if ($needed <= $indexedCount || ($total > 0 && $indexedCount >= $total) || $minSeq <= 1) {
+            return ['syncing' => false, 'index_ready' => true];
         }
 
         $settings = $this->getSettings();
         if (!$settings) {
-            return;
+            return ['syncing' => false, 'index_ready' => false];
         }
 
+        if (function_exists('imap_timeout')) {
+            @\imap_timeout(\IMAP_READTIMEOUT, 60);
+        }
+
+        $startedAt = microtime(true);
         $imapFolder = $this->resolveImapFolder($folder);
         $path = $this->buildMailboxPath($settings, $imapFolder);
         $connection = $this->openConnection($settings, $path);
 
-        $chunkStart = max(1, $minSeq - self::CHUNK_SYNC_LIMIT);
-        $statusObj = @\imap_status($connection, $path, \SA_MESSAGES | \SA_UNSEEN | \SA_UIDNEXT);
-        $status = $statusObj ? $this->normalizeStatus($statusObj) : [];
-        $this->fetchAndStoreSequenceRange($connection, $folder, $chunkStart, $minSeq - 1, array_merge($meta, $status));
+        try {
+            for ($iteration = 0; $iteration < self::BACKFILL_MAX_ITERATIONS; $iteration++) {
+                $meta = $this->getFolderMeta($folder) ?? $meta;
+                $indexedCount = (int) ($meta['indexed_count'] ?? 0);
+                $minSeq = (int) ($meta['min_seq'] ?? 0);
+                $total = (int) ($meta['total'] ?? 0);
 
-        @\imap_close($connection);
-        $this->clearImapErrors();
+                if ($needed <= $indexedCount || $minSeq <= 1 || ($total > 0 && $indexedCount >= $total)) {
+                    break;
+                }
+
+                if ((microtime(true) - $startedAt) >= self::BACKFILL_TIME_BUDGET) {
+                    break;
+                }
+
+                $chunkEnd = $minSeq - 1;
+                if ($chunkEnd < 1) {
+                    break;
+                }
+
+                $deficit = max(0, $needed - $indexedCount);
+                $chunkSize = max(self::CHUNK_SYNC_LIMIT, min($deficit, self::CHUNK_SYNC_LIMIT * 2));
+                $chunkStart = max(1, $chunkEnd - $chunkSize + 1);
+
+                $statusObj = @\imap_status($connection, $path, \SA_MESSAGES | \SA_UNSEEN | \SA_UIDNEXT);
+                $status = $statusObj ? $this->normalizeStatus($statusObj) : [];
+                $this->fetchAndStoreSequenceRange($connection, $folder, $chunkStart, $chunkEnd, array_merge($meta, $status));
+            }
+        } finally {
+            @\imap_close($connection);
+            $this->clearImapErrors();
+        }
+
+        $meta = $this->getFolderMeta($folder) ?? $meta;
+        $indexedCount = (int) ($meta['indexed_count'] ?? 0);
+        $minSeq = (int) ($meta['min_seq'] ?? 0);
+        $indexReady = $needed <= $indexedCount || $minSeq <= 1;
+
+        return [
+            'syncing'     => !$indexReady && $minSeq > 1,
+            'index_ready' => $indexReady,
+        ];
     }
 
     private function fetchAndStoreBySequence($connection, string $folder, int $limit, array $status): void
@@ -1047,17 +1114,7 @@ class InternalMailService
             $offset = max(0, ($page - 1) * $perPage);
             $pageUids = array_slice($uids, $offset, $perPage);
 
-            $rows = [];
-            foreach ($pageUids as $uid) {
-                $overview = @\imap_fetch_overview($connection, (string) $uid, \FT_UID);
-                if (empty($overview[0])) {
-                    continue;
-                }
-                $mapped = $this->mapOverviewsToRows($folder, [$overview[0]]);
-                if (!empty($mapped[0])) {
-                    $rows[] = $mapped[0];
-                }
-            }
+            $rows = $this->fetchOverviewsByUidBatch($connection, $folder, $pageUids);
 
             if (!empty($rows)) {
                 $this->upsertEmailRows($folder, $rows);
@@ -1090,10 +1147,13 @@ class InternalMailService
             $listTotal = $query ? $total : max($total, $imapUnread);
 
             return [
-                'emails'       => $emails,
-                'total'        => $listTotal,
-                'unread_count' => $query ? $total : ($imapUnread > 0 ? $imapUnread : $total),
-                'indexed'      => (int) ($meta['indexed_count'] ?? 0),
+                'emails'         => $emails,
+                'total'          => $listTotal,
+                'mailbox_total'  => $imapUnread > 0 ? $imapUnread : $listTotal,
+                'unread_count'   => $imapUnread > 0 ? $imapUnread : $listTotal,
+                'indexed_unread' => $this->countIndexedUnread($folder),
+                'indexed'        => (int) ($meta['indexed_count'] ?? 0),
+                'index_complete' => false,
             ];
         } finally {
             @\imap_close($connection);
@@ -1250,9 +1310,13 @@ class InternalMailService
 
         $listTotal = $builder->count();
         $mailboxTotal = (int) ($meta['total'] ?? $listTotal);
+        $indexedCount = (int) ($meta['indexed_count'] ?? $listTotal);
+        $indexComplete = $this->isIndexComplete($meta);
 
         if ($filter === 'unread' || $filter === 'read' || $query) {
-            $mailboxTotal = $listTotal;
+            $displayTotal = $listTotal;
+        } else {
+            $displayTotal = $listTotal;
         }
 
         $offset = max(0, ($page - 1) * $perPage);
@@ -1272,11 +1336,138 @@ class InternalMailService
         }
 
         return [
-            'emails'       => $emails,
-            'total'        => $mailboxTotal,
-            'unread_count' => $this->getDisplayUnreadCount($folder),
-            'indexed'      => (int) ($meta['indexed_count'] ?? $listTotal),
+            'emails'         => $emails,
+            'total'          => $displayTotal,
+            'mailbox_total'  => $mailboxTotal,
+            'unread_count'   => $this->getDisplayUnreadCount($folder),
+            'indexed_unread' => $this->countIndexedUnread($folder),
+            'indexed'        => $indexedCount,
+            'index_complete' => $indexComplete,
         ];
+    }
+
+    private function isIndexComplete(?array $meta): bool
+    {
+        if (empty($meta)) {
+            return false;
+        }
+
+        $total = (int) ($meta['total'] ?? 0);
+        $indexed = (int) ($meta['indexed_count'] ?? 0);
+        $minSeq = (int) ($meta['min_seq'] ?? 0);
+
+        if ($total <= 0) {
+            return $indexed <= 0;
+        }
+
+        return $indexed >= $total && $minSeq <= 1;
+    }
+
+    private function attachIndexMeta(array $result, ?array $meta, string $folder = 'inbox'): array
+    {
+        $meta = $meta ?? [];
+
+        return array_merge($result, [
+            'mailbox_total'  => (int) ($result['mailbox_total'] ?? $meta['total'] ?? $result['total'] ?? 0),
+            'indexed_unread' => (int) ($result['indexed_unread'] ?? $this->countIndexedUnread($folder)),
+            'index_complete' => (bool) ($result['index_complete'] ?? $this->isIndexComplete($meta)),
+        ]);
+    }
+
+    private function reconcileIndexWithImap(string $folder): void
+    {
+        $meta = $this->getFolderMeta($folder);
+        if (!$meta) {
+            return;
+        }
+
+        $indexedCount = (int) ($meta['indexed_count'] ?? 0);
+        $imapTotal = (int) ($meta['total'] ?? 0);
+
+        if ($indexedCount === 0) {
+            return;
+        }
+
+        $settings = $this->getSettings();
+        if (!$settings) {
+            return;
+        }
+
+        $imapFolder = $this->resolveImapFolder($folder);
+        $path = $this->buildMailboxPath($settings, $imapFolder);
+        $connection = $this->openConnection($settings, $path);
+
+        try {
+            if ($indexedCount > $imapTotal) {
+                $this->purgeStaleIndexedUids($folder, $connection);
+            }
+        } finally {
+            @\imap_close($connection);
+            $this->clearImapErrors();
+        }
+    }
+
+    private function purgeStaleIndexedUids(string $folder, $connection): void
+    {
+        $uids = DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->orderBy('uid')
+            ->pluck('uid')
+            ->map(fn ($uid) => (int) $uid)
+            ->all();
+
+        if (empty($uids)) {
+            return;
+        }
+
+        $validUids = [];
+
+        foreach (array_chunk($uids, self::UID_VERIFY_BATCH) as $chunk) {
+            $uidStr = implode(',', $chunk);
+            $overviews = @\imap_fetch_overview($connection, $uidStr, \FT_UID) ?: [];
+
+            foreach ($overviews as $overview) {
+                $uid = (int) ($overview->uid ?? 0);
+                if ($uid > 0) {
+                    $validUids[$uid] = true;
+                }
+            }
+        }
+
+        $staleUids = array_values(array_filter($uids, fn ($uid) => !isset($validUids[$uid])));
+
+        if (!empty($staleUids)) {
+            foreach (array_chunk($staleUids, 200) as $chunk) {
+                DB::table('mail_list_index')
+                    ->where('id_karyawan', $this->idKaryawan)
+                    ->where('folder', $folder)
+                    ->whereIn('uid', $chunk)
+                    ->delete();
+            }
+        }
+
+        $meta = $this->getFolderMeta($folder) ?? [];
+        $this->saveFolderMeta($folder, array_merge($meta, [
+            'indexed_count' => $this->countIndexRows($folder),
+        ]));
+    }
+
+    private function fetchOverviewsByUidBatch($connection, string $folder, array $uids): array
+    {
+        if (empty($uids)) {
+            return [];
+        }
+
+        $rows = [];
+
+        foreach (array_chunk($uids, self::UID_VERIFY_BATCH) as $chunk) {
+            $uidStr = implode(',', $chunk);
+            $overviews = @\imap_fetch_overview($connection, $uidStr, \FT_UID) ?: [];
+            $rows = array_merge($rows, $this->mapOverviewsToRows($folder, $overviews));
+        }
+
+        return $rows;
     }
 
     private function connect(string $folder)
