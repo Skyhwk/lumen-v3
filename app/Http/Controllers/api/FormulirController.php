@@ -34,6 +34,11 @@ class FormulirController extends Controller
         DB::beginTransaction();
         try {
             $id = $request->id;
+            
+            $old = null;
+            if ($id) {
+                $old = EmbedSpreadsheet::find($id);
+            }
 
             $data = [
                 'nama_formulir' => $request->nama_formulir,
@@ -47,16 +52,119 @@ class FormulirController extends Controller
             if ($request->type === 'Dokumen') {
                 if ($request->hasFile('file')) {
                     $file = $request->file('file');
-                    $filename = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
-                    $destinationPath = base_path('public/uploads/documents');
-                    if (!file_exists($destinationPath)) {
-                        mkdir($destinationPath, 0777, true);
-                    }
-                    $file->move($destinationPath, $filename);
                     
-                    $data['source'] = $filename;
+                    $namaFormulir = $request->nama_formulir;
+                    $formFolder = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $namaFormulir));
+                    if (empty($formFolder)) {
+                        $formFolder = 'formulir_' . time();
+                    }
+                    
+                    $destinationDir = base_path('public/uploads/akreditasi/dokumen-implementatif/' . $formFolder);
+                    if (!file_exists($destinationDir)) {
+                        mkdir($destinationDir, 0777, true);
+                    }
+                    
+                    $extension = strtolower($file->getClientOriginalExtension());
+                    $originalName = $file->getClientOriginalName();
+                    
+                    if ($extension === 'pdf') {
+                        $pdfBaseName = pathinfo($originalName, PATHINFO_FILENAME);
+                        $pdfFolder = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $pdfBaseName));
+                        $pdfFolder = rtrim($pdfFolder, '_-');
+                        if (empty($pdfFolder)) {
+                            $pdfFolder = 'pdf_' . time();
+                        }
+                        
+                        $pdfSubdir = $destinationDir . '/' . $pdfFolder;
+                        if (!file_exists($pdfSubdir)) {
+                            mkdir($pdfSubdir, 0777, true);
+                        }
+                        
+                        $tempPdfName = time() . '_' . str_replace(' ', '_', $originalName);
+                        $file->move($pdfSubdir, $tempPdfName);
+                        $pdfPath = $pdfSubdir . '/' . $tempPdfName;
+                        
+                        $outputPrefix = $pdfSubdir . '/Page';
+                        $command = "pdftoppm -jpeg -r 150 " . escapeshellarg($pdfPath) . " " . escapeshellarg($outputPrefix);
+                        exec($command, $output, $returnVar);
+                        
+                        if (file_exists($pdfPath)) {
+                            unlink($pdfPath);
+                        }
+                        
+                        $pattern = $pdfSubdir . '/Page-*.jpg';
+                        $generatedFiles = glob($pattern);
+                        
+                        if (empty($generatedFiles)) {
+                            throw new \Exception("Gagal mengonversi PDF ke gambar.");
+                        }
+                        
+                        natsort($generatedFiles);
+                        
+                        $savedFiles = [];
+                        foreach ($generatedFiles as $gFile) {
+                            if (preg_match('/Page-(\d+)\.jpg$/', $gFile, $matches)) {
+                                $pageNum = $matches[1];
+                                $newFilename = $pdfBaseName . '_' . $pageNum . '.jpg';
+                                $newFilePath = $pdfSubdir . '/' . $newFilename;
+                                rename($gFile, $newFilePath);
+                                $savedFiles[] = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $pdfFolder . '/' . $newFilename;
+                            }
+                        }
+                        
+                        $newUploaders = [];
+                        $timestamp = date('Y-m-d H:i:s');
+                        foreach ($savedFiles as $newFile) {
+                            $newUploaders[] = [
+                                'file' => $newFile,
+                                'uploader' => $this->karyawan ?: 'System',
+                                'uploaded_at' => $timestamp
+                            ];
+                        }
+                        
+                        if ($old && !empty($old->source)) {
+                            $existingFiles = is_array($old->source) ? $old->source : [$old->source];
+                            $savedFiles = array_merge($existingFiles, $savedFiles);
+                        }
+                        
+                        $data['source'] = json_encode($savedFiles);
+
+                        $existingUploaders = ($old && !empty($old->uploader)) ? (is_array($old->uploader) ? $old->uploader : json_decode($old->uploader, true)) : [];
+                        if (!is_array($existingUploaders)) {
+                            $existingUploaders = [];
+                        }
+                        $allUploaders = array_merge($existingUploaders, $newUploaders);
+                        $data['uploader'] = json_encode($allUploaders);
+                    } else {
+                        $filename = time() . '_' . str_replace(' ', '_', $originalName);
+                        $file->move($destinationDir, $filename);
+                        
+                        $newFile = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $filename;
+                        
+                        $newUploaders = [
+                            [
+                                'file' => $newFile,
+                                'uploader' => $this->karyawan ?: 'System',
+                                'uploaded_at' => date('Y-m-d H:i:s')
+                            ]
+                        ];
+                        
+                        if ($old && !empty($old->source)) {
+                            $existingFiles = is_array($old->source) ? $old->source : [$old->source];
+                            $savedFiles = array_merge($existingFiles, [$newFile]);
+                            $data['source'] = json_encode($savedFiles);
+                        } else {
+                            $data['source'] = $newFile;
+                        }
+
+                        $existingUploaders = ($old && !empty($old->uploader)) ? (is_array($old->uploader) ? $old->uploader : json_decode($old->uploader, true)) : [];
+                        if (!is_array($existingUploaders)) {
+                            $existingUploaders = [];
+                        }
+                        $allUploaders = array_merge($existingUploaders, $newUploaders);
+                        $data['uploader'] = json_encode($allUploaders);
+                    }
                 } else if ($id) {
-                    $old = EmbedSpreadsheet::find($id);
                     if ($old) {
                         $data['source'] = $old->source;
                         $data['url_form'] = $old->url_form;
