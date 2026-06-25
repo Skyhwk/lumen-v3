@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Helpers\WorkerAutomaticApprove;
-use App\Helpers\WorkerInternalMailSync;
 use App\Helpers\WorkerSummaryParameter;
 use App\Services\EmailBlast;
 use Illuminate\Console\Command;
@@ -22,7 +21,6 @@ class ScheduleEverySecond extends Command
                 WorkerAutomaticApprove::run();
 
                 if (Carbon::now()->second % 5 === 0) {
-                    WorkerInternalMailSync::run();
                     EmailBlast::sendEmailBlast();
                 }
 
