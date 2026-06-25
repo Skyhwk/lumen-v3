@@ -16,6 +16,35 @@ use Yajra\DataTables\Facades\DataTables;
 
 class SoundMeterController extends Controller
 {
+    // public function index()
+    // {
+    //     $records = DetailSoundMeter::with('device')
+    //         ->orderBy('timestamp', 'desc')
+    //         ->get();
+
+    //     // Group the records by no_sampel
+    //     $groupedData = $records->groupBy('no_sampel');
+
+    //     // Transform the grouped data into the desired format
+    //     $result = $groupedData->map(function ($group, $no_sampel) {
+    //         $mainRecord = $group->first();
+
+    //         $item = [
+    //             'id' => $mainRecord->id,
+    //             'nama'=> optional($mainRecord->device)->nama,
+    //             'kode'=> optional($mainRecord->device)->kode,
+    //             'id_device' => $mainRecord->id_device,
+    //             'no_sampel' => $mainRecord->no_sampel,
+    //             // 'sampel_detail' => $group->toArray()
+    //         ];
+
+    //         return $item;
+    //     });
+
+    //     // Convert to a collection and return as DataTables response
+    //     return DataTables::of($result)->make(true);
+    // }
+
     public function index(Request $request)
     {  
         $data = DeviceIntilab::where('category', 'Sound Meter');
@@ -23,113 +52,12 @@ class SoundMeterController extends Controller
         return DataTables::of($data)->make();
     }
 
-    public function sensorData(Request $request){
-        DB::beginTransaction();
-        try {
-            $existingDevice = DeviceIntilab::where('kode', $request->kode)->first();
-            if ($existingDevice) {
-                return response()->json([
-                    'message' => 'Device dengan kode tersebut sudah ada dengan type' . $existingDevice->category
-                ], 409);
-            }
-
-            $device = new DeviceIntilab();
-            $device->nama = $request->nama;
-            $device->kode = $request->kode;
-            $device->category = 'Sound Meter';
-            $device->created_at = Carbon::now();
-            $device->created_by = $this->karyawan;
-            $device->save();
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Berhasil menambahkan device'
-            ],201);
-        }catch (\Exception $th) {
-            return response()->json([
-                'message' => $th->getMessage()
-            ],500);
-        }
-    }
-
-    public function detailDevice(Request $request)
-    {
-        $kode = $request->kode; // Changed from $request->id to match your frontend
-
-        // First, get all the records for this device
-        $records = DetailSoundMeter::where('id_device', $kode)
-            ->select('id', 'id_device', 'no_sampel', 'shift', 'LAeq', 'data_pendukung','db')
-            ->orderBy('timestamp', 'desc')
-            ->get();
-            // ->map(function ($record) {
-            //     $record->data_pendukung = json_decode($record->data_pendukung);
-            //     return $record;
-            // });
-        // Group the records by no_sampel
-        $groupedData = $records->groupBy('no_sampel');
-        
-        // Transform the grouped data into the desired format
-        $result = $groupedData->map(function ($group, $no_sampel) {
-            // Take the first record for the main data
-            $mainRecord = $group->first();
-            
-            // Create a new object with the main fields
-            $item = [
-                'id' => $mainRecord->id,
-                'id_device' => $mainRecord->id_device,
-                'no_sampel' => $mainRecord->no_sampel,
-                'sampel_detail' => $group->toArray() // Add all records with this no_sampel as sampel_detail
-            ];
-            
-            return $item;
-        });
-        // Convert to a collection and return as DataTables response
-        return DataTables::of($result)->make(true);
-    }
-
-    public function getDetailData(Request $request){
+   public function getDetailData(Request $request){
         $data = DetailSoundMeter::where('id_device', $request->kode)
             ->where('no_sampel', $request->no_sampel)
             ->orderBy('timestamp', 'desc');
 
-        $minTimestamps = DetailSoundMeter::where('id_device', $request->kode)
-            ->where('no_sampel', $request->no_sampel)
-            ->select('shift', DB::raw('MIN(timestamp) as min_timestamp'))
-            ->groupBy('shift')
-            ->pluck('min_timestamp', 'shift');
-
-        return DataTables::of($data)
-            ->addColumn('shift_sistem', function ($row) use ($minTimestamps) {
-                $minTimestamp = $minTimestamps[$row->shift] ?? null;
-                if ($minTimestamp) {
-                    $hour = Carbon::parse($minTimestamp)->format('H');
-                    return config('shift_alat.' . $hour);
-                }
-                return null;
-            })
-            ->make(true);
-    }
-
-    public function deleteDevice(Request $request){
-        DB::beginTransaction();
-        try {
-            $device = DeviceIntilab::where('kode',$request->kode)->first();
-
-            DetailSoundMeter::where('id_device', $device->kode)->delete();
-
-            $device->delete();
-            DB::commit();
-            return response()->json([
-                'message' => 'Berhasil menghapus data device'
-            ],201);
-        }catch (\Exception $th) {
-            DB::rollBack();
-            return response()->json([
-                'message' => $th->getMessage(),
-                'line' => $th->getLine(),
-                'file' => $th->getFile()
-            ],500);
-        }
+        return DataTables::of($data)->make(true);
     }
 
     public function updateNoSampel(Request $request){
@@ -182,114 +110,204 @@ class SoundMeterController extends Controller
     public function getDataShift(Request $request){
         DB::beginTransaction();
         try {
-            $records = DetailSoundMeter::where('id_device', $request->kode)
-                ->where('no_sampel', $request->no_sampel)
+            $shift = DetailSoundMeter::where('id_device', $request->kode)->where('no_sampel', $request->no_sampel)
                 ->get();
-
-            // Ambil timestamp terkecil per shift awal untuk mencari shift sistem
-            $minTimestamps = $records->groupBy('shift')->map(function ($group) {
-                return $group->min('timestamp');
+            
+            $dataShift = [];
+            $shift->each(function($item) use (&$dataShift) {
+                $dataShift[$item->shift][] = (object)[
+                    'db' => $item->db,
+                    'laeq' => $item->LAeq
+                ];
             });
 
-            $dataSistemShift = [];
-            
-            // Kelompokkan data LAeq berdasarkan shift sistem
-            foreach ($records as $item) {
-                $minTimestamp = $minTimestamps[$item->shift] ?? null;
-                if ($minTimestamp) {
-                    $hour = Carbon::parse($minTimestamp)->format('H');
-                    $shiftSistem = config('shift_alat.' . $hour);
-                    if ($shiftSistem) {
-                        $dataSistemShift[$shiftSistem][] = (float) $item->LAeq;
+            // Sort the keys naturally to ensure L1, L2, L3... L24 ordering
+            uksort($dataShift, function($a, $b) {
+                // Extract the numeric part from the shift value (L1, L2, etc.)
+                $numA = (int) substr($a, 1);
+                $numB = (int) substr($b, 1);
+                
+                return $numA - $numB;
+            });
+
+            $formattedHasil = 0;
+            $shifSummary = [];
+            $L8 = [];
+            if(count($dataShift) > 23) { // shift 24 jam
+                foreach ($dataShift as $shiftName => $items) {
+                    // Ambil semua nilai laeq
+                    $laeqValues = array_map(function($item) {
+                        return (float) $item->laeq;
+                    }, $items);
+    
+                    $count = count($laeqValues);
+                    $sum = array_sum($laeqValues);
+    
+                    // Hitung combined LAeq jika data ada, jika tidak hasilkan null
+                    $combinedLaeq = $count > 0 ? number_format((10 * log10((1 / $count) * $sum)), 1) : null;
+                    $convertLAeq = $combinedLaeq ? number_format($combinedLaeq * 0.1, 2) : null; // combinedLaeq * 0.1
+                    $hasilConvert = $convertLAeq !== null
+                        ? number_format(1 * pow(10, $convertLAeq), 2)
+                        : null; // 1*(10^convertLAeq)
+                    // Tambahkan hasil ke dalam array
+                    $shifSummary[$shiftName] = [
+                        'total_count' => $count,
+                        'hasil_laeq' => $combinedLaeq,
+                        'convert_laeq' => $convertLAeq,
+                        'hasil_convert' => $hasilConvert
+                    ];
+                }
+            // Persiapkan array nilai convert_laeq untuk semua shift (L1-L24)
+                $allConvertValues = [];
+                foreach ($shifSummary as $shiftName => $data) {
+                    $allConvertValues[] = $data['convert_laeq'];
+                }
+                
+                // Pastikan array terurut dari L1-L24
+                ksort($shifSummary, SORT_NATURAL);
+                
+                // Hitung ls (L1-L16)
+                $lsValues = array_slice($allConvertValues, 0, 16);
+                $lsSum = 0;
+                foreach ($lsValues as $value) {
+                    if ($value !== null) {
+                        $lsSum += pow(10, $value);
                     }
                 }
-            }
-
-            $data_per_shift = [];
-            $allConvertValues = [];
-
-            // Proses wajib 24 Shift (L1 - L24)
-            for ($i = 1; $i <= 24; $i++) {
-                $shiftName = 'L' . $i;
-                $laeqValues = $dataSistemShift[$shiftName] ?? [];
+                $ls = $lsSum > 0 ? 10 * log10((1/16) * $lsSum) : null;
                 
-                $count = count($laeqValues);
-                $sum = array_sum($laeqValues);
-
-                if ($count > 0) {
-                    $combinedLaeq = 10 * log10((1 / $count) * $sum);
-                    $convertLAeq = $combinedLaeq * 0.1;
+                // Hitung lm (L17-L24)
+                $lmValues = array_slice($allConvertValues, 16, 8);
+                $lmSum = 0;
+                foreach ($lmValues as $value) {
+                    if ($value !== null) {
+                        $lmSum += pow(10, $value);
+                    }
+                }
+                $lm = $lmSum > 0 ? 10 * log10((1/8) * $lmSum) : null;
+                
+                // Hitung lsm
+                // lsm = 10*LOG((1/24)*((16*(10^(0,1*ls)))+(8*(10^(0,1*(lm+5))))))
+                if ($ls !== null && $lm !== null) {
+                    $lsm = 10 * log10((1/24) * ((16 * pow(10, 0.1 * $ls)) + (8 * pow(10, 0.1 * ($lm + 5)))));
                 } else {
-                    $combinedLaeq = 0;
-                    $convertLAeq = 0;
+                    $lsm = null;
                 }
+                
+                // Format hasil
+                $ls = $ls !== null ? number_format($ls, 2) : null;
+                $lm = $lm !== null ? number_format($lm, 2) : null;
+                $lsm = $lsm !== null ? number_format($lsm, 2) : null;
 
-                $data_per_shift[] = [
-                    'shift_sistem' => $shiftName,
-                    'nilai_laeq' => $count > 0 ? (float) number_format($combinedLaeq, 1, '.', '') : 0,
-                    'converted_laeq' => $count > 0 ? (float) number_format($convertLAeq, 2, '.', '') : 0,
+                $hasil_l24 = [
+                    'ls' => $ls,
+                    'lm' => $lm,
+                    'lsm' => $lsm
                 ];
+            }else if(count($dataShift) > 7) { // shift 8 jam
+                foreach ($dataShift as $shiftName => $items) {
+                    // Ambil semua nilai laeq
+                    $laeqValues = array_map(function($item) {
+                        return (float) $item->laeq;
+                    }, $items);
+    
+                    $count = count($laeqValues);
+                    $sum = array_sum($laeqValues);
+    
+                    // Hitung combined LAeq jika data ada, jika tidak hasilkan null
+                    $combinedLaeq = $count > 0 ? number_format((10 * log10((1 / $count) * $sum)), 1) : null;
+                    $convertLAeq = $combinedLaeq ? number_format($combinedLaeq * 0.1, 2) : null; // combinedLaeq * 0.1
+                    $hasilConvert = $convertLAeq !== null
+                        ? number_format(1 * pow(10, $convertLAeq), 2)
+                        : null; // 1*(10^convertLAeq)
+                    
+                        // Tambahkan hasil ke dalam array
+                    $shifSummary[$shiftName] = [
+                        'total_count' => $count,
+                        'hasil_laeq' => $combinedLaeq,
+                        'convert_laeq' => $convertLAeq,
+                        'hasil_convert' => $hasilConvert
+                    ];
+                }
+                // Hitung total hasil convert
 
-                $allConvertValues[] = $count > 0 ? $convertLAeq : null;
-            }
+                $totalHasilConvert = 0;
+                $totalShift = count($shifSummary);
 
-            // Hitung ls (L1-L16)
-            $lsValues = array_slice($allConvertValues, 0, 16);
-            $lsSum = 0;
-            foreach ($lsValues as $value) {
-                if ($value !== null) {
-                    $lsSum += pow(10, $value);
+                foreach ($shifSummary as $data) {
+                    // Hilangkan koma dan konversi ke float
+                    $cleanValue = floatval(str_replace(',', '', $data['hasil_convert']));
+                    $totalHasilConvert += $cleanValue;
+                }
+
+                // Hitung hasil akhir seperti rumus Excel: 10 * LOG((1 / totalShift) * totalHasilConvert)
+                $hasil = 10 * log10((1 / $totalShift) * $totalHasilConvert);
+
+
+                // Format hasil jika ingin tampil dengan 2 desimal
+                $formattedJumlahLeq = number_format($totalHasilConvert, 1, '.', ',');
+                $formattedHasil = number_format($hasil, 1, '.', ',');
+                $L8 = [
+                    'hasil' => $formattedHasil,
+                    'jumlah_leq' => $formattedJumlahLeq
+                ];
+            }else{ // sesaat
+                foreach ($dataShift as $shiftName => $items) {
+                    // Ambil semua nilai laeq
+                    $laeqValues = array_map(function($item) {
+                        return (float) $item->laeq;
+                    }, $items);
+    
+                    $count = count($laeqValues);
+                    $sum = array_sum($laeqValues);
+    
+                    // Hitung combined LAeq jika data ada, jika tidak hasilkan null
+                    $combinedLaeq = $count > 0 ? number_format((10 * log10((1 / $count) * $sum)), 1) : null;
+                    $convertLAeq = $combinedLaeq ? number_format($combinedLaeq * 0.1, 2) : null; // combinedLaeq * 0.1
+                    $hasilConvert = $convertLAeq !== null
+                        ? number_format(1 * pow(10, $convertLAeq), 2)
+                        : null; // 1*(10^convertLAeq)
+                    // Tambahkan hasil ke dalam array
+                    $shifSummary[$shiftName] = [
+                        'total_count' => $count,
+                        'hasil_laeq' => $combinedLaeq,
+                        'convert_laeq' => $convertLAeq,
+                        'hasil_convert' => $hasilConvert
+                    ];
                 }
             }
-            $ls = $lsSum > 0 ? 10 * log10((1/16) * $lsSum) : 0;
             
-            // Hitung lm (L17-L24)
-            $lmValues = array_slice($allConvertValues, 16, 8);
-            $lmSum = 0;
-            foreach ($lmValues as $value) {
-                if ($value !== null) {
-                    $lmSum += pow(10, $value);
-                }
-            }
-            $lm = $lmSum > 0 ? 10 * log10((1/8) * $lmSum) : 0;
-            
-            // Hitung lsm
-            if ($ls > 0 || $lm > 0) {
-                $energyLs = $ls > 0 ? (16 * pow(10, 0.1 * $ls)) : 0;
-                $energyLm = $lm > 0 ? (8 * pow(10, 0.1 * ($lm + 5))) : 0;
-                $lsm = 10 * log10((1/24) * ($energyLs + $energyLm));
-            } else {
-                $lsm = 0;
-            }
-
             DB::commit();
             return response()->json([
-                'data_per_shift' => $data_per_shift,
-                'ls' => $ls > 0 ? (float) number_format($ls, 2, '.', '') : 0,
-                'lm' => $lm > 0 ? (float) number_format($lm, 2, '.', '') : 0,
-                'lsm' => $lsm > 0 ? (float) number_format($lsm, 2, '.', '') : 0,
-            ], 200);
-
-        } catch (\Exception $th) {
+                'data' => $dataShift,
+                'shifSummary' => $shifSummary,
+                'hasil' => $L8, // shift 8 jam
+                'hasil_dua_empat' => $hasil_l24 // shift 24 jam
+            ],200);
+        }catch (\Exception $th) {
             DB::rollBack();
             return response()->json([
                 'message' => $th->getMessage(),
                 'line' => $th->getLine(),
                 'file' => $th->getFile()
-            ], 500);
+            ],500);
         }
     }
 
     public function submitData(Request $request){
         DB::beginTransaction();
         try {
+            $hasil = (array)$request->hasil; // sesaat
+            $hasilL8 = (array)$request->hasil_l8; // 8 jam
+            $hasilDuaEmpat = (array)$request->hasil_dua_empat; // 24 jam
+
             $kebisingan_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
             $order_detail = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            
             if($order_detail){
                 // Decode parameter jika dalam format JSON
                 $decoded = json_decode($order_detail->parameter, true);
 
-                $parameterValue = 'Data tidak valid';
                 // Pastikan JSON ter-decode dengan benar dan berisi data
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                     // Ambil elemen pertama dari array hasil decode
@@ -297,25 +315,26 @@ class SoundMeterController extends Controller
 
                     // Pastikan elemen kedua tersedia setelah explode
                     $parameterValue = $parts[1] ?? 'Data tidak valid';
+
+                    // dd($parameterValue); // Output: "Pencahayaan"
+                } else {
+                    dd("Parameter tidak valid atau bukan JSON");
                 }
 
                 $parameter = Parameter::where('nama_lab', $parameterValue)->where('id_kategori', 4)->where('is_active', true)->first();
-                
                 // HEADER
                 if(!$kebisingan_header){
                     $kebisingan_header = new KebisinganHeader();
                 }
                 $kebisingan_header->no_sampel = $request->no_sampel;
-                if ($parameter) {
-                    $kebisingan_header->id_parameter = $parameter->id;
-                    $kebisingan_header->parameter = $parameter->nama_lab;
-                }
-                $kebisingan_header->ls = $request->ls;
-                $kebisingan_header->lm = $request->lm;
+                $kebisingan_header->id_parameter = $parameter->id;
+                $kebisingan_header->parameter = $parameter->nama_lab;
+                $kebisingan_header->leq = $hasilL8['jumlah_leq'] ?? null;
+                $kebisingan_header->ls = $hasilDuaEmpat['ls'] ?? null;
+                $kebisingan_header->lm = $hasilDuaEmpat['lm'] ?? null;
                 $kebisingan_header->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $kebisingan_header->created_by = $this->karyawan;
                 $kebisingan_header->save();
-                
                 // WS VALUE
                 $ws_value = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
 
@@ -326,12 +345,17 @@ class SoundMeterController extends Controller
                 $ws_value->no_sampel = $request->no_sampel;
                 $ws_value->id_kebisingan_header = $kebisingan_header->id;
                 
-                $ws_value->hasil1 = $request->lsm;
-                
+                if(count($hasil) > 23){
+                    $ws_value->hasil1 = $hasilDuaEmpat['lsm'] ?? null;
+                }else if(count($hasil) > 7){
+                    $ws_value->hasil1 = $hasilL8['hasil'] ?? null;
+                }else{
+                    $ws_value->hasil1 = $hasil['L1']['hasil_laeq'] ?? null;
+                }
                 $ws_value->save();
                 DB::commit();
                 return response()->json([
-                    'message' => 'Data Berhasil disimpan'
+                    'message' => 'Data Berhasil dikalkulasi'
                 ], 200);
             }else{
                 DB::rollBack();
