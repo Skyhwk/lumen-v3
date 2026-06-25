@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\{
     MasterCabang,
+    MasterDivisi,
     MasterSupplier,
     PurchaseOrderDocument,
     PurchaseOrderDocumentRevision,
@@ -20,6 +21,15 @@ use Illuminate\Support\Facades\Validator;
 
 class PurchaseOrdersController extends Controller
 {
+    private const PO_CREATION_FINANCE_STATUSES = ['Waiting to Create PO', 'On Process'];
+
+    private const PO_CREATION_BLOCKED_FINANCE_STATUSES = [
+        'Waiting to Delegate',
+        'Rejected',
+        'Void',
+        'Distributed',
+    ];
+
     private const ROMAN_MONTHS = [
         '01' => 'I', '02' => 'II', '03' => 'III', '04' => 'IV',
         '05' => 'V', '06' => 'VI', '07' => 'VII', '08' => 'VIII',
@@ -43,7 +53,7 @@ class PurchaseOrdersController extends Controller
         if ($scope === 'pending') {
             $purchaseRequests = $purchaseRequests
                 ->whereRaw($this->remainingPoAllocationSql('>'))
-                ->whereNotIn('finance_status', ['Rejected', 'Void', 'Distributed']);
+                ->whereNotIn('finance_status', self::PO_CREATION_BLOCKED_FINANCE_STATUSES);
         } else {
             $purchaseRequests = $purchaseRequests->where('finance_status', 'On Process');
         }
@@ -68,11 +78,7 @@ class PurchaseOrdersController extends Controller
                 });
             })
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
-            ->filterColumn('requester_divisi', function($query, $keyword) {
-                $query->whereHas('employee.divisi', function($q) use ($keyword) {
-                    $q->where('nama_divisi', 'like', "%{$keyword}%");
-                });
-            })
+            ->filterColumn('requester_divisi', fn($query, $keyword) => $this->applyRequesterDivisiFilter($query, $keyword, 'employee'))
             ->addColumn('finance_display_status', fn($row) => $this->resolveFinanceDisplayStatus($row))
             ->addColumn('allocated_po_qty', fn($row) => $this->getAllocatedPoQty($row))
             ->addColumn('remaining_po_qty', fn($row) => $this->getRemainingPoQty($row))
@@ -94,7 +100,13 @@ class PurchaseOrdersController extends Controller
                 $query->where('is_voided', false)->orWhereNull('is_voided');
             })
             ->whereIn('po_status', ['draft', 'active'])
-            ->latest('id');
+            ->whereHas('purchaseRequest', function ($query) {
+                $query->where('finance_status', '!=', 'Waiting to Delegate');
+            });
+
+        PurchaseReceiptService::applyExcludeFullyDistributedPoFilter($poDocuments);
+
+        $poDocuments = $poDocuments->latest('id');
 
         return DataTables::of($poDocuments)
             ->addColumn('purchase_request_id', fn($row) => $row->purchase_request_id)
@@ -147,11 +159,7 @@ class PurchaseOrdersController extends Controller
                 });
             })
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi(optional($row->purchaseRequest)->employee))
-            ->filterColumn('requester_divisi', function($query, $keyword) {
-                $query->whereHas('purchaseRequest.employee.divisi', function($q) use ($keyword) {
-                    $q->where('nama_divisi', 'like', "%{$keyword}%");
-                });
-            })
+            ->filterColumn('requester_divisi', fn($query, $keyword) => $this->applyRequesterDivisiFilter($query, $keyword, 'purchaseRequest.employee'))
             ->addColumn('po_display_status', fn($row) => $this->resolvePoDisplayStatus($row))
             ->addColumn('revision_no', fn($row) => $row->revision_no ?? 1)
             ->filterColumn('revision_no', function($query, $keyword) {
@@ -160,7 +168,7 @@ class PurchaseOrdersController extends Controller
                 });
             })
             ->addColumn('can_update', fn($row) => $row->po_status === 'draft')
-            ->addColumn('can_process', fn($row) => $row->po_status === 'draft')
+            ->addColumn('can_process', fn($row) => $row->po_status === 'draft' && $row->purchaseRequest && $this->canProcessPo($row->purchaseRequest))
             ->addColumn('can_revise', fn($row) => $this->canRevisePoDocument($row))
             ->addColumn('can_void', fn($row) => in_array($row->po_status, ['draft', 'active'], true))
             ->addColumn('po_created_at', fn($row) => $row->created_at)
@@ -252,6 +260,12 @@ class PurchaseOrdersController extends Controller
         $purchaseRequest = PurchaseRequest::with('items')->findOrFail($request->id);
 
         if (!$this->canCreateAdditionalPo($purchaseRequest)) {
+            if ($purchaseRequest->finance_status === 'Waiting to Delegate') {
+                return response()->json([
+                    'message' => 'PR belum disetujui purchasing. Silakan approve di Purchase Request Approval terlebih dahulu.',
+                ], 422);
+            }
+
             return response()->json(['message' => 'Permintaan tidak dalam status siap dibuat PO'], 422);
         }
 
@@ -409,6 +423,16 @@ class PurchaseOrdersController extends Controller
         }
 
         $purchaseRequest = PurchaseRequest::with('items')->findOrFail($request->id);
+
+        if (!$this->canProcessPo($purchaseRequest)) {
+            if ($purchaseRequest->finance_status === 'Waiting to Delegate') {
+                return response()->json([
+                    'message' => 'PR belum disetujui purchasing. Silakan approve di Purchase Request Approval terlebih dahulu.',
+                ], 422);
+            }
+
+            return response()->json(['message' => 'PO tidak dapat diproses pada tahap ini'], 422);
+        }
 
         if (!$request->po_document_id) {
             return response()->json(['message' => 'PO document wajib dipilih'], 422);
@@ -784,7 +808,20 @@ class PurchaseOrdersController extends Controller
             return false;
         }
 
-        if (in_array($purchaseRequest->finance_status, ['Rejected', 'Void', 'Distributed'], true)) {
+        if (in_array($purchaseRequest->finance_status, self::PO_CREATION_BLOCKED_FINANCE_STATUSES, true)) {
+            return false;
+        }
+
+        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
+    }
+
+    private function canProcessPo(PurchaseRequest $purchaseRequest): bool
+    {
+        if (!$purchaseRequest->is_active) {
+            return false;
+        }
+
+        if (in_array($purchaseRequest->finance_status, ['Waiting to Delegate', 'Rejected', 'Void'], true)) {
             return false;
         }
 
@@ -835,7 +872,7 @@ class PurchaseOrdersController extends Controller
             return;
         }
 
-        $purchaseRequest->po_number = $latestPo->po_number ?? $purchaseRequest->po_number;
+        $purchaseRequest->po_number = PurchaseReceiptService::formatPoNumbersDisplay($purchaseRequest) ?: $purchaseRequest->po_number;
         $processedQty = round((float) $activePos->where('po_status', 'active')->sum('quantity'), 2);
 
         if ($activeCount > 0) {
@@ -851,6 +888,8 @@ class PurchaseOrdersController extends Controller
             } else {
                 PurchaseReceiptService::syncFinanceStatus($purchaseRequest);
             }
+
+            PurchaseReceiptService::reopenIfIncomplete($purchaseRequest);
         } elseif ($draftCount > 0) {
             $purchaseRequest->finance_status = 'On Process';
         } elseif ($remainingQty > 0) {
@@ -868,6 +907,44 @@ class PurchaseOrdersController extends Controller
         $allocatedQtySql = '(SELECT COALESCE(SUM(pod.quantity), 0) FROM purchase_order_documents pod WHERE pod.purchase_request_id = purchase_requests.id AND (pod.is_voided = 0 OR pod.is_voided IS NULL) AND pod.po_status IN (\'draft\', \'active\'))';
 
         return "{$itemQtySql} - {$allocatedQtySql} {$operator} 0";
+    }
+
+    private function applyRequesterDivisiFilter($query, string $keyword, string $employeeRelation): void
+    {
+        $matchingDivisiIds = MasterDivisi::where('is_active', true)
+            ->where('nama_divisi', 'like', "%{$keyword}%")
+            ->pluck('id');
+
+        $applyEmployeeMatch = function ($outerQuery, string $createdByColumn) use ($keyword, $matchingDivisiIds) {
+            $outerQuery->whereExists(function ($sub) use ($keyword, $matchingDivisiIds, $createdByColumn) {
+                $sub->select(DB::raw(1))
+                    ->from('master_karyawan as mk')
+                    ->whereRaw("{$createdByColumn} COLLATE utf8mb4_unicode_ci = mk.nama_lengkap COLLATE utf8mb4_unicode_ci")
+                    ->where(function ($q) use ($keyword, $matchingDivisiIds) {
+                        $q->where('mk.department', 'like', "%{$keyword}%");
+
+                        if ($matchingDivisiIds->isNotEmpty()) {
+                            $q->orWhereIn('mk.id_department', $matchingDivisiIds);
+                        }
+
+                        $q->orWhereExists(function ($divSub) use ($keyword) {
+                            $divSub->select(DB::raw(1))
+                                ->from('master_divisi as md')
+                                ->whereColumn('mk.id_department', 'md.id')
+                                ->where('md.nama_divisi', 'like', "%{$keyword}%");
+                        });
+                    });
+            });
+        };
+
+        if ($employeeRelation === 'employee') {
+            $applyEmployeeMatch($query, 'purchase_requests.created_by');
+            return;
+        }
+
+        $query->whereHas('purchaseRequest', function ($prQuery) use ($applyEmployeeMatch) {
+            $applyEmployeeMatch($prQuery, 'purchase_requests.created_by');
+        });
     }
 
     private function snapshotPoRevision(PurchaseOrderDocument $poDocument, ?string $reason): void
@@ -903,6 +980,29 @@ class PurchaseOrdersController extends Controller
         }
 
         if ($poDocument->po_status === 'active') {
+            $vendorReceived = PurchaseReceiptService::getPoVendorReceivedTotal($poDocument->id);
+            $target = (float) $poDocument->quantity;
+
+            if ($target > 0 && $vendorReceived >= $target) {
+                $confirmed = PurchaseReceiptService::getPoUserConfirmedTotal($poDocument->id);
+
+                if ($confirmed >= $target) {
+                    return 'Distributed';
+                }
+
+                if (PurchaseReceiptBatch::where('purchase_order_document_id', $poDocument->id)
+                    ->whereNotNull('handover_number')
+                    ->exists()) {
+                    return 'Waiting User Confirm';
+                }
+
+                return 'Waiting User Receipt';
+            }
+
+            if ($vendorReceived > 0) {
+                return 'Partial Vendor Receipt';
+            }
+
             return 'Waiting Vendor Receipt';
         }
 

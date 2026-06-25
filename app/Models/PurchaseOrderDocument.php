@@ -24,4 +24,9 @@ class PurchaseOrderDocument extends Sector
     {
         return $this->hasMany(PurchaseOrderDocumentRevision::class, 'purchase_order_document_id')->orderByDesc('revision_no');
     }
+
+    public function receiptBatches()
+    {
+        return $this->hasMany(PurchaseReceiptBatch::class, 'purchase_order_document_id')->orderBy('batch_no');
+    }
 }
