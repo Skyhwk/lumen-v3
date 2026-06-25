@@ -24,7 +24,7 @@
 
     function renderCaretUpHtml($color = '#000')
     {
-        return '<span style="display:inline-block;width:0;height:0;margin-left:2px;vertical-align:middle;border-left:3px solid transparent;border-right:3px solid transparent;border-bottom:5px solid ' . $color . ';"></span>';
+        return '<span>▲</span>';
     }
 
     $caretUpIndicator = renderCaretUpHtml();
