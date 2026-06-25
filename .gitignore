@@ -8,7 +8,6 @@
 Homestead.json
 Homestead.yaml
 .env
-GEMINI.md
 .phpunit.result.cache
 composer.lock
 docker-compose.yml
