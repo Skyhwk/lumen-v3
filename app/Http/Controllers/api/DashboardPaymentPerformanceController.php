@@ -26,17 +26,22 @@ class DashboardPaymentPerformanceController extends Controller
         }
 
         $days = $paymentRows->pluck('payment_days');
+        $positiveDays = $days->filter(fn ($day) => $day > 0);
         $companyStats = $this->buildCompanyStats($paymentRows);
 
         return response()->json([
             'year' => $year,
             'summaryCards' => $this->buildSummaryCards(
-                $days->min(),
+                $positiveDays->isNotEmpty() ? $positiveDays->min() : null,
                 $days->max(),
                 round($days->avg(), 1)
             ),
             'fastestCompanies' => $this->mapCompanyRanking(
-                $companyStats->sortBy('avg_days')->take(10)->values()
+                $companyStats
+                    ->filter(fn ($company) => $company->avg_days > 0)
+                    ->sortBy('avg_days')
+                    ->take(10)
+                    ->values()
             ),
             'slowestCompanies' => $this->mapCompanyRanking(
                 $companyStats->sortByDesc('avg_days')->take(10)->values()
@@ -68,19 +73,16 @@ class DashboardPaymentPerformanceController extends Controller
                 dq.pelanggan_ID,
                 DATEDIFF(
                     STR_TO_DATE(SUBSTRING_INDEX(dq.tanggal_pembayaran, ',', 1), '%Y-%m-%d'),
-                    DATE(inv.tgl_invoice)
+                    DATE(dq.tanggal_order)
                 ) AS payment_days
             FROM daily_qsd dq
-            INNER JOIN invoice inv
-                ON inv.no_invoice = TRIM(REPLACE(SUBSTRING_INDEX(dq.no_invoice, ',', 1), ' (Lunas)', ''))
-                AND inv.is_active = 1
             WHERE dq.is_invoicing = 1
                 AND dq.tanggal_pembayaran IS NOT NULL
-                AND dq.no_invoice IS NOT NULL
+                AND dq.tanggal_order IS NOT NULL
                 AND YEAR(dq.tanggal_kelompok) = ?
                 AND DATEDIFF(
                     STR_TO_DATE(SUBSTRING_INDEX(dq.tanggal_pembayaran, ',', 1), '%Y-%m-%d'),
-                    DATE(inv.tgl_invoice)
+                    DATE(dq.tanggal_order)
                 ) >= 0
         ", [$year]));
     }
