@@ -18,8 +18,6 @@ class FormulirController extends Controller
                 'nama_formulir',
                 'source',
                 'url_form',
-                'source as Source',
-                'url_form as Link Spreadsheet',
                 'type',
                 'created_by',
                 'updated_by',
