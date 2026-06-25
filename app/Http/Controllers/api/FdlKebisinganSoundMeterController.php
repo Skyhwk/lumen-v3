@@ -13,6 +13,7 @@ use App\Services\NotificationFdlService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class FdlKebisinganSoundMeterController extends Controller
@@ -21,7 +22,7 @@ class FdlKebisinganSoundMeterController extends Controller
     {
         $this->autoBlock();
 
-        $data = DataLapanganKebisinganBySoundMeter::with(['detail', 'catatan', 'kebisinganHeader'])->orderBy('id', 'desc');
+        $data = DataLapanganKebisinganBySoundMeter::with(['detail', 'catatan', 'kebisinganHeader', 'kebisinganHeader.ws_udara'])->orderBy('id', 'desc');
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -118,7 +119,7 @@ class FdlKebisinganSoundMeterController extends Controller
             $header->lm = $calculation['lm'];
             $header->min = $calculation['min'];
             $header->max = $calculation['max'];
-                        $header->data_per_shift = json_encode($calculation['data_per_shift']);
+            $header->data_per_shift = json_encode($calculation['data_per_shift']);
             $header->suhu_udara = $data->suhu_udara;
             $header->kelembapan_udara = $data->kelembapan_udara;
             $header->is_approved = true;
@@ -138,7 +139,12 @@ class FdlKebisinganSoundMeterController extends Controller
             $wsValue->satuan = 'dBA';
             $wsValue->save();
 
-            $data->is_approve = true;
+            if (Schema::hasColumn($data->getTable(), 'is_approved')) {
+                $data->is_approved = true;
+            }
+            if (Schema::hasColumn($data->getTable(), 'is_approve')) {
+                $data->is_approve = true;
+            }
             $data->approved_by = $this->karyawan;
             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->rejected_at = null;
@@ -172,7 +178,12 @@ class FdlKebisinganSoundMeterController extends Controller
             return response()->json(['message' => 'Data lapangan tidak ditemukan'], 404);
         }
 
-        $data->is_approve = false;
+        if (Schema::hasColumn($data->getTable(), 'is_approved')) {
+            $data->is_approved = false;
+        }
+        if (Schema::hasColumn($data->getTable(), 'is_approve')) {
+            $data->is_approve = false;
+        }
         $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
         $data->rejected_by = $this->karyawan;
         $data->approved_by = null;
@@ -419,7 +430,7 @@ class FdlKebisinganSoundMeterController extends Controller
             'min' => count($dbValues) ? min($dbValues) : null,
             'max' => count($dbValues) ? max($dbValues) : null,
             'shift_summary' => $shiftSummary,
-                    'data_per_shift' => array_values($shiftSummary),
+            'data_per_shift' => array_values($shiftSummary),
         ];
     }
 
