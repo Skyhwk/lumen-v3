@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Helpers\WorkerInternalMailSync;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use PhpImap\Mailbox;
 use PHPMailer\PHPMailer\PHPMailer;
@@ -9,6 +11,9 @@ use Repository;
 
 class InternalMailService
 {
+    public const SYNC_STALE_SECONDS = 180;
+    public const SYNC_LOCK_SECONDS = 90;
+
     private const CACHE_TTL = 120;
     private const AUTH_COOLDOWN = 300;
     private const INITIAL_SYNC_LIMIT = 500;
@@ -71,6 +76,112 @@ class InternalMailService
         return json_decode($raw, true);
     }
 
+    public function requestSync(string $folder = 'inbox', bool $force = false): void
+    {
+        if (!$this->getSettings()) {
+            return;
+        }
+
+        WorkerInternalMailSync::pushPending($this->idKaryawan, $this->legacyKey, $folder, $force);
+    }
+
+    public function isSyncPending(): bool
+    {
+        if (Cache::has($this->syncLockKey())) {
+            return true;
+        }
+
+        $queue = Cache::get('mail_sync_pending_queue', []);
+
+        if (!is_array($queue)) {
+            return false;
+        }
+
+        foreach ($queue as $entry) {
+            if ((int) ($entry['user'] ?? 0) === $this->idKaryawan) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function runBoundedSync(string $folder = 'inbox', bool $forceFull = false, int $maxSeconds = 45): array
+    {
+        if (!$this->getSettings()) {
+            return ['skipped' => true, 'reason' => 'not_configured'];
+        }
+
+        if (!$this->acquireSyncLock()) {
+            return ['skipped' => true, 'reason' => 'locked'];
+        }
+
+        $startedAt = microtime(true);
+
+        try {
+            $newCount = $this->syncFolderIndex($folder, $forceFull);
+            $this->refreshFolderUnreadFromImap($folder);
+
+            if ($folder === 'inbox' && (microtime(true) - $startedAt) < ($maxSeconds - 12)) {
+                $this->warmUnreadUidCache();
+            }
+
+            if ($folder === 'inbox' && (microtime(true) - $startedAt) < ($maxSeconds - 5)) {
+                try {
+                    $this->syncFolderIndex('outbox', false);
+                } catch (\Throwable $e) {
+                    // outbox opsional
+                }
+            }
+
+            return [
+                'skipped'    => false,
+                'new_count'  => $newCount,
+                'duration'   => round(microtime(true) - $startedAt, 2),
+                'synced_at'  => date('c'),
+            ];
+        } finally {
+            $this->releaseSyncLock();
+        }
+    }
+
+    private function syncLockKey(): string
+    {
+        return 'mail_sync_lock:' . $this->idKaryawan;
+    }
+
+    private function acquireSyncLock(): bool
+    {
+        return Cache::add($this->syncLockKey(), time(), self::SYNC_LOCK_SECONDS);
+    }
+
+    private function releaseSyncLock(): void
+    {
+        Cache::forget($this->syncLockKey());
+    }
+
+    private function warmUnreadUidCache(): void
+    {
+        $connection = $this->connect('inbox');
+
+        try {
+            $this->getUnreadUidList($connection, 'date_desc', '');
+        } finally {
+            @\imap_close($connection);
+            $this->clearImapErrors();
+        }
+    }
+
+    private function appendSyncMeta(array $result, ?array $meta = null): array
+    {
+        $meta = $meta ?? $this->getFolderMeta('inbox') ?? [];
+
+        $result['sync_pending'] = $this->isSyncPending();
+        $result['last_synced_at'] = $meta['synced_at'] ?? null;
+
+        return $result;
+    }
+
     public function checkUpdates(string $folder = 'inbox'): array
     {
         if (!$this->getSettings()) {
@@ -122,13 +233,8 @@ class InternalMailService
 
         $newCount = $this->estimateNewMessageCount($meta, $status);
 
-        if ($folder === 'inbox' && $newCount > 0) {
-            try {
-                $this->syncFolderIndex($folder, false);
-                $status = $this->fetchMailboxStatus($folder);
-            } catch (\Throwable $e) {
-                // Lanjut dengan status terakhir
-            }
+        if ($folder === 'inbox' && ($changed || $newCount > 0)) {
+            $this->requestSync($folder, $newCount > 0);
         }
 
         if ($changed || ($folder === 'inbox' && $newCount > 0)) {
@@ -147,6 +253,7 @@ class InternalMailService
             'total'         => (int) $status['total'],
             'new_count'     => $newCount,
             'needs_refresh' => $changed && $folder === 'inbox',
+            'sync_pending'  => $this->isSyncPending(),
         ];
     }
 
@@ -173,13 +280,13 @@ class InternalMailService
         $indexedCount = (int) ($meta['indexed_count'] ?? 0);
         $hasIndex = $indexedCount > 0;
         $stale = empty($meta) || empty($meta['synced_at'])
-            || (time() - strtotime($meta['synced_at'])) > self::CACHE_TTL;
+            || (time() - strtotime($meta['synced_at'])) > self::SYNC_STALE_SECONDS;
 
         if ($block = $this->getAuthBlock()) {
             if ($hasIndex) {
                 $result = $this->queryEmailList($folder, $page, $perPage, $sort, $filter, $query, $meta);
                 $result['error'] = $block['message'];
-                return $result;
+                return $this->appendSyncMeta($result, $meta);
             }
             throw new \RuntimeException($block['message']);
         }
@@ -190,15 +297,21 @@ class InternalMailService
         if (!$skipSync && empty($query)) {
             try {
                 if ($forceRefresh) {
-                    $newCount = $this->syncFolderIndex($folder, true);
+                    $syncResult = $this->runBoundedSync($folder, true, 30);
+                    $newCount = (int) ($syncResult['new_count'] ?? 0);
+                    $meta = $this->getFolderMeta($folder) ?? $meta;
                 } elseif (!$hasIndex) {
-                    $newCount = $this->syncFolderIndex($folder, false);
-                } elseif ($stale || $incrementalSync) {
-                    $newCount = $this->syncFolderIndex($folder, false);
+                    $syncResult = $this->runBoundedSync($folder, false, 25);
+                    $newCount = (int) ($syncResult['new_count'] ?? 0);
+                    $meta = $this->getFolderMeta($folder) ?? $meta;
+                    $hasIndex = (int) ($meta['indexed_count'] ?? 0) > 0;
                 } else {
-                    $this->ensurePageIndexed($folder, $page, $perPage);
+                    if ($stale || $incrementalSync) {
+                        $this->requestSync($folder, false);
+                    } elseif ($page * $perPage > $indexedCount) {
+                        $this->requestSync($folder, false);
+                    }
                 }
-                $meta = $this->getFolderMeta($folder) ?? $meta;
             } catch (\Throwable $e) {
                 $syncError = $e->getMessage();
                 if (!$hasIndex) {
@@ -207,26 +320,18 @@ class InternalMailService
             }
         }
 
-        if ($folder === 'inbox' && !$skipSync) {
+        if ($folder === 'inbox' && $filter === 'unread' && !$skipSync) {
             try {
-                $this->refreshFolderUnreadFromImap($folder);
-                $meta = $this->getFolderMeta($folder) ?? $meta;
-            } catch (\Throwable $e) {
-                // abaikan — unread dari meta terakhir
-            }
-        }
-
-        if ($folder === 'inbox' && $filter === 'unread' && empty($query) && !$skipSync) {
-            try {
-                $result = $this->fetchUnreadListFromImap($folder, $page, $perPage, $sort, $meta);
+                $result = $this->fetchUnreadListFromImap($folder, $page, $perPage, $sort, $meta, $query);
                 $result['new_count'] = $newCount;
                 $result['from_cache'] = false;
                 if ($syncError) {
                     $result['error'] = $syncError;
                 }
-                return $result;
+                return $this->appendSyncMeta($result, $meta);
             } catch (\Throwable $e) {
-                $syncError = $syncError ?: $e->getMessage();
+                $this->requestSync($folder, false);
+                throw $e;
             }
         }
 
@@ -237,7 +342,7 @@ class InternalMailService
             $result['error'] = $syncError;
         }
 
-        return $result;
+        return $this->appendSyncMeta($result, $meta);
     }
 
     public function getDetail(string $folder, $uid): array
@@ -328,6 +433,11 @@ class InternalMailService
         @\imap_close($connection);
         $this->clearImapErrors();
         $this->updateIndexedEmailFlag($folder, $uid, $seen);
+
+        if ($folder === 'inbox') {
+            $this->invalidateUnreadUidCache();
+            $this->requestSync($folder, false);
+        }
     }
 
     public function moveToTrash(string $folder, $uid): void
@@ -1026,12 +1136,17 @@ class InternalMailService
         int $page,
         int $perPage,
         ?string $sort,
-        ?array $meta
+        ?array $meta,
+        ?string $query = null
     ): array {
+        if (function_exists('imap_timeout')) {
+            @\imap_timeout(\IMAP_READTIMEOUT, 90);
+        }
+
         $connection = $this->connect($folder);
 
         try {
-            $uids = $this->searchUnreadUids($connection, $sort);
+            $uids = $this->getUnreadUidList($connection, $sort, $query);
             $total = count($uids);
             $offset = max(0, ($page - 1) * $perPage);
             $pageUids = array_slice($uids, $offset, $perPage);
@@ -1076,11 +1191,12 @@ class InternalMailService
             }
 
             $imapUnread = (int) ($meta['unread_count'] ?? 0);
+            $listTotal = $query ? $total : max($total, $imapUnread);
 
             return [
                 'emails'       => $emails,
-                'total'        => max($total, $imapUnread),
-                'unread_count' => $imapUnread > 0 ? $imapUnread : $total,
+                'total'        => $listTotal,
+                'unread_count' => $query ? $total : ($imapUnread > 0 ? $imapUnread : $total),
                 'indexed'      => (int) ($meta['indexed_count'] ?? 0),
             ];
         } finally {
@@ -1089,8 +1205,59 @@ class InternalMailService
         }
     }
 
-    private function searchUnreadUids($connection, ?string $sort): array
+    private function unreadUidCacheKey(): string
     {
+        return 'mail_unread_uids:' . $this->idKaryawan;
+    }
+
+    private function invalidateUnreadUidCache(): void
+    {
+        Cache::forget($this->unreadUidCacheKey());
+    }
+
+    private function getUnreadUidList($connection, ?string $sort, ?string $query): array
+    {
+        $sortKey = $sort ?: 'date_desc';
+        $queryKey = trim((string) $query);
+        $cacheKey = $this->unreadUidCacheKey();
+        $cached = Cache::get($cacheKey);
+
+        if (
+            is_array($cached)
+            && ($cached['sort'] ?? '') === $sortKey
+            && ($cached['query'] ?? '') === $queryKey
+            && (time() - (int) ($cached['at'] ?? 0)) < self::CACHE_TTL
+            && is_array($cached['uids'] ?? null)
+        ) {
+            return $cached['uids'];
+        }
+
+        $uids = $this->searchUnreadUids($connection, $sortKey, $queryKey);
+
+        Cache::put($cacheKey, [
+            'sort'  => $sortKey,
+            'query' => $queryKey,
+            'uids'  => $uids,
+            'at'    => time(),
+        ], self::CACHE_TTL);
+
+        return $uids;
+    }
+
+    private function searchUnreadUids($connection, ?string $sort, ?string $query = null): array
+    {
+        $query = trim((string) $query);
+
+        if ($query !== '') {
+            $term = str_replace(['\\', '"'], '', $query);
+            $criteria = 'UNSEEN TEXT "' . $term . '"';
+            $uids = @\imap_search($connection, $criteria, \SE_UID) ?: [];
+            $uids = array_map('intval', $uids);
+            rsort($uids);
+
+            return $uids;
+        }
+
         [$criteria, $reverse] = $this->resolveImapSortCriteria($sort);
 
         $uids = @\imap_sort($connection, $criteria, $reverse ? 1 : 0, \SE_UID, 'UNSEEN');
