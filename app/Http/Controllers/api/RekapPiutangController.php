@@ -110,10 +110,40 @@ class RekapPiutangController extends Controller
                 ];
             }
 
+            $sqlUnbilled = "
+                SELECT SUM(oh.piutang) AS total_piutang_unbilled
+                FROM order_header AS oh
+                LEFT JOIN invoice AS inv ON oh.no_order = inv.no_order AND inv.is_active = 1
+                WHERE YEAR(oh.tanggal_order) = ? 
+                  AND oh.is_active = 1 
+                  AND oh.is_revisi = 0
+                  AND inv.id IS NULL
+            ";
+            $unbilledResult = DB::select($sqlUnbilled, [$year]);
+            $unbilledTotal = $unbilledResult[0]->total_piutang_unbilled ?? 0;
+
+            $prevYear = $year - 1;
+            $prevInvoices = Invoice::with(['recordPembayaran', 'recordWithdraw'])
+                ->selectRaw('no_invoice, SUM(nilai_tagihan) as nilai_tagihan')
+                ->whereYear('tgl_invoice', $prevYear)
+                ->where('is_active', true)
+                ->groupBy('no_invoice')
+                ->get();
+
+            $prevYearTotal = 0.0;
+            foreach ($prevInvoices as $inv) {
+                $nilai_tagihan = (float)$inv->nilai_tagihan;
+                $nilai_pembayaran = (float)($inv->recordPembayaran->sum('nilai_pembayaran') ?? 0) + (float)($inv->recordWithdraw->sum('nilai_pembayaran') ?? 0);
+                $piutang = max(0, floor($nilai_tagihan - $nilai_pembayaran));
+                $prevYearTotal += $piutang;
+            }
+
             return response()->json([
                 'status' => 'success',
                 'data' => $result,
-                'due_today_total' => $dueTodayTotal
+                'due_today_total' => $dueTodayTotal,
+                'unbilled_total' => (float)$unbilledTotal,     // <-- DATA BARU
+                'prev_year_total' => (float)$prevYearTotal     // <-- DATA BARU
             ]);
         } catch (\Exception $e) {
             return response()->json([
