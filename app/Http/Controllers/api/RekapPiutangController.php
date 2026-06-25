@@ -114,7 +114,10 @@ class RekapPiutangController extends Controller
                 SELECT SUM(oh.piutang) AS total_piutang_unbilled
                 FROM order_header AS oh
                 LEFT JOIN invoice AS inv ON oh.no_order = inv.no_order AND inv.is_active = 1
-                WHERE YEAR(oh.tanggal_order) = ? AND oh.is_active = 1 AND inv.id IS NULL
+                WHERE YEAR(oh.tanggal_order) = ? 
+                  AND oh.is_active = 1 
+                  AND oh.is_revisi = 0
+                  AND inv.id IS NULL
             ";
             $unbilledResult = DB::select($sqlUnbilled, [$year]);
             $unbilledTotal = $unbilledResult[0]->total_piutang_unbilled ?? 0;
