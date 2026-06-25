@@ -11,7 +11,7 @@ use App\Models\Absensi;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\SendMqttAccess;
-use phpMQTT;
+use Bluerhinos\phpMQTT;
 
 class MesinAbsenHandler extends BaseController
 {
