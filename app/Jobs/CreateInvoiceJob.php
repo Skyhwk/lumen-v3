@@ -143,6 +143,16 @@ class CreateInvoiceJob extends Job
         $noInvoice = $this->generateNoInvoice($cekRekening, $rekening);
         $insert = $this->buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, $first, $firstPeriode);
 
+        if ((float) ($insert['nilai_tagihan'] ?? 0) <= 10) {
+            Log::info('CreateInvoiceJob: nilai tagihan nol atau terlalu kecil, invoice dilewati.', [
+                'no_order' => $orderHeader->no_order,
+                'no_document' => $quotation->no_document,
+                'periode' => $periode,
+                'nilai_tagihan' => $insert['nilai_tagihan'] ?? 0,
+            ]);
+            return null;
+        }
+
         Invoice::insert($insert);
         $this->generateQrInvoice($noInvoice, $insert);
 
