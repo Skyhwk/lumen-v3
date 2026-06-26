@@ -30,7 +30,7 @@ class MasterTargetPenjadwalanController extends Controller
             foreach($months as $m) {
                 $key = $row->id . '_' . $m;
                 if(isset($logs[$key])) {
-                    $rowLogs[$m] = $logs[$key]->first();
+                    $rowLogs[$m] = $logs[$key]->values()->all();
                 }
             }
             $row->logs = $rowLogs;
@@ -97,6 +97,7 @@ class MasterTargetPenjadwalanController extends Controller
             // Simpan log perubahan (jika tabel log sudah disiapkan)
             DB::table('log_target_penjadwalan')->insert([
                 'id_target' => $data->id,
+                'tahun' => $data->tahun,
                 'bulan' => $bulanField,
                 'nilai_lama' => $data->{$bulanField},
                 'nilai_baru' => $request->nilai_baru,
