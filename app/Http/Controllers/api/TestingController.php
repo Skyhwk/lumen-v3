@@ -1735,7 +1735,6 @@ class TestingController extends Controller
                         return response()->json(["data" => $chekRegen], 200);
                     }
                 case 'cs_render':
-
                     $orderDetail = OrderDetail::where('tanggal_sampling', $request->tanggal_sampling)
                         ->where('no_order', $request->no_order)
                         ->where('is_active', 1)
