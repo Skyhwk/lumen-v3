@@ -50,11 +50,20 @@ class DailyBillingsController extends Controller
         //     ->where('invoice.is_active', true)
         //     ->where('is_whitelist', false)
         //     ->where('invoice.tgl_jatuh_tempo', $request->tgl_jatuh_tempo);
+        $dailyQsdSales = DB::table('daily_qsd')
+            ->select(
+                'no_quotation',
+                DB::raw('MAX(sales_nama) AS sales_nama')
+            )
+            ->whereNotNull('sales_nama')
+            ->groupBy('no_quotation');
+
         $invoices = Invoice::with('followup_billings') // Data followup diambil lewat sini saja
         ->select(
             'invoice.no_invoice',
             DB::raw('COALESCE(MAX(order_header.nama_perusahaan), MAX(order_header.konsultan)) AS nama_customer'),
             DB::raw('MAX(order_header.konsultan) AS consultant'),
+            DB::raw('MAX(daily_qsd_sales.sales_nama) AS sales_nama'),
             DB::raw('floor(MAX(invoice.nilai_tagihan)) AS nilai_tagihan'), 
             DB::raw('MAX(invoice.tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
             DB::raw('(MAX(invoice.nilai_pelunasan) + COALESCE(SUM(withdraw.nilai_pembayaran), 0)) AS nilai_pelunasan'),
@@ -62,6 +71,9 @@ class DailyBillingsController extends Controller
             DB::raw('MAX(invoice.keterangan) AS keterangan')
         )
         ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+        ->leftJoinSub($dailyQsdSales, 'daily_qsd_sales', function ($join) {
+            $join->on('invoice.no_quotation', '=', 'daily_qsd_sales.no_quotation');
+        })
         ->leftJoin('withdraw', 'invoice.no_invoice', '=', 'withdraw.no_invoice')
         ->groupBy('invoice.no_invoice')
         ->havingRaw('floor(MAX(invoice.nilai_tagihan)) > (COALESCE(MAX(invoice.nilai_pelunasan), 0) + COALESCE(SUM(withdraw.nilai_pembayaran), 0))')
