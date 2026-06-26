@@ -12,7 +12,7 @@ class InternalMailService
 {
     private const CACHE_TTL = 120;
     private const AUTH_COOLDOWN = 300;
-    private const INITIAL_SYNC_LIMIT = 500;
+    private const INITIAL_SYNC_LIMIT = 2000;
     private const CHUNK_SYNC_LIMIT = 200;
     private const TAIL_SYNC_LIMIT = 50;
     private const BACKFILL_MAX_ITERATIONS = 4;
