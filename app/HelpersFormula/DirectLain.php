@@ -23,7 +23,7 @@ class DirectLain {
         $suhu = !empty($ta) ? number_format(array_sum($ta) / count($ta), 1) : 0;
 
         // Inisialisasi default
-        $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = NULL;
+        $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = $c23 = NULL;
         $satuan = NULL;
 
         // Daftar parameter
@@ -31,6 +31,7 @@ class DirectLain {
         $paramO2  = ["O2" ,"O2 (8 Jam)"];
         $paramVoc = ["VOC", "VOC (8 Jam)" , "TVOC 8J (LK-mg)"];
         $paramCO  = ["C O", "CO (8 Jam)", "CO (6 Jam)", "CO (24 Jam)", "CO 6J", "CO (UA)"];
+        $paramTekanan = ["Tekanan Diferensial"];
 
         // Hanya proses kalau jumlah data valid
         if ($jumlahElemen > 0) {
@@ -164,6 +165,16 @@ class DirectLain {
                     $c16 = $c1;
                     $c17 = $c2;
                 }
+
+                // Tekanan Diferensial
+                else if (in_array($row->parameter, $paramTekanan)) {
+                    $c23 = $totalNilai / $jumlahElemen;
+                    
+                    $satuan = "Pa";
+
+                    // cek batas bawah di akhir
+                    $c23 = number_format($c23, 2);
+                }
             }
         }
 
@@ -176,6 +187,7 @@ class DirectLain {
             'c15' => $c15,
             'c16' => $c16,
             'c17' => $c17,
+            'c23' => $c23,
             'satuan' => $satuan,
         ];
     }
