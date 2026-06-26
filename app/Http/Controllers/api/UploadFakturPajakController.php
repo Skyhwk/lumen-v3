@@ -138,6 +138,10 @@ class UploadFakturPajakController extends Controller
             }
 
             $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
+            if (!$inv) {
+                return response()->json(['error' => 'Invoice tidak ditemukan'], 404);
+            }
+
             // Pastikan folder invoice ada
             $folder = public_path('invoice-faktur');
             if (!file_exists($folder)) {
@@ -149,9 +153,10 @@ class UploadFakturPajakController extends Controller
 
             // Simpan file
             $file->move($folder, $fileName);
-            $inv->file_faktur = $fileName;
-            $inv->faktur_pajak = $request->no_faktur;
-            $inv->save();
+            Invoice::where('no_invoice', $inv->no_invoice)->update([
+                'file_faktur' => $fileName,
+                'faktur_pajak' => $request->no_faktur,
+            ]);
 
             $this->generatePDF($inv->no_invoice);
             
@@ -170,6 +175,94 @@ class UploadFakturPajakController extends Controller
         }
     }
 
+    public function indexUploaded(Request $request)
+    {
+        try {
+            $data = Invoice::select(
+                'invoice.no_invoice',
+                DB::raw('MAX(invoice.created_by) AS created_by'),
+                DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
+                DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
+                DB::raw('MAX(faktur_pajak) AS faktur_pajak'),
+                DB::raw('SUM(total_tagihan) AS total_tagihan'),
+                DB::raw('MAX(rekening) AS rekening'),
+                DB::raw('MAX(periode) AS periode_kontrak'),
+                DB::raw('MAX(keterangan) AS keterangan'),
+                DB::raw('MAX(nama_pj) AS nama_pj'),
+                DB::raw('MAX(jabatan_pj) AS jabatan_pj'),
+                DB::raw('MAX(tgl_invoice) AS tgl_invoice'),
+                DB::raw('MAX(no_faktur) AS no_faktur'),
+                DB::raw('MAX(alamat_penagihan) AS alamat_penagihan'),
+                DB::raw('MAX(nama_pic) AS nama_pic'),
+                DB::raw('MAX(no_pic) AS no_pic'),
+                DB::raw('MAX(email_pic) AS email_pic'),
+                DB::raw('MAX(is_custom) AS is_custom'),
+                DB::raw('MAX(invoice.keterangan_tambahan) AS keterangan_tambahan'),
+                DB::raw('MAX(jabatan_pic) AS jabatan_pic'),
+                DB::raw('MAX(invoice.no_po) AS no_po'),
+                DB::raw('MAX(no_spk) AS no_spk'),
+                DB::raw('MAX(tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
+                DB::raw('MAX(filename) AS filename'),
+                DB::raw('MAX(file_pph) AS file_pph'),
+                DB::raw('MAX(file_faktur) AS file_faktur'),
+                DB::raw('MAX(upload_file) AS upload_file'),
+                DB::raw('MAX(order_header.konsultan) AS consultant'),
+                DB::raw('MAX(order_header.no_document) AS document'),
+                DB::raw('MAX(invoice.created_at) AS created_at'),
+                DB::raw('MAX(tgl_pelunasan) AS tgl_pelunasan'),
+                DB::raw('MAX(nilai_pelunasan) AS nilai_pelunasan'),
+                DB::raw('MAX(is_generate) AS is_generate'),
+                DB::raw('MAX(generated_by) AS generated_by'),
+                DB::raw('MAX(generated_at) AS generated_at'),
+                DB::raw('MAX(expired) AS expired'),
+                DB::raw('MAX(invoice.pelanggan_id) AS pelanggan_id'),
+                DB::raw('MAX(invoice.detail_pendukung) AS detail_pendukung'),
+                DB::raw('MAX(invoice.nama_perusahaan) AS nama_customer'),
+                DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
+                DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
+                DB::raw('GROUP_CONCAT(invoice.no_order) AS no_orders'),
+                DB::raw('GROUP_CONCAT(invoice.no_quotation) AS no_quots'),
+                DB::raw('GROUP_CONCAT(CONCAT(order_header.no_document, "_", invoice.no_order)) AS document_order')
+            )
+                ->join('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                ->groupBy('invoice.no_invoice')
+                ->where('invoice.no_invoice', 'LIKE', '%INV/%')
+                ->whereNotNull('invoice.file_faktur')
+                ->where('invoice.is_active', true)
+                ->where('order_header.is_active', true)
+                ->orderBy('invoice.no_invoice', 'DESC');
+
+            return Datatables::of($data)
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                })
+                ->filterColumn('document', function ($query, $keyword) {
+                    $query->whereExists(function ($q) use ($keyword) {
+                        $q->select(DB::raw(1))
+                            ->from('order_header as oh2')
+                            ->whereColumn('oh2.no_order', 'invoice.no_order')
+                            ->whereRaw('LOWER(oh2.no_document) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                    });
+                })
+                ->filterColumn('emailed_at', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_at');
+                    } else {
+                        $data->whereRaw("DATE_FORMAT(emailed_at, '%Y-%m-%d') like ?", ["%$keyword%"]);
+                    }
+                })
+                ->filterColumn('emailed_by', function ($data, $keyword) {
+                    if ($keyword == '-') {
+                        $data->whereNull('emailed_by');
+                    } else {
+                        $data->whereRaw("emailed_by like ?", ["%$keyword%"]);
+                    }
+                })
+                ->make(true);
+        } catch (\Throwable $th) {
+            dd($th);
+        }
+    }
     private static function generatePDF($noInvoice)
     {
         $render = new RenderInvoice();
