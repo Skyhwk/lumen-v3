@@ -737,7 +737,8 @@ class DashboardSmsController extends Controller
             $year = (int) ($request->year ?: Carbon::now()->year);
             $month = (int) ($request->month ?: Carbon::now()->month);
             $month = max(1, min(12, $month));
-            $periode = sprintf('%04d-%02d', $year, $month);
+            $periodType = $request->period_type === 'yearly' ? 'yearly' : 'monthly';
+            $periode = $periodType === 'yearly' ? sprintf('%04d', $year) : sprintf('%04d-%02d', $year, $month);
             $salesIds = null;
 
             if ($request->mode === 'team') {
@@ -753,7 +754,8 @@ class DashboardSmsController extends Controller
 
             return response()->json([
                 'periode' => $periode,
-                'rankings' => $this->buildDailyQsdRankings($periode, $salesIds),
+                'period_type' => $periodType,
+                'rankings' => $this->buildDailyQsdRankings($periode, $salesIds, $periodType),
             ], 200);
         } catch (\Throwable $th) {
             return response()->json([
@@ -787,7 +789,7 @@ class DashboardSmsController extends Controller
         "Dec" => "12",
     ];
 
-    private function buildDailyQsdRankings(?string $periode, ?array $salesIds = null): array
+    private function buildDailyQsdRankings(?string $periode, ?array $salesIds = null, string $periodType = 'monthly'): array
     {
         if (!$periode) {
             return [
@@ -796,9 +798,14 @@ class DashboardSmsController extends Controller
             ];
         }
 
-        $baseQuery = function () use ($periode, $salesIds) {
-            $query = \DB::table('daily_qsd')
-                ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode]);
+        $baseQuery = function () use ($periode, $salesIds, $periodType) {
+            $query = \DB::table('daily_qsd');
+
+            if ($periodType === 'yearly') {
+                $query->whereYear('tanggal_kelompok', $periode);
+            } else {
+                $query->whereRaw("DATE_FORMAT(tanggal_kelompok, '%Y-%m') = ?", [$periode]);
+            }
 
             if (is_array($salesIds) && count($salesIds) > 0) {
                 $query->whereIn('sales_id', $salesIds);
@@ -820,18 +827,19 @@ class DashboardSmsController extends Controller
             ->groupBy('pelanggan_ID')
             ->havingRaw($revenueExpression . ' > 0')
             ->orderByDesc('revenue')
+            ->whereNull('konsultan')
             ->limit(30)
             ->get();
 
         $topConsultants = $baseQuery()
             ->select(
-                'konsultan',
+                \DB::raw('TRIM(konsultan) as konsultan'),
                 \DB::raw('MAX(sales_nama) as sales_nama'),
                 \DB::raw($revenueExpression . ' as revenue')
             )
             ->whereNotNull('konsultan')
-            ->where('konsultan', '!=', '')
-            ->groupBy('konsultan')
+            ->whereRaw("TRIM(konsultan) != ''")
+            ->groupBy(\DB::raw('TRIM(konsultan)'))
             ->havingRaw($revenueExpression . ' > 0')
             ->orderByDesc('revenue')
             ->limit(10)
