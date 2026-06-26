@@ -69,18 +69,21 @@ class FormulirController extends Controller
                     
                     if ($extension === 'pdf') {
                         $pdfBaseName = pathinfo($originalName, PATHINFO_FILENAME);
-                        $pdfFolder = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $pdfBaseName));
-                        $pdfFolder = rtrim($pdfFolder, '_-');
-                        if (empty($pdfFolder)) {
-                            $pdfFolder = 'pdf_' . time();
+                        $pdfBaseNameClean = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $pdfBaseName));
+                        $pdfBaseNameClean = rtrim($pdfBaseNameClean, '_-');
+                        if (empty($pdfBaseNameClean)) {
+                            $pdfBaseNameClean = 'pdf';
                         }
+                        
+                        $timestampVal = time();
+                        $pdfFolder = $pdfBaseNameClean . '_' . $timestampVal;
                         
                         $pdfSubdir = $destinationDir . '/' . $pdfFolder;
                         if (!file_exists($pdfSubdir)) {
                             mkdir($pdfSubdir, 0777, true);
                         }
                         
-                        $tempPdfName = time() . '_' . str_replace(' ', '_', $originalName);
+                        $tempPdfName = $timestampVal . '_' . str_replace(' ', '_', $originalName);
                         $file->move($pdfSubdir, $tempPdfName);
                         $pdfPath = $pdfSubdir . '/' . $tempPdfName;
                         
@@ -105,7 +108,7 @@ class FormulirController extends Controller
                         foreach ($generatedFiles as $gFile) {
                             if (preg_match('/Page-(\d+)\.jpg$/', $gFile, $matches)) {
                                 $pageNum = $matches[1];
-                                $newFilename = $pdfBaseName . '_' . $pageNum . '.jpg';
+                                $newFilename = $pdfBaseNameClean . '_' . $timestampVal . '_' . $pageNum . '.jpg';
                                 $newFilePath = $pdfSubdir . '/' . $newFilename;
                                 rename($gFile, $newFilePath);
                                 $savedFiles[] = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $pdfFolder . '/' . $newFilename;
@@ -136,7 +139,13 @@ class FormulirController extends Controller
                         $allUploaders = array_merge($existingUploaders, $newUploaders);
                         $data['uploader'] = json_encode($allUploaders);
                     } else {
-                        $filename = time() . '_' . str_replace(' ', '_', $originalName);
+                        $nameWithoutExt = pathinfo($originalName, PATHINFO_FILENAME);
+                        $cleanName = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $nameWithoutExt));
+                        $cleanName = rtrim($cleanName, '_-');
+                        if (empty($cleanName)) {
+                            $cleanName = 'document';
+                        }
+                        $filename = $cleanName . '_' . time() . '.' . $extension;
                         $file->move($destinationDir, $filename);
                         
                         $newFile = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $filename;
