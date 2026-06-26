@@ -431,6 +431,10 @@ class OrderDetail extends Sector
             $result->push($this->swabOnMicrobio);
         }
 
+        if ($this->dataLapanganPartikulatMeter()->exists()) {
+            $result->push($this->udaraPartikulat);
+        }
+
         return $result->isEmpty() ? null : $result;
     }
     public function getAnyDataLapanganUdara()
