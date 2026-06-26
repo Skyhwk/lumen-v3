@@ -438,6 +438,7 @@ class DashboardSmsController extends Controller
                 return response()->json([
                     'heading'  => $return,
                     'table'    => $table,
+                    'rankings' => $this->buildDailyQsdRankings($periode),
                     'chart'    => $chart,
                     'piechart' => $piechart,
                     'chartBar' => $result
@@ -596,6 +597,7 @@ class DashboardSmsController extends Controller
                 return response()->json([
                     'heading'  => $return,
                     'table'    => $table,
+                    'rankings' => $this->buildDailyQsdRankings($periode, $bawahanIds),
                     'chart'    => $chart,
                     'piechart' => $piechart,
                 ], 200);
@@ -659,6 +661,7 @@ class DashboardSmsController extends Controller
                 return response()->json([
                     'heading'  => $return,
                     'table'    => null,
+                    'rankings' => $this->buildDailyQsdRankings($periode, [$request->karyawan_id]),
                     'chart'    => $chart,
                     'piechart' => $piechart,
                 ], 200);
@@ -728,6 +731,43 @@ class DashboardSmsController extends Controller
         ], 200);
     }
 
+    public function fetchRankings(Request $request)
+    {
+        try {
+            $year = (int) ($request->year ?: Carbon::now()->year);
+            $month = (int) ($request->month ?: Carbon::now()->month);
+            $month = max(1, min(12, $month));
+            $periodType = $request->period_type === 'yearly' ? 'yearly' : 'monthly';
+            $periode = $periodType === 'yearly' ? sprintf('%04d', $year) : sprintf('%04d-%02d', $year, $month);
+            $salesIds = null;
+
+            if ($request->mode === 'team') {
+                $salesIds = GetBawahan::where('id', str_replace('team_', '', $request->karyawan_id))
+                    ->get()
+                    ->pluck('id')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+            } elseif ($request->mode === 'single' && $request->karyawan_id) {
+                $salesIds = [$request->karyawan_id];
+            }
+
+            return response()->json([
+                'periode' => $periode,
+                'period_type' => $periodType,
+                'rankings' => $this->buildDailyQsdRankings($periode, $salesIds, $periodType),
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'line'    => $th->getLine(),
+                'getFile' => $th->getFile(),
+                'error'   => $th->getMessage(),
+            ], 500);
+        }
+    }
+
     private $bulan = [
         'Januari'   => '01', 'Februari' => '02', 'Maret'    => '03', 'April'    => '04',
         'Mei'       => '05', 'Juni'     => '06', 'Juli'     => '07', 'Agustus'  => '08',
@@ -748,5 +788,67 @@ class DashboardSmsController extends Controller
         "Nov" => "11",
         "Dec" => "12",
     ];
+
+    private function buildDailyQsdRankings(?string $periode, ?array $salesIds = null, string $periodType = 'monthly'): array
+    {
+        if (!$periode) {
+            return [
+                'top_customers' => [],
+                'top_consultants' => [],
+            ];
+        }
+
+        $baseQuery = function () use ($periode, $salesIds, $periodType) {
+            $query = \DB::table('daily_qsd');
+
+            if ($periodType === 'yearly') {
+                $query->whereYear('tanggal_kelompok', $periode);
+            } else {
+                $query->whereRaw("DATE_FORMAT(tanggal_kelompok, '%Y-%m') = ?", [$periode]);
+            }
+
+            if (is_array($salesIds) && count($salesIds) > 0) {
+                $query->whereIn('sales_id', $salesIds);
+            }
+
+            return $query;
+        };
+
+        $revenueExpression = 'SUM(COALESCE(total_revenue, 0))';
+
+        $topCustomers = $baseQuery()
+            ->select(
+                'pelanggan_ID as id_pelanggan',
+                \DB::raw('MAX(nama_perusahaan) as nama_pelanggan'),
+                \DB::raw('MAX(sales_nama) as sales_nama'),
+                \DB::raw($revenueExpression . ' as revenue')
+            )
+            ->whereNotNull('pelanggan_ID')
+            ->groupBy('pelanggan_ID')
+            ->havingRaw($revenueExpression . ' > 0')
+            ->orderByDesc('revenue')
+            ->whereNull('konsultan')
+            ->limit(30)
+            ->get();
+
+        $topConsultants = $baseQuery()
+            ->select(
+                \DB::raw('TRIM(konsultan) as konsultan'),
+                \DB::raw('MAX(sales_nama) as sales_nama'),
+                \DB::raw($revenueExpression . ' as revenue')
+            )
+            ->whereNotNull('konsultan')
+            ->whereRaw("TRIM(konsultan) != ''")
+            ->groupBy(\DB::raw('TRIM(konsultan)'))
+            ->havingRaw($revenueExpression . ' > 0')
+            ->orderByDesc('revenue')
+            ->limit(10)
+            ->get();
+
+        return [
+            'top_customers' => $topCustomers,
+            'top_consultants' => $topConsultants,
+        ];
+    }
 
 }
