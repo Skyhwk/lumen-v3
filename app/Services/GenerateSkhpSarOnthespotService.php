@@ -34,6 +34,42 @@ class GenerateSkhpSarOnthespotService
         ];
     }
 
+    public function renderPdfOnly($header, $generatedBy = 'System')
+    {
+        $header->loadMissing('hasilUji.acuan');
+
+        if (empty($header->no_document)) {
+            $header->no_document = 'ISL-SAR-OS/SKHP/' . $header->no_order;
+        }
+
+        if (empty($header->tanggal_selesai)) {
+            $header->tanggal_selesai = Carbon::now()->format('Y-m-d H:i:s');
+        }
+
+        $this->generateQr($header, $generatedBy);
+
+        $render = new RenderDokumenSkhpOnthespot();
+        $filename = $render->execute(
+            $header,
+            $header->hasilUji,
+            public_path('qr_documents/' . str_replace('/', '_', $header->no_document) . '.svg')
+        );
+
+        $header->file_skhp = $filename;
+        $header->save();
+
+        return $filename;
+    }
+
+    public function resendEmail($header, $generatedBy = 'System')
+    {
+        if (empty($header->file_skhp)) {
+            return false;
+        }
+
+        return $this->sendEmail($header, $header->file_skhp, $generatedBy);
+    }
+
     private function sendEmail($header, $filename, $generatedBy)
     {
         if (empty($header->email)) {

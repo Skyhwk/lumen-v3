@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{PurchaseRequest};
+use App\Models\{PurchaseOrderDocument, PurchaseRequest};
 use App\Services\{KaryawanProfileService, Notification};
 use DataTables;
 use Illuminate\Http\Request;
@@ -59,16 +59,7 @@ class PurchaseRequestApprovalController extends Controller
                     $sub->where('unit', 'like', "%{$keyword}%");
                 });
             })
-            ->filterColumn('requester_divisi', function ($query, $keyword) {
-                $query->whereHas('employee', function ($sub) use ($keyword) {
-                    $sub->where(function ($inner) use ($keyword) {
-                        $inner->where('department', 'like', "%{$keyword}%")
-                            ->orWhereHas('divisi', function ($divisi) use ($keyword) {
-                                $divisi->where('nama_divisi', 'like', "%{$keyword}%");
-                            });
-                    });
-                });
-            })
+            ->filterColumn('requester_divisi', fn($query, $keyword) => KaryawanProfileService::applyRequesterDivisiFilter($query, $keyword))
             ->make(true);
     }
 
@@ -88,7 +79,16 @@ class PurchaseRequestApprovalController extends Controller
         $item = $purchaseRequest->items->first();
 
         if ($request->action === 'approve') {
-            $purchaseRequest->finance_status = 'Waiting to Create PO';
+            $hasActivePoDocuments = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
+                ->where(function ($query) {
+                    $query->where('is_voided', false)->orWhereNull('is_voided');
+                })
+                ->whereIn('po_status', ['draft', 'active'])
+                ->exists();
+
+            $purchaseRequest->finance_status = $hasActivePoDocuments
+                ? 'On Process'
+                : 'Waiting to Create PO';
             $purchaseRequest->delegated_by = $this->karyawan;
             $purchaseRequest->delegated_at = date('Y-m-d H:i:s');
             $purchaseRequest->rejection_finance_note = null;

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
+use Illuminate\Support\Facades\DB;
 
 class KaryawanProfileService
 {
@@ -74,6 +75,33 @@ class KaryawanProfileService
         }
 
         return '-';
+    }
+
+    public static function applyRequesterDivisiFilter($query, string $keyword, string $createdByColumn = 'purchase_requests.created_by'): void
+    {
+        $matchingDivisiIds = MasterDivisi::where('is_active', true)
+            ->where('nama_divisi', 'like', "%{$keyword}%")
+            ->pluck('id');
+
+        $query->whereExists(function ($sub) use ($keyword, $matchingDivisiIds, $createdByColumn) {
+            $sub->select(DB::raw(1))
+                ->from('master_karyawan as mk')
+                ->whereRaw("{$createdByColumn} COLLATE utf8mb4_unicode_ci = mk.nama_lengkap COLLATE utf8mb4_unicode_ci")
+                ->where(function ($q) use ($keyword, $matchingDivisiIds) {
+                    $q->where('mk.department', 'like', "%{$keyword}%");
+
+                    if ($matchingDivisiIds->isNotEmpty()) {
+                        $q->orWhereIn('mk.id_department', $matchingDivisiIds);
+                    }
+
+                    $q->orWhereExists(function ($divSub) use ($keyword) {
+                        $divSub->select(DB::raw(1))
+                            ->from('master_divisi as md')
+                            ->whereColumn('mk.id_department', 'md.id')
+                            ->where('md.nama_divisi', 'like', "%{$keyword}%");
+                    });
+                });
+        });
     }
 
     public static function profile(?string $namaLengkap): array

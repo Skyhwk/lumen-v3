@@ -181,11 +181,16 @@
             <td class="sign-block">
                 <div class="sign-label">Diterima Oleh,</div>
                 <div class="sign-name">{{ $receivedByName }}</div>
-                <div class="sign-meta">
-                    {{ $receivedByPosition }}<br>
-                    {{ $receivedByDivision }}
-                </div>
-                <div class="sign-date">Tgl. {{ $receivedByDate }}</div>
+                @if(!empty($isUserConfirmed))
+                    <div class="sign-meta">
+                        {{ $receivedByPosition }}<br>
+                        {{ $receivedByDivision }}
+                    </div>
+                    <div class="sign-date">Tgl. {{ $receivedByDate }}</div>
+                @else
+                    <div class="sign-meta" style="min-height: 24px;"></div>
+                    <div class="sign-date" style="min-height: 12px;"></div>
+                @endif
             </td>
         </tr>
     </table>

@@ -82,7 +82,8 @@ class SalesDailyQSD
                             'grand_total', 
                             'total_revenue', 
                             'total_cfr',
-                            'tanggal_sampling_min', 
+                            'tanggal_sampling_min',
+                            'tanggal_order',
                             'is_lunas', 
                             'updated_at']
                     );
@@ -152,6 +153,17 @@ class SalesDailyQSD
                 SET dq.is_invoicing = 0
             ");
 
+            printf("[SchaduleUpdateQsd] [%s] Updating tanggal_order\n", Carbon::now()->format('Y-m-d H:i:s'));
+
+            DB::statement("
+                UPDATE daily_qsd dq
+                INNER JOIN order_header oh
+                    ON oh.no_order = dq.no_order
+                    AND oh.is_active = 1
+                SET dq.tanggal_order = DATE(oh.tanggal_order)
+                WHERE oh.tanggal_order IS NOT NULL
+            ");
+
             printf("[SchaduleUpdateQsd] [%s] Updating daily_qsd completed", Carbon::now()->format('Y-m-d H:i:s'));
         }
         // Log::info('[SchaduleUpdateQsd] Inserted ' . $totalInserted . ' rows');
@@ -202,10 +214,16 @@ class SalesDailyQSD
                 MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkh.pelanggan_ID ELSE NULL END) as pelanggan_id_kontrak, 
                 MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.pelanggan_ID ELSE NULL END) as pelanggan_id_non_kontrak, 
                 MAX(CASE WHEN order_detail.kontrak != "C" THEN (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0)) ELSE NULL END) as total_revenue_non_kontrak, 
-                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min
+                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min,
+                MIN(DATE(oh.tanggal_order)) as tanggal_order
             ')
             ->where('order_detail.is_active', true)
             ->whereDate('order_detail.tanggal_sampling', '<=', $maxDateNextYear);
+        
+        $rekapOrder->leftJoin('order_header as oh', function ($join) {
+            $join->on('order_detail.no_order', '=', 'oh.no_order')
+                ->where('oh.is_active', 1);
+        });
         
         $rekapOrder->leftJoin('request_quotation_kontrak_H as rqkh', function ($join) {
             $join->on('order_detail.no_quotation', '=', 'rqkh.no_document')
@@ -305,7 +323,8 @@ class SalesDailyQSD
                     - COALESCE(rq.total_ppn,0)
                 ) AS total_revenue_non_kontrak,
 
-                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min
+                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min,
+                DATE(oh.tanggal_order) AS tanggal_order
             ');
     }
 
@@ -353,7 +372,8 @@ class SalesDailyQSD
 
                 NULL AS total_revenue_non_kontrak,
 
-                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min
+                CASE WHEN rq.tanggal_penawaran < oh.tanggal_order THEN rq.tanggal_penawaran ELSE oh.tanggal_order END AS tanggal_sampling_min,
+                DATE(oh.tanggal_order) AS tanggal_order
             ');
     }
 
@@ -474,6 +494,7 @@ class SalesDailyQSD
                 'grand_total'          => $row->kontrak === 'C' ? $row->grand_total_kontrak : $row->grand_total_non_kontrak,
                 'total_revenue'        => $row->kontrak === 'C' ? $row->total_revenue_kontrak : $row->total_revenue_non_kontrak,
                 'tanggal_sampling_min' => $row->tanggal_sampling_min,
+                'tanggal_order'        => $row->tanggal_order ?? null,
                 'created_at'           => Carbon::now()->subHours(7),
             ];
         }
@@ -538,6 +559,7 @@ class SalesDailyQSD
                     'total_revenue'         => $items->first()['total_revenue'],
                     'total_cfr'             => $items->first()['total_cfr'],
                     'tanggal_sampling_min'  => $items->min('tanggal_sampling_min'),
+                    'tanggal_order'         => $items->min('tanggal_order'),
                     'is_lunas'              => $isLunas,
                     'created_at'            => $items->first()['created_at'],
                 ];
@@ -576,6 +598,7 @@ class SalesDailyQSD
                 'total_revenue'         => $items->sum('total_revenue'),
                 'total_cfr'             => $items->sum('total_cfr'),
                 'tanggal_sampling_min'  => $items->min('tanggal_sampling_min'),
+                'tanggal_order'         => $items->min('tanggal_order'),
                 'is_lunas'              => $items->contains('is_lunas', false) ? false : true,
                 'created_at'            => $items->first()['created_at'],
             ];

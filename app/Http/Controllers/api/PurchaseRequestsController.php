@@ -251,6 +251,13 @@ class PurchaseRequestsController extends Controller
             return response()->json(['message' => 'Permintaan hanya dapat diubah saat status Pending atau Reopened'], 422);
         }
 
+        if (!$isUpdateMode) {
+            $blockMessage = PurchaseReceiptService::getPendingUserAcceptanceBlockMessage($this->karyawan);
+            if ($blockMessage) {
+                return response()->json(['message' => $blockMessage], 422);
+            }
+        }
+
         if ($isUpdateMode) {
             $purchaseRequest->updated_by = $this->karyawan;
             $purchaseRequest->updated_at = date('Y-m-d H:i:s');

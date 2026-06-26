@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
+use App\Models\PurchaseOrderDocument;
 use App\Models\PurchaseReceiptBatch;
 use App\Models\PurchaseRequest;
 use App\Services\{KaryawanProfileService, Notification, PurchaseReceiptService};
@@ -30,113 +31,117 @@ class GoodsReceiptsController extends Controller
     {
         $scope = $request->input('scope', 'pending');
 
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
-            ->where('is_active', true)
+        $poVendorReceivedSql = '(SELECT COALESCE(SUM(prb.vendor_receipt_qty), 0) FROM purchase_receipt_batches prb WHERE prb.purchase_order_document_id = purchase_order_documents.id)';
+        $poUserConfirmedSql = '(SELECT COALESCE(SUM(prb.user_handover_qty), 0) FROM purchase_receipt_batches prb WHERE prb.purchase_order_document_id = purchase_order_documents.id AND prb.completed_at IS NOT NULL)';
+
+        $poDocuments = PurchaseOrderDocument::with(['purchaseRequest.items', 'purchaseRequest.employee.jabatan', 'purchaseRequest.employee.divisi'])
             ->where(function ($query) {
-                $query->where('is_goods_voided', false)
-                    ->orWhereNull('is_goods_voided');
+                $query->where('is_voided', false)->orWhereNull('is_voided');
             })
-            ->whereIn('status', ['Approved', 'Partially Approved'])
-            ->latest();
-
-        $processedPoQtySql = '(SELECT COALESCE(SUM(pod.quantity), 0) FROM purchase_order_documents pod WHERE pod.purchase_request_id = purchase_requests.id AND (pod.is_voided = 0 OR pod.is_voided IS NULL) AND pod.po_status = \'active\')';
-
-        $purchaseRequests = $purchaseRequests->where(function ($query) use ($processedPoQtySql) {
-            $query->whereIn('finance_status', ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing'])
-                ->orWhere(function ($sub) use ($processedPoQtySql) {
-                    $sub->whereRaw("{$processedPoQtySql} > 0")
-                        ->whereRaw("COALESCE(vendor_received_total, 0) < {$processedPoQtySql}");
-                });
-        });
-
-        $targetQtySql = 'COALESCE(NULLIF(receipt_target_qty, 0), (
-            SELECT COALESCE(pod.quantity, pri.quantity, 0)
-            FROM purchase_request_items pri
-            LEFT JOIN purchase_order_documents pod ON pod.purchase_request_id = purchase_requests.id
-                AND (pod.is_voided = 0 OR pod.is_voided IS NULL)
-            WHERE pri.purchase_request_id = purchase_requests.id
-            ORDER BY pod.id DESC, pri.id ASC
-            LIMIT 1
-        ), 0)';
+            ->where('po_status', 'active')
+            ->whereHas('purchaseRequest', function ($query) {
+                $query->where('is_active', true)
+                    ->where(function ($q) {
+                        $q->where('is_goods_voided', false)->orWhereNull('is_goods_voided');
+                    })
+                    ->where(function ($q) {
+                        $q->whereIn('status', ['Approved', 'Partially Approved'])
+                            ->orWhere(function ($sub) {
+                                $sub->where('status', 'Done')
+                                    ->whereIn('finance_status', ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing']);
+                            });
+                    })
+                    ->whereIn('finance_status', ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing']);
+            })
+            ->latest('processed_at')
+            ->latest('id');
 
         if ($scope === 'pending') {
-            $purchaseRequests = $purchaseRequests->whereRaw("COALESCE(vendor_received_total, 0) < {$targetQtySql}");
+            $poDocuments = $poDocuments->whereRaw("{$poVendorReceivedSql} < purchase_order_documents.quantity");
         } else {
-            $purchaseRequests = $purchaseRequests
-                ->whereRaw("COALESCE(user_confirmed_total, 0) < {$targetQtySql}")
-                ->whereRaw('COALESCE(vendor_received_total, 0) > 0')
+            $poDocuments = $poDocuments
+                ->whereRaw("{$poVendorReceivedSql} > 0")
+                ->whereRaw("({$poUserConfirmedSql}) < purchase_order_documents.quantity")
                 ->where(function ($query) {
                     $query->whereExists(function ($sub) {
                         $sub->select(DB::raw(1))
-                            ->from('purchase_receipt_batches')
-                            ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
-                            ->whereNull('handover_number')
-                            ->whereNotNull('vendor_receipt_at');
+                            ->from('purchase_receipt_batches as prb')
+                            ->whereColumn('prb.purchase_order_document_id', 'purchase_order_documents.id')
+                            ->whereNull('prb.handover_number')
+                            ->whereNotNull('prb.vendor_receipt_at');
                     })->orWhereExists(function ($sub) {
                         $sub->select(DB::raw(1))
-                            ->from('purchase_receipt_batches')
-                            ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
-                            ->whereNotNull('handover_number')
-                            ->whereNull('completed_at');
-                    })->orWhereExists(function ($sub) {
-                        $sub->select(DB::raw(1))
-                            ->from('purchase_receipt_batches')
-                            ->whereColumn('purchase_receipt_batches.purchase_request_id', 'purchase_requests.id')
-                            ->whereNotNull('handover_number');
+                            ->from('purchase_receipt_batches as prb')
+                            ->whereColumn('prb.purchase_order_document_id', 'purchase_order_documents.id')
+                            ->whereNotNull('prb.handover_number')
+                            ->whereNull('prb.completed_at');
                     });
                 });
         }
 
-        return DataTables::of($purchaseRequests)
-            ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
-            ->filterColumn('item_name', function($query, $keyword) {
-                $query->whereHas('items', function($q) use ($keyword) {
-                    $q->where('item_name', 'like', "%{$keyword}%");
+        return DataTables::of($poDocuments)
+            ->addColumn('purchase_request_id', fn($row) => $row->purchase_request_id)
+            ->addColumn('po_document_id', fn($row) => $row->id)
+            ->addColumn('request_number', fn($row) => optional($row->purchaseRequest)->request_number)
+            ->filterColumn('request_number', function ($query, $keyword) {
+                $query->whereHas('purchaseRequest', function ($q) use ($keyword) {
+                    $q->where('request_number', 'like', "%{$keyword}%");
                 });
             })
-            ->addColumn('quantity', fn($row) => $row->receipt_target_qty ?: optional($row->items->first())->quantity)
-            ->filterColumn('quantity', function($query, $keyword) {
-                $query->where(function($q) use ($keyword) {
-                    $q->where('purchase_requests.receipt_target_qty', 'like', "%{$keyword}%")
-                      ->orWhereHas('items', function($subQ) use ($keyword) {
-                          $subQ->where('quantity', 'like', "%{$keyword}%");
-                      });
+            ->addColumn('po_number', fn($row) => $row->po_number)
+            ->filterColumn('po_number', function ($query, $keyword) {
+                $query->where('purchase_order_documents.po_number', 'like', "%{$keyword}%");
+            })
+            ->addColumn('item_name', fn($row) => $row->item_name ?: optional(optional($row->purchaseRequest)->items->first())->item_name)
+            ->filterColumn('item_name', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('purchase_order_documents.item_name', 'like', "%{$keyword}%")
+                        ->orWhereHas('purchaseRequest.items', function ($subQ) use ($keyword) {
+                            $subQ->where('item_name', 'like', "%{$keyword}%");
+                        });
                 });
             })
-            ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
-            ->filterColumn('unit', function($query, $keyword) {
-                $query->whereHas('items', function($q) use ($keyword) {
-                    $q->where('unit', 'like', "%{$keyword}%");
+            ->addColumn('quantity', fn($row) => (float) $row->quantity)
+            ->filterColumn('quantity', function ($query, $keyword) {
+                $query->where('purchase_order_documents.quantity', 'like', "%{$keyword}%");
+            })
+            ->addColumn('unit', fn($row) => $row->unit ?: optional(optional($row->purchaseRequest)->items->first())->unit)
+            ->filterColumn('unit', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('purchase_order_documents.unit', 'like', "%{$keyword}%")
+                        ->orWhereHas('purchaseRequest.items', function ($subQ) use ($keyword) {
+                            $subQ->where('unit', 'like', "%{$keyword}%");
+                        });
                 });
             })
-            ->addColumn('vendor_received_total', fn($row) => $row->vendor_received_total ?? 0)
-            ->addColumn('remaining_vendor_qty', fn($row) => PurchaseReceiptService::getRemainingVendorQty($row))
-            ->addColumn('user_confirmed_total', fn($row) => $row->user_confirmed_total ?? 0)
-            ->addColumn('pending_user_handover_count', fn($row) => PurchaseReceiptService::countPendingUserHandoverBatches($row))
-            ->addColumn('can_create_user_receipt', fn($row) => PurchaseReceiptService::hasPendingUserHandoverBatch($row))
-            ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatches($row))
-            ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan($row->employee))
-            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
-            ->filterColumn('requester_divisi', function($query, $keyword) {
-                $query->whereHas('employee.divisi', function($q) use ($keyword) {
-                    $q->where('nama_divisi', 'like', "%{$keyword}%");
+            ->addColumn('vendor_received_total', fn($row) => PurchaseReceiptService::getPoVendorReceivedTotal($row->id))
+            ->addColumn('remaining_vendor_qty', fn($row) => PurchaseReceiptService::getPoRemainingVendorQty($row))
+            ->addColumn('user_confirmed_total', fn($row) => PurchaseReceiptService::getPoUserConfirmedTotal($row->id))
+            ->addColumn('pending_user_handover_count', fn($row) => PurchaseReceiptService::countPendingUserHandoverBatchesForPo($row->id))
+            ->addColumn('can_create_user_receipt', fn($row) => PurchaseReceiptService::hasPendingUserHandoverBatchForPo($row->id))
+            ->addColumn('handover_count', fn($row) => PurchaseReceiptService::countHandoverBatchesForPo($row->id))
+            ->addColumn('created_by', fn($row) => optional($row->purchaseRequest)->created_by)
+            ->filterColumn('created_by', function ($query, $keyword) {
+                $query->whereHas('purchaseRequest', function ($q) use ($keyword) {
+                    $q->where('created_by', 'like', "%{$keyword}%");
                 });
             })
-            ->addColumn('finance_display_status', fn($row) => $this->resolveDisplayStatus($row, $scope))
-            ->filterColumn('request_number', function($query, $keyword) {
-                $query->where('purchase_requests.request_number', 'like', "%{$keyword}%");
+            ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan(optional($row->purchaseRequest)->employee))
+            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi(optional($row->purchaseRequest)->employee))
+            ->filterColumn('requester_divisi', fn($query, $keyword) => $this->applyRequesterDivisiFilter($query, $keyword))
+            ->addColumn('finance_display_status', fn($row) => $this->resolvePoRowDisplayStatus($row, $scope))
+            ->addColumn('po_approved_at', fn($row) => $row->processed_at)
+            ->filterColumn('po_approved_at', function ($query, $keyword) {
+                $query->where('purchase_order_documents.processed_at', 'like', "%{$keyword}%");
             })
-            ->filterColumn('po_number', function($query, $keyword) {
-                $query->where('purchase_requests.po_number', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('created_by', function($query, $keyword) {
-                $query->where('purchase_requests.created_by', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('po_approved_at', function($query, $keyword) {
-                $query->where('purchase_requests.po_approved_at', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('vendor_receipt_at', function($query, $keyword) {
-                $query->where('purchase_requests.vendor_receipt_at', 'like', "%{$keyword}%");
+            ->addColumn('vendor_receipt_at', fn($row) => PurchaseReceiptService::getLatestVendorReceiptAtForPo($row->id))
+            ->filterColumn('vendor_receipt_at', function ($query, $keyword) {
+                $query->whereExists(function ($sub) use ($keyword) {
+                    $sub->select(DB::raw(1))
+                        ->from('purchase_receipt_batches as prb')
+                        ->whereColumn('prb.purchase_order_document_id', 'purchase_order_documents.id')
+                        ->where('prb.vendor_receipt_at', 'like', "%{$keyword}%");
+                });
             })
             ->make(true);
     }
@@ -144,27 +149,51 @@ class GoodsReceiptsController extends Controller
     public function getUserReceipt(Request $request)
     {
         $purchaseRequest = PurchaseRequest::with(['items', 'employee'])->findOrFail($request->id);
+        $poDocument = $request->po_document_id
+            ? PurchaseReceiptService::findActivePoDocument($purchaseRequest->id, (int) $request->po_document_id)
+            : null;
 
-        if (!in_array($purchaseRequest->finance_status, ['Waiting User Receipt', 'Distributing'])) {
-            return response()->json(['message' => 'Permintaan tidak dalam status menunggu serah terima ke user'], 422);
+        if ($poDocument && PurchaseReceiptService::getPoVendorReceivedTotal($poDocument->id) <= 0) {
+            return response()->json(['message' => 'Tanda terima user hanya dapat dibuat setelah ada tanda terima vendor untuk PO ini'], 422);
         }
 
-        if ((float) ($purchaseRequest->vendor_received_total ?? 0) <= 0) {
-            return response()->json(['message' => 'Tanda terima user hanya dapat dibuat setelah ada tanda terima vendor'], 422);
+        if (!$poDocument) {
+            if (!in_array($purchaseRequest->finance_status, ['Waiting User Receipt', 'Distributing'])) {
+                return response()->json(['message' => 'Permintaan tidak dalam status menunggu serah terima ke user'], 422);
+            }
+
+            if ((float) ($purchaseRequest->vendor_received_total ?? 0) <= 0) {
+                return response()->json(['message' => 'Tanda terima user hanya dapat dibuat setelah ada tanda terima vendor'], 422);
+            }
         }
 
         $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
         $item = $purchaseRequest->items->first();
-        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $targetQty = $poDocument
+            ? (float) $poDocument->quantity
+            : PurchaseReceiptService::resolveTargetQty($purchaseRequest);
+        $vendorReceivedTotal = $poDocument
+            ? PurchaseReceiptService::getPoVendorReceivedTotal($poDocument->id)
+            : (float) ($purchaseRequest->vendor_received_total ?? 0);
+        $userConfirmedTotal = $poDocument
+            ? PurchaseReceiptService::getPoUserConfirmedTotal($poDocument->id)
+            : (float) ($purchaseRequest->user_confirmed_total ?? 0);
 
-        $pendingBatches = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+        $batchQuery = PurchaseReceiptBatch::with('purchaseOrderDocument')
+            ->where('purchase_request_id', $purchaseRequest->id);
+
+        if ($poDocument) {
+            $batchQuery->where('purchase_order_document_id', $poDocument->id);
+        }
+
+        $pendingBatches = (clone $batchQuery)
             ->whereNull('handover_number')
             ->whereNotNull('vendor_receipt_at')
             ->orderBy('batch_no')
             ->get()
             ->map(fn($batch) => PurchaseReceiptService::formatBatch($batch, self::ATTACHMENT_DIR));
 
-        $handoverHistory = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+        $handoverHistory = (clone $batchQuery)
             ->whereNotNull('handover_number')
             ->orderByDesc('batch_no')
             ->get()
@@ -177,14 +206,17 @@ class GoodsReceiptsController extends Controller
         return response()->json([
             'data' => [
                 'id' => $purchaseRequest->id,
-                'po_number' => $purchaseRequest->po_number,
+                'po_document_id' => $poDocument->id ?? null,
+                'po_number' => $poDocument->po_number ?? $purchaseRequest->po_number,
                 'request_number' => $purchaseRequest->request_number,
                 'purpose' => $purchaseRequest->purpose,
                 'target_qty' => $targetQty,
-                'vendor_received_total' => $purchaseRequest->vendor_received_total ?? 0,
-                'user_confirmed_total' => $purchaseRequest->user_confirmed_total ?? 0,
-                'remaining_qty' => max(round($targetQty - (float) ($purchaseRequest->user_confirmed_total ?? 0), 2), 0),
-                'can_create_user_receipt' => PurchaseReceiptService::hasPendingUserHandoverBatch($purchaseRequest),
+                'vendor_received_total' => $vendorReceivedTotal,
+                'user_confirmed_total' => $userConfirmedTotal,
+                'remaining_qty' => max(round($targetQty - $userConfirmedTotal, 2), 0),
+                'can_create_user_receipt' => $poDocument
+                    ? PurchaseReceiptService::hasPendingUserHandoverBatchForPo($poDocument->id)
+                    : PurchaseReceiptService::hasPendingUserHandoverBatch($purchaseRequest),
                 'recipient' => [
                     'nama_lengkap' => $purchaseRequest->created_by,
                     'jabatan' => $this->resolveKaryawanJabatan($recipient),
@@ -208,20 +240,49 @@ class GoodsReceiptsController extends Controller
     {
         $purchaseRequest = PurchaseRequest::with('items')->findOrFail($request->id);
 
-        if (!in_array($purchaseRequest->finance_status, ['Waiting Vendor Receipt', 'Waiting User Receipt'])) {
+        if (!in_array($purchaseRequest->finance_status, ['Waiting Vendor Receipt', 'Waiting User Receipt', 'Distributing'])) {
             return response()->json(['message' => 'Data tanda terima vendor tidak dapat diakses'], 422);
         }
+
+        $poDocument = $request->po_document_id
+            ? PurchaseReceiptService::findActivePoDocument($purchaseRequest->id, (int) $request->po_document_id)
+            : null;
+
+        if ($request->po_document_id && !$poDocument) {
+            return response()->json(['message' => 'PO tidak ditemukan atau belum diproses'], 422);
+        }
+
+        if ($poDocument) {
+            $poProgress = PurchaseReceiptService::formatPoProgress($poDocument);
+
+            return response()->json([
+                'data' => [
+                    'id' => $purchaseRequest->id,
+                    'po_document_id' => $poDocument->id,
+                    'po_number' => $poDocument->po_number,
+                    'item_name' => $poDocument->item_name ?: optional($purchaseRequest->items->first())->item_name,
+                    'quantity' => $poProgress['quantity'],
+                    'vendor_received_total' => $poProgress['vendor_received_total'],
+                    'remaining_vendor_qty' => $poProgress['remaining_vendor_qty'],
+                    'finance_status' => $purchaseRequest->finance_status,
+                ],
+                'message' => 'Data tanda terima vendor berhasil dimuat',
+            ], 200);
+        }
+
+        $activePos = PurchaseReceiptService::formatActivePosProgress($purchaseRequest);
+        $receivablePos = array_values(array_filter($activePos, fn($po) => ($po['remaining_vendor_qty'] ?? 0) > 0));
 
         return response()->json([
             'data' => [
                 'id' => $purchaseRequest->id,
-                'po_number' => $purchaseRequest->po_number,
+                'po_number' => PurchaseReceiptService::formatPoNumbersDisplay($purchaseRequest),
                 'item_name' => optional($purchaseRequest->items->first())->item_name,
-                'quantity' => optional($purchaseRequest->items->first())->quantity,
-                'vendor_delivery_note' => $purchaseRequest->vendor_delivery_note,
-                'vendor_receipt_qty' => $purchaseRequest->vendor_receipt_qty,
-                'vendor_receipt_note' => $purchaseRequest->vendor_receipt_note,
-                'vendor_receipt_attachments' => $this->parseAttachments($purchaseRequest->vendor_receipt_attachments),
+                'quantity' => PurchaseReceiptService::resolveTargetQty($purchaseRequest),
+                'vendor_received_total' => $purchaseRequest->vendor_received_total ?? 0,
+                'remaining_vendor_qty' => PurchaseReceiptService::getRemainingVendorQty($purchaseRequest),
+                'active_pos' => $activePos,
+                'receivable_pos' => $receivablePos,
                 'finance_status' => $purchaseRequest->finance_status,
             ],
             'message' => 'Data tanda terima vendor berhasil dimuat',
@@ -232,6 +293,7 @@ class GoodsReceiptsController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'id' => 'required',
+            'po_document_id' => 'required|integer',
             'vendor_delivery_note' => 'nullable|string|max:255',
             'vendor_receipt_qty' => 'required|numeric|min:0.01',
             'vendor_receipt_note' => 'nullable|string',
@@ -247,13 +309,23 @@ class GoodsReceiptsController extends Controller
             return response()->json(['message' => 'Permintaan tidak dalam status penerimaan vendor'], 422);
         }
 
-        $targetQty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
-        $remainingQty = PurchaseReceiptService::getRemainingVendorQty($purchaseRequest);
+        $poDocument = PurchaseReceiptService::findActivePoDocument($purchaseRequest->id, (int) $request->po_document_id);
+
+        if (!$poDocument) {
+            return response()->json(['message' => 'PO tidak ditemukan atau belum diproses'], 422);
+        }
+
+        $targetQty = (float) $poDocument->quantity;
+        $remainingQty = PurchaseReceiptService::getPoRemainingVendorQty($poDocument);
         $receiptQty = (float) $request->vendor_receipt_qty;
+
+        if ($remainingQty <= 0) {
+            return response()->json(['message' => "PO {$poDocument->po_number} sudah diterima penuh"], 422);
+        }
 
         if ($receiptQty > $remainingQty) {
             return response()->json([
-                'message' => "Qty diterima melebihi sisa penerimaan ({$remainingQty})",
+                'message' => "Qty diterima melebihi sisa PO {$poDocument->po_number} ({$remainingQty})",
             ], 422);
         }
 
@@ -267,6 +339,7 @@ class GoodsReceiptsController extends Controller
 
         PurchaseReceiptBatch::create([
             'purchase_request_id' => $purchaseRequest->id,
+            'purchase_order_document_id' => $poDocument->id,
             'batch_no' => PurchaseReceiptService::getNextBatchNo($purchaseRequest->id),
             'vendor_receipt_qty' => $receiptQty,
             'vendor_delivery_note' => $request->vendor_delivery_note,
@@ -278,18 +351,19 @@ class GoodsReceiptsController extends Controller
         ]);
 
         if (empty($purchaseRequest->receipt_target_qty)) {
-            $purchaseRequest->receipt_target_qty = $targetQty;
+            $purchaseRequest->receipt_target_qty = PurchaseReceiptService::resolveTargetQty($purchaseRequest);
         }
 
         PurchaseReceiptService::refreshTotals($purchaseRequest);
 
         $processorName = ($employee && $employee->nama_lengkap) ? $employee->nama_lengkap : $this->karyawan;
-        $isPartial = (float) $purchaseRequest->vendor_received_total < $targetQty;
+        $poVendorTotal = PurchaseReceiptService::getPoVendorReceivedTotal($poDocument->id);
+        $isPartial = $poVendorTotal < $targetQty;
         $partialLabel = $isPartial ? ' (parsial)' : '';
 
         Notification::where('nama_lengkap', $purchaseRequest->created_by)
             ->title('Barang dari Vendor Diterima' . $partialLabel . '!')
-            ->message("Barang sebanyak {$receiptQty} untuk permintaan {$purchaseRequest->request_number} (PO {$purchaseRequest->po_number}) telah diterima dari vendor oleh {$processorName} pada " . date('d-m-Y'))
+            ->message("Barang sebanyak {$receiptQty} untuk permintaan {$purchaseRequest->request_number} (PO {$poDocument->po_number}) telah diterima dari vendor oleh {$processorName} pada " . date('d-m-Y'))
             ->url('/request/purchase-requests')
             ->send();
 
@@ -300,6 +374,8 @@ class GoodsReceiptsController extends Controller
             'data' => [
                 'vendor_received_total' => $purchaseRequest->vendor_received_total,
                 'remaining_vendor_qty' => PurchaseReceiptService::getRemainingVendorQty($purchaseRequest),
+                'po_vendor_received_total' => $poVendorTotal,
+                'po_remaining_vendor_qty' => PurchaseReceiptService::getPoRemainingVendorQty($poDocument),
             ],
         ], 200);
     }
@@ -464,15 +540,20 @@ class GoodsReceiptsController extends Controller
 
     private function buildHandoverPdf(PurchaseRequest $purchaseRequest, PurchaseReceiptBatch $batch, $handedByEmployee): string
     {
+        if (!$batch->relationLoaded('purchaseOrderDocument') && $batch->purchase_order_document_id) {
+            $batch->load('purchaseOrderDocument');
+        }
+
         $item = $purchaseRequest->items->first();
-        $recipient = $this->findKaryawanByName($purchaseRequest->created_by);
 
         $handoverDate = $batch->user_receipt_at ?: date('Y-m-d H:i:s');
         $handoverDateFormatted = Carbon::parse($handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
 
         $keteranganParts = array_filter([
             $purchaseRequest->request_number,
-            $purchaseRequest->po_number ? 'PO: ' . $purchaseRequest->po_number : null,
+            $batch->purchase_order_document_id && $batch->purchaseOrderDocument
+                ? 'PO: ' . $batch->purchaseOrderDocument->po_number
+                : ($purchaseRequest->po_number ? 'PO: ' . $purchaseRequest->po_number : null),
             'Batch #' . $batch->batch_no,
             $purchaseRequest->purpose,
             $item->note ?? null,
@@ -499,10 +580,19 @@ class GoodsReceiptsController extends Controller
             $handedByDivision = 'Purchasing';
         }
 
-        $receivedByName = $purchaseRequest->created_by;
-        $receivedByPosition = $this->resolveKaryawanJabatan($recipient);
-        $receivedByDivision = $this->resolveKaryawanDivisi($recipient);
-        $receivedByDate = Carbon::parse($batch->completed_at ?: $handoverDate)->locale('id')->isoFormat('D MMMM YYYY H:mm');
+        $isUserConfirmed = !empty($batch->completed_at);
+        if ($isUserConfirmed) {
+            $receivedByRecord = $this->findKaryawanByName($batch->completed_by ?: $purchaseRequest->created_by);
+            $receivedByName = $batch->completed_by ?: $purchaseRequest->created_by;
+            $receivedByPosition = $this->resolveKaryawanJabatan($receivedByRecord);
+            $receivedByDivision = $this->resolveKaryawanDivisi($receivedByRecord);
+            $receivedByDate = Carbon::parse($batch->completed_at)->locale('id')->isoFormat('D MMMM YYYY H:mm');
+        } else {
+            $receivedByName = '';
+            $receivedByPosition = '';
+            $receivedByDivision = '';
+            $receivedByDate = '';
+        }
 
         $mpdf = new \Mpdf\Mpdf([
             'format' => 'A5',
@@ -529,6 +619,7 @@ class GoodsReceiptsController extends Controller
             'receivedByPosition',
             'receivedByDivision',
             'receivedByDate',
+            'isUserConfirmed',
         ))->render();
 
         $mpdf->WriteHTML($html);
@@ -676,11 +767,11 @@ class GoodsReceiptsController extends Controller
         return '-';
     }
 
-    private function resolveDisplayStatus($row, string $scope = 'pending'): string
+    private function resolvePoRowDisplayStatus(PurchaseOrderDocument $poDocument, string $scope = 'pending'): string
     {
-        $target = (float) ($row->receipt_target_qty ?? 0);
-        $vendorTotal = (float) ($row->vendor_received_total ?? 0);
-        $confirmedTotal = (float) ($row->user_confirmed_total ?? 0);
+        $target = (float) $poDocument->quantity;
+        $vendorTotal = PurchaseReceiptService::getPoVendorReceivedTotal($poDocument->id);
+        $confirmedTotal = PurchaseReceiptService::getPoUserConfirmedTotal($poDocument->id);
 
         if ($scope === 'pending') {
             if ($vendorTotal > 0 && $vendorTotal < $target) {
@@ -690,14 +781,50 @@ class GoodsReceiptsController extends Controller
             return 'Waiting Vendor Receipt';
         }
 
+        if ($confirmedTotal >= $target && $target > 0) {
+            return 'User Receipt Complete';
+        }
+
         if ($confirmedTotal > 0 && $confirmedTotal < $target) {
             return 'Partial User Receipt';
         }
 
-        if ($row->finance_status === 'Distributing') {
+        if (PurchaseReceiptBatch::where('purchase_order_document_id', $poDocument->id)
+            ->whereNotNull('handover_number')
+            ->whereNull('completed_at')
+            ->exists()) {
             return 'Waiting User Confirm';
         }
 
         return 'Waiting User Receipt';
+    }
+
+    private function applyRequesterDivisiFilter($query, string $keyword): void
+    {
+        $matchingDivisiIds = MasterDivisi::where('is_active', true)
+            ->where('nama_divisi', 'like', "%{$keyword}%")
+            ->pluck('id');
+
+        $query->whereHas('purchaseRequest', function ($prQuery) use ($keyword, $matchingDivisiIds) {
+            $prQuery->whereExists(function ($sub) use ($keyword, $matchingDivisiIds) {
+                $sub->select(DB::raw(1))
+                    ->from('master_karyawan as mk')
+                    ->whereRaw('purchase_requests.created_by COLLATE utf8mb4_unicode_ci = mk.nama_lengkap COLLATE utf8mb4_unicode_ci')
+                    ->where(function ($q) use ($keyword, $matchingDivisiIds) {
+                        $q->where('mk.department', 'like', "%{$keyword}%");
+
+                        if ($matchingDivisiIds->isNotEmpty()) {
+                            $q->orWhereIn('mk.id_department', $matchingDivisiIds);
+                        }
+
+                        $q->orWhereExists(function ($divSub) use ($keyword) {
+                            $divSub->select(DB::raw(1))
+                                ->from('master_divisi as md')
+                                ->whereColumn('mk.id_department', 'md.id')
+                                ->where('md.nama_divisi', 'like', "%{$keyword}%");
+                        });
+                    });
+            });
+        });
     }
 }

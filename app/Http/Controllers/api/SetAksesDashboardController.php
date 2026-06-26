@@ -381,6 +381,7 @@ class SetAksesDashboardController extends Controller
             'DashboardStaffTc' => 3,
             'DashboardAnalist' => 4,
             'DashboardHRD' => 5,
+            'DashboardPaymentPerformance' => 6,
         ];
 
         return $defaultOrder[$item->nama_komponen ?? ''] ?? 999999;

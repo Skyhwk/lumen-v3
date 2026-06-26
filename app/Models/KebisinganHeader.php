@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class KebisinganHeader extends Sector{
@@ -11,6 +10,34 @@ class KebisinganHeader extends Sector{
     public $timestamps = false;
 
     protected $guarded = [];
+
+    public function getDataPerShiftAttribute($value)
+    {
+        if (!$value) {
+            return [];
+        }
+
+        $decoded = $value;
+        for ($i = 0; $i < 3; $i++) {
+            if (!is_string($decoded)) {
+                break;
+            }
+
+            $candidate = json_decode($decoded, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $candidate = json_decode(str_replace('\\"', '"', $decoded), true);
+            }
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return [];
+            }
+
+            $decoded = $candidate;
+        }
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
     public function ws_udara() {
         return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_kebisingan_header');
     }
