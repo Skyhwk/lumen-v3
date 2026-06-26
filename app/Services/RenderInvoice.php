@@ -19,7 +19,7 @@ class RenderInvoice
     protected $data;
     protected $fileName;
 
-    public function renderInvoice($noInvoice)
+    public function renderInvoice($noInvoice, $forceSignature = false, $ignoreUploadFile = false)
     {
         try {
             $invoice = Invoice::where('is_active', true)
@@ -27,13 +27,13 @@ class RenderInvoice
                 ->firstOrFail();
 
             // 1. Generate PDF invoice utama
-            if ($invoice->upload_file) {
+            if ($invoice->upload_file && !$ignoreUploadFile) {
                 $filename = $invoice->upload_file;
             } else {
                 if ($invoice->is_custom == true) {
-                    $filename = $this->renderCustom($noInvoice);
+                    $filename = $this->renderCustom($noInvoice, $forceSignature);
                 } else {
-                    $filename = $this->renderHeader($noInvoice);
+                    $filename = $this->renderHeader($noInvoice, $forceSignature);
                 }
             }
 
@@ -41,7 +41,7 @@ class RenderInvoice
                 throw new \Exception("Gagal membuat file header untuk invoice: $noInvoice");
             }
             // 2. Kalau ada file_faktur, merge ke halaman berikutnya
-            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $invoice->upload_file);
+            $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $ignoreUploadFile ? null : $invoice->upload_file);
 
             // 3. Update filename final
             DB::transaction(function () use ($noInvoice, $filename) {
@@ -56,7 +56,7 @@ class RenderInvoice
         }
     }
 
-    static function renderHeader($noInvoice)
+    static function renderHeader($noInvoice, $forceSignature = false)
     {
         try {
             $dataHead = Invoice::where('is_active', true)
@@ -234,7 +234,7 @@ class RenderInvoice
             $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
             $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
             if ($qr) {
-                if ($dataHead->nilai_tagihan > 4999999) {
+                if (self::shouldRenderSignature($dataHead->nilai_tagihan, $forceSignature)) {
                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
                 } else {
                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
@@ -259,7 +259,7 @@ class RenderInvoice
                         'color' => '#000000'
                     ),
                     'L' => array(
-                        'content' =>  $dataHead->nilai_tagihan > 4999999 ? '' . $qr_img . '' : '',
+                        'content' =>  self::shouldRenderSignature($dataHead->nilai_tagihan, $forceSignature) ? '' . $qr_img . '' : '',
                         'font-size' => 4,
                         'font-style' => 'I',
                         // 'font-style' => 'B',
@@ -1871,8 +1871,9 @@ class RenderInvoice
                 </table>
             ');
 
-            $footerReservedHeight = $nilai_tagihan > 4999999 ? 30 : 15;
-            $signatureRequiredHeight = $nilai_tagihan > 4999999 ? 100 : 25;
+            $needsSignature = self::shouldRenderSignature($nilai_tagihan, $forceSignature);
+            $footerReservedHeight = $needsSignature ? 30 : 15;
+            $signatureRequiredHeight = $needsSignature ? 100 : 25;
             $remainingPageHeight = $pdf->h - $pdf->y - $footerReservedHeight;
 
             if ($remainingPageHeight < $signatureRequiredHeight) {
@@ -1886,7 +1887,7 @@ class RenderInvoice
                         </td>
             ');
 
-            if ($nilai_tagihan > 4999999) {
+            if ($needsSignature) {
                 $pdf->writeHTML('
                             <td width="25%" style="text-align:center;">
                                 <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
@@ -1942,7 +1943,7 @@ class RenderInvoice
         }
     }
 
-    static function renderCustom($noInvoice)
+    static function renderCustom($noInvoice, $forceSignature = false)
     {
         try {
 
@@ -2290,13 +2291,13 @@ class RenderInvoice
             $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
             $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
             if ($qr) {
-                if ($customInvoice->harga->nilai_tagihan > 4999999) {
+                if (self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature)) {
                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
                 } else {
                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
                 }
             }
-            if ($customInvoice->harga->nilai_tagihan > 4999999) {
+            if (self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature)) {
                 $pdf->writeHTML('
                             <td width="25%" style="text-align:center;">
                                 <div style="float: right; text-align: center;">
@@ -2339,7 +2340,7 @@ class RenderInvoice
                         'color' => '#000000'
                     ),
                     'L' => array(
-                        'content' =>  $customInvoice->harga->nilai_tagihan > 4999999 ? '' . $qr_img . '' : '',
+                        'content' =>  self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature) ? '' . $qr_img . '' : '',
                         'font-size' => 4,
                         'font-style' => 'I',
                         // 'font-style' => 'B',
@@ -2364,6 +2365,10 @@ class RenderInvoice
         }
     }
 
+    private static function shouldRenderSignature($amount, $forceSignature = false)
+    {
+        return $forceSignature || (float) $amount > 4999999;
+    }
     protected static function terbilang($angka)
     {
         $satuan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];

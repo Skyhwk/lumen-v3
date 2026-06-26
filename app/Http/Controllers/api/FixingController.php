@@ -1114,6 +1114,193 @@ class FixingController extends Controller
             ], 500);
         }
     }
+    public function checkSmallInvoiceSignature(Request $request)
+    {
+        $noInvoice = trim((string) $request->no_invoice);
+
+        if ($noInvoice === '') {
+            return response()->json([
+                'message' => 'Nomor invoice wajib diisi.',
+            ], 422);
+        }
+
+        try {
+            $invoiceRows = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->get();
+
+            if ($invoiceRows->isEmpty()) {
+                return response()->json([
+                    'message' => 'Invoice tidak ditemukan atau tidak aktif.',
+                ], 404);
+            }
+
+            $totalTagihan = $this->getInvoiceTotalTagihan($noInvoice, $invoiceRows);
+            $firstInvoice = $invoiceRows->first();
+
+            return response()->json([
+                'message' => 'Data invoice ditemukan.',
+                'data' => [
+                    'invoice' => $firstInvoice,
+                    'total_tagihan' => $totalTagihan,
+                    'is_below_threshold' => $totalTagihan < 5000000,
+                    'can_use_fixing' => $totalTagihan < 5000000,
+                    'filename' => $firstInvoice->filename,
+                    'upload_file' => $firstInvoice->upload_file,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    public function renderSmallInvoiceSignature(Request $request)
+    {
+        $noInvoice = trim((string) $request->no_invoice);
+
+        if ($noInvoice === '') {
+            return response()->json([
+                'message' => 'Nomor invoice wajib diisi.',
+            ], 422);
+        }
+
+        try {
+            $invoiceRows = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->get();
+
+            if ($invoiceRows->isEmpty()) {
+                return response()->json([
+                    'message' => 'Invoice tidak ditemukan atau tidak aktif.',
+                ], 404);
+            }
+
+            $totalTagihan = $this->getInvoiceTotalTagihan($noInvoice, $invoiceRows);
+            if ($totalTagihan >= 5000000) {
+                return response()->json([
+                    'message' => 'Invoice ini sudah Rp 5 juta ke atas. Gunakan flow invoice biasa.',
+                ], 422);
+            }
+
+            $render = new RenderInvoice();
+            $render->renderInvoice($noInvoice, true, true);
+
+            $invoice = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->first();
+
+            return response()->json([
+                'message' => 'Template invoice dengan area tanda tangan berhasil dirender.',
+                'data' => [
+                    'filename' => $invoice->filename,
+                    'path' => $invoice->filename ? 'invoice/' . $invoice->filename : null,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    public function uploadSmallInvoiceSignature(Request $request)
+    {
+        $noInvoice = trim((string) $request->no_invoice);
+
+        if ($noInvoice === '') {
+            return response()->json([
+                'message' => 'Nomor invoice wajib diisi.',
+            ], 422);
+        }
+
+        $file = $request->file('file_input');
+        if (!$file || strtolower($file->getClientOriginalExtension()) !== 'pdf') {
+            return response()->json([
+                'message' => 'File tidak valid. Harus PDF.',
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $invoiceRows = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->get();
+
+            if ($invoiceRows->isEmpty()) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Invoice tidak ditemukan atau tidak aktif.',
+                ], 404);
+            }
+
+            $totalTagihan = $this->getInvoiceTotalTagihan($noInvoice, $invoiceRows);
+            if ($totalTagihan >= 5000000) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Invoice ini sudah Rp 5 juta ke atas. Gunakan flow invoice biasa.',
+                ], 422);
+            }
+
+            $fileName = 'INVOICE_' . preg_replace('/\\//', '_', $noInvoice) . '.pdf';
+            $folder = public_path('invoice-upload');
+            if (!file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            $file->move($folder, $fileName);
+
+            Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->update([
+                    'upload_file' => $fileName,
+                ]);
+
+            DB::commit();
+
+            $render = new RenderInvoice();
+            $render->renderInvoice($noInvoice);
+
+            $invoice = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->first();
+
+            return response()->json([
+                'message' => 'PDF tanda tangan berhasil diupload dan invoice final berhasil dirender.',
+                'data' => [
+                    'filename' => $invoice->filename,
+                    'upload_file' => $invoice->upload_file,
+                    'path' => $invoice->filename ? 'invoice/' . $invoice->filename : null,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    private function getInvoiceTotalTagihan(string $noInvoice, $invoiceRows): float
+    {
+        $summary = SummaryInvoice::where('no_invoice', $noInvoice)->first();
+        $totalTagihan = (float) ($summary->total_tagihan ?? 0);
+
+        if ($totalTagihan <= 0) {
+            $totalTagihan = (float) $invoiceRows->sum(function ($item) {
+                return (float) ($item->nilai_tagihan ?? $item->total_tagihan ?? 0);
+            });
+        }
+
+        return $totalTagihan;
+    }
     public function renderInvoice(Request $request)
     {
         if ($request->is_copy && $request->is_copy != 'false') {

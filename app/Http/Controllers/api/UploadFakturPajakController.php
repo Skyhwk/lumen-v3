@@ -84,12 +84,12 @@ class UploadFakturPajakController extends Controller
                 DB::raw('GROUP_CONCAT(invoice.no_quotation) AS no_quots'),
                 DB::raw('GROUP_CONCAT(CONCAT(order_header.no_document, "_", invoice.no_order)) AS document_order')
             )
-                ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                ->join('order_header', 'invoice.no_order', '=', 'order_header.no_order')
                 ->groupBy('invoice.no_invoice')
-                ->where('is_emailed', false)
-                ->where('no_invoice', 'LIKE', '%INV/%')
+                ->where('invoice.is_emailed', false)
+                ->where('invoice.no_invoice', 'LIKE', '%INV/%')
                 ->where('invoice.created_at', '>', '2026-04-27 00:00:00')
-                ->whereNull('file_faktur')
+                ->whereNull('invoice.file_faktur')
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
                 ->orderBy('invoice.no_invoice', 'DESC');
