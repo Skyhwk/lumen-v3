@@ -14,4 +14,9 @@ class PurchaseReceiptBatch extends Sector
     {
         return $this->belongsTo(PurchaseRequest::class, 'purchase_request_id');
     }
+
+    public function purchaseOrderDocument()
+    {
+        return $this->belongsTo(PurchaseOrderDocument::class, 'purchase_order_document_id');
+    }
 }

@@ -32,12 +32,12 @@ class EmailLhpRilisHelpers
             $cekHistory = EmailHistory::where('email_subject', 'LIKE', "{$prefix}%")->first();
 
             if(!$cekHistory || !property_exists($cekHistory, 'email_to') || !$cekHistory->email_to) {
-                Log::info("EmailLhpRilisHelpers: Email history not found, skipping email to : tidak ada");
+                // Log::info("EmailLhpRilisHelpers: Email history not found, skipping email to : tidak ada");
                 return false;
             }    
 
             if($no_order == null || $no_order == '') {
-                Log::info("EmailLhpRilisHelpers: No. Order is empty, skipping email to : {$cekHistory->email_to}");
+                // Log::info("EmailLhpRilisHelpers: No. Order is empty, skipping email to : {$cekHistory->email_to}");
                 return false;
             }
 
@@ -55,7 +55,7 @@ class EmailLhpRilisHelpers
             $bcc = is_array($bcc) ? $bcc : [];
 
             if($subject == "Update Hasil Uji__"){
-                Log::info("EmailLhpRilisHelpers: Subject is empty, skipping email to : {$cekHistory->email_to}");
+                // Log::info("EmailLhpRilisHelpers: Subject is empty, skipping email to : {$cekHistory->email_to}");
                 return false;
             } else {
                 $email = SendEmail::where('to', $cekHistory->email_to)

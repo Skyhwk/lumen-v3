@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\MasterDivisi;
 use App\Models\PurchaseOrderDocument;
 use App\Models\PurchaseOrderDocumentRevision;
 use App\Models\PurchaseReceiptBatch;
@@ -12,6 +13,7 @@ use App\Services\PurchaseReceiptService;
 use Carbon\Carbon;
 use DataTables;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PurchaseReportsController extends Controller
 {
@@ -78,87 +80,131 @@ class PurchaseReportsController extends Controller
 
     public function index(Request $request)
     {
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
-            ->where('is_active', true)
-            ->where('finance_status', 'Distributed')
-            ->where(function ($query) {
-                $query->where('is_goods_voided', false)
-                    ->orWhereNull('is_goods_voided');
+        $batches = PurchaseReceiptBatch::query()
+            ->with([
+                'purchaseRequest.items',
+                'purchaseRequest.employee.jabatan',
+                'purchaseRequest.employee.divisi',
+                'purchaseOrderDocument',
+            ])
+            ->whereNotNull('completed_at')
+            ->whereHas('purchaseRequest', function ($query) {
+                $query->where('is_active', true)
+                    ->where(function ($q) {
+                        $q->where('is_goods_voided', false)
+                            ->orWhereNull('is_goods_voided');
+                    });
             })
-            ->latest();
+            ->orderByDesc('purchase_request_id')
+            ->orderBy('batch_no');
 
-        return DataTables::of($purchaseRequests)
-            ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
-            ->addColumn('quantity', fn($row) => optional($row->items->first())->quantity)
-            ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
-            ->addColumn('vendor_receipt_qty', fn($row) => $row->vendor_received_total ?? $row->vendor_receipt_qty)
-            ->addColumn('handover_number', fn($row) => $row->handover_number)
-            ->addColumn('requester_name', fn($row) => $row->created_by ?: '-')
-            ->addColumn('requester_jabatan', fn($row) => KaryawanProfileService::resolveJabatan($row->employee))
-            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
-            ->addColumn('finance_display_status', fn() => 'Completed')
-            ->filterColumn('item_name', function ($query, $keyword) {
-                $query->whereHas('items', function ($sub) use ($keyword) {
-                    $sub->where('item_name', 'like', "%{$keyword}%");
+        return DataTables::of($batches)
+            ->addColumn('purchase_request_id', fn($row) => $row->purchase_request_id)
+            ->addColumn('batch_id', fn($row) => $row->id)
+            ->addColumn('po_document_id', fn($row) => $row->purchase_order_document_id)
+            ->addColumn('request_number', fn($row) => optional($row->purchaseRequest)->request_number)
+            ->filterColumn('request_number', function ($query, $keyword) {
+                $query->whereHas('purchaseRequest', function ($sub) use ($keyword) {
+                    $sub->where('request_number', 'like', "%{$keyword}%");
                 });
             })
+            ->addColumn('handover_number', fn($row) => $row->handover_number)
+            ->filterColumn('handover_number', function ($query, $keyword) {
+                $query->where('purchase_receipt_batches.handover_number', 'like', "%{$keyword}%");
+            })
+            ->addColumn('po_number', function ($row) {
+                return optional($row->purchaseOrderDocument)->po_number
+                    ?: optional($row->purchaseRequest)->po_number;
+            })
+            ->filterColumn('po_number', function ($query, $keyword) {
+                $query->where(function ($sub) use ($keyword) {
+                    $sub->whereHas('purchaseOrderDocument', function ($po) use ($keyword) {
+                        $po->where('po_number', 'like', "%{$keyword}%");
+                    })->orWhereHas('purchaseRequest', function ($pr) use ($keyword) {
+                        $pr->where('po_number', 'like', "%{$keyword}%");
+                    });
+                });
+            })
+            ->addColumn('supplier_name', fn($row) => optional($row->purchaseOrderDocument)->supplier_name ?: '-')
+            ->filterColumn('supplier_name', function ($query, $keyword) {
+                $query->whereHas('purchaseOrderDocument', function ($po) use ($keyword) {
+                    $po->where('supplier_name', 'like', "%{$keyword}%");
+                });
+            })
+            ->addColumn('item_name', function ($row) {
+                return optional($row->purchaseOrderDocument)->item_name
+                    ?: optional(optional($row->purchaseRequest)->items->first())->item_name;
+            })
+            ->filterColumn('item_name', function ($query, $keyword) {
+                $query->where(function ($sub) use ($keyword) {
+                    $sub->whereHas('purchaseOrderDocument', function ($po) use ($keyword) {
+                        $po->where('item_name', 'like', "%{$keyword}%");
+                    })->orWhereHas('purchaseRequest.items', function ($items) use ($keyword) {
+                        $items->where('item_name', 'like', "%{$keyword}%");
+                    });
+                });
+            })
+            ->addColumn('quantity', fn($row) => optional(optional($row->purchaseRequest)->items->first())->quantity)
             ->filterColumn('quantity', function ($query, $keyword) {
-                $query->whereHas('items', function ($sub) use ($keyword) {
+                $query->whereHas('purchaseRequest.items', function ($sub) use ($keyword) {
                     $sub->where('quantity', 'like', "%{$keyword}%");
                 });
             })
-            ->filterColumn('requester_name', function ($query, $keyword) {
-                $query->where('created_by', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('requester_jabatan', function ($query, $keyword) {
-                $query->whereHas('employee', function ($sub) use ($keyword) {
-                    $sub->where(function ($inner) use ($keyword) {
-                        $inner->where('jabatan', 'like', "%{$keyword}%")
-                            ->orWhereHas('jabatan', function ($jabatan) use ($keyword) {
-                                $jabatan->where('nama_jabatan', 'like', "%{$keyword}%");
-                            });
-                    });
+            ->addColumn('po_quantity', fn($row) => optional($row->purchaseOrderDocument)->quantity)
+            ->filterColumn('po_quantity', function ($query, $keyword) {
+                $query->whereHas('purchaseOrderDocument', function ($po) use ($keyword) {
+                    $po->where('quantity', 'like', "%{$keyword}%");
                 });
             })
-            ->filterColumn('requester_divisi', function ($query, $keyword) {
-                $query->whereHas('employee', function ($sub) use ($keyword) {
-                    $sub->where(function ($inner) use ($keyword) {
-                        $inner->where('department', 'like', "%{$keyword}%")
-                            ->orWhereHas('divisi', function ($divisi) use ($keyword) {
-                                $divisi->where('nama_divisi', 'like', "%{$keyword}%");
-                            });
-                    });
-                });
-            })
+            ->addColumn('vendor_receipt_qty', fn($row) => $row->user_handover_qty)
             ->filterColumn('vendor_receipt_qty', function ($query, $keyword) {
+                $query->where('purchase_receipt_batches.user_handover_qty', 'like', "%{$keyword}%");
+            })
+            ->addColumn('recipient_name', function ($row) {
+                return $row->completed_by ?: optional($row->purchaseRequest)->created_by ?: '-';
+            })
+            ->filterColumn('recipient_name', function ($query, $keyword) {
                 $query->where(function ($sub) use ($keyword) {
-                    $sub->where('vendor_received_total', 'like', "%{$keyword}%")
-                        ->orWhere('vendor_receipt_qty', 'like', "%{$keyword}%");
+                    $sub->where('purchase_receipt_batches.completed_by', 'like', "%{$keyword}%")
+                        ->orWhereHas('purchaseRequest', function ($pr) use ($keyword) {
+                            $pr->where('created_by', 'like', "%{$keyword}%");
+                        });
                 });
             })
+            ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi(optional($row->purchaseRequest)->employee))
+            ->filterColumn('requester_divisi', fn($query, $keyword) => $this->applyBatchRequesterDivisiFilter($query, $keyword))
+            ->addColumn('finance_display_status', fn($row) => $this->resolveReportDisplayStatus($row))
             ->filterColumn('finance_display_status', function ($query, $keyword) {
-                $normalized = strtolower(trim($keyword));
-                $allowed = ['completed', 'selesai', 'distributed', 'distribusi'];
-                if (!in_array($normalized, $allowed, true) && stripos('completed', $keyword) === false) {
-                    $query->whereRaw('1 = 0');
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
                 }
+
+                if ($keyword === 'Partial Receipt' || stripos($keyword, 'partial') !== false) {
+                    $query->whereHas('purchaseRequest', function ($pr) {
+                        $pr->where('finance_status', '!=', 'Distributed')
+                            ->whereRaw('NOT (' . $this->prFullyConfirmedSql() . ')');
+                    });
+
+                    return;
+                }
+
+                if ($keyword === 'Completed' || stripos($keyword, 'complet') !== false || stripos($keyword, 'selesai') !== false) {
+                    $query->whereHas('purchaseRequest', function ($pr) {
+                        $pr->where(function ($sub) {
+                            $sub->where('finance_status', 'Distributed')
+                                ->orWhereRaw($this->prFullyConfirmedSql());
+                        });
+                    });
+
+                    return;
+                }
+
+                $query->whereRaw('1 = 0');
             })
+            ->addColumn('completed_at', fn($row) => $row->completed_at)
             ->filterColumn('completed_at', function ($query, $keyword) {
-                $query->where('completed_at', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('request_number', function ($query, $keyword) {
-                $query->where('purchase_requests.request_number', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('handover_number', function ($query, $keyword) {
-                $query->where('purchase_requests.handover_number', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('po_number', function ($query, $keyword) {
-                $query->where('purchase_requests.po_number', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('unit', function ($query, $keyword) {
-                $query->whereHas('items', function ($sub) use ($keyword) {
-                    $sub->where('unit', 'like', "%{$keyword}%");
-                });
+                $query->where('purchase_receipt_batches.completed_at', 'like', "%{$keyword}%");
             })
             ->make(true);
     }
@@ -167,13 +213,25 @@ class PurchaseReportsController extends Controller
     {
         $purchaseRequest = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
             ->where('is_active', true)
-            ->where('finance_status', 'Distributed')
             ->findOrFail($request->id);
+
+        $hasCompletedBatch = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNotNull('completed_at')
+            ->exists();
+
+        if (!$hasCompletedBatch && $purchaseRequest->finance_status !== 'Distributed') {
+            return response()->json(['message' => 'Data laporan pembelian tidak ditemukan'], 404);
+        }
 
         $item = $purchaseRequest->items->first();
         $poDocuments = PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
             ->orderBy('id')
             ->get();
+        $activePoNumbers = $poDocuments
+            ->filter(fn($doc) => !$doc->is_voided && $doc->po_status === 'active')
+            ->pluck('po_number')
+            ->filter()
+            ->values();
         $poRevisionHistory = PurchaseOrderDocumentRevision::where('purchase_request_id', $purchaseRequest->id)
             ->orderByDesc('revised_at')
             ->get();
@@ -184,7 +242,8 @@ class PurchaseReportsController extends Controller
             ->filter(fn($doc) => (bool) $doc->is_voided)
             ->map(fn($doc) => $this->formatPoDocument($doc, $purchaseRequest))
             ->values();
-        $receiptBatches = PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+        $receiptBatches = PurchaseReceiptBatch::with('purchaseOrderDocument')
+            ->where('purchase_request_id', $purchaseRequest->id)
             ->orderBy('batch_no')
             ->get()
             ->map(fn($batch) => PurchaseReceiptService::formatBatch($batch, self::VENDOR_ATTACHMENT_DIR));
@@ -194,7 +253,10 @@ class PurchaseReportsController extends Controller
                 'summary' => [
                     'id' => $purchaseRequest->id,
                     'request_number' => $purchaseRequest->request_number,
-                    'po_number' => $purchaseRequest->po_number,
+                    'po_number' => $activePoNumbers->isNotEmpty()
+                        ? $activePoNumbers->implode(', ')
+                        : $purchaseRequest->po_number,
+                    'po_numbers' => $activePoNumbers->all(),
                     'handover_number' => $purchaseRequest->handover_number,
                     'finance_status' => $purchaseRequest->finance_status,
                     'status' => $purchaseRequest->status,
@@ -244,6 +306,10 @@ class PurchaseReportsController extends Controller
                     'rejection_finance_note' => $purchaseRequest->rejection_finance_note,
                 ],
                 'purchase_order' => $poDocument ? $this->formatPoDocument($poDocument, $purchaseRequest) : null,
+                'po_documents' => $poDocuments
+                    ->filter(fn($doc) => !$doc->is_voided)
+                    ->map(fn($doc) => $this->formatPoDocument($doc, $purchaseRequest))
+                    ->values(),
                 'po_void_history' => $voidHistory,
                 'po_revision_history' => $poRevisionHistory,
                 'vendor_receipt' => [
@@ -459,5 +525,84 @@ class PurchaseReportsController extends Controller
         }
 
         return [$attachmentField];
+    }
+
+    private function applyBatchRequesterDivisiFilter($query, string $keyword): void
+    {
+        $matchingDivisiIds = MasterDivisi::where('is_active', true)
+            ->where('nama_divisi', 'like', "%{$keyword}%")
+            ->pluck('id');
+
+        $query->whereHas('purchaseRequest', function ($prQuery) use ($keyword, $matchingDivisiIds) {
+            $prQuery->whereExists(function ($sub) use ($keyword, $matchingDivisiIds) {
+                $sub->select(DB::raw(1))
+                    ->from('master_karyawan as mk')
+                    ->whereRaw('purchase_requests.created_by COLLATE utf8mb4_unicode_ci = mk.nama_lengkap COLLATE utf8mb4_unicode_ci')
+                    ->where(function ($q) use ($keyword, $matchingDivisiIds) {
+                        $q->where('mk.department', 'like', "%{$keyword}%");
+
+                        if ($matchingDivisiIds->isNotEmpty()) {
+                            $q->orWhereIn('mk.id_department', $matchingDivisiIds);
+                        }
+
+                        $q->orWhereExists(function ($divSub) use ($keyword) {
+                            $divSub->select(DB::raw(1))
+                                ->from('master_divisi as md')
+                                ->whereColumn('mk.id_department', 'md.id')
+                                ->where('md.nama_divisi', 'like', "%{$keyword}%");
+                        });
+                    });
+            });
+        });
+    }
+
+    private function applyBatchRequesterJabatanFilter($query, string $keyword): void
+    {
+        $query->whereHas('purchaseRequest', function ($prQuery) use ($keyword) {
+            $prQuery->whereExists(function ($sub) use ($keyword) {
+                $sub->select(DB::raw(1))
+                    ->from('master_karyawan as mk')
+                    ->whereRaw('purchase_requests.created_by COLLATE utf8mb4_unicode_ci = mk.nama_lengkap COLLATE utf8mb4_unicode_ci')
+                    ->where(function ($q) use ($keyword) {
+                        $q->where('mk.jabatan', 'like', "%{$keyword}%")
+                            ->orWhereExists(function ($jabSub) use ($keyword) {
+                                $jabSub->select(DB::raw(1))
+                                    ->from('master_jabatan as mj')
+                                    ->whereColumn('mk.id_jabatan', 'mj.id')
+                                    ->where('mj.nama_jabatan', 'like', "%{$keyword}%");
+                            });
+                    });
+            });
+        });
+    }
+
+    private function resolveReportDisplayStatus(PurchaseReceiptBatch $batch): string
+    {
+        $purchaseRequest = $batch->purchaseRequest;
+        if (!$purchaseRequest) {
+            return 'Partial Receipt';
+        }
+
+        if ($purchaseRequest->finance_status === 'Distributed') {
+            return 'Completed';
+        }
+
+        $prQty = (float) optional($purchaseRequest->items->first())->quantity;
+        $targetQty = (float) ($purchaseRequest->receipt_target_qty ?? 0);
+        $target = $targetQty > 0 ? $targetQty : $prQty;
+        $confirmedTotal = (float) ($purchaseRequest->user_confirmed_total ?? 0);
+
+        if ($target > 0 && $confirmedTotal >= $target) {
+            return 'Completed';
+        }
+
+        return 'Partial Receipt';
+    }
+
+    private function prFullyConfirmedSql(): string
+    {
+        $itemQtySql = '(SELECT COALESCE(pri.quantity, 0) FROM purchase_request_items pri WHERE pri.purchase_request_id = purchase_requests.id ORDER BY pri.id ASC LIMIT 1)';
+
+        return "COALESCE(user_confirmed_total, 0) >= COALESCE(NULLIF(receipt_target_qty, 0), {$itemQtySql})";
     }
 }

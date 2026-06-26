@@ -11,7 +11,7 @@ use App\Models\Absensi;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\SendMqttAccess;
-;
+use Bluerhinos\phpMQTT;
 
 class MesinAbsenHandler extends BaseController
 {
@@ -367,14 +367,14 @@ class MesinAbsenHandler extends BaseController
                     }
 
                     if (count($data) == 0) {
-                        \Log::warning("No data found for device: {$deviceCode}");
+                        // \Log::warning("No data found for device: {$deviceCode}");
                     }
 
                     $deviceFolder = public_path('iot/' . $deviceCode);
 
                     if (!file_exists($deviceFolder)) {
                         mkdir($deviceFolder, 0755, true);
-                        \Log::info("Created folder: {$deviceFolder}");
+                        // \Log::info("Created folder: {$deviceFolder}");
                     }
                     
                     $filepath = $deviceFolder . '/access.bin';
@@ -601,7 +601,7 @@ class MesinAbsenHandler extends BaseController
 
     private function send_mqtt($data)
     {
-        $mqtt = new \phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
+        $mqtt = new phpMQTT('apps.intilab.com', '1111', 'AdminIoT');
         if ($mqtt->connect(true, null, '', '')) {
             $mqtt->publish('/intilab/iot/multidevice', $data, 0);
             $mqtt->close();

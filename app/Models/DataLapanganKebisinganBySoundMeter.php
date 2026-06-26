@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class DataLapanganKebisinganBySoundMeter extends Sector
@@ -11,13 +10,21 @@ class DataLapanganKebisinganBySoundMeter extends Sector
     public $timestamps = false;
     protected $guarded = [];
 
-    public function detail(){
+    public function detail()
+    {
         return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')
-        ->where('is_active', true);
+            ->where('is_active', true);
     }
 
-    public function catatan(){
+    public function catatan()
+    {
         return $this->hasMany(CatatanKebisinganSoundMeter::class, 'id_kebisingan', 'id');
     }
-    
+
+    public function kebisinganHeader()
+    {
+        return $this->hasOne(KebisinganHeader::class, 'no_sampel', 'no_sampel')
+            ->where('is_active', true)
+            ->orderBy('id', 'desc');
+    }
 }
