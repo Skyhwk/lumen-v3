@@ -47,14 +47,71 @@ class ImplementatifDataController extends Controller
             if ($request->type === 'Dokumen') {
                 if ($request->hasFile('file')) {
                     $file = $request->file('file');
-                    $filename = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
-                    $destinationPath = base_path('public/uploads/documents');
-                    if (!file_exists($destinationPath)) {
-                        mkdir($destinationPath, 0777, true);
-                    }
-                    $file->move($destinationPath, $filename);
                     
-                    $data['source'] = $filename;
+                    $namaFormulir = $request->nama_formulir;
+                    $formFolder = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $namaFormulir));
+                    if (empty($formFolder)) {
+                        $formFolder = 'formulir_' . time();
+                    }
+                    
+                    $destinationDir = base_path('public/uploads/akreditasi/dokumen-implementatif/' . $formFolder);
+                    if (!file_exists($destinationDir)) {
+                        mkdir($destinationDir, 0777, true);
+                    }
+                    
+                    $extension = strtolower($file->getClientOriginalExtension());
+                    $originalName = $file->getClientOriginalName();
+                    
+                    if ($extension === 'pdf') {
+                        $pdfBaseName = pathinfo($originalName, PATHINFO_FILENAME);
+                        $pdfFolder = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $pdfBaseName));
+                        $pdfFolder = rtrim($pdfFolder, '_-');
+                        if (empty($pdfFolder)) {
+                            $pdfFolder = 'pdf_' . time();
+                        }
+                        
+                        $pdfSubdir = $destinationDir . '/' . $pdfFolder;
+                        if (!file_exists($pdfSubdir)) {
+                            mkdir($pdfSubdir, 0777, true);
+                        }
+                        
+                        $tempPdfName = time() . '_' . str_replace(' ', '_', $originalName);
+                        $file->move($pdfSubdir, $tempPdfName);
+                        $pdfPath = $pdfSubdir . '/' . $tempPdfName;
+                        
+                        $outputPrefix = $pdfSubdir . '/Page';
+                        $command = "pdftoppm -jpeg -r 150 " . escapeshellarg($pdfPath) . " " . escapeshellarg($outputPrefix);
+                        exec($command, $output, $returnVar);
+                        
+                        if (file_exists($pdfPath)) {
+                            unlink($pdfPath);
+                        }
+                        
+                        $pattern = $pdfSubdir . '/Page-*.jpg';
+                        $generatedFiles = glob($pattern);
+                        
+                        if (empty($generatedFiles)) {
+                            throw new \Exception("Gagal mengonversi PDF ke gambar.");
+                        }
+                        
+                        natsort($generatedFiles);
+                        
+                        foreach ($generatedFiles as $gFile) {
+                            if (preg_match('/Page-(\d+)\.jpg$/', $gFile, $matches)) {
+                                $pageNum = $matches[1];
+                                $newFilename = 'Page' . $pageNum . '.jpg';
+                                $newFilePath = $pdfSubdir . '/' . $newFilename;
+                                rename($gFile, $newFilePath);
+                            }
+                        }
+                        
+                        $data['source'] = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $pdfFolder;
+                    } else {
+                        $filename = time() . '_' . str_replace(' ', '_', $originalName);
+                        $file->move($destinationDir, $filename);
+                        
+                        $data['source'] = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $filename;
+                    }
                 } else if ($id) {
                     $old = EmbedSpreadsheet::find($id);
                     if ($old) {
