@@ -79,7 +79,7 @@ class SendNotifPerubahanJadwalJob extends Job
 
             $htmlBody = $this->renderHtml($sales->nama_lengkap);
 
-            Log::info('SendNotifPerubahanJadwalJob: mencoba kirim', [
+            Log::channel('sampling')->info('SendNotifPerubahanJadwalJob: mencoba kirim', [
                 'to'      => $emailSales,
                 'subject' => $subject,
             ]);
