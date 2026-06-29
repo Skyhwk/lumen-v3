@@ -203,7 +203,7 @@
                 @php
                     $parameterUji = json_decode($header->parameter_uji, true);
                 @endphp
-                @if ($header->status_sampling == 'SD')
+                <!-- @if ($header->status_sampling == 'SD')
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @if(!in_array('pH', $parameterUji ?? []) && $header->suhu_air != null || !in_array('Suhu', $parameterUji ?? []) && $header->ph != null)
                         <tr>
@@ -225,7 +225,7 @@
                         </tr>
                         @endif
                     </table>
-                @endif
+                @endif -->
             </td>
         </tr>
     </table>
