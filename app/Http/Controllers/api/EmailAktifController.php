@@ -32,7 +32,7 @@ class EmailAktifController extends Controller
             })
             ->select([
                 'master_karyawan.id as id_karyawan',
-                'master_karyawan.nama_lengkap as nama_karyawan',
+                'master_karyawan.nama_lengkap',
                 'master_karyawan.nik_karyawan',
                 'master_karyawan.email',
                 'master_karyawan.is_active',
@@ -64,7 +64,32 @@ class EmailAktifController extends Controller
                 'spam_meta.total',
                 'trash_meta.total'
             ]);
-        return DataTables::of($query)->make(true);
+        return DataTables::of($query)
+            ->filterColumn('inbox_total', function ($query, $keyword) {
+                $query->whereRaw('COALESCE(inbox_meta.total, 0) LIKE ?', ["%{$keyword}%"]);
+            })
+            ->filterColumn('outbox_total', function ($query, $keyword) {
+                $query->whereRaw('COALESCE(outbox_meta.total, 0) LIKE ?', ["%{$keyword}%"]);
+            })
+            ->filterColumn('spam_total', function ($query, $keyword) {
+                $query->whereRaw('COALESCE(spam_meta.total, 0) LIKE ?', ["%{$keyword}%"]);
+            })
+            ->filterColumn('trash_total', function ($query, $keyword) {
+                $query->whereRaw('COALESCE(trash_meta.total, 0) LIKE ?', ["%{$keyword}%"]);
+            })
+            ->orderColumn('inbox_total', function ($query, $order) {
+                $query->orderByRaw('COALESCE(inbox_meta.total, 0) ' . $order);
+            })
+            ->orderColumn('outbox_total', function ($query, $order) {
+                $query->orderByRaw('COALESCE(outbox_meta.total, 0) ' . $order);
+            })
+            ->orderColumn('spam_total', function ($query, $order) {
+                $query->orderByRaw('COALESCE(spam_meta.total, 0) ' . $order);
+            })
+            ->orderColumn('trash_total', function ($query, $order) {
+                $query->orderByRaw('COALESCE(trash_meta.total, 0) ' . $order);
+            })
+            ->make(true);
     }
 
     public function delete(Request $request)
