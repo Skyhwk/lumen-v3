@@ -17,6 +17,27 @@ class DaftarMobilController extends Controller
         return Datatables::of($data)->make(true);
     }
 
+    public function getAllActive(Request $request)
+    {
+        $data = DaftarMobil::where('is_active', true)
+            ->select(
+                'plat_mobil',
+                'merk_mobil',
+                'tipe_mobil',
+                'nomor_rangka',
+                'nomor_mesin',
+                'warna_mobil',
+                'tahun_perakitan'
+            )
+            ->orderBy('plat_mobil')
+            ->get();
+
+        return response()->json([
+            'message' => 'Data loaded successfully',
+            'data' => $data,
+        ], 200);
+    }
+
     public function getOptions(Request $request)
     {
         $merk = DaftarMobil::where('is_active', true)
