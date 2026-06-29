@@ -32,6 +32,9 @@ class RegionOrderController extends Controller
             'CILEGON',
             'CIKANDE',
             'PANDEGLANG',
+            'CURUG',
+            'BITUNG',
+            'RANGKASBITUNG',
         ];
         $mainRegionFilter = $mode === 'main'
             ? 'AND TRIM(SUBSTRING_INDEX(oh.wilayah, \'-\', -1)) IN (' . implode(',', array_fill(0, count($mainRegions), '?')) . ')'
