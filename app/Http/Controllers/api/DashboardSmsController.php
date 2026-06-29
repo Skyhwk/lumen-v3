@@ -809,6 +809,7 @@ class DashboardSmsController extends Controller
             return [
                 'top_customers' => [],
                 'top_consultants' => [],
+                'top_regions' => [],
             ];
         }
 
@@ -860,9 +861,40 @@ class DashboardSmsController extends Controller
             ->limit(10)
             ->get();
 
+        $regionYear = substr((string) $periode, 0, 4);
+        $regionBaseQuery = function () use ($regionYear) {
+            $query = \DB::table('order_header as oh')
+                ->where('oh.is_active', 1)
+                ->whereNotNull('oh.wilayah')
+                ->whereRaw("TRIM(SUBSTRING_INDEX(oh.wilayah, '-', -1)) != ''")
+                ->whereYear('oh.tanggal_order', $regionYear);
+
+            return $query;
+        };
+
+        $totalRegionOrders = (int) $regionBaseQuery()->count('oh.id');
+
+        $topRegions = $regionBaseQuery()
+            ->select(
+                \DB::raw("TRIM(SUBSTRING_INDEX(oh.wilayah, '-', -1)) as wilayah"),
+                \DB::raw('COUNT(oh.id) as total_order')
+            )
+            ->groupBy(\DB::raw("TRIM(SUBSTRING_INDEX(oh.wilayah, '-', -1))"))
+            ->havingRaw('COUNT(oh.id) > 0')
+            ->orderByDesc('total_order')
+            ->limit(10)
+            ->get()
+            ->map(function ($row) use ($totalRegionOrders) {
+                $totalOrder = (int) ($row->total_order ?? 0);
+                $row->percentage = $totalRegionOrders > 0 ? round(($totalOrder / $totalRegionOrders) * 100, 2) : 0;
+
+                return $row;
+            });
+
         return [
             'top_customers' => $topCustomers,
             'top_consultants' => $topConsultants,
+            'top_regions' => $topRegions,
         ];
     }
 
