@@ -734,11 +734,25 @@ class DashboardSmsController extends Controller
     public function fetchRankings(Request $request)
     {
         try {
-            $year = (int) ($request->year ?: Carbon::now()->year);
-            $month = (int) ($request->month ?: Carbon::now()->month);
-            $month = max(1, min(12, $month));
             $periodType = $request->period_type === 'yearly' ? 'yearly' : 'monthly';
-            $periode = $periodType === 'yearly' ? sprintf('%04d', $year) : sprintf('%04d-%02d', $year, $month);
+            $periode = null;
+
+            if ($periodType === 'yearly') {
+                $year = (int) ($request->year ?: Carbon::now()->year);
+                $periode = sprintf('%04d', $year);
+            } else {
+                if ($request->periode) {
+                    $arr = explode(' ', $request->periode);
+                    $periode = (count($arr) == 2 && isset($this->bulan[$arr[0]])) ? $arr[1] . '-' . $this->bulan[$arr[0]] : null;
+                }
+                
+                if (!$periode) {
+                    $year = (int) ($request->year ?: Carbon::now()->year);
+                    $month = (int) ($request->month ?: Carbon::now()->month);
+                    $month = max(1, min(12, $month));
+                    $periode = sprintf('%04d-%02d', $year, $month);
+                }
+            }
             $salesIds = null;
 
             if ($request->mode === 'team') {
@@ -833,13 +847,14 @@ class DashboardSmsController extends Controller
 
         $topConsultants = $baseQuery()
             ->select(
-                \DB::raw('TRIM(konsultan) as konsultan'),
+                'pelanggan_ID as id_pelanggan',
+                \DB::raw('MAX(konsultan) as konsultan'),
                 \DB::raw('MAX(sales_nama) as sales_nama'),
                 \DB::raw($revenueExpression . ' as revenue')
             )
             ->whereNotNull('konsultan')
             ->whereRaw("TRIM(konsultan) != ''")
-            ->groupBy(\DB::raw('TRIM(konsultan)'))
+            ->groupBy('pelanggan_ID')
             ->havingRaw($revenueExpression . ' > 0')
             ->orderByDesc('revenue')
             ->limit(10)
