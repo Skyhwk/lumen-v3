@@ -17,13 +17,31 @@ class RegionOrderController extends Controller
     public function index(Request $request)
     {
         $tahun = $request->tahun;
+        $mode = $request->mode === 'main' ? 'main' : 'all';
         $search = $request->input('search.value');
+        $mainRegions = [
+            'TANGERANG',
+            'CIKUPA',
+            'BALARAJA',
+            'JAKARTA BARAT',
+            'JAKARTA PUSAT',
+            'JAKARTA SELATAN',
+            'JAKARTA UTARA',
+            'JAKARTA TIMUR',
+            'SERANG',
+            'CILEGON',
+            'CIKANDE',
+            'PANDEGLANG',
+        ];
+        $mainRegionFilter = $mode === 'main'
+            ? 'AND TRIM(SUBSTRING_INDEX(oh.wilayah, \'-\', -1)) IN (' . implode(',', array_fill(0, count($mainRegions), '?')) . ')'
+            : '';
 
         $subSql = "
             SELECT 
                 MAX(oh.id) as id,
                 MAX(oh.id) as last_id,
-                SUBSTRING_INDEX(oh.wilayah, '-', -1) as wilayah,
+                TRIM(SUBSTRING_INDEX(oh.wilayah, '-', -1)) as wilayah,
                 JSON_ARRAYAGG(
                     JSON_OBJECT(
                         'no_document', oh.no_document,
@@ -32,13 +50,14 @@ class RegionOrderController extends Controller
                 ) as quotations,
                 COUNT(oh.id) as total_order
             FROM order_header oh
-            WHERE oh.flag_status = 'ordered'
-                AND YEAR(oh.tanggal_order) = ?
+            WHERE YEAR(oh.tanggal_order) = ?
+                {$mainRegionFilter}
                 AND oh.is_active = 1
-            GROUP BY SUBSTRING_INDEX(oh.wilayah, '-', -1)
+            GROUP BY TRIM(SUBSTRING_INDEX(oh.wilayah, '-', -1))
         ";
 
-        $bindings = [$tahun];
+        $subBindings = array_merge([$tahun], $mode === 'main' ? $mainRegions : []);
+        $bindings = array_merge($subBindings, $subBindings);
 
         if ($search) {
             $searchLower = '%' . strtolower($search) . '%';
@@ -46,13 +65,19 @@ class RegionOrderController extends Controller
         }
 
         $query = DB::table(DB::raw("($subSql) as sub"))
-            ->select('*')
+            ->crossJoin(DB::raw("(SELECT SUM(grouped_region.total_order) AS grand_total FROM ($subSql) as grouped_region) as total_region"))
+            ->select(
+                'sub.*',
+                DB::raw('ROUND((sub.total_order / NULLIF(total_region.grand_total, 0)) * 100, 2) as percentage')
+            )
             ->addBinding($bindings, 'where');
 
         if ($search) {
             $searchLower = '%' . strtolower($search) . '%';
-            $query->whereRaw('LOWER(sub.wilayah) LIKE ?', [$searchLower])
-                ->orWhereRaw('LOWER(sub.quotations) LIKE ?', [$searchLower]);
+            $query->where(function ($q) use ($searchLower) {
+                $q->whereRaw('LOWER(sub.wilayah) LIKE ?', [$searchLower])
+                    ->orWhereRaw('LOWER(sub.quotations) LIKE ?', [$searchLower]);
+            });
         }
 
         return DataTables::of($query)
@@ -64,9 +89,11 @@ class RegionOrderController extends Controller
 
             $orderDir = $request->input('order.0.dir');
 
-            $allowed = ['wilayah', 'total_order'];
+            $allowed = ['wilayah', 'total_order', 'percentage'];
 
-            if (in_array($orderColumn, $allowed)) {
+            if ($orderColumn === 'percentage') {
+                $query->orderBy('percentage', $orderDir);
+            } else if (in_array($orderColumn, $allowed)) {
                 $query->orderBy("sub.$orderColumn", $orderDir);
             } else {
                 $query->orderByDesc('sub.total_order'); // default
