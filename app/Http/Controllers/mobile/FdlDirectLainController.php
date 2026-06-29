@@ -35,7 +35,8 @@ class FdlDirectLainController extends Controller
 {
     public function getSample(Request $request)
     {
-        if (isset($request->no_sample) && $request->no_sample != null) {
+        try {
+            if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','direct_lain')->where('kategori','4-Udara')->first();
             $listParameter = json_decode($parameter->parameters, true);
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
@@ -121,6 +122,12 @@ class FdlDirectLainController extends Controller
         } else {
             return response()->json([
                 'message' => 'Fatal Error'
+            ], 401);
+        }
+        } catch (\Exception $e) {
+            dd($e);
+            return response()->json([
+                'message' => 'Error'
             ], 401);
         }
     }
@@ -240,6 +247,39 @@ class FdlDirectLainController extends Controller
                         foreach ($cek as $key => $value) {
                             if ($value->shift == 'Sesaat') {
                                 if ($request->shift3[$en] == $value->shift) {
+                                    return response()->json([
+                                        'message' => 'Shift sesaat sudah terinput di no sample ini .!'
+                                    ], 401);
+                                }
+                            } else {
+                                $durasi = $value->shift;
+                                $durasi = explode("-", $durasi);
+                                $durasi = $durasi[1];
+                                $nilai_array[$key] = str_replace('"', "", $durasi);
+                            }
+                        }
+                        if (in_array($request->shift3[$en], $nilai_array)) {
+                            return response()->json([
+                                'message' => 'Pengambilan' . $ab . ' Shift ' . $request->shift3[$en] . ' sudah ada !'
+                            ], 401);
+                        }
+                    }
+                }
+            }
+
+            if ($request->param4 != null) {
+                foreach ($request->param4 as $en => $ab) {
+                    if ($request->foto_lain4[$en] == '') {
+                        return response()->json([
+                            'message' => 'Foto lain parameter ' . $ab . ' masing kosong .!'
+                        ], 401);
+                    }
+                    if ($request->shift4[$en] !== "Sesaat") {
+                        $nilai_array = array();
+                        $cek = DataLapanganDirectLain::where('no_sampel', strtoupper(trim($request->no_sample)))->where('parameter', $ab)->get();
+                        foreach ($cek as $key => $value) {
+                            if ($value->shift == 'Sesaat') {
+                                if ($request->shift4[$en] == $value->shift) {
                                     return response()->json([
                                         'message' => 'Shift sesaat sudah terinput di no sample ini .!'
                                     ], 401);
@@ -423,6 +463,55 @@ class FdlDirectLainController extends Controller
                 }
             }
 
+            // Tekanan Differensial
+            if ($request->param4 != null) {
+                foreach ($request->param4 as $in => $a) {
+                    $pengukuran = array();
+                    $pengukuran = [
+                        'data-1' => $request->data16[$in],
+                        'data-2' => $request->data17[$in],
+                        'data-3' => $request->data18[$in],
+                    ];
+
+                    $img2 = str_replace('data:image/jpeg;base64,', '', $request->foto_lain4[$in]);
+                    $file2 = base64_decode($img2);
+                    $safeName2 = DATE('YmdHis') . '_' . $this->user_id . '.jpeg';
+                    $destinationPath2 = public_path() . '/dokumentasi/sampling/';
+                    $success2 = file_put_contents($destinationPath2 . $safeName2, $file2);
+                    if ($request->kateg_uji4[$in] == '24 Jam') {
+                        $shift_peng = $request->kateg_uji4[$in] . '-' . json_encode($request->shift4[$in]);
+                    } else if ($request->kateg_uji4[$in] == '8 Jam') {
+                        $shift_peng = $request->kateg_uji4[$in] . '-' . json_encode($request->shift4[$in]);
+                    } else if ($request->kateg_uji4[$in] == '6 Jam') {
+                        $shift_peng = $request->kateg_uji4[$in] . '-' . json_encode($request->shift4[$in]);
+                    } else {
+                        $shift_peng = 'Sesaat';
+                    }
+                    $data = new DataLapanganDirectLain();
+                    $data->no_sampel                 = strtoupper(trim($request->no_sample));
+                    if ($request->keterangan != '') $data->keterangan            = $request->keterangan;
+                    if ($request->keterangan_2 != '') $data->keterangan_2          = $request->keterangan_2;
+                    if ($request->category != '') $data->kategori_3                = $request->category;
+                    if ($request->lokasi != '') $data->lokasi                         = $request->lokasi;
+                    $data->parameter                         = $a;
+
+                    if ($request->jenis_pengujian != '') $data->jenis_pengukuran              = $request->jenis_pengujian;
+                    if ($request->kondisi_lapangan != '') $data->kondisi_lapangan              = $request->kondisi_lapangan;
+                    if ($request->jam_pengambilan != '') $data->waktu                        = $request->jam_pengambilan;
+                    $data->shift                   = $shift_peng;
+                    if ($request->suhu != '') $data->suhu                          = $request->suhu;
+                    if ($request->kelembapan != '') $data->kelembaban                        = $request->kelembapan;
+                    if ($request->tekanan_udara != '') $data->tekanan_udara                     = $request->tekanan_udara;
+                    $data->pengukuran     = json_encode($pengukuran);
+
+                    if ($request->permission != '') $data->permission                    = $request->permission;
+                    $data->foto_lain        = $safeName2;
+                    $data->created_by                     = $this->karyawan;
+                    $data->created_at                     = Carbon::now()->format('Y-m-d H:i:s');
+                    $data->save();
+                }
+            }
+
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
@@ -547,17 +636,20 @@ class FdlDirectLainController extends Controller
         $sesaat_3 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co2_sesaat')->where('kategori','4-Udara')->first();
         $sesaat_4 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co_sesaat')->where('kategori','4-Udara')->first();
         $sesaat_5 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','o2_sesaat')->where('kategori','4-Udara')->first();
+        $tekanan = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','tekanan_diferensial')->where('kategori','4-Udara')->first();
         return response()->json([
-            'data' =>[
-                'pengukuran_1' => $form1->parameters != null ? json_decode($form1->parameters, true) : [],
-                'pengukuran_2' => $form2->parameters != null ? json_decode($form2->parameters, true) : [],
-                'pengukuran_3' => $form3->parameters != null ? json_decode($form3->parameters, true) : [],
-                'pengukuran_4' => $form4->parameters != null ? json_decode($form4->parameters, true) : [],
-                'sesaat_1' => $sesaat_1->parameters != null ? json_decode($sesaat_1->parameters, true) : [],
-                'sesaat_2' => $sesaat_2->parameters != null ? json_decode($sesaat_2->parameters, true) : [],
-                'sesaat_3' => $sesaat_3->parameters != null ? json_decode($sesaat_3->parameters, true) : [],
-                'sesaat_4' => $sesaat_4->parameters != null ? json_decode($sesaat_4->parameters, true) : [],
-                'sesaat_5' => $sesaat_5->parameters != null ? json_decode($sesaat_5->parameters, true) : [],
+            'data' => [
+                'pengukuran_1' => $this->getParameters('tvoc_voc_hcho_h2co_durasi'),
+                'pengukuran_2' => $this->getParameters('co2_durasi'),
+                'pengukuran_3' => $this->getParameters('co_durasi'),
+                'pengukuran_4' => $this->getParameters('o2_durasi'),
+
+                'sesaat_1' => $this->getParameters('voc_sesaat'),
+                'sesaat_2' => $this->getParameters('h2co_hcho_sesaat'),
+                'sesaat_3' => $this->getParameters('co2_sesaat'),
+                'sesaat_4' => $this->getParameters('co_sesaat'),
+                'sesaat_5' => $this->getParameters('o2_sesaat'),
+                'tekanan' => $this->getParameters('tekanan_diferensial')
             ]
         ]);
     }
@@ -570,5 +662,18 @@ class FdlDirectLainController extends Controller
         $destinationPath = public_path() . '/dokumentasi/sampling/';
         $success = file_put_contents($destinationPath . $safeName, $file);
         return $safeName;
+    }
+
+    private function getParameters($namaFdl)
+    {
+        $data = ParameterFdl::select('parameters')
+            ->where('is_active', 1)
+            ->where('nama_fdl', $namaFdl)
+            ->where('kategori', '4-Udara')
+            ->first();
+
+        return ($data && $data->parameters)
+            ? json_decode($data->parameters, true)
+            : [];
     }
 }
