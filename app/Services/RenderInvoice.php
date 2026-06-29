@@ -40,7 +40,7 @@ class RenderInvoice
             if (!$filename) {
                 throw new \Exception("Gagal membuat file header untuk invoice: $noInvoice");
             }
-            // 2. Kalau ada file_faktur, merge ke halaman berikutnya
+            // 2. Protect invoice final. Faktur pajak tetap disimpan terpisah, tidak digabung ke PDF invoice.
             $filename = $this->mergeInvoiceWithFaktur($filename, $invoice->file_faktur, $ignoreUploadFile ? null : $invoice->upload_file);
 
             // 3. Update filename final
@@ -2470,52 +2470,14 @@ class RenderInvoice
     {
         $invoicePath = public_path('invoice/' . $invoiceFile);
         if ($uploadFile) $invoicePath = public_path('invoice-upload/' . $invoiceFile);
-        $fakturPath  = public_path('invoice-faktur/' . $fakturFile);
         if (!file_exists($invoicePath)) {
             throw new \Exception("File invoice tidak ditemukan: {$invoicePath}");
         }
 
-        // 🟢 CASE 1: kalau faktur ga ada → protect invoice aja
-        if (empty($fakturFile) || !file_exists($fakturPath)) {
-
-            $pdf = new Fpdi();
-            $pdf->setPrintHeader(false);
-            $pdf->setPrintFooter(false);
-
-            $pageCount = $pdf->setSourceFile($invoicePath);
-            for ($i = 1; $i <= $pageCount; $i++) {
-                $tpl = $pdf->importPage($i);
-                $size = $pdf->getTemplateSize($tpl);
-
-                $orientation = $size['width'] > $size['height'] ? 'L' : 'P';
-                $pdf->AddPage($orientation, [$size['width'], $size['height']]);
-                $pdf->useTemplate($tpl);
-            }
-
-            // 🔒 protect langsung
-            $pdf->SetProtection(['copy', 'modify'], '', 'skyhwk12', 0, null);
-
-            // overwrite pakai temp (biar aman)
-            $tempPath  = public_path('invoice/temp_' . $invoiceFile);
-            $finalPath = public_path('invoice/' . $invoiceFile);
-
-            $pdf->Output($tempPath, 'F');
-
-            if (file_exists($finalPath)) {
-                @unlink($finalPath);
-            }
-
-            rename($tempPath, $finalPath);
-
-            return $invoiceFile;
-        }
-
-        // 🔴 CASE 2: kalau ada faktur → merge + protect
         $pdf = new Fpdi();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
 
-        // invoice
         $invoicePageCount = $pdf->setSourceFile($invoicePath);
         for ($i = 1; $i <= $invoicePageCount; $i++) {
             $tpl = $pdf->importPage($i);
@@ -2526,18 +2488,6 @@ class RenderInvoice
             $pdf->useTemplate($tpl);
         }
 
-        // faktur
-        $fakturPageCount = $pdf->setSourceFile($fakturPath);
-        for ($i = 1; $i <= $fakturPageCount; $i++) {
-            $tpl = $pdf->importPage($i);
-            $size = $pdf->getTemplateSize($tpl);
-
-            $orientation = $size['width'] > $size['height'] ? 'L' : 'P';
-            $pdf->AddPage($orientation, [$size['width'], $size['height']]);
-            $pdf->useTemplate($tpl);
-        }
-
-        // 🔒 protect final
         $pdf->SetProtection(['copy', 'modify'], '', 'skyhwk12', 0, null);
 
         $tempPath  = public_path('invoice/temp_' . $invoiceFile);
