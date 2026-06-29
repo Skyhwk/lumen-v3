@@ -12,7 +12,13 @@ class MailComposeController extends Controller
     {
         try {
             $mail = new InternalMailService((int) $this->user_id, $this->karyawan);
-            $mail->sendEmail($request->all());
+            $payload = $request->all();
+
+            if ($request->hasFile('attachments')) {
+                $payload['attachments'] = $request->file('attachments');
+            }
+
+            $mail->sendEmail($payload);
 
             return response()->json(['message' => 'Email berhasil dikirim'], 200);
         } catch (\Throwable $e) {
