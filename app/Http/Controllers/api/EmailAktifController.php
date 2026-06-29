@@ -67,36 +67,7 @@ class EmailAktifController extends Controller
         return DataTables::of($query)->make(true);
     }
 
-    public function listIndex(Request $request)
-    {
-        $idKaryawan = $request->input('id_karyawan');
-        $folder = $request->input('folder');
-
-        if (!$idKaryawan || !$folder) {
-            return response()->json(['message' => 'Karyawan dan Folder harus ditentukan'], 400);
-        }
-
-        $query = MailListIndex::query()
-            ->where('id_karyawan', $idKaryawan)
-            ->where('folder', $folder)
-            ->select([
-                'id',
-                'id_karyawan',
-                'folder',
-                'uid',
-                'seq_num',
-                'from_addr',
-                'to_addr',
-                'subject',
-                'email_date',
-                'size_bytes',
-                'is_seen'
-            ]);
-
-        return DataTables::of($query)->make(true);
-    }
-
-    public function clearData(Request $request)
+    public function delete(Request $request)
     {
         $idKaryawan = $request->input('id_karyawan');
         if (!$idKaryawan) {
@@ -109,21 +80,20 @@ class EmailAktifController extends Controller
             
             DB::table('mail_folder_meta')
                 ->where('id_karyawan', $idKaryawan)
-                ->whereIn('folder', ['inbox', 'outbox', 'spam', 'trash'])
-                ->update([
-                    'total' => 0,
-                    'unread_count' => 0,
-                    'indexed_count' => 0,
-                    'last_uid' => 0,
-                    'min_seq' => 0,
-                    'max_seq' => 0,
-                ]);
+                ->delete();
+
+            $files = glob(storage_path("repository/setting_mail/{$idKaryawan}.*"));
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
 
             DB::commit();
-            return response()->json(['message' => 'Data email karyawan berhasil direset ke 0.'], 200);
+            return response()->json(['message' => 'Data email karyawan berhasil dihapus.'], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Gagal mereset data: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Gagal menghapus data: ' . $e->getMessage()], 500);
         }
     }
 }
