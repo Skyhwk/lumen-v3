@@ -31,6 +31,7 @@ class Kernel extends ConsoleKernel
         Commands\CalculatePoinCustomer::class,
         Commands\CalculateParameter::class,
         Commands\DeactivateExpiredBookings::class,
+        Commands\ScheduleLogTransactionQsd::class,
     ];
 
     /**

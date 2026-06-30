@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 
+use App\Services\LogTransactionQsdService;
 use App\Services\UpdateForecastSPService;
 
 class ScheduleUpdateForecastSP extends Command
@@ -14,5 +15,7 @@ class ScheduleUpdateForecastSP extends Command
     public function handle()
     {
         UpdateForecastSPService::run();
+        $forecastLogs = LogTransactionQsdService::syncForecast();
+        printf("\n[ScheduleUpdateForecastSP] Forecast transaction logs: %d", $forecastLogs);
     }
 }
