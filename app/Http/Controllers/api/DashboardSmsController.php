@@ -254,7 +254,6 @@ class DashboardSmsController extends Controller
                         SUM(revenue_bysampling_order_kontrak_new) as revenue_bysampling_order_kontrak_new,
                         SUM(revenue_forecast_nonkontrak_new) as revenue_forecast_nonkontrak_new,
                         SUM(revenue_forecast_nonkontrak_exist) as revenue_bysampling_order_kontrak_exist,
-                        SUM(revenue_forecast_nonkontrak_exist) as revenue_forecast_nonkontrak_exist,
                         SUM(revenue_forecast_kontrak_new) as revenue_forecast_kontrak_new,
                         SUM(revenue_forecast_kontrak_exist) as revenue_forecast_kontrak_exist
                     ")
@@ -480,7 +479,6 @@ class DashboardSmsController extends Controller
                         SUM(revenue_bysampling_order_kontrak_exist) as revenue_bysampling_order_kontrak_exist,
                         SUM(revenue_forecast_nonkontrak_new) as revenue_forecast_nonkontrak_new,
                         SUM(revenue_forecast_nonkontrak_exist) as revenue_bysampling_order_kontrak_exist,
-                        SUM(revenue_forecast_nonkontrak_exist) as revenue_forecast_nonkontrak_exist,
                         SUM(revenue_forecast_kontrak_new) as revenue_forecast_kontrak_new,
                         SUM(revenue_forecast_kontrak_exist) as revenue_forecast_kontrak_exist
                     ")
