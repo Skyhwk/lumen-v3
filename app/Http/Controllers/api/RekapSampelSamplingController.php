@@ -195,22 +195,63 @@ class RekapSampelSamplingController extends Controller
                 });
             })
             ->filterColumn('tc_order_detail.updated_tc_at', function ($query, $keyword) {
-                $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
-                    $q->where('updated_tc_at', 'like', "%$keyword%");
-                });
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNotExists(function ($q) {
+                        $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                          ->from('tc_order_detail')
+                          ->whereColumn('tc_order_detail.id_order_detail', 'order_detail.id')
+                          ->whereNotNull('tc_order_detail.updated_tc_at');
+                    });
+                } else {
+                    $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
+                        $q->where('updated_tc_at', 'like', "%$keyword%");
+                    });
+                }
             })
             ->filterColumn('tc_order_detail.updated_tc_by', function ($query, $keyword) {
-                $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
-                    $q->where('updated_tc_by', 'like', "%$keyword%");
-                });
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNotExists(function ($q) {
+                        $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                          ->from('tc_order_detail')
+                          ->whereColumn('tc_order_detail.id_order_detail', 'order_detail.id')
+                          ->whereNotNull('tc_order_detail.updated_tc_by');
+                    });
+                } else {
+                    $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
+                        $q->where('updated_tc_by', 'like', "%$keyword%");
+                    });
+                }
+            })
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNull('tanggal_sampling');
+                } else {
+                    $query->where('tanggal_sampling', 'like', "%$keyword%");
+                }
+            })
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNull('tanggal_terima');
+                } else {
+                    $query->where('tanggal_terima', 'like', "%$keyword%");
+                }
             })
             ->addColumn('jadwal_lapangan', function ($row) {
                 return $row->union ? $row->union['created_at'] : null;
             })
             ->filterColumn('jadwal_lapangan', function ($query, $keyword) {
-                $query->whereHas('union', function ($q) use ($keyword) {
-                    $q->where('created_at', 'like', "%$keyword%");
-                });
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNotExists(function ($q) {
+                        $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                          ->from('data_lapangan_union')
+                          ->whereColumn('data_lapangan_union.no_sampel', 'order_detail.no_sampel')
+                          ->whereNotNull('data_lapangan_union.created_at');
+                    });
+                } else {
+                    $query->whereHas('union', function ($q) use ($keyword) {
+                        $q->where('created_at', 'like', "%$keyword%");
+                    });
+                }
             })
             ->addColumn('parameter_status', function ($row) use ($parameterStatusMap) {
                 // ✅ Lazy-compute jika row belum ada di map (misal dari DataTables internal re-query)
