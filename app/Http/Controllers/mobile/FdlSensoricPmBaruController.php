@@ -163,6 +163,7 @@ class FdlSensoricPmBaruController extends Controller
                 'no_sample' => 'No sample tidak boleh kosong!',
                 'pilih_parameter' => 'Parameter tidak boleh kosong!',
                 'flow' => 'Flow tidak boleh kosong!',
+                'waktu_pengukuran' => 'Waktu pengukuran tidak boleh kosong!',
                 'kelas_iso' => 'Kelas ISO tidak boleh kosong!',
                 'panjang' => 'Panjang tidak boleh kosong!',
                 'lebar' => 'Lebar tidak boleh kosong!',
@@ -186,9 +187,11 @@ class FdlSensoricPmBaruController extends Controller
                 $data->shift_pengambilan = 'Sesaat'; // default if none provided
                 $data->pengukuran = json_encode($pengukuran);
                 $data->flow = $request->flow ?? null;
+                $data->waktu_pengukuran = $request->waktu_pengukuran;
                 $data->kelas_iso = $request->kelas_iso ?? null;
                 $data->nilai_iso = $request->nilai_iso[$parameter] ?? null;
                 $data->panjang = $request->panjang ?? null;
+                $data->jumlah_titik = $request->jumlah_titik ?? null;
                 $data->lebar = $request->lebar ?? null;
                 $data->luas_area = $request->luas_area ?? null;
                 $data->foto_lokasi_sampel = $request->foto_lokasi_sampel ? self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id) : null;
