@@ -32,6 +32,8 @@ class Kernel extends ConsoleKernel
         Commands\CalculateParameter::class,
         Commands\DeactivateExpiredBookings::class,
         Commands\ScheduleLogTransactionQsd::class,
+        Commands\SyncQsdRevenue::class,
+        Commands\SyncQsdForecast::class,
     ];
 
     /**

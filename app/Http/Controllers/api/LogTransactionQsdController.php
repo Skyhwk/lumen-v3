@@ -42,6 +42,24 @@ class LogTransactionQsdController extends Controller
             ->whereNotNull('tanggal_sampling_min')
             ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode])
             ->sum('revenue_forecast');
+        // $totalForecast = (float) DB::table('forecast_sp')
+        // ->where(function ($query) use ($periode) {
+            
+        //     // SISI 1: Untuk data Kontrak (QTC), cari berdasarkan kolom 'periode'
+        //     $query->where(function ($q) use ($periode) {
+        //         $q->where('status_quotation', 'kontrak') // Silakan sesuaikan nama kolom & valuenya
+        //         ->where('periode', $periode);
+        //     })
+            
+        //     // SISI 2: ATAU untuk data Non-Kontrak (QT), cari berdasarkan 'tanggal_sampling_min'
+        //     ->orWhere(function ($q) use ($periode) {
+        //         $q->where('status_quotation', 'non_kontrak') // Silakan sesuaikan nama kolom & valuenya
+        //         ->whereNotNull('tanggal_sampling_min')
+        //         ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode]);
+        //     });
+            
+        // })
+        // ->sum('revenue_forecast');
 
         return response()->json([
             'success'        => true,
@@ -58,38 +76,68 @@ class LogTransactionQsdController extends Controller
 
         $data = QsdRevenueTransactionLog::query()
             ->where('periode', $periode)
-            ->orderByDesc('created_at');
+            ->orderByDesc('id');
+
+        $grandTotal = QsdRevenueTransactionLog::where('periode', $periode)->sum('total');
 
         return Datatables::of($data)
             ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
             ->filterColumn('no_order', fn ($query, $keyword) => $this->filterLike($query, 'no_order', $keyword))
             ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))
             ->filterColumn('revenue', fn ($query, $keyword) => $this->filterNumericColumn($query, 'revenue', $keyword))
+            ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'total', $keyword))
             ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword))
             ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
             ->editColumn('revenue', fn ($row) => (float) $row->revenue)
+            ->editColumn('total', fn ($row) => (float) $row->total)
             ->editColumn('status', fn ($row) => ucfirst($row->status))
+            ->with('grand_total', $grandTotal)
             ->make(true);
     }
 
     public function forecastIndex(Request $request)
     {
-        $periode = $this->resolvePeriode($request->input('periode'));
+        try {
+            $periode = $this->resolvePeriode($request->input('periode')); // "2026-06"
+            
+            // 1. Pecah periode menjadi tahun dan bulan
+            $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
+            $bulan = substr($periode, 5, 2); // Menghasilkan "06"
 
-        $data = QsdForecastTransactionLog::query()
-            ->where('periode', $periode)
-            ->orderByDesc('created_at');
+            // 2. Gunakan whereYear dan whereMonth bawaan Laravel
+            $data = QsdForecastTransactionLog::query()
+                ->whereYear('tanggal_sampling_min', $tahun)
+                ->whereMonth('tanggal_sampling_min', $bulan)
+                ->orderByDesc('created_at');
 
-        return Datatables::of($data)
-            ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
-            ->filterColumn('no_penawaran', fn ($query, $keyword) => $this->filterLike($query, 'no_penawaran', $keyword))
-            ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))
-            ->filterColumn('revenue_forecast', fn ($query, $keyword) => $this->filterNumericColumn($query, 'revenue_forecast', $keyword))
-            ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword))
-            ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
-            ->editColumn('revenue_forecast', fn ($row) => (float) $row->revenue_forecast)
-            ->editColumn('status', fn ($row) => ucfirst($row->status))
-            ->make(true);
+            $grandTotal = QsdForecastTransactionLog::query()
+                ->whereYear('tanggal_sampling_min', $tahun)
+                ->whereMonth('tanggal_sampling_min', $bulan)
+                ->sum('revenue_forecast');
+
+            return Datatables::of($data)
+                ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
+                ->filterColumn('no_penawaran', fn ($query, $keyword) => $this->filterLike($query, 'no_penawaran', $keyword))
+                ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))
+                ->filterColumn('revenue_forecast', fn ($query, $keyword) => $this->filterNumericColumn($query, 'revenue_forecast', $keyword))
+                ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'total', $keyword))
+                ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword))
+                ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
+                ->editColumn('revenue_forecast', fn ($row) => (float) $row->revenue_forecast)
+                ->editColumn('total', fn ($row) => (float) $row->total)
+                ->editColumn('status', fn ($row) => ucfirst($row->status))
+                ->with('grand_total', $grandTotal)
+                ->make(true);
+
+        } catch (\Throwable $e) {
+            // Menangkap semua tipe error termasuk Fatal Error (Throwable)
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 200);
+        }
     }
 
     private function resolvePeriode(?string $periode): string
@@ -111,8 +159,12 @@ class LogTransactionQsdController extends Controller
         return $periode;
     }
 
-    private function formatPeriodeLabel(string $periode): string
+    private function formatPeriodeLabel(?string $periode): string
     {
+        if (empty($periode) || !str_contains($periode, '-')) {
+            return '-';
+        }
+
         [$year, $month] = explode('-', $periode);
 
         return (self::BULAN_LABEL[$month] ?? $month) . ' ' . $year;
