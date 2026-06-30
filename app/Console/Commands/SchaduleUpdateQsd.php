@@ -1,6 +1,7 @@
 <?php
 namespace App\Console\Commands;
 
+use App\Services\LogTransactionQsdService;
 use App\Services\SalesDailyQSD;
 use App\Services\SalesKpiMonthly;
 
@@ -29,6 +30,8 @@ class SchaduleUpdateQsd extends Command
         try {
             printf("\n[SchaduleUpdateQsd] [%s] Start Running...", date('Y-m-d H:i:s'));
             SalesDailyQSD::run();
+            $revenueLogs = LogTransactionQsdService::syncRevenue();
+            printf("\n[SchaduleUpdateQsd] [%s] Revenue transaction logs: %d", date('Y-m-d H:i:s'), $revenueLogs);
             printf("\n[SchaduleUpdateQsd] [%s] Running done, delay 3 detik sebelum hitung kpi", date('Y-m-d H:i:s'));
             sleep(3);
             printf("\n[SchaduleUpdateQsd] [%s] Start Running Kpi", date('Y-m-d H:i:s'));

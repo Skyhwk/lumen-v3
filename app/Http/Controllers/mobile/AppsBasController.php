@@ -2677,6 +2677,7 @@ class AppsBasController extends Controller
                 "category"      => $item->category,
                 "model"         => $item->model,
                 "model2"        => $item->model2,
+                "model3"        => $item->model3,
             ];
         })->toArray();
 
