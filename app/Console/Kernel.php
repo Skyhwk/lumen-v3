@@ -31,7 +31,7 @@ class Kernel extends ConsoleKernel
         Commands\CalculatePoinCustomer::class,
         Commands\CalculateParameter::class,
         Commands\DeactivateExpiredBookings::class,
-        Commands\FixJadwalBookingStatus::class,
+        // Commands\FixJadwalBookingStatus::class,
         Commands\FixJadwalSystemDeactivated::class,
         Commands\ScheduleLogTransactionQsd::class,
     ];
