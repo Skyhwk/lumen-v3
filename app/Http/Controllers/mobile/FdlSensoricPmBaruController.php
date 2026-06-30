@@ -169,6 +169,9 @@ class FdlSensoricPmBaruController extends Controller
                 'lebar' => 'Lebar tidak boleh kosong!',
                 'luas_area' => 'Luas area tidak boleh kosong!',
                 'foto_lokasi_sampel' => 'Foto lokasi sampel tidak boleh kosong!',
+                'suhu' => 'Suhu tidak boleh kosong!',
+                'kelembaban' => 'Kelembaban tidak boleh kosong!',
+                'tekanan_udara' => 'Tekanan udara tidak boleh kosong!',
             ];
             foreach ($requiredFields as $field => $message) {
                 if (empty($request->$field)) {
@@ -187,6 +190,9 @@ class FdlSensoricPmBaruController extends Controller
                 $data->shift_pengambilan = 'Sesaat'; // default if none provided
                 $data->pengukuran = json_encode($pengukuran);
                 $data->flow = $request->flow ?? null;
+                $data->suhu = $request->suhu ?: null;
+                $data->kelembapan = $request->kelembaban ?: null;
+                $data->tekanan_udara = $request->tekanan_udara ?: null;
                 $data->waktu_pengukuran = $request->waktu_pengukuran;
                 $data->kelas_iso = $request->kelas_iso ?? null;
                 $data->nilai_iso = $request->nilai_iso[$parameter] ?? null;
