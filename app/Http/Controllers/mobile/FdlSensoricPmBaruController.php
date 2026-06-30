@@ -188,7 +188,7 @@ class FdlSensoricPmBaruController extends Controller
                 $data->keterangan = $request->penamaan_titik ?: null; // penamaan titik
                 $data->parameter = $parameter;
                 $data->shift_pengambilan = 'Sesaat'; // default if none provided
-                $data->pengukuran = json_encode($pengukuran);
+                $data->pengukuran_baru = json_encode($pengukuran);
                 $data->flow = $request->flow ?? null;
                 $data->suhu = $request->suhu ?: null;
                 $data->kelembapan = $request->kelembaban ?: null;
