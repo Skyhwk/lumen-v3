@@ -176,11 +176,7 @@ class FdlSensoricPmBaruController extends Controller
             }
 
             foreach ($request->pilih_parameter as $parameter) {
-                $pengukuran = [];
-
-                foreach (($request->hasil_pengukuran[$parameter] ?? []) as $index => $nilai) {
-                    $pengukuran['hasil_' . ($index + 1)] = $nilai;
-                }
+                $pengukuran = $request->hasil_pengukuran[$parameter] ?? [];
 
                 $data = new DataLapanganPartikulatMeter();
                 $data->no_sampel = strtoupper(trim($request->no_sample));
