@@ -127,7 +127,7 @@ class SamplerTrackingService
         $date = $date ?: Carbon::now()->toDateString();
         $this->sync($date);
 
-        return SamplerTrackingSession::with([
+        $sessions = SamplerTrackingSession::with([
                 'activeMembers.events' => function ($query) {
                     $query->orderBy('event_at')->orderBy('id');
                 },
@@ -146,6 +146,8 @@ class SamplerTrackingService
             ->orderBy('jam_mulai')
             ->orderBy('nama_perusahaan')
             ->get();
+
+        return $this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName);
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
@@ -184,15 +186,22 @@ class SamplerTrackingService
 
                 if (!$sessionsByMember->has($key)) {
                     $sessionsByMember->put($key, [
+                        'group_key' => $key,
                         'date' => $date,
                         'sampler' => $sampler,
                         'member_key' => $memberKey,
+                        'session' => $session,
+                        'member' => $member,
                         'sessions' => collect(),
                         'members' => collect(),
                         'events' => collect(),
+                        'no_orders' => collect(),
+                        'perusahaan' => collect(),
                         'durations' => collect(),
                         'movement_groups' => collect(),
                         'statuses' => collect(),
+                        'jam_mulai' => null,
+                        'jam_selesai' => null,
                     ]);
                 }
 
@@ -200,96 +209,59 @@ class SamplerTrackingService
                 $item['sessions']->push($session);
                 $item['members']->push($member);
                 $item['events'] = $item['events']->merge($member->events ?: collect());
+                $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
+                $item['perusahaan']->push($session->nama_perusahaan ?: '-');
                 $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->durasi])));
                 $item['movement_groups']->push($member->current_movement_group ?: '-');
                 $item['statuses']->push($session->status ?: '-');
+
+                if ($session->jam_mulai && (!$item['jam_mulai'] || $session->jam_mulai < $item['jam_mulai'])) {
+                    $item['jam_mulai'] = $session->jam_mulai;
+                }
+
+                if ($session->jam_selesai && (!$item['jam_selesai'] || $session->jam_selesai > $item['jam_selesai'])) {
+                    $item['jam_selesai'] = $session->jam_selesai;
+                }
+
                 $sessionsByMember->put($key, $item);
             }
         }
 
-        $grouped = collect();
-        foreach ($sessionsByMember as $memberRoute) {
-            $groupKey = $this->teamRouteKey($memberRoute['date'], $memberRoute['sessions']);
-
-            if (!$grouped->has($groupKey)) {
-                $grouped->put($groupKey, [
-                    'group_key' => $groupKey,
-                    'session' => $memberRoute['sessions']->first(),
-                    'member' => $memberRoute['members']->first(),
-                    'sessions' => collect(),
-                    'members' => collect(),
-                    'events' => collect(),
-                    'tanggal_sampling' => $memberRoute['date'],
-                    'jam_mulai' => null,
-                    'jam_selesai' => null,
-                    'no_orders' => collect(),
-                    'perusahaan' => collect(),
-                    'samplers' => collect(),
-                    'durations' => collect(),
-                    'movement_groups' => collect(),
-                    'statuses' => collect(),
-                ]);
-            }
-
-            $row = $grouped->get($groupKey);
-            foreach ($memberRoute['sessions'] as $session) {
-                $row['sessions']->push($session);
-                $row['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
-                $row['perusahaan']->push($session->nama_perusahaan ?: '-');
-
-                if ($session->jam_mulai && (!$row['jam_mulai'] || $session->jam_mulai < $row['jam_mulai'])) {
-                    $row['jam_mulai'] = $session->jam_mulai;
-                }
-
-                if ($session->jam_selesai && (!$row['jam_selesai'] || $session->jam_selesai > $row['jam_selesai'])) {
-                    $row['jam_selesai'] = $session->jam_selesai;
-                }
-            }
-
-            $row['members'] = $row['members']->merge($memberRoute['members']);
-            $row['events'] = $row['events']->merge($memberRoute['events']);
-            $row['samplers']->push($memberRoute['sampler']);
-            $row['durations'] = $row['durations']->merge($memberRoute['durations']);
-            $row['movement_groups'] = $row['movement_groups']->merge($memberRoute['movement_groups']);
-            $row['statuses'] = $row['statuses']->merge($memberRoute['statuses']);
-            $grouped->put($groupKey, $row);
-        }
-
-        return $grouped->values()->map(function ($row) {
+        return $sessionsByMember->values()->map(function ($row) {
             $noOrders = $this->uniqueValues($row['no_orders']);
             $perusahaan = $this->uniqueValues($row['perusahaan']);
-            $samplers = $this->uniqueValues($row['samplers']);
             $durations = $this->uniqueValues($row['durations']);
             $statuses = $this->uniqueValues($row['statuses']);
+            $movementGroups = $this->uniqueValues($row['movement_groups']);
             $lastEvent = $this->latestEvent($row['events']);
+            $sampler = $row['sampler'] ?: '-';
 
             return [
-                'row_id' => $row['tanggal_sampling'] . '-' . implode('|', $noOrders) . '-' . implode('|', $samplers),
+                'row_id' => $row['date'] . '-' . $row['member_key'],
                 'group_key' => $row['group_key'],
                 'session' => $row['session'],
                 'member' => $row['member'],
                 'sessions' => $row['sessions']->values(),
                 'members' => $row['members']->unique('id')->values(),
                 'events' => $row['events']->values(),
-                'tanggal_sampling' => $row['tanggal_sampling'],
+                'tanggal_sampling' => $row['date'],
                 'jam' => ($row['jam_mulai'] ?: '-') . ' - ' . ($row['jam_selesai'] ?: '-'),
                 'jam_mulai' => $row['jam_mulai'],
                 'jam_selesai' => $row['jam_selesai'],
                 'no_order' => count($noOrders) > 0 ? implode(', ', $noOrders) : '-',
                 'perusahaan_list' => $perusahaan,
                 'nama_perusahaan' => count($perusahaan) > 0 ? implode(', ', $perusahaan) : '-',
-                'sampler_list' => $samplers,
-                'sampler' => count($samplers) > 0 ? implode(', ', $samplers) : '-',
+                'sampler_list' => [$sampler],
+                'sampler' => $sampler,
                 'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
-                'movement_group' => $this->teamMovementCode($row['tanggal_sampling'], $row['group_key']),
-                'internal_movement_groups' => $this->uniqueValues($row['movement_groups']),
+                'movement_group' => $this->teamMovementCode($row['date'], $row['group_key']),
+                'internal_movement_groups' => $movementGroups,
                 'total_event' => $row['events']->count(),
                 'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
                 'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
             ];
         });
     }
-
     protected function filterTrackingRows($rows, $request)
     {
         $globalSearch = strtolower(trim($request->input('search.value', '')));
@@ -455,6 +427,7 @@ class SamplerTrackingService
                     'longitude' => $payload['longitude'] ?? null,
                     'photo' => $photo,
                     'note' => $payload['note'] ?? null,
+                    'vehicle_plate' => $payload['vehicle_plate'] ?? null,
                     'is_auto' => $targetMember->id !== $member->id,
                     'sequence_no' => $this->nextSequence($targetMember->id),
                     'event_at' => $payload['event_at'] ?? Carbon::now(),
@@ -480,6 +453,110 @@ class SamplerTrackingService
         return $movementGroup;
     }
 
+    public function updateRouteOrder(array $payload, $actorName = null)
+    {
+        $table = 'sampler_tracking_route_overrides';
+        if (!Schema::hasTable($table)) {
+            throw new \Exception('Tabel sampler_tracking_route_overrides belum ada.');
+        }
+
+        $date = $payload['tanggal'] ?? Carbon::now()->toDateString();
+        $samplerId = $payload['sampler_id'] ?? null;
+        $samplerName = $payload['sampler_name'] ?? $actorName;
+        $samplerKey = $this->samplerRouteKey($samplerId, $samplerName);
+        $reason = trim($payload['reason'] ?? '');
+        $items = collect($payload['items'] ?? [])->values();
+        $now = Carbon::now();
+
+        if (!$samplerKey || $items->isEmpty() || $reason === '') {
+            throw new \Exception('Urutan tujuan dan keterangan wajib diisi.');
+        }
+
+        DB::transaction(function () use ($table, $date, $samplerKey, $samplerId, $samplerName, $reason, $items, $now, $actorName) {
+            DB::table($table)
+                ->where('tanggal_sampling', $date)
+                ->where('sampler_key', $samplerKey)
+                ->update([
+                    'is_active' => 0,
+                    'updated_by' => $actorName,
+                    'updated_at' => $now,
+                ]);
+
+            foreach ($items as $index => $item) {
+                $sessionId = $item['session_id'] ?? null;
+                if (!$sessionId) {
+                    continue;
+                }
+
+                $keys = [
+                    'tanggal_sampling' => $date,
+                    'sampler_key' => $samplerKey,
+                    'sampler_tracking_session_id' => $sessionId,
+                ];
+
+                $values = [
+                    'sampler_id' => $samplerId,
+                    'sampler_name' => $samplerName,
+                    'route_order' => (int) ($item['route_order'] ?? ($index + 1)),
+                    'reason' => $reason,
+                    'is_active' => 1,
+                    'updated_by' => $actorName,
+                    'updated_at' => $now,
+                ];
+
+                $existing = DB::table($table)->where($keys)->first();
+                if ($existing) {
+                    DB::table($table)->where('id', $existing->id)->update($values);
+                    continue;
+                }
+
+                DB::table($table)->insert(array_merge($keys, $values, [
+                    'created_by' => $actorName,
+                    'created_at' => $now,
+                ]));
+            }
+        }, 5);
+
+        return $this->listByDate($date, $samplerId, $samplerName);
+    }
+
+    protected function applyRouteOverrides($sessions, $date, $samplerId = null, $samplerName = null)
+    {
+        $table = 'sampler_tracking_route_overrides';
+        $samplerKey = $this->samplerRouteKey($samplerId, $samplerName);
+
+        if (!$samplerKey || !Schema::hasTable($table)) {
+            return $sessions;
+        }
+
+        $orders = DB::table($table)
+            ->where('tanggal_sampling', $date)
+            ->where('sampler_key', $samplerKey)
+            ->where('is_active', 1)
+            ->pluck('route_order', 'sampler_tracking_session_id');
+
+        if ($orders->isEmpty()) {
+            return $sessions;
+        }
+
+        return $sessions->sortBy(function ($session) use ($orders) {
+            $order = $orders[$session->id] ?? 999999;
+
+            return str_pad($order, 6, '0', STR_PAD_LEFT)
+                . '|' . ($session->jam_mulai ?: '')
+                . '|' . ($session->nama_perusahaan ?: '')
+                . '|' . str_pad($session->id, 10, '0', STR_PAD_LEFT);
+        })->values();
+    }
+
+    protected function samplerRouteKey($samplerId = null, $samplerName = null)
+    {
+        if ($samplerId) {
+            return (string) $samplerId;
+        }
+
+        return $samplerName ? trim((string) $samplerName) : null;
+    }
     protected function makeMovementGroupCode($session, $suffix = null)
     {
         $date = $session && $session->tanggal_sampling

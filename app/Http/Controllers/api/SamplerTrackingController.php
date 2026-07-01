@@ -58,6 +58,7 @@ class SamplerTrackingController extends Controller
             'longitude' => 'nullable',
             'photo' => 'nullable',
             'note' => 'nullable',
+            'vehicle_plate' => 'nullable',
             'event_at' => 'nullable',
         ]);
 
@@ -71,6 +72,24 @@ class SamplerTrackingController extends Controller
         ]);
     }
 
+    public function updateRouteOrder(Request $request)
+    {
+        $this->validate($request, [
+            'tanggal' => 'required',
+            'reason' => 'required',
+            'items' => 'required|array',
+            'items.*.session_id' => 'required',
+            'items.*.route_order' => 'nullable',
+        ]);
+
+        $data = $this->service->updateRouteOrder($request->all(), $request->sampler_name);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Urutan tujuan sampling berhasil disimpan.',
+            'data' => $data,
+        ]);
+    }
     public function updateMovementGroup(Request $request)
     {
         $this->validate($request, [
