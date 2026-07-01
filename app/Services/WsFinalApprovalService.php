@@ -226,6 +226,18 @@ class WsFinalApprovalService
                         ?? $lhpDetail->parameter_uji 
                         ?? null;
 
+                    if ($parameterLab === null || trim((string)$parameterLab) === '') {
+                        $paramsArray = self::arrayValue($detail->parameter);
+                        if (!empty($paramsArray)) {
+                            $firstParam = $paramsArray[0];
+                            if (str_contains($firstParam, ';')) {
+                                $parameterLab = explode(';', $firstParam)[1];
+                            } else {
+                                $parameterLab = $firstParam;
+                            }
+                        }
+                    }
+
                     $hasil = null;
                     if (isset($lhpDetail->hasil_terkoreksi) && trim((string)$lhpDetail->hasil_terkoreksi) !== '' && trim((string)$lhpDetail->hasil_terkoreksi) !== '-') {
                         $hasil = $lhpDetail->hasil_terkoreksi;
@@ -290,6 +302,18 @@ class WsFinalApprovalService
                             ?? $lhpCustom->param 
                             ?? $lhpCustom->parameter_uji 
                             ?? null;
+
+                        if ($parameterLab === null || trim((string)$parameterLab) === '') {
+                            $paramsArray = self::arrayValue($detail->parameter);
+                            if (!empty($paramsArray)) {
+                                $firstParam = $paramsArray[0];
+                                if (str_contains($firstParam, ';')) {
+                                    $parameterLab = explode(';', $firstParam)[1];
+                                } else {
+                                    $parameterLab = $firstParam;
+                                }
+                            }
+                        }
 
                         $hasil = null;
                         if (isset($lhpCustom->hasil_terkoreksi) && trim((string)$lhpCustom->hasil_terkoreksi) !== '' && trim((string)$lhpCustom->hasil_terkoreksi) !== '-') {
