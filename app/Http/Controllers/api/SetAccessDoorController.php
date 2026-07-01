@@ -35,9 +35,7 @@ class SetAccessDoorController extends Controller
     public function getDetail(Request $request)
     {
         $accessDoors = AccessDoor::with(['rfid.karyawan'])
-            ->whereHas('rfid.karyawan')
-            ->where('kode_mesin', $request->kode_device)
-            ->get();
+            ->where('kode_mesin', $request->kode_device);
 
         return Datatables::of($accessDoors)->make(true);
     }
@@ -143,26 +141,28 @@ class SetAccessDoorController extends Controller
     public function destroy(Request $request)
     {
         try {
-            $mqtt = $this->send_mqtt(json_encode((object) [
+            $deleted = AccessDoor::where([
+                'kode_rfid' => explode("-", $request->karyawan)[0],
+                'kode_mesin' => $request->kode_device,
+            ])->delete();
+
+            if (!$deleted) {
+                return response()->json(['message' => 'Access not found'], 404);
+            }
+
+            $this->send_mqtt(json_encode((object) [
                 'topic' => 'del_access',
                 'device' => $request->kode_device,
                 'data' => $request->karyawan,
             ]));
 
-            if ($mqtt) {
-                AccessDoor::where([
-                    'kode_rfid' => explode("-", $request->karyawan)[0],
-                    'kode_mesin' => $request->kode_device
-                ])->delete();
+            $this->newMethod(json_encode((object) [
+                'topic' => 'delete_user',
+                'device' => $request->kode_device,
+                'data' => $request->karyawan,
+            ]));
 
-                $new = $this->newMethod(json_encode((object) [
-                    'topic' => 'delete_user',
-                    'device' => $request->kode_device,
-                    'data' => $request->karyawan,
-                ]));
-
-                return response()->json(['message' => 'Deleted Successfully'], 200);
-            }
+            return response()->json(['message' => 'Deleted Successfully'], 200);
         } catch (\Exception $ex) {
             return response()->json(['message' => $ex->getMessage()], 500);
         }
@@ -172,18 +172,18 @@ class SetAccessDoorController extends Controller
     {
         try {
             foreach ($request->selectedEmployees as $item) {
-                $mqtt = $this->send_mqtt(json_encode((object) [
+                AccessDoor::where([
+                    'kode_rfid' => explode("-", $item['karyawan'])[0],
+                    'kode_mesin' => $item['kode_device'],
+                ])->delete();
+
+                $this->send_mqtt(json_encode((object) [
                     'topic' => 'del_access',
                     'device' => $item['kode_device'],
                     'data' => $item['karyawan'],
                 ]));
 
-                AccessDoor::where([
-                    'kode_rfid' => explode("-", $item['karyawan'])[0],
-                    'kode_mesin' => $item['kode_device']
-                ])->delete();
-
-                $new = $this->newMethod(json_encode((object) [
+                $this->newMethod(json_encode((object) [
                     'topic' => 'delete_user',
                     'device' => $item['kode_device'],
                     'data' => $item['karyawan'],

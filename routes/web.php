@@ -66,6 +66,22 @@ $router->post('/api/import-lhp-udara-ambient', 'external\ImportHasilPengujian@im
 $router->post('/api/import-lhp-udara-lingkungan-kerja', 'external\ImportHasilPengujian@importLhpUdaraLingkunganKerja');
 $router->post('/api/import-lhp-emisi-tidak-bergerak', 'external\ImportHasilPengujian@importLhpEmisiTidakBergerak');
 
+$router->group(['prefix' => 'api/control-access'], function () use ($router) {
+    $router->post('auth/login', 'controlAccess\AuthController@login');
+    $router->post('auth/forgot-password', 'controlAccess\AuthController@forgotPassword');
+    $router->post('auth/reset-password', 'controlAccess\AuthController@resetPassword');
+
+    $router->group(['middleware' => 'control.access.auth'], function () use ($router) {
+        $router->get('auth/me', 'controlAccess\AuthController@me');
+        $router->post('auth/change-password', 'controlAccess\AuthController@changePassword');
+
+        $router->group(['middleware' => ['decrypt.slice']], function () use ($router) {
+            $router->post('lumen/route', 'controlAccess\LumenProxyController@route');
+            $router->post('lumen/datatable', 'controlAccess\LumenProxyController@datatable');
+        });
+    });
+});
+
 $router->group(['prefix' => 'director'], function () use ($router) {
     $router->post('/login', 'directorApp\AuthController@login');
 
