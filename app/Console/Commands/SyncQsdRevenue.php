@@ -16,7 +16,8 @@ class SyncQsdRevenue extends Command
         $this->info('Memulai migrasi data awal daily_qsd...');
 
         $count = 0;
-        $now = Carbon::now();
+        // $now = Carbon::now();
+        $now = Carbon::now()->subMonth();
         
         // Ambil string periode dan angka bulan/tahun saat ini
         $currentPeriodStr = $now->format('Y-m'); // Contoh: '2026-06'
@@ -39,13 +40,9 @@ class SyncQsdRevenue extends Command
             ->orderBy('created_at')
             ->chunk(500, function ($records) use (&$count, $now, $currentPeriodStr, &$lastOrder, &$runningTotal) {
                 $insertData = [];
-
                 foreach ($records as $row) {
                     // --- 1. LOGIC PERIODE ---
-                    $periodeFix = $currentPeriodStr;
-                    if (!empty($row->tanggal_kelompok)) {
-                        $periodeFix = Carbon::parse($row->tanggal_kelompok)->format('Y-m');
-                    }
+                    $periodeFix = $row->periode;
                     // --- 2. LOGIC RUNNING TOTAL (AKUMULASI) ---
                     $currentRevenue = (float) $row->total_revenue;
                     // Jika ini adalah order yang berbeda dari sebelumnya, reset running total ke 0
@@ -59,6 +56,7 @@ class SyncQsdRevenue extends Command
                     $insertData[] = [
                         'no_order'   => $row->no_order,
                         'periode'    => $periodeFix,
+                        'tanggal_kelompok'    => $row->tanggal_kelompok,
                         'revenue'    => $currentRevenue,       // Nilai yang ditambahkan
                         'status'     => 'penambahan',          // Semua data awal dianggap penambahan
                         'total'      => $runningTotal,         // Hasil akumulasi (Total sebelumnya + Revenue saat ini)

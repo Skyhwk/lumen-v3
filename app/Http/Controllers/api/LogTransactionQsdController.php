@@ -42,25 +42,6 @@ class LogTransactionQsdController extends Controller
             ->whereNotNull('tanggal_sampling_min')
             ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode])
             ->sum('revenue_forecast');
-        // $totalForecast = (float) DB::table('forecast_sp')
-        // ->where(function ($query) use ($periode) {
-            
-        //     // SISI 1: Untuk data Kontrak (QTC), cari berdasarkan kolom 'periode'
-        //     $query->where(function ($q) use ($periode) {
-        //         $q->where('status_quotation', 'kontrak') // Silakan sesuaikan nama kolom & valuenya
-        //         ->where('periode', $periode);
-        //     })
-            
-        //     // SISI 2: ATAU untuk data Non-Kontrak (QT), cari berdasarkan 'tanggal_sampling_min'
-        //     ->orWhere(function ($q) use ($periode) {
-        //         $q->where('status_quotation', 'non_kontrak') // Silakan sesuaikan nama kolom & valuenya
-        //         ->whereNotNull('tanggal_sampling_min')
-        //         ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode]);
-        //     });
-            
-        // })
-        // ->sum('revenue_forecast');
-
         return response()->json([
             'success'        => true,
             'periode'        => $periode,
@@ -74,11 +55,17 @@ class LogTransactionQsdController extends Controller
     {
         $periode = $this->resolvePeriode($request->input('periode'));
 
+        $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
+        $bulan = substr($periode, 5, 2); // Menghasilkan "06"
         $data = QsdRevenueTransactionLog::query()
-            ->where('periode', $periode)
-            ->orderByDesc('id');
+            ->whereYear('tanggal_kelompok', $tahun)
+                ->whereMonth('tanggal_kelompok', $bulan)
+                ->orderByDesc('created_at');
 
-        $grandTotal = QsdRevenueTransactionLog::where('periode', $periode)->sum('total');
+        $grandTotal = QsdRevenueTransactionLog::query()
+            ->whereYear('tanggal_kelompok', $tahun)
+                ->whereMonth('tanggal_kelompok', $bulan)
+                ->sum('revenue');
 
         return Datatables::of($data)
             ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))

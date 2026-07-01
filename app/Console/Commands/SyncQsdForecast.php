@@ -16,7 +16,9 @@ class SyncQsdForecast extends Command
         $this->info('Memulai migrasi data forecast_sp berdasarkan tanggal_sampling_min bulan ini...');
 
         $count = 0;
-        $now = Carbon::now();
+        // Gunakan subMonth() untuk mundur 1 bulan dari waktu sekarang
+        // $now = Carbon::now();
+        $now = Carbon::now()->subMonth();
         
         $currentMonth = $now->format('m');
         $currentYear = $now->format('Y');
@@ -42,9 +44,10 @@ class SyncQsdForecast extends Command
                     
                     $currentRevenue = (float) $row->revenue_forecast;
 
-                    // --- LOGIC AKUMULASI KESELURUHAN ---
+                    // --- LOGIC AKUMULASI PER PENAWARAN ---
                     if ($lastQuotation !== $row->no_quotation) {
                         $lastQuotation = $row->no_quotation;
+                        $runningTotal = 0; 
                     }
 
                     $runningTotal += $currentRevenue;
