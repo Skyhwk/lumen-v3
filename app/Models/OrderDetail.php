@@ -590,6 +590,10 @@ class OrderDetail extends Sector
         // pakai new static biar aman di konteks static scope
         return $query->with((new static )->anyDataLapanganRelations);
     }
+    public function getAnyDataLapanganRelations()
+    {
+        return $this->anyDataLapanganRelations;
+    }
 
     public function getAnyDataLapanganAttribute()
     {
