@@ -278,11 +278,6 @@ class OrderDetail extends Sector
         return $this->belongsTo(LhpsMicrobiologiHeader::class, 'cfr', 'no_lhp')->with('lhpsMicrobiologiDetailSampel')->where('is_active', true);
     }
 
-    public function dataLapanganSenyawaVolatil()
-    {
-        return $this->hasMany(DetailSenyawaVolatile::class, 'no_sampel', 'no_sampel');
-    }
-
     public function t_fct()
     {
         return $this->belongsTo(Ftc::class, 'no_sampel', 'no_sample')->where('is_active', true);
@@ -381,6 +376,17 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganPartikulatMeter::class, 'no_sampel', 'no_sampel');
     }
+
+    public function dataLapanganSenyawaVolatile()
+    {
+        return $this->hasMany(DataLapanganSenyawaVolatile::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function detailSenyawaVolatile()
+    {
+        return $this->hasMany(DetailSenyawaVolatile::class, 'no_sampel', 'no_sampel');
+    }
+
     public function pencahayaanHeader()
     {
         return $this->belongsTo(PencahayaanHeader::class, 'no_sampel', 'no_sampel');
@@ -435,6 +441,10 @@ class OrderDetail extends Sector
             $result->push($this->udaraPartikulat);
         }
 
+        if($this->lingkunganHeader()->exists()){
+            $result->push($this->lingkunganHeader);
+        }
+
         return $result->isEmpty() ? null : $result;
     }
     public function getAnyDataLapanganUdara()
@@ -445,6 +455,10 @@ class OrderDetail extends Sector
 
         if ($this->dataLapanganLingkunganKerja()->exists()) {
             return $this->dataLapanganLingkunganKerja;
+        }
+
+        if ($this->dataLapanganSenyawaVolatile()->exists()) {
+            return $this->dataLapanganSenyawaVolatile;
         }
 
         if ($this->dataLapanganDirectLain()->exists()) {
