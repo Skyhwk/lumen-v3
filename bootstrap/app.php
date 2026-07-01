@@ -86,6 +86,7 @@ $app->routeMiddleware([
     'cors' => \App\Http\Middleware\CorsMiddleware::class,
     'auth.customer.token' => App\Http\Middleware\CheckCustomerToken::class,
     'director.auth.token' => App\Http\Middleware\directorApp\ApiTokenAuth::class,
+    'control.access.auth' => App\Http\Middleware\controlAccess\ApiTokenAuth::class,
     'rate.limit.user' => App\Http\Middleware\UserRateLimitMiddleware::class,
 ]);
 
