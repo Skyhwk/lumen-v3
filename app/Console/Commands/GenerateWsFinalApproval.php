@@ -19,6 +19,7 @@ class GenerateWsFinalApproval extends Command
         {--chunk=50 : Jumlah header/LHP per proses}
         {--progress-every=10 : Tampilkan progress setiap jumlah header/LHP ini}
         {--approved-by=system : Nama pengisi approved_by untuk header yang complete}
+        {--category= : Batasi proses untuk kategori tertentu (misal: Air, Udara, Emisi, Padatan)}
         {--dry-run : Hitung data tanpa generate ke tabel ws_final_approval}';
 
     protected $description = 'Generate data ws_final_approval per LHP/CFR dari WS Final yang sudah approve';
@@ -28,6 +29,7 @@ class GenerateWsFinalApproval extends Command
         $chunk = max((int) $this->option('chunk'), 1);
         $progressEvery = max((int) $this->option('progress-every'), 1);
         $approvedBy = (string) $this->option('approved-by');
+        $category = $this->option('category');
         $dryRun = (bool) $this->option('dry-run');
 
         $failed = 0;
@@ -38,23 +40,25 @@ class GenerateWsFinalApproval extends Command
                 $chunk,
                 $progressEvery,
                 $approvedBy,
-                $dryRun
+                $dryRun,
+                $category
             );
         }
 
         return $failed > 0 ? 1 : 0;
     }
 
-    private function processRange(Carbon $from, Carbon $to, int $chunk, int $progressEvery, string $approvedBy, bool $dryRun): int
+    private function processRange(Carbon $from, Carbon $to, int $chunk, int $progressEvery, string $approvedBy, bool $dryRun, ?string $category): int
     {
         $this->info(sprintf(
-            '[WsFinalGenerate] Start from %s to %s%s',
+            '[WsFinalGenerate] Start from %s to %s%s%s',
             $from->format('Y-m-d'),
             $to->format('Y-m-d'),
+            $category ? " [Kategori: $category]" : '',
             $dryRun ? ' (dry-run)' : ''
         ));
 
-        $orderDetailIds = $this->approvedWsFinalOrderDetailIds($from, $to);
+        $orderDetailIds = $this->approvedWsFinalOrderDetailIds($from, $to, $category);
         $total = $orderDetailIds->count();
 
         $this->info(sprintf('[WsFinalGenerate] Total header/LHP: %d', $total));
@@ -75,7 +79,7 @@ class GenerateWsFinalApproval extends Command
 
                 foreach ($orderDetails as $orderDetail) {
                     try {
-                        WsFinalApprovalService::finalizeLhp($orderDetail, true, $approvedBy);
+                        WsFinalApprovalService::finalizeLhpFromLhpTables($orderDetail, true, $approvedBy);
                         $processed++;
                     } catch (\Throwable $th) {
                         $failed++;
@@ -156,9 +160,9 @@ class GenerateWsFinalApproval extends Command
         ]];
     }
 
-    private function approvedWsFinalOrderDetailIds(Carbon $from, Carbon $to)
+    private function approvedWsFinalOrderDetailIds(Carbon $from, Carbon $to, ?string $category)
     {
-        $sampleNumbers = $this->approvedWsFinalSampleNumbers($from, $to);
+        $sampleNumbers = $this->approvedWsFinalSampleNumbers($from, $to, $category);
 
         return OrderDetail::query()
             ->where('is_active', true)
@@ -169,11 +173,13 @@ class GenerateWsFinalApproval extends Command
             ->values();
     }
 
-    private function approvedWsFinalSampleNumbers(Carbon $from, Carbon $to)
+    private function approvedWsFinalSampleNumbers(Carbon $from, Carbon $to, ?string $category)
     {
-        $samples = $this->eligibleWsFinalQuery($from, $to)
+        $samples = $this->eligibleWsFinalQuery($from, $to, $category)
             ->whereIn('status', [1, 2])
             ->pluck('no_sampel');
+
+        $kategoriFilter = $this->resolveKategoriFilter($category);
 
         foreach (WsFinalApprovalService::parameterSourceClasses() as $modelClass) {
             if (!class_exists($modelClass)) {
@@ -195,12 +201,7 @@ class GenerateWsFinalApproval extends Command
             $query = $modelClass::query()
                 ->join('order_detail as od', "{$table}.no_sampel", '=', 'od.no_sampel')
                 ->where('od.is_active', true)
-                ->whereIn('od.kategori_2', [
-                    '1-Air',
-                    '4-Udara',
-                    '5-Emisi',
-                    '6-Padatan',
-                ])
+                ->whereIn('od.kategori_2', $kategoriFilter)
                 ->whereBetween('od.tanggal_sampling', [
                     $from->format('Y-m-d'),
                     $to->format('Y-m-d'),
@@ -222,20 +223,47 @@ class GenerateWsFinalApproval extends Command
             ->values();
     }
 
-    private function eligibleWsFinalQuery(Carbon $from, Carbon $to)
+    private function eligibleWsFinalQuery(Carbon $from, Carbon $to, ?string $category)
     {
+        $kategoriFilter = $this->resolveKategoriFilter($category);
+
         return OrderDetail::query()
             ->where('is_active', true)
-            ->whereIn('kategori_2', [
-                '1-Air',
-                '4-Udara',
-                '5-Emisi',
-                '6-Padatan',
-            ])
+            ->whereIn('kategori_2', $kategoriFilter)
             ->whereBetween('tanggal_sampling', [
                 $from->format('Y-m-d'),
                 $to->format('Y-m-d'),
             ]);
+    }
+
+    private function resolveKategoriFilter(?string $category): array
+    {
+        $categories = [
+            '1-Air',
+            '4-Udara',
+            '5-Emisi',
+            '6-Padatan',
+        ];
+
+        if ($category === null || trim($category) === '') {
+            return $categories;
+        }
+
+        $input = strtolower(trim($category));
+        
+        // Coba cari substring kecocokan
+        $matched = [];
+        foreach ($categories as $cat) {
+            if (str_contains(strtolower($cat), $input)) {
+                $matched[] = $cat;
+            }
+        }
+
+        if (!empty($matched)) {
+            return $matched;
+        }
+
+        return [$category]; // Fallback ke custom input user jika tidak ada yang cocok
     }
 
     private function approvalColumn(string $table): ?string
