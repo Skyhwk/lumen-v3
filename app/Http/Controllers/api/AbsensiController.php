@@ -634,7 +634,7 @@ class AbsensiController extends Controller
             }
 
             $sheet->getStyle('A3:I' . ($u - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-            $sheet->setTitle($dept);
+            $sheet->setTitle($this->sanitizeSheetTitle($sheet, $dept, $spreadsheet));
 
             $path = \public_path() . '/absensi/';
             $writer = new Xlsx($spreadsheet);
@@ -778,7 +778,7 @@ class AbsensiController extends Controller
                     ->getAllBorders()
                     ->setBorderStyle(Border::BORDER_THIN);
 
-                $sheet->setTitle($val->nama_divisi);
+                $sheet->setTitle($this->sanitizeSheetTitle($sheet, $val->nama_divisi, $spreadsheet));
                 $i++;
             }
 
@@ -935,7 +935,7 @@ class AbsensiController extends Controller
                     ->getAllBorders()
                     ->setBorderStyle(Border::BORDER_THIN);
     
-                $sheet->setTitle($cekKaryawan->nama_lengkap);
+                $sheet->setTitle($this->sanitizeSheetTitle($sheet, $cekKaryawan->nama_lengkap, $spreadsheet));
                 $path = \public_path() . '/absensi/';
     
                 $writer = new Xlsx($spreadsheet);
@@ -1258,7 +1258,7 @@ class AbsensiController extends Controller
                     ->getAllBorders()
                     ->setBorderStyle(Border::BORDER_THIN);
                     
-                    $sheet->setTitle($val->nama_lengkap);
+                    $sheet->setTitle($this->sanitizeSheetTitle($sheet, $val->nama_lengkap, $spreadsheet));
                     $i++;
                 }
                     
@@ -1276,6 +1276,31 @@ class AbsensiController extends Controller
         }
         
     }
+    
+    private function sanitizeSheetTitle($sheet, $title, $spreadsheet)
+    {
+        $title = str_replace(['\\', '/', '?', '*', ':', '[', ']'], '', $title);
+        $title = substr($title, 0, 31);
+        if ($title === '' || $title === false) {
+            $title = 'Sheet';
+        }
+        $currentTitle = $sheet->getTitle();
+        $existingTitles = [];
+        foreach ($spreadsheet->getSheetNames() as $name) {
+            if (strtolower($name) !== strtolower($currentTitle)) {
+                $existingTitles[strtolower($name)] = true;
+            }
+        }
+        $tempTitle = $title;
+        $counter = 1;
+        while (isset($existingTitles[strtolower($tempTitle)])) {
+            $suffix = ' ' . $counter;
+            $tempTitle = substr($title, 0, 31 - strlen($suffix)) . $suffix;
+            $counter++;
+        }
+        return $tempTitle;
+    }
+    
     // Tested - Clear
     public function rangeMonth()
     {
