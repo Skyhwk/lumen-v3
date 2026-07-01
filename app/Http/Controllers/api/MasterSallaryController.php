@@ -20,9 +20,32 @@ class MasterSallaryController extends Controller
 {
     public function index()
     {
-        $data = MasterSallary::where('is_active', true);
+        $data = MasterSallary::select(
+                'master_sallary.*',
+                'master_divisi.nama_divisi',
+                DB::raw('(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) as total_gaji')
+            )
+            ->leftJoin('master_karyawan', function ($join) {
+                $join->on('master_sallary.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
+                    ->where('master_karyawan.is_active', true);
+            })
+            ->leftJoin('master_divisi', function ($join) {
+                $join->on('master_karyawan.id_department', '=', 'master_divisi.id')
+                    ->where('master_divisi.is_active', true);
+            })
+            ->where('master_sallary.is_active', true);
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->filterColumn('nama_divisi', function($query, $keyword) {
+                $query->where('master_divisi.nama_divisi', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('total_gaji', function($query, $keyword) {
+                $query->whereRaw("(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) like ?", ["%{$keyword}%"]);
+            })
+            ->orderColumn('total_gaji', function ($query, $order) {
+                $query->orderByRaw("(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) {$order}");
+            })
+            ->make(true);
     }
 
     public function getKaryawan()
