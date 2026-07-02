@@ -17,8 +17,9 @@ class BlastEmailController extends Controller
 {
     private MailListSubscriberService $mailListSubscriberService;
 
-    public function __construct(MailListSubscriberService $mailListSubscriberService)
+    public function __construct(Request $request, MailListSubscriberService $mailListSubscriberService)
     {
+        parent::__construct($request);
         $this->mailListSubscriberService = $mailListSubscriberService;
     }
 
