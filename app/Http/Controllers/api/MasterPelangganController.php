@@ -23,6 +23,7 @@ use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
 
 use App\Services\GetBawahan;
+use App\Services\MailListSubscriberService;
 use Carbon\Carbon;
 
 Carbon::setLocale('id');
@@ -533,6 +534,15 @@ class MasterPelangganController extends Controller
             }
 
             DB::commit();
+
+            if ($request->has('kontak_pelanggan') || $request->has('pic_pelanggan')) {
+                try {
+                    app(MailListSubscriberService::class)->syncFromCustomerRequest($request);
+                } catch (\Throwable $e) {
+                    Log::warning('Gagal sync subscriber blast email: ' . $e->getMessage());
+                }
+            }
+
             return response()->json(['message' => 'Data berhasil disimpan']);
         } catch (\Exception $e) {
             DB::rollback();
