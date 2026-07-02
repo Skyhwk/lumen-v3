@@ -112,6 +112,10 @@ class SamplingPlanController extends Controller
             $data->whereYear('tanggal', Carbon::createFromFormat('Y', $request->tahun)->year);
         }
 
+        if ($request->bulan != '') {
+            $data->whereMonth('tanggal', $request->bulan);
+        }
+
         return Datatables::of($data)
             ->filterColumn('no_quotation', function ($query, $keyword) {
                 $query->where('no_quotation', 'like', '%' . $keyword . '%');
