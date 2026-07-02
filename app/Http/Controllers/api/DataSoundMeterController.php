@@ -164,7 +164,7 @@ class DataSoundMeterController extends Controller
     public function updateNoSampel(Request $request){
         DB::beginTransaction();
         try {
-            DetailSoundMeter::where('id_device', $request->kode)->where('no_sampel', $request->no_sampel_lama)->update([
+            DetailSoundMeter::where('id_device', $request->id_device)->where('no_sampel', $request->no_sampel_lama)->update([
                 'no_sampel' => $request->no_sampel
             ]);
             DB::commit();
