@@ -10,179 +10,64 @@ use Yajra\DataTables\Facades\DataTables;
 use Carbon\Carbon;
 
 class TrackingFdlController extends Controller
-{
-    private function getInnerOrderQuery(Request $request, $bulan, $tahun)
-    {
-        $query = DB::table('order_detail')
-            ->select('no_sampel')
-            ->where('is_active', true);
+{   
+    public function getInputtedFdl(Request $request) {
+        try {
+        $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1')
+            ->withAnyDataLapangan()
+            ->where('is_active', 1)
+            ->whereMonth('tanggal_sampling', $request->bulan)
+            ->whereYear('tanggal_sampling', $request->tahun)
+            ->get();
 
-        if (!empty($bulan) && $bulan !== 'all' && !empty($tahun) && $tahun !== 'all') {
-            $startDate = Carbon::createFromDate($tahun, $bulan, 1)->startOfMonth()->toDateString();
-            $endDate = Carbon::createFromDate($tahun, $bulan, 1)->endOfMonth()->toDateString();
-            $query->whereBetween('tanggal_sampling', [$startDate, $endDate]);
+        if ($data->isEmpty()) {
+            return DataTables::of([])->make(true);
         }
 
-        $columns = $request->input('columns');
-        if (is_array($columns)) {
-            foreach ($columns as $col) {
-                $colName = $col['data'] ?? '';
-                $searchVal = $col['search']['value'] ?? '';
-                if ($searchVal !== '') {
-                    if ($colName === 'no_sampel') {
-                        $query->where('no_sampel', 'like', "%{$searchVal}%");
-                    } elseif ($colName === 'kategori_3') {
-                        $query->where('kategori_3', 'like', "%{$searchVal}%");
-                    } elseif ($colName === 'keterangan_1') {
-                        $query->where('keterangan_1', 'like', "%{$searchVal}%");
+        $rows = [];
+
+        foreach ($data as $orderDetail) {
+            $namaSampler = null;
+            $waktuSubmitFdl = null;
+
+            foreach ($orderDetail->getAnyDataLapanganRelations() as $relation) {
+                if (!$orderDetail->relationLoaded($relation) || !$orderDetail->{$relation}) {
+                    continue;
+                }
+
+                $relasi = $orderDetail->{$relation};
+                $items = $relasi instanceof \Illuminate\Database\Eloquent\Collection
+                    ? $relasi
+                    : collect([$relasi]);
+
+                foreach ($items as $item) {
+                    $createdBy = $item->created_by ?? null;
+                    $createdAt = $item->created_at ?? null;
+
+                    if ($createdBy !== null || $createdAt !== null) {
+                        $namaSampler = $createdBy;
+                        $waktuSubmitFdl = $createdAt;
+                        break 2;
                     }
                 }
             }
-        }
 
-        return $query;
-    }
-
-    private function getUnionSql($innerOrderQuery)
-    {
-        $relations = (new OrderDetail)->getAnyDataLapanganRelations();
-        $queries = [];
-        
-        $innerSql = $innerOrderQuery->toSql();
-        $bindings = $innerOrderQuery->getBindings();
-        foreach ($bindings as $binding) {
-            $value = is_numeric($binding) ? $binding : DB::getPdo()->quote($binding);
-            $innerSql = preg_replace('/\?/', $value, $innerSql, 1);
-        }
-
-        foreach ($relations as $relation) {
-            $model = new OrderDetail();
-            $relInstance = $model->$relation();
-            $relatedModel = $relInstance->getRelated();
-            $table = $relatedModel->getTable();
-            
-            $queries[] = "SELECT dl.no_sampel, MAX(dl.created_at) as tanggal_input_fdl 
-                          FROM `$table` dl
-                          WHERE dl.no_sampel IN ($innerSql)
-                          GROUP BY dl.no_sampel";
-        }
-        
-        $unionSql = implode(" UNION ALL ", $queries);
-        return "SELECT no_sampel, MAX(tanggal_input_fdl) as tanggal_input_fdl FROM ($unionSql) as combined_fdl GROUP BY no_sampel";
-    }
-
-    private function filterDateColumn($query, $column, $keyword)
-    {
-        $keyword = trim(strtolower($keyword));
-        if (empty($keyword)) {
-            return;
-        }
-
-        $indonesianMonths = [
-            'januari' => '01', 'jan' => '01',
-            'februari' => '02', 'feb' => '02',
-            'maret' => '03', 'mar' => '03',
-            'april' => '04', 'apr' => '04',
-            'mei' => '05',
-            'juni' => '06', 'jun' => '06',
-            'juli' => '07', 'jul' => '07',
-            'agustus' => '08', 'agu' => '08', 'agt' => '08',
-            'september' => '09', 'sep' => '09',
-            'oktober' => '10', 'okt' => '10',
-            'november' => '11', 'nov' => '11',
-            'desember' => '12', 'des' => '12',
-        ];
-
-        if (isset($indonesianMonths[$keyword])) {
-            $query->whereMonth($column, $indonesianMonths[$keyword]);
-            return;
-        }
-
-        $parts = preg_split('/\s+/', $keyword);
-
-        if (count($parts) === 3) {
-            $day = str_pad($parts[0], 2, '0', STR_PAD_LEFT);
-            $monthName = $parts[1];
-            $year = $parts[2];
-
-            $month = isset($indonesianMonths[$monthName]) ? $indonesianMonths[$monthName] : null;
-            if ($month && is_numeric($day) && is_numeric($year)) {
-                $query->whereDate($column, "$year-$month-$day");
-                return;
-            }
-        } elseif (count($parts) === 2) {
-            $part1 = $parts[0];
-            $part2 = $parts[1];
-
-            if (isset($indonesianMonths[$part1]) && is_numeric($part2)) {
-                $query->whereMonth($column, $indonesianMonths[$part1])
-                      ->whereYear($column, $part2);
-                return;
-            } elseif (is_numeric($part1) && isset($indonesianMonths[$part2])) {
-                $day = str_pad($part1, 2, '0', STR_PAD_LEFT);
-                $query->whereDay($column, $day)
-                      ->whereMonth($column, $indonesianMonths[$part2]);
-                return;
-            }
-        }
-
-        if (is_numeric($keyword)) {
-            if (strlen($keyword) == 4) {
-                $query->whereYear($column, $keyword);
-            } else {
-                $query->where(function($q) use ($column, $keyword) {
-                    $q->whereDay($column, $keyword)
-                      ->orWhereMonth($column, $keyword);
-                });
-            }
-        } else {
-            $query->where($column, 'like', "%{$keyword}%");
-        }
-    }
-
-    public function getInputtedFdl(Request $request) {
-        try {
-            $bulan = $request->get('bulan', '');
-            $tahun = $request->get('tahun', '');
-            
-            $innerOrderQuery = $this->getInnerOrderQuery($request, $bulan, $tahun);
-            $unionSql = $this->getUnionSql($innerOrderQuery);
-
-            $query = OrderDetail::from('order_detail')
-                ->join(DB::raw("($unionSql) as fdl"), 'fdl.no_sampel', '=', 'order_detail.no_sampel')
-                ->where('order_detail.is_active', true);
-
-            if (!empty($bulan) && $bulan !== 'all' && !empty($tahun) && $tahun !== 'all') {
-                $startDate = Carbon::createFromDate($tahun, $bulan, 1)->startOfMonth()->toDateString();
-                $endDate = Carbon::createFromDate($tahun, $bulan, 1)->endOfMonth()->toDateString();
-                $query->whereBetween('order_detail.tanggal_sampling', [$startDate, $endDate]);
+            if ($namaSampler === null && $waktuSubmitFdl === null) {
+                continue;
             }
 
-            $query->select('order_detail.*', 'fdl.tanggal_input_fdl');
+            $rows[] = [
+                'no_sampel' => $orderDetail->no_sampel,
+                'tanggal_sampling' => $orderDetail->tanggal_sampling,
+                'kategori_3' => $orderDetail->kategori_3,
+                'parameter' => count(json_decode($orderDetail->parameter)),
+                'keterangan_1' => $orderDetail->keterangan_1,
+                'sampler' => $namaSampler,
+                'tanggal_input_fdl' => $waktuSubmitFdl,
+            ];
+        }
 
-            return DataTables::of($query)
-                ->filterColumn('no_sampel', function($query, $keyword) {
-                    $query->where('order_detail.no_sampel', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('tanggal_sampling', function($query, $keyword) {
-                    $this->filterDateColumn($query, 'order_detail.tanggal_sampling', $keyword);
-                })
-                ->filterColumn('tanggal_input_fdl', function($query, $keyword) {
-                    $this->filterDateColumn($query, 'fdl.tanggal_input_fdl', $keyword);
-                })
-                ->filterColumn('kategori_3', function($query, $keyword) {
-                    $query->where('order_detail.kategori_3', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('keterangan_1', function($query, $keyword) {
-                    $query->where('order_detail.keterangan_1', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('parameter', function ($query, $keyword) {
-                    $query->whereRaw(
-                        'JSON_LENGTH(order_detail.parameter) = ?',
-                        [(int) $keyword]
-                    );
-                })
-                ->make(true);
+            return DataTables::of($rows)->make(true);
         } catch (\Exception $th) {
             return response()->json([
                 'success' => false,
@@ -190,48 +75,64 @@ class TrackingFdlController extends Controller
             ], 500);
         }
     }
-
+    
     public function getNotInputtedFdl(Request $request) {
         try {
-            $bulan = $request->get('bulan', '');
-            $tahun = $request->get('tahun', '');
-            
-            $innerOrderQuery = $this->getInnerOrderQuery($request, $bulan, $tahun);
-            $unionSql = $this->getUnionSql($innerOrderQuery);
+            $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1')
+                ->withAnyDataLapangan()
+                ->where('is_active', 1)
+                ->whereMonth('tanggal_sampling', $request->bulan)
+                ->whereYear('tanggal_sampling', $request->tahun)
+                ->get();
 
-            $query = OrderDetail::from('order_detail')
-                ->leftJoin(DB::raw("($unionSql) as fdl"), 'fdl.no_sampel', '=', 'order_detail.no_sampel')
-                ->where('order_detail.is_active', true)
-                ->whereNull('fdl.no_sampel');
-
-            if (!empty($bulan) && $bulan !== 'all' && !empty($tahun) && $tahun !== 'all') {
-                $startDate = Carbon::createFromDate($tahun, $bulan, 1)->startOfMonth()->toDateString();
-                $endDate = Carbon::createFromDate($tahun, $bulan, 1)->endOfMonth()->toDateString();
-                $query->whereBetween('order_detail.tanggal_sampling', [$startDate, $endDate]);
+            if ($data->isEmpty()) {
+                return DataTables::of([])->make(true);
             }
 
-            $query->select('order_detail.*');
+            $rows = [];
 
-            return DataTables::of($query)
-                ->filterColumn('no_sampel', function($query, $keyword) {
-                    $query->where('order_detail.no_sampel', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('tanggal_sampling', function($query, $keyword) {
-                    $this->filterDateColumn($query, 'order_detail.tanggal_sampling', $keyword);
-                })
-                ->filterColumn('kategori_3', function($query, $keyword) {
-                    $query->where('order_detail.kategori_3', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('keterangan_1', function($query, $keyword) {
-                    $query->where('order_detail.keterangan_1', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('parameter', function ($query, $keyword) {
-                    $query->whereRaw(
-                        'JSON_LENGTH(order_detail.parameter) = ?',
-                        [(int) $keyword]
-                    );
-                })
-                ->make(true);
+            foreach ($data as $orderDetail) {
+                $namaSampler = null;
+                $waktuSubmitFdl = null;
+
+                foreach ($orderDetail->getAnyDataLapanganRelations() as $relation) {
+                    if (!$orderDetail->relationLoaded($relation) || !$orderDetail->{$relation}) {
+                        continue;
+                    }
+
+                    $relasi = $orderDetail->{$relation};
+                    $items = $relasi instanceof \Illuminate\Database\Eloquent\Collection
+                        ? $relasi
+                        : collect([$relasi]);
+
+                    foreach ($items as $item) {
+                        $createdBy = $item->created_by ?? null;
+                        $createdAt = $item->created_at ?? null;
+
+                        if ($createdBy !== null || $createdAt !== null) {
+                            $namaSampler = $createdBy;
+                            $waktuSubmitFdl = $createdAt;
+                            break 2;
+                        }
+                    }
+                }
+
+                if ($namaSampler !== null || $waktuSubmitFdl !== null) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'tanggal_sampling' => $orderDetail->tanggal_sampling,
+                    'kategori_3' => $orderDetail->kategori_3,
+                    'parameter' => count(json_decode($orderDetail->parameter)),
+                    'keterangan_1' => $orderDetail->keterangan_1,
+                    'sampler' => null,
+                    'tanggal_input_fdl' => null,
+                ];
+            }
+
+            return DataTables::of($rows)->make(true);
         } catch (\Exception $th) {
             return response()->json([
                 'success' => false,
