@@ -61,14 +61,14 @@ class TrackingFdlController extends Controller
             $relatedModel = $relInstance->getRelated();
             $table = $relatedModel->getTable();
             
-            $queries[] = "SELECT dl.no_sampel, MAX(dl.created_at) as tanggal_input_fdl 
+            $queries[] = "SELECT dl.no_sampel, MAX(dl.created_at) as tanggal_input_fdl, MAX(dl.created_by) as sampler
                           FROM `$table` dl
                           WHERE dl.no_sampel IN ($innerSql)
                           GROUP BY dl.no_sampel";
         }
         
         $unionSql = implode(" UNION ALL ", $queries);
-        return "SELECT no_sampel, MAX(tanggal_input_fdl) as tanggal_input_fdl FROM ($unionSql) as combined_fdl GROUP BY no_sampel";
+        return "SELECT no_sampel, MAX(tanggal_input_fdl) as tanggal_input_fdl, MAX(sampler) as sampler FROM ($unionSql) as combined_fdl GROUP BY no_sampel";
     }
 
     private function filterDateColumn($query, $column, $keyword)
@@ -158,7 +158,7 @@ class TrackingFdlController extends Controller
                 $query->whereBetween('order_detail.tanggal_sampling', [$startDate, $endDate]);
             }
 
-            $query->select('order_detail.*', 'fdl.tanggal_input_fdl');
+            $query->select('order_detail.*', 'fdl.tanggal_input_fdl', 'fdl.sampler');
 
             return DataTables::of($query)
                 ->filterColumn('no_sampel', function($query, $keyword) {
@@ -169,6 +169,9 @@ class TrackingFdlController extends Controller
                 })
                 ->filterColumn('tanggal_input_fdl', function($query, $keyword) {
                     $this->filterDateColumn($query, 'fdl.tanggal_input_fdl', $keyword);
+                })
+                ->filterColumn('sampler', function($query, $keyword) {
+                    $query->where('fdl.sampler', 'like', "%{$keyword}%");
                 })
                 ->filterColumn('kategori_3', function($query, $keyword) {
                     $query->where('order_detail.kategori_3', 'like', "%{$keyword}%");
