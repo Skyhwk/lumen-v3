@@ -812,7 +812,7 @@ class PurchaseOrdersController extends Controller
             return false;
         }
 
-        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
+        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved', 'Done'], true);
     }
 
     private function canProcessPo(PurchaseRequest $purchaseRequest): bool
