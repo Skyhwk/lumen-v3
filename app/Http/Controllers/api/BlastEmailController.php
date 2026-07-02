@@ -17,8 +17,9 @@ class BlastEmailController extends Controller
 {
     private MailListSubscriberService $mailListSubscriberService;
 
-    public function __construct(MailListSubscriberService $mailListSubscriberService)
+    public function __construct(Request $request, MailListSubscriberService $mailListSubscriberService)
     {
+        parent::__construct($request);
         $this->mailListSubscriberService = $mailListSubscriberService;
     }
 
@@ -27,9 +28,19 @@ class BlastEmailController extends Controller
         $project->map(function($item) {
             $item->content = Repository::dir('blast_mail_template')->key($item->name)->get();
             $item->reply_to = json_decode($item->reply_to);
+            $item->email_from = $item->email_from ?: 'fromPromoSales';
             return $item;
         });
         return Datatables::of($project)->make(true);
+    }
+
+    private function resolveEmailFrom(Request $request): string
+    {
+        $from = $request->email_from ?? 'fromPromoSales';
+
+        return in_array($from, SendEmail::allowedFromKeys(), true)
+            ? $from
+            : 'fromPromoSales';
     }
 
     public function saveProject(Request $request) {
@@ -65,6 +76,7 @@ class BlastEmailController extends Controller
             $project = new MailList;
             $project->name = $name;
             $project->email_to = $request->email_to;
+            $project->email_from = $this->resolveEmailFrom($request);
             $project->reply_to = count($request->reply_to) > 0 && $request->reply_to[0] != "" ? json_encode($request->reply_to) : null;
             $project->subject = $request->email_subject;
             $project->content = $name . '.txt'; // Just the filename
@@ -140,6 +152,7 @@ class BlastEmailController extends Controller
     
             $project->name = $name;
             $project->email_to = $request->email_to;
+            $project->email_from = $this->resolveEmailFrom($request);
             $project->reply_to = count($request->reply_to) > 0 && $request->reply_to[0] !== "" ? json_encode($request->reply_to) : null;
             $project->subject = $request->email_subject;
             $project->content = $name . '.txt'; // Just the filename

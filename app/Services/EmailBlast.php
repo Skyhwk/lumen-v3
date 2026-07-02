@@ -113,7 +113,8 @@ class EmailBlast
                     $mailist->email_to,
                     preg_replace('/[^\p{L}\p{N}\s!]/u', '', $mailist->subject),
                     json_decode($mailist->reply_to, true),
-                    $content
+                    $content,
+                    $mailist->email_from ?? 'fromPromoSales'
                 ));
             }
 

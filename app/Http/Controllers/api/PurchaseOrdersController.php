@@ -516,7 +516,7 @@ class PurchaseOrdersController extends Controller
 
         $lineTotal = round($quantity * $unitPrice, 2);
         $subTotal = max(round($lineTotal - $discount, 2), 0);
-        $ppnAmount = round($lineTotal * ($ppnPercent / 100), 2);
+        $ppnAmount = round($subTotal * ($ppnPercent / 100), 2);
         $grandTotal = round($subTotal + $ppnAmount + $otherCost, 2);
 
         DB::beginTransaction();
@@ -812,7 +812,7 @@ class PurchaseOrdersController extends Controller
             return false;
         }
 
-        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
+        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved', 'Done'], true);
     }
 
     private function canProcessPo(PurchaseRequest $purchaseRequest): bool
