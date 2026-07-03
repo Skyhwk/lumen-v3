@@ -524,6 +524,10 @@ class OrderDetail extends Sector
         if ($this->dataLapanganSinarUV()->exists()) {
             return $this->dataLapanganSinarUV;
         }
+
+        if ($this->fdl_sound_meter()->exists()) {
+            return $this->fdl_sound_meter;
+        }
         return null;
     }
 
@@ -580,6 +584,7 @@ class OrderDetail extends Sector
         'dataLapanganSwab',
         'dataLapanganCahaya',
         'dataLapanganSinarUV',
+        'fdl_sound_meter',
 
         'dataLapanganEmisiCerobong',
         'dataLapanganEmisiKendaraan',
@@ -589,6 +594,10 @@ class OrderDetail extends Sector
     {
         // pakai new static biar aman di konteks static scope
         return $query->with((new static )->anyDataLapanganRelations);
+    }
+    public function getAnyDataLapanganRelations()
+    {
+        return $this->anyDataLapanganRelations;
     }
 
     public function getAnyDataLapanganAttribute()
@@ -807,5 +816,11 @@ class OrderDetail extends Sector
     public function scan_analis()
     {
         return $this->hasOne(ScanSampelAnalis::class, 'no_sampel', 'no_sampel');
+    }
+
+    // DATA LAPANGAN
+    public function fdl_sound_meter()
+    {
+        return $this->belongsTo(DataLapanganKebisinganBySoundMeter::class, 'no_sampel', 'no_sampel');
     }
 }

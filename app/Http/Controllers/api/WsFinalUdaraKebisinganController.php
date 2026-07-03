@@ -3,6 +3,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganKebisingan;
+use App\Models\DataLapanganKebisinganBySoundMeter;
 use App\Models\DataLapanganKebisinganPersonal;
 use App\Models\HistoryAppReject;
 use App\Models\KebisinganHeader;
@@ -214,12 +215,14 @@ class WsFinalUdaraKebisinganController extends Controller
             $totLapangan = $lapangan2->count();
 
             try {
-                $data  = [];
-                $model = in_array("Kebisingan (P8J)", $parameterNames)
-                    ? DataLapanganKebisinganPersonal::class
-                    : DataLapanganKebisingan::class;
-
-                $data = $model::where('no_sampel', $request->no_sampel)->first();
+                if (in_array("Kebisingan (P8J)", $parameterNames)) {
+                    $data = DataLapanganKebisinganPersonal::where('no_sampel', $request->no_sampel)->first();
+                } else {
+                    $data = DataLapanganKebisinganBySoundMeter::where('no_sampel', $request->no_sampel)->first();
+                    if (!$data) {
+                        $data = DataLapanganKebisingan::where('no_sampel', $request->no_sampel)->first();
+                    }
+                }
 
                 if (! $data) {
                     return response()->json(['message' => 'Data Lapangan Tidak Ditemukan'], 401);

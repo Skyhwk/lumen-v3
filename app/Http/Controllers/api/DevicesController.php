@@ -87,14 +87,19 @@ class DevicesController extends Controller
             'data' => $request->mode, // normal, open, close
         ]));
 
-        if($mqtt){
+        if ($mqtt) {
             Devices::updateOrCreate(['id' => $request->id], $data);
-    
-            // update access door
-            foreach (AccessDoor::where('kode_mesin', $oldDevice->kode_device)->get() as $accessDoor) {
-                $accessDoor->kode_mesin = $request->kode_device;
-                $accessDoor->save();
-            };
+
+            if (
+                $oldDevice
+                && $request->filled('kode_device')
+                && $request->kode_device !== $oldDevice->kode_device
+            ) {
+                foreach (AccessDoor::where('kode_mesin', $oldDevice->kode_device)->get() as $accessDoor) {
+                    $accessDoor->kode_mesin = $request->kode_device;
+                    $accessDoor->save();
+                }
+            }
         }
 
         return response()->json(['message' => 'Saved Successfully'], 200);
