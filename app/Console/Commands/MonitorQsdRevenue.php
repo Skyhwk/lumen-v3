@@ -18,23 +18,30 @@ class MonitorQsdRevenue extends Command
         $batchId = uniqid('MONITOR-REV-');
         
         $now = Carbon::now();
-        $currentMonth = $now->format('m');
-        $currentYear = $now->format('Y');
+
+        // Batas bulan berjalan dipakai SEBAGAI SATU SUMBER KEBENARAN (single source of truth)
+        // untuk kedua query di bawah, supaya tidak ada celah tanggal yang beda antara
+        // pengambilan log terakhir vs pengambilan data live dari daily_qsd.
+        $startOfMonth = $now->copy()->startOfMonth()->startOfDay();
+        $endOfMonth   = $now->copy()->endOfMonth()->endOfDay();
 
         $this->info("[$batchId] Memulai monitoring pergerakan data revenue...");
         Log::channel('monitor_log_qsd_revenue')->info("[$batchId] Memulai monitoring", ['waktu' => $now->toDateTimeString()]);
 
         try {
-            // Ambil referensi data terakhir, TAPI HANYA UNTUK BULAN BERJALAN
-            $latestLogs = DB::table('qsd_revenue_transaction_log')
-                ->whereIn('id', function($query) use ($currentMonth, $currentYear) {
-                    $query->select(DB::raw('MAX(id)'))
-                          ->from('qsd_revenue_transaction_log')
-                          // Kunci perbaikannya ada di 2 baris ini:
-                          ->whereMonth('tanggal_kelompok', $currentMonth)
-                          ->whereYear('tanggal_kelompok', $currentYear)
-                          ->groupBy('no_order');
-                })
+            // Ambil baris LOG TERAKHIR per no_order, TAPI HANYA UNTUK BULAN BERJALAN.
+            // Dipakai correlated subquery eksplisit (t1.id = MAX(t2.id) dengan filter tanggal
+            // yang SAMA PERSIS dengan batas di atas) supaya "ada/belum ada di log bulan ini"
+            // dicek dengan rentang tanggal yang identik dengan query daily_qsd di bawah.
+            $latestLogs = DB::table('qsd_revenue_transaction_log as t1')
+                ->select('t1.no_order', 't1.total')
+                ->whereBetween('t1.tanggal_kelompok', [$startOfMonth, $endOfMonth])
+                ->whereRaw('t1.id = (
+                        SELECT MAX(t2.id)
+                        FROM qsd_revenue_transaction_log t2
+                        WHERE t2.no_order = t1.no_order
+                          AND t2.tanggal_kelompok BETWEEN ? AND ?
+                    )', [$startOfMonth, $endOfMonth])
                 ->get()
                 ->keyBy('no_order');
 
@@ -48,8 +55,7 @@ class MonitorQsdRevenue extends Command
                     DB::raw('MAX(tanggal_kelompok) as tanggal_kelompok'), 
                     DB::raw('SUM(total_revenue) as total_revenue')
                 )
-                ->whereMonth('tanggal_kelompok', $currentMonth)
-                ->whereYear('tanggal_kelompok', $currentYear)
+                ->whereBetween('tanggal_kelompok', [$startOfMonth, $endOfMonth])
                 ->groupBy('no_order')
                 ->orderBy('no_order')
                 ->chunk(500, function ($records) use ($latestLogs, $now, &$countInsert, $batchId) {
@@ -75,9 +81,13 @@ class MonitorQsdRevenue extends Command
                             // DEBUG: Tampilkan perbandingan untuk setiap order
                             $this->info("  [{$orderId}] isNew={$isNewOrder} | DB_SUM={$currentValue} | LOG_TOTAL={$lastTotal} | diff=" . abs($currentValue - $lastTotal));
 
-                            // LOGIC UTAMA: Gunakan TOLERANSI >= 10 karena kolom 'total' bertipe float
-                            // MySQL float hanya presisi ~7 digit, angka besar bisa meleset ±5
-                            if (!$isNewOrder && abs($currentValue - $lastTotal) < 10) {
+                            // LOGIC UTAMA: bandingkan dengan toleransi kecil (bukan 10) karena
+                            // nilai revenue di sini selalu bulat (Rupiah, tanpa desimal).
+                            // Toleransi 10 sebelumnya terlalu longgar dan bisa menyembunyikan
+                            // perubahan nilai kecil yang seharusnya tetap di-insert sebagai
+                            // penambahan/pengurangan, sehingga log jadi tidak sinkron dengan
+                            // total_revenue riil di daily_qsd.
+                            if (!$isNewOrder && abs($currentValue - $lastTotal) < 0.01) {
                                 $this->info("    → SKIP (nilai sama/dalam toleransi)");
                                 continue; 
                             }
