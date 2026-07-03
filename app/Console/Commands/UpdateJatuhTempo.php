@@ -23,10 +23,22 @@ class UpdateJatuhTempo extends Command
                 ->whereColumn('tgl_jatuh_tempo', '<', 'tgl_invoice')
                 ->whereNotNull('periode');
 
-            $totalData = $query->count();
+            $invoices = $query->get(['id', 'no_invoice', 'tgl_jatuh_tempo', 'tgl_invoice']);
+            $totalData = $invoices->count();
             printf("\n[UpdateJatuhTempo] [%s] Total matching data: %d", Carbon::now(), $totalData);
 
             if ($totalData > 0) {
+                foreach ($invoices as $invoice) {
+                    $logMsg = sprintf(
+                        "Updating No. Invoice: %s | Old tgl_jatuh_tempo: %s | New tgl_jatuh_tempo: %s",
+                        $invoice->no_invoice,
+                        $invoice->tgl_jatuh_tempo,
+                        $invoice->tgl_invoice
+                    );
+                    Log::channel('update_jatuh_tempo')->info($logMsg);
+                    printf("\n[UpdateJatuhTempo] %s", $logMsg);
+                }
+
                 $updatedCount = $query->update([
                     'tgl_jatuh_tempo' => DB::raw('tgl_invoice')
                 ]);
