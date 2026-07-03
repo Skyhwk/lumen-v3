@@ -812,7 +812,7 @@ class PurchaseOrdersController extends Controller
             return false;
         }
 
-        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved', 'Done'], true);
+        return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
     }
 
     private function canProcessPo(PurchaseRequest $purchaseRequest): bool
@@ -823,6 +823,14 @@ class PurchaseOrdersController extends Controller
 
         if (in_array($purchaseRequest->finance_status, ['Waiting to Delegate', 'Rejected', 'Void'], true)) {
             return false;
+        }
+
+        if (
+            $purchaseRequest->status === 'Done'
+            && PurchaseReceiptService::hasDraftPoDocuments($purchaseRequest)
+            && !PurchaseReceiptService::isWorkflowFullyDistributed($purchaseRequest)
+        ) {
+            return true;
         }
 
         return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
