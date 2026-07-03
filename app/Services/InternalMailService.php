@@ -293,13 +293,24 @@ class InternalMailService
         $mail = $mailbox->getMail($uid);
 
         $attachments = [];
+        $inlineImages = [];
         foreach ($mail->getAttachments() as $attachment) {
-            $pathParts = explode('/', $attachment->filePath);
+            $fileName = $this->attachmentFileName($attachment->filePath);
+            $contentId = $this->normalizeContentId($this->getAttachmentContentId($attachment));
+            $url = env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . rawurlencode($fileName);
+            $isInline = $contentId !== '';
+
             $attachments[] = [
                 'filename' => $attachment->name,
                 'size'     => $this->formatSize((int) ($attachment->size ?? 0)),
-                'url'      => env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . end($pathParts),
+                'url'      => $url,
+                'content_id' => $contentId,
+                'inline'   => $isInline,
             ];
+
+            if ($isInline) {
+                $inlineImages[$contentId] = $url;
+            }
         }
 
         $headerAddresses = $this->fetchHeaderAddresses($imapFolder, (int) $uid, $settings);
@@ -333,10 +344,53 @@ class InternalMailService
             'subject'   => $this->decodeHeader($mail->subject ?? ''),
             'date'      => $mail->date ?? null,
             'size'      => $this->formatSize((int) ($mail->size ?? 0)),
-            'html_body' => $mail->textHtml ?? '',
+            'html_body' => $this->replaceInlineImageSources($mail->textHtml ?? '', $inlineImages),
             'text_body' => $mail->textPlain ?? '',
             'attachments' => $attachments,
         ];
+    }
+
+    private function attachmentFileName(?string $filePath): string
+    {
+        $normalized = str_replace('\\', '/', (string) $filePath);
+        return basename($normalized);
+    }
+
+    private function getAttachmentContentId($attachment): string
+    {
+        foreach (['id', 'contentId', 'contentID', 'content_id'] as $property) {
+            if (!empty($attachment->{$property})) {
+                return (string) $attachment->{$property};
+            }
+        }
+
+        if (method_exists($attachment, 'getContentId')) {
+            return (string) $attachment->getContentId();
+        }
+
+        return '';
+    }
+
+    private function normalizeContentId(?string $contentId): string
+    {
+        return trim((string) $contentId, " \t\n\r\0\x0B<>");
+    }
+
+    private function replaceInlineImageSources(string $html, array $inlineImages): string
+    {
+        if ($html === '' || empty($inlineImages)) {
+            return $html;
+        }
+
+        foreach ($inlineImages as $contentId => $url) {
+            $html = preg_replace(
+                '/(["\'])cid:' . preg_quote($contentId, '/') . '(["\'])/i',
+                '$1' . $url . '$2',
+                $html
+            );
+        }
+
+        return $html;
     }
 
     public function markSeen(string $folder, $uid, bool $seen = true): void
