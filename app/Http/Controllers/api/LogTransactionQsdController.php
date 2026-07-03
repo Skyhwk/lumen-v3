@@ -95,11 +95,14 @@ class LogTransactionQsdController extends Controller
             $data = QsdForecastTransactionLog::query()
                 ->whereYear('tanggal_sampling_min', $tahun)
                 ->whereMonth('tanggal_sampling_min', $bulan)
+                ->where('forecast_order', 0)
                 ->orderByDesc('created_at');
 
+            // Exclude forecast yang sudah jadi order (forecast_order = true)
             $grandTotal = QsdForecastTransactionLog::query()
                 ->whereYear('tanggal_sampling_min', $tahun)
                 ->whereMonth('tanggal_sampling_min', $bulan)
+                ->where('forecast_order', 0)
                 ->sum('revenue_forecast');
 
             return Datatables::of($data)

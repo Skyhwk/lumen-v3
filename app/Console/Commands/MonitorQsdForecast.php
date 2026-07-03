@@ -11,46 +11,87 @@ use Throwable;
 class MonitorQsdForecast extends Command
 {
     protected $signature = 'qsd:monitor-forecast';
-    protected $description = 'Monitor pergerakan nilai forecast_sp setiap 5 menit (dengan Tracing)';
+    protected $description = 'Monitor pergerakan nilai forecast_sp setiap 5 menit (2-sisi: tambah & hapus)';
+
+    /**
+     * Parse revenue_forecast dari varchar ke float.
+     * Handle format: "2000000", "2.000.000", "Rp 2.000.000", "2,000,000.50"
+     */
+    private function parseRevenueForecast($raw): float
+    {
+        $str = trim((string) $raw);
+
+        if ($str === '' || $str === null) {
+            return 0.0;
+        }
+
+        // Hapus prefix non-numerik (Rp, IDR, $, dll)
+        $str = preg_replace('/^[^0-9\-]+/', '', $str);
+
+        // Deteksi format: apakah ada koma sebagai desimal (Indonesia) atau titik (International)
+        // Contoh Indonesia: "2.000.000" atau "2.000.000,50"
+        // Contoh International: "2,000,000" atau "2,000,000.50"
+
+        if (preg_match('/,\d{1,2}$/', $str)) {
+            // Koma di akhir dengan 1-2 digit = desimal (format Indonesia)
+            // "2.000.000,50" → hapus titik → ganti koma jadi titik
+            $str = str_replace('.', '', $str);
+            $str = str_replace(',', '.', $str);
+        } else {
+            // Format lain: hapus semua pemisah ribuan (titik dan koma)
+            // "2.000.000" → "2000000"
+            // "2,000,000" → "2000000"
+            $str = str_replace(['.', ','], '', $str);
+        }
+
+        // Bersihkan sisa karakter non-numerik
+        $str = preg_replace('/[^0-9.\-]/', '', $str);
+
+        return round((float) $str, 2);
+    }
 
     public function handle()
     {
-        // 1. Buat Batch ID unik untuk tracing
         $batchId = uniqid('MONITOR-FC-');
         
         $now = Carbon::now();
-        $currentMonth = $now->format('m');
-        $currentYear = $now->format('Y');
+        $startOfMonth = $now->copy()->startOfMonth()->startOfDay();
+        $endOfMonth   = $now->copy()->endOfMonth()->endOfDay();
 
         $this->info("[$batchId] Memulai monitoring pergerakan data forecast...");
-        
-        // Pastikan Anda sudah membuat channel 'monitor_log_qsd_forecast' di config logging Anda
         Log::channel('monitor_log_qsd_forecast')->info("[$batchId] Memulai monitoring qsd_forecast", ['waktu' => $now->toDateTimeString()]);
 
         try {
-            // 2. Ambil data terakhir per no_penawaran dari log untuk membandingkan
-            $latestLogs = DB::table('qsd_forecast_transaction_log')
-                ->whereIn('id', function($query) use ($currentMonth, $currentYear) {
-                    $query->select(DB::raw('MAX(id)'))
-                          ->from('qsd_forecast_transaction_log')
-                           ->whereMonth('tanggal_sampling_min', $currentMonth)
-                          ->whereYear('tanggal_sampling_min', $currentYear)
-                          ->groupBy('no_penawaran');
-                })
+            // ================================================================
+            // STEP 1: Ambil LOG TERAKHIR per no_penawaran bulan berjalan
+            // Termasuk forecast_order agar STEP 3 bisa cek apakah sudah di-flag
+            // ================================================================
+            $latestLogs = DB::table('qsd_forecast_transaction_log as t1')
+                ->select('t1.no_penawaran', 't1.total', 't1.periode', 't1.tanggal_sampling_min', 't1.forecast_order')
+                ->whereBetween('t1.tanggal_sampling_min', [$startOfMonth, $endOfMonth])
+                ->whereRaw('t1.id = (
+                        SELECT MAX(t2.id)
+                        FROM qsd_forecast_transaction_log t2
+                        WHERE t2.no_penawaran = t1.no_penawaran
+                          AND t2.tanggal_sampling_min BETWEEN ? AND ?
+                    )', [$startOfMonth, $endOfMonth])
                 ->get()
                 ->keyBy('no_penawaran');
 
             $countInsert = 0;
 
-            // 3. Tarik data dari forecast_sp berdasarkan tanggal_sampling_min bulan berjalan
+            // Kumpulkan no_penawaran yang masih ada di forecast_sp bulan ini
+            $activePenawaran = collect();
+
+            // ================================================================
+            // STEP 2 (SISI 1): Cek forecast_sp → bandingkan dengan log
+            // ================================================================
             DB::table('forecast_sp')
                 ->whereNotNull('tanggal_sampling_min')
-                ->whereMonth('tanggal_sampling_min', $currentMonth)
-                ->whereYear('tanggal_sampling_min', $currentYear)
+                ->whereBetween('tanggal_sampling_min', [$startOfMonth, $endOfMonth])
                 ->orderBy('no_quotation')
-                ->chunk(500, function ($records) use ($latestLogs, $now, &$countInsert, $batchId) {
+                ->chunk(500, function ($records) use ($latestLogs, $now, &$countInsert, &$activePenawaran, $batchId) {
                     
-                    // Try-Catch Level Chunk
                     try {
                         $insertData = [];
 
@@ -59,9 +100,10 @@ class MonitorQsdForecast extends Command
                             
                             if (empty($penawaranId)) continue;
 
-                            // varchar → float: bersihkan dulu lalu bulatkan 2 desimal
-                            $rawValue = preg_replace('/[^0-9.\-]/', '', (string) $row->revenue_forecast);
-                            $currentValue = round((float) $rawValue, 2);
+                            $activePenawaran->push($penawaranId);
+
+                            // Parse varchar revenue_forecast dengan aman
+                            $currentValue = $this->parseRevenueForecast($row->revenue_forecast);
                             
                             $lastTotal = 0;
                             $isNewPenawaran = true;
@@ -71,16 +113,14 @@ class MonitorQsdForecast extends Command
                                 $isNewPenawaran = false;
                             }
 
-                            // DEBUG: Tampilkan perbandingan
-                            $this->info("  [{$penawaranId}] isNew={$isNewPenawaran} | FORECAST={$currentValue} | LOG_TOTAL={$lastTotal} | diff=" . abs($currentValue - $lastTotal));
+                            // DEBUG: tampilkan RAW varchar + hasil parse
+                            $this->info("  [{$penawaranId}] isNew={$isNewPenawaran} | RAW='{$row->revenue_forecast}' | PARSED={$currentValue} | LOG={$lastTotal} | diff=" . abs($currentValue - $lastTotal));
 
-                            // Gunakan TOLERANSI karena varchar vs decimal bisa beda presisi
-                            if (!$isNewPenawaran && abs($currentValue - $lastTotal) < 10) {
-                                $this->info("    → SKIP (nilai sama/dalam toleransi)");
+                            if (!$isNewPenawaran && abs($currentValue - $lastTotal) < 0.01) {
+                                $this->info("    → SKIP (nilai sama)");
                                 continue; 
                             }
 
-                            // Tentukan status dan selisih
                             if ($isNewPenawaran) {
                                 $status = 'penambahan';
                                 $revenueDiff = $currentValue;
@@ -102,11 +142,14 @@ class MonitorQsdForecast extends Command
                                 'revenue_forecast'     => $revenueDiff,
                                 'status'               => $status,
                                 'total'                => $currentValue,
+                                'forecast_order'       => 0,  // Masih aktif, belum jadi order
                                 'created_at'           => $now,
                             ];
 
-                            // Update nilai di memori PHP
-                            $latestLogs->put($penawaranId, (object)['total' => $currentValue]);
+                            $latestLogs->put($penawaranId, (object)[
+                                'total' => $currentValue,
+                                'forecast_order' => 0,
+                            ]);
                         }
 
                         if (!empty($insertData)) {
@@ -115,24 +158,62 @@ class MonitorQsdForecast extends Command
                         }
 
                     } catch (Throwable $e) {
-                        Log::channel('monitor_log_qsd_forecast')->error("[$batchId] Gagal memproses chunk data", [
-                            'pesan_error' => $e->getMessage(),
-                            'file'        => $e->getFile(),
-                            'baris'       => $e->getLine()
+                        Log::channel('monitor_log_qsd_forecast')->error("[$batchId] Gagal memproses chunk forecast_sp", [
+                            'pesan' => $e->getMessage(),
+                            'baris' => $e->getLine()
                         ]);
                     }
                 });
 
-            $this->info("[$batchId] Selesai! Terdeteksi {$countInsert} pergerakan.");
-            Log::channel('monitor_log_qsd_forecast')->info("[$batchId] Monitoring selesai", ['total_pergerakan_baru' => $countInsert]);
+            // ================================================================
+            // STEP 3 (SISI 2): Cek log → cari yang SUDAH TIDAK ADA di forecast_sp
+            // Update forecast_order = 1 (true) untuk semua log entry bulan ini
+            // ================================================================
+            $this->info("[$batchId] Mengecek penawaran yang sudah dihapus dari forecast_sp...");
+
+            $countOrdered = 0;
+
+            foreach ($latestLogs as $noPenawaran => $logEntry) {
+                // Sudah di-flag sebelumnya → skip
+                if (!empty($logEntry->forecast_order)) {
+                    continue;
+                }
+
+                // Jika no_penawaran ini TIDAK ada di forecast_sp bulan ini → sudah jadi order
+                if (!$activePenawaran->contains($noPenawaran)) {
+                    $lastTotal = round((float) $logEntry->total, 2);
+                    $this->info("  [{$noPenawaran}] ORDERED | LOG_TOTAL={$lastTotal} → set forecast_order=1");
+
+                    // Update SEMUA log entry bulan ini untuk no_penawaran ini
+                    // Gunakan integer 0 bukan boolean false (MySQL tinyint)
+                    $affected = DB::table('qsd_forecast_transaction_log')
+                        ->where('no_penawaran', $noPenawaran)
+                        ->whereBetween('tanggal_sampling_min', [$startOfMonth, $endOfMonth])
+                        ->where('forecast_order', 0)
+                        ->update(['forecast_order' => 1]);
+
+                    $this->info("    → Updated {$affected} rows");
+                    $countOrdered++;
+                }
+            }
+
+            if ($countOrdered > 0) {
+                $this->info("[$batchId] Tercatat {$countOrdered} penawaran sudah menjadi order.");
+            }
+
+            $this->info("[$batchId] Selesai! Terdeteksi {$countInsert} pergerakan, {$countOrdered} ordered.");
+            Log::channel('monitor_log_qsd_forecast')->info("[$batchId] Monitoring selesai", [
+                'pergerakan' => $countInsert,
+                'ordered'    => $countOrdered,
+            ]);
 
         } catch (Throwable $e) {
             $this->error("[$batchId] Terjadi kesalahan fatal. Cek file log.");
-            Log::channel('monitor_log_qsd_forecast')->critical("[$batchId] KESALAHAN FATAL SISTEM MONITORING", [
-                'pesan_error' => $e->getMessage(),
-                'file'        => $e->getFile(),
-                'baris'       => $e->getLine(),
-                'trace'       => $e->getTraceAsString()
+            Log::channel('monitor_log_qsd_forecast')->critical("[$batchId] KESALAHAN FATAL", [
+                'pesan' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'baris' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
     }
