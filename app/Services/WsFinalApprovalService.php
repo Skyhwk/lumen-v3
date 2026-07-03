@@ -1326,6 +1326,12 @@ class WsFinalApprovalService
                 }
             }
 
+            if (Schema::hasTable('ws_final_approval_header')) {
+                if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'air') {
+                    self::syncAirFieldParameters($orderDetail);
+                }
+            }
+
             DB::commit();
 
             return [

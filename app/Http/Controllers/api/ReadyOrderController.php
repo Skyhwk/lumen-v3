@@ -1306,6 +1306,7 @@ class ReadyOrderController extends Controller
                     $DataOrderDetail->nama_perusahaan = $dataQuotation->nama_perusahaan;
                     $DataOrderDetail->alamat_perusahaan = $dataQuotation->alamat_kantor;
                     $DataOrderDetail->no_quotation = $dataQuotation->no_document;
+                    $DataOrderDetail->konsultan = $dataQuotation->konsultan;
                     $DataOrderDetail->no_sampel = $no_sample;
                     $DataOrderDetail->koding_sampling = $no_sampling;
                     $DataOrderDetail->kontrak = 'N';
@@ -1822,6 +1823,7 @@ class ReadyOrderController extends Controller
                     $dataD->id_order_header = $data_lama->id_order;
                     $dataD->no_order = $no_order;
                     $dataD->nama_perusahaan = $dataQuotation->nama_perusahaan;
+                    $dataD->konsultan = $dataQuotation->konsultan;
                     $dataD->alamat_perusahaan = $dataQuotation->alamat_kantor;
                     $dataD->no_quotation = $dataQuotation->no_document;
                     $dataD->no_sampel = $no_sample;
@@ -2399,6 +2401,7 @@ class ReadyOrderController extends Controller
                                 $DataOrderDetail->id_order_header = $dataOrderHeader->id;
                                 $DataOrderDetail->no_order = $dataOrderHeader->no_order;
                                 $DataOrderDetail->nama_perusahaan = $dataQuotation->nama_perusahaan;
+                                $DataOrderDetail->konsultan = $dataQuotation->konsultan;
                                 $DataOrderDetail->alamat_perusahaan = $dataQuotation->alamat_kantor;
                                 $DataOrderDetail->no_quotation = $dataQuotation->no_document;
                                 $DataOrderDetail->no_sampel = $no_sample;
@@ -3160,6 +3163,7 @@ class ReadyOrderController extends Controller
                     $DataOrderDetail->id_order_header = $data_lama->id_order;
                     $DataOrderDetail->no_order = $data_lama->no_order;
                     $DataOrderDetail->nama_perusahaan = $dataQuotation->nama_perusahaan;
+                    $DataOrderDetail->konsultan = $dataQuotation->konsultan;
                     $DataOrderDetail->alamat_perusahaan = $dataQuotation->alamat_kantor;
                     $DataOrderDetail->no_quotation = $dataQuotation->no_document;
                     $DataOrderDetail->no_sampel = $no_sample;
