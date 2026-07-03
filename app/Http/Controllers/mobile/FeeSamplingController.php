@@ -153,6 +153,7 @@ class FeeSamplingController extends Controller
         $jadwal = Jadwal::where('userid', $this->user_id)
         ->whereDate('tanggal', '<', Carbon::today())
         ->whereNotIn('tanggal', $tanggalBlocked)
+        ->where('is_active', 1)
         ->distinct()
         ->pluck('tanggal');
 
