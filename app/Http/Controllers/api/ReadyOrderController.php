@@ -1823,6 +1823,7 @@ class ReadyOrderController extends Controller
                     $dataD->id_order_header = $data_lama->id_order;
                     $dataD->no_order = $no_order;
                     $dataD->nama_perusahaan = $dataQuotation->nama_perusahaan;
+                    $dataD->konsultan = $dataQuotation->konsultan;
                     $dataD->alamat_perusahaan = $dataQuotation->alamat_kantor;
                     $dataD->no_quotation = $dataQuotation->no_document;
                     $dataD->no_sampel = $no_sample;
