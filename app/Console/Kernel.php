@@ -38,6 +38,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncQsdForecast::class,
         Commands\MonitorQsdRevenue::class,
         Commands\MonitorQsdForecast::class,
+        Commands\UpdateOrderDetailKonsultan::class,
     ];
 
     /**

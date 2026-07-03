@@ -229,7 +229,7 @@ class SummaryQSDController extends Controller
                 DB::raw("MONTH(tanggal_kelompok) as month_num"),
                 DB::raw('SUM(total_revenue) as total_revenue')
             )
-            ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01'])
+            ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01', 'SEMX01'])
             ->whereYear('tanggal_kelompok', $tahun);
 
         switch ($type) {
