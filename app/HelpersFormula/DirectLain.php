@@ -19,8 +19,8 @@ class DirectLain {
             }
         }
 
-        $tekanan_udara = !empty($pa) ? number_format(array_sum($pa) / count($pa), 1) : 0;
-        $suhu = !empty($ta) ? number_format(array_sum($ta) / count($ta), 1) : 0;
+        $tekanan_udara = !empty($pa) ? round(array_sum($pa) / count($pa), 1) : 0;
+        $suhu = !empty($ta) ? round(array_sum($ta) / count($ta), 1) : 0;
 
         // Inisialisasi default
         $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = $c23 = NULL;
