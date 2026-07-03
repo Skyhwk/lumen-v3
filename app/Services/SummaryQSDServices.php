@@ -164,7 +164,7 @@ class SummaryQSDServices
                 DB::raw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') as periode"),
                 DB::raw('SUM(total_revenue) as total_revenue'))
         // ->whereIn('sales_id', $allMemberIds)
-            ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01'])
+            ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01', 'SEMX01'])
             ->whereYear('tanggal_sampling_min', $year);
 
         switch ($type) {
