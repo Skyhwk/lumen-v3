@@ -414,7 +414,16 @@ class SamplerTrackingService
 
             $events = [];
             $eventModel = new SamplerTrackingEvent();
-            $photo = $this->storePhoto($payload['photo'] ?? null);
+            $photos = $this->storePhotos($payload['photos'] ?? null);
+
+            if (count($photos) === 0 && !empty($payload['photo'])) {
+                $singlePhoto = $this->storePhoto($payload['photo']);
+                if ($singlePhoto) {
+                    $photos[] = $singlePhoto;
+                }
+            }
+
+            $photo = $photos[0] ?? null;
 
             foreach ($members as $targetMember) {
                 $events[] = SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
@@ -426,6 +435,7 @@ class SamplerTrackingService
                     'latitude' => $payload['latitude'] ?? null,
                     'longitude' => $payload['longitude'] ?? null,
                     'photo' => $photo,
+                    'photos' => count($photos) > 0 ? json_encode($photos) : null,
                     'note' => $payload['note'] ?? null,
                     'vehicle_plate' => $payload['vehicle_plate'] ?? null,
                     'is_auto' => $targetMember->id !== $member->id,
@@ -584,6 +594,32 @@ class SamplerTrackingService
 
         return 'TRK-' . $date . '-' . strtoupper(substr(sha1($date . '|' . $samplerKey), 0, 8));
     }
+    protected function storePhotos($photos)
+    {
+        if (!$photos) {
+            return [];
+        }
+
+        if (is_string($photos)) {
+            $decoded = json_decode($photos, true);
+            $photos = json_last_error() === JSON_ERROR_NONE ? $decoded : [$photos];
+        }
+
+        if (!is_array($photos)) {
+            return [];
+        }
+
+        $stored = [];
+        foreach ($photos as $photo) {
+            $path = $this->storePhoto($photo);
+            if ($path) {
+                $stored[] = $path;
+            }
+        }
+
+        return $stored;
+    }
+
     protected function storePhoto($photo)
     {
         if (!$photo || strpos($photo, 'data:image') !== 0) {
