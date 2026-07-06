@@ -30,6 +30,13 @@ class GenerateHasilPengujianController extends Controller
             ->filterColumn('is_completed', function ($query, $keyword) {
                 if ($keyword) $query->where('is_completed', $keyword);
             })
+            ->filterColumn('is_system', function ($query, $keyword) {
+                if (strtolower($keyword) === 'system') {
+                    $query->where('is_system', 1);
+                } else {
+                    $query->where('is_system', 0)->where('created_by', 'like', "%{$keyword}%");
+                }
+            })
             ->make(true);
     }
 
