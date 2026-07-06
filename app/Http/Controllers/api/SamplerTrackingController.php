@@ -59,9 +59,22 @@ class SamplerTrackingController extends Controller
             'photo' => 'nullable',
             'photos' => 'nullable',
             'note' => 'nullable',
+            'force_bas_checkout' => 'nullable',
             'vehicle_plate' => 'nullable',
             'event_at' => 'nullable',
         ]);
+
+        if ($request->event_type === 'checkout' && !filter_var($request->force_bas_checkout, FILTER_VALIDATE_BOOLEAN)) {
+            $basWarning = $this->service->checkoutBasWarning($request->member_id);
+            if ($basWarning) {
+                return response()->json([
+                    'success' => false,
+                    'requires_confirmation' => true,
+                    'message' => $basWarning['message'],
+                    'data' => $basWarning,
+                ], 409);
+            }
+        }
 
         $events = $this->service->storeEvent($request->all());
 

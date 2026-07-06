@@ -35,6 +35,10 @@ class FdlDirectLainController extends Controller
 {
     public function getSample(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','direct_lain')->where('kategori','4-Udara')->first();
             $listParameter = json_decode($parameter->parameters, true);

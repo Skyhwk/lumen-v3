@@ -50,4 +50,54 @@ class Controller extends BaseController
         $this->db = DATE('Y');
 
     }
+    protected function ensureSamplerCheckedInForSample(Request $request, $field = 'no_sample')
+    {
+        $sample = $request->input($field) ?: $request->input('no_sampel');
+        $sample = strtoupper(trim((string) $sample));
+
+        if ($sample === '') {
+            return null;
+        }
+
+        $orderDetail = \App\Models\OrderDetail::where('no_sampel', $sample)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$orderDetail) {
+            return null;
+        }
+
+        $date = $request->input('tanggal_sampling')
+            ?: $request->input('tanggal')
+            ?: ($orderDetail->tanggal_sampling ?: date('Y-m-d'));
+
+        $samplerName = $this->karyawan;
+        $hasCheckin = \App\Models\SamplerTrackingSession::where('is_active', true)
+            ->whereDate('tanggal_sampling', $date)
+            ->where(function ($query) use ($orderDetail) {
+                if ($orderDetail->no_order) {
+                    $query->where('no_order', $orderDetail->no_order);
+                }
+
+                if (!empty($orderDetail->no_quotation)) {
+                    $query->orWhere('no_quotation', $orderDetail->no_quotation);
+                }
+            })
+            ->whereHas('activeMembers', function ($query) use ($samplerName) {
+                $query->where('sampler_name', 'like', '%' . $samplerName . '%')
+                    ->whereHas('events', function ($eventQuery) {
+                        $eventQuery->where('event_type', 'checkin');
+                    });
+            })
+            ->exists();
+
+        if ($hasCheckin) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => 'Kamu belum check in di lokasi sampling untuk nomor sampel ' . $sample . '. Silakan check in terlebih dahulu sebelum cek/input nomor sampel.',
+        ], 401);
+    }
+
 }

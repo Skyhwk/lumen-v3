@@ -412,6 +412,9 @@ class SamplerTrackingService
                 })
                 ->get();
 
+            $basWarning = $eventType === 'checkout' ? $this->checkoutBasWarning($member->id) : null;
+            $forceBasCheckout = filter_var($payload['force_bas_checkout'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
             $events = [];
             $eventModel = new SamplerTrackingEvent();
             $photos = $this->storePhotos($payload['photos'] ?? null);
@@ -438,6 +441,9 @@ class SamplerTrackingService
                     'photos' => count($photos) > 0 ? json_encode($photos) : null,
                     'note' => $payload['note'] ?? null,
                     'vehicle_plate' => $payload['vehicle_plate'] ?? null,
+                    'bas_not_completed' => $basWarning ? 1 : 0,
+                    'bas_forced_checkout' => ($basWarning && $forceBasCheckout) ? 1 : 0,
+                    'bas_warning_message' => $basWarning['message'] ?? null,
                     'is_auto' => $targetMember->id !== $member->id,
                     'sequence_no' => $this->nextSequence($targetMember->id),
                     'event_at' => $payload['event_at'] ?? Carbon::now(),
@@ -446,6 +452,76 @@ class SamplerTrackingService
 
             return collect($events);
         });
+    }
+
+    public function checkoutBasWarning($memberId)
+    {
+        $member = SamplerTrackingMember::with('session')
+            ->where('id', $memberId)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$member || !$member->session) {
+            return null;
+        }
+
+        $session = $member->session;
+        $query = PersiapanSampelHeader::where('is_active', true)
+            ->whereDate('tanggal_sampling', $session->tanggal_sampling);
+
+        if ($session->no_order) {
+            $query->where('no_order', $session->no_order);
+        } elseif ($session->no_quotation) {
+            $query->where('no_quotation', $session->no_quotation);
+        }
+
+        $table = (new PersiapanSampelHeader())->getTable();
+        if ($member->sampler_name && $this->hasColumn($table, 'sampler_jadwal')) {
+            $query->where('sampler_jadwal', 'like', '%' . $member->sampler_name . '%');
+        }
+
+        $headers = $query->get();
+        $hasCompletedBas = $headers->contains(function ($header) {
+            return $this->isBasDocumentFilled($header->detail_bas_documents);
+        });
+
+        if ($hasCompletedBas) {
+            return null;
+        }
+
+        return [
+            'message' => 'BAS untuk lokasi ini belum selesai. Kamu tetap bisa checkout, tapi akan tercatat sebagai checkout paksa tanpa BAS.',
+            'no_order' => $session->no_order,
+            'tanggal_sampling' => $session->tanggal_sampling,
+            'sampler' => $member->sampler_name,
+        ];
+    }
+
+    protected function isBasDocumentFilled($value)
+    {
+        if ($value === null) {
+            return false;
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ($trimmed === '' || $trimmed === '[]' || strtolower($trimmed) === 'null') {
+                return false;
+            }
+
+            $decoded = json_decode($trimmed, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return count($decoded) > 0;
+            }
+
+            return true;
+        }
+
+        if (is_array($value)) {
+            return count($value) > 0;
+        }
+
+        return !empty($value);
     }
 
     public function updateMovementGroup(array $memberIds, $movementGroup = null)

@@ -35,6 +35,10 @@ class FdlGetaranPersonalController extends Controller
 {
     public function getSample(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameterList = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','getaran_personal')->where('kategori','4-Udara')->first();
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
