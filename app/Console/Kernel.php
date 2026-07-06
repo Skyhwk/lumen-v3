@@ -35,6 +35,10 @@ class Kernel extends ConsoleKernel
         Commands\FixJadwalSystemDeactivated::class,
         Commands\ScheduleLogTransactionQsd::class,
         Commands\GenerateWsFinalApproval::class,
+        Commands\SyncQsdRevenue::class,
+        Commands\SyncQsdForecast::class,
+        Commands\MonitorQsdRevenue::class,
+        Commands\MonitorQsdForecast::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
     ];
@@ -101,6 +105,9 @@ class Kernel extends ConsoleKernel
             ->between('20:00', '05:00')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+        // Sementara dimatikan untuk debugging — uncomment jika sudah fix
+        // $schedule->command('qsd:monitor-revenue')->everyFiveMinutes();
+        // $schedule->command('qsd:monitor-forecast')->everyFiveMinutes();
     }
 
     protected function commands()
