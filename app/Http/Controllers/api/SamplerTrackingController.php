@@ -57,6 +57,7 @@ class SamplerTrackingController extends Controller
             'latitude' => 'nullable',
             'longitude' => 'nullable',
             'photo' => 'nullable',
+            'photos' => 'nullable',
             'note' => 'nullable',
             'vehicle_plate' => 'nullable',
             'event_at' => 'nullable',
