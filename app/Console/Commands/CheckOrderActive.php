@@ -385,7 +385,9 @@ class CheckOrderActive extends Command
 
         $steps['activeStep'] = $this->detectActiveStep($steps);
 
-        return [
+       $lhpRilis = (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5);
+
+        $result = [
             'no_order'      => $d['no_order'],
             'jumlah_sampel' => $group->count(),
             'cfr'           => $d['cfr'],
@@ -393,15 +395,20 @@ class CheckOrderActive extends Command
             'kategori_2'    => $d['kategori_2'],
             'kategori_3'    => $d['kategori_3'],
             'parameter'          => json_decode($d['parameter'] ?? '', true),
-            'parameter_regulasi' => $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter),
             'regulasi'           => json_decode($d['regulasi'] ?? '', true),
-            'lhp_rilis'     => (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5),
+            'lhp_rilis'     => $lhpRilis,
             'tgl_lhp_rilis' => $tglLhpRilis,
             'steps'         => $steps,
             'points'        => $group->pluck('keterangan_1')->toArray(),
             'categories'    => $group->pluck('kategori_3')->toArray(),
             'sampelNumbers' => $group->pluck('no_sampel')->toArray(),
         ];
+
+        if (!$lhpRilis) {
+            $result['parameter_regulasi'] = $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter);
+        }
+
+        return $result;
     }
 
     private function buildParameterRegulasi(?string $parameterJson, array $allParameter): array
