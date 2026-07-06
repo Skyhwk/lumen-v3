@@ -34,6 +34,8 @@ class Kernel extends ConsoleKernel
         // Commands\FixJadwalBookingStatus::class,
         Commands\FixJadwalSystemDeactivated::class,
         Commands\ScheduleLogTransactionQsd::class,
+        Commands\UpdateJatuhTempo::class,
+        Commands\UpdateOrderDetailKonsultan::class,
     ];
 
     /**
