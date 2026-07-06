@@ -187,6 +187,13 @@ return [
             'days' => 30,
         ],
 
+        'update_jatuh_tempo' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/update_jatuh_tempo/update_jatuh_tempo.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'perubahan_jadwal' => [
             'driver' => 'daily',
             'path' => storage_path('logs/perubahan_jadwal/log.log'),
