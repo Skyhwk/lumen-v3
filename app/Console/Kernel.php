@@ -35,6 +35,8 @@ class Kernel extends ConsoleKernel
         Commands\FixJadwalSystemDeactivated::class,
         Commands\ScheduleLogTransactionQsd::class,
         Commands\GenerateWsFinalApproval::class,
+        Commands\UpdateJatuhTempo::class,
+        Commands\UpdateOrderDetailKonsultan::class,
     ];
 
     /**

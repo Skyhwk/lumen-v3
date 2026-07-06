@@ -1,30 +1,5 @@
 @php
-    use Carbon\Carbon;
-    \Carbon\Carbon::setLocale('id');
-
-    function formatTanggalRange($awal, $akhir = null)
-    {
-        if (empty($awal)) {
-            return '-';
-        }
-
-        return !empty($akhir)
-            ? Carbon::parse($awal)->translatedFormat('d F Y') . ' - ' . Carbon::parse($akhir)->translatedFormat('d F Y')
-            : Carbon::parse($awal)->translatedFormat('d F Y');
-    }
-
-    function formatPeriode($periode)
-    {
-        if (empty($periode)) {
-            return '-';
-        }
-
-        try {
-            return Carbon::createFromFormat('Y-m', $periode)->translatedFormat('F Y');
-        } catch (\Throwable $th) {
-            return $periode;
-        }
-    }
+    use App\Helpers\SkppaDateHelper;
 
     $details = [];
 
@@ -50,7 +25,7 @@
 
     $details[] = [
         'label' => 'Tanggal Penawaran',
-        'value' => formatTanggalRange($data->tanggal_penawaran),
+        'value' => SkppaDateHelper::formatTanggalRange($data->tanggal_penawaran),
     ];
 
     $details[] = [
@@ -60,14 +35,14 @@
 
     $details[] = [
         'label' => 'Tanggal Order',
-        'value' => formatTanggalRange($data->tanggal_order),
+        'value' => SkppaDateHelper::formatTanggalRange($data->tanggal_order),
     ];
 
     // Kalau kontrak → tambah periode di bawah PO
     if (!empty($data->periode)) {
         $details[] = [
             'label' => 'Periode',
-            'value' => formatPeriode($data->periode),
+            'value' => SkppaDateHelper::formatPeriode($data->periode),
         ];
     }
 
@@ -88,7 +63,7 @@
 
     // $details[] = [
     //     'label' => 'Tanggal Sampling',
-    //     'value' => formatTanggalRange($data->tanggal_sampling),
+    //     'value' => SkppaDateHelper::formatTanggalRange($data->tanggal_sampling),
     // ];
 
     $kategori = json_decode($data->kategori, true);
@@ -96,13 +71,13 @@
     {
         $details[] = [
             'label' => 'Tanggal Sampling',
-            'value' => formatTanggalRange($data->tanggal_sampling_awal),
+            'value' => SkppaDateHelper::formatTanggalRange($data->tanggal_sampling_awal),
         ];
     }
 
     $details[] = [
         'label' => 'Tanggal Sampel Diterima',
-        'value' => formatTanggalRange($data->tanggal_sampel_diterima_awal),
+        'value' => SkppaDateHelper::formatTanggalRange($data->tanggal_sampel_diterima_awal),
     ];
     // if (!empty($data->tanggal_sampel_diterima_awal)) {
     // } else {
@@ -110,7 +85,7 @@
 
     $details[] = [
         'label' => 'Tanggal Penyelesaian Analisa',
-        'value' => formatTanggalRange($data->tanggal_penyelesaian_analisa_akhir),
+        'value' => SkppaDateHelper::formatTanggalRange($data->tanggal_penyelesaian_analisa_akhir),
     ];
 @endphp
 
@@ -209,7 +184,7 @@
 
     <table style="font-size:14px; border-collapse:collapse;">
         <tr>
-            <td style="padding:0; text-align:left;">Tangerang, {{ formatTanggalRange($data->tanggal_penyelesaian_analisa_akhir) }}<br />PT Inti Surya Laboratorium</td>
+            <td style="padding:0; text-align:left;">Tangerang, {{ SkppaDateHelper::formatTanggalRange($data->tanggal_penyelesaian_analisa_akhir) }}<br />PT Inti Surya Laboratorium</td>
         </tr>
         <tr>
             <td style="padding:18px 0 0 0; text-align:center;">

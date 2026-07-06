@@ -457,6 +457,145 @@ class FdlKebisinganSoundMeterController extends Controller
             unlink($path);
         }
     }
+
+    public function viewDetail(Request $request)
+    {
+        try {
+
+            $detail_sound_meter = DetailSoundMeter::where('id_device', $request->id_device)->where('no_sampel', $request->no_sampel)->get();
+            $jam_pengukuran = null;
+            if ($detail_sound_meter->isNotEmpty()) {
+                $min_timestamp = $detail_sound_meter->min('timestamp');
+                $max_timestamp = $detail_sound_meter->max('timestamp');
+               Carbon::setLocale('id');
+                $start =Carbon::parse($min_timestamp);
+                $end =Carbon::parse($max_timestamp);
+                
+                $jam_pengukuran = $start->format('H:i') . ' - ' . $end->format('H:i') . ' (' . $end->translatedFormat('j F Y') . ')';
+            }
+
+            $order_detail = OrderDetail::where('no_sampel', $request->no_sampel)
+                ->select('no_order', 'nama_perusahaan', 'keterangan_1')
+                ->first();
+            $data_lapangan = DataLapanganKebisinganBySoundMeter::where('no_sampel', $request->no_sampel)->first();
+            $kebisingan_header = KebisinganHeader::where('no_sampel', $request->no_sampel)
+                ->select('id', 'no_sampel', 'leq_ls', 'leq_lm', 'data_per_shift')
+                ->first();
+            $hasil_lsm = null;
+            if ($kebisingan_header) {
+                $ws_value = WsValueUdara::where('id_kebisingan_header', $kebisingan_header->id)
+                    ->select('hasil1')
+                    ->first();
+                if ($ws_value) {
+                    $hasil_lsm = $ws_value->hasil1;
+                }
+            }
+
+            if(!$data_lapangan){
+                return response()->json([
+                    'message' => 'Silahkan lakukan input data lapangan terlebih dahulu',
+                ], 404);
+            }
+            
+            $data = [
+                'no_sampel' => $request->no_sampel,
+                'no_order' => $order_detail->no_order ?? null,
+                'nama_perusahaan' => $order_detail->nama_perusahaan ?? null,
+                'keterangan_1' => $order_detail->keterangan_1 ?? null,
+                'leq_ls' => $kebisingan_header->leq_ls ?? null,
+                'leq_lm' => $kebisingan_header->leq_lm ?? null,
+                'lsm' => $hasil_lsm ?? null,
+                'data_per_shift' => $kebisingan_header->data_per_shift ?? [],
+                'sampler' => $data_lapangan->created_by ?? $data_lapangan->updated_by ?? null,
+                'waktu_input' => $data_lapangan->created_at ?? $data_lapangan->updated_at ?? null,
+                'jam_pengukuran' => $jam_pengukuran ?? null,
+                'data_pendukung' => json_decode($data_lapangan->kondisi_lapangan_json) ?? [],
+            ];
+
+            return response()->json($data, 200);
+
+        } catch (\Exception $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
+            ], 500);
+        }
+    }
+
+    public function approveFdl(Request $request){
+        DB::beginTransaction();
+        try {
+            $fdl = DataLapanganKebisinganBySoundMeter::where('no_sampel', $request->no_sampel)->first();
+            $header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
+
+            $po = OrderDetail::where('no_sampel', $data->no_sampel)
+                ->where('is_active', true)
+                ->first();
+
+            if ($po) {
+                // Decode parameter jika dalam format JSON
+                $decoded = json_decode($po->parameter, true);
+
+                // Pastikan JSON ter-decode dengan benar dan berisi data
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    // Ambil elemen pertama dari array hasil decode
+                    $parts = explode(';', $decoded[0] ?? '');
+
+                    // Pastikan elemen kedua tersedia setelah explode
+                    $parameterValue = $parts[1] ?? 'Data tidak valid';
+
+                    // dd($parameterValue); // Output: "Pencahayaan"
+                } else {
+                    return response()->json([
+                        'message' => 'Parameter tidak valid',
+                    ], 400);
+                }
+
+            } else {
+                return response()->json([
+                    'message' => 'OrderDetail tidak ditemukan',
+                ], 404);
+            }
+
+            $parameter = Parameter::where('nama_lab', $parameterValue)->first();
+
+            if(!$header){
+                return response()->json([
+                    'message' => 'Silahkan lakukan kalkulasi data terlebih dahulu',
+                ], 404);
+            }
+
+            $header->id_parameter = $parameter->id;
+            $header->parameter  = $parameter->nama;
+            $header->is_approved = true;
+            $header->approved_by = $this->karyawan;
+            $header->approved_at = Carbon::now();   
+            $header->save();
+            
+            $fdl->is_approved = true;
+            $fdl->approved_by = $this->karyawan;
+            $fdl->approved_at = Carbon::now();   
+            $fdl->save();
+            
+            DB::commit();
+            return response()->json([
+                'message' => 'Data FDL berhasil di-approve',
+            ], 200);
+            
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Data FDL tidak ditemukan',
+            ], 404);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
+            ], 500);
+        }
+    }
 }
 
 

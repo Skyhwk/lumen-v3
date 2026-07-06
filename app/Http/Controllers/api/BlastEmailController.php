@@ -9,21 +9,38 @@ use App\Models\MailList;
 use App\Models\Prospek;
 use App\Models\MailSchedule;
 use Yajra\Datatables\Datatables;
-use App\Services\{SendEmail };
-use Illuminate\Support\Facades\Http;
+use App\Services\{SendEmail, MailListSubscriberService };
 use Carbon\Carbon;
 use Repository;
 
 class BlastEmailController extends Controller
 {
+    private MailListSubscriberService $mailListSubscriberService;
+
+    public function __construct(Request $request, MailListSubscriberService $mailListSubscriberService)
+    {
+        parent::__construct($request);
+        $this->mailListSubscriberService = $mailListSubscriberService;
+    }
+
     public function index(Request $request) {
         $project = MailList::with('schedule')->get();
         $project->map(function($item) {
             $item->content = Repository::dir('blast_mail_template')->key($item->name)->get();
             $item->reply_to = json_decode($item->reply_to);
+            $item->email_from = $item->email_from ?: 'fromPromoSales';
             return $item;
         });
         return Datatables::of($project)->make(true);
+    }
+
+    private function resolveEmailFrom(Request $request): string
+    {
+        $from = $request->email_from ?? 'fromPromoSales';
+
+        return in_array($from, SendEmail::allowedFromKeys(), true)
+            ? $from
+            : 'fromPromoSales';
     }
 
     public function saveProject(Request $request) {
@@ -59,6 +76,7 @@ class BlastEmailController extends Controller
             $project = new MailList;
             $project->name = $name;
             $project->email_to = $request->email_to;
+            $project->email_from = $this->resolveEmailFrom($request);
             $project->reply_to = count($request->reply_to) > 0 && $request->reply_to[0] != "" ? json_encode($request->reply_to) : null;
             $project->subject = $request->email_subject;
             $project->content = $name . '.txt'; // Just the filename
@@ -134,6 +152,7 @@ class BlastEmailController extends Controller
     
             $project->name = $name;
             $project->email_to = $request->email_to;
+            $project->email_from = $this->resolveEmailFrom($request);
             $project->reply_to = count($request->reply_to) > 0 && $request->reply_to[0] !== "" ? json_encode($request->reply_to) : null;
             $project->subject = $request->email_subject;
             $project->content = $name . '.txt'; // Just the filename
@@ -261,15 +280,9 @@ class BlastEmailController extends Controller
         return Datatables::of($prospek)->make(true);
     }
 
-    public function getSubscribers (Request $request)
+    public function getSubscribers(Request $request)
     {
-        $response = Http::withHeaders([
-            'X-MLMMJADMIN-API-AUTH-TOKEN' => 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS'
-        ])
-        ->withOptions([
-            'verify' => false // Disable SSL verification - WARNING: For debugging purposes only!
-        ])
-        ->get('https://mail.intilab.com/api/promotion@intilab.com/subscribers');
+        $response = $this->mailListSubscriberService->http()->get($this->mailListSubscriberService->subscribersUrl());
 
         if (!$response->successful()) {
             return response()->json([
@@ -282,7 +295,7 @@ class BlastEmailController extends Controller
         $return = $response->json();
         $return = (object) $return;
         $data = $return->_data;
-        // dd($data);
+
         if ($return === null) {
             return response()->json([
             'error' => 'Invalid JSON response',
@@ -295,6 +308,130 @@ class BlastEmailController extends Controller
             'message' => 'Data subscribers berhasil diambil',
             'status' => 200,
             'success' => true
+        ], 200);
+    }
+
+    public function deleteSubscribers(Request $request)
+    {
+        $emails = $request->emails ?? [];
+
+        if ($request->email) {
+            $emails[] = $request->email;
+        }
+
+        $emails = array_values(array_unique(array_filter($emails)));
+
+        if (empty($emails)) {
+            return response()->json([
+                'message' => 'Email subscriber wajib diisi',
+            ], 422);
+        }
+
+        $deleted = 0;
+        $failed = [];
+
+        foreach ($emails as $email) {
+            try {
+                $response = $this->mailListSubscriberService->removeSubscriber($email);
+
+                if ($this->mailListSubscriberService->isApiSuccess($response)) {
+                    $deleted++;
+                    continue;
+                }
+
+                $failed[] = [
+                    'email' => $email,
+                    'status' => $response->status(),
+                    'message' => $response->body(),
+                ];
+            } catch (\Throwable $th) {
+                $failed[] = [
+                    'email' => $email,
+                    'status' => 500,
+                    'message' => $th->getMessage(),
+                ];
+            }
+        }
+
+        if ($deleted === 0) {
+            return response()->json([
+                'message' => 'Gagal menghapus subscriber',
+                'deleted' => 0,
+                'failed' => $failed,
+            ], 422);
+        }
+
+        $message = $deleted === 1
+            ? '1 subscriber berhasil dihapus'
+            : "{$deleted} subscriber berhasil dihapus";
+
+        if (!empty($failed)) {
+            $message .= ', ' . count($failed) . ' gagal dihapus';
+        }
+
+        return response()->json([
+            'message' => $message,
+            'deleted' => $deleted,
+            'failed' => $failed,
+        ], 200);
+    }
+
+    public function addSubscribers(Request $request)
+    {
+        $emails = $request->emails ?? [];
+
+        if ($request->email) {
+            $emails[] = $request->email;
+        }
+
+        $emails = array_values(array_unique(array_filter($emails)));
+
+        if (empty($emails)) {
+            return response()->json([
+                'message' => 'Email subscriber wajib diisi',
+            ], 422);
+        }
+
+        $result = $this->mailListSubscriberService->addSubscribersWithReport($emails);
+        $added = $result['added'];
+        $duplicate = $result['duplicate'];
+        $invalid = $result['invalid'];
+        $failed = $result['failed'];
+
+        if ($added === 0 && $duplicate === 0) {
+            return response()->json([
+                'message' => 'Gagal menambahkan subscriber',
+                'added' => 0,
+                'duplicate' => 0,
+                'invalid' => $invalid,
+                'failed' => $failed,
+            ], 422);
+        }
+
+        $parts = [];
+
+        if ($added > 0) {
+            $parts[] = "{$added} berhasil ditambahkan";
+        }
+
+        if ($duplicate > 0) {
+            $parts[] = "{$duplicate} sudah terdaftar";
+        }
+
+        if (!empty($failed)) {
+            $parts[] = count($failed) . ' gagal';
+        }
+
+        if (!empty($invalid)) {
+            $parts[] = count($invalid) . ' format tidak valid';
+        }
+
+        return response()->json([
+            'message' => implode(', ', $parts),
+            'added' => $added,
+            'duplicate' => $duplicate,
+            'invalid' => $invalid,
+            'failed' => $failed,
         ], 200);
     }
 }

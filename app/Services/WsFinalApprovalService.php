@@ -369,38 +369,55 @@ class WsFinalApprovalService
                 }
             }
 
-            // Penanganan LhpsErgonomiHeader (karena relasi di OrderDetail adalah ke DraftErgonomiFile)
-            if (class_exists(\App\Models\LhpsErgonomiHeader::class)) {
-                $ergonomiHeader = \App\Models\LhpsErgonomiHeader::where('no_sampel', $detail->no_sampel)
-                    ->where('is_active', true)
-                    ->first();
+            // Penanganan Ergonomi
+            $isErgonomi = false;
+            if ($detail->kategori_3 && str_contains(strtolower($detail->kategori_3), 'ergonomi')) {
+                $isErgonomi = true;
+            } elseif ($detail->kategori_2 && str_contains(strtolower($detail->kategori_2), 'ergonomi')) {
+                $isErgonomi = true;
+            }
 
-                if ($ergonomiHeader) {
-                    $ergonomiDetails = $ergonomiHeader->lhpsErgonomiDetail ?? collect();
-                    foreach ($ergonomiDetails as $eDetail) {
-                        $parameterLab = $eDetail->parameter_lab 
-                            ?? $eDetail->parameter 
-                            ?? $eDetail->param 
-                            ?? $eDetail->parameter_uji 
-                            ?? null;
-
-                        if (!$parameterLab) {
-                            continue;
+            if ($isErgonomi) {
+                $paramsArray = self::arrayValue($detail->parameter);
+                
+                // Fallback jika array parameter di order detail kosong, coba cari di lhps_ergonomi_header
+                if (empty($paramsArray) && class_exists(\App\Models\LhpsErgonomiHeader::class)) {
+                    $ergonomiHeader = \App\Models\LhpsErgonomiHeader::where('no_sampel', $detail->no_sampel)
+                        ->where('is_active', true)
+                        ->first();
+                    if ($ergonomiHeader) {
+                        $ergonomiDetails = $ergonomiHeader->lhpsErgonomiDetail ?? collect();
+                        foreach ($ergonomiDetails as $eDetail) {
+                            $paramName = $eDetail->parameter_lab ?? $eDetail->parameter ?? $eDetail->param ?? $eDetail->parameter_uji;
+                            if ($paramName) {
+                                $paramsArray[] = $paramName;
+                            }
                         }
-
-                        $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
-                        $hasil = 'Sudah dianalisa';
-
-                        DB::table('ws_final_approval_detail')->updateOrInsert([
-                            'ws_final_approval_header_id' => $headerId,
-                            'no_sampel' => $detail->no_sampel,
-                            'parameter_lab' => self::limit($parameterLab, 70),
-                        ], [
-                            'no_sampel' => $detail->no_sampel,
-                            'parameter_regulasi' => self::limit($parameterRegulasi, 100),
-                            'hasil' => self::limit($hasil, 50),
-                        ]);
                     }
+                }
+
+                foreach ($paramsArray as $paramRaw) {
+                    $parameterLab = $paramRaw;
+                    if (str_contains($paramRaw, ';')) {
+                        $parameterLab = explode(';', $paramRaw)[1];
+                    }
+
+                    if (!$parameterLab || trim((string)$parameterLab) === '') {
+                        continue;
+                    }
+
+                    $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
+                    $hasil = 'Sudah dianalisa';
+
+                    DB::table('ws_final_approval_detail')->updateOrInsert([
+                        'ws_final_approval_header_id' => $headerId,
+                        'no_sampel' => $detail->no_sampel,
+                        'parameter_lab' => self::limit($parameterLab, 70),
+                    ], [
+                        'no_sampel' => $detail->no_sampel,
+                        'parameter_regulasi' => self::limit($parameterRegulasi, 100),
+                        'hasil' => self::limit($hasil, 50),
+                    ]);
                 }
             }
         });
@@ -1672,6 +1689,12 @@ class WsFinalApprovalService
                             ]);
                         }
                     }
+                }
+            }
+
+            if (Schema::hasTable('ws_final_approval_header')) {
+                if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'air') {
+                    self::syncAirFieldParameters($orderDetail);
                 }
             }
 

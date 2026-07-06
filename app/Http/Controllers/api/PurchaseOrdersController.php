@@ -516,7 +516,7 @@ class PurchaseOrdersController extends Controller
 
         $lineTotal = round($quantity * $unitPrice, 2);
         $subTotal = max(round($lineTotal - $discount, 2), 0);
-        $ppnAmount = round($lineTotal * ($ppnPercent / 100), 2);
+        $ppnAmount = round($subTotal * ($ppnPercent / 100), 2);
         $grandTotal = round($subTotal + $ppnAmount + $otherCost, 2);
 
         DB::beginTransaction();
@@ -823,6 +823,14 @@ class PurchaseOrdersController extends Controller
 
         if (in_array($purchaseRequest->finance_status, ['Waiting to Delegate', 'Rejected', 'Void'], true)) {
             return false;
+        }
+
+        if (
+            $purchaseRequest->status === 'Done'
+            && PurchaseReceiptService::hasDraftPoDocuments($purchaseRequest)
+            && !PurchaseReceiptService::isWorkflowFullyDistributed($purchaseRequest)
+        ) {
+            return true;
         }
 
         return in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true);
