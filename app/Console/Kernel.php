@@ -50,8 +50,8 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // Sementara dimatikan untuk debugging — uncomment jika sudah fix
-        $schedule->command('qsd:monitor-revenue')->everyFiveMinutes();
-        $schedule->command('qsd:monitor-forecast')->everyFiveMinutes();
+        // $schedule->command('qsd:monitor-revenue')->everyFiveMinutes();
+        // $schedule->command('qsd:monitor-forecast')->everyFiveMinutes();
     }
 
     protected function commands()
