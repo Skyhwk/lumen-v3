@@ -15,7 +15,17 @@ class DokumenCocController extends Controller
     public function generateDokumenCoc(Request $request)
     {
         try {
-            $no_lhp = $request->no_lhp;
+            $no_lhp = trim((string) ($request->input('no_lhp')
+                ?? $request->input('cfr')
+                ?? $request->input('noLhp')
+                ?? $request->input('lhp_number')
+                ?? ''));
+
+            if ($no_lhp === '') {
+                return response()->json([
+                    'message' => 'No LHP wajib diisi',
+                ], 422);
+            }
 
             $dokumenCoc = DokumenCoc::where('no_lhp', $no_lhp)->first();
             if ($dokumenCoc) {
@@ -29,7 +39,7 @@ class DokumenCocController extends Controller
             // Jika kode di bawah ini crash, dia akan lompat ke blok catch
             $filename = $service->generate();
 
-            if (!$filename) return response()->json(['message' => 'Dokumen tidak tersedia'], 401);
+            if (!$filename) return response()->json(['message' => 'Dokumen tidak tersedia'], 404);
 
             return response()->json([
                 'message'  => 'Berhasil generate data COC',
@@ -38,7 +48,9 @@ class DokumenCocController extends Controller
 
         } catch (\Throwable $th) {
             // Tangkap error aslinya agar kita tahu apa yang rusak di dalam proses generate
-            \Log::error('Crash saat generate COC V3: ' . $th->getMessage() . ' Line: ' . $th->getLine());
+            \Log::error('Crash saat generate COC V3: ' . $th->getMessage() . ' Line: ' . $th->getLine(), [
+                'no_lhp' => $no_lhp ?? null,
+            ]);
             
             return response()->json([
                 'message' => 'Terjadi kerusakan saat proses pembuatan dokumen di server V3',
