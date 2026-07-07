@@ -8,7 +8,6 @@ use App\Models\OrderDetail;
 use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
 use App\Models\Parameter;
-use App\Models\WsFinalApprovalHeader;
 use App\Models\WsFinalApprovalDetail;
 
 use Schema;
