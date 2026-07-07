@@ -598,7 +598,8 @@ class WsFinalApprovalService
                 str_contains(strtolower($od->kategori_3), 'lingkungan kerja') || 
                 str_contains(strtolower($od->kategori_3), 'lingkungan hidup') || 
                 str_contains(strtolower($od->kategori_3), 'ambient') || 
-                str_contains(strtolower($od->kategori_3), 'tidak bergerak')
+                str_contains(strtolower($od->kategori_3), 'tidak bergerak') ||
+                str_contains(strtolower($od->kategori_3), 'isokinetik')
             );
         });
 
@@ -675,7 +676,6 @@ class WsFinalApprovalService
             ->filter()
             ->unique()
             ->values();
-
         $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
             ->where('is_active', true)
             ->get();
