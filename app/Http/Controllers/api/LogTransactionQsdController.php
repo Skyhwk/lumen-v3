@@ -86,6 +86,7 @@ class LogTransactionQsdController extends Controller
             ->value('total_bersih') ?? 0; // Kasih default 0 jika null
 
         return Datatables::of($data)
+            ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('id', $order))
             ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
             ->filterColumn('no_order', fn ($query, $keyword) => $this->filterLike($query, 'no_order', $keyword))
             ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))
@@ -125,6 +126,7 @@ class LogTransactionQsdController extends Controller
                 ->value('total_bersih') ?? 0;
 
             return Datatables::of($data)
+                ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('id', $order))
                 ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
                 ->filterColumn('no_penawaran', fn ($query, $keyword) => $this->filterLike($query, 'no_penawaran', $keyword))
                 ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))

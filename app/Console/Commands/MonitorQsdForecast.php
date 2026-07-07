@@ -63,22 +63,32 @@ class MonitorQsdForecast extends Command
 
         try {
             // ================================================================
-            // STEP 1: Ambil LOG TERAKHIR berdasarkan Kunci Ganda (Penawaran + Periode)
+            // STEP 1: Ambil SALDO BERJALAN (Grand Total Terakhir) di bulan ini
             // ================================================================
-            $latestLogs = DB::table('qsd_forecast_transaction_log as t1')
-                ->select('t1.no_penawaran', 't1.total', 't1.periode', 't1.tanggal_sampling_min', 't1.forecast_order')
-                ->whereBetween('t1.tanggal_sampling_min', [$startOfMonth, $endOfMonth])
-                ->whereRaw('t1.id = (
-                        SELECT MAX(t2.id)
-                        FROM qsd_forecast_transaction_log t2
-                        WHERE t2.no_penawaran = t1.no_penawaran
-                        -- Mencegah cross-month error: Pastikan periodenya juga sama!
-                        AND (t2.periode = t1.periode OR (t2.periode IS NULL AND t1.periode IS NULL))
-                        AND t2.tanggal_sampling_min BETWEEN ? AND ?
-                    )', [$startOfMonth, $endOfMonth])
+            $currentGrandTotal = DB::table('qsd_forecast_transaction_log')
+                ->whereBetween('tanggal_sampling_min', [$startOfMonth, $endOfMonth])
+                ->orderByDesc('id') // Ambil transaksi paling terakhir
+                ->value('total');
+
+            $currentGrandTotal = $currentGrandTotal ? (float) $currentGrandTotal : 0.0;
+
+            // ================================================================
+            // STEP 1.5: Ambil riwayat NILAI PER PENAWARAN di bulan ini
+            // Kita hitung menggunakan SUM(Penambahan) - SUM(Pengurangan)
+            // dan mengambil MAX(forecast_order) untuk tahu status terakhirnya
+            // ================================================================
+            $latestLogs = DB::table('qsd_forecast_transaction_log')
+                ->select(
+                    'no_penawaran',
+                    'periode',
+                    DB::raw('MAX(tanggal_sampling_min) as tanggal_sampling_min'),
+                    DB::raw('SUM(CASE WHEN status = "penambahan" THEN revenue_forecast ELSE -revenue_forecast END) as order_total'),
+                    DB::raw('MAX(forecast_order) as is_ordered')
+                )
+                ->whereBetween('tanggal_sampling_min', [$startOfMonth, $endOfMonth])
+                ->groupBy('no_penawaran', 'periode')
                 ->get()
                 ->keyBy(function ($item) {
-                    // Gabungkan nomor penawaran dan periode sebagai ID Unik
                     return $item->no_penawaran . '|' . $item->periode;
                 });
 
@@ -101,9 +111,7 @@ class MonitorQsdForecast extends Command
                         $penawaranId = $row->no_quotation;
                         if (empty($penawaranId)) continue;
 
-                        // ID Unik untuk memisahkan 1 quotation yang memiliki banyak periode
                         $uniqueKey = $penawaranId . '|' . $row->periode;
-                        
                         $parsedValue = $this->parseRevenueForecast($row->revenue_forecast);
 
                         if (!isset($groupedForecasts[$uniqueKey])) {
@@ -120,45 +128,56 @@ class MonitorQsdForecast extends Command
                 });
 
             // ================================================================
-            // STEP 3: Cek Perubahan Nilai & Insert
+            // STEP 3: Cek Perubahan Nilai & Insert (Update Saldo Berjalan)
             // ================================================================
             foreach ($groupedForecasts as $uniqueKey => $data) {
                 $activePenawaran[] = $uniqueKey;
 
                 $currentValue = round($data['total_revenue'], 2);
-                $lastTotal = 0;
+                $lastOrderTotal = 0;
                 $isNewPenawaran = true;
                 $wasOrdered = false; 
 
                 if ($latestLogs->has($uniqueKey)) {
                     $log = $latestLogs->get($uniqueKey);
-                    $lastTotal = round((float) $log->total, 2);
-                    $wasOrdered = (int) $log->forecast_order === 1;
+                    $lastOrderTotal = round((float) $log->order_total, 2);
+                    $wasOrdered = (int) $log->is_ordered === 1;
                     $isNewPenawaran = false;
                 }
 
-                if (!$isNewPenawaran && !$wasOrdered && abs($currentValue - $lastTotal) < 0.01) {
+                if (!$isNewPenawaran && !$wasOrdered && abs($currentValue - $lastOrderTotal) < 0.01) {
                     continue; 
                 }
 
                 if ($isNewPenawaran || $wasOrdered) {
                     $status = 'penambahan';
-                    $revenueDiff = $currentValue - $lastTotal; 
-                } elseif ($currentValue > $lastTotal) {
+                    $revenueDiff = $currentValue - $lastOrderTotal; 
+                    
+                    // UPDATE SALDO BERJALAN
+                    $currentGrandTotal += $revenueDiff;
+                    
+                } elseif ($currentValue > $lastOrderTotal) {
                     $status = 'penambahan';
-                    $revenueDiff = round($currentValue - $lastTotal, 2);
+                    $revenueDiff = round($currentValue - $lastOrderTotal, 2);
+                    
+                    // UPDATE SALDO BERJALAN
+                    $currentGrandTotal += $revenueDiff;
+                    
                 } else {
                     $status = 'pengurangan';
-                    $revenueDiff = round($lastTotal - $currentValue, 2);
+                    $revenueDiff = round($lastOrderTotal - $currentValue, 2);
+                    
+                    // UPDATE SALDO BERJALAN
+                    $currentGrandTotal -= $revenueDiff;
                 }
 
                 $insertData[] = [
                     'no_penawaran'         => $data['no_quotation'],
-                    'periode'              => $data['periode'], // Periode tetap terjaga
+                    'periode'              => $data['periode'],
                     'tanggal_sampling_min' => $data['tanggal_sampling_min'],
                     'revenue_forecast'     => $revenueDiff,
                     'status'               => $status,
-                    'total'                => $currentValue,
+                    'total'                => $currentGrandTotal, // <-- Simpan Saldo Berjalan
                     'forecast_order'       => 0,
                     'created_at'           => $now,
                 ];
@@ -171,19 +190,23 @@ class MonitorQsdForecast extends Command
             $countOrdered = 0;
 
             foreach ($deletedQuotations as $uniqueKey => $logEntry) {
-                if (!empty($logEntry->forecast_order) || round((float)$logEntry->total, 2) == 0) {
+                $lastOrderTotal = round((float) $logEntry->order_total, 2);
+                
+                // Jika sudah di-flag order (1) ATAU saldonya sudah 0, abaikan
+                if ((int)$logEntry->is_ordered === 1 || $lastOrderTotal <= 0) {
                     continue;
                 }
 
-                $lastTotal = round((float) $logEntry->total, 2);
+                // KURANGI SALDO BERJALAN
+                $currentGrandTotal -= $lastOrderTotal;
 
                 $insertData[] = [
                     'no_penawaran'         => $logEntry->no_penawaran,
                     'periode'              => $logEntry->periode,
                     'tanggal_sampling_min' => $logEntry->tanggal_sampling_min,
-                    'revenue_forecast'     => $lastTotal, // Ditarik seluruh sisa saldonya
+                    'revenue_forecast'     => $lastOrderTotal, 
                     'status'               => 'pengurangan',
-                    'total'                => 0, // Saldo menjadi 0
+                    'total'                => $currentGrandTotal, // <-- Simpan Saldo Berjalan
                     'forecast_order'       => 1, // FLAG
                     'created_at'           => $now,
                 ];
