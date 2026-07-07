@@ -483,12 +483,12 @@ class CheckOrderActive extends Command
             'steps'         => $steps,
             'points'        => $group->pluck('keterangan_1')->toArray(),
             'categories'    => $group->pluck('kategori_3')->toArray(),
-            'sampelNumbers' => $sampelNumbers,
-            'hasil_uji' => $this->buildHasilUji($sampelNumbers, $kategori_2, $parameterRegulasi, $steps),
+            'sampelNumbers' => $sampelNumbers,          
         ];
 
         if (!$lhpRilis) {
             $result['parameter_regulasi'] = $parameterRegulasi;
+            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $kategori_2, $parameterRegulasi, $steps);
         }
 
         return $result;
