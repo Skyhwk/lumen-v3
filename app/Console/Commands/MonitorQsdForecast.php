@@ -63,7 +63,7 @@ class MonitorQsdForecast extends Command
 
         try {
             // ================================================================
-            // STEP 1: Ambil LOG TERAKHIR per no_penawaran bulan berjalan
+            // STEP 1: Ambil LOG TERAKHIR berdasarkan Kunci Ganda (Penawaran + Periode)
             // ================================================================
             $latestLogs = DB::table('qsd_forecast_transaction_log as t1')
                 ->select('t1.no_penawaran', 't1.total', 't1.periode', 't1.tanggal_sampling_min', 't1.forecast_order')
@@ -72,17 +72,22 @@ class MonitorQsdForecast extends Command
                         SELECT MAX(t2.id)
                         FROM qsd_forecast_transaction_log t2
                         WHERE t2.no_penawaran = t1.no_penawaran
+                        -- Mencegah cross-month error: Pastikan periodenya juga sama!
+                        AND (t2.periode = t1.periode OR (t2.periode IS NULL AND t1.periode IS NULL))
                         AND t2.tanggal_sampling_min BETWEEN ? AND ?
                     )', [$startOfMonth, $endOfMonth])
                 ->get()
-                ->keyBy('no_penawaran');
+                ->keyBy(function ($item) {
+                    // Gabungkan nomor penawaran dan periode sebagai ID Unik
+                    return $item->no_penawaran . '|' . $item->periode;
+                });
 
             $countInsert = 0;
             $activePenawaran = [];
             $insertData = [];
 
             // ================================================================
-            // STEP 2: Tarik Mentah, Parsing, dan Grouping di Memori PHP
+            // STEP 2: Tarik & Grouping di Memori berdasarkan Kunci Ganda
             // ================================================================
             $groupedForecasts = [];
 
@@ -96,52 +101,42 @@ class MonitorQsdForecast extends Command
                         $penawaranId = $row->no_quotation;
                         if (empty($penawaranId)) continue;
 
-                        // EKSEKUSI FUNGSI PARSING ANDA DI SINI
+                        // ID Unik untuk memisahkan 1 quotation yang memiliki banyak periode
+                        $uniqueKey = $penawaranId . '|' . $row->periode;
+                        
                         $parsedValue = $this->parseRevenueForecast($row->revenue_forecast);
 
-                        // Buat grouping array manual seperti Datatable Grouping
-                        if (!isset($groupedForecasts[$penawaranId])) {
-                            $groupedForecasts[$penawaranId] = [
+                        if (!isset($groupedForecasts[$uniqueKey])) {
+                            $groupedForecasts[$uniqueKey] = [
                                 'no_quotation'         => $penawaranId,
                                 'periode'              => $row->periode,
                                 'tanggal_sampling_min' => $row->tanggal_sampling_min,
-                                'total_revenue'        => 0, // Set awal 0
+                                'total_revenue'        => 0,
                             ];
-                        } else {
-                            // Update jika ada multiple row: pastikan kita simpan periode MAX dan tanggal MIN
-                            if ($row->periode > $groupedForecasts[$penawaranId]['periode']) {
-                                $groupedForecasts[$penawaranId]['periode'] = $row->periode;
-                            }
-                            if ($row->tanggal_sampling_min < $groupedForecasts[$penawaranId]['tanggal_sampling_min']) {
-                                $groupedForecasts[$penawaranId]['tanggal_sampling_min'] = $row->tanggal_sampling_min;
-                            }
                         }
 
-                        // Akumulasikan nilai yang sudah bersih (angka desimal)
-                        $groupedForecasts[$penawaranId]['total_revenue'] += $parsedValue;
+                        $groupedForecasts[$uniqueKey]['total_revenue'] += $parsedValue;
                     }
                 });
 
             // ================================================================
-            // STEP 3: Cek Data Agregat PHP → Bandingkan dengan Log
+            // STEP 3: Cek Perubahan Nilai & Insert
             // ================================================================
-            foreach ($groupedForecasts as $penawaranId => $data) {
-                // Catat penawaran ini masih aktif
-                $activePenawaran[] = $penawaranId;
+            foreach ($groupedForecasts as $uniqueKey => $data) {
+                $activePenawaran[] = $uniqueKey;
 
                 $currentValue = round($data['total_revenue'], 2);
                 $lastTotal = 0;
                 $isNewPenawaran = true;
                 $wasOrdered = false; 
 
-                if ($latestLogs->has($penawaranId)) {
-                    $log = $latestLogs->get($penawaranId);
+                if ($latestLogs->has($uniqueKey)) {
+                    $log = $latestLogs->get($uniqueKey);
                     $lastTotal = round((float) $log->total, 2);
                     $wasOrdered = (int) $log->forecast_order === 1;
                     $isNewPenawaran = false;
                 }
 
-                // Jika nilai tidak berubah dan belum jadi order, lewati
                 if (!$isNewPenawaran && !$wasOrdered && abs($currentValue - $lastTotal) < 0.01) {
                     continue; 
                 }
@@ -158,26 +153,24 @@ class MonitorQsdForecast extends Command
                 }
 
                 $insertData[] = [
-                    'no_penawaran'         => $penawaranId,
-                    'periode'              => $data['periode'],
+                    'no_penawaran'         => $data['no_quotation'],
+                    'periode'              => $data['periode'], // Periode tetap terjaga
                     'tanggal_sampling_min' => $data['tanggal_sampling_min'],
                     'revenue_forecast'     => $revenueDiff,
                     'status'               => $status,
                     'total'                => $currentValue,
-                    'forecast_order'       => 0, // Flag masih berupa forecast
+                    'forecast_order'       => 0,
                     'created_at'           => $now,
                 ];
             }
 
             // ================================================================
-            // STEP 4: Menangani Hard Delete (Forecast menjadi Order)
+            // STEP 4: Deteksi Status Berubah Menjadi Order (Hard Delete)
             // ================================================================
-            $this->info("[$batchId] Mengecek penawaran yang ditarik/menjadi Order...");
-            
             $deletedQuotations = $latestLogs->except($activePenawaran);
             $countOrdered = 0;
 
-            foreach ($deletedQuotations as $noPenawaran => $logEntry) {
+            foreach ($deletedQuotations as $uniqueKey => $logEntry) {
                 if (!empty($logEntry->forecast_order) || round((float)$logEntry->total, 2) == 0) {
                     continue;
                 }
@@ -185,13 +178,13 @@ class MonitorQsdForecast extends Command
                 $lastTotal = round((float) $logEntry->total, 2);
 
                 $insertData[] = [
-                    'no_penawaran'         => $noPenawaran,
+                    'no_penawaran'         => $logEntry->no_penawaran,
                     'periode'              => $logEntry->periode,
                     'tanggal_sampling_min' => $logEntry->tanggal_sampling_min,
-                    'revenue_forecast'     => $lastTotal, // Pengurangan saldo
+                    'revenue_forecast'     => $lastTotal, // Ditarik seluruh sisa saldonya
                     'status'               => 'pengurangan',
-                    'total'                => 0, // Saldo nol
-                    'forecast_order'       => 1, // FLAG menjadi Order
+                    'total'                => 0, // Saldo menjadi 0
+                    'forecast_order'       => 1, // FLAG
                     'created_at'           => $now,
                 ];
 
@@ -210,15 +203,16 @@ class MonitorQsdForecast extends Command
             }
 
             $this->info("[$batchId] Selesai! Insert: " . ($countInsert - $countOrdered) . " revisi, {$countOrdered} closed order.");
-            Log::channel('monitor_log_qsd_forecast')->info("[$batchId] Monitoring selesai", [
-                'total_insert' => $countInsert,
-                'ordered'      => $countOrdered,
-            ]);
 
-        } catch (Throwable $e) {
-            $this->error("[$batchId] Terjadi kesalahan fatal. Cek file log.");
+        } catch (\Throwable $e) {
+            // Tampilkan detail error langsung ke terminal
+            $this->error("[$batchId] Terjadi kesalahan fatal: " . $e->getMessage());
+            $this->error("File: " . $e->getFile() . " (Baris: " . $e->getLine() . ")");
+            
+            // Tetap simpan ke log
             Log::channel('monitor_log_qsd_forecast')->critical("[$batchId] KESALAHAN FATAL", [
                 'pesan' => $e->getMessage(),
+                'file'  => $e->getFile(),
                 'baris' => $e->getLine()
             ]);
         }

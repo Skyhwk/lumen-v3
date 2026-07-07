@@ -38,10 +38,24 @@ class LogTransactionQsdController extends Controller
             ->whereRaw("DATE_FORMAT(tanggal_kelompok, '%Y-%m') = ?", [$periode])
             ->sum('total_revenue');
 
-        $totalForecast = (float) DB::table('forecast_sp')
+        // $totalForecast = (float) DB::table('forecast_sp')
+        //     ->whereNotNull('tanggal_sampling_min')
+        //     ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode])
+        //     ->sum('revenue_forecast');
+        // 1. Tarik hanya array nilainya saja (jangan di-SUM di database)
+        $rawForecastData = DB::table('forecast_sp')
             ->whereNotNull('tanggal_sampling_min')
             ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$periode])
-            ->sum('revenue_forecast');
+            ->pluck('revenue_forecast'); // Ini akan menghasilkan array string: ["1980000", "7.000.000", ...]
+
+        $totalForecast = 0;
+
+        // 2. Jumlahkan secara manual menggunakan fungsi pembersih Anda
+        foreach ($rawForecastData as $rawRevenue) {
+            $totalForecast += $this->parseRevenueForecast($rawRevenue);
+        }
+
+        // Coba bandingkan nilainya sekarang
         return response()->json([
             'success'        => true,
             'periode'        => $periode,
@@ -96,26 +110,19 @@ class LogTransactionQsdController extends Controller
             $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
             $bulan = substr($periode, 5, 2); // Menghasilkan "06"
 
-            // 2. Filter berdasarkan kolom periode (format YYYY-MM)
-            $data = QsdForecastTransactionLog::query()
-                ->where(function ($q) use ($tahun, $bulan) {
-                    $q->where(function ($sub) use ($tahun, $bulan) {
-                        $sub->whereYear('tanggal_sampling_min', $tahun)
-                            ->whereMonth('tanggal_sampling_min', $bulan);
-                    })->orWhere(function ($sub) use ($tahun, $bulan) {
-                        $sub->whereNull('tanggal_sampling_min')
-                            ->whereYear('created_at', $tahun)
-                            ->whereMonth('created_at', $bulan);
-                    });
-                })
-                ->orderByDesc('created_at');
-
-            // Exclude forecast yang sudah jadi order (forecast_order = true)
-            $grandTotal = QsdForecastTransactionLog::query()
+            // 2. BASE QUERY (Sekarang murni hanya menggunakan tanggal_sampling_min)
+            $baseQuery = QsdForecastTransactionLog::query()
+                ->whereNotNull('tanggal_sampling_min') // Samakan dengan logic $totalForecast Anda
                 ->whereYear('tanggal_sampling_min', $tahun)
-                ->whereMonth('tanggal_sampling_min', $bulan)
-                ->where('forecast_order', 0)
-                ->sum('revenue_forecast');
+                ->whereMonth('tanggal_sampling_min', $bulan);
+
+            // 3. Clone query untuk Datatables (Menampilkan semua riwayat)
+            $data = (clone $baseQuery)->orderByDesc('created_at');
+
+            // 4. Clone query untuk Grand Total dengan Logika Ledger (Penambahan - Pengurangan)
+            $grandTotal = (clone $baseQuery)
+                ->selectRaw('SUM(CASE WHEN status = "penambahan" THEN revenue_forecast ELSE -revenue_forecast END) as total_bersih')
+                ->value('total_bersih') ?? 0;
 
             return Datatables::of($data)
                 ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
@@ -128,11 +135,10 @@ class LogTransactionQsdController extends Controller
                 ->editColumn('revenue_forecast', fn ($row) => (float) $row->revenue_forecast)
                 ->editColumn('total', fn ($row) => (float) $row->total)
                 ->editColumn('status', fn ($row) => ucfirst($row->status))
-                ->with('grand_total', $grandTotal)
+                ->with('grand_total', (float) $grandTotal)
                 ->make(true);
 
         } catch (\Throwable $e) {
-            // Menangkap semua tipe error termasuk Fatal Error (Throwable)
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -240,5 +246,38 @@ class LogTransactionQsdController extends Controller
                 }
             }
         });
+    }
+
+    private function parseRevenueForecast($raw): float
+    {
+        $str = trim((string) $raw);
+
+        if ($str === '' || $str === null) {
+            return 0.0;
+        }
+
+        // Hapus prefix non-numerik (Rp, IDR, $, dll)
+        $str = preg_replace('/^[^0-9\-]+/', '', $str);
+
+        // Deteksi format: apakah ada koma sebagai desimal (Indonesia) atau titik (International)
+        // Contoh Indonesia: "2.000.000" atau "2.000.000,50"
+        // Contoh International: "2,000,000" atau "2,000,000.50"
+
+        if (preg_match('/,\d{1,2}$/', $str)) {
+            // Koma di akhir dengan 1-2 digit = desimal (format Indonesia)
+            // "2.000.000,50" → hapus titik → ganti koma jadi titik
+            $str = str_replace('.', '', $str);
+            $str = str_replace(',', '.', $str);
+        } else {
+            // Format lain: hapus semua pemisah ribuan (titik dan koma)
+            // "2.000.000" → "2000000"
+            // "2,000,000" → "2000000"
+            $str = str_replace(['.', ','], '', $str);
+        }
+
+        // Bersihkan sisa karakter non-numerik
+        $str = preg_replace('/[^0-9.\-]/', '', $str);
+
+        return round((float) $str, 2);
     }
 }
