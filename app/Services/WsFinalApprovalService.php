@@ -80,7 +80,7 @@ class WsFinalApprovalService
                 ], [
                     'no_sampel' => $noSampel,
                     'parameter_regulasi' => self::limit($parameterRegulasi, 100),
-                    'hasil' => self::limit(self::extractResult($source), 50),
+                    'hasil' => self::extractResult($source),
                 ]);
             }
         } else {
@@ -278,7 +278,7 @@ class WsFinalApprovalService
                     ], [
                         'no_sampel' => $detail->no_sampel,
                         'parameter_regulasi' => self::limit($parameterRegulasi, 100),
-                        'hasil' => self::limit($hasil, 50),
+                        'hasil' => $hasil,
                     ]);
 
                     $insertedParams[strtolower(trim($parameterLab))] = true;
@@ -361,7 +361,7 @@ class WsFinalApprovalService
                         ], [
                             'no_sampel' => $detail->no_sampel,
                             'parameter_regulasi' => self::limit($parameterRegulasi, 100),
-                            'hasil' => self::limit($hasil, 50),
+                            'hasil' => $hasil,
                         ]);
                     }
                 }
@@ -414,7 +414,7 @@ class WsFinalApprovalService
                     ], [
                         'no_sampel' => $detail->no_sampel,
                         'parameter_regulasi' => self::limit($parameterRegulasi, 100),
-                        'hasil' => self::limit($hasil, 50),
+                        'hasil' => $hasil,
                     ]);
                 }
             }
@@ -856,7 +856,7 @@ class WsFinalApprovalService
                     self::findParameterRegulasi($orderDetail, $parameterLab) ?: '',
                     100
                 ),
-                'hasil' => self::limit($result, 50),
+                'hasil' => $result,
             ]);
         }
     }
@@ -1302,7 +1302,7 @@ class WsFinalApprovalService
                                 ->where('id', $existingDetail->id)
                                 ->update([
                                     'parameter_regulasi' => self::limit($parameterRegulasi, 100),
-                                    'hasil'              => self::limit($hasil, 50),
+                                    'hasil'              => $hasil,
                                 ]);
                         } else {
                             DB::table('ws_final_approval_detail')->insert([
@@ -1310,7 +1310,7 @@ class WsFinalApprovalService
                                 'no_sampel'                   => $orderDetail->no_sampel,
                                 'parameter_lab'               => self::limit($parameterLab, 70),
                                 'parameter_regulasi'          => self::limit($parameterRegulasi, 100),
-                                'hasil'                       => self::limit($hasil, 50),
+                                'hasil'                       => $hasil,
                             ]);
                         }
                     }
