@@ -212,6 +212,7 @@ class FdlDirectLainController extends Controller
                             'hasil15' => $data_kalkulasi['c15'] ?? null, 
                             'hasil16' => $data_kalkulasi['c16'] ?? null, 
                             'hasil17' => $data_kalkulasi['c17'] ?? null, 
+                            'hasil23' => $data_kalkulasi['c23'] ?? null, 
                             'satuan' => $data_kalkulasi['satuan'] ?? null,
                         ]
                     );

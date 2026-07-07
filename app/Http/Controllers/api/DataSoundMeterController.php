@@ -30,6 +30,10 @@ class DataSoundMeterController extends Controller
         // Transform the grouped data into the desired format
         $result = $groupedData->map(function ($group, $no_sampel) {
             $mainRecord = $group->first();
+            $isInputLapangan = DataLapanganKebisinganBySoundMeter::where(
+                'no_sampel',
+                $mainRecord->no_sampel
+            )->exists();
 
             $item = [
                 'id' => $mainRecord->id,
@@ -37,6 +41,7 @@ class DataSoundMeterController extends Controller
                 'kode'=> optional($mainRecord->device)->kode,
                 'id_device' => $mainRecord->id_device,
                 'no_sampel' => $mainRecord->no_sampel,
+                'is_input_lapangan' => $isInputLapangan,    
                 // 'sampel_detail' => $group->toArray()
             ];
 
@@ -159,7 +164,7 @@ class DataSoundMeterController extends Controller
     public function updateNoSampel(Request $request){
         DB::beginTransaction();
         try {
-            DetailSoundMeter::where('id_device', $request->kode)->where('no_sampel', $request->no_sampel_lama)->update([
+            DetailSoundMeter::where('id_device', $request->id_device)->where('no_sampel', $request->no_sampel_lama)->update([
                 'no_sampel' => $request->no_sampel
             ]);
             DB::commit();
@@ -409,6 +414,12 @@ class DataSoundMeterController extends Controller
                     $hasil_lsm = $ws_value->hasil1;
                 }
             }
+
+            if(!$data_lapangan){
+                return response()->json([
+                    'message' => 'Silahkan lakukan input data lapangan terlebih dahulu',
+                ], 404);
+            }
             
             $data = [
                 'no_sampel' => $request->no_sampel,
@@ -418,11 +429,11 @@ class DataSoundMeterController extends Controller
                 'leq_ls' => $kebisingan_header->leq_ls ?? null,
                 'leq_lm' => $kebisingan_header->leq_lm ?? null,
                 'lsm' => $hasil_lsm ?? null,
-                'data_per_shift' => json_decode($kebisingan_header->data_per_shift) ?? null,
+                'data_per_shift' => $kebisingan_header->data_per_shift ?? [],
                 'sampler' => $data_lapangan->created_by ?? $data_lapangan->updated_by ?? null,
                 'waktu_input' => $data_lapangan->created_at ?? $data_lapangan->updated_at ?? null,
                 'jam_pengukuran' => $jam_pengukuran ?? null,
-                'data_pendukung' => json_decode($data_lapangan->kondisi_lapangan_json) ?? null,
+                'data_pendukung' => json_decode($data_lapangan->kondisi_lapangan_json) ?? [],
             ];
 
             return response()->json($data, 200);

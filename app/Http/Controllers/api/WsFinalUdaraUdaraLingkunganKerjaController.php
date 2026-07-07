@@ -73,7 +73,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 
     public function index(Request $request)
-
     {
 
         $data = OrderDetail::select(

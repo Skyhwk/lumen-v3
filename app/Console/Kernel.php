@@ -4,23 +4,6 @@ namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Laravel\Lumen\Console\Kernel as ConsoleKernel;
-use App\Console\Commands\CleanOldRequestLogs;
-use App\Console\Commands\ScheduleEverySecond;
-use App\Console\Commands\CacheCommand;
-use App\Console\Commands\ScheduleUpdateForecastSP;
-use App\Console\Commands\SchaduleUpdateQsd;
-use App\Console\Commands\SchaduleUpdateSummaryQsd;
-use App\Console\Commands\AssignSales;
-use App\Console\Commands\BillingComand;
-use App\Console\Commands\CalculateFeeSales;
-use App\Console\Commands\SummaryFeeSales;
-use App\Console\Commands\KalkulasiTargetPenjadwalan;
-use App\Console\Commands\ScheduleQtTransaction;
-use App\Console\Commands\CheckOrderActive;
-use App\Console\Commands\SummaryInvoice;
-use App\Console\Commands\CalculatePoinCustomer;
-use App\Console\Commands\CalculateParameter;
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class Kernel extends ConsoleKernel
@@ -47,6 +30,12 @@ class Kernel extends ConsoleKernel
         Commands\SummaryInvoice::class,
         Commands\CalculatePoinCustomer::class,
         Commands\CalculateParameter::class,
+        Commands\DeactivateExpiredBookings::class,
+        // Commands\FixJadwalBookingStatus::class,
+        Commands\FixJadwalSystemDeactivated::class,
+        Commands\ScheduleLogTransactionQsd::class,
+        Commands\UpdateJatuhTempo::class,
+        Commands\UpdateOrderDetailKonsultan::class,
     ];
 
     /**

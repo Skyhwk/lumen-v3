@@ -250,7 +250,13 @@ class PortalCustomerController extends Controller
                                     'status' => 'processing',
                                     'timestamp' => date('Y-m-d H:i:s')
                                 ]);
-                                $job = new JobEmailBlast('luthfi@intilab.com', $mailist->subject, $content);
+                                $job = new JobEmailBlast(
+                                    'luthfi@intilab.com',
+                                    $mailist->subject,
+                                    json_decode($mailist->reply_to, true),
+                                    $content,
+                                    $mailist->email_from ?? 'fromPromoSales'
+                                );
                                 $this->dispatch($job);
                                 JobTask::insert([
                                     'job' => 'JobEmailBlast',

@@ -242,6 +242,36 @@ class PurchaseReceiptService
         return false;
     }
 
+    public static function hasDraftPoDocuments(PurchaseRequest $purchaseRequest): bool
+    {
+        return PurchaseOrderDocument::where('purchase_request_id', $purchaseRequest->id)
+            ->where(function ($query) {
+                $query->where('is_voided', false)->orWhereNull('is_voided');
+            })
+            ->where('po_status', 'draft')
+            ->exists();
+    }
+
+    public static function isWorkflowFullyDistributed(PurchaseRequest $purchaseRequest): bool
+    {
+        $target = self::resolveTargetQty($purchaseRequest);
+
+        if ($target <= 0) {
+            return false;
+        }
+
+        $vendorTotal = (float) ($purchaseRequest->vendor_received_total ?? 0);
+        $confirmedTotal = (float) ($purchaseRequest->user_confirmed_total ?? 0);
+
+        return $vendorTotal >= $target
+            && $confirmedTotal >= $target
+            && !self::hasPendingVendorReceiptForAnyActivePo($purchaseRequest)
+            && self::getRemainingPoAllocationQty($purchaseRequest) <= 0
+            && !self::hasDraftPoDocuments($purchaseRequest)
+            && !self::hasUnconfirmedHandover($purchaseRequest)
+            && self::countPendingUserHandoverBatches($purchaseRequest) === 0;
+    }
+
     public static function formatPoProgress(PurchaseOrderDocument $poDocument): array
     {
         $target = round((float) $poDocument->quantity, 2);
@@ -317,14 +347,20 @@ class PurchaseReceiptService
     {
         $target = self::resolveTargetQty($purchaseRequest);
 
-        if ($target <= 0 || $purchaseRequest->finance_status === 'Distributed') {
+        if ($target <= 0) {
             return;
         }
 
         $vendorTotal = (float) ($purchaseRequest->vendor_received_total ?? 0);
         $confirmedTotal = (float) ($purchaseRequest->user_confirmed_total ?? 0);
 
-        if ($vendorTotal >= $target && $confirmedTotal >= $target && !self::hasPendingVendorReceiptForAnyActivePo($purchaseRequest)) {
+        if (
+            $vendorTotal >= $target
+            && $confirmedTotal >= $target
+            && !self::hasPendingVendorReceiptForAnyActivePo($purchaseRequest)
+            && self::getRemainingPoAllocationQty($purchaseRequest) <= 0
+            && !self::hasDraftPoDocuments($purchaseRequest)
+        ) {
             return;
         }
 
@@ -424,6 +460,7 @@ class PurchaseReceiptService
         $vendorTotal = (float) ($purchaseRequest->vendor_received_total ?? 0);
         $confirmedTotal = (float) ($purchaseRequest->user_confirmed_total ?? 0);
         $pendingVendorForAnyPo = self::hasPendingVendorReceiptForAnyActivePo($purchaseRequest);
+        $hasDraftPo = self::hasDraftPoDocuments($purchaseRequest);
 
         if ($target > 0 && $confirmedTotal >= $target && $vendorTotal >= $target && !$pendingVendorForAnyPo) {
             if (self::getRemainingPoAllocationQty($purchaseRequest) > 0) {
@@ -434,6 +471,8 @@ class PurchaseReceiptService
                 } else {
                     $purchaseRequest->finance_status = 'Waiting to Create PO';
                 }
+            } elseif ($hasDraftPo) {
+                $purchaseRequest->finance_status = 'On Process';
             } else {
                 $purchaseRequest->finance_status = 'Distributed';
                 $purchaseRequest->status = 'Done';

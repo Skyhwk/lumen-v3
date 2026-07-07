@@ -65,6 +65,11 @@ class SendEmail
             'password' => null,
             'name' => 'Promo Intilab'
         ],
+        'info' => [
+            'email' => null,
+            'password' => null,
+            'name' => 'Info Intilab'
+        ],
         'lhp' => [
             'email' => null,
             'password' => null,
@@ -86,6 +91,8 @@ class SendEmail
         $this->emailConfig['tc']['password'] = env('MAIL_TC_PASSWORD');
         $this->emailConfig['promo']['email'] = env('MAIL_PROMO_USERNAME');
         $this->emailConfig['promo']['password'] = env('MAIL_PROMO_PASSWORD');
+        $this->emailConfig['info']['email'] = env('MAIL_INFO_USERNAME');
+        $this->emailConfig['info']['password'] = env('MAIL_INFO_PASSWORD');
         $this->emailConfig['lhp']['email'] = env('MAIL_LHP_USERNAME');
         $this->emailConfig['lhp']['password'] = env('MAIL_LHP_PASSWORD');
     }
@@ -178,6 +185,41 @@ class SendEmail
         $this->alias = $alias ?? $this->emailConfig['promo']['name'];
         return $this;
     }
+
+    public function fromInfoIntilab($alias = null)
+    {
+        $this->fromType = 'info';
+        $this->alias = $alias ?? $this->emailConfig['info']['name'];
+        return $this;
+    }
+
+    public function applyFromKey(string $fromKey, $alias = null)
+    {
+        switch ($fromKey) {
+            case 'fromInfoIntilab':
+                return $this->fromInfoIntilab($alias);
+            case 'fromPromoSales':
+            default:
+                return $this->fromPromoSales($alias);
+        }
+    }
+
+    public static function resolveKaryawanFromKey(string $fromKey): string
+    {
+        switch ($fromKey) {
+            case 'fromInfoIntilab':
+                return env('MAIL_INFO_USERNAME');
+            case 'fromPromoSales':
+            default:
+                return env('MAIL_PROMO_USERNAME');
+        }
+    }
+
+    public static function allowedFromKeys(): array
+    {
+        return ['fromPromoSales', 'fromInfoIntilab'];
+    }
+
     public function fromLhp($alias = null)
     {
         $this->fromType = 'lhp';
@@ -260,7 +302,7 @@ class SendEmail
 
             $mail->isHTML(true);
             $mail->Subject = mb_encode_mimeheader($this->subject, 'UTF-8', 'B');
-            if ($this->fromType == 'promo') {
+            if (in_array($this->fromType, ['promo', 'info'], true)) {
                 $body = self::replaceBase64WithUrl($this->body);
                 $mail->Body = $body;
                 $mail->Body .= self::footer($this->to);

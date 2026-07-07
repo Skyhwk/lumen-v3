@@ -124,7 +124,7 @@ class RekapSampelSamplingController extends Controller
     public function index(Request $request)
     {
         $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])
-            ->where('kategori_1', 'not like', '%Sd%')
+            ->whereNotIn('kategori_1', ['SD', 'SP'])
             ->where('is_active', 1);
 
         // Filter berdasarkan date range
@@ -143,37 +143,7 @@ class RekapSampelSamplingController extends Controller
 
         $data = $data->orderBy('id', 'desc');
 
-        // ✅ Ambil hanya kolom yang dibutuhkan + batasi ke page yang sedang ditampilkan
-        $dtRequest   = app(\Yajra\DataTables\Utilities\Request::class);
-        $pageLength  = (int) ($dtRequest->input('length') ?? 10);
-        $pageStart   = (int) ($dtRequest->input('start')  ?? 0);
-
-        // Hanya ambil rows pada halaman aktif saja (bukan seluruh dataset)
-        $pageRows = (clone $data)
-            ->skip($pageStart)
-            ->take($pageLength > 0 ? $pageLength : 10)
-            ->get(['no_sampel', 'parameter', 'kategori_2']);
-
-        // ✅ Group + batch hanya untuk rows di halaman ini
-        $parameterStatusMap = [];
-
-        if ($pageRows->isNotEmpty()) {
-            $grouped = $pageRows->groupBy('kategori_2');
-
-            foreach ($grouped as $kategori2 => $rows) {
-                $noSampelList = $rows->pluck('no_sampel')->unique()->toArray(); // ✅ unique() hindari duplikat
-                $batchResult  = $this->parameterResultService->getNamaYangSudahAdaBatch($noSampelList, $kategori2);
-
-                foreach ($rows as $row) {
-                    $parameterRaw    = json_decode($row->parameter, true) ?? [];
-                    $namaYangSudahAda = $batchResult[$row->no_sampel] ?? [];
-                    $parameterStatusMap[$row->no_sampel] = $this->parameterResultService
-                        ->mapParameterWithStatus($parameterRaw, $namaYangSudahAda);
-                }
-            }
-        }
-
-        return DataTables::of($data)
+        $response = DataTables::of($data)
             ->filterColumn('order_header.no_document', function ($query, $keyword) {
                 $query->whereHas('orderHeader', function ($q) use ($keyword) {
                     $q->where('no_document', 'like', "%$keyword%");
@@ -195,37 +165,95 @@ class RekapSampelSamplingController extends Controller
                 });
             })
             ->filterColumn('tc_order_detail.updated_tc_at', function ($query, $keyword) {
-                $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
-                    $q->where('updated_tc_at', 'like', "%$keyword%");
-                });
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereDoesntHave('tc_order_detail', function ($q) {
+                        $q->whereNotNull('updated_tc_at');
+                    });
+                } else {
+                    $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
+                        $q->where('updated_tc_at', 'like', "%$keyword%");
+                    });
+                }
             })
             ->filterColumn('tc_order_detail.updated_tc_by', function ($query, $keyword) {
-                $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
-                    $q->where('updated_tc_by', 'like', "%$keyword%");
-                });
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereDoesntHave('tc_order_detail', function ($q) {
+                        $q->whereNotNull('updated_tc_by');
+                    });
+                } else {
+                    $query->whereHas('tc_order_detail', function ($q) use ($keyword) {
+                        $q->where('updated_tc_by', 'like', "%$keyword%");
+                    });
+                }
+            })
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNull('order_detail.tanggal_sampling');
+                } else {
+                    $query->where('order_detail.tanggal_sampling', 'like', "%$keyword%");
+                }
+            })
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereNull('order_detail.tanggal_terima');
+                } else {
+                    $query->where('order_detail.tanggal_terima', 'like', "%$keyword%");
+                }
             })
             ->addColumn('jadwal_lapangan', function ($row) {
                 return $row->union ? $row->union['created_at'] : null;
             })
             ->filterColumn('jadwal_lapangan', function ($query, $keyword) {
-                $query->whereHas('union', function ($q) use ($keyword) {
-                    $q->where('created_at', 'like', "%$keyword%");
-                });
-            })
-            ->addColumn('parameter_status', function ($row) use ($parameterStatusMap) {
-                // ✅ Lazy-compute jika row belum ada di map (misal dari DataTables internal re-query)
-                if (!isset($parameterStatusMap[$row->no_sampel])) {
-                    $batchResult = $this->parameterResultService
-                        ->getNamaYangSudahAdaBatch([$row->no_sampel], $row->kategori_2);
-                    $parameterRaw = json_decode($row->parameter, true) ?? [];
-                    $parameterStatusMap[$row->no_sampel] = $this->parameterResultService
-                        ->mapParameterWithStatus($parameterRaw, $batchResult[$row->no_sampel] ?? []);
+                if (trim(strtolower($keyword)) === 'na') {
+                    $query->whereDoesntHave('union', function ($q) {
+                        $q->whereNotNull('created_at');
+                    });
+                } else {
+                    $query->whereHas('union', function ($q) use ($keyword) {
+                        $q->where('created_at', 'like', "%$keyword%");
+                    });
                 }
-                return $parameterStatusMap[$row->no_sampel];
+            })
+            ->addColumn('parameter_status', function ($row) {
+                // Di-populate di post-processing untuk mencegah N+1 query
+                return '[]';
             })
             ->addIndexColumn()
             ->rawColumns(['action', 'parameter_status'])
             ->make(true);
+
+        // Ambil data JSON asli dari response DataTables untuk dimodifikasi
+        $originalData = $response->getData(true);
+        $rows = $originalData['data'] ?? [];
+
+        if (!empty($rows)) {
+            // Group by kategori_2 untuk menjalankan query batch parameter status
+            $grouped = collect($rows)->groupBy('kategori_2');
+            $batchResult = [];
+
+            foreach ($grouped as $kategori2 => $groupRows) {
+                $noSampelList = $groupRows->pluck('no_sampel')->filter()->unique()->toArray();
+                if (!empty($noSampelList)) {
+                    $results = $this->parameterResultService->getNamaYangSudahAdaBatch($noSampelList, $kategori2);
+                    foreach ($results as $noSampel => $params) {
+                        $batchResult[$noSampel] = $params;
+                    }
+                }
+            }
+
+            foreach ($originalData['data'] as $key => $row) {
+                $parameterRaw = json_decode($row['parameter'] ?? '[]', true) ?? [];
+                $namaYangSudahAda = $batchResult[$row['no_sampel']] ?? [];
+                
+                $originalData['data'][$key]['parameter_status'] = $this->parameterResultService
+                    ->mapParameterWithStatus($parameterRaw, $namaYangSudahAda);
+            }
+
+            // Set kembali data yang telah diperbarui ke response
+            $response->setData($originalData);
+        }
+
+        return $response;
     }
 
     public function getKategori(Request $request)

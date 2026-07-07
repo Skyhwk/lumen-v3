@@ -385,6 +385,13 @@ class SoundMeterController extends Controller
             $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->first();
+
+            if($orderDetail->tanggal_terima == null){
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                $orderDetail->save();
+            }
+
             DB::commit();
             return response()->json([
                 'message' => 'Kondisi lapangan berhasil disimpan',

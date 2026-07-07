@@ -55,13 +55,23 @@ class GenerateDokumenCocService
             ->get()
             ->each->append(['any_data_lapangan', 'any_lapangan_header', 'any_lhps']);
 
+        if ($orderDetail->isEmpty()) {
+            return null;
+        }
+
         $orderHeader = OrderHeader::find($orderDetail->first()->id_order_header);
+
+        if (!$orderHeader) {
+            return null;
+        }
 
         $isAir = $orderDetail->contains(fn($item) => $item->kategori_2 === '1-Air');
 
         $cutOffDate = Carbon::parse($isAir ? '2026-01-01' : '2026-05-01');
 
-        if (Carbon::parse($orderHeader->tgl_order)->lte($cutOffDate)) return null;
+        if (empty($orderHeader->tanggal_order)) return null;
+
+        if (Carbon::parse($orderHeader->tanggal_order)->lte($cutOffDate)) return null;
 
         $parameterIds = $orderDetail
             ->flatMap(fn($item) => json_decode($item->parameter, true))
@@ -80,6 +90,10 @@ class GenerateDokumenCocService
         $tglApproveLhps = $orderDetail->flatMap->any_lhps->max('approved_at');
 
         $pengesah = PengesahanLhp::where('berlaku_mulai', '<=', $tglApproveLhps ? date('Y-m-d', strtotime($tglApproveLhps)) : date('Y-m-d'))->latest('berlaku_mulai')->first();
+
+        if (!$pengesah) {
+            return null;
+        }
 
         $dokumenCoc = new DokumenCoc();
         $dokumenCoc->no_dokumen = $this->generateNoDokumenCoc();

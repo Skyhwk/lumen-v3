@@ -293,13 +293,24 @@ class InternalMailService
         $mail = $mailbox->getMail($uid);
 
         $attachments = [];
+        $inlineImages = [];
         foreach ($mail->getAttachments() as $attachment) {
-            $pathParts = explode('/', $attachment->filePath);
+            $fileName = $this->attachmentFileName($attachment->filePath);
+            $contentId = $this->normalizeContentId($this->getAttachmentContentId($attachment));
+            $url = env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . rawurlencode($fileName);
+            $isInline = $contentId !== '';
+
             $attachments[] = [
                 'filename' => $attachment->name,
                 'size'     => $this->formatSize((int) ($attachment->size ?? 0)),
-                'url'      => env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . end($pathParts),
+                'url'      => $url,
+                'content_id' => $contentId,
+                'inline'   => $isInline,
             ];
+
+            if ($isInline) {
+                $inlineImages[$contentId] = $url;
+            }
         }
 
         $headerAddresses = $this->fetchHeaderAddresses($imapFolder, (int) $uid, $settings);
@@ -333,10 +344,53 @@ class InternalMailService
             'subject'   => $this->decodeHeader($mail->subject ?? ''),
             'date'      => $mail->date ?? null,
             'size'      => $this->formatSize((int) ($mail->size ?? 0)),
-            'html_body' => $mail->textHtml ?? '',
+            'html_body' => $this->replaceInlineImageSources($mail->textHtml ?? '', $inlineImages),
             'text_body' => $mail->textPlain ?? '',
             'attachments' => $attachments,
         ];
+    }
+
+    private function attachmentFileName(?string $filePath): string
+    {
+        $normalized = str_replace('\\', '/', (string) $filePath);
+        return basename($normalized);
+    }
+
+    private function getAttachmentContentId($attachment): string
+    {
+        foreach (['id', 'contentId', 'contentID', 'content_id'] as $property) {
+            if (!empty($attachment->{$property})) {
+                return (string) $attachment->{$property};
+            }
+        }
+
+        if (method_exists($attachment, 'getContentId')) {
+            return (string) $attachment->getContentId();
+        }
+
+        return '';
+    }
+
+    private function normalizeContentId(?string $contentId): string
+    {
+        return trim((string) $contentId, " \t\n\r\0\x0B<>");
+    }
+
+    private function replaceInlineImageSources(string $html, array $inlineImages): string
+    {
+        if ($html === '' || empty($inlineImages)) {
+            return $html;
+        }
+
+        foreach ($inlineImages as $contentId => $url) {
+            $html = preg_replace(
+                '/(["\'])cid:' . preg_quote($contentId, '/') . '(["\'])/i',
+                '$1' . $url . '$2',
+                $html
+            );
+        }
+
+        return $html;
     }
 
     public function markSeen(string $folder, $uid, bool $seen = true): void
@@ -480,6 +534,8 @@ class InternalMailService
         $mail->Body = $data['html_body'] ?? ($data['body'] ?? '');
         $mail->AltBody = strip_tags($mail->Body);
 
+        $this->attachFilesToMail($mail, $data['attachments'] ?? []);
+
         if (!$mail->send()) {
             throw new \RuntimeException('Gagal mengirim email');
         }
@@ -489,6 +545,33 @@ class InternalMailService
             $this->syncFolderIndex('outbox', false);
         } catch (\Throwable $e) {
             // Email sudah terkirim via SMTP; outbox akan disinkronkan saat folder dibuka
+        }
+    }
+
+    private function attachFilesToMail(PHPMailer $mail, $attachments): void
+    {
+        if (empty($attachments)) {
+            return;
+        }
+
+        $maxBytes = 10 * 1024 * 1024;
+        $items = is_array($attachments) ? $attachments : [$attachments];
+
+        foreach ($items as $file) {
+            if (!$file instanceof \Illuminate\Http\UploadedFile || !$file->isValid()) {
+                continue;
+            }
+
+            if ($file->getSize() > $maxBytes) {
+                throw new \RuntimeException(
+                    'File "' . $file->getClientOriginalName() . '" melebihi batas 10MB'
+                );
+            }
+
+            $mail->addAttachment(
+                $file->getRealPath(),
+                $file->getClientOriginalName()
+            );
         }
     }
 
@@ -1069,6 +1152,12 @@ class InternalMailService
 
     private function removeFromIndex(string $folder, $uid): void
     {
+        $row = DB::table('mail_list_index')
+            ->where('id_karyawan', $this->idKaryawan)
+            ->where('folder', $folder)
+            ->where('uid', (int) $uid)
+            ->first();
+
         DB::table('mail_list_index')
             ->where('id_karyawan', $this->idKaryawan)
             ->where('folder', $folder)
@@ -1078,10 +1167,21 @@ class InternalMailService
         $meta = $this->getFolderMeta($folder);
         if ($meta) {
             $total = max(0, (int) $meta['total'] - 1);
+            $indexedCount = max(0, (int) $meta['indexed_count'] - 1);
+            $unreadCount = (int) ($meta['unread_count'] ?? 0);
+            if ($row && !$row->is_seen && $unreadCount > 0) {
+                $unreadCount = max(0, $unreadCount - 1);
+            }
+
             $this->saveFolderMeta($folder, array_merge($meta, [
                 'total'         => $total,
-                'indexed_count' => max(0, (int) $meta['indexed_count'] - 1),
+                'indexed_count' => $indexedCount,
+                'unread_count'  => $unreadCount,
             ]));
+        }
+
+        if ($folder === 'inbox') {
+            $this->invalidateUnreadUidCache();
         }
     }
 

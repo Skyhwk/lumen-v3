@@ -147,6 +147,432 @@ class WsFinalApprovalService
         self::refreshApprovalStatus($orderDetail, $approvedBy);
     }
 
+    public static function parameterSourceClasses(): array
+    {
+        return self::PARAMETER_SOURCES;
+    }
+
+    public static function finalizeLhpFromLhpTables(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
+    {
+        $headerId = self::upsertHeader($orderDetail);
+
+        if (!$approved) {
+            DB::table('ws_final_approval_detail')
+                ->where('ws_final_approval_header_id', $headerId)
+                ->delete();
+
+            DB::table('ws_final_approval_header')
+                ->where('id', $headerId)
+                ->update([
+                    'is_approved' => 0,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                ]);
+
+            return;
+        }
+
+        $orderDetails = self::lhpOrderDetails($orderDetail);
+
+        // Eager load semua relasi LHP untuk performa maksimal (menghindari N+1 query)
+        $orderDetails->load([
+            'lhps_air', 'lhps_padatan', 'lhps_emisi', 'lhps_emisi_c', 'lhps_emisi_isokinetik',
+            'lhps_getaran', 'lhps_kebisingan', 'lhps_kebisingan_personal', 'lhps_ling',
+            'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_swab_udara',
+            'lhps_microbiologi'
+        ]);
+
+        $lhpRelations = [
+            'lhps_air' => ['detail' => 'lhpsAirDetail', 'custom' => 'lhpsAirCustom'],
+            'lhps_padatan' => ['detail' => 'lhpsPadatanDetail', 'custom' => 'lhpsPadatanCustom'],
+            'lhps_emisi' => ['detail' => 'lhpsEmisiDetail', 'custom' => null],
+            'lhps_emisi_c' => ['detail' => 'lhpsEmisiCDetail', 'custom' => null],
+            'lhps_emisi_isokinetik' => ['detail' => 'lhpsEmisiIsokinetikDetail', 'custom' => null],
+            'lhps_getaran' => ['detail' => 'lhpsGetaranDetail', 'custom' => null],
+            'lhps_kebisingan' => ['detail' => 'lhpsKebisinganDetail', 'custom' => null],
+            'lhps_kebisingan_personal' => ['detail' => 'lhpsKebisinganPersonalDetail', 'custom' => null],
+            'lhps_ling' => ['detail' => 'lhpsLingDetail', 'custom' => null],
+            'lhps_medanlm' => ['detail' => 'lhpsMedanLMDetail', 'custom' => null],
+            'lhps_pencahayaan' => ['detail' => 'lhpsPencahayaanDetail', 'custom' => null],
+            'lhps_sinaruv' => ['detail' => 'lhpsSinarUVDetail', 'custom' => null],
+            'lhps_iklim' => ['detail' => 'lhpsIklimDetail', 'custom' => null],
+            'lhps_swab_udara' => ['detail' => 'lhpsSwabTesDetail', 'custom' => null],
+            'lhps_microbiologi' => ['detail' => 'lhpsMicrobiologiDetailSampel', 'custom' => null],
+        ];
+
+        $orderDetails->each(function (OrderDetail $detail) use ($headerId, $lhpRelations) {
+            foreach ($lhpRelations as $relationName => $config) {
+                $lhpHeader = $detail->{$relationName};
+                if (!$lhpHeader) {
+                    continue;
+                }
+
+                $detailRelation = $config['detail'];
+                $lhpDetails = $lhpHeader->{$detailRelation} ?? collect();
+                $insertedParams = [];
+
+                foreach ($lhpDetails as $lhpDetail) {
+                    // Filter berdasarkan no_sampel jika kolom no_sampel tersedia di data detail
+                    $lhpDetailNoSampel = $lhpDetail->no_sampel ?? null;
+                    if ($lhpDetailNoSampel !== null && trim((string)$lhpDetailNoSampel) !== '' && trim((string)$lhpDetailNoSampel) !== trim((string)$detail->no_sampel)) {
+                        continue;
+                    }
+
+                    $parameterLab = $lhpDetail->parameter_lab 
+                        ?? $lhpDetail->parameter 
+                        ?? $lhpDetail->param 
+                        ?? $lhpDetail->parameter_uji 
+                        ?? null;
+
+                    if ($parameterLab === null || trim((string)$parameterLab) === '') {
+                        $paramsArray = self::arrayValue($detail->parameter);
+                        if (!empty($paramsArray)) {
+                            $firstParam = $paramsArray[0];
+                            if (str_contains($firstParam, ';')) {
+                                $parameterLab = explode(';', $firstParam)[1];
+                            } else {
+                                $parameterLab = $firstParam;
+                            }
+                        }
+                    }
+
+                    $hasil = null;
+                    if (isset($lhpDetail->hasil_terkoreksi) && trim((string)$lhpDetail->hasil_terkoreksi) !== '' && trim((string)$lhpDetail->hasil_terkoreksi) !== '-') {
+                        $hasil = $lhpDetail->hasil_terkoreksi;
+                    } elseif (isset($lhpDetail->terkoreksi) && trim((string)$lhpDetail->terkoreksi) !== '' && trim((string)$lhpDetail->terkoreksi) !== '-') {
+                        $hasil = $lhpDetail->terkoreksi;
+                    } elseif (isset($lhpDetail->hasil_uji) && trim((string)$lhpDetail->hasil_uji) !== '' && trim((string)$lhpDetail->hasil_uji) !== '-') {
+                        $hasil = $lhpDetail->hasil_uji;
+                    } elseif (isset($lhpDetail->C) && trim((string)$lhpDetail->C) !== '' && trim((string)$lhpDetail->C) !== '-') {
+                        $hasil = $lhpDetail->C;
+                    } elseif (isset($lhpDetail->hasil) && trim((string)$lhpDetail->hasil) !== '' && trim((string)$lhpDetail->hasil) !== '-') {
+                        $hasil = $lhpDetail->hasil;
+                    } else {
+                        $hasil = $lhpDetail->hasil_terkoreksi 
+                            ?? $lhpDetail->terkoreksi 
+                            ?? $lhpDetail->hasil_uji 
+                            ?? $lhpDetail->C 
+                            ?? $lhpDetail->hasil 
+                            ?? '';
+                    }
+
+                    if ($hasil !== null && $hasil !== '') {
+                        $decoded = json_decode($hasil, true);
+                        if (is_array($decoded)) {
+                            $hasil = reset($decoded);
+                        }
+                    } else {
+                        $hasil = '';
+                    }
+
+                    if (!$parameterLab) {
+                        continue;
+                    }
+
+                    $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
+
+                    DB::table('ws_final_approval_detail')->updateOrInsert([
+                        'ws_final_approval_header_id' => $headerId,
+                        'no_sampel' => $detail->no_sampel,
+                        'parameter_lab' => self::limit($parameterLab, 70),
+                    ], [
+                        'no_sampel' => $detail->no_sampel,
+                        'parameter_regulasi' => self::limit($parameterRegulasi, 100),
+                        'hasil' => self::limit($hasil, 50),
+                    ]);
+
+                    $insertedParams[strtolower(trim($parameterLab))] = true;
+                }
+
+                if (!empty($config['custom'])) {
+                    $customRelation = $config['custom'];
+                    $lhpCustoms = $lhpHeader->{$customRelation} ?? collect();
+
+                    foreach ($lhpCustoms as $lhpCustom) {
+                        // Filter berdasarkan no_sampel jika kolom no_sampel tersedia di data kustom
+                        $lhpCustomNoSampel = $lhpCustom->no_sampel ?? null;
+                        if ($lhpCustomNoSampel !== null && trim((string)$lhpCustomNoSampel) !== '' && trim((string)$lhpCustomNoSampel) !== trim((string)$detail->no_sampel)) {
+                            continue;
+                        }
+
+                        $parameterLab = $lhpCustom->parameter_lab 
+                            ?? $lhpCustom->parameter 
+                            ?? $lhpCustom->param 
+                            ?? $lhpCustom->parameter_uji 
+                            ?? null;
+
+                        if ($parameterLab === null || trim((string)$parameterLab) === '') {
+                            $paramsArray = self::arrayValue($detail->parameter);
+                            if (!empty($paramsArray)) {
+                                $firstParam = $paramsArray[0];
+                                if (str_contains($firstParam, ';')) {
+                                    $parameterLab = explode(';', $firstParam)[1];
+                                } else {
+                                    $parameterLab = $firstParam;
+                                }
+                            }
+                        }
+
+                        $hasil = null;
+                        if (isset($lhpCustom->hasil_terkoreksi) && trim((string)$lhpCustom->hasil_terkoreksi) !== '' && trim((string)$lhpCustom->hasil_terkoreksi) !== '-') {
+                            $hasil = $lhpCustom->hasil_terkoreksi;
+                        } elseif (isset($lhpCustom->terkoreksi) && trim((string)$lhpCustom->terkoreksi) !== '' && trim((string)$lhpCustom->terkoreksi) !== '-') {
+                            $hasil = $lhpCustom->terkoreksi;
+                        } elseif (isset($lhpCustom->hasil_uji) && trim((string)$lhpCustom->hasil_uji) !== '' && trim((string)$lhpCustom->hasil_uji) !== '-') {
+                            $hasil = $lhpCustom->hasil_uji;
+                        } elseif (isset($lhpCustom->C) && trim((string)$lhpCustom->C) !== '' && trim((string)$lhpCustom->C) !== '-') {
+                            $hasil = $lhpCustom->C;
+                        } elseif (isset($lhpCustom->hasil) && trim((string)$lhpCustom->hasil) !== '' && trim((string)$lhpCustom->hasil) !== '-') {
+                            $hasil = $lhpCustom->hasil;
+                        } else {
+                            $hasil = $lhpCustom->hasil_terkoreksi 
+                                ?? $lhpCustom->terkoreksi 
+                                ?? $lhpCustom->hasil_uji 
+                                ?? $lhpCustom->C 
+                                ?? $lhpCustom->hasil 
+                                ?? '';
+                        }
+
+                        if ($hasil !== null && $hasil !== '') {
+                            $decoded = json_decode($hasil, true);
+                            if (is_array($decoded)) {
+                                $hasil = reset($decoded);
+                            }
+                        } else {
+                            $hasil = '';
+                        }
+
+                        if (!$parameterLab) {
+                            continue;
+                        }
+
+                        // Jika nama parameter sudah dimasukkan dari detail utama, lewati data custom ini
+                        $paramKey = strtolower(trim($parameterLab));
+                        if (isset($insertedParams[$paramKey])) {
+                            continue;
+                        }
+
+                        $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
+
+                        DB::table('ws_final_approval_detail')->updateOrInsert([
+                            'ws_final_approval_header_id' => $headerId,
+                            'no_sampel' => $detail->no_sampel,
+                            'parameter_lab' => self::limit($parameterLab, 70),
+                        ], [
+                            'no_sampel' => $detail->no_sampel,
+                            'parameter_regulasi' => self::limit($parameterRegulasi, 100),
+                            'hasil' => self::limit($hasil, 50),
+                        ]);
+                    }
+                }
+            }
+
+            // Penanganan Ergonomi
+            $isErgonomi = false;
+            if ($detail->kategori_3 && str_contains(strtolower($detail->kategori_3), 'ergonomi')) {
+                $isErgonomi = true;
+            } elseif ($detail->kategori_2 && str_contains(strtolower($detail->kategori_2), 'ergonomi')) {
+                $isErgonomi = true;
+            }
+
+            if ($isErgonomi) {
+                $paramsArray = self::arrayValue($detail->parameter);
+                
+                // Fallback jika array parameter di order detail kosong, coba cari di lhps_ergonomi_header
+                if (empty($paramsArray) && class_exists(\App\Models\LhpsErgonomiHeader::class)) {
+                    $ergonomiHeader = \App\Models\LhpsErgonomiHeader::where('no_sampel', $detail->no_sampel)
+                        ->where('is_active', true)
+                        ->first();
+                    if ($ergonomiHeader) {
+                        $ergonomiDetails = $ergonomiHeader->lhpsErgonomiDetail ?? collect();
+                        foreach ($ergonomiDetails as $eDetail) {
+                            $paramName = $eDetail->parameter_lab ?? $eDetail->parameter ?? $eDetail->param ?? $eDetail->parameter_uji;
+                            if ($paramName) {
+                                $paramsArray[] = $paramName;
+                            }
+                        }
+                    }
+                }
+
+                foreach ($paramsArray as $paramRaw) {
+                    $parameterLab = $paramRaw;
+                    if (str_contains($paramRaw, ';')) {
+                        $parameterLab = explode(';', $paramRaw)[1];
+                    }
+
+                    if (!$parameterLab || trim((string)$parameterLab) === '') {
+                        continue;
+                    }
+
+                    $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
+                    $hasil = 'Sudah dianalisa';
+
+                    DB::table('ws_final_approval_detail')->updateOrInsert([
+                        'ws_final_approval_header_id' => $headerId,
+                        'no_sampel' => $detail->no_sampel,
+                        'parameter_lab' => self::limit($parameterLab, 70),
+                    ], [
+                        'no_sampel' => $detail->no_sampel,
+                        'parameter_regulasi' => self::limit($parameterRegulasi, 100),
+                        'hasil' => self::limit($hasil, 50),
+                    ]);
+                }
+            }
+        });
+
+        $orderDetails->each(function (OrderDetail $detail) use ($headerId) {
+            self::syncAirFieldParametersToHeader($headerId, $detail);
+        });
+
+        self::refreshApprovalStatusFromDetailsFromHistory($headerId, $orderDetails, $orderDetail->cfr);
+    }
+
+    private static function refreshApprovalStatusFromDetailsFromHistory(int $headerId, $orderDetails, ?string $noLhp): void
+    {
+        $required = $orderDetails
+            ->flatMap(function (OrderDetail $detail) {
+                return collect(self::arrayValue($detail->parameter))
+                    ->map(function ($parameter) use ($detail) {
+                        return self::sampleParameterKey($detail->no_sampel, $parameter);
+                    });
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $approved = DB::table('ws_final_approval_detail')
+            ->where('ws_final_approval_header_id', $headerId)
+            ->get(['no_sampel', 'parameter_lab'])
+            ->map(function ($detail) {
+                return self::sampleParameterKey($detail->no_sampel, $detail->parameter_lab);
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $complete = $required->isNotEmpty()
+            && $required->diff($approved)->isEmpty();
+
+        $approvedBy = null;
+        $approvedAt = null;
+
+        $sampleAndLhpNumbers = $orderDetails->pluck('no_sampel')
+            ->merge($orderDetails->pluck('cfr'))
+            ->filter()
+            ->unique()
+            ->all();
+
+        $history = null;
+        if (!empty($sampleAndLhpNumbers)) {
+            $history = DB::table('history_app_reject')
+                ->where(function($query) use ($sampleAndLhpNumbers) {
+                    $query->whereIn('no_sampel', $sampleAndLhpNumbers)
+                          ->orWhereIn('no_lhp', $sampleAndLhpNumbers);
+                })
+                ->where('status', 'approve')
+                ->where('menu', 'like', '%WS Final%')
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        if ($history) {
+            $approvedBy = $history->approved_by;
+            $approvedAt = $history->approved_at;
+        } elseif ($complete) {
+            $approvedBy = 'system';
+            $approvedAt = Carbon::now()->format('Y-m-d H:i:s');
+        }
+
+        DB::table('ws_final_approval_header')
+            ->where('id', $headerId)
+            ->update([
+                'is_approved' => $complete ? 1 : 0,
+                'approved_by' => self::limit($approvedBy, 100),
+                'approved_at' => $approvedAt,
+            ]);
+    }
+
+    private static function lhpOrderDetails(OrderDetail $orderDetail)
+    {
+        $cfr = $orderDetail->cfr;
+
+        if ($cfr !== null && $cfr !== '') {
+            return OrderDetail::where('cfr', $cfr)
+                ->where('is_active', true)
+                ->get();
+        }
+
+        return collect([$orderDetail]);
+    }
+
+    private static function sampleParameterKey(?string $noSampel, ?string $parameter): string
+    {
+        $noSampel = trim((string) $noSampel);
+        $parameter = self::normalizeParameter($parameter);
+
+        return "{$noSampel}#{$parameter}";
+    }
+
+    public static function finalizeLhp(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
+    {
+        $headerId = self::upsertHeader($orderDetail);
+
+        if (!$approved) {
+            DB::table('ws_final_approval_detail')
+                ->where('ws_final_approval_header_id', $headerId)
+                ->delete();
+
+            DB::table('ws_final_approval_header')
+                ->where('id', $headerId)
+                ->update([
+                    'is_approved' => 0,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                ]);
+
+            return;
+        }
+
+        $orderDetails = self::lhpOrderDetails($orderDetail);
+        $detailsBySample = $orderDetails->keyBy('no_sampel');
+        $samples = $detailsBySample->keys()->filter()->values();
+
+        foreach (self::PARAMETER_SOURCES as $modelClass) {
+            if (!class_exists($modelClass)) {
+                continue;
+            }
+
+            $model = new $modelClass();
+            $table = $model->getTable();
+
+            if (!Schema::hasColumn($table, 'no_sampel') || !Schema::hasColumn($table, 'parameter')) {
+                continue;
+            }
+
+            $approvalColumn = self::approvalColumn($table);
+            if ($approvalColumn === null) {
+                continue;
+            }
+
+            $query = $modelClass::whereIn('no_sampel', $samples)
+                ->where($approvalColumn, 1);
+
+            if (Schema::hasColumn($table, 'is_active')) {
+                $query->where('is_active', true);
+            }
+
+            $query->get()->each(function (Model $source) use ($headerId, $detailsBySample) {
+                self::upsertDetailFromSource($headerId, $detailsBySample, $source);
+            });
+        }
+
+        $orderDetails->each(function (OrderDetail $detail) use ($headerId) {
+            self::syncAirFieldParametersToHeader($headerId, $detail);
+        });
+
+        self::refreshApprovalStatusFromDetails($headerId, $orderDetails, $approvedBy);
+    }
+
     public static function finalizeSamples(iterable $orderDetails, bool $approved, ?string $approvedBy = null): void
     {
         foreach ($orderDetails as $orderDetail) {
@@ -172,7 +598,8 @@ class WsFinalApprovalService
                 str_contains(strtolower($od->kategori_3), 'lingkungan kerja') || 
                 str_contains(strtolower($od->kategori_3), 'lingkungan hidup') || 
                 str_contains(strtolower($od->kategori_3), 'ambient') || 
-                str_contains(strtolower($od->kategori_3), 'tidak bergerak')
+                str_contains(strtolower($od->kategori_3), 'tidak bergerak') ||
+                str_contains(strtolower($od->kategori_3), 'isokinetik')
             );
         });
 
@@ -249,7 +676,6 @@ class WsFinalApprovalService
             ->filter()
             ->unique()
             ->values();
-
         $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
             ->where('is_active', true)
             ->get();
@@ -318,27 +744,18 @@ class WsFinalApprovalService
             'nama_titik' => self::limit($orderDetail->keterangan_1, 50),
         ], $approval);
 
-        $columns = array_keys($row);
-        $quotedColumns = implode(', ', array_map(function ($column) {
-            return "`{$column}`";
-        }, $columns));
-        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-        $updates = implode(', ', array_map(function ($column) {
-            return "`{$column}` = VALUES(`{$column}`)";
-        }, array_filter($columns, function ($column) {
-            return $column !== 'no_lhp';
-        })));
+        $existing = DB::table('ws_final_approval_header')
+            ->where('no_lhp', $orderDetail->cfr)
+            ->first();
 
-        DB::statement(
-            "INSERT INTO `ws_final_approval_header` ({$quotedColumns})
-             VALUES ({$placeholders})
-             ON DUPLICATE KEY UPDATE
-                `id` = LAST_INSERT_ID(`id`),
-                {$updates}",
-            array_values($row)
-        );
+        if ($existing) {
+            DB::table('ws_final_approval_header')
+                ->where('id', $existing->id)
+                ->update($row);
+            return (int) $existing->id;
+        }
 
-        return (int) DB::connection()->getPdo()->lastInsertId();
+        return (int) DB::table('ws_final_approval_header')->insertGetId($row);
     }
 
     private static function findOrderDetail(string $noSampel): ?OrderDetail
@@ -897,6 +1314,12 @@ class WsFinalApprovalService
                             ]);
                         }
                     }
+                }
+            }
+
+            if (Schema::hasTable('ws_final_approval_header')) {
+                if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'air') {
+                    self::syncAirFieldParameters($orderDetail);
                 }
             }
 

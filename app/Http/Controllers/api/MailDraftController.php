@@ -70,7 +70,13 @@ class MailDraftController extends Controller
     public function send(Request $request)
     {
         try {
-            $this->mail()->sendEmail($request->all());
+            $payload = $request->all();
+
+            if ($request->hasFile('attachments')) {
+                $payload['attachments'] = $request->file('attachments');
+            }
+
+            $this->mail()->sendEmail($payload);
 
             if ($request->filled('id')) {
                 $this->mail()->deleteLocalDraft($request->input('id'));

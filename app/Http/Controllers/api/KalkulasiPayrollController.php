@@ -88,6 +88,28 @@ class KalkulasiPayrollController extends Controller
     public function showData(Request $request)
     {
         try {
+            $karyawanLogin = DB::table('master_karyawan')
+                ->leftJoin('master_jabatan', 'master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+                ->where('master_karyawan.id', $this->user_id)
+                ->select('master_jabatan.nama_jabatan', 'master_karyawan.grade')
+                ->first();
+
+            $isSpv = false;
+            if ($karyawanLogin) {
+                $namaJabatan = strtolower($karyawanLogin->nama_jabatan ?? '');
+                $grade = strtoupper($karyawanLogin->grade ?? '');
+                if ($grade === 'SUPERVISOR' || str_contains($namaJabatan, 'spv') || str_contains($namaJabatan, 'supervisor')) {
+                    $isSpv = true;
+                }
+            }
+
+            if ($isSpv && $request->status_karyawan === 'Supervisor') {
+                return response()->json([
+                    'data' => [],
+                    'message' => 'Anda adalah Supervisor (SPV). Anda tidak diperbolehkan melihat/generate data payroll untuk status karyawan Supervisor!'
+                ], 403);
+            }
+
             // dd($request->all());
             // Calculate working days from rekap_libur_kalender
             $workingDaysQuery = DB::table('rekap_libur_kalender')
@@ -594,6 +616,28 @@ class KalkulasiPayrollController extends Controller
     public function generateData(Request $request)
     {      
         try {
+            $karyawanLogin = DB::table('master_karyawan')
+                ->leftJoin('master_jabatan', 'master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+                ->where('master_karyawan.id', $this->user_id)
+                ->select('master_jabatan.nama_jabatan', 'master_karyawan.grade')
+                ->first();
+
+            $isSpv = false;
+            if ($karyawanLogin) {
+                $namaJabatan = strtolower($karyawanLogin->nama_jabatan ?? '');
+                $grade = strtoupper($karyawanLogin->grade ?? '');
+                if ($grade === 'SUPERVISOR' || str_contains($namaJabatan, 'spv') || str_contains($namaJabatan, 'supervisor')) {
+                    $isSpv = true;
+                }
+            }
+
+            if ($isSpv && $request->status_karyawan === 'Supervisor') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda adalah Supervisor (SPV). Anda tidak diperbolehkan melakukan generate/kalkulasi payroll untuk status karyawan Supervisor!'
+                ], 403);
+            }
+
             $conn_latestPayroll = new PayrollHeader;
             $latestPayroll = PayrollHeader::orderBy('id', 'desc')->first();
             

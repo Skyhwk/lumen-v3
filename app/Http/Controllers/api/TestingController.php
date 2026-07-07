@@ -2276,7 +2276,6 @@ class TestingController extends Controller
                         DataLapanganSenyawaVolatile::class,
                         DataLapanganSinarUV::class,
                         DataLapanganSwab::class,
-                        DataLapanganUnion::class,
                         DataLimbah::class,
                         DetailFlowMeter::class,
                         DetailLingkunganHidup::class,
@@ -2338,6 +2337,9 @@ class TestingController extends Controller
                         $registered = [];
                         $unregistered = [];
 
+                        // Buat lookup dari $results yang sudah di-trace (group by parameter -> count)
+                        $resultsCollection = collect($results);
+
                         if (is_array($parametersRaw)) {
                             foreach ($parametersRaw as $item) {
                                 $parameterName = explode(";", $item)[1] ?? null;
@@ -2348,30 +2350,67 @@ class TestingController extends Controller
                                     ->first();
 
                                 if ($matched) {
+                                    // Hitung actual_count: jumlah data di model yang sesuai untuk no_sampel ini
+                                    $actualCount = 0;
+                                    $modelClass = $matched['model'];
+                                    $model2Class = $matched['model2'] ?? null;
+
+                                    if ($modelClass) {
+                                        try {
+                                            $actualCount += $modelClass::where('no_sampel', $noSampelCari)
+                                                ->where('parameter', $parameterName)
+                                                ->count();
+                                        } catch (\Exception $e) {
+                                            // model mungkin tidak punya kolom parameter
+                                        }
+                                    }
+
+                                    if ($model2Class) {
+                                        try {
+                                            $actualCount += $model2Class::where('no_sampel', $noSampelCari)
+                                                ->where('parameter', $parameterName)
+                                                ->count();
+                                        } catch (\Exception $e) {
+                                            // model2 mungkin tidak punya kolom parameter
+                                        }
+                                    }
+
+                                    $requiredCount = (int) ($matched['requiredCount'] ?? 1);
+                                    $isComplete = $actualCount >= $requiredCount;
+
                                     $registered[] = [
-                                        'parameter' => $parameterName,
-                                        'category'  => $matched['category'],
-                                        'model'     => $matched['model'],
-                                        'status'    => 'TERDAFTAR',
+                                        'parameter'      => $parameterName,
+                                        'category'       => $matched['category'],
+                                        'model'          => $matched['model'] ? class_basename($matched['model']) : '-',
+                                        'required_count' => $requiredCount,
+                                        'actual_count'   => $actualCount,
+                                        'status'         => 'TERDAFTAR',
+                                        'completion'     => $isComplete ? 'SELESAI' : 'BELUM SELESAI',
                                     ];
                                 } else {
                                     $unregistered[] = [
                                         'parameter'   => $parameterName,
                                         'kategori_2'  => $sample->kategori_2,
                                         'status'      => 'BELUM TERDAFTAR',
+                                        'completion'  => 'TIDAK DIKETAHUI',
                                     ];
                                 }
                             }
                         }
 
+                        $totalSelesai = collect($registered)->where('completion', 'SELESAI')->count();
+                        $totalBelumSelesai = collect($registered)->where('completion', 'BELUM SELESAI')->count();
+
                         $registrationCheck = [
-                            'no_sampel'            => $noSampelCari,
-                            'kategori_2'           => $sample->kategori_2,
-                            'total_parameter'      => count($registered) + count($unregistered),
-                            'total_terdaftar'      => count($registered),
+                            'no_sampel'             => $noSampelCari,
+                            'kategori_2'            => $sample->kategori_2,
+                            'total_parameter'       => count($registered) + count($unregistered),
+                            'total_terdaftar'       => count($registered),
                             'total_belum_terdaftar' => count($unregistered),
-                            'registered'           => $registered,
-                            'unregistered'         => $unregistered,
+                            'total_selesai'         => $totalSelesai,
+                            'total_belum_selesai'   => $totalBelumSelesai,
+                            'registered'            => $registered,
+                            'unregistered'          => $unregistered,
                         ];
                     }
 
@@ -2380,6 +2419,426 @@ class TestingController extends Controller
                         'data_lapangan'             => $results,
                         'parameter_registration'    => $registrationCheck,
                     ]);
+
+                // ====================================================================
+                // CASE: debug-status-sampling
+                // Replika logika BasOnlineController::getStatusSampling + verifyStatus
+                // Input: no_sampel (string)
+                // Output: detail per-parameter, step-by-step debugging
+                // ====================================================================
+                case 'debug-status-sampling':
+                    $noSampel = $request->input('no_sampel');
+                    if (!$noSampel) {
+                        return response()->json(['error' => 'no_sampel wajib diisi'], 422);
+                    }
+
+                    $sample = OrderDetail::where('no_sampel', $noSampel)->first();
+                    if (!$sample) {
+                        return response()->json(['error' => "Sample {$noSampel} tidak ditemukan di OrderDetail"], 404);
+                    }
+
+                    $debugResult = [];
+                    $debugResult['no_sampel'] = $noSampel;
+                    $debugResult['kategori_2'] = $sample->kategori_2;
+
+                    try {
+                        $parametersRaw = json_decode($sample->parameter);
+                        $debugResult['total_raw_parameters'] = is_array($parametersRaw) ? count($parametersRaw) : 0;
+
+                        // 1. Template ICP (sama persis seperti BasOnline)
+                        $templateIcp = \App\Models\TemplateStp::where('name', 'icp')
+                            ->where('category_id', 4)
+                            ->first();
+
+                        $icpParameters = [];
+                        if ($templateIcp && $templateIcp->param) {
+                            $icpParameters = json_decode($templateIcp->param, true) ?? [];
+                        }
+
+                        // 2. Required Parameters dari DB (sama persis seperti BasOnline getRequiredParameters)
+                        $allRequiredParams = \App\Models\RequiredParameters::all()->map(function ($item) {
+                            return [
+                                'parameter'     => $item->parameter,
+                                'requiredCount' => $item->required_count,
+                                'category'      => $item->category,
+                                'model'         => $item->model,
+                                'model2'        => $item->model2,
+                                'model3'        => $item->model3 ?? null,
+                            ];
+                        });
+
+                        $filteredRequired = collect($allRequiredParams)
+                            ->where('category', $sample->kategori_2);
+
+                        // 3. Matching parameters (sama persis seperti array_reduce di BasOnline)
+                        $parameters = [];
+                        $matchDebug = [];
+
+                        if (is_array($parametersRaw)) {
+                            foreach ($parametersRaw as $item) {
+                                $parameterName = explode(";", $item)[1] ?? null;
+                                if (!$parameterName) continue;
+
+                                $matched = $filteredRequired
+                                    ->where('parameter', $parameterName)
+                                    ->first();
+
+                                if ($matched === null) {
+                                    $matchDebug[] = [
+                                        'parameter' => $parameterName,
+                                        'step' => 'MATCH',
+                                        'result' => 'TIDAK DITEMUKAN di RequiredParameters',
+                                        'note' => "Parameter '{$parameterName}' dengan category '{$sample->kategori_2}' tidak ada di DB required_parameters",
+                                    ];
+                                    // Di BasOnline ini akan throw Exception!
+                                    continue;
+                                }
+
+                                $parameters[] = $matched;
+                                $matchDebug[] = [
+                                    'parameter' => $parameterName,
+                                    'step' => 'MATCH',
+                                    'result' => 'DITEMUKAN',
+                                    'model' => $matched['model'],
+                                    'model2' => $matched['model2'],
+                                    'requiredCount' => $matched['requiredCount'],
+                                ];
+                            }
+                        }
+
+                        $debugResult['matching_debug'] = $matchDebug;
+
+                        // 4. Filter: buang yang null atau tanpa model (kecuali Padatan)
+                        $parametersFiltered = array_filter($parameters, function ($param) {
+                            if ($param == null) return false;
+                            if ($param['category'] == '6-Padatan') return is_array($param);
+                            return is_array($param) && isset($param['model']);
+                        });
+
+                        $debugResult['total_after_filter'] = count($parametersFiltered);
+
+                        // 5. Loop per parameter: replika persis BasOnline getStatusSampling
+                        $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
+                        $status = 'selesai';
+                        $parameterDetails = [];
+
+                        $environmentModels = [
+                            DetailLingkunganHidup::class,
+                            DetailLingkunganKerja::class,
+                            DetailMicrobiologi::class,
+                        ];
+
+                        $modelsWithParameter = [
+                            DetailLingkunganHidup::class,
+                            DetailSenyawaVolatile::class,
+                            DetailMicrobiologi::class,
+                            DataLapanganDirectLain::class,
+                        ];
+
+                        if (!empty($parametersFiltered)) {
+                            foreach ($parametersFiltered as $parameter) {
+                                $paramName = $parameter['parameter'];
+                                $detail = [
+                                    'parameter' => $paramName,
+                                    'category' => $parameter['category'],
+                                    'model' => $parameter['model'],
+                                    'model2' => $parameter['model2'] ?? null,
+                                    'model3' => $parameter['model3'] ?? null,
+                                    'requiredCount' => $parameter['requiredCount'],
+                                    'bypassed' => false,
+                                    'bypass_reason' => null,
+                                    'verify_path' => null,
+                                    'verify_detail' => [],
+                                    'verified' => null,
+                                    'final_status' => null,
+                                ];
+
+                                // --- BYPASS CHECKS (sama persis) ---
+                                if ($parameter['category'] == '6-Padatan') {
+                                    $detail['bypassed'] = true;
+                                    $detail['bypass_reason'] = 'Kategori 6-Padatan → di-skip';
+                                    $detail['final_status'] = 'BYPASS';
+                                    $parameterDetails[] = $detail;
+                                    continue;
+                                }
+
+                                if (in_array($paramName, $parameterBypass)) {
+                                    $detail['bypassed'] = true;
+                                    $detail['bypass_reason'] = "Parameter '{$paramName}' ada di parameterBypass list";
+                                    $detail['final_status'] = 'BYPASS';
+                                    $parameterDetails[] = $detail;
+                                    continue;
+                                }
+
+                                if ($noSampel == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                                    $detail['bypassed'] = true;
+                                    $detail['bypass_reason'] = "Hardcode bypass untuk ITEM012501/015 + {$paramName}";
+                                    $detail['final_status'] = 'BYPASS';
+                                    $parameterDetails[] = $detail;
+                                    continue;
+                                }
+
+                                if (in_array($noSampel, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                                    $detail['bypassed'] = true;
+                                    $detail['bypass_reason'] = "Hardcode bypass untuk no_sampel {$noSampel}";
+                                    $detail['final_status'] = 'BYPASS';
+                                    $parameterDetails[] = $detail;
+                                    continue;
+                                }
+
+                                // --- ICP BYPASS (sama persis) ---
+                                if (in_array($paramName, $icpParameters)) {
+                                    if (!preg_match('/(jam|\d+j)/i', $paramName)) {
+                                        $detail['bypassed'] = true;
+                                        $detail['bypass_reason'] = "ICP Template bypass: '{$paramName}' tidak mengandung 'jam' atau digit+j";
+                                        $detail['final_status'] = 'BYPASS';
+                                        $parameterDetails[] = $detail;
+                                        continue;
+                                    }
+                                    $detail['verify_detail'][] = "ICP tapi mengandung 'jam', tetap di-verify";
+                                }
+
+                                // --- VERIFY STATUS (replika verifyStatus dari BasOnline) ---
+                                $model = $parameter['model'];
+                                $model2 = $parameter['model2'] ?? null;
+                                $model3 = $parameter['model3'] ?? null;
+                                $requiredCount = (int) ($parameter['requiredCount'] ?? 1);
+
+                                if (empty($model)) {
+                                    $detail['verify_path'] = 'EMPTY_MODEL';
+                                    $detail['verified'] = false;
+                                    $detail['verify_detail'][] = 'model kosong → return null → BELUM SELESAI';
+                                    $detail['final_status'] = 'BELUM SELESAI';
+                                    $status = 'belum selesai';
+                                    $parameterDetails[] = $detail;
+                                    break;
+                                }
+
+                                // Cek apakah environment model
+                                $isEnvironment = in_array($model, $environmentModels, true);
+                                $detail['verify_detail'][] = "model='{$model}', isEnvironmentModel=" . ($isEnvironment ? 'true' : 'false');
+                                $detail['verify_detail'][] = "strict_match_check: in_array('{$model}', ['" . implode("','", $environmentModels) . "'], true) = " . ($isEnvironment ? 'TRUE' : 'FALSE');
+
+                                if ($isEnvironment) {
+                                    // --- handleEnvironmentModel ---
+                                    $detail['verify_path'] = 'ENVIRONMENT_MODEL';
+
+                                    $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 'Kelembaban', 'Suhu'], true);
+                                    if (!$hasPMParameter) {
+                                        $model3 = null;
+                                    }
+
+                                    if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi') {
+                                        // --- handleTemperatureHumidity ---
+                                        $detail['verify_detail'][] = "Path: handleTemperatureHumidity (model3=" . ($model3 ?? 'null') . ")";
+
+                                        if (in_array($paramName, ['Suhu', 'Kelembaban', 'Laju Ventilasi', 'Laju Ventilasi (8 Jam)'], true)) {
+                                            // Mapping nama kolom
+                                            if ($paramName === 'Kelembaban') {
+                                                $searchColumn = 'Kelembapan';
+                                            } elseif ($paramName === 'Laju Ventilasi' || $paramName === 'Laju Ventilasi (8 Jam)') {
+                                                $searchColumn = 'laju_ventilasi';
+                                            } else {
+                                                $searchColumn = $paramName;
+                                            }
+
+                                            $detail['verify_detail'][] = "Cari via whereNotNull('{$searchColumn}')";
+
+                                            $foundAny = false;
+
+                                            if ($paramName === 'Laju Ventilasi' || $paramName === 'Laju Ventilasi (8 Jam)') {
+                                                if ($model == DetailLingkunganKerja::class) {
+                                                    $c = $model::where('no_sampel', $noSampel)->whereNotNull($searchColumn)->count();
+                                                    $detail['verify_detail'][] = "LajuVentilasi: model({$model})::whereNotNull('{$searchColumn}') count={$c}";
+                                                    if ($c > 0) $foundAny = true;
+                                                }
+                                                if (!$foundAny && $model2 == DetailLingkunganKerja::class) {
+                                                    $c = $model2::where('no_sampel', $noSampel)->whereNotNull($searchColumn)->count();
+                                                    $detail['verify_detail'][] = "LajuVentilasi: model2({$model2})::whereNotNull('{$searchColumn}') count={$c}";
+                                                    if ($c > 0) $foundAny = true;
+                                                }
+                                            } else {
+                                                // Suhu / Kelembaban
+                                                $c1 = $model::where('no_sampel', $noSampel)->whereNotNull($searchColumn)->count();
+                                                $detail['verify_detail'][] = "model({$model})::whereNotNull('{$searchColumn}') count={$c1}";
+                                                if ($c1 > 0) $foundAny = true;
+
+                                                if (!$foundAny && $model2) {
+                                                    $c2 = $model2::where('no_sampel', $noSampel)->whereNotNull($searchColumn)->count();
+                                                    $detail['verify_detail'][] = "model2({$model2})::whereNotNull('{$searchColumn}') count={$c2}";
+                                                    if ($c2 > 0) $foundAny = true;
+                                                }
+
+                                                if (!$foundAny && $model3) {
+                                                    $c3 = $model3::where('no_sampel', $noSampel)->whereNotNull($searchColumn)->count();
+                                                    $detail['verify_detail'][] = "model3({$model3})::whereNotNull('{$searchColumn}') count={$c3}";
+                                                    if ($c3 > 0) $foundAny = true;
+                                                }
+                                            }
+
+                                            $detail['verified'] = $foundAny;
+                                            $detail['final_status'] = $foundAny ? 'SELESAI' : 'BELUM SELESAI';
+
+                                        } else {
+                                            // Default: where('parameter', $paramName) + count >= requiredCount
+                                            $count1 = $model::where('no_sampel', $noSampel)->where('parameter', $paramName)->count();
+                                            $detail['verify_detail'][] = "Default env: model({$model})::where('parameter','{$paramName}') count={$count1}, required={$requiredCount}";
+
+                                            if ($count1 >= $requiredCount) {
+                                                $detail['verified'] = true;
+                                                $detail['final_status'] = 'SELESAI';
+                                            } else if ($model2) {
+                                                $count2 = $model2::where('no_sampel', $noSampel)->where('parameter', $paramName)->count();
+                                                $detail['verify_detail'][] = "Default env: model2({$model2})::where('parameter','{$paramName}') count={$count2}, required={$requiredCount}";
+
+                                                if ($count2 >= $requiredCount) {
+                                                    $detail['verified'] = true;
+                                                    $detail['final_status'] = 'SELESAI';
+                                                } else {
+                                                    $detail['verified'] = false;
+                                                    $detail['final_status'] = 'BELUM SELESAI';
+                                                }
+                                            } else {
+                                                $detail['verified'] = false;
+                                                $detail['final_status'] = 'BELUM SELESAI';
+                                            }
+                                        }
+                                    } else {
+                                        // --- handlePMParameters ---
+                                        $detail['verify_detail'][] = "Path: handlePMParameters (model3={$model3})";
+
+                                        $count1 = $model::where('no_sampel', $noSampel)->where('parameter', $paramName)->count();
+                                        $detail['verify_detail'][] = "PM: model({$model}) count={$count1}, required={$requiredCount}";
+
+                                        if ($count1 >= $requiredCount) {
+                                            $detail['verified'] = true;
+                                            $detail['final_status'] = 'SELESAI';
+                                        } else if ($model2) {
+                                            $count2 = $model2::where('no_sampel', $noSampel)->where('parameter', $paramName)->count();
+                                            $detail['verify_detail'][] = "PM: model2({$model2}) count={$count2}, required={$requiredCount}";
+
+                                            if ($count2 >= $requiredCount) {
+                                                $detail['verified'] = true;
+                                                $detail['final_status'] = 'SELESAI';
+                                            } else {
+                                                $count3 = $model3::where('no_sampel', $noSampel)->where('parameter', $paramName)->count();
+                                                $detail['verify_detail'][] = "PM: model3({$model3}) count={$count3}, required={$requiredCount}";
+
+                                                $detail['verified'] = $count3 >= $requiredCount;
+                                                $detail['final_status'] = $count3 >= $requiredCount ? 'SELESAI' : 'BELUM SELESAI';
+                                            }
+                                        } else {
+                                            $count3 = $model3::where('no_sampel', $noSampel)->where('parameter', $paramName)->count();
+                                            $detail['verify_detail'][] = "PM: model3({$model3}) count={$count3}, required={$requiredCount}";
+
+                                            $detail['verified'] = $count3 >= $requiredCount;
+                                            $detail['final_status'] = $count3 >= $requiredCount ? 'SELESAI' : 'BELUM SELESAI';
+                                        }
+                                    }
+
+                                } else {
+                                    // --- NON-ENVIRONMENT (verifyStatus default path) ---
+                                    $detail['verify_path'] = 'NON_ENVIRONMENT';
+
+                                    $query = $model::where('no_sampel', $noSampel);
+                                    $addedParamFilter = false;
+
+                                    if (in_array($model, $modelsWithParameter, true) && $paramName !== null) {
+                                        $query->where('parameter', $paramName);
+                                        $addedParamFilter = true;
+                                    }
+
+                                    $count = $query->count();
+                                    $detail['verify_detail'][] = "NonEnv: model({$model}), paramFilter=" . ($addedParamFilter ? 'YES' : 'NO') . ", count={$count}, required={$requiredCount}";
+
+                                    if ($count >= $requiredCount) {
+                                        $detail['verified'] = true;
+                                        $detail['final_status'] = 'SELESAI';
+                                    } else {
+                                        $detail['verified'] = false;
+                                        $detail['final_status'] = 'BELUM SELESAI';
+                                    }
+                                }
+
+                                $parameterDetails[] = $detail;
+
+                                if (!$detail['verified'] && $detail['final_status'] === 'BELUM SELESAI') {
+                                    $status = 'belum selesai';
+                                    // Di BasOnline ada break di sini, tapi kita LANJUTKAN supaya lihat semua
+                                    // break;
+                                }
+                            }
+                        } else {
+                            $status = 'belum selesai';
+                        }
+
+                        $totalSelesai = collect($parameterDetails)->where('final_status', 'SELESAI')->count();
+                        $totalBelum = collect($parameterDetails)->where('final_status', 'BELUM SELESAI')->count();
+                        $totalBypass = collect($parameterDetails)->where('final_status', 'BYPASS')->count();
+
+                        // Juga hitung versi TestingController (jumlahkan model+model2)
+                        $testingComparison = [];
+                        foreach ($parametersFiltered as $parameter) {
+                            $paramName = $parameter['parameter'];
+                            $modelClass = $parameter['model'];
+                            $model2Class = $parameter['model2'] ?? null;
+                            $requiredCount = (int) ($parameter['requiredCount'] ?? 1);
+
+                            $actualCount = 0;
+                            if ($modelClass) {
+                                try {
+                                    $actualCount += $modelClass::where('no_sampel', $noSampel)
+                                        ->where('parameter', $paramName)->count();
+                                } catch (\Exception $e) {}
+                            }
+                            if ($model2Class) {
+                                try {
+                                    $actualCount += $model2Class::where('no_sampel', $noSampel)
+                                        ->where('parameter', $paramName)->count();
+                                } catch (\Exception $e) {}
+                            }
+
+                            $testingComparison[] = [
+                                'parameter' => $paramName,
+                                'actual_count_combined' => $actualCount,
+                                'required_count' => $requiredCount,
+                                'testing_status' => $actualCount >= $requiredCount ? 'SELESAI' : 'BELUM SELESAI',
+                            ];
+                        }
+
+                        $debugResult['final_status_basonline_logic'] = $status;
+                        $debugResult['summary'] = [
+                            'total_parameter_dicek' => count($parameterDetails),
+                            'total_selesai' => $totalSelesai,
+                            'total_belum_selesai' => $totalBelum,
+                            'total_bypass' => $totalBypass,
+                        ];
+                        $debugResult['parameter_details_basonline'] = $parameterDetails;
+                        $debugResult['parameter_details_testing_logic'] = $testingComparison;
+
+                        // Highlight perbedaan
+                        $differences = [];
+                        foreach ($parameterDetails as $basDetail) {
+                            if ($basDetail['final_status'] === 'BYPASS') continue;
+                            $testMatch = collect($testingComparison)->where('parameter', $basDetail['parameter'])->first();
+                            if ($testMatch && $basDetail['final_status'] !== $testMatch['testing_status']) {
+                                $differences[] = [
+                                    'parameter' => $basDetail['parameter'],
+                                    'basonline_status' => $basDetail['final_status'],
+                                    'testing_status' => $testMatch['testing_status'],
+                                    'reason' => 'Logika berbeda → cek verify_detail di parameter_details_basonline',
+                                ];
+                            }
+                        }
+                        $debugResult['differences'] = $differences;
+
+                    } catch (\Exception $e) {
+                        $debugResult['error'] = $e->getMessage();
+                        $debugResult['error_line'] = $e->getLine();
+                    }
+
+                    return response()->json($debugResult);
+
                 case 'missing-qrcode':
                     try {
                         // 1. Input Array

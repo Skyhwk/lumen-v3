@@ -8,7 +8,7 @@ use App\Services\Crypto;
 
 class SalesDailyQSD
 {
-    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01', 'TPTT01'];
+    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01', 'TPTT01', 'SEMX01'];
 
     public static function run(): void
     {
