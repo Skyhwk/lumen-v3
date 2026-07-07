@@ -819,4 +819,22 @@ class TicketProgrammingController extends Controller
             ], 500);
         }
     }
+
+    public function delete(Request $request){
+        try {
+            $data = TicketProgramming::find($request->id);
+            $data->is_active = false;
+            $data->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ticket Programming telah dihapus',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
