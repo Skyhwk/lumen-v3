@@ -709,7 +709,28 @@ class AppsBasController extends Controller
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
                 $headerList = $persiapanHeadersData->get($item['no_order'] . '_' . $item['jadwal']);
-                $header = $headerList ? $headerList->first() : null;
+                // --- PERBAIKAN BUG: Cocokkan Persiapan Header berdasarkan no_sampel ---
+                $header = null;
+                if ($headerList) {
+                    // 1. Ekstrak nomor sampel dari kolom 'kategori' di item ini
+                    $itemSamples = [];
+                    $kategoriItems = explode(',', $item['kategori']);
+                    foreach ($kategoriItems as $katItem) {
+                        if (empty(trim($katItem))) continue;
+                        $parts = explode('-', $katItem);
+                        $nomor = trim(end($parts));
+                        $itemSamples[] = $item['no_order'] . '/' . $nomor; // misal: EAED012601/032
+                    }
+
+                    // 2. Cari header yang array no_sampel-nya beririsan dengan sampel di item ini
+                    foreach ($headerList as $h) {
+                        $hSamples = json_decode($h->no_sampel, true);
+                        if (is_array($hSamples) && count(array_intersect($itemSamples, $hSamples)) > 0) {
+                            $header = $h; // Ketemu header yang pas!
+                            break;
+                        }
+                    }
+                }
 
                 if (isset($header)) {
                     if ($header->detail_bas_documents) {
