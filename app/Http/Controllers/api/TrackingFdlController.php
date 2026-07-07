@@ -13,11 +13,12 @@ class TrackingFdlController extends Controller
 {   
     public function getInputtedFdl(Request $request) {
         try {
-        $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1')
+        $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1', 'no_quotation')
             ->withAnyDataLapangan()
             ->where('is_active', 1)
             ->whereMonth('tanggal_sampling', $request->bulan)
             ->whereYear('tanggal_sampling', $request->tahun)
+            ->whereNotIn('kategori_1', ['SD', 'SP'])
             ->get();
 
         if ($data->isEmpty()) {
@@ -64,6 +65,7 @@ class TrackingFdlController extends Controller
                 'keterangan_1' => $orderDetail->keterangan_1,
                 'sampler' => $namaSampler,
                 'tanggal_input_fdl' => $waktuSubmitFdl,
+                'no_quotation' => $orderDetail->no_quotation,
             ];
         }
 
@@ -78,11 +80,12 @@ class TrackingFdlController extends Controller
     
     public function getNotInputtedFdl(Request $request) {
         try {
-            $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1')
+            $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1', 'no_quotation')
                 ->withAnyDataLapangan()
                 ->where('is_active', 1)
                 ->whereMonth('tanggal_sampling', $request->bulan)
                 ->whereYear('tanggal_sampling', $request->tahun)
+                ->whereNotIn('kategori_1', ['SD', 'SP'])
                 ->get();
 
             if ($data->isEmpty()) {
@@ -129,6 +132,7 @@ class TrackingFdlController extends Controller
                     'keterangan_1' => $orderDetail->keterangan_1,
                     'sampler' => null,
                     'tanggal_input_fdl' => null,
+                    'no_quotation' => $orderDetail->no_quotation,
                 ];
             }
 
