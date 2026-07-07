@@ -124,7 +124,7 @@ class RekapSampelSamplingController extends Controller
     public function index(Request $request)
     {
         $data = OrderDetail::with(['orderHeader', 'TrackingSatu', 'TrackingDua', 'union', 'tc_order_detail'])
-            ->where('kategori_1', 'not like', '%Sd%')
+            ->whereNotIn('kategori_1', ['SD', 'SP'])
             ->where('is_active', 1);
 
         // Filter berdasarkan date range

@@ -18,6 +18,7 @@ class TrackingFdlController extends Controller
             ->where('is_active', 1)
             ->whereMonth('tanggal_sampling', $request->bulan)
             ->whereYear('tanggal_sampling', $request->tahun)
+            ->whereNotIn('kategori_1', ['SD', 'SP'])
             ->get();
 
         if ($data->isEmpty()) {
@@ -84,6 +85,7 @@ class TrackingFdlController extends Controller
                 ->where('is_active', 1)
                 ->whereMonth('tanggal_sampling', $request->bulan)
                 ->whereYear('tanggal_sampling', $request->tahun)
+                ->whereNotIn('kategori_1', ['SD', 'SP'])
                 ->get();
 
             if ($data->isEmpty()) {
