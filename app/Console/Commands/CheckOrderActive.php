@@ -340,17 +340,11 @@ class CheckOrderActive extends Command
        $foundMap = [];
        foreach ($details as &$detail) {
            if (empty($detail['parameter_regulasi']) || $detail['parameter_regulasi'] == null) {
-               $query = Parameter::where('is_active', 1)
+               $param = Parameter::where('is_active', 1)
                    ->where(function ($q) use ($detail) {
                        $q->where('nama_lab', $detail['parameter_lab']);
-                   }
-                );
+                   })->whereRaw("TRIM(nama_kategori) = ?", [$categoryName])->first();
 
-               if (!empty($categoryName)) {
-                   $query->whereRaw("TRIM(nama_kategori) = ?", [$categoryName]);
-               }
-
-               $param = $query->first();
                if ($param) {
                    $detail['parameter_regulasi'] = $param->nama_regulasi;
                } else {
