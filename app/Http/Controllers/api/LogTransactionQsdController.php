@@ -91,11 +91,18 @@ class LogTransactionQsdController extends Controller
             $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
             $bulan = substr($periode, 5, 2); // Menghasilkan "06"
 
-            // 2. Gunakan whereYear dan whereMonth bawaan Laravel
+            // 2. Filter berdasarkan kolom periode (format YYYY-MM)
             $data = QsdForecastTransactionLog::query()
-                ->whereYear('tanggal_sampling_min', $tahun)
-                ->whereMonth('tanggal_sampling_min', $bulan)
-                ->where('forecast_order', 0)
+                ->where(function ($q) use ($tahun, $bulan) {
+                    $q->where(function ($sub) use ($tahun, $bulan) {
+                        $sub->whereYear('tanggal_sampling_min', $tahun)
+                            ->whereMonth('tanggal_sampling_min', $bulan);
+                    })->orWhere(function ($sub) use ($tahun, $bulan) {
+                        $sub->whereNull('tanggal_sampling_min')
+                            ->whereYear('created_at', $tahun)
+                            ->whereMonth('created_at', $bulan);
+                    });
+                })
                 ->orderByDesc('created_at');
 
             // Exclude forecast yang sudah jadi order (forecast_order = true)

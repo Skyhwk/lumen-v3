@@ -386,8 +386,9 @@ class ProcessAfterOrder
         $linkLhp->jumlah_lhp = $jumlah_lhp;
         $linkLhp->created_by = $this->created_by;
         $linkLhp->created_at = Carbon::now();
-        $linkLhp->updated_by = $this->created_by;
-        $linkLhp->updated_at = Carbon::now();
+        // $linkLhp->updated_by = $this->created_by;
+        // $linkLhp->updated_at = Carbon::now();
+        $linkLhp->is_system=true;
         $linkLhp->save();
 
         // Generate token dan link
@@ -445,8 +446,9 @@ class ProcessAfterOrder
         $linkLhp->jumlah_lhp = $jumlah_lhp;
         $linkLhp->created_by = $this->created_by;
         $linkLhp->created_at = Carbon::now();
-        $linkLhp->updated_by = $this->created_by;
-        $linkLhp->updated_at = Carbon::now();
+        // $linkLhp->updated_by = $this->created_by;
+        // $linkLhp->updated_at = Carbon::now();
+        $linkLhp->is_system=true;
         $linkLhp->save();
 
         // Generate token dan link
