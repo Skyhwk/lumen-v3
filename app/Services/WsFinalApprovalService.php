@@ -746,27 +746,18 @@ class WsFinalApprovalService
             'nama_titik' => self::limit($orderDetail->keterangan_1, 50),
         ], $approval);
 
-        $columns = array_keys($row);
-        $quotedColumns = implode(', ', array_map(function ($column) {
-            return "`{$column}`";
-        }, $columns));
-        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-        $updates = implode(', ', array_map(function ($column) {
-            return "`{$column}` = VALUES(`{$column}`)";
-        }, array_filter($columns, function ($column) {
-            return $column !== 'no_lhp';
-        })));
+        $existing = DB::table('ws_final_approval_header')
+            ->where('no_lhp', $orderDetail->cfr)
+            ->first();
 
-        DB::statement(
-            "INSERT INTO `ws_final_approval_header` ({$quotedColumns})
-             VALUES ({$placeholders})
-             ON DUPLICATE KEY UPDATE
-                `id` = LAST_INSERT_ID(`id`),
-                {$updates}",
-            array_values($row)
-        );
+        if ($existing) {
+            DB::table('ws_final_approval_header')
+                ->where('id', $existing->id)
+                ->update($row);
+            return (int) $existing->id;
+        }
 
-        return (int) DB::connection()->getPdo()->lastInsertId();
+        return (int) DB::table('ws_final_approval_header')->insertGetId($row);
     }
 
     private static function findOrderDetail(string $noSampel): ?OrderDetail
