@@ -57,15 +57,19 @@ class LogTransactionQsdController extends Controller
 
         $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
         $bulan = substr($periode, 5, 2); // Menghasilkan "06"
+        
+        // Query Utama untuk Datatables (Menampilkan SEMUA jejak log)
         $data = QsdRevenueTransactionLog::query()
             ->whereYear('tanggal_kelompok', $tahun)
-                ->whereMonth('tanggal_kelompok', $bulan)
-                ->orderByDesc('created_at');
+            ->whereMonth('tanggal_kelompok', $bulan)
+            ->orderByDesc('created_at');
 
+        // Perhitungan Grand Total yang Benar (Penambahan - Pengurangan)
         $grandTotal = QsdRevenueTransactionLog::query()
             ->whereYear('tanggal_kelompok', $tahun)
-                ->whereMonth('tanggal_kelompok', $bulan)
-                ->sum('revenue');
+            ->whereMonth('tanggal_kelompok', $bulan)
+            ->selectRaw('SUM(CASE WHEN status = "penambahan" THEN revenue ELSE -revenue END) as total_bersih')
+            ->value('total_bersih') ?? 0; // Kasih default 0 jika null
 
         return Datatables::of($data)
             ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
@@ -77,8 +81,9 @@ class LogTransactionQsdController extends Controller
             ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
             ->editColumn('revenue', fn ($row) => (float) $row->revenue)
             ->editColumn('total', fn ($row) => (float) $row->total)
-            ->editColumn('status', fn ($row) => ucfirst($row->status))
-            ->with('grand_total', $grandTotal)
+            // Opsional: Bikin UI lebih jelas, pengurangan dikasih tanda minus di view
+            ->editColumn('status', fn ($row) => ucfirst($row->status)) 
+            ->with('grand_total', (float) $grandTotal)
             ->make(true);
     }
 

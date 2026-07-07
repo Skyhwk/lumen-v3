@@ -1149,25 +1149,28 @@ class AppsBasController extends Controller
                 'tanggal_sampling' => $request->tanggal_sampling,
             ])->where('is_active', true)->orderBy('id', 'desc')
                 ->get();
-            $persiapanHeaders = $dataList
-            ->filter(function ($item) use ($expectednoSampel) {
-                $no_sampel = json_decode($item->no_sampel, true) ?? [];
-                return count(array_intersect($no_sampel, $expectednoSampel)) > 0;
-            })
-            ->groupBy('no_order');
-            
-            /* $persiapanHeaders = $dataList
-                ->filter(function ($item) use ($expectednoSampel) {
-                    $no_sampel = json_decode($item->no_sampel, true) ?? [];
-                    return count(array_intersect($no_sampel, $expectednoSampel)) > 0;
-                })
-                ->keyBy('no_order'); */
+
+            if ($dataList->isEmpty()) {
+                $dataList = PersiapanSampelHeader::with('psDetail')->where([
+                    'no_order' => $orderNos,
+                ])->where('is_active', true)->orderBy('id', 'desc')
+                    ->get();
+            }
 
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
-                if (isset($persiapanHeaders[$item['no_order']])) {
-                    
-                    $header = $persiapanHeaders[$item['no_order']]->first();
+                // Cari header yang memuat no_sampel dari item ini
+                $header = $dataList->where('no_order', $item['no_order'])->first(function($h) use ($item) {
+                    $no_sampel = json_decode($h->no_sampel, true) ?? [];
+                    return in_array($item['no_sample'], $no_sampel);
+                });
+                
+                // Fallback ke header pertama dari order tersebut
+                if (!$header) {
+                    $header = $dataList->where('no_order', $item['no_order'])->first();
+                }
+
+                if ($header) {
                     if ($header->detail_bas_documents) {
                         $item['detail_bas_documents'] = json_decode($header->detail_bas_documents, true);
 
@@ -1324,8 +1327,11 @@ class AppsBasController extends Controller
                         $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
                         $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
+                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->orderBy('id', 'desc')->first();
                         $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
+                        if ($dataSampelBelumSelesai) {
+                            $detail_sampling_sampel[$key]['detail_status'] = $dataSampelBelumSelesai;
+                        }
 
                     } else {
                         $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
@@ -1334,8 +1340,11 @@ class AppsBasController extends Controller
                         $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
                         $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
+                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->orderBy('id', 'desc')->first();
                         $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
+                        if ($dataSampelBelumSelesai) {
+                            $detail_sampling_sampel[$key]['detail_status'] = $dataSampelBelumSelesai;
+                        }
                     }
                 }
                 // dd($detail_sampling_sampel);
@@ -1390,18 +1399,42 @@ class AppsBasController extends Controller
                         return $item['no_order'] . '/' . $kode;
                     }, $item['no_sampel']);
                     // dd(json_encode($item['no_sampel'], JSON_UNESCAPED_SLASHES), $item['no_sampel']);
-                    // Kode lama sebelum diubah menggunakan no_order
-                    $dataList = PersiapanSampelHeader::where('no_quotation', $item['no_quotation'])
+                    $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
                         ->where('tanggal_sampling', $item['tanggal_sampling'])
                         ->where('is_active', true)
                         ->orderBy('id', 'desc')
                         ->get();
 
+                    if ($dataList->isEmpty()) {
+                        $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
+                            ->where('is_active', true)
+                            ->orderBy('id', 'desc')
+                            ->get();
+                    }
+
+                    if ($dataList->isEmpty()) {
+                        $dataList = PersiapanSampelHeader::where('no_quotation', $item['no_quotation'])
+                            ->where('is_active', true)
+                            ->orderBy('id', 'desc')
+                            ->get();
+                    }
+
                     $header = $dataList->first(function ($data) use ($item) {
-                        
                         $no_sampel = json_decode($data->no_sampel, true) ?? [];
-                        return count(array_intersect($no_sampel, $item['expectedNoSampel'])) > 0;
+                        // Ekstrak kode sampel dari database (ambil bagian terakhir setelah '/')
+                        $dbSamples = array_map(function($s) {
+                            $parts = explode('/', $s);
+                            return end($parts);
+                        }, $no_sampel);
+                        
+                        return count(array_intersect($dbSamples, $item['no_sampel'])) > 0;
                     });
+
+                    if (!$header) {
+                        // Fallback ke header pertama jika tidak ada yang match no_sampel persis (meskipun seharusnya ada)
+                        $header = $dataList->first();
+                    }
+
                     if (!$header) {
                         return response()->json(['status' => 'error', 'message' => 'No quotation tidak ditemukan atau tidak sesuai dengan tanggal sampling dan no sampel.'], 404);
                     }
@@ -1631,9 +1664,15 @@ class AppsBasController extends Controller
 
             // Get No Sample
             $noSample = [];
-            foreach ($request->kategori as $item) {
-                $parts = explode(" - ", $item);
-                array_push($noSample, $request->no_order . '/' . $parts[1]);
+            if ($request->has('no_sampel') && is_array($request->no_sampel)) {
+                $noSample = $request->no_sampel;
+            } else {
+                foreach ($request->kategori as $item) {
+                    $parts = explode(" - ", $item);
+                    if (isset($parts[1])) {
+                        array_push($noSample, $request->no_order . '/' . trim($parts[1]));
+                    }
+                }
             }
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
@@ -1706,17 +1745,46 @@ class AppsBasController extends Controller
             }
 
 
-            // Ambil data PersiapanSampelHeader berdasarkan no_quotation kode lama menggunakan no_order
-            $dataList = PersiapanSampelHeader::where('no_quotation', $request->no_document)
+            // Ambil data PersiapanSampelHeader dengan fallback yang sama dengan UpdateData
+            $dataList = PersiapanSampelHeader::where('no_order', $request->no_order)
                 ->where('tanggal_sampling', $request->tanggal_sampling)
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
                 ->get();
-            
-            $persiapanHeader = $dataList->first(function ($item) use ($expectednoSampel) {
+
+            if ($dataList->isEmpty()) {
+                $dataList = PersiapanSampelHeader::where('no_order', $request->no_order)
+                    ->where('is_active', true)
+                    ->orderBy('id', 'desc')
+                    ->get();
+            }
+
+            if ($dataList->isEmpty()) {
+                $dataList = PersiapanSampelHeader::where('no_quotation', $request->no_document)
+                    ->where('is_active', true)
+                    ->orderBy('id', 'desc')
+                    ->get();
+            }
+
+            $persiapanHeader = $dataList->first(function ($item) use ($request) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
-                return count(array_intersect($no_sampel, $expectednoSampel)) > 0;
+                
+                $dbSamples = array_map(function($s) {
+                    $parts = explode('/', $s);
+                    return end($parts);
+                }, $no_sampel);
+                
+                $reqSamples = $request->no_sampel ?? [];
+                if (empty($reqSamples)) {
+                    return true; // Fallback jika tidak ada no_sampel dikirim
+                }
+                
+                return count(array_intersect($dbSamples, $reqSamples)) > 0;
             });
+
+            if (!$persiapanHeader) {
+                $persiapanHeader = $dataList->first();
+            }
 
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
@@ -2233,12 +2301,15 @@ class AppsBasController extends Controller
 
             // Process sampling data for this specific sampler
             foreach ($samplerSamplingData as $key => $val) {
-                $dataSampelTidakSelesai = SampelTidakSelesai::where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->first();
+                $dataSampelTidakSelesai = SampelTidakSelesai::where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('id', 'desc')->first();
                 $dat = explode("-", $val->kategori_3);
                 $boxChecked = '&#9745;'; // ☑
                 $boxUnchecked = '&#9744;'; // ☐
 
                 $isSelesai = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
+                if ($dataSampelTidakSelesai) {
+                    $isSelesai = false;
+                }
                 $selesaiBox = $isSelesai ? $boxChecked : $boxUnchecked;
                 $belumSelesaiBox = $isSelesai ? $boxUnchecked : $boxChecked;
 
@@ -2252,11 +2323,11 @@ class AppsBasController extends Controller
                         // $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
                         // $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
                         $tanggalHtml = "Hari/Tanggal : ....................................";
-                        $sisa_sampling = "Sisa Sampling : .................................... Titik";
+                        
                     } else {
                         // placeholder jika belum ada
                         $tanggalHtml = "Hari/Tanggal : ....................................";
-                        $sisa_sampling = "Sisa Sampling : .................................... Titik";
+                        
                     }
                 } else {
                     if (isset($dataSampelTidakSelesai) && $dataSampelTidakSelesai->status == "Dilanjutkan") {
@@ -2264,10 +2335,11 @@ class AppsBasController extends Controller
                         $hari2 = $c->translatedFormat('l');      // e.g. "Jumat"
                         $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
                         $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
-                        $sisa_sampling = "Sisa Sampling : 1 Titik";
+                        $belumSelesaiBox = $boxUnchecked;
+                        
                     } else {
                         $tanggalHtml = "Hari/Tanggal : ....................................";
-                        $sisa_sampling = "Sisa Sampling : 1 Titik";
+                        
                     }
                 }
 
@@ -2285,36 +2357,42 @@ class AppsBasController extends Controller
                             </tr>
                             <tr>
                             <td style="font-size: 20px; font-weight: bold;" width="10">' . $belumSelesaiBox . '</td>
-                                <td class="custom2" style="font-weight: bold;">Belum selesai / dilanjutkan pada :</td>
+                                <td class="custom2" style="font-weight: bold;">Belum selesai</td>
+                            </tr>
+                            <tr>
+                            <td style="font-size: 20px; font-weight: bold;" width="10">' . (isset($dataSampelTidakSelesai) && $dataSampelTidakSelesai->status == "Dilanjutkan" ? "&#9745;" : "&#9744;") . '</td>
+                                <td class="custom2" style="font-weight: bold;">dilanjutkan pada</td>
                             </tr>
                             <tr>
                                 <td colspan="2" class="custom2">' . $tanggalHtml . '</td>
                             </tr>
-                            <tr>
-                                <td colspan="2" class="custom2">' . $sisa_sampling . '</td>
-                            </tr>
+
                         </table>
                     </td>
                     <td style="border: 1px solid #000000;" width="240">
                         <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin: 8px;">
                             <tr>
+                                <td colspan="3" class="custom2" style="font-size: 10px; font-weight: bold; padding-bottom: 4px;">Catatan belum selesai :</td>
+                            </tr>
+                            <tr>
                                 <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Dibatalkan oleh pihak pelanggan" ? "&#9745;" : "&#9744;") . '</td>
-                                <td class="custom2">Dibatalkan oleh pihak pelanggan</td>
-                                <td class="custom2">' . (($dataSampelTidakSelesai->alasan ?? '') == "Dibatalkan oleh pihak pelanggan" ? "1" : "......") . ' Titik</td>
+                                <td colspan="2" class="custom2">Dibatalkan oleh pihak pelanggan</td>
                             </tr>
                             <tr>
                                 <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Terbatas/kendala waktu/cuaca" ? "&#9745;" : "&#9744;") . '</td>
-                                <td class="custom2">Terbatas / kendala waktu / cuaca</td>
-                                <td class="custom2">' . (($dataSampelTidakSelesai->alasan ?? '') == "Terbatas/kendala waktu/cuaca" ? "1" : "......") . ' Titik</td>
+                                <td colspan="2" class="custom2">Terbatas / kendala waktu / cuaca</td>
                             </tr>
                             <tr>
                                 <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Titik sampling tidak/belum siap" ? "&#9745;" : "&#9744;") . '</td>
-                                <td class="custom2">Titik sampling tidak / belum siap</td>
-                                <td class="custom2">' . (($dataSampelTidakSelesai->alasan ?? '') == "Titik sampling tidak/belum siap" ? "1" : "......") . ' Titik</td>
+                                <td colspan="2" class="custom2">Titik sampling tidak / belum siap</td>
                             </tr>
                             <tr>
-                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') != "Dibatalkan oleh pihak pelanggan" && ($dataSampelTidakSelesai->alasan ?? '') != "Terbatas/kendala waktu/cuaca" && ($dataSampelTidakSelesai->alasan ?? '') != "Titik sampling tidak/belum siap" && isset($dataSampelTidakSelesai->alasan) ? "&#9745;" : "&#9744;") . '</td>
-                                <td colspan="2" class="custom2">Lainnya :' . (($dataSampelTidakSelesai->alasan ?? '') != "Dibatalkan oleh pihak pelanggan" && ($dataSampelTidakSelesai->alasan ?? '') != "Terbatas/kendala waktu/cuaca" && ($dataSampelTidakSelesai->alasan ?? '') != "Titik sampling tidak/belum siap" && isset($dataSampelTidakSelesai->alasan) ? ($dataSampelTidakSelesai->alasan ?? '') : "...............................................") . '</td>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') == "Sample di pick up" ? "&#9745;" : "&#9744;") . '</td>
+                                <td colspan="2" class="custom2">Sample di pick up</td>
+                            </tr>
+                            <tr>
+                                <td style="font-size: 20px; font-weight: bold;" width="10">' . (($dataSampelTidakSelesai->alasan ?? '') != "Dibatalkan oleh pihak pelanggan" && ($dataSampelTidakSelesai->alasan ?? '') != "Terbatas/kendala waktu/cuaca" && ($dataSampelTidakSelesai->alasan ?? '') != "Titik sampling tidak/belum siap" && ($dataSampelTidakSelesai->alasan ?? '') != "Sample di pick up" && (isset($dataSampelTidakSelesai) ? $dataSampelTidakSelesai->status != "Dilanjutkan" : true) && ($dataSampelTidakSelesai->alasan ?? '') != "" && isset($dataSampelTidakSelesai->alasan) ? "&#9745;" : "&#9744;") . '</td>
+                                <td colspan="2" class="custom2">Lainnya :' . (($dataSampelTidakSelesai->alasan ?? '') != "Dibatalkan oleh pihak pelanggan" && ($dataSampelTidakSelesai->alasan ?? '') != "Terbatas/kendala waktu/cuaca" && ($dataSampelTidakSelesai->alasan ?? '') != "Titik sampling tidak/belum siap" && ($dataSampelTidakSelesai->alasan ?? '') != "Sample di pick up" && (isset($dataSampelTidakSelesai) ? $dataSampelTidakSelesai->status != "Dilanjutkan" : true) && ($dataSampelTidakSelesai->alasan ?? '') != "" && isset($dataSampelTidakSelesai->alasan) ? (($dataSampelTidakSelesai->alasan ?? '') == "Lainnya" ? ($dataSampelTidakSelesai->keterangan ?? '') : ($dataSampelTidakSelesai->alasan ?? '')) : "...............................................") . '</td>
                             </tr>
                         </table>
                     </td>
