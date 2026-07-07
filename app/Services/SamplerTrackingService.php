@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Jadwal;
 use App\Models\OrderHeader;
+use App\Models\PersiapanSampelHeader;
 use App\Models\SamplerTrackingEvent;
 use App\Models\SamplerTrackingMember;
 use App\Models\SamplerTrackingSession;
@@ -427,6 +428,8 @@ class SamplerTrackingService
             }
 
             $photo = $photos[0] ?? null;
+            $latitude = $this->normalizeCoordinate($payload['latitude'] ?? $payload['lat'] ?? null);
+            $longitude = $this->normalizeCoordinate($payload['longitude'] ?? $payload['longi'] ?? $payload['long'] ?? null);
 
             foreach ($members as $targetMember) {
                 $events[] = SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
@@ -435,8 +438,8 @@ class SamplerTrackingService
                     'triggered_by_member_id' => $member->id,
                     'event_type' => $eventType,
                     'movement_group' => $movementGroup,
-                    'latitude' => $payload['latitude'] ?? null,
-                    'longitude' => $payload['longitude'] ?? null,
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
                     'photo' => $photo,
                     'photos' => count($photos) > 0 ? json_encode($photos) : null,
                     'note' => $payload['note'] ?? null,
@@ -452,6 +455,19 @@ class SamplerTrackingService
 
             return collect($events);
         });
+    }
+
+    protected function normalizeCoordinate($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $value = str_replace(',', '.', trim($value));
+        }
+
+        return is_numeric($value) ? $value : null;
     }
 
     public function checkoutBasWarning($memberId)
