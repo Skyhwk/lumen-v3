@@ -71,6 +71,16 @@ return [
             'path' => storage_path('logs/sampling/log.log'),
             'level' => 'info',
         ],
+        'monitor_log_qsd_revenue' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/monitor_log_qsd_revenue/log.log'),
+            'level' => 'info',
+        ],
+        'monitor_log_qsd_forecast' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/monitor_qsd_forecast/log.log'),
+            'level' => 'info',
+        ],
 
         'slack' => [
             'driver' => 'slack',
