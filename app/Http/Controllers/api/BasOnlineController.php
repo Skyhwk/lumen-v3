@@ -2645,8 +2645,6 @@ class BasOnlineController extends Controller
                 return is_array($param) && isset($param['model']);
             });
 
-            });
-
             $status = 'selesai';
             if (!empty($parameters)) {
                 $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
