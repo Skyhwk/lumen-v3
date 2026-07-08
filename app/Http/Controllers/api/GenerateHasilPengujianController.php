@@ -37,6 +37,9 @@ class GenerateHasilPengujianController extends Controller
                     $query->where('is_system', 0)->where('created_by', 'like', "%{$keyword}%");
                 }
             })
+            ->filterColumn('created_at', function ($query, $keyword) {
+                $query->whereRaw("DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') LIKE ?", ["%{$keyword}%"]);
+            })
             ->make(true);
     }
 
