@@ -416,6 +416,7 @@ class GenerateFeeSampling
                 $rincian['luar_kota_24jam'] = $feeLuarKota24JamKandidat;
             } else {
                 $rincian['sampling_24jam'] = $totalKandidatDalamKota;
+                $rincian['luar_kota']       = $feeLuarKotaKandidat;
             }
 
         } elseif ($adaLuarKota) {
