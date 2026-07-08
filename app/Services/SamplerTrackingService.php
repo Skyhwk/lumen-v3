@@ -71,6 +71,7 @@ class SamplerTrackingService
                         'sampler_tracking_session_id' => $session->id,
                         'sampler_id' => $row->userid,
                         'sampler_name' => $row->sampler,
+                        'duration' => $row->durasi,
                         'durasi' => $row->durasi,
                         'durasi_personal' => $row->durasi_personal,
                         'effective_duration' => $effectiveDuration,
@@ -128,22 +129,44 @@ class SamplerTrackingService
         $date = $date ?: Carbon::now()->toDateString();
         $this->sync($date);
 
+        $hasSamplerFilter = !empty($samplerId) || !empty($samplerName);
+        $memberFilter = function ($query) use ($samplerId, $samplerName) {
+            if ($samplerId) {
+                $query->where('sampler_id', $samplerId);
+            }
+
+            if ($samplerName) {
+                $query->where('sampler_name', 'like', '%' . $samplerName . '%');
+            }
+        };
+
         $sessions = SamplerTrackingSession::with([
                 'activeMembers.events' => function ($query) {
                     $query->orderBy('event_at')->orderBy('id');
                 },
             ])
-            ->where('tanggal_sampling', $date)
             ->where('is_active', true)
-            ->whereHas('activeMembers', function ($query) use ($samplerId, $samplerName) {
-                if ($samplerId) {
-                    $query->where('sampler_id', $samplerId);
-                }
+            ->whereHas('activeMembers', $memberFilter)
+            ->where(function ($query) use ($date, $hasSamplerFilter, $memberFilter) {
+                $query->whereDate('tanggal_sampling', $date);
 
-                if ($samplerName) {
-                    $query->where('sampler_name', 'like', '%' . $samplerName . '%');
+                if ($hasSamplerFilter) {
+                    $query->orWhere(function ($ongoingQuery) use ($date, $memberFilter) {
+                        $ongoingQuery->whereDate('tanggal_sampling', '<', $date)
+                            ->whereHas('activeMembers', function ($memberQuery) use ($date, $memberFilter) {
+                                $memberFilter($memberQuery);
+                                $memberQuery->whereRaw(
+                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(sampler_tracking_members.effective_duration, ''), NULLIF(sampler_tracking_members.durasi_personal, ''), NULLIF(sampler_tracking_members.duration, ''), 0) AS SIGNED) - 1, 0) DAY) >= ?",
+                                    [$date]
+                                );
+                                $memberQuery->whereDoesntHave('events', function ($eventQuery) {
+                                    $eventQuery->where('event_type', 'return');
+                                });
+                            });
+                    });
                 }
             })
+            ->orderBy('tanggal_sampling')
             ->orderBy('jam_mulai')
             ->orderBy('nama_perusahaan')
             ->get();
@@ -212,7 +235,7 @@ class SamplerTrackingService
                 $item['events'] = $item['events']->merge($member->events ?: collect());
                 $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
                 $item['perusahaan']->push($session->nama_perusahaan ?: '-');
-                $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->durasi])));
+                $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi])));
                 $item['movement_groups']->push($member->current_movement_group ?: '-');
                 $item['statuses']->push($session->status ?: '-');
 
