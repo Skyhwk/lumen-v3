@@ -391,9 +391,16 @@ class AppsBasController extends Controller
                 }
             }
 
-            $orderD = OrderDetail::where('no_order', $request->no_order)
-                ->where('is_active', true)
-                ->where('tanggal_sampling', $request->tanggal_sampling)
+            $orderD = OrderDetail::select(
+                    'order_detail.*',
+                    'bas_sampel_selesai.id as bas_selesai_id',
+                    'sampel_tidak_selesai.id as ts_id'
+                )
+                ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
+                ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
+                ->where('order_detail.no_order', $request->no_order)
+                ->where('order_detail.is_active', true)
+                ->where('order_detail.tanggal_sampling', $request->tanggal_sampling)
                 ->get()
                 ->map(function ($item) {
                     return (object) $item->toArray(); // ubah ke stdClass
@@ -404,32 +411,16 @@ class AppsBasController extends Controller
 
                 foreach ($orderD as $key => $item) {
                     $item->no_sample = $item->no_sampel;
-                    if ($item->kategori_2 === "1-Air") {
-                        $exists = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
-                        // $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
-                        if(in_array($item->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
-                            $detail_sampling_sampel[$key]['status'] = 'selesai';
-                        } else {
-                            $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
-                        }
-                        $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
-                        $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
-                        $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
-                        $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
+                    $isSelesai = !is_null($item->bas_selesai_id);
+                    $isTidakSelesai = !is_null($item->ts_id);
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
-                        $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-                    } else {
-                        $status_sample = $this->getStatusSampling($item);
-                        $detail_sampling_sampel[$key]['status'] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
-                        $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
-                        $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
-                        $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
-                        $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
+                    $detail_sampling_sampel[$key]['status'] = $isSelesai ? 'selesai' : 'belum selesai';
+                    $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
+                    $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
+                    $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
+                    $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
-                        $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-                    }
+                    $detail_sampling_sampel[$key]['status_sampel'] = $isTidakSelesai;
                 }
                 // dd($detail_sampling_sampel);
 
@@ -838,9 +829,16 @@ class AppsBasController extends Controller
                 }
             }
 
-            $orderD = OrderDetail::where('no_order', $request->no_order)
-                ->where('is_active', true)
-                ->where('tanggal_sampling', $request->tanggal_sampling)
+            $orderD = OrderDetail::select(
+                    'order_detail.*',
+                    'bas_sampel_selesai.id as bas_selesai_id',
+                    'sampel_tidak_selesai.id as ts_id'
+                )
+                ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
+                ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
+                ->where('order_detail.no_order', $request->no_order)
+                ->where('order_detail.is_active', true)
+                ->where('order_detail.tanggal_sampling', $request->tanggal_sampling)
                 ->get()
                 ->map(function ($item) {
                     return (object) $item->toArray(); // ubah ke stdClass
@@ -851,27 +849,16 @@ class AppsBasController extends Controller
 
                 foreach ($orderD as $key => $item) {
                     $item->no_sample = $item->no_sampel;
-                    if ($item->kategori_2 === "1-Air") {
-                        $exists = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
-                        $detail_sampling_sampel[$key]['status'] = $exists ? 'selesai' : 'belum selesai';
-                        $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
-                        $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
-                        $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
-                        $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
+                    $isSelesai = !is_null($item->bas_selesai_id);
+                    $isTidakSelesai = !is_null($item->ts_id);
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
-                        $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-                    } else {
-                        $status_sample = $this->getStatusSampling($item);
-                        $detail_sampling_sampel[$key]['status'] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
-                        $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
-                        $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
-                        $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
-                        $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
+                    $detail_sampling_sampel[$key]['status'] = $isSelesai ? 'selesai' : 'belum selesai';
+                    $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
+                    $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
+                    $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
+                    $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                        $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
-                        $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-                    }
+                    $detail_sampling_sampel[$key]['status_sampel'] = $isTidakSelesai;
                 }
                 // dd($detail_sampling_sampel);
 
@@ -1315,11 +1302,19 @@ class AppsBasController extends Controller
 
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
-                ->where('id_order_header', $orderH->id)
-                ->where('no_order', $request->no_order)
-                ->whereIn('no_sampel', $noSample)
-                ->whereIn('tanggal_sampling', $jadwal)
-                ->where('is_active', true)
+                ->select(
+                    'order_detail.*',
+                    'bas_sampel_selesai.id as bas_selesai_id',
+                    'bas_sampel_selesai.created_at as bas_selesai_created_at',
+                    'sampel_tidak_selesai.id as ts_id'
+                )
+                ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
+                ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
+                ->where('order_detail.id_order_header', $orderH->id)
+                ->where('order_detail.no_order', $request->no_order)
+                ->whereIn('order_detail.no_sampel', $noSample)
+                ->whereIn('order_detail.tanggal_sampling', $jadwal)
+                ->where('order_detail.is_active', true)
                 ->get();
             // dd($orderD);
 
@@ -1339,6 +1334,8 @@ class AppsBasController extends Controller
 
             $data_sampling = [];
             $dat_param = [];
+            $status = [];
+            $hariTanggal = [];
 
             $file_name_old = str_replace("&#039;", "'", $request->filename_old);
             $file_name = str_replace("&#039;", "'", $request->filename);
@@ -1370,48 +1367,18 @@ class AppsBasController extends Controller
                     'no_document' => $request->no_document,
                 ];
 
+                if (!is_null($vv->bas_selesai_id)) {
+                    $status[$vv->no_sampel] = 'selesai';
+                    $hariTanggal[$vv->no_sampel] = $vv->bas_selesai_created_at;
+                } else {
+                    $status[$vv->no_sampel] = 'belum selesai';
+                    $hariTanggal[$vv->no_sampel] = null;
+                }
+
                 // dd($data_sampling);
 
                 if ($vv->codingSampling) {
                     $dat_param[] = $vv->codingSampling;
-                }
-            }
-
-            $status = [];
-            $hariTanggal = [];
-            foreach ($data_sampling as $sample) {
-                // dd($sample);
-                $dataLapangan = $this->getDataLapangan(
-                    $sample->kategori_2,
-                    $sample->kategori_3,
-                    $sample->no_sample,
-                    $sample->parameter
-                );
-
-                // $status[$sample->no_sample] = !is_null($dataLapangan) ? 'selesai' : 'belum selesai';
-                // $status[$sample->no_sample] = $this->getStatusSampling($sample);
-
-                if ($sample->kategori_2 === "1-Air") {
-                    $exists = DataLapanganAir::where('no_sampel', $sample->no_sample)->exists();
-                    // $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
-                    if(in_array($sample->no_sample, ['BUIL022603/012', 'BUIL022603/014', 'BUIL022603/015', 'BUIL022603/016', 'BUIL022603/008'])) {
-                        $status[$sample->no_sample] = 'selesai';
-                    } else {
-                        $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
-                    }
-                } else {
-                    $status_sample = $this->getStatusSampling($sample);
-                    $status[$sample->no_sample] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
-                }
-
-                if ($dataLapangan && $dataLapangan->created_at && $status[$sample->no_sample] === 'selesai') {
-                    if (!isset($hariTanggal[$sample->no_sample]) || $dataLapangan->created_at > $hariTanggal[$sample->no_sample]) {
-                        $hariTanggal[$sample->no_sample] = $dataLapangan->created_at;
-                    }
-                } else {
-                    if (!isset($hariTanggal[$sample->no_sample])) {
-                        $hariTanggal[$sample->no_sample] = null;
-                    }
                 }
             }
 
@@ -1824,7 +1791,7 @@ class AppsBasController extends Controller
 
             // Process sampling data for this specific sampler
             foreach ($samplerSamplingData as $key => $val) {
-                $dataSampelTidakSelesai = SampelTidakSelesai::where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->first();
+                $dataSampelTidakSelesai = \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->first();
                 $dat = explode("-", $val->kategori_3);
                 $boxChecked = '&#9745;'; // ☑
                 $boxUnchecked = '&#9744;'; // ☐
@@ -2362,17 +2329,19 @@ class AppsBasController extends Controller
     {
         DB::beginTransaction();
         try {
-            SampelTidakSelesai::create([
-                'no_order' => $request->no_order,
-                'no_sampel' => $request->no_sampel,
-                'kategori' => $request->kategori ?? null,
-                'keterangan' => ($request->status === 'Dilanjutkan') ? null : ($request->keterangan ?? null),
-                'status' => $request->status ?? null,
-                'alasan' => ($request->status === 'Dilanjutkan') ? null : ($request->alasan ?? null),
-                'tanggal_dilanjutkan' => ($request->status === 'Belum Selesai') ? null : ($request->tanggal_dilanjutkan ?? null),
-                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                'created_by' => $this->karyawan
-            ]);
+            SampelTidakSelesai::updateOrCreate(
+                ['no_sampel' => $request->no_sampel],
+                [
+                    'no_order' => $request->no_order,
+                    'kategori' => $request->kategori ?? null,
+                    'keterangan' => ($request->status === 'Dilanjutkan') ? null : ($request->keterangan ?? null),
+                    'status' => $request->status ?? null,
+                    'alasan' => ($request->status === 'Dilanjutkan') ? null : ($request->alasan ?? null),
+                    'tanggal_dilanjutkan' => ($request->status === 'Belum Selesai') ? null : ($request->tanggal_dilanjutkan ?? null),
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'created_by' => $this->karyawan
+                ]
+            );
             DB::commit();
 
             return response()->json([
