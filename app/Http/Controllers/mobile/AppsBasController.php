@@ -707,6 +707,13 @@ class AppsBasController extends Controller
                     return $item->no_order . '_' . $item->tanggal_sampling;
                 });
 
+            // Ambil semua order yang memiliki persiapan (tanpa mempedulikan tanggal_sampling)
+            $ordersWithAnyPersiapan = PersiapanSampelHeader::whereIn('no_order', $orderNos)
+                ->where('is_active', true)
+                ->pluck('no_order')
+                ->unique()
+                ->toArray();
+
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
                 $headerList = $persiapanHeadersData->get($item['no_order'] . '_' . $item['jadwal']);
@@ -819,6 +826,7 @@ class AppsBasController extends Controller
                     } else {
                         $item['tanda_tangan_bas'] = [];
                     }
+                    $item['has_persiapan'] = true;
                 } else {
                     $item['detail_bas_documents'] = [];
                     $item['catatan'] = '';
@@ -826,6 +834,7 @@ class AppsBasController extends Controller
                     $item['waktu_mulai'] = '';
                     $item['waktu_selesai'] = '';
                     $item['tanda_tangan_bas'] = [];
+                    $item['has_persiapan'] = in_array($item['no_order'], $ordersWithAnyPersiapan);
                 }
             }
             unset($item);
