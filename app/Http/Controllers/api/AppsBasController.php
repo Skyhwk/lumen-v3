@@ -21,6 +21,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
+use App\Models\BasSampelSelesai;
 
 //cek status data lapangan
 use App\Models\DataLapanganAir;
@@ -105,6 +106,7 @@ class AppsBasController extends Controller
                 ]);
             }
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
+            $orderDetail->orderBy('tanggal_sampling', 'desc');
 
             $orderDetail = $orderDetail->get()->toArray();
 
@@ -251,7 +253,7 @@ class AppsBasController extends Controller
             foreach ($finalResult as &$item) {
                 $persiapanHeaders = PersiapanSampelHeader::where('no_order', $item['no_order'])->where('is_active', true)->where('tanggal_sampling', $item['jadwal'])->orderBy('id', 'desc')->first();
                 // dd($persiapanHeaders);
-                if (isset($persiapanHeaders)) {
+                if ($persiapanHeaders) {
                     $header = $persiapanHeaders;
                     // dd($item);
                     if ($header->detail_bas_documents) {
@@ -340,6 +342,7 @@ class AppsBasController extends Controller
                     } else {
                         $item['tanda_tangan_bas'] = [];
                     }
+                    $item['has_persiapan'] = true;
                 } else {
                     $item['detail_bas_documents'] = [];
                     $item['catatan'] = '';
@@ -347,6 +350,7 @@ class AppsBasController extends Controller
                     $item['waktu_mulai'] = '';
                     $item['waktu_selesai'] = '';
                     $item['tanda_tangan_bas'] = [];
+                    $item['has_persiapan'] = false;
                 }
             }
             unset($item);
@@ -416,7 +420,8 @@ class AppsBasController extends Controller
                         $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
                         $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
                     } else {
-                        $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
+                        $status_sample = $this->getStatusSampling($item);
+                        $detail_sampling_sampel[$key]['status'] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
                         $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
                         $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
                         $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
@@ -784,6 +789,7 @@ class AppsBasController extends Controller
                     } else {
                         $item['tanda_tangan_bas'] = [];
                     }
+                    $item['has_persiapan'] = true;
                 } else {
                     $item['detail_bas_documents'] = [];
                     $item['catatan'] = '';
@@ -791,6 +797,7 @@ class AppsBasController extends Controller
                     $item['waktu_mulai'] = '';
                     $item['waktu_selesai'] = '';
                     $item['tanda_tangan_bas'] = [];
+                    $item['has_persiapan'] = false;
                 }
             }
             unset($item);
@@ -855,7 +862,8 @@ class AppsBasController extends Controller
                         $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
                         $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
                     } else {
-                        $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
+                        $status_sample = $this->getStatusSampling($item);
+                        $detail_sampling_sampel[$key]['status'] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
                         $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
                         $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
                         $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
@@ -1019,6 +1027,24 @@ class AppsBasController extends Controller
 
                         $header->detail_bas_documents = json_encode($existingDetails);
                         $header->save();
+
+                        // Hapus PDF lama agar dirender ulang dengan data terbaru (misal: ada tanda tangan baru)
+                        if (isset($detailData['filename']) && !empty($detailData['filename'])) {
+                            $pdfPath = public_path('dokumen/bas/' . $detailData['filename']);
+                            if (file_exists($pdfPath)) {
+                                unlink($pdfPath);
+                            }
+                        }
+
+                        if ($request->input('is_final')) {
+                            $error = \App\Services\BasSampelService::processFinalSamples(
+                                $item,
+                                fn($sample) => $this->getStatusSampling($sample)
+                            );
+                            if ($error) {
+                                return response()->json($error, 200);
+                            }
+                        }
                     }
                 }
             }
@@ -1143,6 +1169,35 @@ class AppsBasController extends Controller
                 return response()->json([
                     'data' => [],
                 ], 200);
+            }
+
+            // Jika file PDF sudah ada, langsung kembalikan tanpa render ulang
+            $existingFilename = str_replace("&#039;", "'", $request->filename ?? $request->filename_old ?? '');
+            if ($existingFilename && $existingFilename !== 'undefined') {
+                $existingPath = public_path('dokumen/bas/' . $existingFilename);
+                if (file_exists($existingPath)) {
+                    return response()->json([$existingFilename], 200);
+                }
+            }
+
+            // Cari filename dari detail_bas_documents yang tersimpan di PersiapanSampelHeader
+            if (!$existingFilename || $existingFilename === 'undefined') {
+                $savedHeaders = PersiapanSampelHeader::where('no_order', $request->no_order)
+                    ->whereNotNull('detail_bas_documents')
+                    ->get();
+                foreach ($savedHeaders as $sh) {
+                    $docs = json_decode($sh->detail_bas_documents, true);
+                    if (is_array($docs)) {
+                        foreach ($docs as $doc) {
+                            if (isset($doc['filename']) && !empty($doc['filename'])) {
+                                $cachedPath = public_path('dokumen/bas/' . $doc['filename']);
+                                if (file_exists($cachedPath)) {
+                                    return response()->json([$doc['filename']], 200);
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             $jsonDecode = html_entity_decode($request->info_sampling);
@@ -1345,7 +1400,8 @@ class AppsBasController extends Controller
                         $status[$sample->no_sample] = $exists ? 'selesai' : 'belum selesai';
                     }
                 } else {
-                    $status[$sample->no_sample] = $this->getStatusSampling($sample);
+                    $status_sample = $this->getStatusSampling($sample);
+                    $status[$sample->no_sample] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
                 }
 
                 if ($dataLapangan && $dataLapangan->created_at && $status[$sample->no_sample] === 'selesai') {
@@ -1647,16 +1703,23 @@ class AppsBasController extends Controller
 
                 if (isset($samplerKategoriMap[$sampleNumber])) {
                     $assignedSamplers = $samplerKategoriMap[$sampleNumber];
-                    $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
-
-                    // Create combined key for samplers working together
-                    $samplerKey = count($assignedSamplers) > 2 ? implode(', ', $assignedSamplers) : implode(' & ', $assignedSamplers);
-
-                    if (!isset($samplingBySampler[$samplerKey])) {
-                        $samplingBySampler[$samplerKey] = [];
+                } else {
+                    // Fallback: If not mapped, assign to all samplers
+                    $assignedSamplers = $samplerJadwal->pluck('sampler')->unique()->values()->all();
+                    if (empty($assignedSamplers)) {
+                        $assignedSamplers = ['Petugas'];
                     }
-                    $samplingBySampler[$samplerKey][] = $sampling;
                 }
+
+                $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
+
+                // Create combined key for samplers working together
+                $samplerKey = count($assignedSamplers) > 2 ? implode(', ', $assignedSamplers) : implode(' & ', $assignedSamplers);
+
+                if (!isset($samplingBySampler[$samplerKey])) {
+                    $samplingBySampler[$samplerKey] = [];
+                }
+                $samplingBySampler[$samplerKey][] = $sampling;
             }
         }
         // dd($samplingBySampler, $sampleSamplerMap);
@@ -2303,10 +2366,10 @@ class AppsBasController extends Controller
                 'no_order' => $request->no_order,
                 'no_sampel' => $request->no_sampel,
                 'kategori' => $request->kategori ?? null,
-                'keterangan' => $request->keterangan ?? null,
+                'keterangan' => ($request->status === 'Dilanjutkan') ? null : ($request->keterangan ?? null),
                 'status' => $request->status ?? null,
-                'alasan' => $request->alasan ?? null,
-                'tanggal_dilanjutkan' => $request->tanggal_dilanjutkan ?? null,
+                'alasan' => ($request->status === 'Dilanjutkan') ? null : ($request->alasan ?? null),
+                'tanggal_dilanjutkan' => ($request->status === 'Belum Selesai') ? null : ($request->tanggal_dilanjutkan ?? null),
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'created_by' => $this->karyawan
             ]);
@@ -2359,22 +2422,57 @@ class AppsBasController extends Controller
 
 
         $status = 'selesai';
+        $verifiedCount = 0;
+        $totalValidParams = 0;
+
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
                 if($parameter['category'] == '6-Padatan'){
                     continue; // Skip Padatan
                 }
-                // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
                 if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                 }
 
-                $verified = $this->verifyStatus($sample->no_sample, $parameter);
-                if (!$verified) {
-                    // dd("Parameter {$parameter['parameter']} tidak memenuhi syarat");
-                    $status = 'belum selesai';
-                    break;
+                $totalValidParams++;
+                $sampleNumber = $sample->no_sampel ?? $sample->no_sample;
+                $verified = $this->verifyStatus($sampleNumber, $parameter);
+                if ($verified) {
+                    $verifiedCount++;
                 }
+            }
+
+            if ($verifiedCount === 0 && $totalValidParams > 0) {
+                // Periksa apakah sudah ada record apa pun di tabel-tabel terkait
+                $hasAnyRecord = false;
+                foreach ($parameters as $parameter) {
+                    $modelsToCheck = [];
+                    if (isset($parameter['model'])) $modelsToCheck[] = $parameter['model'];
+                    if (isset($parameter['model2'])) $modelsToCheck[] = $parameter['model2'];
+                    if (isset($parameter['model3'])) $modelsToCheck[] = $parameter['model3'];
+                    
+                    foreach ($modelsToCheck as $m) {
+                        $modelsToTest = [$m];
+                        if ($m === DetailLingkunganHidup::class) $modelsToTest[] = \App\Models\DataLapanganLingkunganHidup::class;
+                        if ($m === DetailLingkunganKerja::class) $modelsToTest[] = \App\Models\DataLapanganLingkunganKerja::class;
+                        if ($m === DetailSenyawaVolatile::class) $modelsToTest[] = \App\Models\DataLapanganSenyawaVolatile::class;
+                        if ($m === DetailMicrobiologi::class) $modelsToTest[] = \App\Models\DataLapanganMicrobiologi::class;
+
+                        $sampleNumber = $sample->no_sampel ?? $sample->no_sample;
+                        foreach ($modelsToTest as $testModel) {
+                            if ($testModel::where('no_sampel', $sampleNumber)->exists()) {
+                                $hasAnyRecord = true;
+                                break 3;
+                            }
+                        }
+                    }
+                }
+                
+                $status = $hasAnyRecord ? 'parsial' : 'belum selesai';
+            } elseif ($verifiedCount > 0 && $verifiedCount < $totalValidParams) {
+                $status = 'parsial';
+            } elseif ($verifiedCount === $totalValidParams) {
+                $status = 'selesai';
             }
         } else {
             $status = 'belum selesai';
@@ -2406,10 +2504,24 @@ class AppsBasController extends Controller
 
         // non-environment: hanya kembalikan builder jika count >= requiredCount, else null
         $query = $model::where('no_sampel', $sample_number);
+        if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_blocked')) {
+            $query->where('is_blocked', 0);
+        }
+        if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_rejected')) {
+            $query->where('is_rejected', 0);
+        }
+        
         if ($paramName === 'Opasitas (Solar)') {
-            $queryN = $model::where('no_sampel', $sample_number)->first();
+            $queryN = clone $query;
+            $queryN = $queryN->first();
             if ($queryN == null) {
                 $query = $model2::where('no_sampel', $sample_number);
+                if (\Illuminate\Support\Facades\Schema::hasColumn((new $model2)->getTable(), 'is_blocked')) {
+                    $query->where('is_blocked', 0);
+                }
+                if (\Illuminate\Support\Facades\Schema::hasColumn((new $model2)->getTable(), 'is_rejected')) {
+                    $query->where('is_rejected', 0);
+                }
             }
         }
         $modelsWithParameter = [
