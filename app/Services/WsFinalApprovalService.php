@@ -403,45 +403,7 @@ class WsFinalApprovalService
                     if (!$parameterLab || trim((string)$parameterLab) === '') {
                         continue;
                     }
-            // Penanganan Ergonomi
-            $isErgonomi = false;
-            if ($detail->kategori_3 && str_contains(strtolower($detail->kategori_3), 'ergonomi')) {
-                $isErgonomi = true;
-            } elseif ($detail->kategori_2 && str_contains(strtolower($detail->kategori_2), 'ergonomi')) {
-                $isErgonomi = true;
-            }
 
-            if ($isErgonomi) {
-                $paramsArray = self::arrayValue($detail->parameter);
-                
-                // Fallback jika array parameter di order detail kosong, coba cari di lhps_ergonomi_header
-                if (empty($paramsArray) && class_exists(\App\Models\LhpsErgonomiHeader::class)) {
-                    $ergonomiHeader = \App\Models\LhpsErgonomiHeader::where('no_sampel', $detail->no_sampel)
-                        ->where('is_active', true)
-                        ->first();
-                    if ($ergonomiHeader) {
-                        $ergonomiDetails = $ergonomiHeader->lhpsErgonomiDetail ?? collect();
-                        foreach ($ergonomiDetails as $eDetail) {
-                            $paramName = $eDetail->parameter_lab ?? $eDetail->parameter ?? $eDetail->param ?? $eDetail->parameter_uji;
-                            if ($paramName) {
-                                $paramsArray[] = $paramName;
-                            }
-                        }
-                    }
-                }
-
-                foreach ($paramsArray as $paramRaw) {
-                    $parameterLab = $paramRaw;
-                    if (str_contains($paramRaw, ';')) {
-                        $parameterLab = explode(';', $paramRaw)[1];
-                    }
-
-                    if (!$parameterLab || trim((string)$parameterLab) === '') {
-                        continue;
-                    }
-
-                    $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
-                    $hasil = 'Sudah dianalisa';
                     $parameterRegulasi = self::findParameterRegulasi($detail, $parameterLab) ?: '';
                     $hasil = 'Sudah dianalisa';
 
