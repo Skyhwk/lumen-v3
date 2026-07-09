@@ -910,6 +910,15 @@ class AppsBasController extends Controller
                         $isSelesai = !is_null($item->bas_selesai_id);
                         $isTidakSelesai = !is_null($item->ts_id);
 
+                        if (!$isSelesai) {
+                            if ($item->kategori_2 === "1-Air") {
+                                $isSelesai = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
+                            } else {
+                                $status_sample = $this->getStatusSampling($item);
+                                $isSelesai = ($status_sample === 'parsial' || $status_sample === 'selesai');
+                            }
+                        }
+
                         $detail_sampling_sampel[$key]['status'] = $isSelesai ? 'selesai' : 'belum selesai';
                         $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
                         $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
@@ -1356,6 +1365,15 @@ class AppsBasController extends Controller
                 foreach ($orderD as $key => $item) {
                     $item->no_sample = $item->no_sampel;
                     $isSelesai = !is_null($item->bas_selesai_id);
+
+                    if (!$isSelesai) {
+                        if ($item->kategori_2 === "1-Air") {
+                            $isSelesai = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
+                        } else {
+                            $status_sample = $this->getStatusSampling($item);
+                            $isSelesai = ($status_sample === 'parsial' || $status_sample === 'selesai');
+                        }
+                    }
                     
                     $dataSampelBelumSelesai = null;
                     if (!is_null($item->ts_id)) {
@@ -1945,8 +1963,29 @@ class AppsBasController extends Controller
                     $status[$vv->no_sampel] = 'selesai';
                     $hariTanggal[$vv->no_sampel] = $vv->bas_selesai_created_at;
                 } else {
-                    $status[$vv->no_sampel] = 'belum selesai';
-                    $hariTanggal[$vv->no_sampel] = null;
+                    if ($vv->kategori_2 === "1-Air") {
+                        $exists = DataLapanganAir::where('no_sampel', $vv->no_sampel)->exists();
+                        $status[$vv->no_sampel] = $exists ? 'selesai' : 'belum selesai';
+                    } else {
+                        $status_sample = $this->getStatusSampling($vv);
+                        $status[$vv->no_sampel] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
+                    }
+
+                    if ($status[$vv->no_sampel] === 'selesai') {
+                        $dataLapangan = $this->getDataLapangan(
+                            $vv->kategori_2,
+                            $vv->kategori_3,
+                            $vv->no_sampel,
+                            $vv->parameter
+                        );
+                        if ($dataLapangan && isset($dataLapangan->created_at)) {
+                            $hariTanggal[$vv->no_sampel] = $dataLapangan->created_at;
+                        } else {
+                            $hariTanggal[$vv->no_sampel] = null;
+                        }
+                    } else {
+                        $hariTanggal[$vv->no_sampel] = null;
+                    }
                 }
 
                 // dd($data_sampling);
@@ -3020,9 +3059,7 @@ class AppsBasController extends Controller
                         continue;
                     }
 
-                    if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
-                        continue;
-                    }
+
 
                     // --- LOGIKA BYPASS ICP TEMPLATE ---
                     // Cek apakah parameter saat ini ada di dalam list JSON Template ICP
