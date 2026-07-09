@@ -532,36 +532,36 @@ class AppsBasController extends Controller
             
             // --- URGENT HARDCODE EXCEPTION: BYPASS TANGGAL UNTUK QUOTATION TERTENTU ---
             // Kembalikan query database ke awal
-            // if ($isProgrammer) {
-            //     $orderDetail->whereBetween('tanggal_sampling', [
-            //         Carbon::now()->subDays(8)->toDateString(),
-            //         Carbon::now()->toDateString()
-            //     ]);
-            // } else {
-            //     $orderDetail->whereBetween('tanggal_sampling', [
-            //         Carbon::now()->subDays(8)->toDateString(),
-            //         Carbon::now()->toDateString()
-            //     ]);
-            // }
             if ($isProgrammer) {
-                $orderDetail->where(function($query) use ($urgentQuotes) {
-                    $query->whereBetween('tanggal_sampling', [
-                        Carbon::now()->subDays(8)->toDateString(),
-                        Carbon::now()->toDateString()
-                    ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
-                        $q->whereIn('no_document', $urgentQuotes);
-                    });
-                });
+                $orderDetail->whereBetween('tanggal_sampling', [
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
+                ]);
             } else {
-                $orderDetail->where(function($query) use ($urgentQuotes) {
-                    $query->whereBetween('tanggal_sampling', [
-                        Carbon::now()->subDays(8)->toDateString(),
-                        Carbon::now()->toDateString()
-                    ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
-                        $q->whereIn('no_document', $urgentQuotes);
-                    });
-                });
+                $orderDetail->whereBetween('tanggal_sampling', [
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
+                ]);
             }
+            // if ($isProgrammer) {
+            //     $orderDetail->where(function($query) use ($urgentQuotes) {
+            //         $query->whereBetween('tanggal_sampling', [
+            //             Carbon::now()->subDays(8)->toDateString(),
+            //             Carbon::now()->toDateString()
+            //         ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
+            //             $q->whereIn('no_document', $urgentQuotes);
+            //         });
+            //     });
+            // } else {
+            //     $orderDetail->where(function($query) use ($urgentQuotes) {
+            //         $query->whereBetween('tanggal_sampling', [
+            //             Carbon::now()->subDays(8)->toDateString(),
+            //             Carbon::now()->toDateString()
+            //         ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
+            //             $q->whereIn('no_document', $urgentQuotes);
+            //         });
+            //     });
+            // }
             //------------------------------------------------------------------------
 
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
@@ -874,7 +874,10 @@ class AppsBasController extends Controller
             // filter tanggal sampling sesuai durasi jadwal
             $today = Carbon::today();
             $filtered = [];
-
+            // header('Access-Control-Allow-Origin: *');
+            // header('Access-Control-Allow-Methods: *');
+            // header('Access-Control-Allow-Headers: *');
+           
             foreach ($filteredResult as $item) {
                 // --- URGENT HARDCODE EXCEPTION: LOLOSKAN FILTER ARRAY ---
                 if (isset($item['nomor_quotation']) && in_array($item['nomor_quotation'], $urgentQuotes)) {
@@ -900,6 +903,7 @@ class AppsBasController extends Controller
             if(!empty($filtered)){
                 $filteredResult = $filtered;
             }
+            //  dd($filteredResult);
             
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::where('no_order', $request->no_order)
