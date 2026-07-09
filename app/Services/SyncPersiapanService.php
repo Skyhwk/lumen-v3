@@ -38,7 +38,7 @@ class SyncPersiapanService
                     $bottleType = optional(HargaParameter::where([
                         'id_parameter' => $orderedParamId,
                         'is_active' => true,
-                        'status'=>0,
+                        'status'=> false,
                     ])->first())->regen;
 
                     if ($bottleType) {
@@ -139,6 +139,7 @@ class SyncPersiapanService
 
             $params = HargaParameter::where('id_kategori', $orderedCategoryId)
                 ->where('is_active', true)
+                ->where('status', false)
                 ->whereIn('nama_parameter', $parameter_names)
                 ->get();
 
