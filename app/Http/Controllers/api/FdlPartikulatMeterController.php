@@ -99,6 +99,27 @@ class FdlPartikulatMeterController extends Controller
                 $data->updated_at = Carbon::now();
                 $data->save();
 
+                PartikulatHeader::where('no_sampel', $request->no_sampel_lama)->update([
+                    'no_sampel' => $request->no_sampel_baru,
+                    'no_sampel_lama' => $request->no_sampel_lama
+                ]);
+
+                WsValueUdara::where('no_sampel', $request->no_sampel_lama)->update([
+                    'no_sampel' => $request->no_sampel_baru,
+                    'no_sampel_lama' => $request->no_sampel_lama
+                ]);
+
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
+
+                if ($order_detail_lama) {
+                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
+                        ->where('is_active', 1)
+                        ->update([
+                            'tanggal_terima' => $order_detail_lama->tanggal_terima
+                        ]);
+                }
+
                 DB::commit();
                 return response()->json([
                     'message' => 'Berhasil ubah no sampel ' . $request->no_sampel_lama . ' menjadi ' . $request->no_sampel_baru
