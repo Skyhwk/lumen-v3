@@ -215,8 +215,13 @@ class FdlGetaranController extends Controller
     {
         $data = DataLapanganGetaran::with('detail','sub_kategori')
             ->where('created_by', $this->karyawan)
-            ->whereIn('is_rejected', [0, 1])
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+            ->where(function ($query) {
+                $query->where('is_rejected', 1)
+                      ->orWhere(function ($q) {
+                          $q->where('is_rejected', 0)
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                      });
+            });
 
         return Datatables::of($data)->make(true);
     }

@@ -555,8 +555,13 @@ class FdlEmisiCerobongController extends Controller
 
         $query = DataLapanganEmisiCerobong::with('detail')
             ->where('created_by', $this->karyawan)
-            ->whereIn('is_rejected', [0, 1])
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+            ->where(function ($query) {
+                $query->where('is_rejected', 1)
+                      ->orWhere(function ($q) {
+                          $q->where('is_rejected', 0)
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                      });
+            });
 
         if ($search) {
             $query->where(function ($q) use ($search) {
