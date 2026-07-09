@@ -38,7 +38,7 @@ class SamplerTrackingService
                     ->where('is_active', true)
                     ->first();
 
-                $session = SamplerTrackingSession::firstOrNew(['team_key' => $teamKey]);
+                $session = $this->findSession($teamKey);
                 $session->fill($this->onlyExistingColumns($session->getTable(), [
                     'id_sampling' => $first->id_sampling,
                     'parsial' => $first->parsial,
@@ -793,7 +793,70 @@ class SamplerTrackingService
 
         return sha1($sourceKey);
     }
+    protected function findSession($teamKey)
+    {
+        $sessions = SamplerTrackingSession::withCount('events')
+            ->where('team_key', $teamKey)
+            ->orderByDesc('events_count')
+            ->orderBy('id')
+            ->get();
 
+        if ($sessions->isEmpty()) {
+            $session = new SamplerTrackingSession();
+            $session->team_key = $teamKey;
+
+            return $session;
+        }
+
+        $keeper = $sessions->first();
+        $duplicates = $sessions->where('id', '!=', $keeper->id);
+
+        foreach ($duplicates as $duplicate) {
+            $this->mergeDuplicateSession($keeper, $duplicate);
+        }
+
+        return $keeper;
+    }
+
+    protected function mergeDuplicateSession($keeper, $duplicate)
+    {
+        DB::transaction(function () use ($keeper, $duplicate) {
+            $duplicateMembers = SamplerTrackingMember::where('sampler_tracking_session_id', $duplicate->id)->get();
+
+            foreach ($duplicateMembers as $duplicateMember) {
+                $targetMember = SamplerTrackingMember::where('sampler_tracking_session_id', $keeper->id)
+                    ->when($duplicateMember->sampler_id, function ($query) use ($duplicateMember) {
+                        $query->where('sampler_id', $duplicateMember->sampler_id);
+                    }, function ($query) use ($duplicateMember) {
+                        $query->where('sampler_name', $duplicateMember->sampler_name);
+                    })
+                    ->first();
+
+                if ($targetMember) {
+                    SamplerTrackingEvent::where('sampler_tracking_member_id', $duplicateMember->id)
+                        ->update([
+                            'sampler_tracking_session_id' => $keeper->id,
+                            'sampler_tracking_member_id' => $targetMember->id,
+                        ]);
+
+                    $duplicateMember->fill($this->onlyExistingColumns($duplicateMember->getTable(), ['is_active' => false]));
+                    $duplicateMember->save();
+                } else {
+                    $duplicateMember->sampler_tracking_session_id = $keeper->id;
+                    $duplicateMember->save();
+
+                    SamplerTrackingEvent::where('sampler_tracking_member_id', $duplicateMember->id)
+                        ->update(['sampler_tracking_session_id' => $keeper->id]);
+                }
+            }
+
+            SamplerTrackingEvent::where('sampler_tracking_session_id', $duplicate->id)
+                ->update(['sampler_tracking_session_id' => $keeper->id]);
+
+            $duplicate->fill($this->onlyExistingColumns($duplicate->getTable(), ['is_active' => false]));
+            $duplicate->save();
+        });
+    }
     protected function findMember($sessionId, $row)
     {
         $query = SamplerTrackingMember::where('sampler_tracking_session_id', $sessionId);
