@@ -373,8 +373,9 @@ class FdlKebisinganPersonalController extends Controller
     {
         try {
             $file = $request->file('file_input');
-            if (!$file || $file->getClientOriginalExtension() !== 'xlsx') {
-                return response()->json(['error' => 'File tidak valid. Harus .xlsx'], 400);
+            $extension = strtolower($file ? $file->getClientOriginalExtension() : '');
+            if (!$file || !in_array($extension, ['xls', 'xlsx'])) {
+                return response()->json(['error' => 'File tidak valid. Harus .xls atau .xlsx'], 400);
             }
             
             $spreadsheet = IOFactory::load($file->getPathname());
