@@ -562,7 +562,7 @@ class AppsBasController extends Controller
                     });
                 });
             }
-            -------------------------------------------------------------------------
+            //------------------------------------------------------------------------
 
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
             
