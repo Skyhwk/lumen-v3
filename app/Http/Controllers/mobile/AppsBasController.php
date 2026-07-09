@@ -524,39 +524,51 @@ class AppsBasController extends Controller
                         })
                         ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai']);
                 },
-                'orderHeader.docCodeSampling' => function ($q) {
-                    $q->where('menu', 'STPS');
-                }
             ])
                 ->select(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1'])
+                
                 ->where('is_active', true)
                 ->where('kategori_1', '!=', 'SD');
             
             // --- URGENT HARDCODE EXCEPTION: BYPASS TANGGAL UNTUK QUOTATION TERTENTU ---
+            // Kembalikan query database ke awal
             if ($isProgrammer) {
-                $orderDetail->where(function($query) use ($urgentQuotes) {
-                    $query->whereBetween('tanggal_sampling', [
-                        Carbon::now()->subDays(8)->toDateString(),
-                        Carbon::now()->toDateString()
-                    ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
-                        $q->whereIn('no_document', $urgentQuotes);
-                    });
-                });
+                $orderDetail->whereBetween('tanggal_sampling', [
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
+                ]);
             } else {
-                $orderDetail->where(function($query) use ($urgentQuotes) {
-                    $query->whereBetween('tanggal_sampling', [
-                        Carbon::now()->subDays(8)->toDateString(),
-                        Carbon::now()->toDateString()
-                    ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
-                        $q->whereIn('no_document', $urgentQuotes);
-                    });
-                });
+                $orderDetail->whereBetween('tanggal_sampling', [
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
+                ]);
             }
+            // if ($isProgrammer) {
+            //     $orderDetail->where(function($query) use ($urgentQuotes) {
+            //         $query->whereBetween('tanggal_sampling', [
+            //             Carbon::now()->subDays(8)->toDateString(),
+            //             Carbon::now()->toDateString()
+            //         ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
+            //             $q->whereIn('no_document', $urgentQuotes);
+            //         });
+            //     });
+            // } else {
+            //     $orderDetail->where(function($query) use ($urgentQuotes) {
+            //         $query->whereBetween('tanggal_sampling', [
+            //             Carbon::now()->subDays(8)->toDateString(),
+            //             Carbon::now()->toDateString()
+            //         ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
+            //             $q->whereIn('no_document', $urgentQuotes);
+            //         });
+            //     });
+            // }
             // -------------------------------------------------------------------------
 
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
+            
 
             $orderDetail = $orderDetail->get()->toArray();
+            
 
             // \Illuminate\Support\Facades\Log::info("AppsBasController::index After Query - Count: " . count($orderDetail) . " - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
@@ -617,6 +629,8 @@ class AppsBasController extends Controller
 
                 return array_merge($carry, $results);
             }, []);
+
+            
 
             unset($orderDetail); // Free up memory
 
@@ -679,8 +693,10 @@ class AppsBasController extends Controller
                 }
             }
 
-            unset($formattedData); // Free up memory
+           
+           
 
+            unset($formattedData); // Free up memory
             // Buat final result: 1 data per sampler
             $finalResult = [];
 
@@ -693,6 +709,8 @@ class AppsBasController extends Controller
             }
 
             $finalResult = array_values($finalResult);
+
+             
             unset($groupedData);
 
             // Ambil semua no_order dari hasil akhir
@@ -844,6 +862,7 @@ class AppsBasController extends Controller
 
             // Reindex array setelah filter jika diperlukan
             $filteredResult = array_values($filteredResult);
+            
             unset($finalResult);
 
             if (count($filteredResult) === 0) {
@@ -863,7 +882,7 @@ class AppsBasController extends Controller
                     continue;
                 }
                 // --------------------------------------------------------
-
+                
                 $jadwal = Carbon::parse($item['jadwal']);
                 $durasi = (int) $item['durasi'];
 
@@ -871,8 +890,8 @@ class AppsBasController extends Controller
                     if ($jadwal->isSameDay($today))
                         $filtered[] = $item;
                 } else {
-                    $endDate = $jadwal->copy()->addDays($durasi - 1);
-                    if ($today->between($jadwal, $endDate))
+                    
+                    // if ($today->between($jadwal, $endDate))
                         $filtered[] = $item;
                 }
             }
@@ -880,7 +899,7 @@ class AppsBasController extends Controller
             // Catatan: Jika di versi kode asli Anda variabel $filtered ini belum dipakai 
             // menimpa $filteredResult, saya tambahkan ini agar filter array berfungsi
             $filteredResult = $filtered; 
-
+            
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::where('no_order', $request->no_order)
                     ->where('is_active', true)
