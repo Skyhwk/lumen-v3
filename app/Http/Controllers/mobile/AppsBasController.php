@@ -886,19 +886,20 @@ class AppsBasController extends Controller
                 $jadwal = Carbon::parse($item['jadwal']);
                 $durasi = (int) $item['durasi'];
 
-                if ($durasi <= 1) { // sesaat ato 8jam
-                    if ($jadwal->isSameDay($today))
-                        $filtered[] = $item;
-                } else {
-                    
-                    // if ($today->between($jadwal, $endDate))
-                        $filtered[] = $item;
-                }
+                // if ($durasi <= 1) { // sesaat ato 8jam
+                //     if ($jadwal->isSameDay($today))
+                //         $filtered[] = $item;
+                // } else {
+                //     // if ($today->between($jadwal, $endDate))
+                //         $filtered[] = $item;
+                // }
             }
             
             // Catatan: Jika di versi kode asli Anda variabel $filtered ini belum dipakai 
             // menimpa $filteredResult, saya tambahkan ini agar filter array berfungsi
-            $filteredResult = $filtered; 
+            if(!empty($filtered)){
+                $filteredResult = $filtered;
+            }
             
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::where('no_order', $request->no_order)
