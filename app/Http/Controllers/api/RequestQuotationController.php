@@ -6259,27 +6259,50 @@ class RequestQuotationController extends Controller
     }
 
     public function getSampledData(Request $request){
-        $header = OrderHeader::where('no_document', $request->no_document)->first();
-        if(!$header){
-            return response()->json([
-                'message' => 'Header data not found',
-                'data' => 0,
-                'is_found' => false
-            ], 404);
+        $baseDoc = preg_replace('/R\d+$/i', '', $request->no_document);
+        $quotation = \DB::table('request_quotation')
+            ->where('no_document', 'like', $baseDoc . '%')
+            ->first();
+        
+        $header = null;
+        if ($quotation) {
+            $header = OrderHeader::where('no_quotation', $quotation->no_quotation)
+                ->where('is_active', true)
+                ->first();
         }
 
-        $data = OrderDetail::where('id_order_header', $header->id)->get();
-        $data_sampled = $data->filter(function ($item) {
-            return $item->tanggal_terima !== null;
-        })->toArray();
+        if (!$header) {
+            $header = OrderHeader::where('no_document', 'like', $baseDoc . '%')
+                ->where('is_active', true)
+                ->first();
+        }
 
-        $data_return = array_map(function ($item) {
-            return explode('/',$item['no_sampel'])[1];
-        }, $data_sampled);
+        $data_return = [];
+        $nomorTitikTerbesar = 0;
 
+        if ($header) {
+            $data_sampled = OrderDetail::where('id_order_header', $header->id)->get()->toArray();
+
+            $data_return = array_map(function ($item) {
+                return explode('/',$item['no_sampel'])[1];
+            }, $data_sampled);
+
+            $orderDetails = \DB::table('order_detail')->where('no_order', $header->no_order)->get();
+            foreach ($orderDetails as $od) {
+                $parts = explode('/', $od->no_sampel);
+                if (isset($parts[1])) {
+                    $num = (int)$parts[1];
+                    if ($num > $nomorTitikTerbesar) {
+                        $nomorTitikTerbesar = $num;
+                    }
+                }
+            }
+        }
+ 
         return response()->json([
             'message' => 'Success',
-            'data' => $data_return
+            'data' => $data_return,
+            'nomor_titik_terbesar' => $nomorTitikTerbesar
         ], 200);
     }
 
