@@ -37,7 +37,8 @@ class SyncPersiapanService
                 if ($orderedCategoryName == 'air') {
                     $bottleType = optional(HargaParameter::where([
                         'id_parameter' => $orderedParamId,
-                        'is_active' => true
+                        'is_active' => true,
+                        'status'=>0,
                     ])->first())->regen;
 
                     if ($bottleType) {
@@ -55,7 +56,7 @@ class SyncPersiapanService
                     $isShouldPrepared = KonfigurasiPraSampling::where([
                         'id_kategori' => $orderedCategoryId,
                         'parameter' => $orderedParam,
-                        'is_active' => true
+                        'is_active' => true,
                     ])->exists();
 
                     if ($isShouldPrepared && !isset($preparedParams[$orderedCategoryName][$orderedParamName])) {
