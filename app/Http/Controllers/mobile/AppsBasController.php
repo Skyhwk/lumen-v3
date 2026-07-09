@@ -3109,7 +3109,7 @@ class AppsBasController extends Controller
             } else {
                 $status = 'belum selesai';
             }
-
+            
             return $status;
         } catch (\Exception $th) {
             throw new Exception($th->getMessage());
@@ -3123,15 +3123,25 @@ class AppsBasController extends Controller
                 return true;
             }
 
-            $model = $parameter['model'];
+        $model = $parameter['model'];
         $model2 = isset($parameter['model2']) ? $parameter['model2'] : null;
         $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
+
+        // --- HARDCODE KHUSUS LINGKUNGAN KERJA & PARTIKULAT METER ---
+        if (in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+            $sampleData = \App\Models\OrderDetail::where('no_sampel', $sample_number)->first();
+            if ($sampleData && stripos($sampleData->kategori_3, 'Lingkungan Kerja') !== false) {
+                $parameter['requiredCount'] = 4; // Timpa langsung di array
+            }
+        }
+
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
 
         $environmentModels = [
             DetailLingkunganHidup::class,
             DetailLingkunganKerja::class,
+            DetailMicrobiologi::class,
         ];
 
         if (in_array($model, $environmentModels, true)) {
