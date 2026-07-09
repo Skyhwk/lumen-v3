@@ -1712,6 +1712,7 @@ class RequestQuotationController extends Controller
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
             $data->transportasi = !in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR']) ? $payload->data_wilayah->transportasi : null;
+            $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem ?? 'off';
 
             $harga_transport = 0;
             $jam = 0;
