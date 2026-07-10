@@ -13,6 +13,7 @@ use App\Models\HistoryLevelSampler;
 use App\Models\Invoice;
 use App\Models\Jadwal;
 use App\Models\JobTask;
+use App\Models\LinkLhp;
 use App\Models\MasterFeeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Menu;
@@ -49,6 +50,203 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class FixingController extends Controller
 {
+
+    public function syncLinkLhpRilis(Request $request)
+    {
+        $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+        $limit = (int) $request->input('limit', 0);
+
+        $summary = [
+            'checked' => 0,
+            'updated' => 0,
+            'unchanged' => 0,
+            'skipped_empty_lhp' => 0,
+            'missing_order_berjalan' => 0,
+            'errors' => 0,
+            'dry_run' => $dryRun,
+        ];
+        $changes = [];
+        $missing = [];
+        $errors = [];
+
+        try {
+            $query = LinkLhp::query()
+                ->select([
+                    'id',
+                    'no_order',
+                    'periode',
+                    'jumlah_lhp',
+                    'jumlah_lhp_rilis',
+                    'list_lhp_rilis',
+                    'is_completed',
+                ])
+                ->orderBy('id');
+
+            if ($limit > 0) {
+                $query->limit($limit);
+            }
+
+            $linkRows = $query->get();
+            $orderBerjalanByOrder = DB::table('order_berjalan')
+                ->whereIn('no_order', $linkRows->pluck('no_order')->filter()->unique()->values())
+                ->pluck('dataOrderDetail', 'no_order');
+
+            foreach ($linkRows as $linkLhp) {
+                $summary['checked']++;
+
+                try {
+                    $dataOrderDetail = $orderBerjalanByOrder[$linkLhp->no_order] ?? null;
+                    if (!$dataOrderDetail) {
+                        $summary['missing_order_berjalan']++;
+                        $missing[] = [
+                            'id' => $linkLhp->id,
+                            'no_order' => $linkLhp->no_order,
+                            'periode' => $linkLhp->periode,
+                        ];
+                        continue;
+                    }
+
+                    $calculated = $this->calculateLhpRilisFromOrderBerjalan($dataOrderDetail, $linkLhp->periode);
+                    if ($calculated['jumlah_lhp'] === 0) {
+                        $summary['skipped_empty_lhp']++;
+                        continue;
+                    }
+
+                    $currentList = $this->normalizeJsonArray($linkLhp->list_lhp_rilis);
+
+                    $needsUpdate =
+                        (int) $linkLhp->jumlah_lhp !== $calculated['jumlah_lhp'] ||
+                        (int) $linkLhp->jumlah_lhp_rilis !== $calculated['jumlah_lhp_rilis'] ||
+                        (int) $linkLhp->is_completed !== (int) $calculated['is_completed'] ||
+                        $currentList !== $calculated['list_lhp_rilis'];
+
+                    if (!$needsUpdate) {
+                        $summary['unchanged']++;
+                        continue;
+                    }
+
+                    $change = [
+                        'id' => $linkLhp->id,
+                        'no_order' => $linkLhp->no_order,
+                        'periode' => $linkLhp->periode,
+                        'before' => [
+                            'jumlah_lhp' => (int) $linkLhp->jumlah_lhp,
+                            'jumlah_lhp_rilis' => (int) $linkLhp->jumlah_lhp_rilis,
+                            'is_completed' => (int) $linkLhp->is_completed,
+                            'list_lhp_rilis' => $currentList,
+                        ],
+                        'after' => $calculated,
+                    ];
+                    $changes[] = $change;
+
+                    if (!$dryRun) {
+                        $linkLhp->update([
+                            'jumlah_lhp' => $calculated['jumlah_lhp'],
+                            'jumlah_lhp_rilis' => $calculated['jumlah_lhp_rilis'],
+                            'list_lhp_rilis' => json_encode($calculated['list_lhp_rilis']),
+                            'is_completed' => $calculated['is_completed'],
+                            'updated_by' => $this->karyawan,
+                            'updated_at' => Carbon::now(),
+                        ]);
+                    }
+
+                    $summary['updated']++;
+                } catch (\Throwable $th) {
+                    $summary['errors']++;
+                    $errors[] = [
+                        'id' => $linkLhp->id,
+                        'no_order' => $linkLhp->no_order,
+                        'periode' => $linkLhp->periode,
+                        'message' => $th->getMessage(),
+                    ];
+                }
+            }
+
+            return response()->json([
+                'message' => $dryRun ? 'Preview sync link LHP selesai.' : 'Sync link LHP selesai.',
+                'summary' => $summary,
+                'changes' => array_slice($changes, 0, 100),
+                'missing_order_berjalan' => array_slice($missing, 0, 100),
+                'errors' => array_slice($errors, 0, 100),
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Gagal sync link LHP: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    private function calculateLhpRilisFromOrderBerjalan($dataOrderDetail, ?string $periode = null): array
+    {
+        $decoded = is_string($dataOrderDetail)
+            ? json_decode($dataOrderDetail, true)
+            : $dataOrderDetail;
+
+        if (!is_array($decoded)) {
+            throw new \Exception('dataOrderDetail bukan JSON valid.');
+        }
+
+        $periodGroups = collect($decoded)
+            ->filter(function ($group) use ($periode) {
+                if ($periode === null || $periode === '') {
+                    return true;
+                }
+
+                return (string) ($group['periode'] ?? '') === (string) $periode;
+            })
+            ->values();
+
+        $details = $periodGroups
+            ->flatMap(function ($group) {
+                return $group['detail'] ?? [];
+            })
+            ->filter(fn ($detail) => !empty($detail['cfr']))
+            ->unique('cfr')
+            ->values();
+
+        $listLhpRilis = $details
+            ->filter(fn ($detail) => (bool) ($detail['lhp_rilis'] ?? false))
+            ->pluck('cfr')
+            ->filter()
+            ->unique()
+            ->sort(SORT_NATURAL)
+            ->values()
+            ->toArray();
+
+        $jumlahLhp = $details->count();
+        $jumlahLhpRilis = count($listLhpRilis);
+
+        return [
+            'jumlah_lhp' => $jumlahLhp,
+            'jumlah_lhp_rilis' => $jumlahLhpRilis,
+            'list_lhp_rilis' => $listLhpRilis,
+            'is_completed' => $jumlahLhp > 0 && $jumlahLhp === $jumlahLhpRilis ? 1 : 0,
+        ];
+    }
+
+    private function normalizeJsonArray($value): array
+    {
+        if (is_array($value)) {
+            $data = $value;
+        } elseif (is_string($value) && trim($value) !== '') {
+            $data = json_decode($value, true);
+        } else {
+            $data = [];
+        }
+
+        if (!is_array($data)) {
+            return [];
+        }
+
+        return collect($data)
+            ->filter()
+            ->unique()
+            ->sort(SORT_NATURAL)
+            ->values()
+            ->toArray();
+    }
+
     public function fixDetailStructure(Request $request)
     {
         try {

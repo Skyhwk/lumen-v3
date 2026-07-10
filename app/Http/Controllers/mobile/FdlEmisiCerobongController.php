@@ -127,6 +127,8 @@ class FdlEmisiCerobongController extends Controller
                     // if ($request->metode != '') $data->metode                       = $request->metode;
                     $data->tipe                                             = 1;
                     $data->is_rejected                                      = 0;
+                    $data->rejected_at                                      = null;
+                    $data->rejected_by                                      = null;
 
                     $partikulat = [];
                     
@@ -404,7 +406,10 @@ class FdlEmisiCerobongController extends Controller
                     if ($request->foto_lain2 != '') $data->foto_lain2     = self::convertImg($request->foto_lain2, 5, $this->user_id);
                     $data->updated_by                                                   = $this->karyawan;
                     $data->updated_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
+                    $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected                                      = 0;
+                    $data->rejected_at                                      = null;
+                    $data->rejected_by                                      = null;
                     $data->save();
                     
                     $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
@@ -521,7 +526,10 @@ class FdlEmisiCerobongController extends Controller
                     $data->permission_3                     = (empty($request->permission)) ? 1 : $request->permission;
                     $data->updated_by                                                 = $this->karyawan;
                     $data->updated_at                                                = Carbon::now()->format('Y-m-d H:i:s');
+                    $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected                                      = 0;
+                    $data->rejected_at                                      = null;
+                    $data->rejected_by                                      = null;
                     $data->save();
 
                     $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
@@ -555,8 +563,13 @@ class FdlEmisiCerobongController extends Controller
 
         $query = DataLapanganEmisiCerobong::with('detail')
             ->where('created_by', $this->karyawan)
-            ->whereIn('is_rejected', [0, 1])
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+            ->where(function ($query) {
+                $query->where('is_rejected', 1)
+                      ->orWhere(function ($q) {
+                          $q->where('is_rejected', 0)
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                      });
+            });
 
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -834,6 +847,7 @@ class FdlEmisiCerobongController extends Controller
                 'CO2' => null,
                 'NO' => null,
                 'NO2' => null,
+                'NOx' => null,
                 'SO2' => null,
                 'T_Flue' => null,
                 'velocity' => null,
@@ -843,6 +857,7 @@ class FdlEmisiCerobongController extends Controller
                 'co_populasi' => null,
                 'co2_populasi' => null,
                 'no_populasi' => null,
+                'nox_populasi' => null,
                 'no2_populasi' => null,
                 'so2_populasi' => null,
                 'permission_2' => 0,
