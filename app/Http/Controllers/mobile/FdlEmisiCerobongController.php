@@ -128,7 +128,7 @@ class FdlEmisiCerobongController extends Controller
                     $data->tipe                                             = 1;
                     $data->is_rejected                                      = 0;
                     $data->rejected_at                                      = null;
-                    $data->reject_by                                      = null;
+                    $data->rejected_by                                      = null;
 
                     $partikulat = [];
                     
@@ -409,7 +409,7 @@ class FdlEmisiCerobongController extends Controller
                     $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected                                      = 0;
                     $data->rejected_at                                      = null;
-                    $data->reject_by                                      = null;
+                    $data->rejected_by                                      = null;
                     $data->save();
                     
                     $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
@@ -529,7 +529,7 @@ class FdlEmisiCerobongController extends Controller
                     $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected                                      = 0;
                     $data->rejected_at                                      = null;
-                    $data->reject_by                                      = null;
+                    $data->rejected_by                                      = null;
                     $data->save();
 
                     $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
