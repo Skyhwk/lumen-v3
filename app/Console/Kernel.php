@@ -51,6 +51,60 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        // =========================================================================
+        // 1. SKEMA INISIALISASI (Mencicil Data Awal Tahun, 1 Bulan per Malam)
+        // =========================================================================
+        
+        // Senin Malam (20:00) -> Generate data Januari 2026
+        $schedule->command('wsfinal:generate --month="2026-01" --chunk=100')
+            ->weeklyOn(1, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // Selasa Malam (20:00) -> Generate data Februari 2026
+        $schedule->command('wsfinal:generate --month="2026-02" --chunk=100')
+            ->weeklyOn(2, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // Rabu Malam (20:00) -> Generate data Maret 2026
+        $schedule->command('wsfinal:generate --month="2026-03" --chunk=100')
+            ->weeklyOn(3, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // Kamis Malam (20:00) -> Generate data April 2026
+        $schedule->command('wsfinal:generate --month="2026-04" --chunk=100')
+            ->weeklyOn(4, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // Jumat Malam (20:00) -> Generate data Mei 2026
+        $schedule->command('wsfinal:generate --month="2026-05" --chunk=100')
+            ->weeklyOn(5, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // Sabtu Malam (20:00) -> Generate data Juni 2026
+        $schedule->command('wsfinal:generate --month="2026-06" --chunk=100')
+            ->weeklyOn(6, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // Minggu Malam (20:00) -> Generate data Juli 2026
+        $schedule->command('wsfinal:generate --month="2026-07" --chunk=100')
+            ->weeklyOn(7, '20:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
+
+        // =========================================================================
+        // 2. SKEMA RUTIN HARIAN (Sinkronisasi LHP Baru Tiap Jam)
+        // =========================================================================
+        $schedule->command('wsfinal:generate --from="-3 days" --to="today" --chunk=50')
+            ->hourly()
+            ->between('20:00', '05:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/wsfinal_generate.log'));
         // Sementara dimatikan untuk debugging — uncomment jika sudah fix
         // $schedule->command('qsd:monitor-revenue')->everyFiveMinutes();
         // $schedule->command('qsd:monitor-forecast')->everyFiveMinutes();

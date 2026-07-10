@@ -227,8 +227,8 @@ class KalkulasiPayrollController extends Controller
             })
             ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
             ->orderBy('master_karyawan.nik_karyawan', 'ASC')
-            // ->where('master_karyawan.nik_karyawan', 'ISP232')
-            ->whereRaw(('CASE WHEN master_karyawan.is_active = 0 THEN CAST(NOW() as DATE) <= DATE_ADD(master_karyawan.effective_date, INTERVAL 45 DAY) ELSE master_karyawan.is_active = 1 END'))
+            ->where('master_karyawan.nik_karyawan', 'ISC008')
+            // ->whereRaw(('CASE WHEN master_karyawan.is_active = 0 THEN CAST(NOW() as DATE) <= DATE_ADD(master_karyawan.effective_date, INTERVAL 45 DAY) ELSE master_karyawan.is_active = 1 END'))
             ->where('rekap_masuk_kerja.bulan', $request->periode_payroll);
             // ->where('rekap_masuk_kerja.is_active', true);
             if($request->status_karyawan == 'Supervisor'){
