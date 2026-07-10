@@ -34,6 +34,7 @@ class Kernel extends ConsoleKernel
         // Commands\FixJadwalBookingStatus::class,
         Commands\FixJadwalSystemDeactivated::class,
         Commands\ScheduleLogTransactionQsd::class,
+        Commands\GenerateWsFinalApproval::class,
         Commands\SyncQsdRevenue::class,
         Commands\SyncQsdForecast::class,
         Commands\MonitorQsdRevenue::class,
