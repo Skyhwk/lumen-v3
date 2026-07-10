@@ -230,13 +230,7 @@ class FdlMethodNbmController extends Controller
 
         $query = DataLapanganErgonomi::with('detail')
             ->where('created_by', $this->karyawan)->where('method', 1)
-            ->where(function ($query) {
-                $query->where('is_rejected', 1)
-                      ->orWhere(function ($q) {
-                          $q->where('is_rejected', 0)
-                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
-                      });
-            });
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
