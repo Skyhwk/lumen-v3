@@ -2496,7 +2496,7 @@ class RequestQuotationController extends Controller
                     $detailGrouped[$key] = (object)[
                         'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
-                        'penamaan_titik'  => [], // default kosong
+                        'penamaan_titik'  => isset($sampling->penamaan_titik) ? $sampling->penamaan_titik : [],
                         'parameter'       => $sampling->parameter,
                         'jumlah_titik'    => (int) $sampling->jumlah_titik,
                         'total_parameter' => $sampling->total_parameter,
@@ -6247,7 +6247,8 @@ class RequestQuotationController extends Controller
         }
 
         if($order_id && $order_id != '') {
-            $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
+            // $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
+            $dataDetail = OrderDetail::where('id_order_header', $order_id)->get()->toArray();
             foreach($dataDetail as $key => $value) {
                 $orderDetail[] = \explode('/', $value['no_sampel'])[1];
             }
