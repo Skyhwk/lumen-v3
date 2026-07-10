@@ -18,7 +18,6 @@ class KonfigurasiPraSamplingController extends Controller
     public function index()
     {
         $data = KonfigurasiPraSampling::with('kategori')->where('is_active', true)->latest();
-
         return Datatables::of($data)->make(true);
     }
 
@@ -161,6 +160,7 @@ class KonfigurasiPraSamplingController extends Controller
     {
         $data = HargaParameter::where('id_kategori', '1')
             ->where('is_active', true)
+            ->where('status',0)
             ->whereNotNull('regen')
             ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
             ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')

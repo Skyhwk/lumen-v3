@@ -510,10 +510,10 @@ class AppsBasController extends Controller
 
             // Filter data untuk hanya mendapatkan data yang memiliki 'sampler' sesuai dengan $this->karyawan
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)->whereIn('id_jabatan', [41, 42])->exists();
-            // $urgentQuotes = [
-            //     'ISL/QT/26-I/001678R5','ISL/QT/26-V/009328R1','ISL/QT/26-V/009463','ISL/QT/26-V/009358','ISL/QT/26-V/009324','ISL/QT/26-IV/005704R1','ISL/QT/26-IV/005684R1','ISL/QTC/26-I/000308R5','ISL/QT/26-III/004305R3','ISL/QT/26-V/009373R1','ISL/QT/26-V/008607R1','ISL/QTC/25-XII/002426R1','ISL/QTC/25-XII/002427R1','ISL/QTC/25-XII/002319R1','ISL/QTC/26-II/000408R2','ISL/QTC/26-V/000728R1','ISL/QT/26-V/010207R1','ISL/QTC/26-IV/000592R6','ISL/QT/26-V/010558R4'
-            // ];
-            $urgentQuotes=[];
+            $urgentQuotes = [
+                'ISL/QT/26-I/001678R5','ISL/QT/26-V/009328R1','ISL/QT/26-V/009463','ISL/QT/26-V/009358','ISL/QT/26-V/009324','ISL/QT/26-IV/005704R1','ISL/QT/26-IV/005684R1','ISL/QTC/26-I/000308R5','ISL/QT/26-III/004305R3','ISL/QT/26-V/009373R1','ISL/QT/26-V/008607R1','ISL/QTC/25-XII/002426R1','ISL/QTC/25-XII/002427R1','ISL/QTC/25-XII/002319R1','ISL/QTC/26-II/000408R2','ISL/QTC/26-V/000728R1','ISL/QT/26-V/010207R1','ISL/QTC/26-IV/000592R6','ISL/QT/26-V/010558R4'
+            ];
+            // $urgentQuotes=[];
             $orderDetail = OrderDetail::with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi,email_pic_order,email_pic_sampling',
                 'orderHeader.samplingPlan',
@@ -563,7 +563,7 @@ class AppsBasController extends Controller
             //         });
             //     });
             // }
-            // -------------------------------------------------------------------------
+            //------------------------------------------------------------------------
 
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
             
@@ -884,7 +884,10 @@ class AppsBasController extends Controller
             // filter tanggal sampling sesuai durasi jadwal
             $today = Carbon::today();
             $filtered = [];
-
+            // header('Access-Control-Allow-Origin: *');
+            // header('Access-Control-Allow-Methods: *');
+            // header('Access-Control-Allow-Headers: *');
+           
             foreach ($filteredResult as $item) {
                 // --- URGENT HARDCODE EXCEPTION: LOLOSKAN FILTER ARRAY ---
                 if (isset($item['nomor_quotation']) && in_array($item['nomor_quotation'], $urgentQuotes)) {
@@ -896,19 +899,21 @@ class AppsBasController extends Controller
                 $jadwal = Carbon::parse($item['jadwal']);
                 $durasi = (int) $item['durasi'];
 
-                if ($durasi <= 1) { // sesaat ato 8jam
-                    if ($jadwal->isSameDay($today))
-                        $filtered[] = $item;
-                } else {
-                    
-                    // if ($today->between($jadwal, $endDate))
-                        $filtered[] = $item;
-                }
+                // if ($durasi <= 1) { // sesaat ato 8jam
+                //     if ($jadwal->isSameDay($today))
+                //         $filtered[] = $item;
+                // } else {
+                //     // if ($today->between($jadwal, $endDate))
+                //         $filtered[] = $item;
+                // }
             }
             
             // Catatan: Jika di versi kode asli Anda variabel $filtered ini belum dipakai 
             // menimpa $filteredResult, saya tambahkan ini agar filter array berfungsi
-            $filteredResult = $filtered; 
+            if(!empty($filtered)){
+                $filteredResult = $filtered;
+            }
+            //  dd($filteredResult);
             
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::select(
