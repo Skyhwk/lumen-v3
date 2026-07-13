@@ -646,7 +646,7 @@ class AppsBasService
             $groupedData = [];
 
             foreach ($formattedData as $item) {
-                // Group TANPA field 'sampler'
+                // Group TANPA field 'sampler' dan 'kategori'
                 $key = implode('|', [
                     $item['nomor_quotation'],
                     $item['nama_perusahaan'],
@@ -657,7 +657,6 @@ class AppsBasService
                     $item['no_order'],
                     $item['alamat_sampling'],
                     $item['konsultan'],
-                    $item['kategori'],
                     $item['info_pendukung'],
                     $item['jadwal_jam_mulai'],
                     $item['jadwal_jam_selesai'],
@@ -694,6 +693,12 @@ class AppsBasService
                         ],
                         'samplers' => [],
                     ];
+                } else {
+                    // Gabungkan kategori jika berbeda
+                    $existingKategori = explode(',', $groupedData[$key]['base_data']['kategori']);
+                    $newKategori = explode(',', $item['kategori']);
+                    $mergedKategori = array_unique(array_filter(array_merge($existingKategori, $newKategori)));
+                    $groupedData[$key]['base_data']['kategori'] = implode(',', $mergedKategori);
                 }
 
                 // Hindari duplicate sampler
@@ -737,12 +742,7 @@ class AppsBasService
                     return $item->no_order . '_' . $item->tanggal_sampling;
                 });
 
-            // Ambil semua order yang memiliki persiapan (tanpa mempedulikan tanggal_sampling)
-            $ordersWithAnyPersiapan = PersiapanSampelHeader::whereIn('no_order', $orderNos)
-                ->where('is_active', true)
-                ->pluck('no_order')
-                ->unique()
-                ->toArray();
+            // Check persiapan by exact order and date match
 
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
@@ -864,7 +864,7 @@ class AppsBasService
                     $item['waktu_mulai'] = '';
                     $item['waktu_selesai'] = '';
                     $item['tanda_tangan_bas'] = [];
-                    $item['has_persiapan'] = in_array($item['no_order'], $ordersWithAnyPersiapan);
+                    $item['has_persiapan'] = false;
                 }
             }
             unset($item);
@@ -1088,7 +1088,7 @@ class AppsBasService
             // dd(json_decode($formattedData[0]['parameters'], true));
 
             foreach ($formattedData as $item) {
-                // Group TANPA field 'sampler'
+                // Group TANPA field 'sampler' dan 'kategori'
                 $key = implode('|', [
                     $item['nomor_quotation'],
                     $item['nama_perusahaan'],
@@ -1099,7 +1099,6 @@ class AppsBasService
                     $item['no_order'],
                     $item['alamat_sampling'],
                     $item['konsultan'],
-                    $item['kategori'],
                     $item['info_pendukung'],
                     $item['jadwal_jam_mulai'],
                     $item['jadwal_jam_selesai'],
@@ -1136,6 +1135,12 @@ class AppsBasService
                         ],
                         'samplers' => [],
                     ];
+                } else {
+                    // Gabungkan kategori jika berbeda
+                    $existingKategori = explode(',', $groupedData[$key]['base_data']['kategori']);
+                    $newKategori = explode(',', $item['kategori']);
+                    $mergedKategori = array_unique(array_filter(array_merge($existingKategori, $newKategori)));
+                    $groupedData[$key]['base_data']['kategori'] = implode(',', $mergedKategori);
                 }
 
                 // Hindari duplicate sampler
