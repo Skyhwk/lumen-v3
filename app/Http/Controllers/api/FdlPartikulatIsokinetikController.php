@@ -1511,7 +1511,12 @@ class FdlPartikulatIsokinetikController extends Controller
 
         $updateData = [
             'no_sampel' => $request->no_sampel_baru,
-            'no_sampel_lama' => $request->no_sampel_lama,
+            // Mengubah array PHP menjadi string JSON agar bisa disimpan di kolom TEXT
+            'no_sampel_lama' => json_encode([
+                'no_sampel_lama' => $request->no_sampel_lama,
+                'updated_by'     => $this->karyawan,
+                'updated_at'     => Carbon::now() // Pastikan dalam format string tanggal
+            ])
         ];
 
         try {
