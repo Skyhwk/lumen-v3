@@ -1712,7 +1712,6 @@ class RequestQuotationController extends Controller
             $data->status_wilayah = $payload->data_wilayah->status_wilayah;
             $data->wilayah = $payload->data_wilayah->wilayah;
             $data->transportasi = !in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR']) ? $payload->data_wilayah->transportasi : null;
-            $data->kalkulasi_by_sistem = $payload->data_wilayah->kalkulasi_by_sistem ?? 'off';
 
             $harga_transport = 0;
             $jam = 0;
@@ -2496,7 +2495,7 @@ class RequestQuotationController extends Controller
                     $detailGrouped[$key] = (object)[
                         'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
-                        'penamaan_titik'  => isset($sampling->penamaan_titik) ? $sampling->penamaan_titik : [],
+                        'penamaan_titik'  => [], // default kosong
                         'parameter'       => $sampling->parameter,
                         'jumlah_titik'    => (int) $sampling->jumlah_titik,
                         'total_parameter' => $sampling->total_parameter,
@@ -6247,8 +6246,7 @@ class RequestQuotationController extends Controller
         }
 
         if($order_id && $order_id != '') {
-            // $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
-            $dataDetail = OrderDetail::where('id_order_header', $order_id)->get()->toArray();
+            $dataDetail = OrderDetail::where('id_order_header', $order_id)->where('is_active', true)->whereNotNull('tanggal_terima')->select('no_sampel')->get()->toArray();
             foreach($dataDetail as $key => $value) {
                 $orderDetail[] = \explode('/', $value['no_sampel'])[1];
             }
@@ -6261,50 +6259,27 @@ class RequestQuotationController extends Controller
     }
 
     public function getSampledData(Request $request){
-        $baseDoc = preg_replace('/R\d+$/i', '', $request->no_document);
-        $quotation = \DB::table('request_quotation')
-            ->where('no_document', 'like', $baseDoc . '%')
-            ->first();
-        
-        $header = null;
-        if ($quotation) {
-            $header = OrderHeader::where('no_quotation', $quotation->no_quotation)
-                ->where('is_active', true)
-                ->first();
+        $header = OrderHeader::where('no_document', $request->no_document)->first();
+        if(!$header){
+            return response()->json([
+                'message' => 'Header data not found',
+                'data' => 0,
+                'is_found' => false
+            ], 404);
         }
 
-        if (!$header) {
-            $header = OrderHeader::where('no_document', 'like', $baseDoc . '%')
-                ->where('is_active', true)
-                ->first();
-        }
+        $data = OrderDetail::where('id_order_header', $header->id)->get();
+        $data_sampled = $data->filter(function ($item) {
+            return $item->tanggal_terima !== null;
+        })->toArray();
 
-        $data_return = [];
-        $nomorTitikTerbesar = 0;
+        $data_return = array_map(function ($item) {
+            return explode('/',$item['no_sampel'])[1];
+        }, $data_sampled);
 
-        if ($header) {
-            $data_sampled = OrderDetail::where('id_order_header', $header->id)->get()->toArray();
-
-            $data_return = array_map(function ($item) {
-                return explode('/',$item['no_sampel'])[1];
-            }, $data_sampled);
-
-            $orderDetails = \DB::table('order_detail')->where('no_order', $header->no_order)->get();
-            foreach ($orderDetails as $od) {
-                $parts = explode('/', $od->no_sampel);
-                if (isset($parts[1])) {
-                    $num = (int)$parts[1];
-                    if ($num > $nomorTitikTerbesar) {
-                        $nomorTitikTerbesar = $num;
-                    }
-                }
-            }
-        }
- 
         return response()->json([
             'message' => 'Success',
-            'data' => $data_return,
-            'nomor_titik_terbesar' => $nomorTitikTerbesar
+            'data' => $data_return
         ], 200);
     }
 
