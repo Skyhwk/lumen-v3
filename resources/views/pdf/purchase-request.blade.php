@@ -84,7 +84,7 @@
             border: 1px solid #333;
         }
 
-        .signature-table > tbody > tr > td {
+        .signature-table>tbody>tr>td {
             border: 1px solid #333;
             padding: 0;
             vertical-align: top;
@@ -144,7 +144,7 @@
 
     <table>
         <tr>
-            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+            <td style="width: 50%; vertical-align: bottom; padding-right: 10px;">
                 <table class="layout-table">
                     <tr>
                         <td class="label">Nama Karyawan</td>
@@ -173,9 +173,23 @@
                 </table>
             </td>
 
-            <td style="width: 50%; vertical-align: top; padding-left: 10px;">
-                @if ($purchaseRequest->processed_at)
-                    <table class="layout-table">
+            <td style="width: 55%; vertical-align: bottom; padding-left: 10px;">
+                <table class="layout-table">
+                    <tr>
+                        <td class="label">Tanggal Diajukan</td>
+                        <td class="value">:
+                            {{ date('d M Y', strtotime($purchaseRequest->created_at)) }}
+                        </td>
+                    </tr>
+                    @if ($purchaseRequest->tanggal_kedatangan)
+                        <tr>
+                            <td class="label">Tanggal Kedatangan</td>
+                            <td class="value">:
+                                {{ date('d M Y', strtotime($purchaseRequest->tanggal_kedatangan)) }}
+                            </td>
+                        </tr>
+                    @endif
+                    @if ($purchaseRequest->processed_at)
                         <tr>
                             <td class="label">Diproses oleh</td>
                             <td class="value">: {{ $purchaseRequest->processed_by }}</td>
@@ -208,8 +222,8 @@
                                 </td>
                             </tr>
                         @endif
-                    </table>
-                @endif
+                    @endif
+                </table>
             </td>
         </tr>
     </table>
@@ -271,7 +285,8 @@
                         @if (!empty($attachments))
                             @foreach ($attachments as $attachment)
                                 @if (file_exists(public_path('purchase-requests/' . $attachment)))
-                                    <img src="{{ public_path('purchase-requests/' . $attachment) }}" class="img-preview" alt="Lampiran" style="margin-right: 4px;">
+                                    <img src="{{ public_path('purchase-requests/' . $attachment) }}" class="img-preview" alt="Lampiran"
+                                        style="margin-right: 4px;">
                                 @endif
                             @endforeach
                         @else
