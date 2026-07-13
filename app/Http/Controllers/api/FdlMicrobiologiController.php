@@ -286,7 +286,7 @@ class FdlMicrobiologiController extends Controller
                         ]
                     );
 
-                WsValueMicrobio::where('no_sampel', $request->no_sampel_lama)
+                WsValueUdara::where('no_sampel', $request->no_sampel_lama)
                     ->update(
                         [
                             'no_sampel' => $request->no_sampel_baru,
@@ -301,16 +301,16 @@ class FdlMicrobiologiController extends Controller
                 $data->save();
 
                 // update OrderDetail
-                    $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                        ->first();
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
 
-                    if ($order_detail_lama) {
-                        OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                            ->where('is_active', 1)
-                            ->update([
-                                'tanggal_terima' => $order_detail_lama->tanggal_terima
-                            ]);
-                    }
+                if ($order_detail_lama) {
+                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
+                        ->where('is_active', 1)
+                        ->update([
+                            'tanggal_terima' => $order_detail_lama->tanggal_terima
+                        ]);
+                }
 
                 DB::commit();
                 return response()->json([

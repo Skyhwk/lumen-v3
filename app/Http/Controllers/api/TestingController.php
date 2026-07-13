@@ -2570,21 +2570,7 @@ class TestingController extends Controller
                                     continue;
                                 }
 
-                                if ($noSampel == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
-                                    $detail['bypassed'] = true;
-                                    $detail['bypass_reason'] = "Hardcode bypass untuk ITEM012501/015 + {$paramName}";
-                                    $detail['final_status'] = 'BYPASS';
-                                    $parameterDetails[] = $detail;
-                                    continue;
-                                }
-
-                                if (in_array($noSampel, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
-                                    $detail['bypassed'] = true;
-                                    $detail['bypass_reason'] = "Hardcode bypass untuk no_sampel {$noSampel}";
-                                    $detail['final_status'] = 'BYPASS';
-                                    $parameterDetails[] = $detail;
-                                    continue;
-                                }
+                                
 
                                 // --- ICP BYPASS (sama persis) ---
                                 if (in_array($paramName, $icpParameters)) {
@@ -2603,6 +2589,17 @@ class TestingController extends Controller
                                 $model2 = $parameter['model2'] ?? null;
                                 $model3 = $parameter['model3'] ?? null;
                                 $requiredCount = (int) ($parameter['requiredCount'] ?? 1);
+
+                                // --- HARDCODE KHUSUS LINGKUNGAN KERJA & PARTIKULAT METER ---
+                                $isLingkunganKerja = false;
+                                if (isset($sample) && isset($sample->kategori_3) && stripos($sample->kategori_3, 'Lingkungan Kerja') !== false) {
+                                    $isLingkunganKerja = true;
+                                }
+
+                                if ($isLingkunganKerja && in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                                    $requiredCount = 4;
+                                    $detail['verify_detail'][] = "Hardcode requiredCount = 4 khusus untuk sampel dengan kategori Lingkungan Kerja";
+                                }
 
                                 if (empty($model)) {
                                     $detail['verify_path'] = 'EMPTY_MODEL';

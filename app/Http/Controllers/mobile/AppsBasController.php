@@ -502,13 +502,17 @@ class AppsBasController extends Controller
     public function index(Request $request)
     {
         // Set limit memory lebih besar secara sementara untuk proses data besar
+        
         ini_set('memory_limit', '512M');
         try {
             // \Illuminate\Support\Facades\Log::info("AppsBasController::index START - User: {$this->karyawan} - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
             // Filter data untuk hanya mendapatkan data yang memiliki 'sampler' sesuai dengan $this->karyawan
             $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)->whereIn('id_jabatan', [41, 42])->exists();
-
+            $urgentQuotes = [
+                'ISL/QT/26-I/001678R5','ISL/QT/26-V/009328R1','ISL/QT/26-V/009463','ISL/QT/26-V/009358','ISL/QT/26-V/009324','ISL/QT/26-IV/005704R1','ISL/QT/26-IV/005684R1','ISL/QTC/26-I/000308R5','ISL/QT/26-III/004305R3','ISL/QT/26-V/009373R1','ISL/QT/26-V/008607R1','ISL/QTC/25-XII/002426R1','ISL/QTC/25-XII/002427R1','ISL/QTC/25-XII/002319R1','ISL/QTC/26-II/000408R2','ISL/QTC/26-V/000728R1','ISL/QT/26-V/010207R1','ISL/QTC/26-IV/000592R6','ISL/QT/26-V/010558R4'
+            ];
+            // $urgentQuotes=[];
             $orderDetail = OrderDetail::with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi,email_pic_order,email_pic_sampling',
                 'orderHeader.samplingPlan',
@@ -520,39 +524,51 @@ class AppsBasController extends Controller
                         })
                         ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai']);
                 },
-                'orderHeader.docCodeSampling' => function ($q) {
-                    $q->where('menu', 'STPS');
-                }
             ])
                 ->select(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1'])
+                
                 ->where('is_active', true)
                 ->where('kategori_1', '!=', 'SD');
             
             // --- URGENT HARDCODE EXCEPTION: BYPASS TANGGAL UNTUK QUOTATION TERTENTU ---
+            // Kembalikan query database ke awal
             if ($isProgrammer) {
-                $orderDetail->where(function($query) {
-                    $query->whereBetween('tanggal_sampling', [
-                        Carbon::now()->subDays(8)->toDateString(),
-                        Carbon::now()->toDateString()
-                    ])->orWhereHas('orderHeader', function($q) {
-                        $q->where('no_document', 'ISL/QT/26-VI/011494R7');
-                    });
-                });
+                $orderDetail->whereBetween('tanggal_sampling', [
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
+                ]);
             } else {
-                $orderDetail->where(function($query) {
-                    $query->whereBetween('tanggal_sampling', [
-                        Carbon::now()->subDays(8)->toDateString(),
-                        Carbon::now()->toDateString()
-                    ])->orWhereHas('orderHeader', function($q) {
-                        $q->where('no_document', 'ISL/QT/26-VI/011494R7');
-                    });
-                });
+                $orderDetail->whereBetween('tanggal_sampling', [
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
+                ]);
             }
-            // -------------------------------------------------------------------------
+            // if ($isProgrammer) {
+            //     $orderDetail->where(function($query) use ($urgentQuotes) {
+            //         $query->whereBetween('tanggal_sampling', [
+            //             Carbon::now()->subDays(8)->toDateString(),
+            //             Carbon::now()->toDateString()
+            //         ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
+            //             $q->whereIn('no_document', $urgentQuotes);
+            //         });
+            //     });
+            // } else {
+            //     $orderDetail->where(function($query) use ($urgentQuotes) {
+            //         $query->whereBetween('tanggal_sampling', [
+            //             Carbon::now()->subDays(8)->toDateString(),
+            //             Carbon::now()->toDateString()
+            //         ])->orWhereHas('orderHeader', function($q) use ($urgentQuotes) {
+            //             $q->whereIn('no_document', $urgentQuotes);
+            //         });
+            //     });
+            // }
+            //------------------------------------------------------------------------
 
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
+            
 
             $orderDetail = $orderDetail->get()->toArray();
+            
 
             // \Illuminate\Support\Facades\Log::info("AppsBasController::index After Query - Count: " . count($orderDetail) . " - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
@@ -613,6 +629,8 @@ class AppsBasController extends Controller
 
                 return array_merge($carry, $results);
             }, []);
+
+            
 
             unset($orderDetail); // Free up memory
 
@@ -675,8 +693,10 @@ class AppsBasController extends Controller
                 }
             }
 
-            unset($formattedData); // Free up memory
+           
+           
 
+            unset($formattedData); // Free up memory
             // Buat final result: 1 data per sampler
             $finalResult = [];
 
@@ -689,6 +709,8 @@ class AppsBasController extends Controller
             }
 
             $finalResult = array_values($finalResult);
+
+             
             unset($groupedData);
 
             // Ambil semua no_order dari hasil akhir
@@ -840,6 +862,7 @@ class AppsBasController extends Controller
 
             // Reindex array setelah filter jika diperlukan
             $filteredResult = array_values($filteredResult);
+            
             unset($finalResult);
 
             if (count($filteredResult) === 0) {
@@ -851,32 +874,37 @@ class AppsBasController extends Controller
             // filter tanggal sampling sesuai durasi jadwal
             $today = Carbon::today();
             $filtered = [];
-
+            // header('Access-Control-Allow-Origin: *');
+            // header('Access-Control-Allow-Methods: *');
+            // header('Access-Control-Allow-Headers: *');
+           
             foreach ($filteredResult as $item) {
                 // --- URGENT HARDCODE EXCEPTION: LOLOSKAN FILTER ARRAY ---
-                if (isset($item['nomor_quotation']) && $item['nomor_quotation'] === 'ISL/QT/26-VI/011494R7') {
+                if (isset($item['nomor_quotation']) && in_array($item['nomor_quotation'], $urgentQuotes)) {
                     $filtered[] = $item;
                     continue;
                 }
                 // --------------------------------------------------------
-
+                
                 $jadwal = Carbon::parse($item['jadwal']);
                 $durasi = (int) $item['durasi'];
 
-                if ($durasi <= 1) { // sesaat ato 8jam
-                    if ($jadwal->isSameDay($today))
-                        $filtered[] = $item;
-                } else {
-                    $endDate = $jadwal->copy()->addDays($durasi - 1);
-                    if ($today->between($jadwal, $endDate))
-                        $filtered[] = $item;
-                }
+                // if ($durasi <= 1) { // sesaat ato 8jam
+                //     if ($jadwal->isSameDay($today))
+                //         $filtered[] = $item;
+                // } else {
+                //     // if ($today->between($jadwal, $endDate))
+                //         $filtered[] = $item;
+                // }
             }
             
             // Catatan: Jika di versi kode asli Anda variabel $filtered ini belum dipakai 
             // menimpa $filteredResult, saya tambahkan ini agar filter array berfungsi
-            $filteredResult = $filtered; 
-
+            if(!empty($filtered)){
+                $filteredResult = $filtered;
+            }
+            //  dd($filteredResult);
+            
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::where('no_order', $request->no_order)
                     ->where('is_active', true)
@@ -2897,7 +2925,8 @@ class AppsBasController extends Controller
         }
 
     }
-
+    
+    /*
     private function getStatusSampling($sample)
     {
         try {
@@ -3003,6 +3032,112 @@ class AppsBasController extends Controller
         } catch (\Exception $th) {
             throw new Exception($th->getMessage());
         }
+    }*/
+    
+    private function getStatusSampling($sample)
+    {
+        try {
+            $parametersRaw = json_decode($sample->parameter);
+            
+            // 1. Panggil data Template ICP di luar loop (sekali saja agar query ringan)
+            // Pastikan Anda sudah meng-import: use App\Models\TemplateStp; di atas class
+            $templateIcp = TemplateStp::where('name', 'icp')
+                ->where('category_id', 4)
+                ->first();
+                
+            $icpParameters = [];
+            if ($templateIcp && $templateIcp->param) {
+                // Decode array JSON seperti $a yang Anda berikan tadi
+                $icpParameters = json_decode($templateIcp->param, true) ?? [];
+            }
+            
+            // Panggil sekali di luar loop, bukan di dalam array_reduce
+            $requiredParameters = collect($this->getRequiredParameters())
+                ->where('category', $sample->kategori_2);
+
+            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample, $requiredParameters) {
+                $parameterName = explode(";", $item)[1] ?? null;
+
+                if (!$parameterName) {
+                    return $carry;
+                }
+
+                $matchedParameter = $requiredParameters
+                    ->where('parameter', $parameterName)
+                    ->first();
+
+                if ($matchedParameter == null) {
+                    throw new Exception("Kemungkinan Parameter.{$parameterName}. Belum Terdaftar di RequiredParameters Hub IT");
+                }
+                $carry[] = $matchedParameter;
+                return $carry;
+            }, []);
+
+            $parameters = array_filter($parameters, function ($param) {
+                if ($param == null) {
+                    return false;
+                }
+                if ($param['category'] == '6-Padatan') {
+                    return is_array($param);
+                }
+                return is_array($param) && isset($param['model']);
+            });
+
+            $status = 'selesai';
+            if (!empty($parameters)) {
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
+                
+                foreach ($parameters as $parameter) {
+                    $paramName = $parameter['parameter']; // Ambil nama parameter untuk mempermudah pengecekan
+
+                    if ($parameter['category'] == '6-Padatan') {
+                        continue;
+                    }
+                    
+                    if (in_array($paramName, $parameterBypass)) {
+                        continue;
+                    }
+
+                    if ($sample->no_sample == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                        continue;
+                    }
+
+                    if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                        continue;
+                    }
+
+                    // --- LOGIKA BYPASS ICP TEMPLATE ---
+                    // Cek apakah parameter saat ini ada di dalam list JSON Template ICP
+                    if (in_array($paramName, $icpParameters)) {
+                        
+                        // Validasi Regex: Cari kata "jam" atau angka bergandengan huruf "j" (seperti 8j, 24j)
+                        // /i = case-insensitive (Jam, jam, 8J, 8j akan terdeteksi)
+                        if (!preg_match('/(jam|\d+j)/i', $paramName)) {
+                            
+                            // Jika TIDAK MENGANDUNG "jam" atau "8j", maka BYPASS (dianggap selesai).
+                            continue; 
+                        }
+                        
+                        // Jika MENGANDUNG "jam" atau "8j" (misal: "Pb 8J (IKM-ICP-LK)"), 
+                        // kode akan mengabaikan blok if ini dan tetap lanjut diperiksa di bawah oleh verifyStatus.
+                    }
+                    // ----------------------------------
+
+                    $verified = $this->verifyStatus($sample->no_sample, $parameter);
+
+                    if (!$verified) {
+                        $status = 'belum selesai';
+                        break;
+                    }
+                }
+            } else {
+                $status = 'belum selesai';
+            }
+            
+            return $status;
+        } catch (\Exception $th) {
+            throw new Exception($th->getMessage());
+        }
     }
 
     private function verifyStatus($sample_number, $parameter)
@@ -3012,15 +3147,25 @@ class AppsBasController extends Controller
                 return true;
             }
 
-            $model = $parameter['model'];
+        $model = $parameter['model'];
         $model2 = isset($parameter['model2']) ? $parameter['model2'] : null;
         $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
+
+        // --- HARDCODE KHUSUS LINGKUNGAN KERJA & PARTIKULAT METER ---
+        if (in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+            $sampleData = \App\Models\OrderDetail::where('no_sampel', $sample_number)->first();
+            if ($sampleData && stripos($sampleData->kategori_3, 'Lingkungan Kerja') !== false) {
+                $parameter['requiredCount'] = 4; // Timpa langsung di array
+            }
+        }
+
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
 
         $environmentModels = [
             DetailLingkunganHidup::class,
             DetailLingkunganKerja::class,
+            DetailMicrobiologi::class,
         ];
 
         if (in_array($model, $environmentModels, true)) {
