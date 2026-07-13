@@ -144,7 +144,7 @@
 
     <table>
         <tr>
-            <td style="width: 50%; vertical-align: bottom; padding-right: 10px;">
+            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
                 <table class="layout-table">
                     <tr>
                         <td class="label">Nama Karyawan</td>
