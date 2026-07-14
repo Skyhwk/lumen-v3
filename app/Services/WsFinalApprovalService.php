@@ -102,7 +102,13 @@ class WsFinalApprovalService
         }
 
         // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
-        if ($orderDetail->kategori_3 && (
+        // Perkecualian khusus untuk parameter Ergonomi agar tetap diproses
+        $isErgonomi = $orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
+            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi')
+        );
+
+        if (!$isErgonomi && $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
             str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
@@ -186,7 +192,13 @@ class WsFinalApprovalService
     public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
     {
         // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
-        if ($orderDetail->kategori_3 && (
+        // Perkecualian khusus untuk parameter Ergonomi agar tetap diproses
+        $isErgonomi = $orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
+            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi')
+        );
+
+        if (!$isErgonomi && $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
             str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
@@ -833,16 +845,67 @@ class WsFinalApprovalService
     public static function appendProgressAndFilter(iterable $rows, $request)
     {
         $rows = collect($rows)->values();
-        $samples = $rows
-            ->flatMap(function ($row) {
-                return self::sampleNamesFromRow($row);
-            })
-            ->filter()
-            ->unique()
-            ->values();
-        $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
-            ->where('is_active', true)
-            ->get();
+
+        if ($rows->isNotEmpty()) {
+            $firstRow = $rows->first();
+            $kategori2 = isset($firstRow->kategori_2) ? strtolower($firstRow->kategori_2) : '';
+            $kategori3 = isset($firstRow->kategori_3) ? strtolower($firstRow->kategori_3) : '';
+            
+            // Bypass subkategori yang dilarang diotak-atik karena sudah produksi
+            $isBypassedSubcategory = str_contains($kategori3, 'lingkungan kerja') || 
+                                     str_contains($kategori3, 'lingkungan hidup') || 
+                                     str_contains($kategori3, 'ambient') || 
+                                     str_contains($kategori3, 'tidak bergerak') ||
+                                     str_contains($kategori3, 'isokinetik');
+
+            // Cek apakah ini kategori Udara atau Emisi yang di-group per CFR/LHP dan bukan subkategori bypass
+            $isGroupedByCfr = (str_contains($kategori2, 'udara') || str_contains($kategori2, 'emisi')) && !$isBypassedSubcategory;
+
+            if ($isGroupedByCfr) {
+                // Ambil semua cfr unik dari rows
+                $cfrs = $rows->pluck('cfr')->filter()->unique()->values();
+
+                // Tarik semua order_detail untuk cfr tersebut yang is_active = 1 dan status = 0
+                // (tanpa memedulikan tanggal_terima null atau tidak)
+                $allOrderDetails = OrderDetail::whereIn('cfr', $cfrs)
+                    ->where('is_active', true)
+                    ->where('status', 0)
+                    ->get();
+
+                // Kelompokkan order_detail berdasarkan cfr
+                $orderDetailsByCfr = $allOrderDetails->groupBy('cfr');
+
+                // Update no_sampel di setiap row agar mencakup seluruh sampel untuk cfr tersebut
+                $rows->each(function ($row) use ($orderDetailsByCfr) {
+                    $cfr = $row->cfr;
+                    if ($cfr && isset($orderDetailsByCfr[$cfr])) {
+                        $cfrDetails = $orderDetailsByCfr[$cfr];
+                        $row->no_sampel = $cfrDetails->pluck('no_sampel')->unique()->implode(', ');
+                        
+                        // Update tanggal_sampling dan tanggal_terima agar mencakup seluruh sampel CFR
+                        $row->tanggal_sampling = $cfrDetails->pluck('tanggal_sampling')->filter()->unique()->implode(', ');
+                        $row->tanggal_terima = $cfrDetails->pluck('tanggal_terima')->filter()->unique()->implode(', ');
+                    }
+                });
+
+                // Gunakan allOrderDetails untuk menghitung progressBySample
+                $orderDetails = $allOrderDetails;
+            } else {
+                // Default logic untuk kategori lain (seperti Air, Padatan, dan subkategori bypass)
+                $samples = $rows
+                    ->flatMap(function ($row) {
+                        return self::sampleNamesFromRow($row);
+                    })
+                    ->filter()
+                    ->unique()
+                    ->values();
+                $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
+                    ->where('is_active', true)
+                    ->get();
+            }
+        } else {
+            $orderDetails = collect();
+        }
 
         $progressBySample = self::progressBySample($orderDetails);
 
@@ -1188,6 +1251,11 @@ class WsFinalApprovalService
 
     private static function extractResult(Model $source): ?string
     {
+        $parameter = $source->getAttribute('parameter');
+        if ($parameter && strtolower(trim($parameter)) === 'ergonomi') {
+            return 'sudah dilakukan analisa';
+        }
+
         foreach (['hasil', 'hasil1', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
             $value = $source->getAttribute($field);
             if ($value !== null && $value !== '') {
@@ -1209,7 +1277,14 @@ class WsFinalApprovalService
                 continue;
             }
 
-            foreach (['hasil', 'hasil1', 'nilai', 'C', 'C1', 'C2'] as $field) {
+            $fields = ['hasil', 'hasil1', 'nilai', 'C', 'C1', 'C2'];
+            if ($source->getTable() === 'microbio_header') {
+                for ($i = 2; $i <= 23; $i++) {
+                    $fields[] = "hasil{$i}";
+                }
+            }
+
+            foreach ($fields as $field) {
                 $result = $value->getAttribute($field);
                 if ($result !== null && $result !== '') {
                     return self::stringValue($result);

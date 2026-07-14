@@ -65,6 +65,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
         $data = OrderDetail::select(
 
             DB::raw("MAX(id) as max_id"),
+            DB::raw("MAX(parameter) as parameter"),
 
             DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
 
@@ -980,11 +981,18 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 
                 $data               = OrderDetail::where('id', $request->id)->first();
 
+                // Set lhps = 1 untuk microbio_header dan subkontrak yang berasosiasi
+                MicrobioHeader::where('no_sampel', $data->no_sampel)->update(['lhps' => 1]);
+                Subkontrak::where('no_sampel', $data->no_sampel)->update(['lhps' => 1]);
+
                 $data->status       = 1;
 
                 $data->keterangan_1 = $request->keterangan_1;
 
                 $data->save();
+
+                // Panggil manual finalizeSample agar 100% tersinkronkan
+                \App\Services\WsFinalApprovalService::finalizeSample($data, true, $this->karyawan);
 
 
 
