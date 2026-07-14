@@ -123,7 +123,7 @@ class FdlKebisinganController extends Controller
                 ], 401);
             }
 
-            if($request->kategori_kebisingan == 'Lingkungan Kerja' && $request->jam_pemaparan == null || $request->jam_pemaparan == "" || empty($request->jam_pemaparan) ){
+            if($request->kategori_kebisingan == 'Lingkungan Kerja' && ($request->jam_pemaparan == null || $request->jam_pemaparan == "" || empty($request->jam_pemaparan)) ){
                 return response()->json([
                     'message' => 'Jam Pemaparan Wajib Diisi !'
                 ], 401);
