@@ -171,22 +171,13 @@ class DraftSwabTesController extends Controller
                 ->where('status', 2)
                 ->pluck('no_sampel');
 
-            // Ambil data KebisinganHeader + relasinya
-            $swabData = SwabTestHeader::with('ws_udara')
+            $swabData = MicrobioHeader::with('ws_udara')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approved', 1)
                 ->where('is_active', 1)
                 ->where('lhps', 1)
                 ->get();
 
-            if ($swabData->isEmpty()) {
-                $swabData = MicrobioHeader::with('ws_udara')
-                    ->whereIn('no_sampel', $orders)
-                    ->where('is_approved', 1)
-                    ->where('is_active', 1)
-                    ->where('lhps', 1)
-                    ->get();
-            }
             $swabData2 = Subkontrak::with('ws_udara', 'ws_value_linkungan')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approve', 1)
@@ -211,7 +202,6 @@ class DraftSwabTesController extends Controller
             $mappedData = [];
 
             // LOOP SETIAP REGULASI
-            
             foreach ($regulasiList as $full_regulasi) {
                 // contoh: "143-Peraturan Menteri Kesehatan Nomor 7 Tahun 2019"
                 $id_regulasi   = null;
@@ -223,7 +213,6 @@ class DraftSwabTesController extends Controller
                     $id_regulasi    = $parts_regulasi[0] ?? null;
                     $nama_regulasi  = $parts_regulasi[1] ?? null;
                 }
-
                 // mapping setiap swabData terhadap regulasi ini
                 $tmpData = $merge->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
                     $keterangan        = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
@@ -294,7 +283,6 @@ class DraftSwabTesController extends Controller
                             : 'ẍ',
                     ];
                 })->toArray();
-
                 $mappedData[] = [
                     "id_regulasi"   => $id_regulasi,
                     "nama_regulasi" => $nama_regulasi,
