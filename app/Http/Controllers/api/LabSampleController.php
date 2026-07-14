@@ -36,7 +36,7 @@ class LabSampleController extends Controller
     public function store(Request $request){
         try {
             $data = Ftc::where('no_sample', $request->no_sample)->first();
-            if($data->ftc_sd != null) {
+            if($data->ftc_sd != null || $data->ftc_laboratory != null) {
                 return response()->json(['message' => 'Nomor sampel sudah pernah di scan'], 401);
             }
             $data->ftc_laboratory = Carbon::now()->format('Y-m-d H:i:s');

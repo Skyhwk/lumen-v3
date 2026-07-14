@@ -82,8 +82,9 @@ class VerifikasiLabISLController extends Controller
         try {
             $data = Ftc::where('no_sample', $request->no_sampel)->first();
 
-            if ($data->ftc_laboratory)
+            if ($data->ftc_laboratory){
                 return response()->json(['message' => 'Nomor sampel sudah pernah di scan'], 401);
+            }
 
             $data->ftc_laboratory = Carbon::now()->format('Y-m-d H:i:s');
             $data->user_laboratory = $this->user_id;
