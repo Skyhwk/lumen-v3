@@ -916,6 +916,7 @@ class WsFinalAirController extends Controller
 	public function validasiApproveWSApi(Request $request)
 	{
 		$result = \App\Services\WsFinalApprovalService::validateAndApprove($request->all(), $this->karyawan);
+		$result = \App\Services\WsFinalApprovalService::validateAndApprove($request->all(), $this->karyawan);
 
 		if ($result['success'] && $request->data_limbah) {
 			try {

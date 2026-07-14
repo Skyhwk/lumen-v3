@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SyncsWsFinalApproval;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class DirectLainHeader extends Sector
 {
+    use SyncsWsFinalApproval;
 
     protected $table = 'directlain_header';
     public $timestamps = false;

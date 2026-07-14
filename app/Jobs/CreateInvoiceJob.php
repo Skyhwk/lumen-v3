@@ -161,7 +161,9 @@ class CreateInvoiceJob extends Job
     }
 
     private function generateNoInvoice($cekRekening, $rekening, Carbon $invoiceDate)
+    private function generateNoInvoice($cekRekening, $rekening, Carbon $invoiceDate)
     {
+        $invoiceYear = $invoiceDate->format('Y');
         $invoiceYear = $invoiceDate->format('Y');
         $shortYear = substr($invoiceYear, -2);
 
@@ -181,6 +183,7 @@ class CreateInvoiceJob extends Job
         return "ISL/{$prefix}/{$shortYear}{$no}";
     }
 
+    private function buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, Carbon $invoiceDate, $first, $firstPeriode)
     private function buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, Carbon $invoiceDate, $first, $firstPeriode)
     {
         $source = $detail ?: $quotation;
@@ -232,6 +235,7 @@ class CreateInvoiceJob extends Job
             'keterangan_tambahan' => null,
             'tgl_faktur' => date('Y-m-d H:i:s'),
             'tgl_invoice' => $invoiceDate->format('Y-m-d H:i:s'),
+            'tgl_invoice' => $invoiceDate->format('Y-m-d H:i:s'),
             'nilai_tagihan' => $nilaiTagihan,
             'total_tagihan' => $totalTagihan,
             'rekening' => $cekRekening,
@@ -252,6 +256,20 @@ class CreateInvoiceJob extends Job
             'is_generate' => 0,
             'expired' => $expired,
         ];
+    }
+
+    private function getInvoiceDate($periode)
+    {
+        $today = Carbon::now();
+
+        if ($periode === null) {
+            return $today;
+        }
+
+        $invoiceDate = Carbon::createFromFormat('!Y-m-d', $periode . '-01');
+        $invoiceDate->day(min($today->day, $invoiceDate->daysInMonth));
+
+        return $invoiceDate->setTimeFrom($today);
     }
 
     private function getInvoiceDate($periode)

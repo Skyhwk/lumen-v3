@@ -70,9 +70,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
 
         $data = $data->get();
-		$data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
+        $data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
 
-		return Datatables::of($data)->make(true);
+        return Datatables::of($data)->make(true);
 
     }
 
