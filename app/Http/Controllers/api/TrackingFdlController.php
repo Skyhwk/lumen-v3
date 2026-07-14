@@ -29,11 +29,8 @@ class TrackingFdlController extends Controller
 
         
         foreach ($data as $orderDetail) {
-            // dd($orderDetail->getAnyDataLapanganRelations());
             $namaSampler = null;
             $waktuSubmitFdl = [];
-
-            $relations = [];
 
             foreach ($orderDetail->getAnyDataLapanganRelations() as $relation) {
                 if (!$orderDetail->relationLoaded($relation) || !$orderDetail->{$relation}) {
@@ -41,8 +38,6 @@ class TrackingFdlController extends Controller
                 }
 
                 $relasi = $orderDetail->{$relation};
-
-               $relations[$relation] = $relasi;
                 $items = $relasi instanceof \Illuminate\Database\Eloquent\Collection
                     ? $relasi
                     : collect([$relasi]);
@@ -60,14 +55,6 @@ class TrackingFdlController extends Controller
                     }
                 }
             }
-
-            // if($orderDetail->no_sampel == 'OAAT012502/023') {
-            //     dd($relations);
-            // }
-
-            // dd($orderDetail, $relations);
-
-            // dd($orderDetail->getAnyDataLapanganRelations());
 
             if (empty($namaSampler) && empty($waktuSubmitFdl)) {
                 continue;
