@@ -29,7 +29,7 @@ class TrackingFdlController extends Controller
 
         foreach ($data as $orderDetail) {
             $namaSampler = null;
-            $waktuSubmitFdl = null;
+            $waktuSubmitFdl = [];
 
             foreach ($orderDetail->getAnyDataLapanganRelations() as $relation) {
                 if (!$orderDetail->relationLoaded($relation) || !$orderDetail->{$relation}) {
@@ -53,7 +53,7 @@ class TrackingFdlController extends Controller
                 }
             }
 
-            if ($namaSampler === null && $waktuSubmitFdl === null) {
+            if (empty($namaSampler) && empty($waktuSubmitFdl)) {
                 continue;
             }
 
