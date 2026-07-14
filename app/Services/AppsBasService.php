@@ -118,7 +118,7 @@ class AppsBasService
     //                 Carbon::now()->subDays(8)->toDateString(),
     //                 Carbon::now()->toDateString()
     //             ]);
-                
+
     //         }
     //         $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
 
@@ -443,7 +443,7 @@ class AppsBasService
 
     //                 // OPTIMASI: Eager Load queries in loop DataLapanganAir and SampelTidakSelesai
     //                 $noSampelList = $orderD->pluck('no_sampel')->unique()->toArray();
-                    
+
     //                 $dataAirExists = DataLapanganAir::whereIn('no_sampel', $noSampelList)->pluck('no_sampel')->toArray();
     //                 $sampelTidakSelesaiList = SampelTidakSelesai::whereIn('no_sampel', $noSampelList)->pluck('no_sampel')->toArray();
 
@@ -511,7 +511,7 @@ class AppsBasService
     public function index(Request $request)
     {
         // Set limit memory lebih besar secara sementara untuk proses data besar
-        
+
         ini_set('memory_limit', '512M');
         try {
             // \Illuminate\Support\Facades\Log::info("AppsBasController::index START - User: {$this->karyawan} - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
@@ -521,7 +521,7 @@ class AppsBasService
             // $urgentQuotes = [
             //     'ISL/QT/26-I/001678R5','ISL/QT/26-V/009328R1','ISL/QT/26-V/009463','ISL/QT/26-V/009358','ISL/QT/26-V/009324','ISL/QT/26-IV/005704R1','ISL/QT/26-IV/005684R1','ISL/QTC/26-I/000308R5','ISL/QT/26-III/004305R3','ISL/QT/26-V/009373R1','ISL/QT/26-V/008607R1','ISL/QTC/25-XII/002426R1','ISL/QTC/25-XII/002427R1','ISL/QTC/25-XII/002319R1','ISL/QTC/26-II/000408R2','ISL/QTC/26-V/000728R1','ISL/QT/26-V/010207R1','ISL/QTC/26-IV/000592R6','ISL/QT/26-V/010558R4'
             // ];
-            $urgentQuotes=[];
+            $urgentQuotes = [];
             $orderDetail = OrderDetail::with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi,email_pic_order,email_pic_sampling',
                 'orderHeader.samplingPlan',
@@ -535,10 +535,10 @@ class AppsBasService
                 },
             ])
                 ->select(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1'])
-                
+
                 ->where('is_active', true)
                 ->where('kategori_1', '!=', 'SD');
-            
+
             // --- URGENT HARDCODE EXCEPTION: BYPASS TANGGAL UNTUK QUOTATION TERTENTU ---
             // Kembalikan query database ke awal
             if ($isProgrammer) {
@@ -574,10 +574,10 @@ class AppsBasService
             // -------------------------------------------------------------------------
 
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
-            
+
 
             $orderDetail = $orderDetail->get()->toArray();
-            
+
 
             // \Illuminate\Support\Facades\Log::info("AppsBasController::index After Query - Count: " . count($orderDetail) . " - Memory: " . (memory_get_usage(true) / 1024 / 1024) . " MB");
 
@@ -639,7 +639,7 @@ class AppsBasService
                 return array_merge($carry, $results);
             }, []);
 
-            
+
 
             unset($orderDetail); // Free up memory
 
@@ -707,8 +707,8 @@ class AppsBasService
                 }
             }
 
-           
-           
+
+
 
             unset($formattedData); // Free up memory
             // Buat final result: 1 data per sampler
@@ -724,7 +724,7 @@ class AppsBasService
 
             $finalResult = array_values($finalResult);
 
-             
+
             unset($groupedData);
 
             // Ambil semua no_order dari hasil akhir
@@ -738,14 +738,21 @@ class AppsBasService
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
                 ->get()
-                ->groupBy(function($item) {
+                ->groupBy(function ($item) {
                     return $item->no_order . '_' . $item->tanggal_sampling;
                 });
 
             // Check persiapan by exact order and date match
 
+            // Cek order mana yang masih punya sampel tidak selesai
+            $ordersWithUnfinishedSamples = \App\Models\SampelTidakSelesai::whereIn('no_order', $orderNos)
+                ->pluck('no_order')
+                ->unique()
+                ->toArray();
+
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
+                $item['has_unfinished_samples'] = in_array($item['no_order'], $ordersWithUnfinishedSamples);
                 $headerList = $persiapanHeadersData->get($item['no_order'] . '_' . $item['jadwal']);
                 // --- PERBAIKAN BUG: Cocokkan Persiapan Header berdasarkan no_sampel ---
                 $header = null;
@@ -880,7 +887,7 @@ class AppsBasService
 
             // Reindex array setelah filter jika diperlukan
             $filteredResult = array_values($filteredResult);
-            
+
             unset($finalResult);
 
             if (count($filteredResult) === 0) {
@@ -900,7 +907,7 @@ class AppsBasService
                     continue;
                 }
                 // --------------------------------------------------------
-                
+
                 $jadwal = Carbon::parse($item['jadwal']);
                 $durasi = (int) $item['durasi'];
 
@@ -908,22 +915,22 @@ class AppsBasService
                     if ($jadwal->isSameDay($today))
                         $filtered[] = $item;
                 } else {
-                    
+
                     // if ($today->between($jadwal, $endDate))
-                        $filtered[] = $item;
+                    $filtered[] = $item;
                 }
             }
-            
+
             // Catatan: Jika di versi kode asli Anda variabel $filtered ini belum dipakai 
             // menimpa $filteredResult, saya tambahkan ini agar filter array berfungsi
-            $filteredResult = $filtered; 
-            
+            $filteredResult = $filtered;
+
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::select(
-                        'order_detail.*',
-                        'bas_sampel_selesai.id as bas_selesai_id',
-                        'sampel_tidak_selesai.id as ts_id'
-                    )
+                    'order_detail.*',
+                    'bas_sampel_selesai.id as bas_selesai_id',
+                    'sampel_tidak_selesai.id as ts_id'
+                )
                     ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
                     ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
                     ->where('order_detail.no_order', $request->no_order)
@@ -1225,11 +1232,11 @@ class AppsBasService
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
                 // Cari header yang memuat no_sampel dari item ini
-                $header = $dataList->where('no_order', $item['no_order'])->first(function($h) use ($item) {
+                $header = $dataList->where('no_order', $item['no_order'])->first(function ($h) use ($item) {
                     $no_sampel = json_decode($h->no_sampel, true) ?? [];
                     return in_array($item['no_sample'], $no_sampel);
                 });
-                
+
                 // Fallback ke header pertama dari order tersebut
                 if (!$header) {
                     $header = $dataList->where('no_order', $item['no_order'])->first();
@@ -1259,7 +1266,7 @@ class AppsBasService
                             }
                         }
                     } else {
-                        
+
                         $item['detail_bas_documents'] = [];
 
                         if ($header->catatan || $header->informasi_teknis || $header->tanda_tangan_bas || $header->waktu_mulai || $header->waktu_selesai) {
@@ -1324,7 +1331,7 @@ class AppsBasService
                         $item['tanda_tangan_bas'] = [];
                     }
                 } else {
-                    
+
                     $item['detail_bas_documents'] = [];
                     $item['catatan'] = '';
                     $item['informasi_teknis'] = '';
@@ -1372,19 +1379,19 @@ class AppsBasService
             }
 
             $orderD = OrderDetail::select(
-                    'order_detail.*',
-                    'bas_sampel_selesai.id as bas_selesai_id',
-                    'sampel_tidak_selesai.id as ts_id',
-                    'sampel_tidak_selesai.status as ts_status',
-                    'sampel_tidak_selesai.alasan as ts_alasan',
-                    'sampel_tidak_selesai.keterangan as ts_keterangan',
-                    'sampel_tidak_selesai.kategori as ts_kategori',
-                    'sampel_tidak_selesai.tanggal_dilanjutkan as ts_tanggal_dilanjutkan',
-                    'sampel_tidak_selesai.no_order as ts_no_order',
-                    'sampel_tidak_selesai.created_at as ts_created_at',
-                    'sampel_tidak_selesai.created_by as ts_created_by',
-                    'sampel_tidak_selesai.updated_at as ts_updated_at'
-                )
+                'order_detail.*',
+                'bas_sampel_selesai.id as bas_selesai_id',
+                'sampel_tidak_selesai.id as ts_id',
+                'sampel_tidak_selesai.status as ts_status',
+                'sampel_tidak_selesai.alasan as ts_alasan',
+                'sampel_tidak_selesai.keterangan as ts_keterangan',
+                'sampel_tidak_selesai.kategori as ts_kategori',
+                'sampel_tidak_selesai.tanggal_dilanjutkan as ts_tanggal_dilanjutkan',
+                'sampel_tidak_selesai.no_order as ts_no_order',
+                'sampel_tidak_selesai.created_at as ts_created_at',
+                'sampel_tidak_selesai.created_by as ts_created_by',
+                'sampel_tidak_selesai.updated_at as ts_updated_at'
+            )
                 ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
                 ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
                 ->where('order_detail.no_order', $request->no_order)
@@ -1410,7 +1417,7 @@ class AppsBasService
                             $isSelesai = ($status_sample === 'parsial' || $status_sample === 'selesai');
                         }
                     }
-                    
+
                     $dataSampelBelumSelesai = null;
                     if (!is_null($item->ts_id)) {
                         $dataSampelBelumSelesai = (object)[
@@ -1462,7 +1469,6 @@ class AppsBasService
                     }
                     $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
                 }
-
             }
             // dd($filteredResult);
             return DataTables::of($filteredResult)->make(true);
@@ -1514,11 +1520,11 @@ class AppsBasService
                     $header = $dataList->first(function ($data) use ($item) {
                         $no_sampel = json_decode($data->no_sampel, true) ?? [];
                         // Ekstrak kode sampel dari database (ambil bagian terakhir setelah '/')
-                        $dbSamples = array_map(function($s) {
+                        $dbSamples = array_map(function ($s) {
                             $parts = explode('/', $s);
                             return end($parts);
                         }, $no_sampel);
-                        
+
                         return count(array_intersect($dbSamples, $item['no_sampel'])) > 0;
                     });
 
@@ -1764,39 +1770,9 @@ class AppsBasService
                 ], 200);
             }
 
-            // Jika file PDF sudah ada, langsung kembalikan tanpa render ulang
-            $existingFilename = str_replace("&#039;", "'", $request->filename ?? $request->filename_old ?? '');
-            if ($existingFilename && $existingFilename !== 'undefined') {
-                $existingPath = public_path('dokumen/bas/' . $existingFilename);
-                if (file_exists($existingPath)) {
-                    return response()->json([$existingFilename], 200);
-                }
-            }
-
-            // Cari filename dari detail_bas_documents yang tersimpan di PersiapanSampelHeader
-            if (!$existingFilename || $existingFilename === 'undefined') {
-                $savedHeaders = PersiapanSampelHeader::where('no_order', $request->no_order)
-                    ->whereNotNull('detail_bas_documents')
-                    ->get();
-                foreach ($savedHeaders as $sh) {
-                    $docs = json_decode($sh->detail_bas_documents, true);
-                    if (is_array($docs)) {
-                        foreach ($docs as $doc) {
-                            if (isset($doc['filename']) && !empty($doc['filename'])) {
-                                $cachedPath = public_path('dokumen/bas/' . $doc['filename']);
-                                if (file_exists($cachedPath)) {
-                                    return response()->json([$doc['filename']], 200);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
             $jsonDecode = html_entity_decode($request->info_sampling);
-
             $infoSampling = json_decode($jsonDecode, true);
-            
+
             $tipe = explode("/", $request->no_document);
             $request->kategori = explode(",", $request->kategori);
 
@@ -1812,13 +1788,14 @@ class AppsBasService
                     }
                 }
             }
+            
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
                 ->where('status_quotation', $infoSampling['status_quotation'])
                 ->where('is_active', true)
                 ->first();
-            // dd($sp);
+                
             if (!$sp) {
                 return response()->json([
                     'message' => 'Data sampling plan tidak ditemukan.!'
@@ -1854,7 +1831,6 @@ class AppsBasService
                     ['is_active', '=', true],
                 ])
                 ->get();
-            // dd($samplerJadwal);
 
             if ($samplerJadwal->isEmpty()) {
                 return response()->json([
@@ -1867,9 +1843,7 @@ class AppsBasService
                 ->where('no_order', $request->no_order)
                 ->first();
 
-            // dd($request->all());
             $expectednoSampel = [];
-
             $kategoriList = is_array($request['kategori'])
                 ? $request['kategori']
                 : (strpos($request['kategori'], ',') !== false
@@ -1878,12 +1852,11 @@ class AppsBasService
 
             foreach ($kategoriList as $kategoriItem) {
                 $parts = explode(' - ', trim($kategoriItem));
-                $kode = trim(end($parts)); // ambil bagian paling kanan (kode)
+                $kode = trim(end($parts)); 
                 $expectednoSampel[] = $request['no_order'] . '/' . $kode;
             }
 
-
-            // Ambil data PersiapanSampelHeader dengan fallback yang sama dengan UpdateData
+            // Ambil data PersiapanSampelHeader
             $dataList = PersiapanSampelHeader::where('no_order', $request->no_order)
                 ->where('tanggal_sampling', $request->tanggal_sampling)
                 ->where('is_active', true)
@@ -1906,17 +1879,15 @@ class AppsBasService
 
             $persiapanHeader = $dataList->first(function ($item) use ($request) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
-                
-                $dbSamples = array_map(function($s) {
+                $dbSamples = array_map(function ($s) {
                     $parts = explode('/', $s);
                     return end($parts);
                 }, $no_sampel);
-                
+
                 $reqSamples = $request->no_sampel ?? [];
                 if (empty($reqSamples)) {
-                    return true; // Fallback jika tidak ada no_sampel dikirim
+                    return true; 
                 }
-                
                 return count(array_intersect($dbSamples, $reqSamples)) > 0;
             });
 
@@ -1929,7 +1900,7 @@ class AppsBasService
             } else {
                 $orderH->detail_bas_documents = json_encode([]);
             }
-            
+
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
                 ->select(
@@ -1947,29 +1918,12 @@ class AppsBasService
                 ->where('order_detail.is_active', true)
                 ->get();
 
-            $tipe = explode("/", $request->no_document);
-            $tahun = "20" . explode("-", $tipe[2])[0];
-            // Ambil data perdiem sesuai tipe dokumen
-            if ($tipe[1] == "QT") {
-                $perdiem = QuotationNonKontrak::select('perdiem_jumlah_orang', 'jumlah_orang_24jam')
-                    ->where('no_document', $request->no_document)
-                    ->first();
-            } else if ($tipe[1] == "QTC") {
-                $perdiem = QuotationKontrakH::select('perdiem_jumlah_orang', 'jumlah_orang_24jam')
-                    ->where('no_document', $request->no_document)
-                    ->first();
-            }
-
-            $data_sampling = [];
-            $dat_param = [];
             $status = [];
             $hariTanggal = [];
+            $data_sampling = [];
+            $dat_param = [];
 
-            $file_name_old = str_replace("&#039;", "'", $request->filename_old);
-            $file_name = str_replace("&#039;", "'", $request->filename);
-            // dd($file_name_old, $file_name);
             foreach ($orderD as $vv) {
-
                 $data_sampling[] = (object) [
                     'no_sample' => $vv->no_sampel,
                     'kategori_2' => $vv->kategori_2,
@@ -2008,12 +1962,7 @@ class AppsBasService
                     }
 
                     if ($status[$vv->no_sampel] === 'selesai') {
-                        $dataLapangan = $this->getDataLapangan(
-                            $vv->kategori_2,
-                            $vv->kategori_3,
-                            $vv->no_sampel,
-                            $vv->parameter
-                        );
+                        $dataLapangan = $this->getDataLapangan($vv->kategori_2, $vv->kategori_3, $vv->no_sampel, $vv->parameter);
                         if ($dataLapangan && isset($dataLapangan->created_at)) {
                             $hariTanggal[$vv->no_sampel] = $dataLapangan->created_at;
                         } else {
@@ -2024,24 +1973,44 @@ class AppsBasService
                     }
                 }
 
-                // dd($data_sampling);
-
                 if ($vv->codingSampling) {
                     $dat_param[] = $vv->codingSampling;
                 }
             }
+            // Gunakan nama file dari request agar sinkron dengan frontend
+            $file_name_old = $request->filename_old ?? null;
+            $file_name = $request->filename ?? null;
 
-            // dd($status);
-            // dd([
-            //     $orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal
-            // ]);
+            $generatedFilename = self::cetakBASPDF($orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal);
 
-            // dd($persiapanHeader);
+            // Sinkronisasikan mapping record dokumen ke database
+            if ($persiapanHeader && $generatedFilename) {
+                $existingDocs = json_decode($persiapanHeader->detail_bas_documents, true) ?? [];
+                $isMatched = false;
+                foreach ($existingDocs as &$doc) {
+                    if (!empty(array_intersect($doc['no_sampel'] ?? [], $expectednoSampel))) {
+                        $doc['filename'] = $generatedFilename;
+                        $isMatched = true;
+                        break;
+                    }
+                }
+                if (!$isMatched) {
+                    $existingDocs[] = [
+                        'no_sampel' => $expectednoSampel,
+                        'filename' => $generatedFilename,
+                        'catatan' => '',
+                        'informasi_teknis' => '',
+                        'waktu_mulai' => '',
+                        'waktu_selesai' => '',
+                        'tanda_tangan' => []
+                    ];
+                }
+                $persiapanHeader->detail_bas_documents = json_encode($existingDocs);
+                $persiapanHeader->save();
+            }
 
-            $dataPdf = self::cetakBASPDF($orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal);
-            return $dataPdf;
+            return response()->json([$generatedFilename], 200);
         } catch (\Exception $e) {
-            // dd($e);
             return response()->json([
                 'message' => $e->getMessage(),
                 'line' => $e->getLine(),
@@ -2051,7 +2020,7 @@ class AppsBasService
 
     private function cetakBASPDF($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
     {
-        
+
         $psh = $dataPersiapan;
         if (!$psh) {
             return response()->json([
@@ -2269,7 +2238,7 @@ class AppsBasService
 
         $hariInggris = date('l', strtotime($tanggal));
         $bulanInggris = date('F', strtotime($tanggal));
-        
+
         $hari = $namaHari[$hariInggris];
         // dd($hariInggris, $hari);
         $tanggalNumber = date('d', strtotime($tanggal));
@@ -2468,11 +2437,9 @@ class AppsBasService
                         // $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
                         // $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
                         $tanggalHtml = "Hari/Tanggal : ....................................";
-                        
                     } else {
                         // placeholder jika belum ada
                         $tanggalHtml = "Hari/Tanggal : ....................................";
-                        
                     }
                 } else {
                     if (isset($dataSampelTidakSelesai) && $dataSampelTidakSelesai->status == "Dilanjutkan") {
@@ -2481,10 +2448,8 @@ class AppsBasService
                         $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
                         $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
                         $belumSelesaiBox = $boxUnchecked;
-                        
                     } else {
                         $tanggalHtml = "Hari/Tanggal : ....................................";
-                        
                     }
                 }
 
@@ -2796,8 +2761,9 @@ class AppsBasService
         $filePath = $path . '/' . $filename;
 
         $pdf->Output($filePath, 'F');
-        // return $pdf->Output('', 'I');
-        return response()->json([$filename], 200);
+
+        // Cukup kembalikan string nama file murni agar dibaca oleh fungsi induknya di atas
+        return $filename;
     }
 
 
@@ -2862,6 +2828,20 @@ class AppsBasService
         }
 
         return 'bin';
+    }
+
+    public function downloadBasFile($filename)
+    {
+        $path = public_path('dokumen/bas/' . str_replace('..', '', $filename));
+
+        if (!file_exists($path)) {
+            return response()->json(['message' => 'File tidak ditemukan di storage server.'], 404);
+        }
+
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"'
+        ]);
     }
 
     /**
@@ -3021,9 +3001,8 @@ class AppsBasService
                 'message' => $th->getMessage(),
             ]);
         }
-
     }
-    
+
     /*
     private function getStatusSampling($sample)
     {
@@ -3163,24 +3142,24 @@ class AppsBasService
             throw new Exception($th->getMessage());
         }
     }*/
-    
+
     private function getStatusSampling($sample)
     {
         try {
             $parametersRaw = json_decode($sample->parameter);
-            
+
             // 1. Panggil data Template ICP di luar loop (sekali saja agar query ringan)
             // Pastikan Anda sudah meng-import: use App\Models\TemplateStp; di atas class
             $templateIcp = TemplateStp::where('name', 'icp')
                 ->where('category_id', 4)
                 ->first();
-                
+
             $icpParameters = [];
             if ($templateIcp && $templateIcp->param) {
                 // Decode array JSON seperti $a yang Anda berikan tadi
                 $icpParameters = json_decode($templateIcp->param, true) ?? [];
             }
-            
+
             // Panggil sekali di luar loop, bukan di dalam array_reduce
             $requiredParameters = collect($this->getRequiredParameters())
                 ->where('category', $sample->kategori_2);
@@ -3216,44 +3195,46 @@ class AppsBasService
             $status = 'selesai';
             if (!empty($parameters)) {
                 $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
-                
+
                 foreach ($parameters as $parameter) {
                     $paramName = $parameter['parameter']; // Ambil nama parameter untuk mempermudah pengecekan
 
                     if ($parameter['category'] == '6-Padatan') {
                         continue;
                     }
-                    
+
                     if (in_array($paramName, $parameterBypass)) {
                         continue;
                     }
 
-                    if ($sample->no_sample == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                    $sampleNumber = $sample->no_sampel ?? $sample->no_sample;
+
+                    if ($sampleNumber == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
                         continue;
                     }
 
-                    if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
+                    if (in_array($sampleNumber, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
                         continue;
                     }
 
                     // --- LOGIKA BYPASS ICP TEMPLATE ---
                     // Cek apakah parameter saat ini ada di dalam list JSON Template ICP
                     if (in_array($paramName, $icpParameters)) {
-                        
+
                         // Validasi Regex: Cari kata "jam" atau angka bergandengan huruf "j" (seperti 8j, 24j)
                         // /i = case-insensitive (Jam, jam, 8J, 8j akan terdeteksi)
                         if (!preg_match('/(jam|\d+j)/i', $paramName)) {
-                            
+
                             // Jika TIDAK MENGANDUNG "jam" atau "8j", maka BYPASS (dianggap selesai).
-                            continue; 
+                            continue;
                         }
-                        
+
                         // Jika MENGANDUNG "jam" atau "8j" (misal: "Pb 8J (IKM-ICP-LK)"), 
                         // kode akan mengabaikan blok if ini dan tetap lanjut diperiksa di bawah oleh verifyStatus.
                     }
                     // ----------------------------------
 
-                    $verified = $this->verifyStatus($sample->no_sample, $parameter);
+                    $verified = $this->verifyStatus($sampleNumber, $parameter);
 
                     if (!$verified) {
                         $status = 'belum selesai';
@@ -3263,7 +3244,7 @@ class AppsBasService
             } else {
                 $status = 'belum selesai';
             }
-            
+
             return $status;
         } catch (\Exception $th) {
             throw new Exception($th->getMessage());
@@ -3277,72 +3258,72 @@ class AppsBasService
                 return true;
             }
 
-        $model = $parameter['model'];
-        $model2 = isset($parameter['model2']) ? $parameter['model2'] : null;
-        $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
-        $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
+            $model = $parameter['model'];
+            $model2 = isset($parameter['model2']) ? $parameter['model2'] : null;
+            $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
+            $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
 
-        // --- HARDCODE KHUSUS LINGKUNGAN KERJA & PARTIKULAT METER ---
-        if (in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
-            $sampleData = \App\Models\OrderDetail::where('no_sampel', $sample_number)->first();
-            if ($sampleData && stripos($sampleData->kategori_3, 'Lingkungan Kerja') !== false) {
-                $parameter['requiredCount'] = 4; // Timpa langsung di array
-            }
-        }
-
-        $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
-
-        $environmentModels = [
-            DetailLingkunganHidup::class,
-            DetailLingkunganKerja::class,
-            DetailMicrobiologi::class,
-        ];
-
-        if (in_array($model, $environmentModels, true)) {
-            return $this->handleEnvironmentModel($sample_number, $parameter, $model, $model2, $model3);
-        }
-
-        // non-environment: hanya kembalikan builder jika count >= requiredCount, else null
-        $query = $model::where('no_sampel', $sample_number);
-        if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_blocked')) {
-            $query->where('is_blocked', 0);
-        }
-        if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_rejected')) {
-            $query->where('is_rejected', 0);
-        }
-        
-        if ($paramName === 'Opasitas (Solar)') {
-            $queryN = clone $query;
-            $queryN = $queryN->first();
-            if ($queryN == null) {
-                if ($model2 != null) {
-                    $query = $model2::where('no_sampel', $sample_number);
-                    if (\Illuminate\Support\Facades\Schema::hasColumn((new $model2)->getTable(), 'is_blocked')) {
-                        $query->where('is_blocked', 0);
-                    }
-                    if (\Illuminate\Support\Facades\Schema::hasColumn((new $model2)->getTable(), 'is_rejected')) {
-                        $query->where('is_rejected', 0);
-                    }
-                } else {
-                    return null;
+            // --- HARDCODE KHUSUS LINGKUNGAN KERJA & PARTIKULAT METER ---
+            if (in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                $sampleData = \App\Models\OrderDetail::where('no_sampel', $sample_number)->first();
+                if ($sampleData && stripos($sampleData->kategori_3, 'Lingkungan Kerja') !== false) {
+                    $parameter['requiredCount'] = 4; // Timpa langsung di array
                 }
             }
-        }
-        $modelsWithParameter = [
-            DetailLingkunganHidup::class,
-            DetailSenyawaVolatile::class,
-            DetailMicrobiologi::class,
-            DataLapanganDirectLain::class,
-        ];
-        if (in_array($model, $modelsWithParameter, true) && $paramName !== null) {
-            $query->where('parameter', $paramName);
-        }
 
-        $count = $query->count();
-        if ($count >= $requiredCount) {
-            return $query;
-        }
-        return null;
+            $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
+
+            $environmentModels = [
+                DetailLingkunganHidup::class,
+                DetailLingkunganKerja::class,
+                DetailMicrobiologi::class,
+            ];
+
+            if (in_array($model, $environmentModels, true)) {
+                return $this->handleEnvironmentModel($sample_number, $parameter, $model, $model2, $model3);
+            }
+
+            // non-environment: hanya kembalikan builder jika count >= requiredCount, else null
+            $query = $model::where('no_sampel', $sample_number);
+            if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_blocked')) {
+                $query->where('is_blocked', 0);
+            }
+            if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_rejected')) {
+                $query->where('is_rejected', 0);
+            }
+
+            if ($paramName === 'Opasitas (Solar)') {
+                $queryN = clone $query;
+                $queryN = $queryN->first();
+                if ($queryN == null) {
+                    if ($model2 != null) {
+                        $query = $model2::where('no_sampel', $sample_number);
+                        if (\Illuminate\Support\Facades\Schema::hasColumn((new $model2)->getTable(), 'is_blocked')) {
+                            $query->where('is_blocked', 0);
+                        }
+                        if (\Illuminate\Support\Facades\Schema::hasColumn((new $model2)->getTable(), 'is_rejected')) {
+                            $query->where('is_rejected', 0);
+                        }
+                    } else {
+                        return null;
+                    }
+                }
+            }
+            $modelsWithParameter = [
+                DetailLingkunganHidup::class,
+                DetailSenyawaVolatile::class,
+                DetailMicrobiologi::class,
+                DataLapanganDirectLain::class,
+            ];
+            if (in_array($model, $modelsWithParameter, true) && $paramName !== null) {
+                $query->where('parameter', $paramName);
+            }
+
+            $count = $query->count();
+            if ($count >= $requiredCount) {
+                return $query;
+            }
+            return null;
         } catch (\Throwable $th) {
             \Illuminate\Support\Facades\Log::error("Error in verifyStatus: " . $th->getMessage(), [
                 'no_sampel' => $sample_number,
@@ -3358,13 +3339,13 @@ class AppsBasService
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
 
-        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)','Kelembaban','Suhu'], true);
+        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)', 'Kelembaban', 'Suhu'], true);
         if (!$hasPMParameter) {
             $model3 = null;
         }
 
-        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi' ) {  
-            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3);
+        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi') {
+            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         } else {
             return $this->handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         }
@@ -3428,7 +3409,7 @@ class AppsBasService
                 $found = $model3::where('no_sampel', $sample_number)
                     ->whereNotNull($searchColumn)
                     ->first();
-                
+
                 if ($found) {
                     return $found;
                 }
@@ -3505,9 +3486,44 @@ class AppsBasService
 
         // $padatanParam tetap hardcode karena fixed, tidak perlu masuk DB
         $padatanParam = [
-            "Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F",
-            "NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride",
-            "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"
+            "Al",
+            "Sb",
+            "Ag",
+            "As",
+            "Ba",
+            "Fe",
+            "B",
+            "Cd",
+            "Ca",
+            "Co",
+            "Mn",
+            "Na",
+            "Ni",
+            "Hg",
+            "Se",
+            "Zn",
+            "Tl",
+            "Cu",
+            "Sn",
+            "Pb",
+            "Ti",
+            "Cr",
+            "V",
+            "F",
+            "NO2",
+            "Cr6+",
+            "Mo",
+            "NO3",
+            "CN",
+            "Sulfida",
+            "Cl-",
+            "OG",
+            "Chloride",
+            "E.Coli (MM)",
+            "Salmonella (MM)",
+            "Shigella Sp. (MM)",
+            "Vibrio Ch (MM)",
+            "S.Aureus"
         ];
 
         foreach ($padatanParam as $value) {
