@@ -646,7 +646,7 @@ class AppsBasService
             $groupedData = [];
 
             foreach ($formattedData as $item) {
-                // Group TANPA field 'sampler' dan 'kategori'
+                // Group TANPA field 'sampler' tapi MENGGUNAKAN 'kategori' agar parsial terpisah
                 $key = implode('|', [
                     $item['nomor_quotation'],
                     $item['nama_perusahaan'],
@@ -657,6 +657,7 @@ class AppsBasService
                     $item['no_order'],
                     $item['alamat_sampling'],
                     $item['konsultan'],
+                    $item['kategori'],
                     $item['info_pendukung'],
                     $item['jadwal_jam_mulai'],
                     $item['jadwal_jam_selesai'],
@@ -694,7 +695,7 @@ class AppsBasService
                         'samplers' => [],
                     ];
                 } else {
-                    // Gabungkan kategori jika berbeda
+                    // Gabungkan kategori jika berbeda (walaupun dengan key kategori harusnya sama, jaga-jaga format beda)
                     $existingKategori = explode(',', $groupedData[$key]['base_data']['kategori']);
                     $newKategori = explode(',', $item['kategori']);
                     $mergedKategori = array_unique(array_filter(array_merge($existingKategori, $newKategori)));
@@ -724,6 +725,21 @@ class AppsBasService
 
             $finalResult = array_values($finalResult);
 
+            // Deteksi jika ada jadwal parsial pada tanggal yang sama dengan sampler yang sama
+            $samplerCounts = [];
+            foreach ($finalResult as $res) {
+                $samplerKey = $res['nomor_quotation'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
+                if (!isset($samplerCounts[$samplerKey])) {
+                    $samplerCounts[$samplerKey] = 0;
+                }
+                $samplerCounts[$samplerKey]++;
+            }
+            
+            foreach ($finalResult as &$res) {
+                $samplerKey = $res['nomor_quotation'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
+                $res['is_sampler_duplicate'] = $samplerCounts[$samplerKey] > 1;
+            }
+            unset($res);
 
             unset($groupedData);
 
@@ -770,9 +786,23 @@ class AppsBasService
                     // 2. Cari header yang array no_sampel-nya beririsan dengan sampel di item ini
                     foreach ($headerList as $h) {
                         $hSamples = json_decode($h->no_sampel, true);
-                        if (is_array($hSamples) && count(array_intersect($itemSamples, $hSamples)) > 0) {
-                            $header = $h; // Ketemu header yang pas!
-                            break;
+                        if (is_array($hSamples)) {
+                            // Bersihkan hSamples dari prefix untuk pencocokan yang aman
+                            $hSamplesClean = array_map(function($s) {
+                                $parts = explode('/', $s);
+                                return end($parts);
+                            }, $hSamples);
+
+                            // Bersihkan itemSamples dari prefix
+                            $itemSamplesClean = array_map(function($s) {
+                                $parts = explode('/', $s);
+                                return end($parts);
+                            }, $itemSamples);
+
+                            if (count(array_intersect($itemSamplesClean, $hSamplesClean)) > 0) {
+                                $header = $h; // Ketemu header yang pas!
+                                break;
+                            }
                         }
                     }
                 }
@@ -928,11 +958,9 @@ class AppsBasService
             if ($request->has('no_order') && $request->has('tanggal_sampling')) {
                 $orderD = OrderDetail::select(
                     'order_detail.*',
-                    'bas_sampel_selesai.id as bas_selesai_id',
-                    'sampel_tidak_selesai.id as ts_id'
+                    DB::raw('(SELECT bss.id FROM bas_sampel_selesai bss WHERE bss.no_sampel = order_detail.no_sampel ORDER BY bss.id DESC LIMIT 1) as bas_selesai_id'),
+                    DB::raw('(SELECT sts.id FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_id')
                 )
-                    ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
-                    ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
                     ->where('order_detail.no_order', $request->no_order)
                     ->where('order_detail.is_active', true)
                     ->where('order_detail.tanggal_sampling', $request->tanggal_sampling)
@@ -1095,7 +1123,7 @@ class AppsBasService
             // dd(json_decode($formattedData[0]['parameters'], true));
 
             foreach ($formattedData as $item) {
-                // Group TANPA field 'sampler' dan 'kategori'
+                // Group TANPA field 'sampler' tapi MENGGUNAKAN 'kategori' agar tidak tergabung saat parsial
                 $key = implode('|', [
                     $item['nomor_quotation'],
                     $item['nama_perusahaan'],
@@ -1106,6 +1134,7 @@ class AppsBasService
                     $item['no_order'],
                     $item['alamat_sampling'],
                     $item['konsultan'],
+                    $item['kategori'],
                     $item['info_pendukung'],
                     $item['jadwal_jam_mulai'],
                     $item['jadwal_jam_selesai'],
@@ -1232,15 +1261,30 @@ class AppsBasService
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
                 // Cari header yang memuat no_sampel dari item ini
-                $header = $dataList->where('no_order', $item['no_order'])->first(function ($h) use ($item) {
+                $header = $dataList->where('no_order', $item['no_order'])->first(function ($h) use ($kodeList, $item) {
                     $no_sampel = json_decode($h->no_sampel, true) ?? [];
-                    return in_array($item['no_sample'], $no_sampel);
+                    $no_sampel_clean = array_map(function($s) {
+                        $parts = explode('/', $s);
+                        return end($parts);
+                    }, $no_sampel);
+                    
+                    // Jika ada $kodeList (dari request kategori), kita cocokkan dengan salah satu kode yang direquest
+                    if (!empty($kodeList)) {
+                        return count(array_intersect($kodeList, $no_sampel_clean)) > 0;
+                    }
+
+                    // Jika tidak ada kodeList, gunakan item_sample_clean seperti sebelumnya
+                    $item_sample_parts = explode('/', $item['no_sample']);
+                    $item_sample_clean = end($item_sample_parts);
+                    return in_array($item_sample_clean, $no_sampel_clean);
                 });
 
                 // Fallback ke header pertama dari order tersebut
                 if (!$header) {
                     $header = $dataList->where('no_order', $item['no_order'])->first();
                 }
+
+                // Block fallback mewariskan dokumen dihapus atas permintaan user
 
                 if ($header) {
                     if ($header->detail_bas_documents) {
@@ -1380,20 +1424,18 @@ class AppsBasService
 
             $orderD = OrderDetail::select(
                 'order_detail.*',
-                'bas_sampel_selesai.id as bas_selesai_id',
-                'sampel_tidak_selesai.id as ts_id',
-                'sampel_tidak_selesai.status as ts_status',
-                'sampel_tidak_selesai.alasan as ts_alasan',
-                'sampel_tidak_selesai.keterangan as ts_keterangan',
-                'sampel_tidak_selesai.kategori as ts_kategori',
-                'sampel_tidak_selesai.tanggal_dilanjutkan as ts_tanggal_dilanjutkan',
-                'sampel_tidak_selesai.no_order as ts_no_order',
-                'sampel_tidak_selesai.created_at as ts_created_at',
-                'sampel_tidak_selesai.created_by as ts_created_by',
-                'sampel_tidak_selesai.updated_at as ts_updated_at'
+                DB::raw('(SELECT bss.id FROM bas_sampel_selesai bss WHERE bss.no_sampel = order_detail.no_sampel ORDER BY bss.id DESC LIMIT 1) as bas_selesai_id'),
+                DB::raw('(SELECT sts.id FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_id'),
+                DB::raw('(SELECT sts.status FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_status'),
+                DB::raw('(SELECT sts.alasan FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_alasan'),
+                DB::raw('(SELECT sts.keterangan FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_keterangan'),
+                DB::raw('(SELECT sts.kategori FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_kategori'),
+                DB::raw('(SELECT sts.tanggal_dilanjutkan FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_tanggal_dilanjutkan'),
+                DB::raw('(SELECT sts.no_order FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_no_order'),
+                DB::raw('(SELECT sts.created_at FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_created_at'),
+                DB::raw('(SELECT sts.created_by FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_created_by'),
+                DB::raw('(SELECT sts.updated_at FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.created_at DESC LIMIT 1) as ts_updated_at')
             )
-                ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
-                ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
                 ->where('order_detail.no_order', $request->no_order)
                 ->where('order_detail.is_active', true)
                 ->where('order_detail.tanggal_sampling', $request->tanggal_sampling)
@@ -1450,7 +1492,12 @@ class AppsBasService
 
                 // Gabungkan detail_sampling_sampel ke filteredResult
                 foreach ($filteredResult as $key => $value) {
-                    $kategoriItems = explode(',', $value['kategori']);
+                    // Hanya gunakan kategori yang di-request jika ada, jika tidak fallback ke kategori default grup
+                    if ($request->has('kategori') && !empty($request->kategori)) {
+                        $kategoriItems = is_array($request->kategori) ? $request->kategori : explode(',', $request->kategori);
+                    } else {
+                        $kategoriItems = explode(',', $value['kategori']);
+                    }
 
                     $matchedDetails = [];
 
@@ -1491,12 +1538,17 @@ class AppsBasService
                     if (!isset($item['no_quotation'])) {
                         continue;
                     }
-                    // dd($item);
+                    // Pastikan $item['no_sampel'] hanya berisi kode (tanpa no_order)
+                    if (isset($item['no_sampel']) && is_array($item['no_sampel'])) {
+                        $item['no_sampel'] = array_map(function ($s) {
+                            $parts = explode('/', $s);
+                            return end($parts);
+                        }, $item['no_sampel']);
+                    }
 
                     $item['expectedNoSampel'] = array_map(function ($kode) use ($item) {
                         return $item['no_order'] . '/' . $kode;
                     }, $item['no_sampel']);
-                    // dd(json_encode($item['no_sampel'], JSON_UNESCAPED_SLASHES), $item['no_sampel']);
                     $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
                         ->where('tanggal_sampling', $item['tanggal_sampling'])
                         ->where('is_active', true)
@@ -1853,7 +1905,8 @@ class AppsBasService
             foreach ($kategoriList as $kategoriItem) {
                 $parts = explode(' - ', trim($kategoriItem));
                 $kode = trim(end($parts)); 
-                $expectednoSampel[] = $request['no_order'] . '/' . $kode;
+                // Sekarang hanya gunakan kodenya saja agar sesuai dengan yang disimpan di updateData
+                $expectednoSampel[] = $kode;
             }
 
             // Ambil data PersiapanSampelHeader
@@ -1877,17 +1930,28 @@ class AppsBasService
                     ->get();
             }
 
-            $persiapanHeader = $dataList->first(function ($item) use ($request) {
+            $persiapanHeader = $dataList->first(function ($item) use ($request, $expectednoSampel) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 $dbSamples = array_map(function ($s) {
                     $parts = explode('/', $s);
                     return end($parts);
                 }, $no_sampel);
 
-                $reqSamples = $request->no_sampel ?? [];
+                $reqSamplesRaw = $request->no_sampel ?? [];
+                $reqSamples = array_map(function ($s) {
+                    $parts = explode('/', $s);
+                    return end($parts);
+                }, $reqSamplesRaw);
+
+                // Jika $request->no_sampel kosong, gunakan $expectednoSampel yang didapat dari request->kategori
+                if (empty($reqSamples)) {
+                    $reqSamples = $expectednoSampel;
+                }
+                
                 if (empty($reqSamples)) {
                     return true; 
                 }
+
                 return count(array_intersect($dbSamples, $reqSamples)) > 0;
             });
 
@@ -1902,15 +1966,14 @@ class AppsBasService
             }
 
             // Ambil data order detail beserta relasi codingSampling
+            // Menggunakan subquery agar tidak duplikasi baris saat LEFT JOIN memiliki multiple match
             $orderD = OrderDetail::with(['codingSampling'])
                 ->select(
                     'order_detail.*',
-                    'bas_sampel_selesai.id as bas_selesai_id',
-                    'bas_sampel_selesai.created_at as bas_selesai_created_at',
-                    'sampel_tidak_selesai.id as ts_id'
+                    DB::raw('(SELECT bss.id FROM bas_sampel_selesai bss WHERE bss.no_sampel = order_detail.no_sampel ORDER BY bss.id DESC LIMIT 1) as bas_selesai_id'),
+                    DB::raw('(SELECT bss.created_at FROM bas_sampel_selesai bss WHERE bss.no_sampel = order_detail.no_sampel ORDER BY bss.id DESC LIMIT 1) as bas_selesai_created_at'),
+                    DB::raw('(SELECT sts.id FROM sampel_tidak_selesai sts WHERE sts.no_sampel = order_detail.no_sampel ORDER BY sts.id DESC LIMIT 1) as ts_id')
                 )
-                ->leftJoin('bas_sampel_selesai', 'order_detail.no_sampel', '=', 'bas_sampel_selesai.no_sampel')
-                ->leftJoin('sampel_tidak_selesai', 'order_detail.no_sampel', '=', 'sampel_tidak_selesai.no_sampel')
                 ->where('order_detail.id_order_header', $orderH->id)
                 ->where('order_detail.no_order', $request->no_order)
                 ->whereIn('order_detail.no_sampel', $noSample)
@@ -2415,7 +2478,7 @@ class AppsBasService
 
             // Process sampling data for this specific sampler
             foreach ($samplerSamplingData as $key => $val) {
-                $dataSampelTidakSelesai = \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('id', 'desc')->first();
+                $dataSampelTidakSelesai = \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('created_at', 'desc')->first();
                 $dat = explode("-", $val->kategori_3);
                 $boxChecked = '&#9745;'; // ☑
                 $boxUnchecked = '&#9744;'; // ☐
