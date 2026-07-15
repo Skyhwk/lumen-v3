@@ -23,7 +23,19 @@ use DateTime;
 
 class AppsBasController extends Controller
 {
+<<<<<<< HEAD
     public function index(Request $request)
+=======
+    protected $service;
+
+    public function __construct(Request $request)
+    {
+        parent::__construct($request);
+        $this->service = new AppsBasService($this->karyawan, $this->user_id);
+    }
+
+    public function index1(Request $request)
+>>>>>>> 1f4120057a5157a4b3ab0bf21e1d9cab92a9a335
     {
         // Set limit memory lebih besar secara sementara untuk proses data besar
         ini_set('memory_limit', '512M');
