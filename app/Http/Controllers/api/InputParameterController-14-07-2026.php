@@ -827,6 +827,780 @@ class InputParameterController extends Controller
 		}
     }
 
+    /* BACKUP KODE LAMA */
+    public function index_lama(Request $request){
+		try {
+			$stp = TemplateStp::with('sample')->where('id', $request->id_stp)->select('name','category_id')->first();
+			if(!isset($request->category) || $request->category == null || !isset($request->tgl) || $request->tgl == null || !isset($request->id_stp) || $request->id_stp == null) {
+				return response()->json([
+					'message' => 'Parameter tidak lengkap (kategori, tanggal, parameter) wajib diisi',
+					'code' => 400
+				],400);
+			}
+
+			$join = OrderDetail::with('TrackingSatu')
+                ->whereHas('TrackingSatu', function ($q) use ($request) {
+                    $q->where('ftc_laboratory', 'LIKE', "%$request->tgl%")->orderBy('ftc_laboratory', 'asc');
+                })
+                ->where('kategori_2', $request->category)
+                ->where('is_active', true)
+                ->orderByRaw("JSON_LENGTH(parameter) = 1 DESC")
+                ->orderBy('no_sampel', 'asc');
+			$join = $join->get();
+
+            $quota = KuotaAnalisaParameter::select('parameter_name', 'quota', 'tanggal_berlaku')
+                ->where('kategori', $request->category)
+                ->where('is_active', true)
+                ->get()
+                ->mapWithKeys(function ($item) {
+                    return [
+                        $item->parameter_name => (object)[
+                            'kuota' => $item->quota,
+                            'tanggal_berlaku' => $item->tanggal_berlaku,
+                        ],
+                    ];
+                });
+
+			// dd($join);
+			if($join->isEmpty()) {
+				return response()->json([
+					'message' => 'Data tidak ditemukan',
+				], 404);
+			}
+
+			$par = TemplateStp::where('id', $request->id_stp)->first();
+			$select = json_decode($par->param);
+
+			$data = [];
+			$inter = [];
+			$ftc = [];
+
+            $quota_count = collect();
+            $repo_quota = json_decode(
+                Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
+                true
+            );
+
+            // Pastikan struktur data benar sebelum diproses
+            if (is_array($repo_quota) && isset($repo_quota[$request->id_stp])) {
+                foreach ($repo_quota[$request->id_stp] as $parameter => $samples) {
+                    // Simpan dengan struktur: [id_stp => [parameter => collection(samples)]]
+                    if (!$quota_count->has($request->id_stp)) {
+                        $quota_count->put($request->id_stp, collect());
+                    }
+                    $quota_count[$request->id_stp]->put($parameter, collect($samples));
+                }
+            }
+
+            $t_coli_rest = [];
+            $category_prioritized = ['5-Air Laut','54-Air Sungai','72-Air Tanah'];
+
+            // Konversi $join ke array untuk memudahkan pencarian
+            $join_array = $join->toArray(); // Jika $join adalah Collection
+
+            // Kumpulkan sampel berdasarkan kategori prioritas terlebih dahulu
+            $priority_samples = [];
+            $backup_samples = [];
+			$pm24_samples_excluded = [];
+
+            foreach ($join as $key => $val) {
+				// Ambil parameter
+                $param = !is_null(json_decode($val->parameter))
+					? array_map(function ($item) {
+						return explode(';', $item)[1];
+					}, json_decode($val->parameter, true))
+					: [];
+
+				$isOrderContainerPM24 = in_array('PM 10 (24 Jam)', $param) || in_array('PM10 (24 Jam)', $param) || in_array('PM2.5 (24 Jam)', $param) || in_array('PM 2.5 (24 Jam)', $param);
+				
+				if($stp->name == 'GRAVIMETRI' && $stp->sample->nama_kategori == 'Udara' && $isOrderContainerPM24 && $val->kategori_3 == '27-Udara Lingkungan Kerja'){
+					$pm24_samples_excluded[] = $val->no_sampel;
+				}
+                // Cek apakah ada parameter yang mengandung 'BOD'
+                $isBodExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'BOD');
+                });
+                // Cek apakah ada parameter yang mengandung 'NH3'
+                $isNh3Exist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'NH3');
+                });
+                // Cek apakah ada parameter yang mengandung 'TSS'
+                $isTSSExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'TSS');
+                });
+
+                // Gunakan hasil pengecekan
+                if ((!$isBodExist && !$isNh3Exist && !$isTSSExist) || in_array($val->kategori_3, $category_prioritized)) {
+                    $priority_samples[$key] = $val;
+                } else {
+                    $backup_samples[$key] = $val;
+                }
+            }
+            // Gabungkan: prioritas dulu, kemudian backup
+            $sorted_join = $priority_samples + $backup_samples;
+
+            foreach($sorted_join as $key => $val) {
+                $param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
+                    return explode(';', $item)[1];
+                }, json_decode($val->parameter, true)) : [];
+
+                $diff = array_diff($select, $param);
+                $row = array_fill_keys($diff, '-');
+
+                foreach (array_diff($select, $diff) as $param_key => $p) {
+                    $quota_exceeded = false;
+                    $already_counted = false;
+                    $index_counted = null;
+
+                    $tglBerlaku = isset($quota[$p]) ? Carbon::parse($quota[$p]->tanggal_berlaku) : Carbon::parse($request->tgl)->addDay(7);
+                    $tglRequest = Carbon::parse($request->tgl);
+
+                    // if(isset($quota[$p])) {
+                    //     dump($tglBerlaku, $tglRequest, $tglRequest >= $tglBerlaku, $p);
+                    // }
+
+                    // --- PERUBAHAN PENTING: Hanya proses quota jika parameter ada dalam $quota dan tanggal request lebih besar atau sama dengan tanggal berlaku
+                    if (!in_array($stp->name, ['SUBKONTRAK','OTHER','Other']) && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
+                        // Pastikan struktur quota_count ada
+                        if (!$quota_count->has($request->id_stp)) {
+                            $quota_count->put($request->id_stp, collect());
+                        }
+                        if (!$quota_count[$request->id_stp]->has($p)) {
+                            $quota_count[$request->id_stp]->put($p, collect());
+                        }
+
+                        // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                        if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                            $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
+                            $already_counted = true;
+                        }
+
+                        // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
+                        if ($quota_count[$request->id_stp][$p]->count() >= $quota[$p]->kuota) {
+                            $quota_exceeded = true;
+                        }
+
+                        // --- 3️⃣ Handle Total Coliform khusus untuk kategori non-prioritas
+                        if(in_array($p, ['Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)']) && !in_array($val->kategori_3, $category_prioritized)){
+                            $t_coli_rest[$p][] = $val->no_sampel;
+                            if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]->reject(fn($item) => $item === $val->no_sampel)->values();
+                            }
+                            continue;
+                        }
+
+                        // --- 4️⃣ Jika quota penuh, potong kelebihan dari belakang
+                        if ($quota_exceeded || $already_counted) {
+                            // --- Jika sudah counted, ambil dari index yang sama
+                            if($already_counted){
+                                $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
+                            }
+                            $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p]->kuota;
+                            if ($diff_count > 0) {
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
+                                    ->slice(0, $quota[$p]->kuota)
+                                    ->values();
+                            }
+                            continue;
+                        }
+
+                        // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
+                        $currentCount = $quota_count[$request->id_stp][$p]->count();
+                        $maxQuota = $quota[$p]->kuota;
+
+                        // Hanya tambahkan jika belum mencapai batas quota
+                        if ($currentCount < $maxQuota) {
+                            $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                            $row[$p] = $val->no_sampel;
+                        } else {
+                            // Jika quota penuh, simpan sebagai cadangan untuk parameter ini
+                            $t_coli_rest[$p][] = $val->no_sampel;
+                        }
+
+                    } else {
+                        // --- PARAMETER TANPA QUOTA: Langsung tampilkan tanpa pembatasan
+                        $row[$p] = $val->no_sampel;
+
+                        // Untuk SUBKONTRAK juga langsung tampilkan
+                        if (in_array($stp->name, ['SUBKONTRAK','OTHER','Other'])) {
+                            $row[$p] = $val->no_sampel;
+                        }
+                    }
+                }
+
+                if($stp->sample->nama_kategori == 'Air') {
+                    $ftc[] = (object)[
+                        'no_sample' => $val->no_sampel,
+                        'tanggal' => $val->TrackingSatu == null ? '-' : $val->TrackingSatu->ftc_verifier
+                    ];
+                }
+
+                ksort($row);
+                $data[$key] = $row;
+                $inter[$key] = array_fill_keys($diff, '-');
+            }
+
+            // dd($data);
+
+             // Handle cadangan jika quota belum terpenuhi (hanya untuk parameter dengan quota)
+            // dd($quota_count->has($request->id_stp));
+            if ($quota_count->has($request->id_stp)) {
+                foreach ($quota_count[$request->id_stp] as $parameter => $samples) {
+                    // Hanya proses parameter yang ada dalam $quota
+                    $tglBerlaku = isset($quota[$parameter]) ? Carbon::parse($quota[$parameter]->tanggal_berlaku) : Carbon::parse($request->tgl)->addDay(7);
+                    $tglRequest = Carbon::parse($request->tgl);
+
+                    if (isset($quota[$parameter]->kuota) && $samples->count() < $quota[$parameter]->kuota && $tglRequest >= $tglBerlaku) {
+                        $remaining_quota = $quota[$parameter]->kuota - $samples->count();
+
+                        // Ambil dari cadangan untuk parameter ini
+                        if (isset($t_coli_rest[$parameter]) && count($t_coli_rest[$parameter]) > 0) {
+                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota);
+
+                            foreach ($backup_to_add as $backup_sample) {
+                                if ($samples->count() < $quota[$parameter]->kuota) {
+                                    $quota_count[$request->id_stp][$parameter]->push($backup_sample);
+
+                                    // Update data untuk menambahkan sampel cadangan
+                                    foreach ($data as $key => $row) {
+                                        $join_no_samples = array_column($join_array, 'no_sampel');
+                                        if (isset($row[$parameter]) && $row[$parameter] === '-' && in_array($backup_sample, $join_no_samples)) {
+                                            $data[$key][$parameter] = $backup_sample;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            $tes = [];
+            $tes0 = [];
+            $key_param_rest = [];
+
+            foreach($select as $key => $param) {
+                $samples = array_values(array_diff(array_column($data, $param), ['-']));
+                sort($samples);
+                $tes[$key] = $samples;
+
+                if(isset($quota[$param]) && in_array($param, ['Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)']) && count($samples) > 0){
+                    $key_param_rest[$param] =  $key;
+                }
+
+                $inter_samples = array_values(array_diff(array_column($inter, $param), ['-']));
+                sort($inter_samples);
+                $tes0[$key] = $inter_samples;
+            }
+
+            $tes1 = $tes0;
+            $approve = $tes0;
+
+            $stp = TemplateStp::with('sample')->where('id', $request->id_stp)->select('name','category_id')->first();
+			// dd($stp);
+
+            if($stp == null) {
+                return response()->json([
+                    'message' => 'Data template tidak ditemukan'
+                ],401);
+            }else if($stp->sample == null) {
+                return response()->json([
+                    'message' => 'Data template sample tidak ditemukan'
+                ],401);
+            }
+
+            if(( $stp->name == 'TITRIMETRI' || $stp->name == 'TITRI A' || $stp->name == 'TITRI B' ) && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
+				// $analystParameter = TemplateAnalyst::where('nama', $stp->name)->where('is_active', true)->first();
+				// $analystParameter = Parameter::whereIn('id', json_decode($analystParameter->parameters))->select('nama_lab')->get();
+				// echo(json_encode($analystParameter));
+				// dd($analystParameter);
+                $parameterData = Titrimetri::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active',true)
+                    ->where('is_total',false)
+                    ->orderBy('parameter')
+                    ->orderBy('no_sampel', 'asc')
+					->get()->groupBy('parameter');
+                // if($stp->sample->nama_kategori == 'Air') {
+                //     $parameterData = $parameterData->with('TrackingSatu');
+                // }
+                // $parameterData = $parameterData->get()->groupBy('parameter');
+				// dd($parameterData);
+
+                foreach($parameterData as $param => $samples) {
+                    $k = array_search($param, $select);
+
+
+					// if($stp->sample->nama_kategori == 'Air') {
+					// 	$ftc[$k] = $samples->map(function($item) {
+					// 		return (object)[
+					// 			'no_sample' => $item->no_sampel,
+					// 			'tanggal' => $item->TrackingSatu->ftc_verifier == null ? '-' : $item->TrackingSatu->ftc_verifier
+					// 		];
+					// 	});
+					// }
+
+                    $tes1[$k] = $samples->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+                    $approved = $samples->where('is_approved', 1)->pluck('no_sampel')->toArray();
+                    sort($approved);
+
+                    if(!empty($approved)) {
+						$unapproved = array_diff($tes[$k], $approved);
+                        // sort($unapproved);
+                        $approve[$k] = array_replace($tes[$k], array_fill_keys(array_keys($unapproved), '-'));
+                    } else {
+						$approve[$k] = [];
+                    }
+					// dump($approve[$k]);
+                }
+				// dd($approve);
+            // }else if($stp->name == 'GRAVIMETRI' && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
+            }else if(($stp->name == 'GRAVIMETRI A' || $stp->name == 'GRAVIMETRI B' || $stp->name == 'GRAVIMETRI') && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
+                $parameterData = Gravimetri::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+					->where('is_total',false)
+                    ->orderBy('parameter')
+                    ->orderBy('no_sampel', 'asc')
+					->get()->groupBy('parameter');
+					// if($stp->sample->nama_kategori == 'Air') {
+					// 	$parameterData = $parameterData->with('TrackingSatu');
+					// }
+					// $parameterData = $parameterData->get()->groupBy('parameter');
+
+                foreach($parameterData as $param => $samples) {
+                    $k = array_search($param, $select);
+
+					// if($stp->sample->nama_kategori == 'Air') {
+					// 	$ftc[$k] = $samples->map(function($item) {
+					// 		return (object)[
+					// 			'no_sample' => $item->no_sampel,
+					// 			'tanggal' => $item->TrackingSatu->ftc_verifier == null ? '-' : $item->TrackingSatu->ftc_verifier
+					// 		];
+					// 	});
+					// }
+
+                    $tes1[$k] = $samples->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    $approved = $samples->where('is_approved', 1)->pluck('no_sampel')->toArray();
+                    sort($approved);
+
+                    if(!empty($approved)) {
+                        $unapproved = array_diff($tes[$k], $approved);
+                        // sort($unapproved);
+                        $approve[$k] = array_replace($tes[$k], array_fill_keys(array_keys($unapproved), '-'));
+                    } else {
+                        $approve[$k] = [];
+                    }
+                }
+            }else if(
+                ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'Direct Reading A' || $stp->name == 'Direct Reading B' || $stp->name == 'Direct Reading C' || $stp->name == 'Direct Reading D' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'SPEKTRO A' || $stp->name == 'SPEKTRO B' || $stp->name == 'SPEKTRO C' ||  $stp->name == 'SPEKTRO D' ||  $stp->name == 'SPEKTRO E' ||  $stp->name == 'SPEKTRO F' ||  $stp->name == 'COLORIMETER' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'KIMIA PANGAN A' || $stp->name == 'Mikrobiologi Padatan')
+                &&
+                ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan' || $stp->sample->nama_kategori == 'Pangan')
+            ) {
+                $parameterData = Colorimetri::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+					->where('is_total',false)
+                    ->orderBy('parameter')
+                    ->orderBy('no_sampel', 'asc')
+					->get()->groupBy('parameter');
+					// if($stp->sample->nama_kategori == 'Air') {
+					// 	$parameterData = $parameterData->with('TrackingSatu');
+					// }
+					// $parameterData = $parameterData->get()->groupBy('parameter');
+
+				// dd($parameterData);
+                foreach($parameterData as $param => $samples) {
+                    $k = array_search($param, $select);
+
+					// if($stp->sample->nama_kategori == 'Air') {
+					// 	$ftc[$k] = $samples->map(function($item) {
+					// 		return (object)[
+					// 			'no_sample' => $item->no_sampel,
+					// 			'tanggal' => $item->TrackingSatu->ftc_verifier == null ? '-' : $item->TrackingSatu->ftc_verifier
+					// 		];
+					// 	});
+					// }
+
+                    $tes1[$k] = $samples->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    $approved = $samples->where('is_approved', 1)->pluck('no_sampel')->toArray();
+                    sort($approved);
+
+                    if(!empty($approved)) {
+                        $unapproved = array_diff($tes[$k], $approved);
+                        // sort($unapproved);
+                        $approve[$k] = array_replace($tes[$k], array_fill_keys(array_keys($unapproved), '-'));
+                    } else {
+                        $approve[$k] = [];
+                    }
+                }
+            }else if(($stp->name == 'SPEKTRO UV-VIS' || $stp->name == 'ICP' || $stp->name == 'GRAVIMETRI') && $stp->sample->nama_kategori == 'Udara'){
+                $loop = LingkunganHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->select('parameter')
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->groupBy('parameter')
+                    ->get();
+				// dump($select);
+                foreach($select as $k => $parameter) {
+					if($parameter == 'PM 10 (24 Jam)' || $parameter == 'PM 2.5 (24 Jam)') {
+						$tes[$k] = array_values(array_diff($tes[$k], $pm24_samples_excluded));
+					}
+                    // Get data for Linghidup
+                    $linghidupData = LingkunganHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                        ->where('parameter', $parameter)
+                        ->where('is_active', true)
+                        ->orderBy('no_sampel', 'asc')
+                        ->get();
+
+                    $dustfallData = DustFallHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                        ->where('parameter', $parameter)
+                        ->where('is_active', true)
+                        ->orderBy('no_sampel', 'asc')
+                        ->get();
+
+                    // Get data for DebuPersonal
+                    $debuData = DebuPersonalHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                        ->where('parameter', $parameter)
+                        ->where('is_active', true)
+                        ->orderBy('no_sampel', 'asc')
+                        ->get();
+
+                    // Combine data from both sources
+                    $combinedData = $linghidupData
+						->concat($dustfallData)
+						->concat($debuData);
+
+                    // Map sample data
+                    $tes1[$k] = $combinedData->map(function($item) {
+						// dd($item);
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    // Handle approved samples
+                    $approvedSamples = $combinedData->where('is_approved', true)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+					// dd($linghidupData);
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+                }
+            }else if(($stp->name == 'SPEKTRO UV-VIS' || $stp->name == 'ICP' || $stp->name == 'GRAVIMETRI') && $stp->sample->nama_kategori == 'Emisi'){
+                $emisicData = EmisiCerobongHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+				// dd('masuk');
+
+                foreach($select as $k => $parameter) {
+                    $parameterData = $emisicData->where('parameter', $parameter);
+
+					// Map sample data dan reset key
+					$tes1[$k] = array_values($parameterData->map(function ($item) {
+						return (object)[
+							'no_sample' => $item->no_sampel,
+							'note' => $item->note
+						];
+					})->toArray());
+
+					// dd($tes1[$k]);
+
+                    // Handle approved samples
+                    $approvedSamples = $parameterData->where('is_approved', 1)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+
+
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+
+					// dd($approve[$k]);
+                }
+            }else if($stp->name == 'DIRECT READING' && $stp->sample->nama_kategori == 'Udara'){
+                $dustfallData = DustFallHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+                foreach($select as $k => $parameter) {
+                    $parameterData = $dustfallData->where('parameter', $parameter);
+
+                    // Map sample data
+                    $tes1[$k] = $parameterData->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    // Handle approved samples
+                    $approvedSamples = $parameterData->where('is_approved', 1)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+
+
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+                }
+            }else if($stp->name == 'MIKROBIOLOGI' && $stp->sample->nama_kategori == 'Udara'){
+                $microbioData = MicrobioHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+                foreach($select as $k => $parameter) {
+                    $parameterData = $microbioData->where('parameter', $parameter);
+
+                    // Map sample data
+                    $tes1[$k] = $parameterData->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    // Handle approved samples
+                    $approvedSamples = $parameterData->where('is_approved', 1)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+                }
+            }else if($stp->name == 'SWAB TEST' && $stp->sample->nama_kategori == 'Udara'){
+                $swab = SwabTestHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+                foreach($select as $k => $parameter) {
+                    $parameterData = $swab->where('parameter', $parameter);
+
+                    // Map sample data
+                    $tes1[$k] = $parameterData->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    // Handle approved samples
+                    $approvedSamples = $parameterData->where('is_approved', 1)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+                }
+            } else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi','Padatan'])){
+				$isokinetik = Subkontrak::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+					->where('is_total',false)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+                foreach($select as $k => $parameter) {
+                    $parameterData = $isokinetik->where('parameter', $parameter);
+
+                    // Map sample data
+                    $tes1[$k] = array_values($parameterData->map(function ($item) {
+						return (object)[
+							'no_sample' => $item->no_sampel,
+							'note' => $item->note
+						];
+					})->toArray());
+
+                    // Handle approved samples
+                    $approvedSamples = $parameterData->where('is_approve', 1)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+                }
+			}else if($stp->name == 'ISOKINETIK' && $stp->sample->nama_kategori == 'Emisi'){
+                $isokinetik = IsokinetikHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+                foreach($select as $k => $parameter) {
+                    $parameterData = $isokinetik->where('parameter', $parameter);
+
+                    // Map sample data
+                    $tes1[$k] = $parameterData->map(function($item) {
+                        return (object)[
+                            'no_sample' => $item->no_sampel,
+                            'note' => $item->note
+                        ];
+                    })->toArray();
+
+                    // Handle approved samples
+                    $approvedSamples = $parameterData->where('is_approved', 1)
+                        ->pluck('no_sampel')
+                        ->sort()
+                        ->toArray();
+
+                    $unapprovedSamples = array_diff($tes[$k], $approvedSamples);
+
+                    $approve[$k] = array_replace(
+                        $tes[$k],
+                        array_fill_keys(array_keys($unapprovedSamples), '-')
+                    );
+                }
+			}
+            // }else{
+            //     return response()->json([
+            //         'message' => 'Template pengujian tidak ditemukan'
+            //     ],401);
+            // }
+
+            $filtered_sample_request = $quota_count->map(fn($item) =>
+                $item instanceof \Illuminate\Support\Collection ? $item->toArray() : (array)$item
+            )->toArray();
+
+            $filtered_sample_repo = $repo_quota;
+
+            foreach ($filtered_sample_request as $key => $val) {
+                if (isset($filtered_sample_repo[$key])) {
+                    // Jika key utama (misal 7 atau 8) sudah ada di repo
+                    foreach ($val as $param => $samples) {
+                        if (isset($filtered_sample_repo[$key][$param])) {
+                            // Gabungkan nilai array tanpa duplikasi
+                            $filtered_sample_repo[$key][$param] = array_values(array_unique(array_merge(
+                                $filtered_sample_repo[$key][$param],
+                                $samples
+                            )));
+                        } else {
+                            // Tambahkan parameter baru (misal COD, Fenol, dll)
+                            $filtered_sample_repo[$key][$param] = $samples;
+                        }
+                    }
+                } else {
+                    // Jika key utama belum ada di repo, tambahkan seluruh isinya
+                    $filtered_sample_repo[$key] = $val;
+                }
+            }
+
+            // Simpan ke repository sebagai JSON
+            Repository::dir('filtered_quota_sampel')
+                ->key($request->tgl)
+                // ->save(json_encode($filtered_sample_request, JSON_PRETTY_PRINT));
+                ->save(json_encode($filtered_sample_repo, JSON_PRETTY_PRINT));
+
+            return response()->json([
+                'status'=>0,
+                'columns'=>$select,
+                'data' => $tes,
+                'nilai' => $tes1,
+                'approve' => $approve,
+				'ftc' => $ftc
+            ], 200);
+		}catch(\Exception $e) {
+            return response()->json([
+				'message' => 'Gagal mengambil parameter: '.$e->getMessage(),
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
+			],500);
+		}
+    }
+
     public function getShiftIcp(Request $request)
 	{
 		try {

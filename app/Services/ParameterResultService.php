@@ -41,6 +41,7 @@ class ParameterResultService
     {
         $ws = WsValueAir::where('no_sampel', $noSampel)
             ->with(['titrimetri', 'gravimetri', 'colorimetri', 'subkontrak'])
+            ->where('is_active', 1)
             ->get();
 
         if ($ws->isEmpty()) {
@@ -77,6 +78,7 @@ class ParameterResultService
 
         $ws = WsValueUdara::where('no_sampel', $noSampel)
             ->with($relations)
+            ->where('is_active', 1)
             ->get();
 
         if ($ws->isEmpty()) {
@@ -103,6 +105,7 @@ class ParameterResultService
     {
         $ws = WsValueEmisiCerobong::where('no_sampel', $noSampel)
             ->with(['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'])
+            ->where('is_active', 1)
             ->get();
 
         if ($ws->isEmpty()) {
@@ -161,6 +164,7 @@ class ParameterResultService
     {
         $ws = WsValueAir::whereIn('no_sampel', $noSampelList)
             ->with(['titrimetri', 'gravimetri', 'colorimetri', 'subkontrak'])
+            ->where('is_active', 1)
             ->get();
 
         $result = [];
@@ -199,6 +203,7 @@ class ParameterResultService
 
         $ws = WsValueUdara::whereIn('no_sampel', $noSampelList)
             ->with($relations)
+            ->where('is_active', 1)
             ->get();
 
         $result = [];
@@ -227,6 +232,7 @@ class ParameterResultService
     {
         $ws = WsValueEmisiCerobong::whereIn('no_sampel', $noSampelList)
             ->with(['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'])
+            ->where('is_active', 1)
             ->get();
 
         $result = [];
