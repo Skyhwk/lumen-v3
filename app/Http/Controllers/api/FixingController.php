@@ -18,6 +18,7 @@ use App\Models\MasterFeeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Menu;
 use App\Models\OrderDetail;
+use App\Models\DataLapanganCahaya;
 use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -1713,4 +1714,26 @@ class FixingController extends Controller
             @rename($oldPath, $newPath);
         }
     }
+
+    // INI PUNYA DATA LAPANGAN CAHAYA
+    public function updateJenisCahaya(Request $request)
+    {
+        $dataCahaya = DataLapanganCahaya::where('id', $request->id)->first();
+        $dataCahaya->jenis_cahaya = $request->jenis_cahaya;
+        $dataCahaya->save();
+        return response()->json([
+            'message' => 'Update jenis cahaya selesai.',
+        ], 200);
+    }
+
+    public function cekNoSampel(Request $request)
+    {
+        $noSampel = $request->input('no_sampel');
+        $dataCahaya = DataLapanganCahaya::where('no_sampel', $noSampel)->first();
+        return response()->json([
+            'data' => $dataCahaya,
+        ], 200);
+    }
+
+    // END PUNYA DATA LAPANGAN CAHAYA
 }

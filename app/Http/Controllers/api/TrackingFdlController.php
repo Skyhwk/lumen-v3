@@ -27,9 +27,10 @@ class TrackingFdlController extends Controller
 
         $rows = [];
 
+        
         foreach ($data as $orderDetail) {
             $namaSampler = null;
-            $waktuSubmitFdl = null;
+            $waktuSubmitFdl = [];
 
             foreach ($orderDetail->getAnyDataLapanganRelations() as $relation) {
                 if (!$orderDetail->relationLoaded($relation) || !$orderDetail->{$relation}) {
@@ -45,17 +46,42 @@ class TrackingFdlController extends Controller
                     $createdBy = $item->created_by ?? null;
                     $createdAt = $item->created_at ?? null;
 
-                    if ($createdBy !== null || $createdAt !== null) {
+                    if ($createdBy !== null) {
                         $namaSampler = $createdBy;
-                        $waktuSubmitFdl = $createdAt;
-                        break 2;
+                    }
+         
+                    if ($createdAt !== null) {
+                        $waktuSubmitFdl[] = $createdAt;
                     }
                 }
             }
 
-            if ($namaSampler === null && $waktuSubmitFdl === null) {
+            if (empty($namaSampler) && empty($waktuSubmitFdl)) {
                 continue;
             }
+
+            $groupedWaktu = [];
+
+             foreach ($waktuSubmitFdl as $time) {
+                if ($time) {
+                    $timestamp = strtotime($time);
+                    $date = date('Y-m-d', $timestamp);
+                    $timeOnly = date('H:i:s', $timestamp);
+
+                    if (!isset($groupedWaktu[$date])) {
+                        $groupedWaktu[$date] = [];
+                    }
+                    if (!in_array($timeOnly, $groupedWaktu[$date])) {
+                        $groupedWaktu[$date][] = $timeOnly;
+                    }
+                }
+            }
+
+            ksort($groupedWaktu);
+            foreach ($groupedWaktu as &$times) {
+                sort($times);
+            }
+            unset($times);
 
             $rows[] = [
                 'no_sampel' => $orderDetail->no_sampel,
@@ -64,12 +90,12 @@ class TrackingFdlController extends Controller
                 'parameter' => count(json_decode($orderDetail->parameter)),
                 'keterangan_1' => $orderDetail->keterangan_1,
                 'sampler' => $namaSampler,
-                'tanggal_input_fdl' => $waktuSubmitFdl,
+                'tanggal_input_fdl' => $groupedWaktu,
                 'no_quotation' => $orderDetail->no_quotation,
             ];
         }
 
-            return DataTables::of($rows)->make(true);
+        return DataTables::of($rows)->make(true);
         } catch (\Exception $th) {
             return response()->json([
                 'success' => false,
@@ -95,35 +121,6 @@ class TrackingFdlController extends Controller
             $rows = [];
 
             foreach ($data as $orderDetail) {
-                $namaSampler = null;
-                $waktuSubmitFdl = null;
-
-                foreach ($orderDetail->getAnyDataLapanganRelations() as $relation) {
-                    if (!$orderDetail->relationLoaded($relation) || !$orderDetail->{$relation}) {
-                        continue;
-                    }
-
-                    $relasi = $orderDetail->{$relation};
-                    $items = $relasi instanceof \Illuminate\Database\Eloquent\Collection
-                        ? $relasi
-                        : collect([$relasi]);
-
-                    foreach ($items as $item) {
-                        $createdBy = $item->created_by ?? null;
-                        $createdAt = $item->created_at ?? null;
-
-                        if ($createdBy !== null || $createdAt !== null) {
-                            $namaSampler = $createdBy;
-                            $waktuSubmitFdl = $createdAt;
-                            break 2;
-                        }
-                    }
-                }
-
-                if ($namaSampler !== null || $waktuSubmitFdl !== null) {
-                    continue;
-                }
-
                 $rows[] = [
                     'no_sampel' => $orderDetail->no_sampel,
                     'tanggal_sampling' => $orderDetail->tanggal_sampling,
