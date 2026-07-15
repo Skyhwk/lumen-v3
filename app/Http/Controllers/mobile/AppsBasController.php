@@ -3331,4 +3331,5 @@ class AppsBasController extends Controller
 
         return $fromDb;
     }
+    // mas luthfi tes
 }
