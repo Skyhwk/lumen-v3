@@ -16,7 +16,7 @@ class AppsBasController extends Controller
         $this->service = new AppsBasService($this->karyawan, $this->user_id);
     }
 
-    public function index(Request $request)
+    public function index1(Request $request)
     {
         return $this->service->index($request);
     }
