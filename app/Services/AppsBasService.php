@@ -67,7 +67,7 @@ use App\Services\SendEmail;
 
 use Mpdf;
 
-use DateTime;
+Carbon::setLocale('id');
 
 class AppsBasService
 {
@@ -1906,7 +1906,7 @@ class AppsBasService
                                         ->update([
                                             'status'         => 'Selesai',
                                             'is_finished'    => 1, // boolean true
-                                            'is_finished_at' => now(),
+                                            'is_finished_at' => Carbon::now(),
                                         ]);
                                 }
                             }
