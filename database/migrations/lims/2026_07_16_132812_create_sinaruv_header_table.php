@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateDataMedanlmHeaderTable extends Migration
+class CreateSinaruvHeaderTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,23 +13,22 @@ class CreateDataMedanlmHeaderTable extends Migration
      */
     public function up(): void
     {
-        Schema::create('medanlm_header', function (Blueprint $table) {
+        Schema::create('sinaruv_header', function (Blueprint $table) {
             $table->id();
             $table->string('no_sampel', 50)->nullable();
             $table->text('no_sampel_lama')->nullable();
             $table->bigInteger('id_parameter')->nullable();
             $table->string('parameter', 50)->nullable();
-            $table->string('bagian_tubuh', 150)->nullable();
             
-            // Status & Kontrol Progress
+            // Status & Catatan
             $table->integer('draft')->default(0);
             $table->integer('lhps')->default(0);
             $table->text('notes_reject')->nullable();
             
-            // Timestamps Audit & Approval
+            // Workflow Status & Audit Trails
             $table->timestamp('rejected_at')->nullable();
             $table->string('rejected_by', 70)->nullable();
-            $table->integer('is_approve')->nullable();
+            $table->integer('is_approved')->nullable();
             $table->string('approved_by', 70)->nullable();
             $table->timestamp('approved_at')->nullable();
             $table->string('created_by', 70)->nullable();
@@ -41,6 +40,6 @@ class CreateDataMedanlmHeaderTable extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('medanlm_header');
+        Schema::dropIfExists('sinaruv_header');
     }
 }
