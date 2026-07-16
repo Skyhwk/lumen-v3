@@ -1736,4 +1736,144 @@ class FixingController extends Controller
     }
 
     // END PUNYA DATA LAPANGAN CAHAYA
+
+    public function cekLhpDouble(Request $request)
+    {
+        $noOrder = $request->input('no_order');
+        if (!$noOrder) {
+            return response()->json(['message' => 'no_order is required'], 400);
+        }
+
+        $models = [
+            \App\Models\LhpsAdverseOdorHeader::class,
+            \App\Models\LhpsAirHeader::class,
+            \App\Models\LhpsEmisiCHeader::class,
+            \App\Models\LhpsEmisiHeader::class,
+            \App\Models\LhpsEmisiIsokinetikHeader::class,
+            \App\Models\LhpsErgonomiHeader::class,
+            \App\Models\LhpsGetaranHeader::class,
+            \App\Models\LhpsHygieneSanitasiHeader::class,
+            \App\Models\LhpsIklimHeader::class,
+            \App\Models\LhpsKebisinganHeader::class,
+            \App\Models\LhpsKebisinganPersonalHeader::class,
+            \App\Models\LhpsLingHeader::class,
+            \App\Models\LhpsMedanLMHeader::class,
+            \App\Models\LhpsMicrobiologiHeader::class,
+            \App\Models\LhpsPadatanHeader::class,
+            \App\Models\LhpsPencahayaanHeader::class,
+            \App\Models\LhpsSinarUVHeader::class,
+            \App\Models\LhpsSwabTesHeader::class,
+            \App\Models\LhpUdaraPsikologiHeader::class,
+        ];
+
+        $duplicates = [];
+
+        foreach ($models as $modelClass) {
+            if (!class_exists($modelClass)) continue;
+            
+            $table = (new $modelClass)->getTable();
+            $hasLhp = \Illuminate\Support\Facades\Schema::hasColumn($table, 'no_lhp');
+            $hasCfr = \Illuminate\Support\Facades\Schema::hasColumn($table, 'no_cfr');
+            
+            // Step 1: Find no_lhp that appear more than once for this no_order
+            if ($hasLhp) {
+                $dupNos = DB::table($table)
+                    ->select('no_lhp')
+                    ->where('no_order', $noOrder)
+                    ->whereNotNull('no_lhp')
+                    ->where('no_lhp', '!=', '')
+                    ->groupBy('no_lhp')
+                    ->havingRaw('COUNT(*) > 1')
+                    ->pluck('no_lhp');
+
+                if ($dupNos->isNotEmpty()) {
+                    $records = $modelClass::where('no_order', $noOrder)
+                        ->whereIn('no_lhp', $dupNos)
+                        ->get(['id', 'no_lhp', 'no_order', 'is_approve']);
+                    
+                    foreach ($records as $record) {
+                        $duplicates[] = [
+                            'id' => $record->id,
+                            'no_lhp' => $record->no_lhp,
+                            'no_order' => $record->no_order,
+                            'is_approve' => $record->is_approve,
+                            'model' => class_basename($modelClass)
+                        ];
+                    }
+                }
+            }
+
+            // Step 2: Find no_cfr that appear more than once for this no_order
+            if ($hasCfr) {
+                $dupCfrs = DB::table($table)
+                    ->select('no_cfr')
+                    ->where('no_order', $noOrder)
+                    ->whereNotNull('no_cfr')
+                    ->where('no_cfr', '!=', '')
+                    ->groupBy('no_cfr')
+                    ->havingRaw('COUNT(*) > 1')
+                    ->pluck('no_cfr');
+
+                if ($dupCfrs->isNotEmpty()) {
+                    $selectColumns = ['id', 'no_cfr', 'no_order', 'is_approve'];
+                    if ($hasLhp) {
+                        $selectColumns[] = 'no_lhp';
+                    }
+                    $recordsCfr = $modelClass::where('no_order', $noOrder)
+                        ->whereIn('no_cfr', $dupCfrs)
+                        ->get($selectColumns);
+                    
+                    foreach ($recordsCfr as $record) {
+                        // Avoid adding duplicates if already added by no_lhp check
+                        $alreadyAdded = false;
+                        foreach ($duplicates as $dup) {
+                            if ($dup['id'] == $record->id && $dup['model'] == class_basename($modelClass)) {
+                                $alreadyAdded = true;
+                                break;
+                            }
+                        }
+
+                        if (!$alreadyAdded) {
+                            $duplicates[] = [
+                                'id' => $record->id,
+                                'no_lhp' => ($hasLhp && !empty($record->no_lhp)) ? $record->no_lhp : $record->no_cfr,
+                                'no_order' => $record->no_order,
+                                'is_approve' => $record->is_approve,
+                                'model' => class_basename($modelClass)
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        return response()->json(['data' => $duplicates], 200);
+    }
+
+    public function hapusLhpDouble(Request $request)
+    {
+        $id = $request->input('id');
+        $modelName = $request->input('model');
+
+        if (!$id || !$modelName) {
+            return response()->json(['message' => 'id and model are required'], 400);
+        }
+
+        $modelClass = "\\App\\Models\\" . $modelName;
+        if (!class_exists($modelClass)) {
+            return response()->json(['message' => 'Model not found'], 404);
+        }
+
+        $record = $modelClass::find($id);
+        if (!$record) {
+            return response()->json(['message' => 'Record not found'], 404);
+        }
+
+        try {
+            $record->delete();
+            return response()->json(['message' => 'Data berhasil dihapus'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal menghapus data: ' . $e->getMessage()], 500);
+        }
+    }
 }
