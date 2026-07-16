@@ -1368,7 +1368,32 @@ class AppsBasService
 
             if ($sent) {
 
-                $persiapanHeader = PersiapanSampelHeader::where('no_quotation', $noDocument)->where('no_order', $noOrder)->where('tanggal_sampling', $request->input('tanggal_sampling'))->where('is_active', true)->whereNotNull('detail_bas_documents')->first();
+                $persiapanHeaders = PersiapanSampelHeader::where('no_quotation', $noDocument)
+                    ->where('no_order', $noOrder)
+                    ->where('tanggal_sampling', $request->input('tanggal_sampling'))
+                    ->where('is_active', true)
+                    ->whereNotNull('detail_bas_documents')
+                    ->get();
+
+                $persiapanHeader = null;
+                foreach ($persiapanHeaders as $header) {
+                    $details = json_decode($header->detail_bas_documents, true) ?? [];
+                    $found = false;
+                    foreach ($details as $detail) {
+                        if (isset($detail['filename']) && in_array($detail['filename'], $attachments)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if ($found) {
+                        $persiapanHeader = $header;
+                        break;
+                    }
+                }
+
+                if (!$persiapanHeader && $persiapanHeaders->isNotEmpty()) {
+                    $persiapanHeader = $persiapanHeaders->first();
+                }
 
                 if ($persiapanHeader) {
                     $persiapanHeader->is_emailed_bas = 1;
