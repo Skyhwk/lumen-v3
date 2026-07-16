@@ -79,7 +79,7 @@ class AppsBasService
         $this->karyawan = $karyawan;
         $this->user_id = $user_id;
     }
-    
+
     public function index(Request $request)
     {
         // Set limit memory lebih besar secara sementara untuk proses data besar
@@ -286,7 +286,7 @@ class AppsBasService
                 }
                 $samplerCounts[$samplerKey]++;
             }
-            
+
             foreach ($finalResult as &$res) {
                 $samplerKey = $res['nomor_quotation'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
                 $res['is_sampler_duplicate'] = $samplerCounts[$samplerKey] > 1;
@@ -344,13 +344,13 @@ class AppsBasService
                         $hSamples = json_decode($h->no_sampel, true);
                         if (is_array($hSamples)) {
                             // Bersihkan hSamples dari prefix untuk pencocokan yang aman
-                            $hSamplesClean = array_map(function($s) {
+                            $hSamplesClean = array_map(function ($s) {
                                 $parts = explode('/', $s);
                                 return end($parts);
                             }, $hSamples);
 
                             // Bersihkan itemSamples dari prefix
-                            $itemSamplesClean = array_map(function($s) {
+                            $itemSamplesClean = array_map(function ($s) {
                                 $parts = explode('/', $s);
                                 return end($parts);
                             }, $itemSamples);
@@ -819,11 +819,11 @@ class AppsBasService
                 // Cari header yang memuat no_sampel dari item ini
                 $header = $dataList->where('no_order', $item['no_order'])->first(function ($h) use ($kodeList, $item) {
                     $no_sampel = json_decode($h->no_sampel, true) ?? [];
-                    $no_sampel_clean = array_map(function($s) {
+                    $no_sampel_clean = array_map(function ($s) {
                         $parts = explode('/', $s);
                         return end($parts);
                     }, $no_sampel);
-                    
+
                     // Jika ada $kodeList (dari request kategori), kita cocokkan dengan salah satu kode yang direquest
                     if (!empty($kodeList)) {
                         return count(array_intersect($kodeList, $no_sampel_clean)) > 0;
@@ -1087,52 +1087,52 @@ class AppsBasService
     {
         DB::beginTransaction();
         try {
-                if ($request->has('data') && !empty($request->data)) {
-                    $errors = [];
-                    foreach ($request->data as $item) {
-                        if (!isset($item['no_quotation'])) {
-                            continue;
-                        }
-                        
-                        // Pastikan $item['no_sampel'] hanya berisi kode (tanpa no_order)
-                        if (isset($item['no_sampel']) && is_array($item['no_sampel'])) {
-                            $item['no_sampel'] = array_map(function ($s) {
-                                $parts = explode('/', $s);
-                                return end($parts);
-                            }, $item['no_sampel']);
-                        }
+            if ($request->has('data') && !empty($request->data)) {
+                $errors = [];
+                foreach ($request->data as $item) {
+                    if (!isset($item['no_quotation'])) {
+                        continue;
+                    }
 
-                        $item['expectedNoSampel'] = array_map(function ($kode) use ($item) {
-                            return $item['no_order'] . '/' . $kode;
+                    // Pastikan $item['no_sampel'] hanya berisi kode (tanpa no_order)
+                    if (isset($item['no_sampel']) && is_array($item['no_sampel'])) {
+                        $item['no_sampel'] = array_map(function ($s) {
+                            $parts = explode('/', $s);
+                            return end($parts);
                         }, $item['no_sampel']);
-                        
+                    }
+
+                    $item['expectedNoSampel'] = array_map(function ($kode) use ($item) {
+                        return $item['no_order'] . '/' . $kode;
+                    }, $item['no_sampel']);
+
+                    $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
+                        ->where('tanggal_sampling', $item['tanggal_sampling'])
+                        ->where('is_active', true)
+                        ->orderBy('id', 'desc')
+                        ->get();
+
+                    if ($dataList->isEmpty()) {
                         $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
-                            ->where('tanggal_sampling', $item['tanggal_sampling'])
                             ->where('is_active', true)
                             ->orderBy('id', 'desc')
                             ->get();
+                    }
 
-                        if ($dataList->isEmpty()) {
-                            $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
-                                ->where('is_active', true)
-                                ->orderBy('id', 'desc')
-                                ->get();
-                        }
+                    if ($dataList->isEmpty()) {
+                        $dataList = PersiapanSampelHeader::where('no_quotation', $item['no_quotation'])
+                            ->where('is_active', true)
+                            ->orderBy('id', 'desc')
+                            ->get();
+                    }
 
-                        if ($dataList->isEmpty()) {
-                            $dataList = PersiapanSampelHeader::where('no_quotation', $item['no_quotation'])
-                                ->where('is_active', true)
-                                ->orderBy('id', 'desc')
-                                ->get();
-                        }
-
-                        $header = $dataList->first(function ($data) use ($item) {
-                            $no_sampel = json_decode($data->no_sampel, true) ?? [];
-                            // Ekstrak kode sampel dari database (ambil bagian terakhir setelah '/')
-                            $dbSamples = array_map(function ($s) {
-                                $parts = explode('/', $s);
-                                return end($parts);
-                            }, $no_sampel);
+                    $header = $dataList->first(function ($data) use ($item) {
+                        $no_sampel = json_decode($data->no_sampel, true) ?? [];
+                        // Ekstrak kode sampel dari database (ambil bagian terakhir setelah '/')
+                        $dbSamples = array_map(function ($s) {
+                            $parts = explode('/', $s);
+                            return end($parts);
+                        }, $no_sampel);
 
                         return count(array_intersect($dbSamples, $item['no_sampel'])) > 0;
                     });
@@ -1201,7 +1201,7 @@ class AppsBasService
                         $detailData['tanda_tangan'] = $ttd_bas;
 
                         $existingDetails = json_decode($header->detail_bas_documents, true) ?? [];
-                        
+
                         // Bersihkan dan sort no_sampel untuk menghindari duplikat tidak terdeteksi
                         $detailData['no_sampel'] = array_values(array_unique($detailData['no_sampel']));
                         sort($detailData['no_sampel']);
@@ -1255,24 +1255,29 @@ class AppsBasService
                         // Loop semua sampel di dalam header ini
                         foreach ($allHeaderSamples as $ns) {
                             $order = OrderDetail::where('no_sampel', $ns)->first();
-                            
+
                             if (!$order) {
                                 $headerIsCompleted = false;
                                 continue;
                             }
 
-                            // Cek kelengkapan parameter melalui function getStatusSampling
-                            $statusSampel = $this->getStatusSampling($order);
-                            
-                            // 1. Logika untuk menentukan $header->is_completed 
-                            // (Jika ada 1 saja sampel di header yang belum selesai, maka header false)
-                            if ($statusSampel !== 'selesai') {
+                            $isSelesai = \App\Models\BasSampelSelesai::where('no_sampel', $ns)->exists();
+
+                            if (!$isSelesai) {
+                                if ($order->kategori_2 === "1-Air") {
+                                    $isSelesai = \App\Models\DataLapanganAir::where('no_sampel', $ns)->exists();
+                                } else {
+                                    $statusSampel = $this->getStatusSampling($order);
+                                    $isSelesai = ($statusSampel === 'parsial' || $statusSampel === 'selesai');
+                                }
+                            }
+
+                            if (!$isSelesai) {
                                 $headerIsCompleted = false;
                             }
                         }
 
                         // Update is_completed di tabel persiapan_sampel_header
-                        // Perlu query Builder langsung atau assign ke model lalu save lagi
                         $header->is_completed = $headerIsCompleted ? 1 : 0;
                         $header->save();
                         // =========================================================================
@@ -1457,14 +1462,14 @@ class AppsBasService
                     }
                 }
             }
-            
+
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
                 ->where('status_quotation', $infoSampling['status_quotation'])
                 ->where('is_active', true)
                 ->first();
-                
+
             if (!$sp) {
                 return response()->json([
                     'message' => 'Data sampling plan tidak ditemukan.!'
@@ -1521,7 +1526,7 @@ class AppsBasService
 
             foreach ($kategoriList as $kategoriItem) {
                 $parts = explode(' - ', trim($kategoriItem));
-                $kode = trim(end($parts)); 
+                $kode = trim(end($parts));
                 // Sekarang hanya gunakan kodenya saja agar sesuai dengan yang disimpan di updateData
                 $expectednoSampel[] = $kode;
             }
@@ -1564,9 +1569,9 @@ class AppsBasService
                 if (empty($reqSamples)) {
                     $reqSamples = $expectednoSampel;
                 }
-                
+
                 if (empty($reqSamples)) {
-                    return true; 
+                    return true;
                 }
 
                 return count(array_intersect($dbSamples, $reqSamples)) > 0;
@@ -2520,7 +2525,7 @@ class AppsBasService
 
         return response()->download($path, $filename, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$filename.'"'
+            'Content-Disposition' => 'inline; filename="' . $filename . '"'
         ]);
     }
 
