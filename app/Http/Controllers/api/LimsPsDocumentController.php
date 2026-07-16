@@ -453,6 +453,9 @@ class LimsPsDocumentController extends Controller
         $document->cetakan = $request->filled('cetakan') ? $request->cetakan : null;
         $document->disusun_oleh = $request->disusun_oleh;
         $document->jabatan_penyusun = $request->jabatan_penyusun;
+        $document->tanggal_disusun = $request->filled('tanggal_disusun')
+            ? $request->tanggal_disusun
+            : Carbon::today()->format('Y-m-d');
     }
 
     private function resolveStatusLabel(LimsDocument $document): string
