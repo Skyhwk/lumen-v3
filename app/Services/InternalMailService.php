@@ -297,7 +297,9 @@ class InternalMailService
         foreach ($mail->getAttachments() as $attachment) {
             $fileName = $this->attachmentFileName($attachment->filePath);
             $contentId = $this->normalizeContentId($this->getAttachmentContentId($attachment));
-            $url = env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . rawurlencode($fileName);
+            $url = rtrim(request()->root(), '/')
+                . '/email/' . $this->storageKey()
+                . '/attachments/' . rawurlencode($fileName);
             $isInline = $contentId !== '';
 
             $attachments[] = [
