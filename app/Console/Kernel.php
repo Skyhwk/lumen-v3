@@ -40,9 +40,6 @@ class Kernel extends ConsoleKernel
         Commands\MonitorQsdForecast::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
-        Commands\NormalizeIdPersiapan::class,
-        Commands\CheckSamplingStatus::class,
-        
     ];
 
     /**
