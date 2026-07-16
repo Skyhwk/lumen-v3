@@ -1261,11 +1261,11 @@ class AppsBasService
                                 continue;
                             }
 
-                            $isSelesai = \App\Models\BasSampelSelesai::where('no_sampel', $ns)->exists();
+                            $isSelesai = BasSampelSelesai::where('no_sampel', $ns)->exists();
 
                             if (!$isSelesai) {
                                 if ($order->kategori_2 === "1-Air") {
-                                    $isSelesai = \App\Models\DataLapanganAir::where('no_sampel', $ns)->exists();
+                                    $isSelesai = DataLapanganAir::where('no_sampel', $ns)->exists();
                                 } else {
                                     $statusSampel = $this->getStatusSampling($order);
                                     $isSelesai = ($statusSampel === 'parsial' || $statusSampel === 'selesai');
