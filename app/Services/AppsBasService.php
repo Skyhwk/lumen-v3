@@ -1898,12 +1898,18 @@ class AppsBasService
                                 continue;
                             }
 
-                            // Cek kelengkapan parameter melalui function getStatusSampling
-                            $statusSampel = $this->getStatusSampling($order);
-                            
-                            // 1. Logika untuk menentukan $header->is_completed 
-                            // (Jika ada 1 saja sampel di header yang belum selesai, maka header false)
-                            if ($statusSampel !== 'selesai') {
+                            $isSelesai = BasSampelSelesai::where('no_sampel', $ns)->exists();
+
+                            if (!$isSelesai) {
+                                if ($order->kategori_2 === "1-Air") {
+                                    $isSelesai = DataLapanganAir::where('no_sampel', $ns)->exists();
+                                } else {
+                                    $statusSampel = $this->getStatusSampling($order);
+                                    $isSelesai = ($statusSampel === 'parsial' || $statusSampel === 'selesai');
+                                }
+                            }
+
+                            if (!$isSelesai) {
                                 $headerIsCompleted = false;
                             }
                         }
