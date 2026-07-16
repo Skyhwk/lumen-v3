@@ -88,7 +88,7 @@ class FormulirController extends Controller
                         $pdfPath = $pdfSubdir . '/' . $tempPdfName;
                         
                         $outputPrefix = $pdfSubdir . '/Page';
-                        $command = "pdftoppm -jpeg -r 150 " . escapeshellarg($pdfPath) . " " . escapeshellarg($outputPrefix);
+                        $command = "pdftoppm -jpeg -r 150 " . escapeshellarg($pdfPath) . " " . escapeshellarg($outputPrefix) . " 2>&1";
                         exec($command, $output, $returnVar);
                         
                         if (file_exists($pdfPath)) {
@@ -99,7 +99,8 @@ class FormulirController extends Controller
                         $generatedFiles = glob($pattern);
                         
                         if (empty($generatedFiles)) {
-                            throw new \Exception("Gagal mengonversi PDF ke gambar.");
+                            $outputStr = implode("\n", $output);
+                            throw new \Exception("Gagal mengonversi PDF ke gambar. Exit Code: {$returnVar}, Command: {$command}, Output: {$outputStr}");
                         }
                         
                         natsort($generatedFiles);
