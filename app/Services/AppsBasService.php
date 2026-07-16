@@ -1896,22 +1896,8 @@ class AppsBasService
 
                             // Cek kelengkapan parameter melalui function getStatusSampling
                             $statusSampel = $this->getStatusSampling($order);
-
-                            // 1. Logika untuk "Tabel sampel_tidak_selesai" (Hanya yang sedang disubmit)
-                            if (in_array($ns, $item['expectedNoSampel'])) {
-                                if ($statusSampel === 'selesai') {
-                                    DB::table('sampel_tidak_selesai')
-                                        ->where('no_sampel', $ns)
-                                        ->where('id_persiapan', $header->id)
-                                        ->update([
-                                            'status'         => 'Selesai',
-                                            'is_finished'    => 1, // boolean true
-                                            'is_finished_at' => Carbon::now(),
-                                        ]);
-                                }
-                            }
-
-                            // 2. Logika untuk menentukan $header->is_completed 
+                            
+                            // 1. Logika untuk menentukan $header->is_completed 
                             // (Jika ada 1 saja sampel di header yang belum selesai, maka header false)
                             if ($statusSampel !== 'selesai') {
                                 $headerIsCompleted = false;
