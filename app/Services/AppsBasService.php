@@ -2841,12 +2841,12 @@ class AppsBasService
 
             // non-environment: hanya kembalikan builder jika count >= requiredCount, else null
             $query = $model::where('no_sampel', $sample_number);
-            if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_blocked')) {
-                $query->where('is_blocked', 0);
-            }
-            if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_rejected')) {
-                $query->where('is_rejected', 0);
-            }
+            // if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_blocked')) {
+            //     $query->where('is_blocked', 0);
+            // }
+            // if (\Illuminate\Support\Facades\Schema::hasColumn((new $model)->getTable(), 'is_rejected')) {
+            //     $query->where('is_rejected', 0);
+            // }
 
             if ($paramName === 'Opasitas (Solar)') {
                 $queryN = clone $query;
