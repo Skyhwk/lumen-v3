@@ -762,28 +762,32 @@ class AppsBasService
 
             // Check persiapan by exact order and date match
 
-            // Cek order mana yang masih punya sampel tidak selesai
-            $ordersWithUnfinishedSamples = \App\Models\SampelTidakSelesai::whereIn('no_order', $orderNos)
-                ->pluck('no_order')
+            // Cek sampel mana yang masih tidak selesai (is_finished = 0)
+            $unfinishedSamplesList = \App\Models\SampelTidakSelesai::whereIn('no_order', $orderNos)
+                ->where('is_finished', 0)
+                ->pluck('no_sampel')
                 ->unique()
                 ->toArray();
 
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
-                $item['has_unfinished_samples'] = in_array($item['no_order'], $ordersWithUnfinishedSamples);
+                // 1. Ekstrak nomor sampel dari kolom 'kategori' di item ini
+                $itemSamples = [];
+                $kategoriItems = explode(',', $item['kategori']);
+                foreach ($kategoriItems as $katItem) {
+                    if (empty(trim($katItem))) continue;
+                    $parts = explode('-', $katItem);
+                    $nomor = trim(end($parts));
+                    $itemSamples[] = $item['no_order'] . '/' . $nomor; // misal: EAED012601/032
+                }
+
+                // Cek apakah item (schedule) ini punya sampel yang belum selesai
+                $item['has_unfinished_samples'] = count(array_intersect($itemSamples, $unfinishedSamplesList)) > 0;
+
                 $headerList = $persiapanHeadersData->get($item['no_order'] . '_' . $item['jadwal']);
                 // --- PERBAIKAN BUG: Cocokkan Persiapan Header berdasarkan no_sampel ---
                 $header = null;
                 if ($headerList) {
-                    // 1. Ekstrak nomor sampel dari kolom 'kategori' di item ini
-                    $itemSamples = [];
-                    $kategoriItems = explode(',', $item['kategori']);
-                    foreach ($kategoriItems as $katItem) {
-                        if (empty(trim($katItem))) continue;
-                        $parts = explode('-', $katItem);
-                        $nomor = trim(end($parts));
-                        $itemSamples[] = $item['no_order'] . '/' . $nomor; // misal: EAED012601/032
-                    }
 
                     // 2. Cari header yang array no_sampel-nya beririsan dengan sampel di item ini
                     foreach ($headerList as $h) {
@@ -3262,10 +3266,19 @@ class AppsBasService
     {
         DB::beginTransaction();
         try {
+            $id_persiapan = $request->id_persiapan ?? null;
+            if (!$id_persiapan) {
+                $psd = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
+                if ($psd) {
+                    $id_persiapan = $psd->id_persiapan_sampel_header;
+                }
+            }
+
             SampelTidakSelesai::updateOrCreate(
                 ['no_sampel' => $request->no_sampel],
                 [
                     'no_order' => $request->no_order,
+                    'id_persiapan' => $id_persiapan,
                     'kategori' => $request->kategori ?? null,
                     'keterangan' => ($request->status === 'Dilanjutkan') ? null : ($request->keterangan ?? null),
                     'status' => $request->status ?? null,

@@ -16,7 +16,7 @@ class AppsBasController extends Controller
         $this->service = new AppsBasService($this->karyawan, $this->user_id);
     }
 
-    public function index1(Request $request)
+    public function index(Request $request)
     {
         return $this->service->index($request);
     }
@@ -45,5 +45,5 @@ class AppsBasController extends Controller
     {
         return $this->service->storeSampelTidakSelesai($request);
     }
-    // mas luthfi tes
+
 }
