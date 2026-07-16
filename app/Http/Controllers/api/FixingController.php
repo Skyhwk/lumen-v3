@@ -1718,22 +1718,20 @@ class FixingController extends Controller
     // INI PUNYA DATA LAPANGAN CAHAYA
     public function updateJenisCahaya(Request $request)
     {
-        $dataLampu = DataLapanganCahaya::where('id', $request->id)->first();
-        $dataLampu->jenis_cahaya = $request->jenis_cahaya;
-        $dataLampu->save();
+        $dataCahaya = DataLapanganCahaya::where('id', $request->id)->first();
+        $dataCahaya->jenis_cahaya = $request->jenis_cahaya;
+        $dataCahaya->save();
         return response()->json([
-            'message' => 'Update jenis lampu selesai.',
-            'data' => $dataLampu,
+            'message' => 'Update jenis cahaya selesai.',
         ], 200);
     }
 
     public function cekNoSampel(Request $request)
     {
         $noSampel = $request->input('no_sampel');
-        $dataLampu = DataLapanganCahaya::where('no_sampel', $noSampel)->first();
+        $dataCahaya = DataLapanganCahaya::where('no_sampel', $noSampel)->first();
         return response()->json([
-            'message' => 'Cek no sampel selesai.',
-            'data' => $dataLampu,
+            'data' => $dataCahaya,
         ], 200);
     }
 
