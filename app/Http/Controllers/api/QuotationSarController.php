@@ -2688,15 +2688,9 @@ class QuotationSarController extends Controller
 
                 if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                     $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', true)->first();
-                    if ($cek_order) {
-                        $no_qt_lama = $cek_order->no_document;
-                        $no_qt_baru = $data->no_document;
-                        $id_order = $data_lama->id_order;
-
-                        $cek_order->no_document = $no_qt_baru;
-                        $cek_order->save();
-                        OrderDetail::where('id_order_header', $cek_order->id)->update(['no_quotation' => $no_qt_baru]);
-                    }
+                    $no_qt_lama = $cek_order->no_document;
+                    $no_qt_baru = $data->no_document;
+                    $id_order = $data_lama->id_order;
                 }
             }
 
