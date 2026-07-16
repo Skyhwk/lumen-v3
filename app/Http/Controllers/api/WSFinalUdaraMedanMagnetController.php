@@ -72,6 +72,9 @@ class WSFinalUdaraMedanMagnetController extends Controller
             ->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
             ->orderBy('tanggal_sampling');
 
+        $data = $data->get();
+        $data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
+
         return Datatables::of($data)
             ->make(true);
     }
@@ -456,10 +459,13 @@ class WSFinalUdaraMedanMagnetController extends Controller
         try {
 
             if ($request->id) {
-                $data = OrderDetail::where('id', $request->id)->first();
+                $data = OrderDetail::where('id', $request->id)->first();
+                \App\Models\MedanLmHeader::where('no_sampel', $data->no_sampel)->update(['lhps' => 1]);
+                Subkontrak::where('no_sampel', $data->no_sampel)->update(['lhps' => 1]);
                 $data->status = 1;
                 $data->keterangan_1 = $request->keterangan_1;
-                $data->save();
+                $data->save();
+                \App\Services\WsFinalApprovalService::finalizeSample($data, true, $this->karyawan);
 
                 HistoryAppReject::insert([
                     'no_lhp' => $data->cfr,

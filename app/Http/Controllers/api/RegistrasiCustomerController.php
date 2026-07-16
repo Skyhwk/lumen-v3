@@ -305,12 +305,14 @@ class RegistrasiCustomerController extends Controller
                     'emailed_by' => $this->karyawan
                 ]);
             }
-
+            $bcc = array_filter(array_map('trim', explode(',', $request->bcc ?? '')));
+            $cc = array_filter(array_map('trim', explode(',', $request->cc ?? '')));
+            
             $email = SendEmail::where('to',  $request->to)
                 ->where('subject', $request->subject)
                 ->where('body', $request->content)
-                ->where('cc', $request->cc)
-                ->where('bcc', $request->bcc)
+                ->where('cc', $cc)
+                ->where('bcc', $bcc)
                 ->where('attachments', $request->attachments)
                 ->where('karyawan', $this->karyawan)
                 ->noReply()

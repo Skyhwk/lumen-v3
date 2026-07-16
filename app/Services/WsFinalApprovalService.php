@@ -102,13 +102,16 @@ class WsFinalApprovalService
         }
 
         // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
-        // Perkecualian khusus untuk parameter Ergonomi agar tetap diproses
-        $isErgonomi = $orderDetail->kategori_3 && (
+        // Perkecualian khusus untuk parameter Ergonomi, Legionella, & Gelombang Elektro/Mikro agar tetap diproses
+        $isException = $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
-            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi')
+            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'legionella') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang elektro') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang mikro')
         );
 
-        if (!$isErgonomi && $orderDetail->kategori_3 && (
+        if (!$isException && $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
             str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
@@ -192,13 +195,16 @@ class WsFinalApprovalService
     public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
     {
         // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
-        // Perkecualian khusus untuk parameter Ergonomi agar tetap diproses
-        $isErgonomi = $orderDetail->kategori_3 && (
+        // Perkecualian khusus untuk parameter Ergonomi, Legionella, & Gelombang Elektro/Mikro agar tetap diproses
+        $isException = $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
-            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi')
+            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'legionella') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang elektro') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang mikro')
         );
 
-        if (!$isErgonomi && $orderDetail->kategori_3 && (
+        if (!$isException && $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
             str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
@@ -852,11 +858,18 @@ class WsFinalApprovalService
             $kategori3 = isset($firstRow->kategori_3) ? strtolower($firstRow->kategori_3) : '';
             
             // Bypass subkategori yang dilarang diotak-atik karena sudah produksi
-            $isBypassedSubcategory = str_contains($kategori3, 'lingkungan kerja') || 
-                                     str_contains($kategori3, 'lingkungan hidup') || 
-                                     str_contains($kategori3, 'ambient') || 
-                                     str_contains($kategori3, 'tidak bergerak') ||
-                                     str_contains($kategori3, 'isokinetik');
+            // Perkecualian khusus untuk parameter Ergonomi & Gelombang Elektro agar tetap dihitung progress CFR-nya
+            $isBypassedSubcategory = (
+                str_contains($kategori3, 'lingkungan kerja') || 
+                str_contains($kategori3, 'lingkungan hidup') || 
+                str_contains($kategori3, 'ambient') || 
+                str_contains($kategori3, 'tidak bergerak') ||
+                str_contains($kategori3, 'isokinetik')
+            ) && !(
+                str_contains($kategori3, 'ergonomi') ||
+                str_contains(strtolower($firstRow->parameter ?? ''), 'ergonomi') ||
+                str_contains(strtolower($firstRow->parameter ?? ''), 'gelombang elektro')
+            );
 
             // Cek apakah ini kategori Udara atau Emisi yang di-group per CFR/LHP dan bukan subkategori bypass
             $isGroupedByCfr = (str_contains($kategori2, 'udara') || str_contains($kategori2, 'emisi')) && !$isBypassedSubcategory;
