@@ -130,7 +130,7 @@ class FdlMicrobiologiUdaraController extends Controller
                     // Cek duplikasi di dalam form (request) yang sama
                     if (isset($processed[$ab]) && in_array($shift, $processed[$ab])) {
                         return response()->json([
-                            'message' => 'Pengambilan ' . $ab . ' Shift ' . $shift . ' duplikat pada inputan Anda!'
+                            'message' => 'Pengambilan ' . $ab . ' Shift ' . $shift . ' pada No Sample ' . strtoupper(trim($request->no_sampel)) . ' dengan parameter ' . $ab . ' sudah ada !'
                         ], 401);
                     }
                     $processed[$ab][] = $shift;
