@@ -30,6 +30,30 @@ use App\Models\SalesInDetail;
 use App\Models\SummaryInvoice;
 use App\Models\TemplateAkses;
 use App\Models\Withdraw;
+
+// model LHP
+use App\Models\LhpsAdverseOdorHeader;
+use App\Models\LhpsAirHeader;
+use App\Models\LhpsEmisiCHeader;
+use App\Models\LhpsEmisiHeader;
+use App\Models\LhpsEmisiIsokinetikHeader;
+use App\Models\LhpsErgonomiHeader;
+use App\Models\LhpsGetaranHeader;
+use App\Models\LhpsHygieneSanitasiHeader;
+use App\Models\LhpsIklimHeader;
+use App\Models\LhpsKebisinganHeader;
+use App\Models\LhpsKebisinganPersonalHeader;
+use App\Models\LhpsLingHeader;
+use App\Models\LhpsMedanLMHeader;
+use App\Models\LhpsMicrobiologiHeader;
+use App\Models\LhpsPadatanHeader;
+use App\Models\LhpsPencahayaanHeader;
+use App\Models\LhpsSinarUVHeader;
+use App\Models\LhpsSwabTesHeader;
+use App\Models\LhpUdaraPsikologiHeader;
+// end model LHP
+
+
 use App\Services\GenerateFeeSampling;
 use App\Services\RenderInvoice;
 use App\Services\RenderInvoiceTitik;
@@ -1744,26 +1768,31 @@ class FixingController extends Controller
             return response()->json(['message' => 'no_order is required'], 400);
         }
 
+        $link = LinkLhp::where('no_order', $noOrder)->get();
+        if ($link->isEmpty()) {
+            return response()->json(['message' => 'Link Lhp not found'], 404);
+        }
+
         $models = [
-            \App\Models\LhpsAdverseOdorHeader::class,
-            \App\Models\LhpsAirHeader::class,
-            \App\Models\LhpsEmisiCHeader::class,
-            \App\Models\LhpsEmisiHeader::class,
-            \App\Models\LhpsEmisiIsokinetikHeader::class,
-            \App\Models\LhpsErgonomiHeader::class,
-            \App\Models\LhpsGetaranHeader::class,
-            \App\Models\LhpsHygieneSanitasiHeader::class,
-            \App\Models\LhpsIklimHeader::class,
-            \App\Models\LhpsKebisinganHeader::class,
-            \App\Models\LhpsKebisinganPersonalHeader::class,
-            \App\Models\LhpsLingHeader::class,
-            \App\Models\LhpsMedanLMHeader::class,
-            \App\Models\LhpsMicrobiologiHeader::class,
-            \App\Models\LhpsPadatanHeader::class,
-            \App\Models\LhpsPencahayaanHeader::class,
-            \App\Models\LhpsSinarUVHeader::class,
-            \App\Models\LhpsSwabTesHeader::class,
-            \App\Models\LhpUdaraPsikologiHeader::class,
+            LhpsAdverseOdorHeader::class,
+            LhpsAirHeader::class,
+            LhpsEmisiCHeader::class,
+            LhpsEmisiHeader::class,
+            LhpsEmisiIsokinetikHeader::class,
+            LhpsErgonomiHeader::class,
+            LhpsGetaranHeader::class,
+            LhpsHygieneSanitasiHeader::class,
+            LhpsIklimHeader::class,
+            LhpsKebisinganHeader::class,
+            LhpsKebisinganPersonalHeader::class,
+            LhpsLingHeader::class,
+            LhpsMedanLMHeader::class,
+            LhpsMicrobiologiHeader::class,
+            LhpsPadatanHeader::class,
+            LhpsPencahayaanHeader::class,
+            LhpsSinarUVHeader::class,
+            LhpsSwabTesHeader::class,
+            LhpUdaraPsikologiHeader::class,
         ];
 
         $duplicates = [];
@@ -1774,6 +1803,10 @@ class FixingController extends Controller
             $table = (new $modelClass)->getTable();
             $hasLhp = \Illuminate\Support\Facades\Schema::hasColumn($table, 'no_lhp');
             $hasCfr = \Illuminate\Support\Facades\Schema::hasColumn($table, 'no_cfr');
+            $hasIsApprove = \Illuminate\Support\Facades\Schema::hasColumn($table, 'is_approve');
+            $hasIsApproved = \Illuminate\Support\Facades\Schema::hasColumn($table, 'is_approved');
+            
+            $approveColumn = $hasIsApprove ? 'is_approve' : ($hasIsApproved ? 'is_approved' : null);
             
             // Step 1: Find no_lhp that appear more than once for this no_order
             if ($hasLhp) {
@@ -1787,16 +1820,20 @@ class FixingController extends Controller
                     ->pluck('no_lhp');
 
                 if ($dupNos->isNotEmpty()) {
+                    $selectColumns = ['id', 'no_lhp', 'no_order'];
+                    if ($approveColumn) {
+                        $selectColumns[] = $approveColumn;
+                    }
                     $records = $modelClass::where('no_order', $noOrder)
                         ->whereIn('no_lhp', $dupNos)
-                        ->get(['id', 'no_lhp', 'no_order', 'is_approve']);
+                        ->get($selectColumns);
                     
                     foreach ($records as $record) {
                         $duplicates[] = [
                             'id' => $record->id,
                             'no_lhp' => $record->no_lhp,
                             'no_order' => $record->no_order,
-                            'is_approve' => $record->is_approve,
+                            'is_approve' => $approveColumn ? $record->{$approveColumn} : null,
                             'model' => class_basename($modelClass)
                         ];
                     }
@@ -1815,9 +1852,12 @@ class FixingController extends Controller
                     ->pluck('no_cfr');
 
                 if ($dupCfrs->isNotEmpty()) {
-                    $selectColumns = ['id', 'no_cfr', 'no_order', 'is_approve'];
+                    $selectColumns = ['id', 'no_cfr', 'no_order'];
                     if ($hasLhp) {
                         $selectColumns[] = 'no_lhp';
+                    }
+                    if ($approveColumn) {
+                        $selectColumns[] = $approveColumn;
                     }
                     $recordsCfr = $modelClass::where('no_order', $noOrder)
                         ->whereIn('no_cfr', $dupCfrs)
@@ -1838,7 +1878,7 @@ class FixingController extends Controller
                                 'id' => $record->id,
                                 'no_lhp' => ($hasLhp && !empty($record->no_lhp)) ? $record->no_lhp : $record->no_cfr,
                                 'no_order' => $record->no_order,
-                                'is_approve' => $record->is_approve,
+                                'is_approve' => $approveColumn ? $record->{$approveColumn} : null,
                                 'model' => class_basename($modelClass)
                             ];
                         }
@@ -1847,7 +1887,10 @@ class FixingController extends Controller
             }
         }
 
-        return response()->json(['data' => $duplicates], 200);
+        return response()->json([
+            'data' => $duplicates,
+            'links' => $link
+        ], 200);
     }
 
     public function hapusLhpDouble(Request $request)
@@ -1870,9 +1913,21 @@ class FixingController extends Controller
         }
 
         try {
+            DB::beginTransaction();
+
+            $detailModelName = str_replace('Header', 'Detail', $modelName);
+            $detailModelClass = "\\App\\Models\\" . $detailModelName;
+            
+            if (class_exists($detailModelClass)) {
+                $detailModelClass::where('id_header', $id)->delete();
+            }
+
             $record->delete();
+            
+            DB::commit();
             return response()->json(['message' => 'Data berhasil dihapus'], 200);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json(['message' => 'Gagal menghapus data: ' . $e->getMessage()], 500);
         }
     }
