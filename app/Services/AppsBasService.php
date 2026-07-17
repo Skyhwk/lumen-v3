@@ -498,7 +498,7 @@ class AppsBasService
                 $durasi = (int) $item['durasi'];
 
                 if ($durasi <= 1) { // sesaat ato 8jam
-                    if ($jadwal->isSameDay($today))
+                    // if ($jadwal->isSameDay($today))
                         $filtered[] = $item;
                 } else {
 
