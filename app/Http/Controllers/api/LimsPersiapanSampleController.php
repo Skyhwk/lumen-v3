@@ -16,7 +16,7 @@ use Exception;
 use App\Jobs\RenderPdfPersiapanSample;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
-use App\Models\{
+use App\Models\Lims\{
     OrderDetail,
     MasterKaryawan,
     QuotationKontrakH,

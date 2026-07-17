@@ -9,60 +9,49 @@ use Yajra\Datatables\Datatables;
 
 use Illuminate\Support\Collection; // ++ Abu
 
-use App\Models\PersiapanSampelDetail;
-use App\Models\MasterKaryawan;
-
-use App\Models\SamplingPlan;
-use App\Models\Jadwal;
-use App\Models\QuotationKontrakH;
-use App\Models\QuotationKontrakD;
-use App\Models\QuotationNonKontrak;
-use App\Models\OrderHeader;
-use App\Models\OrderDetail;
-use App\Models\PersiapanSampelHeader;
+use App\Models\Lims\SamplingPlan;
+use App\Models\Lims\Jadwal;
+use App\Models\Lims\QuotationKontrakH;
+use App\Models\Lims\QuotationNonKontrak;
+use App\Models\Lims\OrderHeader;
+use App\Models\Lims\OrderDetail;
+use App\Models\Lims\PersiapanSampelHeader;
 use Carbon\Carbon;
 use Mpdf;
-use App\Models\DataLapanganAir;
-use App\Models\DataLapanganKebisingan;
-use App\Models\DataLapanganKebisinganPersonal;
-use App\Models\DataLapanganCahaya;
-use App\Models\DataLapanganEmisiKendaraan;
-use App\Models\DataLapanganGetaran;
-use App\Models\DataLapanganGetaranPersonal;
-use App\Models\DataLapanganIklimPanas;
-use App\Models\DataLapanganIklimDingin;
-use App\Models\DataLapanganPartikulatMeter;
-use App\Models\DataLapanganLingkunganHidup;
-use App\Models\DataLapanganLingkunganKerja;
-use App\Models\DataLapanganMicrobiologi;
-use App\Models\DataLapanganMedanLM;
-use App\Models\DataLapanganSinarUv;
-use App\Models\DataLapanganDirectLain;
-use App\Models\DataLapanganSwab;
-use App\Models\DataLapanganEmisiCerobong;
-use App\Models\DataLapanganErgonomi;
-use App\Models\DataLapanganIsokinetikSurveiLapangan;
-use App\Models\DataLapanganIsokinetikPenentuanKecepatanLinier;
-use App\Models\DataLapanganIsokinetikBeratMolekul;
-use App\Models\DataLapanganIsokinetikKadarAir;
-use App\Models\DataLapanganIsokinetikPenentuanPartikulat;
-use App\Models\DataLapanganIsokinetikHasil;
-use App\Models\DataLapanganDebuPersonal;
-use App\Models\DataLapanganPsikologi;
-use App\Models\DataLapanganSenyawaVolatile;
-use App\Models\DetailLingkunganHidup;
-use App\Models\DetailLingkunganKerja;
-use App\Models\DetailMicrobiologi;
-use App\Models\DetailSenyawaVolatile;
-use App\Models\SampelTidakSelesai;
-use App\Models\QrDocument;
-use App\Models\RequiredParameters;
-use App\Models\MasterKategori;
-use App\Models\Parameter;
-use DateTime;
+use App\Models\Lims\DataLapanganAir;
+use App\Models\Lims\DataLapanganKebisingan;
+use App\Models\Lims\DataLapanganKebisinganPersonal;
+use App\Models\Lims\DataLapanganCahaya;
+use App\Models\Lims\DataLapanganEmisiKendaraan;
+use App\Models\Lims\DataLapanganGetaran;
+use App\Models\Lims\DataLapanganGetaranPersonal;
+use App\Models\Lims\DataLapanganIklimPanas;
+use App\Models\Lims\DataLapanganIklimDingin;
+use App\Models\Lims\DataLapanganPartikulatMeter;
+use App\Models\Lims\DataLapanganLingkunganHidup;
+use App\Models\Lims\DataLapanganLingkunganKerja;
+use App\Models\Lims\DataLapanganMicrobiologi;
+use App\Models\Lims\DataLapanganMedanLM;
+use App\Models\Lims\DataLapanganSinarUV;
+use App\Models\Lims\DataLapanganDirectLain;
+use App\Models\Lims\DataLapanganSwab;
+use App\Models\Lims\DataLapanganEmisiCerobong;
+use App\Models\Lims\DataLapanganErgonomi;
+use App\Models\Lims\DataLapanganIsokinetikHasil;
+use App\Models\Lims\DataLapanganDebuPersonal;
+use App\Models\Lims\DataLapanganPsikologi;
+use App\Models\Lims\DetailLingkunganHidup;
+use App\Models\Lims\DetailLingkunganKerja;
+use App\Models\Lims\DetailMicrobiologi;
+use App\Models\Lims\DetailSenyawaVolatile;
+use App\Models\Lims\SampelTidakSelesai;
+use App\Models\Lims\QrDocument;
+use App\Models\Lims\RequiredParameters;
+use App\Models\Lims\MasterKategori;
+use App\Models\Lims\Parameter;
 use Exception;
 use Illuminate\Support\Facades\Validator;
-use App\Models\TemplateStp;
+use App\Models\Lims\TemplateStp;
 
 
 class LimsBasOnlineController extends Controller
@@ -2602,7 +2591,7 @@ class LimsBasOnlineController extends Controller
             $parametersRaw = json_decode($sample->parameter);
             
             // 1. Panggil data Template ICP di luar loop (sekali saja agar query ringan)
-            // Pastikan Anda sudah meng-import: use App\Models\TemplateStp; di atas class
+            // Pastikan Anda sudah meng-import: use App\Models\Lims\TemplateStp; di atas class
             $templateIcp = TemplateStp::where('name', 'icp')
                 ->where('category_id', 4)
                 ->first();
@@ -2716,7 +2705,7 @@ class LimsBasOnlineController extends Controller
 
         // --- HARDCODE KHUSUS LINGKUNGAN KERJA & PARTIKULAT METER ---
         if (in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
-            $sampleData = \App\Models\OrderDetail::where('no_sampel', $sample_number)->first();
+            $sampleData = \App\Models\Lims\OrderDetail::where('no_sampel', $sample_number)->first();
             if ($sampleData && stripos($sampleData->kategori_3, 'Lingkungan Kerja') !== false) {
                 $parameter['requiredCount'] = 4; // Timpa langsung di array
             }
@@ -2763,7 +2752,7 @@ class LimsBasOnlineController extends Controller
             $model3 = null;
         }
 
-        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi') {
+        if ($model3 === null || $model3 === 'App\Models\Lims\DetailMicrobiologi') {
 
             return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         } else {
@@ -4641,7 +4630,7 @@ class LimsBasOnlineController extends Controller
                 "parameter" => "Sinar UV",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
-                "model" => DataLapanganSinarUv::class,
+                "model" => DataLapanganSinarUV::class,
                 "model2" => null
             ],
             [
