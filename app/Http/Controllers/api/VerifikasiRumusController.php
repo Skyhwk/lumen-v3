@@ -159,6 +159,262 @@ class VerifikasiRumusController extends Controller
         ], 201);
     }
 
+    public function getFormulasForCopy(Request $request)
+    {
+        $formulas = Formula::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->orderBy('kategori')
+            ->orderBy('template_stp')
+            ->orderBy('parameter')
+            ->get([
+                'id',
+                'id_kategori',
+                'id_parameter',
+                'id_template_stp',
+                'kategori',
+                'template_stp',
+                'parameter',
+                'status',
+            ]);
+
+        $data = $formulas->map(function ($formula) {
+            $templateLabel = $formula->template_stp ?: 'Semua Template';
+
+            return [
+                'id' => $formula->id,
+                'id_kategori' => $formula->id_kategori,
+                'id_parameter' => $formula->id_parameter,
+                'id_template_stp' => $formula->id_template_stp,
+                'kategori' => $formula->kategori,
+                'template_stp' => $templateLabel,
+                'parameter' => $formula->parameter,
+                'status' => $formula->status,
+                'label' => $formula->kategori . ' — ' . $templateLabel . ' — ' . $formula->parameter,
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => $data,
+        ], 201);
+    }
+
+    public function getCopyTargetParameters(Request $request)
+    {
+        if (!$request->source_formula_id) {
+            return response()->json(['message' => 'Rumus sumber wajib dipilih.'], 400);
+        }
+
+        $source = Formula::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->find($request->source_formula_id);
+
+        if (!$source) {
+            return response()->json(['message' => 'Rumus sumber tidak ditemukan.'], 404);
+        }
+
+        $parameterFormulaMap = $this->buildParameterFormulaMap();
+        $parameters = Parameter::query()
+            ->select('id', 'nama_lab')
+            ->where('id_kategori', $source->id_kategori)
+            ->where('id', '!=', $source->id_parameter)
+            ->where('is_active', true)
+            ->where('is_blocked', false)
+            ->orderBy('nama_lab')
+            ->get();
+
+        $targets = [];
+        foreach ($parameters as $parameter) {
+            $formulas = $parameterFormulaMap[$parameter->id] ?? [];
+            if (!$this->isParameterAvailableForScope($formulas, $source->id_template_stp)) {
+                continue;
+            }
+
+            $targets[] = [
+                'id' => $parameter->id,
+                'nama_lab' => $parameter->nama_lab,
+            ];
+        }
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => [
+                'source' => [
+                    'id' => $source->id,
+                    'id_kategori' => $source->id_kategori,
+                    'id_parameter' => $source->id_parameter,
+                    'id_template_stp' => $source->id_template_stp,
+                    'kategori' => $source->kategori,
+                    'template_stp' => $source->template_stp ?: 'Semua Template',
+                    'parameter' => $source->parameter,
+                ],
+                'parameters' => $targets,
+            ],
+        ], 201);
+    }
+
+    public function copyFormula(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            if (!$request->source_formula_id) {
+                return response()->json(['message' => 'Rumus sumber wajib dipilih.'], 422);
+            }
+
+            $targetParameterIds = $this->normalizeIdList($request->id_parameters);
+            if (empty($targetParameterIds)) {
+                return response()->json(['message' => 'Minimal satu parameter tujuan wajib dipilih.'], 422);
+            }
+
+            $source = Formula::with('inputs')
+                ->where('is_active', true)
+                ->whereNull('deleted_at')
+                ->find($request->source_formula_id);
+
+            if (!$source) {
+                return response()->json(['message' => 'Rumus sumber tidak ditemukan.'], 404);
+            }
+
+            $sourceInputs = $this->buildInputsFromFormulaModel($source);
+            $inputErrors = $this->validateInputDefinitions($sourceInputs);
+            if (!empty($inputErrors)) {
+                return response()->json([
+                    'message' => 'Data input rumus sumber tidak valid.',
+                    'errors' => $inputErrors,
+                ], 422);
+            }
+
+            $allowedVariables = array_column($sourceInputs, 'variable');
+            $validation = $this->formulaService->validate($source->formula, $allowedVariables);
+            if (!$validation['valid']) {
+                return response()->json([
+                    'message' => 'Formula sumber tidak valid.',
+                    'errors' => $validation['errors'],
+                ], 422);
+            }
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $created = [];
+            $skipped = [];
+
+            foreach ($targetParameterIds as $parameterId) {
+                if ((int) $parameterId === (int) $source->id_parameter) {
+                    $skipped[] = [
+                        'id_parameter' => $parameterId,
+                        'parameter' => null,
+                        'reason' => 'Parameter sumber tidak bisa menjadi tujuan copy.',
+                    ];
+                    continue;
+                }
+
+                $parameter = Parameter::query()
+                    ->where('id', $parameterId)
+                    ->where('id_kategori', $source->id_kategori)
+                    ->where('is_active', true)
+                    ->where('is_blocked', false)
+                    ->first();
+
+                if (!$parameter) {
+                    $skipped[] = [
+                        'id_parameter' => $parameterId,
+                        'parameter' => null,
+                        'reason' => 'Parameter tujuan tidak valid atau beda kategori.',
+                    ];
+                    continue;
+                }
+
+                $duplicateError = $this->validateParameterFormulaScope(
+                    (int) $parameter->id,
+                    $source->id_template_stp !== null ? (int) $source->id_template_stp : null,
+                    null
+                );
+
+                if ($duplicateError) {
+                    $skipped[] = [
+                        'id_parameter' => $parameter->id,
+                        'parameter' => $parameter->nama_lab,
+                        'reason' => $duplicateError['message'],
+                    ];
+                    continue;
+                }
+
+                if ($source->status === 'active') {
+                    Formula::where('id_parameter', $parameter->id)
+                        ->where(function ($query) use ($source) {
+                            if ($source->id_template_stp === null) {
+                                $query->whereNull('id_template_stp');
+                            } else {
+                                $query->where('id_template_stp', $source->id_template_stp);
+                            }
+                        })
+                        ->where('status', 'active')
+                        ->where('is_active', true)
+                        ->whereNull('deleted_at')
+                        ->update([
+                            'status' => 'inactive',
+                            'updated_by' => $this->karyawan,
+                            'updated_at' => $now,
+                        ]);
+                }
+
+                $formula = Formula::create([
+                    'id_kategori' => $source->id_kategori,
+                    'id_parameter' => $parameter->id,
+                    'id_template_stp' => $source->id_template_stp,
+                    'kategori' => $source->kategori,
+                    'parameter' => $parameter->nama_lab,
+                    'template_stp' => $source->template_stp ?: 'Semua Template',
+                    'formula' => $source->formula,
+                    'formula_json' => $source->formula_json,
+                    'status' => $source->status,
+                    'is_active' => true,
+                    'created_by' => $this->karyawan,
+                    'created_at' => $now,
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => $now,
+                ]);
+
+                $this->syncFormulaInputs((int) $formula->id, $sourceInputs);
+
+                $created[] = [
+                    'id' => $formula->id,
+                    'id_parameter' => $parameter->id,
+                    'parameter' => $parameter->nama_lab,
+                ];
+            }
+
+            if (empty($created)) {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Tidak ada rumus yang berhasil disalin.',
+                    'data' => ['created' => [], 'skipped' => $skipped],
+                ], 422);
+            }
+
+            DB::commit();
+
+            $message = count($created) . ' rumus berhasil disalin.';
+            if (!empty($skipped)) {
+                $message .= ' ' . count($skipped) . ' parameter dilewati.';
+            }
+
+            return response()->json([
+                'message' => $message,
+                'data' => [
+                    'created' => $created,
+                    'skipped' => $skipped,
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
     public function validateFormula(Request $request)
     {
         $formula = trim((string) $request->formula);
@@ -816,6 +1072,60 @@ class VerifikasiRumusController extends Controller
         }
 
         return $map;
+    }
+
+    private function isParameterAvailableForScope(array $formulas, ?int $templateStpId): bool
+    {
+        $hasFormulaAll = collect($formulas)->contains(fn ($item) => $item['id_template_stp'] === null);
+        if ($hasFormulaAll) {
+            return false;
+        }
+
+        if ($templateStpId === null) {
+            return empty($formulas);
+        }
+
+        $duplicateTemplate = collect($formulas)->contains(
+            fn ($item) => (int) $item['id_template_stp'] === (int) $templateStpId
+        );
+
+        return !$duplicateTemplate;
+    }
+
+    private function buildInputsFromFormulaModel(Formula $formula): array
+    {
+        return $formula->inputs->map(function ($input) {
+            return [
+                'variable' => $input->variable,
+                'label' => $input->label,
+                'type' => $input->type ?: 'number',
+                'required' => (bool) $input->required,
+                'default_value' => $input->default_value,
+                'urutan' => (int) $input->urutan,
+            ];
+        })->values()->all();
+    }
+
+    private function normalizeIdList($rawIds): array
+    {
+        if (is_string($rawIds)) {
+            $decoded = json_decode($rawIds, true);
+            $rawIds = is_array($decoded) ? $decoded : explode(',', $rawIds);
+        }
+
+        if (!is_array($rawIds)) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($rawIds as $id) {
+            if ($id === null || $id === '') {
+                continue;
+            }
+            $ids[] = (int) $id;
+        }
+
+        return array_values(array_unique(array_filter($ids)));
     }
 
     private function resolveTemplateStpFromRequest(Request $request): array
