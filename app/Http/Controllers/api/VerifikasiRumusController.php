@@ -1,0 +1,896 @@
+<?php
+
+namespace App\Http\Controllers\api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Formula;
+use App\Models\FormulaInput;
+use App\Models\FormulaVerification;
+use App\Models\MasterKategori;
+use App\Models\Parameter;
+use App\Services\FormulaService;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Yajra\DataTables\Facades\DataTables;
+
+class VerifikasiRumusController extends Controller
+{
+    private FormulaService $formulaService;
+
+    public function __construct(Request $request)
+    {
+        parent::__construct($request);
+        $this->formulaService = new FormulaService();
+    }
+
+    public function index(Request $request)
+    {
+        $query = Formula::query()
+            ->withCount(['inputs as jumlah_input'])
+            ->with(['latestVerification'])
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+
+        return DataTables::of($query)->make(true);
+    }
+
+    public function show(Request $request)
+    {
+        $id = $request->id;
+        if (!$id) {
+            return response()->json(['message' => 'ID rumus wajib diisi.'], 400);
+        }
+
+        $formula = Formula::with('inputs')->where('is_active', true)->whereNull('deleted_at')->find($id);
+        if (!$formula) {
+            return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+        }
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => $formula,
+        ], 200);
+    }
+
+    public function getMasterOptions(Request $request)
+    {
+        $parameters = Parameter::query()
+            ->select('id', 'nama_lab', 'id_kategori', 'nama_kategori')
+            ->where('is_active', true)
+            ->where('is_blocked', false)
+            ->orderBy('nama_kategori')
+            ->orderBy('nama_lab')
+            ->get();
+
+        $parameterFormulaMap = Formula::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->pluck('id', 'id_parameter')
+            ->all();
+
+        $grouped = [];
+        foreach ($parameters as $parameter) {
+            $key = (string) $parameter->id_kategori;
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'id_kategori' => $parameter->id_kategori,
+                    'kategori' => $parameter->nama_kategori,
+                    'parameter' => [],
+                ];
+            }
+
+            $formulaId = $parameterFormulaMap[$parameter->id] ?? null;
+
+            $grouped[$key]['parameter'][] = [
+                'id' => $parameter->id,
+                'nama_lab' => $parameter->nama_lab,
+                'has_formula' => $formulaId !== null,
+                'formula_id' => $formulaId,
+            ];
+        }
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => array_values($grouped),
+        ], 201);
+    }
+
+    public function getParametersByKategori(Request $request)
+    {
+        if (!$request->id_kategori) {
+            return response()->json(['message' => 'Kategori wajib dipilih.'], 400);
+        }
+
+        $data = Parameter::query()
+            ->select('id', 'nama_lab', 'id_kategori', 'nama_kategori')
+            ->where('id_kategori', $request->id_kategori)
+            ->where('is_active', true)
+            ->where('is_blocked', false)
+            ->orderBy('nama_lab')
+            ->get();
+
+        $parameterFormulaMap = Formula::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->pluck('id', 'id_parameter')
+            ->all();
+
+        $data = $data->map(function ($parameter) use ($parameterFormulaMap) {
+            $formulaId = $parameterFormulaMap[$parameter->id] ?? null;
+
+            return [
+                'id' => $parameter->id,
+                'nama_lab' => $parameter->nama_lab,
+                'id_kategori' => $parameter->id_kategori,
+                'nama_kategori' => $parameter->nama_kategori,
+                'has_formula' => $formulaId !== null,
+                'formula_id' => $formulaId,
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => $data,
+        ], 201);
+    }
+
+    public function validateFormula(Request $request)
+    {
+        $formula = trim((string) $request->formula);
+        $allowedVariables = $this->extractAllowedVariables($request);
+
+        $result = $this->formulaService->validate($formula, $allowedVariables);
+
+        if (!$result['valid']) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json($result, 200);
+    }
+
+    public function testFormula(Request $request)
+    {
+        $formula = trim((string) $request->formula);
+        $values = $this->extractInputValues($request);
+        $allowedVariables = $this->extractAllowedVariables($request);
+
+        $missing = array_diff($allowedVariables, array_keys($values));
+        if (!empty($missing)) {
+            return response()->json([
+                'valid' => false,
+                'message' => 'Semua variable wajib diisi untuk test formula.',
+                'errors' => [[
+                    'code' => 'MISSING_INPUT',
+                    'message' => 'Variable "' . reset($missing) . '" belum diisi.',
+                ]],
+            ], 422);
+        }
+
+        $numericError = $this->validateNumericInputs($values);
+        if ($numericError) {
+            return response()->json($numericError, 422);
+        }
+
+        $result = $this->formulaService->calculate($formula, $values);
+
+        if (!$result['valid']) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json([
+            'message' => 'Calculation success',
+            'data' => $result,
+        ], 200);
+    }
+
+    public function calculate(Request $request)
+    {
+        if (!$request->id) {
+            return response()->json(['message' => 'ID rumus wajib diisi.'], 400);
+        }
+
+        $formula = Formula::with('inputs')->where('is_active', true)->whereNull('deleted_at')->find($request->id);
+        if (!$formula) {
+            return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+        }
+
+        $values = $this->extractInputValues($request);
+        $requiredError = $this->validateRequiredInputs($formula->inputs, $values);
+        if ($requiredError) {
+            return response()->json($requiredError, 422);
+        }
+
+        $numericError = $this->validateNumericInputs($values);
+        if ($numericError) {
+            return response()->json($numericError, 422);
+        }
+
+        $allowedVariables = $formula->inputs->pluck('variable')->all();
+        $extra = array_diff(array_keys($values), $allowedVariables);
+        if (!empty($extra)) {
+            return response()->json([
+                'valid' => false,
+                'message' => 'Variable tidak dikenal.',
+            ], 422);
+        }
+
+        $result = $this->formulaService->calculate($formula->formula, $values);
+
+        if (!$result['valid']) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json([
+            'message' => 'Calculation success',
+            'data' => $result,
+        ], 200);
+    }
+
+    public function store(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $inputs = $this->normalizeInputs($request);
+            if (empty($inputs)) {
+                return response()->json(['message' => 'Minimal satu input variable wajib diisi.'], 422);
+            }
+
+            $inputErrors = $this->validateInputDefinitions($inputs);
+            if (!empty($inputErrors)) {
+                return response()->json([
+                    'message' => 'Validasi input gagal.',
+                    'errors' => $inputErrors,
+                ], 422);
+            }
+
+            if (!$request->id_kategori || !$request->id_parameter) {
+                return response()->json(['message' => 'Kategori dan parameter wajib dipilih.'], 422);
+            }
+
+            $kategori = MasterKategori::where('id', $request->id_kategori)->where('is_active', true)->first();
+            $parameter = Parameter::where('id', $request->id_parameter)
+                ->where('id_kategori', $request->id_kategori)
+                ->where('is_active', true)
+                ->where('is_blocked', false)
+                ->first();
+
+            if (!$kategori || !$parameter) {
+                return response()->json(['message' => 'Kategori atau parameter tidak valid.'], 422);
+            }
+
+            $duplicateError = $this->validateParameterFormulaUnique(
+                (int) $parameter->id,
+                $request->id ? (int) $request->id : null
+            );
+            if ($duplicateError) {
+                return response()->json($duplicateError, 422);
+            }
+
+            $formulaText = trim((string) $request->formula);
+            $allowedVariables = array_column($inputs, 'variable');
+            $validation = $this->formulaService->validate($formulaText, $allowedVariables);
+
+            if (!$validation['valid']) {
+                return response()->json([
+                    'message' => 'Formula tidak valid.',
+                    'errors' => $validation['errors'],
+                ], 422);
+            }
+
+            $status = in_array($request->status, ['draft', 'active', 'inactive'], true)
+                ? $request->status
+                : 'draft';
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $formulaJson = $this->decodeFormulaJson($request->formula_json);
+
+            if ($status === 'active') {
+                Formula::where('id_parameter', $parameter->id)
+                    ->where('status', 'active')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at')
+                    ->when($request->id, function ($query) use ($request) {
+                        $query->where('id', '!=', $request->id);
+                    })
+                    ->update([
+                        'status' => 'inactive',
+                        'updated_by' => $this->karyawan,
+                        'updated_at' => $now,
+                    ]);
+            }
+
+            if ($request->id) {
+                $formula = Formula::where('is_active', true)->whereNull('deleted_at')->find($request->id);
+                if (!$formula) {
+                    return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+                }
+
+                $formula->fill([
+                    'id_kategori' => $kategori->id,
+                    'id_parameter' => $parameter->id,
+                    'kategori' => $kategori->nama_kategori,
+                    'parameter' => $parameter->nama_lab,
+                    'formula' => $formulaText,
+                    'formula_json' => $formulaJson,
+                    'status' => $status,
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => $now,
+                ]);
+                $formula->save();
+
+                FormulaInput::where('formula_id', $formula->id)->update(['is_active' => false]);
+            } else {
+                $formula = Formula::create([
+                    'id_kategori' => $kategori->id,
+                    'id_parameter' => $parameter->id,
+                    'kategori' => $kategori->nama_kategori,
+                    'parameter' => $parameter->nama_lab,
+                    'formula' => $formulaText,
+                    'formula_json' => $formulaJson,
+                    'status' => $status,
+                    'is_active' => true,
+                    'created_by' => $this->karyawan,
+                    'created_at' => $now,
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            foreach ($inputs as $index => $input) {
+                FormulaInput::create([
+                    'formula_id' => $formula->id,
+                    'variable' => $input['variable'],
+                    'label' => $input['label'],
+                    'type' => $input['type'],
+                    'required' => $input['required'],
+                    'default_value' => $input['default_value'] ?? null,
+                    'urutan' => $input['urutan'] ?? ($index + 1),
+                    'is_active' => true,
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Rumus berhasil disimpan.',
+                'data' => $formula->load('inputs'),
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function lookupSystemResult(Request $request)
+    {
+        if (!$request->formula_id || !$request->no_sampel) {
+            return response()->json(['message' => 'Formula dan nomor sampel wajib diisi.'], 400);
+        }
+
+        $formula = Formula::where('is_active', true)->whereNull('deleted_at')->find($request->formula_id);
+        if (!$formula) {
+            return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+        }
+
+        $hasil = $this->findSystemResult(trim((string) $request->no_sampel), (int) $formula->id_parameter);
+        if ($hasil === null) {
+            return response()->json([
+                'message' => 'Hasil uji sistem tidak ditemukan untuk nomor sampel ini.',
+            ], 404);
+        }
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => ['hasil' => $hasil],
+        ], 200);
+    }
+
+    public function storeVerifikasi(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            if (!$request->formula_id) {
+                return response()->json(['message' => 'ID rumus wajib diisi.'], 400);
+            }
+
+            $noSampel = trim((string) $request->no_sampel);
+            $hasilSistem = trim((string) $request->hasil_sistem);
+            $hasilManual = trim((string) $request->hasil_manual);
+
+            if ($noSampel === '') {
+                return response()->json(['message' => 'Nomor sampel wajib diisi.'], 422);
+            }
+            if ($hasilSistem === '') {
+                return response()->json(['message' => 'Hasil uji di sistem wajib diisi.'], 422);
+            }
+            if ($hasilManual === '') {
+                return response()->json(['message' => 'Hasil uji hitung manual wajib diisi.'], 422);
+            }
+
+            $verifikator = trim((string) ($request->verifikator ?? ''));
+            if ($verifikator === '') {
+                $verifikator = $this->karyawan;
+            }
+
+            try {
+                $tanggalVerifikasi = $request->tanggal_verifikasi
+                    ? Carbon::parse($request->tanggal_verifikasi)->format('Y-m-d H:i:s')
+                    : Carbon::now()->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {
+                return response()->json(['message' => 'Format tanggal verifikasi tidak valid.'], 422);
+            }
+
+            $formula = Formula::where('is_active', true)->whereNull('deleted_at')->find($request->formula_id);
+            if (!$formula) {
+                return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+            }
+
+            $isMatch = $this->compareVerificationResults($hasilSistem, $hasilManual);
+            $statusVerifikasi = $isMatch ? 'sesuai' : 'tidak_sesuai';
+            $statusLabel = $isMatch
+                ? 'Terverifikasi Rumus di Sistem LIMS Sesuai'
+                : 'Terverifikasi Rumus di Sistem LIMS Tidak Sesuai';
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $uploadPath = 'verifikasi_rumus/';
+
+            if (!is_dir(public_path($uploadPath))) {
+                mkdir(public_path($uploadPath), 0755, true);
+            }
+
+            $fotoFilename = null;
+            if ($request->foto_screenshot) {
+                $fotoResult = $this->processAndSaveVerificationFile(
+                    $request->foto_screenshot,
+                    $uploadPath,
+                    'SS',
+                    $noSampel
+                );
+                if (!$fotoResult['success']) {
+                    return response()->json(['message' => $fotoResult['message']], 422);
+                }
+                $fotoFilename = $fotoResult['filename'];
+            }
+
+            $dokumenFilename = null;
+            if ($request->dokumen_file) {
+                $docResult = $this->processAndSaveVerificationFile(
+                    $request->dokumen_file,
+                    $uploadPath,
+                    'DOC',
+                    $noSampel
+                );
+                if (!$docResult['success']) {
+                    return response()->json(['message' => $docResult['message']], 422);
+                }
+                $dokumenFilename = $docResult['filename'];
+            }
+
+            $linkDokumen = trim((string) ($request->link_dokumen ?? ''));
+            if ($linkDokumen === '') {
+                $linkDokumen = null;
+            }
+
+            $verification = FormulaVerification::create([
+                'formula_id' => $formula->id,
+                'tanggal_verifikasi' => $tanggalVerifikasi,
+                'no_sampel' => $noSampel,
+                'hasil_sistem' => $hasilSistem,
+                'hasil_manual' => $hasilManual,
+                'rumus_sistem' => $formula->formula,
+                'foto_screenshot' => $fotoFilename,
+                'link_dokumen' => $linkDokumen,
+                'dokumen_filename' => $dokumenFilename,
+                'status_verifikasi' => $statusVerifikasi,
+                'status_label' => $statusLabel,
+                'verifikator' => $verifikator,
+                'catatan' => trim((string) ($request->catatan ?? '')) ?: null,
+                'is_active' => true,
+                'created_by' => $this->karyawan,
+                'created_at' => $now,
+                'updated_by' => $this->karyawan,
+                'updated_at' => $now,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Verifikasi rumus berhasil disimpan.',
+                'data' => $verification,
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function showVerifikasi(Request $request)
+    {
+        if (!$request->formula_id && !$request->id) {
+            return response()->json(['message' => 'ID verifikasi atau formula wajib diisi.'], 400);
+        }
+
+        if ($request->id) {
+            $verification = FormulaVerification::with('formula')
+                ->where('is_active', true)
+                ->whereNull('deleted_at')
+                ->find($request->id);
+
+            if (!$verification) {
+                return response()->json(['message' => 'Data verifikasi tidak ditemukan.'], 404);
+            }
+
+            return response()->json([
+                'message' => 'Data hasbeen show',
+                'data' => $this->formatVerificationResponse($verification),
+            ], 200);
+        }
+
+        $formula = Formula::with(['verifications' => function ($query) {
+            $query->limit(200);
+        }])->where('is_active', true)->whereNull('deleted_at')->find($request->formula_id);
+
+        if (!$formula) {
+            return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+        }
+
+        $records = $formula->verifications->map(function ($item) {
+            return $this->formatVerificationResponse($item);
+        });
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => [
+                'formula' => [
+                    'id' => $formula->id,
+                    'kategori' => $formula->kategori,
+                    'parameter' => $formula->parameter,
+                    'formula' => $formula->formula,
+                ],
+                'records' => $records,
+                'latest' => $records->first(),
+            ],
+        ], 200);
+    }
+
+    public function delete(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            if (!$request->id) {
+                return response()->json(['message' => 'ID rumus wajib diisi.'], 400);
+            }
+
+            $formula = Formula::where('is_active', true)->whereNull('deleted_at')->find($request->id);
+            if (!$formula) {
+                return response()->json(['message' => 'Data rumus tidak ditemukan.'], 404);
+            }
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $formula->is_active = false;
+            $formula->status = 'inactive';
+            $formula->deleted_by = $this->karyawan;
+            $formula->deleted_at = $now;
+            $formula->updated_by = $this->karyawan;
+            $formula->updated_at = $now;
+            $formula->save();
+
+            FormulaInput::where('formula_id', $formula->id)->update(['is_active' => false]);
+
+            DB::commit();
+
+            return response()->json(['message' => 'Rumus berhasil dihapus.'], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    private function normalizeInputs(Request $request): array
+    {
+        $inputs = $request->input('inputs');
+
+        if (is_string($inputs)) {
+            $decoded = json_decode($inputs, true);
+            return is_array($decoded) ? array_values($decoded) : [];
+        }
+
+        if (is_array($inputs)) {
+            return array_values($inputs);
+        }
+
+        return [];
+    }
+
+    private function validateInputDefinitions(array $inputs): array
+    {
+        $errors = [];
+        $seen = [];
+
+        foreach ($inputs as $index => $input) {
+            $variable = trim((string) ($input['variable'] ?? ''));
+            $label = trim((string) ($input['label'] ?? ''));
+
+            if ($variable === '') {
+                $errors[] = ['message' => 'Nama variable pada baris ' . ($index + 1) . ' wajib diisi.'];
+                continue;
+            }
+
+            if (!preg_match('/^[a-z][a-z0-9_]*$/', $variable)) {
+                $errors[] = ['message' => 'Variable "' . $variable . '" tidak valid. Gunakan a-z, 0-9, dan underscore.'];
+            }
+
+            if (isset($seen[$variable])) {
+                $errors[] = ['message' => 'Variable "' . $variable . '" duplikat.'];
+            }
+            $seen[$variable] = true;
+
+            if ($label === '') {
+                $errors[] = ['message' => 'Label untuk variable "' . $variable . '" wajib diisi.'];
+            }
+
+            $type = $input['type'] ?? 'number';
+            if (!in_array($type, ['number', 'integer', 'decimal'], true)) {
+                $errors[] = ['message' => 'Tipe input "' . $variable . '" tidak valid.'];
+            }
+        }
+
+        return $errors;
+    }
+
+    private function extractAllowedVariables(Request $request): array
+    {
+        $inputs = $this->normalizeInputs($request);
+        if (!empty($inputs)) {
+            return array_values(array_unique(array_column($inputs, 'variable')));
+        }
+
+        if ($request->variables) {
+            $variables = is_string($request->variables)
+                ? json_decode($request->variables, true)
+                : $request->variables;
+
+            return is_array($variables) ? array_values($variables) : [];
+        }
+
+        return [];
+    }
+
+    private function extractInputValues(Request $request): array
+    {
+        $values = $request->input('values');
+
+        if (is_string($values)) {
+            $decoded = json_decode($values, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        if (is_array($values)) {
+            return $values;
+        }
+
+        return [];
+    }
+
+    private function validateNumericInputs(array $values): ?array
+    {
+        foreach ($values as $name => $value) {
+            if ($value === '' || $value === null) {
+                continue;
+            }
+
+            if (!is_numeric($value)) {
+                return [
+                    'valid' => false,
+                    'message' => 'Input "' . $name . '" harus berupa angka.',
+                    'errors' => [[
+                        'code' => 'INVALID_NUMBER',
+                        'message' => 'Input "' . $name . '" harus berupa angka.',
+                    ]],
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function validateRequiredInputs($inputs, array $values): ?array
+    {
+        foreach ($inputs as $input) {
+            if (!$input->required) {
+                continue;
+            }
+
+            $value = $values[$input->variable] ?? null;
+            if ($value === '' || $value === null) {
+                return [
+                    'valid' => false,
+                    'message' => 'Input "' . $input->label . '" wajib diisi.',
+                    'errors' => [[
+                        'code' => 'MISSING_INPUT',
+                        'message' => 'Input "' . $input->label . '" wajib diisi.',
+                    ]],
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function decodeFormulaJson($formulaJson): ?array
+    {
+        if (is_array($formulaJson)) {
+            return $formulaJson;
+        }
+
+        if (is_string($formulaJson) && $formulaJson !== '') {
+            $decoded = json_decode($formulaJson, true);
+            return is_array($decoded) ? $decoded : null;
+        }
+
+        return null;
+    }
+
+    private function validateParameterFormulaUnique(int $parameterId, ?int $excludeFormulaId = null): ?array
+    {
+        $query = Formula::query()
+            ->where('id_parameter', $parameterId)
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+
+        if ($excludeFormulaId) {
+            $query->where('id', '!=', $excludeFormulaId);
+        }
+
+        if (!$query->exists()) {
+            return null;
+        }
+
+        return [
+            'message' => 'Parameter ini sudah memiliki rumus. Satu parameter hanya boleh memiliki satu rumus.',
+            'errors' => [[
+                'code' => 'PARAMETER_FORMULA_EXISTS',
+                'message' => 'Parameter ini sudah memiliki rumus.',
+            ]],
+        ];
+    }
+
+    private function compareVerificationResults(string $system, string $manual): bool
+    {
+        if (is_numeric($system) && is_numeric($manual)) {
+            return abs((float) $system - (float) $manual) < 0.0001;
+        }
+
+        return trim($system) === trim($manual);
+    }
+
+    private function findSystemResult(string $noSampel, int $idParameter): ?string
+    {
+        $tables = [
+            'lhps_air_detail',
+            'lhps_padatan_detail',
+            'lhps_ling_detail',
+        ];
+
+        foreach ($tables as $table) {
+            if (!DB::getSchemaBuilder()->hasTable($table)) {
+                continue;
+            }
+
+            $row = DB::table($table)
+                ->where('no_sampel', $noSampel)
+                ->where('id_parameter', $idParameter)
+                ->where('is_active', true)
+                ->first();
+
+            if ($row && isset($row->lhps) && $row->lhps !== '' && $row->lhps !== null) {
+                return (string) $row->lhps;
+            }
+        }
+
+        return null;
+    }
+
+    private function formatVerificationResponse(FormulaVerification $verification): array
+    {
+        $baseUrl = rtrim((string) env('APP_PUBLIC_URL', ''), '/');
+        if ($baseUrl === '') {
+            $baseUrl = rtrim((string) env('APP_URL', ''), '/');
+        }
+
+        $fileBase = $baseUrl ? $baseUrl . '/verifikasi_rumus/' : 'verifikasi_rumus/';
+
+        return [
+            'id' => $verification->id,
+            'formula_id' => $verification->formula_id,
+            'tanggal_verifikasi' => $verification->tanggal_verifikasi,
+            'no_sampel' => $verification->no_sampel,
+            'hasil_sistem' => $verification->hasil_sistem,
+            'hasil_manual' => $verification->hasil_manual,
+            'rumus_sistem' => $verification->rumus_sistem,
+            'foto_screenshot' => $verification->foto_screenshot,
+            'foto_url' => $verification->foto_screenshot ? $fileBase . $verification->foto_screenshot : null,
+            'link_dokumen' => $verification->link_dokumen,
+            'dokumen_filename' => $verification->dokumen_filename,
+            'dokumen_url' => $verification->dokumen_filename ? $fileBase . $verification->dokumen_filename : null,
+            'status_verifikasi' => $verification->status_verifikasi,
+            'status_label' => $verification->status_label,
+            'verifikator' => $verification->verifikator,
+            'catatan' => $verification->catatan,
+            'formula' => $verification->relationLoaded('formula') ? [
+                'kategori' => $verification->formula->kategori,
+                'parameter' => $verification->formula->parameter,
+            ] : null,
+        ];
+    }
+
+    private function processAndSaveVerificationFile($base64File, string $path, string $prefix, string $noSampel): array
+    {
+        try {
+            $fileData = $this->extractBase64FileData($base64File);
+            if (!$fileData) {
+                return ['success' => false, 'message' => 'Format file tidak valid.'];
+            }
+
+            $allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+            $fileExtension = strtolower($fileData['extension']);
+            if (!in_array($fileExtension, $allowedExtensions, true)) {
+                return ['success' => false, 'message' => 'Format file tidak didukung. Gunakan PDF, JPG, JPEG, atau PNG.'];
+            }
+
+            $safeSample = str_replace(['/', '\\', ' '], '_', $noSampel);
+            $fileName = $prefix . '-' . $safeSample . '_' . Carbon::now()->format('YmdHis') . '_' . time() . '.' . $fileExtension;
+            $fullPath = public_path($path . $fileName);
+
+            $decodedContent = base64_decode($fileData['content']);
+            if ($decodedContent === false || empty($decodedContent)) {
+                return ['success' => false, 'message' => 'Gagal memproses file.'];
+            }
+
+            if (file_put_contents($fullPath, $decodedContent) === false) {
+                return ['success' => false, 'message' => 'Gagal menyimpan file.'];
+            }
+
+            return ['success' => true, 'filename' => $fileName];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function extractBase64FileData($base64String): ?array
+    {
+        if (strpos($base64String, ';base64,') === false) {
+            return null;
+        }
+
+        [$fileInfo, $fileContent] = explode(';base64,', $base64String);
+        [, $fileType] = explode(':', $fileInfo);
+        $fileExtension = $this->getExtensionFromMimeType($fileType);
+
+        if (!$fileExtension) {
+            return null;
+        }
+
+        return [
+            'type' => $fileType,
+            'extension' => $fileExtension,
+            'content' => $fileContent,
+        ];
+    }
+
+    private function getExtensionFromMimeType(string $mimeType): ?string
+    {
+        $map = [
+            'application/pdf' => 'pdf',
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+        ];
+
+        return $map[$mimeType] ?? null;
+    }
+}
