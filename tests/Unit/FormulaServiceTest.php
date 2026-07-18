@@ -67,6 +67,20 @@ class FormulaServiceTest extends TestCase
 
         $this->assertTrue($result['valid']);
         $this->assertEqualsWithDelta(3.1416, $result['result'], 0.00001);
+        $this->assertSame('3.1416', $result['result_formatted']);
+        $this->assertSame(4, $result['display_precision']);
+    }
+
+    public function testRoundFunctionFormatsTrailingZeros(): void
+    {
+        $result = $this->service->calculate(
+            'ROUND(0.03,4)',
+            []
+        );
+
+        $this->assertTrue($result['valid']);
+        $this->assertEqualsWithDelta(0.03, $result['result'], 0.000001);
+        $this->assertSame('0.0300', $result['result_formatted']);
     }
 
     public function testTruncFunctionWithPrecision(): void

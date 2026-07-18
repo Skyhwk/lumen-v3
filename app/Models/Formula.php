@@ -11,8 +11,10 @@ class Formula extends Sector
     protected $fillable = [
         'id_kategori',
         'id_parameter',
+        'id_template_stp',
         'kategori',
         'parameter',
+        'template_stp',
         'formula',
         'formula_json',
         'status',
@@ -40,6 +42,11 @@ class Formula extends Sector
     public function parameter()
     {
         return $this->belongsTo(Parameter::class, 'id_parameter', 'id');
+    }
+
+    public function templateStp()
+    {
+        return $this->belongsTo(TemplateStp::class, 'id_template_stp', 'id');
     }
 
     public function verifications()

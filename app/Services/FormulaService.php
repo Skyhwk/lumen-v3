@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\FormulaEngine\AstNode;
 use App\Services\FormulaEngine\Evaluator;
 use App\Services\FormulaEngine\FormulaException;
 use App\Services\FormulaEngine\FunctionRegistry;
@@ -84,11 +85,13 @@ class FormulaService
             $ast = $this->parser->parse($tokens);
             $tracer = new StepTracer();
             $result = $this->evaluator->evaluate($ast, $variables, $tracer);
+            $displayPrecision = $this->extractDisplayPrecision($ast, $variables);
 
             return [
                 'valid' => true,
                 'result' => $result,
-                'result_formatted' => $this->formatResult($result),
+                'result_formatted' => $this->formatResult($result, $displayPrecision),
+                'display_precision' => $displayPrecision,
                 'steps' => $tracer->getSteps(),
                 'formula_substituted' => $this->substituteVariables($formula, $variables),
             ];
@@ -116,10 +119,44 @@ class FormulaService
         }, $formula);
     }
 
-    public function formatResult(float $value): string
+    public function formatResult(float $value, ?int $precision = null): string
     {
+        if ($precision !== null) {
+            return number_format($value, max(0, $precision), '.', '');
+        }
+
         $formatted = rtrim(rtrim(sprintf('%.10F', $value), '0'), '.');
         return $formatted === '' || $formatted === '-0' ? '0' : $formatted;
+    }
+
+    private function extractDisplayPrecision(AstNode $node, array $variables = []): ?int
+    {
+        if ($node->type !== 'FUNCTION') {
+            return null;
+        }
+
+        if (!in_array($node->name, ['ROUND', 'TRUNC'], true)) {
+            return null;
+        }
+
+        if (count($node->args) < 2) {
+            return null;
+        }
+
+        return $this->resolvePrecisionArg($node->args[1], $variables);
+    }
+
+    private function resolvePrecisionArg(AstNode $argNode, array $variables): ?int
+    {
+        if ($argNode->type === 'NUMBER') {
+            return max(0, (int) $argNode->value);
+        }
+
+        if ($argNode->type === 'VARIABLE' && array_key_exists($argNode->value, $variables)) {
+            return max(0, (int) $variables[$argNode->value]);
+        }
+
+        return null;
     }
 
     private function registerDefaultFunctions(): void

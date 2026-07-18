@@ -8,6 +8,7 @@ use App\Models\FormulaInput;
 use App\Models\FormulaVerification;
 use App\Models\MasterKategori;
 use App\Models\Parameter;
+use App\Models\TemplateStp;
 use App\Services\FormulaService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -63,11 +64,7 @@ class VerifikasiRumusController extends Controller
             ->orderBy('nama_lab')
             ->get();
 
-        $parameterFormulaMap = Formula::query()
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->pluck('id', 'id_parameter')
-            ->all();
+        $parameterFormulaMap = $this->buildParameterFormulaMap();
 
         $grouped = [];
         foreach ($parameters as $parameter) {
@@ -80,19 +77,46 @@ class VerifikasiRumusController extends Controller
                 ];
             }
 
-            $formulaId = $parameterFormulaMap[$parameter->id] ?? null;
+            $formulas = $parameterFormulaMap[$parameter->id] ?? [];
+            $hasFormulaAll = collect($formulas)->contains(fn ($item) => $item['id_template_stp'] === null);
 
             $grouped[$key]['parameter'][] = [
                 'id' => $parameter->id,
                 'nama_lab' => $parameter->nama_lab,
-                'has_formula' => $formulaId !== null,
-                'formula_id' => $formulaId,
+                'formulas' => $formulas,
+                'has_formula_all' => $hasFormulaAll,
+                'has_any_formula' => !empty($formulas),
+                'has_formula' => !empty($formulas),
+                'formula_id' => $formulas[0]['id'] ?? null,
             ];
         }
 
         return response()->json([
             'message' => 'Data hasbeen show',
             'data' => array_values($grouped),
+        ], 201);
+    }
+
+    public function getTemplatesByKategori(Request $request)
+    {
+        if (!$request->id_kategori) {
+            return response()->json(['message' => 'Kategori wajib dipilih.'], 400);
+        }
+
+        $kategori = MasterKategori::where('id', $request->id_kategori)->where('is_active', true)->first();
+        if (!$kategori) {
+            return response()->json(['message' => 'Kategori tidak valid.'], 422);
+        }
+
+        $templates = TemplateStp::query()
+            ->where('category_id', $request->id_kategori)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'param']);
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => $templates,
         ], 201);
     }
 
@@ -110,22 +134,22 @@ class VerifikasiRumusController extends Controller
             ->orderBy('nama_lab')
             ->get();
 
-        $parameterFormulaMap = Formula::query()
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->pluck('id', 'id_parameter')
-            ->all();
+        $parameterFormulaMap = $this->buildParameterFormulaMap();
 
         $data = $data->map(function ($parameter) use ($parameterFormulaMap) {
-            $formulaId = $parameterFormulaMap[$parameter->id] ?? null;
+            $formulas = $parameterFormulaMap[$parameter->id] ?? [];
+            $hasFormulaAll = collect($formulas)->contains(fn ($item) => $item['id_template_stp'] === null);
 
             return [
                 'id' => $parameter->id,
                 'nama_lab' => $parameter->nama_lab,
                 'id_kategori' => $parameter->id_kategori,
                 'nama_kategori' => $parameter->nama_kategori,
-                'has_formula' => $formulaId !== null,
-                'formula_id' => $formulaId,
+                'formulas' => $formulas,
+                'has_formula_all' => $hasFormulaAll,
+                'has_any_formula' => !empty($formulas),
+                'has_formula' => !empty($formulas),
+                'formula_id' => $formulas[0]['id'] ?? null,
             ];
         });
 
@@ -249,6 +273,11 @@ class VerifikasiRumusController extends Controller
                 return response()->json(['message' => 'Kategori dan parameter wajib dipilih.'], 422);
             }
 
+            $templateScope = $this->resolveTemplateStpFromRequest($request);
+            if (!empty($templateScope['error'])) {
+                return response()->json($templateScope['error'], 422);
+            }
+
             $kategori = MasterKategori::where('id', $request->id_kategori)->where('is_active', true)->first();
             $parameter = Parameter::where('id', $request->id_parameter)
                 ->where('id_kategori', $request->id_kategori)
@@ -260,8 +289,9 @@ class VerifikasiRumusController extends Controller
                 return response()->json(['message' => 'Kategori atau parameter tidak valid.'], 422);
             }
 
-            $duplicateError = $this->validateParameterFormulaUnique(
+            $duplicateError = $this->validateParameterFormulaScope(
                 (int) $parameter->id,
+                $templateScope['id_template_stp'],
                 $request->id ? (int) $request->id : null
             );
             if ($duplicateError) {
@@ -288,6 +318,13 @@ class VerifikasiRumusController extends Controller
 
             if ($status === 'active') {
                 Formula::where('id_parameter', $parameter->id)
+                    ->where(function ($query) use ($templateScope) {
+                        if ($templateScope['id_template_stp'] === null) {
+                            $query->whereNull('id_template_stp');
+                        } else {
+                            $query->where('id_template_stp', $templateScope['id_template_stp']);
+                        }
+                    })
                     ->where('status', 'active')
                     ->where('is_active', true)
                     ->whereNull('deleted_at')
@@ -310,8 +347,10 @@ class VerifikasiRumusController extends Controller
                 $formula->fill([
                     'id_kategori' => $kategori->id,
                     'id_parameter' => $parameter->id,
+                    'id_template_stp' => $templateScope['id_template_stp'],
                     'kategori' => $kategori->nama_kategori,
                     'parameter' => $parameter->nama_lab,
+                    'template_stp' => $templateScope['template_stp'],
                     'formula' => $formulaText,
                     'formula_json' => $formulaJson,
                     'status' => $status,
@@ -320,13 +359,15 @@ class VerifikasiRumusController extends Controller
                 ]);
                 $formula->save();
 
-                FormulaInput::where('formula_id', $formula->id)->update(['is_active' => false]);
+                $this->syncFormulaInputs((int) $formula->id, $inputs);
             } else {
                 $formula = Formula::create([
                     'id_kategori' => $kategori->id,
                     'id_parameter' => $parameter->id,
+                    'id_template_stp' => $templateScope['id_template_stp'],
                     'kategori' => $kategori->nama_kategori,
                     'parameter' => $parameter->nama_lab,
+                    'template_stp' => $templateScope['template_stp'],
                     'formula' => $formulaText,
                     'formula_json' => $formulaJson,
                     'status' => $status,
@@ -336,19 +377,8 @@ class VerifikasiRumusController extends Controller
                     'updated_by' => $this->karyawan,
                     'updated_at' => $now,
                 ]);
-            }
 
-            foreach ($inputs as $index => $input) {
-                FormulaInput::create([
-                    'formula_id' => $formula->id,
-                    'variable' => $input['variable'],
-                    'label' => $input['label'],
-                    'type' => $input['type'],
-                    'required' => $input['required'],
-                    'default_value' => $input['default_value'] ?? null,
-                    'urutan' => $input['urutan'] ?? ($index + 1),
-                    'is_active' => true,
-                ]);
+                $this->syncFormulaInputs((int) $formula->id, $inputs);
             }
 
             DB::commit();
@@ -548,6 +578,7 @@ class VerifikasiRumusController extends Controller
                     'id' => $formula->id,
                     'kategori' => $formula->kategori,
                     'parameter' => $formula->parameter,
+                    'template_stp' => $formula->template_stp ?: 'Semua Template',
                     'formula' => $formula->formula,
                 ],
                 'records' => $records,
@@ -588,6 +619,40 @@ class VerifikasiRumusController extends Controller
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
         }
+    }
+
+    private function syncFormulaInputs(int $formulaId, array $inputs): void
+    {
+        $variables = [];
+
+        foreach ($inputs as $index => $input) {
+            $variable = $input['variable'];
+            $variables[] = $variable;
+
+            FormulaInput::updateOrCreate(
+                [
+                    'formula_id' => $formulaId,
+                    'variable' => $variable,
+                ],
+                [
+                    'label' => $input['label'],
+                    'type' => $input['type'],
+                    'required' => $input['required'],
+                    'default_value' => $input['default_value'] ?? null,
+                    'urutan' => $input['urutan'] ?? ($index + 1),
+                    'is_active' => true,
+                ]
+            );
+        }
+
+        if (empty($variables)) {
+            FormulaInput::where('formula_id', $formulaId)->delete();
+            return;
+        }
+
+        FormulaInput::where('formula_id', $formulaId)
+            ->whereNotIn('variable', $variables)
+            ->delete();
     }
 
     private function normalizeInputs(Request $request): array
@@ -735,7 +800,65 @@ class VerifikasiRumusController extends Controller
         return null;
     }
 
-    private function validateParameterFormulaUnique(int $parameterId, ?int $excludeFormulaId = null): ?array
+    private function buildParameterFormulaMap(): array
+    {
+        $rows = Formula::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->get(['id', 'id_parameter', 'id_template_stp']);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row->id_parameter][] = [
+                'id' => $row->id,
+                'id_template_stp' => $row->id_template_stp !== null ? (int) $row->id_template_stp : null,
+            ];
+        }
+
+        return $map;
+    }
+
+    private function resolveTemplateStpFromRequest(Request $request): array
+    {
+        $rawTemplate = $request->id_template_stp;
+        if ($rawTemplate === null || $rawTemplate === '' || $rawTemplate === 'all') {
+            return [
+                'id_template_stp' => null,
+                'template_stp' => 'Semua Template',
+                'error' => null,
+            ];
+        }
+
+        if (!$request->id_kategori) {
+            return [
+                'id_template_stp' => null,
+                'template_stp' => null,
+                'error' => ['message' => 'Kategori wajib dipilih sebelum template STP.'],
+            ];
+        }
+
+        $template = TemplateStp::query()
+            ->where('id', $rawTemplate)
+            ->where('category_id', $request->id_kategori)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$template) {
+            return [
+                'id_template_stp' => null,
+                'template_stp' => null,
+                'error' => ['message' => 'Template STP tidak valid untuk kategori ini.'],
+            ];
+        }
+
+        return [
+            'id_template_stp' => (int) $template->id,
+            'template_stp' => $template->name,
+            'error' => null,
+        ];
+    }
+
+    private function validateParameterFormulaScope(int $parameterId, ?int $templateStpId, ?int $excludeFormulaId = null): ?array
     {
         $query = Formula::query()
             ->where('id_parameter', $parameterId)
@@ -746,17 +869,49 @@ class VerifikasiRumusController extends Controller
             $query->where('id', '!=', $excludeFormulaId);
         }
 
-        if (!$query->exists()) {
+        $existing = $query->get(['id', 'id_template_stp']);
+        if ($existing->isEmpty()) {
             return null;
         }
 
-        return [
-            'message' => 'Parameter ini sudah memiliki rumus. Satu parameter hanya boleh memiliki satu rumus.',
-            'errors' => [[
-                'code' => 'PARAMETER_FORMULA_EXISTS',
-                'message' => 'Parameter ini sudah memiliki rumus.',
-            ]],
-        ];
+        $hasAllScope = $existing->contains(fn ($item) => $item->id_template_stp === null);
+        if ($hasAllScope) {
+            return [
+                'message' => 'Parameter ini sudah memiliki rumus untuk semua template STP.',
+                'errors' => [[
+                    'code' => 'PARAMETER_FORMULA_ALL_EXISTS',
+                    'message' => 'Parameter ini sudah memiliki rumus untuk semua template STP.',
+                ]],
+            ];
+        }
+
+        if ($templateStpId === null) {
+            return [
+                'message' => 'Parameter ini sudah memiliki rumus pada template STP tertentu. Tidak bisa menambah rumus semua template.',
+                'errors' => [[
+                    'code' => 'PARAMETER_FORMULA_TEMPLATE_EXISTS',
+                    'message' => 'Parameter ini sudah memiliki rumus pada template STP tertentu.',
+                ]],
+            ];
+        }
+
+        $duplicateTemplate = $existing->contains(fn ($item) => (int) $item->id_template_stp === $templateStpId);
+        if ($duplicateTemplate) {
+            return [
+                'message' => 'Parameter ini sudah memiliki rumus pada template STP ini.',
+                'errors' => [[
+                    'code' => 'PARAMETER_FORMULA_TEMPLATE_DUPLICATE',
+                    'message' => 'Parameter ini sudah memiliki rumus pada template STP ini.',
+                ]],
+            ];
+        }
+
+        return null;
+    }
+
+    private function validateParameterFormulaUnique(int $parameterId, ?int $excludeFormulaId = null): ?array
+    {
+        return $this->validateParameterFormulaScope($parameterId, null, $excludeFormulaId);
     }
 
     private function compareVerificationResults(string $system, string $manual): bool

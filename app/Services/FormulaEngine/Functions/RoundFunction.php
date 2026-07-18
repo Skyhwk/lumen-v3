@@ -27,7 +27,13 @@ class RoundFunction implements FunctionHandlerInterface
         $value = $args[0];
         $precision = isset($args[1]) ? (int) $args[1] : 0;
         $result = round($value, $precision);
-        $tracer->addStep('ROUND(' . $this->format($value) . ', ' . $precision . ')', $result, 'Pembulatan');
+        $formattedResult = number_format($result, max(0, $precision), '.', '');
+        $tracer->addStep(
+            'ROUND(' . $this->format($value) . ', ' . $precision . ')',
+            $result,
+            'Pembulatan',
+            $formattedResult
+        );
         return $result;
     }
 

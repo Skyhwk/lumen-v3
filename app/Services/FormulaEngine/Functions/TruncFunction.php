@@ -28,10 +28,12 @@ class TruncFunction implements FunctionHandlerInterface
         $precision = isset($args[1]) ? (int) $args[1] : 0;
         $multiplier = pow(10, max(0, $precision));
         $result = intval($value * $multiplier) / $multiplier;
+        $formattedResult = number_format($result, max(0, $precision), '.', '');
         $tracer->addStep(
             'TRUNC(' . $this->format($value) . ', ' . $precision . ')',
             $result,
-            'Potong angka desimal'
+            'Potong angka desimal',
+            $formattedResult
         );
 
         return $result;
