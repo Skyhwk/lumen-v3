@@ -810,6 +810,25 @@ class InputParameterController extends Controller
                 // ->save(json_encode($filtered_sample_request, JSON_PRETTY_PRINT));
                 ->save(json_encode($filtered_sample_repo, JSON_PRETTY_PRINT));
 
+            $isTesEmpty = true;
+            if (is_array($tes)) {
+                foreach ($tes as $t) {
+                    if (!empty($t)) {
+                        $isTesEmpty = false;
+                        break;
+                    }
+                }
+            } else {
+                $isTesEmpty = empty($tes);
+            }
+
+            if ($isTesEmpty) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'data tidak ditemukan'
+                ], 404);
+            }
+
             return response()->json([
                 'status'=>0,
                 'columns'=>$select,
