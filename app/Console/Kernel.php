@@ -42,6 +42,7 @@ class Kernel extends ConsoleKernel
         Commands\UpdateOrderDetailKonsultan::class,
         Commands\SyncLimsData::class,
         Commands\TruncateLimsTesting::class,
+        Commands\SyncShioElemen::class,
     ];
 
     /**

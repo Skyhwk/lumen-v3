@@ -11,9 +11,11 @@
 </div>
 
 <div class="auth-section">
+    @if($legalization)
     <div class="auth-title">
         Tanggal Pengesahan : {{ $pdfService->formatIndonesianDate($pengesahanDate) }}
     </div>
+    @endif
 
     <div class="auth-note">
         <ul>
@@ -36,7 +38,7 @@
                 <td class="auth-role">Disusun Oleh</td>
                 <td>{{ $document->disusun_oleh ?? '-' }}</td>
                 <td>{{ $document->jabatan_penyusun ?? '-' }}</td>
-                <td>{{ $pdfService->formatIndonesianDate($document->created_at) }}</td>
+                <td>{{ $pdfService->formatIndonesianDate($document->tanggal_disusun ?? $document->created_at) }}</td>
             </tr>
 
             @if($verification)
@@ -57,27 +59,16 @@
                         <td>{{ $pdfService->formatIndonesianDate($approval->approved_at) }}</td>
                     </tr>
                 @endforeach
-            @else
-                <tr>
-                    <td class="auth-role">Disetujui Oleh</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                </tr>
             @endif
 
-            <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                </tr>
+            @if($legalization)
             <tr>
                 <td class="auth-role">Disahkan Oleh</td>
-                <td>{{ optional($legalization)->nama ?? $document->pengesahan ?? '-' }}</td>
-                <td>{{ optional($legalization)->jabatan ?? '-' }}</td>
-                <td>{{ $pdfService->formatIndonesianDate(optional($legalization)->approved_at ?? $document->disahkan_pada) }}</td>
+                <td>{{ $legalization->nama ?? $document->pengesahan ?? '-' }}</td>
+                <td>{{ $legalization->jabatan ?? '-' }}</td>
+                <td>{{ $pdfService->formatIndonesianDate($legalization->approved_at ?? $document->disahkan_pada) }}</td>
             </tr>
+            @endif
         </tbody>
     </table>
 </div>
