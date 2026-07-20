@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\LhpsKebisinganPersonalHeader;
-use App\Models\Lims\LhpsKebisinganPersonalDetail;
-use App\Models\Lims\LhpsKebisinganPersonalCustom;
+use App\Models\LhpsKebisinganPersonalHeader;
+use App\Models\LhpsKebisinganPersonalDetail;
+use App\Models\LhpsKebisinganPersonalCustom;
 use App\Models\Lims\OrderDetail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -12,7 +12,7 @@ use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-use App\Models\Lims\MasterRegulasi;
+use App\Models\MasterRegulasi;
 use Carbon\Carbon;
 use Exception;
 use Yajra\Datatables\Datatables;

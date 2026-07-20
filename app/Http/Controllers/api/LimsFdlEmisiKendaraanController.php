@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganEmisiKendaraan;
-use App\Models\Lims\DataLapanganEmisiOrder;
-use App\Models\Lims\MasterQr;
-use App\Models\Lims\MasterKendaraan;
+use App\Models\DataLapanganEmisiKendaraan;
+use App\Models\DataLapanganEmisiOrder;
+use App\Models\MasterQr;
+use App\Models\MasterKendaraan;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
-use App\Models\Lims\MasterRegulasi;
-use App\Models\Lims\MasterBakumutu;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
+use App\Models\MasterRegulasi;
+use App\Models\MasterBakumutu;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;

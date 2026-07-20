@@ -16,18 +16,17 @@ use Exception;
 use App\Jobs\RenderPdfPersiapanSample;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
-use App\Models\Lims\{
-    OrderDetail,
-    MasterKaryawan,
-    QuotationKontrakH,
-    QuotationNonKontrak,
-    PersiapanSampelHeader,
-    PersiapanSampelDetail,
-    KonfigurasiPraSampling,
-    QrDocument,
-    JobTask,
-    Jadwal
-};
+use App\Models\Lims\OrderDetail;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
+use App\Models\PersiapanSampelHeader;
+use App\Models\PersiapanSampelDetail;
+use App\Models\Jadwal;
+use App\Models\KonfigurasiPraSampling;
+use App\Models\QrDocument;
+use App\Models\JobTask;
+
+use App\Models\MasterKaryawan;
 
 use App\Http\Controllers\api\RekapSampelController;
 use App\Services\SyncPersiapanService;

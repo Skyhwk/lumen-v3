@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganSampah;
+use App\Models\DataLapanganSampah;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
 // header
-use App\Models\Lims\Colorimetri;
+use App\Models\Colorimetri;
 
 // WS
-use App\Models\Lims\WsValueAir;
+use App\Models\WsValueAir;
 
 use App\Services\NotificationFdlService;
 
@@ -28,7 +28,7 @@ use Yajra\Datatables\Datatables;
 
 // SERVICE
 use App\Services\AnalystFormula;
-use App\Models\Lims\AnalystFormula as Formula;
+use App\Models\AnalystFormula as Formula;
 
 class LimsFdlSampahController extends Controller
 {

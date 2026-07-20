@@ -7,19 +7,18 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
-
-use App\Models\Lims\QuotationKontrakH;
-use App\Models\Lims\QuotationKontrakD;
-use App\Models\Lims\QuotationNonKontrak;
-use App\Models\Lims\PersiapanSampelHeader;
-use App\Models\Lims\QrDocument;
-use App\Models\Lims\PengesahanDokumenSampling;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationKontrakD;
+use App\Models\QuotationNonKontrak;
+use App\Models\PersiapanSampelHeader;
+use App\Models\QrDocument;
+use App\Models\PengesahanDokumenSampling;
 
 use Carbon\Carbon;
 
 use App\Models\Lims\OrderDetail;
 use App\Models\Lims\OrderHeader;
-use App\Models\Lims\Parameter;
+use App\Models\Parameter;
 use Mpdf;
 
 use SimpleSoftwareIO\QrCode\Facades\QrCode;

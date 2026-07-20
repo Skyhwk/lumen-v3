@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganEmisiCerobong;
+use App\Models\DataLapanganEmisiCerobong;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
-use App\Models\Lims\EmisiCerobongHeader;
-use App\Models\Lims\WsValueEmisiCerobong;
+use App\Models\EmisiCerobongHeader;
+use App\Models\WsValueEmisiCerobong;
 
 use App\Services\NotificationFdlService;
 
@@ -24,7 +24,7 @@ use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 use App\Services\AnalystFormula;
-use App\Models\Lims\AnalystFormula as Formula;
+use App\Models\AnalystFormula as Formula;
 
 class LimsFdlEmisiCerobongController extends Controller
 {
