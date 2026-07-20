@@ -1,0 +1,48 @@
+<?php
+namespace App\Models\Lims;
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\Sector;
+
+class MasterBakumutu extends Sector
+{
+    protected $connection = 'lims';
+
+
+    protected $table = 'master_bakumutu';
+
+    protected $fillable = [
+        'id_regulasi',
+        'id_parameter',
+        'parameter',
+        'satuan',
+        'method',
+        'baku_mutu',
+        'nama_header',
+        'durasi_pengukuran',
+        'akreditasi',
+        'is_active',
+    ];
+
+    public $timestamps = false;
+
+    public function colorimetri() {
+        return $this->belongsTo('App\Models\Colorimetri', 'parameter', 'parameter');
+    }
+    public function titrimetri() {
+        return $this->belongsTo('App\Models\Titrimetri', 'parameter', 'parameter');
+    }
+    public function gravimetri() {
+        return $this->belongsTo('App\Models\Gravimetri', 'parameter', 'parameter');
+    }
+    public function subkontrak() {
+        return $this->belongsTo('App\Models\Subkontrak', 'parameter', 'parameter');
+    }
+    public function activeHargaParameter() {
+        return $this->hasOne(HargaParameter::class, 'id_parameter', 'id_parameter')->where('is_active', true);
+    }
+
+    public function parameter() {
+        return $this->belongsTo(Parameter::class, 'id_parameter', 'id');
+    }
+}

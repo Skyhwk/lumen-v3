@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Models\Lims;
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\Sector;
+
+class DataLapanganGetaran extends Sector
+{
+    protected $connection = 'lims';
+
+    protected $table = "data_lapangan_getaran";
+    public $timestamps = false;
+
+    protected $guarded = [];
+
+    public function detail(){
+        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
+        ->where('is_active', true);
+    }
+    
+    public function sub_kategori(){
+        return $this->belongsTo(MasterSubKategori::class, 'kategori_3', 'id') // kiri current kanan target
+        ->where('is_active', true);
+    }
+}
