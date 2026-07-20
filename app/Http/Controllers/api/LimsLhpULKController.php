@@ -2,15 +2,15 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\LhpsLingHeader;
-use App\Models\Lims\LhpsLingDetail;
-use App\Models\Lims\LhpsLingCustom;
+use App\Models\LhpsLingHeader;
+use App\Models\LhpsLingDetail;
+use App\Models\LhpsLingCustom;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MetodeSampling;
-use App\Models\Lims\MasterBakumutu;
-use App\Models\Lims\Parameter;
-use App\Models\Lims\ParameterFdl;
-use App\Models\Lims\GenerateLink;
+use App\Models\MetodeSampling;
+use App\Models\MasterBakumutu;
+use App\Models\Parameter;
+use App\Models\ParameterFdl;
+use App\Models\GenerateLink;
 use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;

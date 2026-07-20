@@ -1,7 +1,6 @@
 <?php
-namespace App\Models\Lims;
-
-use App\Models\Sector;
+namespace App\Models;
+use App\Models\Lims\OrderHeader; 
 
 class OrderDetail extends Sector
 {

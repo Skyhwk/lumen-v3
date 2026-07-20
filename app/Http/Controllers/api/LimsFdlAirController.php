@@ -2,18 +2,18 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganAir;
+use App\Models\DataLapanganAir;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\MasterJabatan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\MasterJabatan;
+use App\Models\Parameter;
 
-use App\Models\Lims\Titrimetri;
-use App\Models\Lims\Colorimetri;
-use App\Models\Lims\Gravimetri;
-use App\Models\Lims\Subkontrak;
-use App\Models\Lims\WsValueAir;
+use App\Models\Titrimetri;
+use App\Models\Colorimetri;
+use App\Models\Gravimetri;
+use App\Models\Subkontrak;
+use App\Models\WsValueAir;
 
 use App\Services\NotificationFdlService;
 

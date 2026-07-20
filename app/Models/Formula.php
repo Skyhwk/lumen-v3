@@ -15,6 +15,7 @@ class Formula extends Sector
         'kategori',
         'parameter',
         'template_stp',
+        'satuan',
         'formula',
         'formula_json',
         'status',

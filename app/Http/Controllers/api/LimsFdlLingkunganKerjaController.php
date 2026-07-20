@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganLingkunganKerja;
-use App\Models\Lims\DetailLingkunganKerja;
+use App\Models\DataLapanganLingkunganKerja;
+use App\Models\DetailLingkunganKerja;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
-use App\Models\Lims\LingkunganHeader;
-use App\Models\Lims\WsValueLingkungan;
-use App\Models\Lims\WsValueUdara;
+use App\Models\LingkunganHeader;
+use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
 
 use App\Services\NotificationFdlService;
 
@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
 
 // SERVICE
 use App\Services\AnalystFormula;
-use App\Models\Lims\AnalystFormula as Formula;
+use App\Models\AnalystFormula as Formula;
 
 class LimsFdlLingkunganKerjaController extends Controller
 {

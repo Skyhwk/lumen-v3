@@ -8,6 +8,7 @@ use App\Models\FormulaInput;
 use App\Models\FormulaVerification;
 use App\Models\MasterKategori;
 use App\Models\Parameter;
+use App\Models\TemplateSatuan;
 use App\Models\TemplateStp;
 use App\Services\FormulaService;
 use Carbon\Carbon;
@@ -57,7 +58,7 @@ class VerifikasiRumusController extends Controller
     public function getMasterOptions(Request $request)
     {
         $parameters = Parameter::query()
-            ->select('id', 'nama_lab', 'id_kategori', 'nama_kategori')
+            ->select('id', 'nama_lab', 'id_kategori', 'nama_kategori', 'satuan')
             ->where('is_active', true)
             ->where('is_blocked', false)
             ->orderBy('nama_kategori')
@@ -73,6 +74,7 @@ class VerifikasiRumusController extends Controller
                 $grouped[$key] = [
                     'id_kategori' => $parameter->id_kategori,
                     'kategori' => $parameter->nama_kategori,
+                    'is_multi_satuan' => $this->isMultiSatuanCategory($parameter->nama_kategori),
                     'parameter' => [],
                 ];
             }
@@ -83,6 +85,7 @@ class VerifikasiRumusController extends Controller
             $grouped[$key]['parameter'][] = [
                 'id' => $parameter->id,
                 'nama_lab' => $parameter->nama_lab,
+                'satuan' => $parameter->satuan,
                 'formulas' => $formulas,
                 'has_formula_all' => $hasFormulaAll,
                 'has_any_formula' => !empty($formulas),
@@ -120,6 +123,44 @@ class VerifikasiRumusController extends Controller
         ], 201);
     }
 
+    public function getSatuanByKategori(Request $request)
+    {
+        if (!$request->id_kategori) {
+            return response()->json(['message' => 'Kategori wajib dipilih.'], 400);
+        }
+
+        $kategori = MasterKategori::where('id', $request->id_kategori)->where('is_active', true)->first();
+        if (!$kategori) {
+            return response()->json(['message' => 'Kategori tidak valid.'], 422);
+        }
+
+        if (!$this->isMultiSatuanCategory($kategori->nama_kategori)) {
+            return response()->json([
+                'message' => 'Data hasbeen show',
+                'data' => [
+                    'is_multi_satuan' => false,
+                    'satuan' => [],
+                ],
+            ], 201);
+        }
+
+        $satuan = TemplateSatuan::query()
+            ->where('kategori', strtolower($kategori->nama_kategori))
+            ->where('is_active', true)
+            ->orderBy('satuan')
+            ->pluck('satuan')
+            ->values()
+            ->all();
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => [
+                'is_multi_satuan' => true,
+                'satuan' => $satuan,
+            ],
+        ], 201);
+    }
+
     public function getParametersByKategori(Request $request)
     {
         if (!$request->id_kategori) {
@@ -127,7 +168,7 @@ class VerifikasiRumusController extends Controller
         }
 
         $data = Parameter::query()
-            ->select('id', 'nama_lab', 'id_kategori', 'nama_kategori')
+            ->select('id', 'nama_lab', 'id_kategori', 'nama_kategori', 'satuan')
             ->where('id_kategori', $request->id_kategori)
             ->where('is_active', true)
             ->where('is_blocked', false)
@@ -143,6 +184,7 @@ class VerifikasiRumusController extends Controller
             return [
                 'id' => $parameter->id,
                 'nama_lab' => $parameter->nama_lab,
+                'satuan' => $parameter->satuan,
                 'id_kategori' => $parameter->id_kategori,
                 'nama_kategori' => $parameter->nama_kategori,
                 'formulas' => $formulas,
@@ -166,6 +208,7 @@ class VerifikasiRumusController extends Controller
             ->whereNull('deleted_at')
             ->orderBy('kategori')
             ->orderBy('template_stp')
+            ->orderBy('satuan')
             ->orderBy('parameter')
             ->get([
                 'id',
@@ -174,12 +217,14 @@ class VerifikasiRumusController extends Controller
                 'id_template_stp',
                 'kategori',
                 'template_stp',
+                'satuan',
                 'parameter',
                 'status',
             ]);
 
         $data = $formulas->map(function ($formula) {
             $templateLabel = $formula->template_stp ?: 'Semua Template';
+            $satuanLabel = $this->formatSatuanLabel($formula->satuan, $formula->kategori);
 
             return [
                 'id' => $formula->id,
@@ -188,9 +233,10 @@ class VerifikasiRumusController extends Controller
                 'id_template_stp' => $formula->id_template_stp,
                 'kategori' => $formula->kategori,
                 'template_stp' => $templateLabel,
+                'satuan' => $satuanLabel,
                 'parameter' => $formula->parameter,
                 'status' => $formula->status,
-                'label' => $formula->kategori . ' — ' . $templateLabel . ' — ' . $formula->parameter,
+                'label' => $formula->kategori . ' — ' . $templateLabel . ' — ' . $satuanLabel . ' — ' . $formula->parameter,
             ];
         });
 
@@ -225,10 +271,16 @@ class VerifikasiRumusController extends Controller
             ->orderBy('nama_lab')
             ->get();
 
+        $isMultiSatuan = $this->isMultiSatuanCategory($source->kategori);
         $targets = [];
         foreach ($parameters as $parameter) {
             $formulas = $parameterFormulaMap[$parameter->id] ?? [];
-            if (!$this->isParameterAvailableForScope($formulas, $source->id_template_stp)) {
+            if (!$this->isParameterAvailableForScope(
+                $formulas,
+                $source->id_template_stp !== null ? (int) $source->id_template_stp : null,
+                $source->satuan,
+                $isMultiSatuan
+            )) {
                 continue;
             }
 
@@ -248,6 +300,7 @@ class VerifikasiRumusController extends Controller
                     'id_template_stp' => $source->id_template_stp,
                     'kategori' => $source->kategori,
                     'template_stp' => $source->template_stp ?: 'Semua Template',
+                    'satuan' => $this->formatSatuanLabel($source->satuan, $source->kategori),
                     'parameter' => $source->parameter,
                 ],
                 'parameters' => $targets,
@@ -296,6 +349,7 @@ class VerifikasiRumusController extends Controller
                 ], 422);
             }
 
+            $isMultiSatuan = $this->isMultiSatuanCategory($source->kategori);
             $now = Carbon::now()->format('Y-m-d H:i:s');
             $created = [];
             $skipped = [];
@@ -326,9 +380,24 @@ class VerifikasiRumusController extends Controller
                     continue;
                 }
 
+                $targetSatuanScope = $isMultiSatuan
+                    ? ['satuan' => $source->satuan]
+                    : $this->resolveSatuanFromParameter($parameter);
+
+                if (!empty($targetSatuanScope['error'])) {
+                    $skipped[] = [
+                        'id_parameter' => $parameter->id,
+                        'parameter' => $parameter->nama_lab,
+                        'reason' => $targetSatuanScope['error']['message'],
+                    ];
+                    continue;
+                }
+
                 $duplicateError = $this->validateParameterFormulaScope(
                     (int) $parameter->id,
                     $source->id_template_stp !== null ? (int) $source->id_template_stp : null,
+                    $targetSatuanScope['satuan'],
+                    $isMultiSatuan,
                     null
                 );
 
@@ -343,12 +412,9 @@ class VerifikasiRumusController extends Controller
 
                 if ($source->status === 'active') {
                     Formula::where('id_parameter', $parameter->id)
-                        ->where(function ($query) use ($source) {
-                            if ($source->id_template_stp === null) {
-                                $query->whereNull('id_template_stp');
-                            } else {
-                                $query->where('id_template_stp', $source->id_template_stp);
-                            }
+                        ->where(function ($query) use ($source, $targetSatuanScope) {
+                            $this->applyTemplateStpScopeToQuery($query, $source->id_template_stp);
+                            $this->applySatuanScopeToQuery($query, $targetSatuanScope['satuan']);
                         })
                         ->where('status', 'active')
                         ->where('is_active', true)
@@ -367,6 +433,7 @@ class VerifikasiRumusController extends Controller
                     'kategori' => $source->kategori,
                     'parameter' => $parameter->nama_lab,
                     'template_stp' => $source->template_stp ?: 'Semua Template',
+                    'satuan' => $targetSatuanScope['satuan'],
                     'formula' => $source->formula,
                     'formula_json' => $source->formula_json,
                     'status' => $source->status,
@@ -545,9 +612,17 @@ class VerifikasiRumusController extends Controller
                 return response()->json(['message' => 'Kategori atau parameter tidak valid.'], 422);
             }
 
+            $isMultiSatuan = $this->isMultiSatuanCategory($kategori->nama_kategori);
+            $satuanScope = $this->resolveSatuanFromRequest($request, $parameter, $kategori->nama_kategori);
+            if (!empty($satuanScope['error'])) {
+                return response()->json($satuanScope['error'], 422);
+            }
+
             $duplicateError = $this->validateParameterFormulaScope(
                 (int) $parameter->id,
                 $templateScope['id_template_stp'],
+                $satuanScope['satuan'],
+                $isMultiSatuan,
                 $request->id ? (int) $request->id : null
             );
             if ($duplicateError) {
@@ -574,12 +649,9 @@ class VerifikasiRumusController extends Controller
 
             if ($status === 'active') {
                 Formula::where('id_parameter', $parameter->id)
-                    ->where(function ($query) use ($templateScope) {
-                        if ($templateScope['id_template_stp'] === null) {
-                            $query->whereNull('id_template_stp');
-                        } else {
-                            $query->where('id_template_stp', $templateScope['id_template_stp']);
-                        }
+                    ->where(function ($query) use ($templateScope, $satuanScope) {
+                        $this->applyTemplateStpScopeToQuery($query, $templateScope['id_template_stp']);
+                        $this->applySatuanScopeToQuery($query, $satuanScope['satuan']);
                     })
                     ->where('status', 'active')
                     ->where('is_active', true)
@@ -607,6 +679,7 @@ class VerifikasiRumusController extends Controller
                     'kategori' => $kategori->nama_kategori,
                     'parameter' => $parameter->nama_lab,
                     'template_stp' => $templateScope['template_stp'],
+                    'satuan' => $satuanScope['satuan'],
                     'formula' => $formulaText,
                     'formula_json' => $formulaJson,
                     'status' => $status,
@@ -624,6 +697,7 @@ class VerifikasiRumusController extends Controller
                     'kategori' => $kategori->nama_kategori,
                     'parameter' => $parameter->nama_lab,
                     'template_stp' => $templateScope['template_stp'],
+                    'satuan' => $satuanScope['satuan'],
                     'formula' => $formulaText,
                     'formula_json' => $formulaJson,
                     'status' => $status,
@@ -835,6 +909,7 @@ class VerifikasiRumusController extends Controller
                     'kategori' => $formula->kategori,
                     'parameter' => $formula->parameter,
                     'template_stp' => $formula->template_stp ?: 'Semua Template',
+                    'satuan' => $this->formatSatuanLabel($formula->satuan, $formula->kategori),
                     'formula' => $formula->formula,
                 ],
                 'records' => $records,
@@ -1061,35 +1136,84 @@ class VerifikasiRumusController extends Controller
         $rows = Formula::query()
             ->where('is_active', true)
             ->whereNull('deleted_at')
-            ->get(['id', 'id_parameter', 'id_template_stp']);
+            ->get(['id', 'id_parameter', 'id_template_stp', 'satuan']);
 
         $map = [];
         foreach ($rows as $row) {
             $map[$row->id_parameter][] = [
                 'id' => $row->id,
                 'id_template_stp' => $row->id_template_stp !== null ? (int) $row->id_template_stp : null,
+                'satuan' => $row->satuan,
             ];
         }
 
         return $map;
     }
 
-    private function isParameterAvailableForScope(array $formulas, ?int $templateStpId): bool
-    {
-        $hasFormulaAll = collect($formulas)->contains(fn ($item) => $item['id_template_stp'] === null);
-        if ($hasFormulaAll) {
-            return false;
+    private function isParameterAvailableForScope(
+        array $formulas,
+        ?int $templateStpId,
+        ?string $satuanName,
+        bool $isMultiSatuanCategory
+    ): bool {
+        return $this->validateParameterFormulaScopeFromFormulas(
+            $formulas,
+            $templateStpId,
+            $satuanName,
+            $isMultiSatuanCategory
+        ) === null;
+    }
+
+    private function validateParameterFormulaScopeFromFormulas(
+        array $formulas,
+        ?int $templateStpId,
+        ?string $satuanName,
+        bool $isMultiSatuanCategory
+    ): ?array {
+        if (empty($formulas)) {
+            return null;
+        }
+
+        $existing = collect($formulas);
+
+        $hasAllTemplate = $existing->contains(fn ($item) => $item['id_template_stp'] === null);
+        if ($hasAllTemplate) {
+            return ['message' => 'Parameter ini sudah memiliki rumus untuk semua template STP.'];
         }
 
         if ($templateStpId === null) {
-            return empty($formulas);
+            return ['message' => 'Parameter ini sudah memiliki rumus pada template STP tertentu.'];
         }
 
-        $duplicateTemplate = collect($formulas)->contains(
+        $sameTemplate = $existing->filter(
             fn ($item) => (int) $item['id_template_stp'] === (int) $templateStpId
         );
 
-        return !$duplicateTemplate;
+        if ($sameTemplate->isEmpty()) {
+            return null;
+        }
+
+        if (!$isMultiSatuanCategory) {
+            return ['message' => 'Parameter ini sudah memiliki rumus pada template STP ini.'];
+        }
+
+        $hasAllSatuan = $sameTemplate->contains(fn ($item) => $this->isAllSatuanStored($item['satuan'] ?? null));
+        if ($hasAllSatuan) {
+            return ['message' => 'Parameter ini sudah memiliki rumus untuk semua satuan pada template STP ini.'];
+        }
+
+        if ($this->isAllSatuanStored($satuanName)) {
+            return ['message' => 'Parameter ini sudah memiliki rumus pada satuan tertentu.'];
+        }
+
+        $duplicateSatuan = $sameTemplate->contains(
+            fn ($item) => trim((string) ($item['satuan'] ?? '')) === trim((string) $satuanName)
+        );
+        if ($duplicateSatuan) {
+            return ['message' => 'Parameter ini sudah memiliki rumus pada satuan ini.'];
+        }
+
+        return null;
     }
 
     private function buildInputsFromFormulaModel(Formula $formula): array
@@ -1168,8 +1292,104 @@ class VerifikasiRumusController extends Controller
         ];
     }
 
-    private function validateParameterFormulaScope(int $parameterId, ?int $templateStpId, ?int $excludeFormulaId = null): ?array
+    private function resolveSatuanFromRequest(Request $request, Parameter $parameter, string $kategoriName): array
     {
+        if (!$this->isMultiSatuanCategory($kategoriName)) {
+            return $this->resolveSatuanFromParameter($parameter);
+        }
+
+        $rawSatuan = $request->satuan;
+        if ($rawSatuan === null || $rawSatuan === '' || $rawSatuan === 'all') {
+            return [
+                'satuan' => null,
+                'error' => null,
+            ];
+        }
+
+        $satuanName = trim((string) $rawSatuan);
+        $templateSatuan = TemplateSatuan::query()
+            ->where('satuan', $satuanName)
+            ->where('kategori', strtolower($kategoriName))
+            ->where('is_active', true)
+            ->first();
+
+        if (!$templateSatuan) {
+            return [
+                'satuan' => null,
+                'error' => ['message' => 'Satuan tidak valid untuk kategori ini.'],
+            ];
+        }
+
+        return [
+            'satuan' => $templateSatuan->satuan,
+            'error' => null,
+        ];
+    }
+
+    private function resolveSatuanFromParameter(Parameter $parameter): array
+    {
+        $satuan = trim((string) ($parameter->satuan ?? ''));
+        if ($satuan === '') {
+            return [
+                'satuan' => null,
+                'error' => ['message' => 'Parameter ini belum memiliki satuan.'],
+            ];
+        }
+
+        return [
+            'satuan' => $satuan,
+            'error' => null,
+        ];
+    }
+
+    private function isMultiSatuanCategory(?string $kategoriName): bool
+    {
+        $normalized = strtolower(trim((string) $kategoriName));
+
+        return in_array($normalized, ['udara', 'emisi'], true);
+    }
+
+    private function isAllSatuanStored(?string $satuan): bool
+    {
+        return $satuan === null || trim((string) $satuan) === '';
+    }
+
+    private function formatSatuanLabel(?string $satuan, ?string $kategoriName): string
+    {
+        if (!$this->isAllSatuanStored($satuan)) {
+            return (string) $satuan;
+        }
+
+        return $this->isMultiSatuanCategory($kategoriName) ? 'Semua Satuan' : '-';
+    }
+
+    private function applyTemplateStpScopeToQuery($query, ?int $templateStpId): void
+    {
+        if ($templateStpId === null) {
+            $query->whereNull('id_template_stp');
+            return;
+        }
+
+        $query->where('id_template_stp', $templateStpId);
+    }
+
+    private function applySatuanScopeToQuery($query, ?string $satuanName): void
+    {
+        if ($this->isAllSatuanStored($satuanName)) {
+            $query->whereNull('satuan');
+            return;
+        }
+
+        $query->where('satuan', $satuanName);
+    }
+
+    private function validateParameterFormulaScope(
+        int $parameterId,
+        ?int $templateStpId,
+        ?string $satuanName,
+        bool $isMultiSatuanCategory,
+        ?int $excludeFormulaId = null
+    ): ?array {
         $query = Formula::query()
             ->where('id_parameter', $parameterId)
             ->where('is_active', true)
@@ -1179,49 +1399,37 @@ class VerifikasiRumusController extends Controller
             $query->where('id', '!=', $excludeFormulaId);
         }
 
-        $existing = $query->get(['id', 'id_template_stp']);
+        $existing = $query->get(['id', 'id_template_stp', 'satuan']);
         if ($existing->isEmpty()) {
             return null;
         }
 
-        $hasAllScope = $existing->contains(fn ($item) => $item->id_template_stp === null);
-        if ($hasAllScope) {
+        $formulas = $existing->map(function ($item) {
             return [
-                'message' => 'Parameter ini sudah memiliki rumus untuk semua template STP.',
-                'errors' => [[
-                    'code' => 'PARAMETER_FORMULA_ALL_EXISTS',
-                    'message' => 'Parameter ini sudah memiliki rumus untuk semua template STP.',
-                ]],
+                'id' => $item->id,
+                'id_template_stp' => $item->id_template_stp !== null ? (int) $item->id_template_stp : null,
+                'satuan' => $item->satuan,
             ];
+        })->all();
+
+        $error = $this->validateParameterFormulaScopeFromFormulas(
+            $formulas,
+            $templateStpId,
+            $satuanName,
+            $isMultiSatuanCategory
+        );
+
+        if (!$error) {
+            return null;
         }
 
-        if ($templateStpId === null) {
-            return [
-                'message' => 'Parameter ini sudah memiliki rumus pada template STP tertentu. Tidak bisa menambah rumus semua template.',
-                'errors' => [[
-                    'code' => 'PARAMETER_FORMULA_TEMPLATE_EXISTS',
-                    'message' => 'Parameter ini sudah memiliki rumus pada template STP tertentu.',
-                ]],
-            ];
-        }
-
-        $duplicateTemplate = $existing->contains(fn ($item) => (int) $item->id_template_stp === $templateStpId);
-        if ($duplicateTemplate) {
-            return [
-                'message' => 'Parameter ini sudah memiliki rumus pada template STP ini.',
-                'errors' => [[
-                    'code' => 'PARAMETER_FORMULA_TEMPLATE_DUPLICATE',
-                    'message' => 'Parameter ini sudah memiliki rumus pada template STP ini.',
-                ]],
-            ];
-        }
-
-        return null;
-    }
-
-    private function validateParameterFormulaUnique(int $parameterId, ?int $excludeFormulaId = null): ?array
-    {
-        return $this->validateParameterFormulaScope($parameterId, null, $excludeFormulaId);
+        return [
+            'message' => $error['message'],
+            'errors' => [[
+                'code' => 'PARAMETER_FORMULA_SCOPE_CONFLICT',
+                'message' => $error['message'],
+            ]],
+        ];
     }
 
     private function compareVerificationResults(string $system, string $manual): bool

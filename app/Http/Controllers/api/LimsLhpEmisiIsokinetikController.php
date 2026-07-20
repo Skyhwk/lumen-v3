@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\api;
 
 // Models
-use App\Models\Lims\LhpsEmisiIsokinetikCustom;
-use App\Models\Lims\LhpsEmisiIsokinetikDetail;
-use App\Models\Lims\LhpsEmisiIsokinetikHeader;
+use App\Models\LhpsEmisiIsokinetikCustom;
+use App\Models\LhpsEmisiIsokinetikDetail;
+use App\Models\LhpsEmisiIsokinetikHeader;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MetodeSampling;
-use App\Models\Lims\MasterBakumutu;
-use App\Models\Lims\Parameter;
-use App\Models\Lims\GenerateLink;
+use App\Models\MetodeSampling;
+use App\Models\MasterBakumutu;
+use App\Models\Parameter;
+use App\Models\GenerateLink;
 // Services
 use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;

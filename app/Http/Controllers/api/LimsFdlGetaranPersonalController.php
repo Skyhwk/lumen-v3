@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganGetaranPersonal;
+use App\Models\DataLapanganGetaranPersonal;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\WsValueUdara;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\WsValueUdara;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
-use App\Models\Lims\GetaranHeader;
+use App\Models\GetaranHeader;
 
 use App\Services\NotificationFdlService;
 
@@ -22,7 +22,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
-use App\Models\Lims\AnalystFormula as Formula;
+use App\Models\AnalystFormula as Formula;
 use App\Services\AnalystFormula;
 
 
