@@ -15,11 +15,11 @@ use App\Models\Lims\OrderDetail as LimsOrderDetail;
 class SyncLimsData extends Command
 {
     protected $signature = 'lims:sync 
-                            {--limit=50 : Jumlah maksimal data Order Header yang ditarik} 
+                            {--limit=300 : Jumlah maksimal data Order Header yang ditarik} 
                             {--month= : Bulan spesifik (1-12)} 
                             {--year= : Tahun spesifik}';
                             
-    protected $description = 'Sinkronisasi data Order Header & Detail dari DB Utama ke DB LIMS';
+    protected $description = 'Sinkronisasi data Order Header & Detail dari DB Utama ke DB LIMS dan pembersihan data parameter tertentu';
 
     public function handle()
     {
@@ -45,6 +45,7 @@ class SyncLimsData extends Command
         $headers = OrderHeader::where('is_revisi', 0)
             ->whereMonth('tanggal_order', $month)
             ->whereYear('tanggal_order', $year)
+            ->where('no_document', 'LIKE', '%/QT/%')
             ->limit($limit)
             ->get();
 
@@ -53,13 +54,14 @@ class SyncLimsData extends Command
             return 0;
         }
 
-        $this->info("Ditemukan {$headers->count()} Order Header. Memulai proses...");
+        $this->info("Ditemukan {$headers->count()} Order Header. Memulai proses copy...");
         $bar = $this->output->createProgressBar($headers->count());
         $bar->start();
 
         $successCount = 0;
         $failedOrders = [];
 
+        // 1. FASE COPY DATA KE LIMS
         foreach ($headers as $header) {
             try {
                 DB::connection('lims')->transaction(function () use ($header) {
@@ -74,7 +76,6 @@ class SyncLimsData extends Command
                         return; 
                     }
 
-                    // A. OrderHeader & Detail Saja
                     LimsOrderHeader::updateOrCreate(['id' => $header->id], $header->toArray());
                     foreach ($details as $detail) {
                         LimsOrderDetail::updateOrCreate(['id' => $detail->id], $detail->toArray());
@@ -101,15 +102,55 @@ class SyncLimsData extends Command
         $bar->finish();
         $this->newLine(2);
 
+
+        // 2. FASE PEMBERSIHAN (CLEANUP) DATA DI LIMS
+        $this->info("=== Memulai Fase Pembersihan (Cleanup) ===");
+        
+        $forbiddenParams = [
+            'Rd - Alfa Beta',
+            'Rd Alfa',
+            'Rd Beta',
+            'Rd - Alfa NS1',
+            'Rd - Alfa',
+            'Rd - Beta'
+        ];
+
+        // Query mencari Order Detail di LIMS yang mengandung parameter terlarang
+        $queryCleanup = LimsOrderDetail::query();
+        foreach ($forbiddenParams as $param) {
+            $queryCleanup->orWhereRaw("JSON_SEARCH(parameter, 'one', ?) IS NOT NULL", ["%;{$param}"]);
+        }
+
+        // Ambil ID Header-nya saja secara unik
+        $forbiddenHeaderIds = $queryCleanup->pluck('id_order_header')->unique();
+
+        if ($forbiddenHeaderIds->isNotEmpty()) {
+            $this->warn("Ditemukan {$forbiddenHeaderIds->count()} Order yang mengandung parameter Radioaktif. Melakukan penghapusan...");
+            
+            DB::connection('lims')->transaction(function () use ($forbiddenHeaderIds) {
+                // Hapus Detail-nya dulu
+                LimsOrderDetail::whereIn('id_order_header', $forbiddenHeaderIds)->delete();
+                // Hapus Header-nya
+                LimsOrderHeader::whereIn('id', $forbiddenHeaderIds)->delete();
+            });
+            
+            $this->info("Pembersihan selesai! Order H & D terkait berhasil dicabut.");
+        } else {
+            $this->info("Aman. Tidak ditemukan data dengan parameter Radioaktif di LIMS.");
+        }
+        $this->newLine();
+
+
+        // 3. KESIMPULAN
         if (count($failedOrders) > 0) {
             $this->error("Sinkronisasi selesai dengan beberapa kendala!");
-            $this->info("Berhasil: {$successCount} data.");
+            $this->info("Berhasil Copy: {$successCount} data.");
             $this->error("Gagal: " . count($failedOrders) . " data.");
             $this->warn("Daftar No Order yang gagal: " . implode(', ', $failedOrders));
             $this->line("Silakan cek 'storage/logs/laravel.log' untuk detail error-nya.");
         } else {
-            $this->info("Sinkronisasi periode {$month}/{$year} selesai dengan sukses 100%!");
-            $this->info("Total diproses: {$successCount} data.");
+            $this->info("Seluruh rangkaian periode {$month}/{$year} selesai dengan sukses 100%!");
+            $this->info("Total Order diproses: {$successCount} data.");
         }
 
         return 0;
