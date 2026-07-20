@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganLingkunganHidup;
-use App\Models\Lims\DetailLingkunganHidup;
+use App\Models\DataLapanganLingkunganHidup;
+use App\Models\DetailLingkunganHidup;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
-use App\Models\Lims\LingkunganHeader;
-use App\Models\Lims\WsValueLingkungan;
-use App\Models\Lims\WsValueUdara;
+use App\Models\LingkunganHeader;
+use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
 
 use App\Services\NotificationFdlService;
 

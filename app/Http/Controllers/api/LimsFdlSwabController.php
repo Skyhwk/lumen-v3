@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganSwab;
+use App\Models\DataLapanganSwab;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
 use App\Services\NotificationFdlService;
 

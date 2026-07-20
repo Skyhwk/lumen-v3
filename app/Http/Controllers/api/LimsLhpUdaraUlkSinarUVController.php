@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\lhpsSinarUVCustom;
-use App\Models\Lims\LhpsSinarUVDetail;
-use App\Models\Lims\LhpsSinarUVHeader;
+use App\Models\lhpsSinarUVCustom;
+use App\Models\LhpsSinarUVDetail;
+use App\Models\LhpsSinarUVHeader;
 use App\Models\Lims\OrderDetail;
 
 use App\Services\LhpTemplate;

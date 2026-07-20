@@ -2,15 +2,15 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganMicrobiologi;
-use App\Models\Lims\DetailMicrobiologi;
+use App\Models\DataLapanganMicrobiologi;
+use App\Models\DetailMicrobiologi;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 
-use App\Models\Lims\MicrobioHeader;
-use App\Models\Lims\WsValueMicrobio;
+use App\Models\MicrobioHeader;
+use App\Models\WsValueMicrobio;
 
 use App\Services\NotificationFdlService;
 

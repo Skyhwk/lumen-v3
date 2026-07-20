@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 
-use App\Models\Lims\LhpsGetaranCustom;
+use App\Models\LhpsGetaranCustom;
 use App\Services\LhpTemplate;
 use Exception;
 use Illuminate\Http\Request;
@@ -17,8 +17,8 @@ use Yajra\Datatables\Datatables;
 use App\Services\PrintLhp;
 
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\LhpsGetaranHeader;
-use App\Models\Lims\LhpsGetaranDetail;
+use App\Models\LhpsGetaranHeader;
+use App\Models\LhpsGetaranDetail;
 
 class LimsLhpUdaraGetaranPersonalController extends Controller
 {

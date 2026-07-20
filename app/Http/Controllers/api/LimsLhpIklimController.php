@@ -4,12 +4,10 @@ namespace App\Http\Controllers\api;
 
 
 
-use App\Models\Lims\{
-    LhpsIklimCustom, 
-    LhpsIklimDetail,
-    LhpsIklimHeader, 
-    OrderDetail
-};
+use App\Models\Lims\OrderDetail;
+use App\Models\LhpsIklimCustom;
+use App\Models\LhpsIklimDetail;
+use App\Models\LhpsIklimHeader;
 
 use App\Services\{
     GenerateQrDocumentLhp,

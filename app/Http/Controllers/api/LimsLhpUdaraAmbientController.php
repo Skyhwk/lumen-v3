@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\LhpsLingHeader;
-use App\Models\Lims\LhpsLingDetail;
-use App\Models\Lims\LhpsLingCustom;
+use App\Models\LhpsLingHeader;
+use App\Models\LhpsLingDetail;
+use App\Models\LhpsLingCustom;
 use App\Models\Lims\OrderDetail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;

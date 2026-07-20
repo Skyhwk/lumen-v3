@@ -2,18 +2,18 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\DataLapanganIsokinetikBeratMolekul;
-use App\Models\Lims\DataLapanganIsokinetikHasil;
-use App\Models\Lims\DataLapanganIsokinetikKadarAir;
-use App\Models\Lims\DataLapanganIsokinetikPenentuanKecepatanLinier;
-use App\Models\Lims\DataLapanganIsokinetikPenentuanPartikulat;
-use App\Models\Lims\DataLapanganIsokinetikSurveiLapangan;
+use App\Models\DataLapanganIsokinetikBeratMolekul;
+use App\Models\DataLapanganIsokinetikHasil;
+use App\Models\DataLapanganIsokinetikKadarAir;
+use App\Models\DataLapanganIsokinetikPenentuanKecepatanLinier;
+use App\Models\DataLapanganIsokinetikPenentuanPartikulat;
+use App\Models\DataLapanganIsokinetikSurveiLapangan;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MasterSubKategori;
-use App\Models\Lims\MasterKaryawan;
-use App\Models\Lims\Parameter;
-use App\Models\Lims\IsokinetikHeader;
-use App\Models\Lims\WsValueEmisiCerobong;
+use App\Models\MasterSubKategori;
+use App\Models\MasterKaryawan;
+use App\Models\Parameter;
+use App\Models\IsokinetikHeader;
+use App\Models\WsValueEmisiCerobong;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;

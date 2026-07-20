@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\LhpsMedanLMCustom;
-use App\Models\Lims\LhpsMedanLMDetail;
-use App\Models\Lims\LhpsMedanLMHeader;
+use App\Models\LhpsMedanLMCustom;
+use App\Models\LhpsMedanLMDetail;
+use App\Models\LhpsMedanLMHeader;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\ParameterFdl;
+use App\Models\ParameterFdl;
 
 use App\Services\LhpTemplate;
 use App\Services\PrintLhp;

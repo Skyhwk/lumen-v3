@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lims\LhpsAirHeader;
-use App\Models\Lims\LhpsAirDetail;
-use App\Models\Lims\LhpsAirCustom;
+use App\Models\LhpsAirHeader;
+use App\Models\LhpsAirDetail;
+use App\Models\LhpsAirCustom;
 use App\Models\Lims\OrderDetail;
-use App\Models\Lims\MetodeSampling;
-use App\Models\Lims\MasterBakumutu;
-use App\Models\Lims\Colorimetri;
-use App\Models\Lims\Gravimetri;
-use App\Models\Lims\Titrimetri;
-use App\Models\Lims\Parameter;
-use App\Models\Lims\GenerateLink;
+use App\Models\MetodeSampling;
+use App\Models\MasterBakumutu;
+use App\Models\Colorimetri;
+use App\Models\Gravimetri;
+use App\Models\Titrimetri;
+use App\Models\Parameter;
+use App\Models\GenerateLink;
 use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
