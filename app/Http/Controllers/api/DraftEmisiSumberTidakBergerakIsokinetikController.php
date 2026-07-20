@@ -254,7 +254,6 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'line'    => $th->getLine(),
@@ -308,7 +307,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 $groupedByPage[$page][] = $item->toArray();
             }
 
-            $view = 'DraftESTB';
+            $view = 'DraftESTBIsokinetik';
 
             $fileName = LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($dataHeader)
