@@ -11,20 +11,10 @@ class BasOnlineTidakSelesaiController extends Controller
 {
     /**
      * Menampilkan data sampel yang tidak selesai.
-     * 
-     * Query:
-     * SELECT 
-     *     psh.no_quotation AS no_qt,
-     *     sts.no_order, 
-     *     psh.nama_perusahaan,
-     *     psh.tanggal_sampling,
-     *     psh.sampler_jadwal,
-     *     GROUP_CONCAT(sts.no_sampel SEPARATOR ', ') AS nosampel_tidak_selesai
-     * FROM persiapan_sampel_header psh
-     * INNER JOIN sampel_tidak_selesai sts ON psh.id = sts.id_persiapan 
-     * WHERE psh.is_active = 1 
-     * GROUP BY psh.id, psh.no_quotation, sts.no_order, psh.nama_perusahaan, 
-     *          psh.tanggal_sampling, psh.sampler_jadwal
+     *
+     * Kolom detail_bas_documents bertipe JSON array.
+     * Setiap update BAS menambahkan entry baru ke akhir array.
+     * Maka index terakhir = dokumen BAS terbaru.
      */
     public function index(Request $request)
     {
@@ -37,6 +27,7 @@ class BasOnlineTidakSelesaiController extends Controller
                     'psh.nama_perusahaan',
                     'psh.tanggal_sampling',
                     'psh.sampler_jadwal',
+                    'psh.detail_bas_documents',
                     DB::raw("GROUP_CONCAT(sts.no_sampel SEPARATOR ', ') AS nosampel_tidak_selesai")
                 ])
                 ->where('psh.is_active', 1);
@@ -50,13 +41,14 @@ class BasOnlineTidakSelesaiController extends Controller
             }
 
             $query->groupBy([
-                    'psh.id',
-                    'psh.no_quotation',
-                    'sts.no_order',
-                    'psh.nama_perusahaan',
-                    'psh.tanggal_sampling',
-                    'psh.sampler_jadwal'
-                ]);
+                'psh.id',
+                'psh.no_quotation',
+                'sts.no_order',
+                'psh.nama_perusahaan',
+                'psh.tanggal_sampling',
+                'psh.sampler_jadwal',
+                'psh.detail_bas_documents',
+            ]);
 
             return DataTables::of($query)
                 ->filterColumn('no_qt', function ($query, $keyword) {
@@ -74,11 +66,23 @@ class BasOnlineTidakSelesaiController extends Controller
                 ->filterColumn('sampler_jadwal', function ($query, $keyword) {
                     $query->where('psh.sampler_jadwal', 'like', "%{$keyword}%");
                 })
+                // Parse JSON, ambil filename dari elemen terakhir (dokumen BAS terbaru)
+                ->addColumn('latest_bas_filename', function ($row) {
+                    if (empty($row->detail_bas_documents)) {
+                        return null; // null = BAS belum pernah dibuat/diupload
+                    }
+                    $docs = json_decode($row->detail_bas_documents, true);
+                    if (!is_array($docs) || count($docs) === 0) {
+                        return null;
+                    }
+                    $last = end($docs);
+                    return $last['filename'] ?? null;
+                })
                 ->make(true);
         } catch (\Exception $ex) {
             return response()->json([
                 'message' => $ex->getMessage(),
-                'line' => $ex->getLine()
+                'line'    => $ex->getLine()
             ], 500);
         }
     }
