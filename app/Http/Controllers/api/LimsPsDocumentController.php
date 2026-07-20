@@ -149,15 +149,7 @@ class LimsPsDocumentController extends Controller
                     return response()->json(['message' => 'Dokumen tidak ditemukan'], 404);
                 }
 
-                if ($document->status === self::STATUS_LEGALIZED) {
-                    return response()->json(['message' => 'Dokumen yang sudah disahkan tidak dapat diubah'], 422);
-                }
-
                 $document->load('approvals');
-
-                if (!$this->workflow->canUserUpdate($document)) {
-                    return response()->json(['message' => 'Dokumen yang sudah diverifikasi atau disetujui tidak dapat diubah'], 422);
-                }
 
                 $oldContentFile = $document->content_file;
 
@@ -375,6 +367,44 @@ class LimsPsDocumentController extends Controller
         return response()->json(['message' => 'Aksi tidak valid'], 422);
     }
 
+    public function rejectDocument(Request $request)
+    {
+        $document = $this->findActiveDocument($request->id, $request->menu_slug);
+
+        if (!$document) {
+            return response()->json(['message' => 'Dokumen tidak ditemukan'], 404);
+        }
+
+        if ($document->status !== self::STATUS_LEGALIZED) {
+            return response()->json(['message' => 'Hanya dokumen arsip yang dapat dikembalikan ke dokumen aktif'], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            LimsDocumentApproval::where('lims_document_id', $document->id)
+                ->where('action', 'legalize')
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
+
+            $document->status = self::STATUS_IN_REVIEW;
+            $document->pengesahan = null;
+            $document->disahkan_pada = null;
+            $document->tanggal_pengesahan = null;
+            $document->updated_by = $this->karyawan;
+            $document->updated_at = Carbon::now();
+            $document->save();
+
+            DB::commit();
+
+            return response()->json(['message' => 'Dokumen berhasil dikembalikan ke dokumen aktif'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
     public function deleteDocument(Request $request)
     {
         $document = $this->findActiveDocument($request->id, $request->menu_slug);
@@ -383,15 +413,7 @@ class LimsPsDocumentController extends Controller
             return response()->json(['message' => 'Dokumen tidak ditemukan'], 404);
         }
 
-        if ($document->status === self::STATUS_LEGALIZED) {
-            return response()->json(['message' => 'Dokumen yang sudah disahkan tidak dapat dihapus'], 422);
-        }
-
         $document->load('approvals');
-
-        if ($document->approvals->whereIn('action', ['approve', 'verify'])->isNotEmpty()) {
-            return response()->json(['message' => 'Dokumen yang sudah diverifikasi atau disetujui tidak dapat dihapus'], 422);
-        }
 
         DB::beginTransaction();
 
@@ -431,6 +453,9 @@ class LimsPsDocumentController extends Controller
         $document->cetakan = $request->filled('cetakan') ? $request->cetakan : null;
         $document->disusun_oleh = $request->disusun_oleh;
         $document->jabatan_penyusun = $request->jabatan_penyusun;
+        $document->tanggal_disusun = $request->filled('tanggal_disusun')
+            ? $request->tanggal_disusun
+            : Carbon::today()->format('Y-m-d');
     }
 
     private function resolveStatusLabel(LimsDocument $document): string
