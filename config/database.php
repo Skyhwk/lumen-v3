@@ -139,11 +139,11 @@ return [
 
         'lims' => [
             'driver' => 'mysql',
-            'host' => env('DB_LIMS_HOST', env('DB_HOST', '127.0.0.1')),
-            'port' => env('DB_LIMS_PORT', env('DB_PORT', 3306)),
-            'database' => env('DB_LIMS', 'lims'),
-            'username' => env('DB_LIMS_USERNAME', env('DB_USERNAME', 'forge')),
-            'password' => env('DB_LIMS_PASSWORD', env('DB_PASSWORD', '')),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', 3306),
+            'database' => env('DB_LIMS', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_general_ci'),
