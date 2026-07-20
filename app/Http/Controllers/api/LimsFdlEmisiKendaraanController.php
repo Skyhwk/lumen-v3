@@ -21,11 +21,32 @@ use Yajra\Datatables\Datatables;
 
 class LimsFdlEmisiKendaraanController extends Controller
 {
+    public function __construct(\Illuminate\Http\Request $request)
+    {
+        parent::__construct($request);
+        config(['is_lims' => true]);
+    }
+
     // Ini punya web
     public function showFdlEmisiApi(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganEmisiKendaraan::with('emisiOrder', 'detail')->where('is_active', true)->orderBy('id', 'DESC');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganEmisiKendaraan::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('emisiOrder', 'detail')->where('is_active', true)->orderBy('id', 'DESC');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) == 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $data->whereHas('detail', function($q) use ($month, $year) {
+                    $q->whereMonth('tanggal_sampling', $month)
+                      ->whereYear('tanggal_sampling', $year);
+                });
+            }
+        }
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -66,7 +87,7 @@ class LimsFdlEmisiKendaraanController extends Controller
             $status_co = 'Parameter Tidak di uji';
             $status_hc = 'Parameter Tidak di uji';
             $data = [];
-            $data1 = DataLapanganEmisiKendaraan::with('emisiOrder')->where('id', $request->id)->first();
+            $data1 = DataLapanganEmisiKendaraan::has('detail')->with('emisiOrder')->where('id', $request->id)->first();
             
             if($data1->emisiOrder != null && $data1->emisiOrder->regulasi != null){
                 $dataPermen = $data1->emisiOrder->regulasi->peraturan;
@@ -247,7 +268,7 @@ class LimsFdlEmisiKendaraanController extends Controller
     public function deleteData(Request $request){
         DB::beginTransaction();
         try {
-            $data_fdl = DataLapanganEmisiKendaraan::with('emisiOrder')->where('id', $request->id)->first();
+            $data_fdl = DataLapanganEmisiKendaraan::has('detail')->with('emisiOrder')->where('id', $request->id)->first();
             
             if($data_fdl != null){
                 $data_order = DataLapanganEmisiOrder::where('id_qr', $data_fdl->emisiOrder->qr->id)->get();

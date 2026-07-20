@@ -7,6 +7,8 @@ use App\Models\Sector;
 
 class DataLapanganSenyawaVolatile extends Sector
 {
+    public static $useLimsDetail = false;
+
     protected $table = "data_lapangan_senyawa_volatile";
     public $timestamps = false;
 
