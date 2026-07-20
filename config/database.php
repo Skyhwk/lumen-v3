@@ -152,10 +152,7 @@ return [
             'engine' => env('DB_ENGINE', null),
             'timezone' => env('DB_TIMEZONE', '+00:00'),
         ],
-<<<<<<< HEAD
-=======
         
->>>>>>> 08e7716a732e8faf4ad67f12c7575418ae73a69d
         'pgsql' => [
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),

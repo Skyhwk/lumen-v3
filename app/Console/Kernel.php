@@ -41,6 +41,8 @@ class Kernel extends ConsoleKernel
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
         Commands\SyncShioElemen::class,
+        Commands\SyncLimsData::class,
+        Commands\TruncateLimsTesting::class,
     ];
 
     /**
