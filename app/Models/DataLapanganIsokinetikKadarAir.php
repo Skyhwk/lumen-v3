@@ -7,7 +7,7 @@ use App\Models\Sector;
 
 class DataLapanganIsokinetikKadarAir extends Sector
 {
-    protected $table = "data_lapangan_isokinetik_kadar_air";
+protected $table = "data_lapangan_isokinetik_kadar_air";
     public $timestamps = false;
 
     protected $guarded = [];
@@ -19,9 +19,12 @@ class DataLapanganIsokinetikKadarAir extends Sector
         'data_kalkulasi_dgm' => 'array',
     ];
 
-    public function detail(){
-        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
-        ->where('is_active', true);
+    public function detail()
+    {
+        if (config('is_lims', false)) {
+            return $this->belongsTo(\App\Models\Lims\OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
+        }
+        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
     }
 
     public function survei(){

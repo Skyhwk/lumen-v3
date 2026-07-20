@@ -7,6 +7,8 @@ use App\Models\Sector;
 
 class DataLapanganSARDetail extends Sector
 {
+    public static $useLimsDetail = false;
+
     protected $table = "datalapangan_sar_detail";
     public $timestamps = false;
 
