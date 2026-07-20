@@ -37,7 +37,10 @@ class LimsFdlEmisiCerobongController extends Controller
     public function index(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganEmisiCerobong::has('detail')->with('detail')
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganEmisiCerobong::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('detail')
             ->where('tipe', $request->mode_cerobong)
             ->orderBy('id', 'desc');
 

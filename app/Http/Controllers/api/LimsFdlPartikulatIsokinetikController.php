@@ -241,9 +241,12 @@ class LimsFdlPartikulatIsokinetikController extends Controller
 
     public function index(Request $request)
     {
+        $dbLims = config('database.connections.lims.database', 'lims');
         if ($request->method == 1) {
             $this->autoBlock(DataLapanganIsokinetikSurveiLapangan::class);
-            $data = DataLapanganIsokinetikSurveiLapangan::has('detail')->with('detail');
+            $data = DataLapanganIsokinetikSurveiLapangan::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
@@ -321,7 +324,9 @@ class LimsFdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 2) {
             $this->autoBlock(DataLapanganIsokinetikPenentuanKecepatanLinier::class);
-            $data = DataLapanganIsokinetikPenentuanKecepatanLinier::has('detail')->with('detail','survei');
+            $data = DataLapanganIsokinetikPenentuanKecepatanLinier::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail','survei');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
@@ -389,7 +394,9 @@ class LimsFdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 3) {
             $this->autoBlock(DataLapanganIsokinetikBeratMolekul::class);
-            $data = DataLapanganIsokinetikBeratMolekul::has('detail')->with('detail','survei');
+            $data = DataLapanganIsokinetikBeratMolekul::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail','survei');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
@@ -466,7 +473,9 @@ class LimsFdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 4) {
             $this->autoBlock(DataLapanganIsokinetikKadarAir::class);
-            $data = DataLapanganIsokinetikKadarAir::has('detail')->with('detail','survei');
+            $data = DataLapanganIsokinetikKadarAir::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail','survei');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
@@ -510,7 +519,9 @@ class LimsFdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 5) {
             $this->autoBlock(DataLapanganIsokinetikPenentuanPartikulat::class);
-            $data = DataLapanganIsokinetikPenentuanPartikulat::has('detail')->with('detail','survei', 'method3');
+            $data = DataLapanganIsokinetikPenentuanPartikulat::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail','survei', 'method3');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
@@ -584,7 +595,9 @@ class LimsFdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 6) {
             $this->autoBlock(DataLapanganIsokinetikHasil::class);
-            $data = DataLapanganIsokinetikHasil::has('detail')->with('detail','survei','method5');
+            $data = DataLapanganIsokinetikHasil::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail','survei','method5');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
@@ -664,19 +677,32 @@ class LimsFdlPartikulatIsokinetikController extends Controller
 
     public function indexApps(Request $request)
     {
+        $dbLims = config('database.connections.lims.database', 'lims');
         $data = array();
         if ($request->method == 1) {
-            $data = DataLapanganIsokinetikSurveiLapangan::has('detail')->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
+            $data = DataLapanganIsokinetikSurveiLapangan::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
         } else if ($request->method == 2) {
-            $data = DataLapanganIsokinetikPenentuanKecepatanLinier::has('detail')->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
+            $data = DataLapanganIsokinetikPenentuanKecepatanLinier::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
         } else if ($request->method == 3) {
-            $data = DataLapanganIsokinetikBeratMolekul::has('detail')->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
+            $data = DataLapanganIsokinetikBeratMolekul::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
         } else if ($request->method == 4) {
-            $data = DataLapanganIsokinetikKadarAir::has('detail')->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
+            $data = DataLapanganIsokinetikKadarAir::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
         } else if ($request->method == 5) {
-            $data = DataLapanganIsokinetikPenentuanPartikulat::has('detail')->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
+            $data = DataLapanganIsokinetikPenentuanPartikulat::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
         } else if ($request->method == 6) {
-            $data = DataLapanganIsokinetikHasil::has('detail')->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
+            $data = DataLapanganIsokinetikHasil::whereHas('detail', function ($query) use ($dbLims) {
+                $query->from($dbLims . '.order_detail');
+            })->with('detail')->where('is_blocked', false)->where('created_by', $this->karyawan)->orderBy('created_at', 'desc');
         }
 
         $this->resultx = 'Show Partikulat Isokinetik Success';

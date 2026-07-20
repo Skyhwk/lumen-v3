@@ -31,7 +31,10 @@ class LimsFdlEmisiKendaraanController extends Controller
     public function showFdlEmisiApi(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganEmisiKendaraan::has('detail')->with('emisiOrder', 'detail')->where('is_active', true)->orderBy('id', 'DESC');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganEmisiKendaraan::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('emisiOrder', 'detail')->where('is_active', true)->orderBy('id', 'DESC');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);

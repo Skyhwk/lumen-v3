@@ -36,8 +36,10 @@ class LimsFdlMedanLMController extends Controller
     public function index(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganMedanLM::has('detail')->with('detail')
-            ->orderBy('id', 'desc');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganMedanLM::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('detail')->orderBy('id', 'desc');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);

@@ -36,7 +36,10 @@ class LimsFdlKebisinganController extends Controller
     public function indexAll(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganKebisingan::has('detail')->with('detail')->orderBy('id', 'desc');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganKebisingan::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('detail')->orderBy('id', 'desc');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);

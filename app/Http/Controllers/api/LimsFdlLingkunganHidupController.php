@@ -36,7 +36,10 @@ class LimsFdlLingkunganHidupController extends Controller
 
     public function index(Request $request){
         $this->autoBlock();
-        $data = DataLapanganLingkunganHidup::has('detail')->with('detail', 'detailLingkunganHidup')->orderBy('id', 'desc');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganLingkunganHidup::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('detail', 'detailLingkunganHidup')->orderBy('id', 'desc');
 
         if ($request->has('month_year') && !empty($request->month_year)) {
             $parts = explode('-', $request->month_year);
