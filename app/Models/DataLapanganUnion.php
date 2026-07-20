@@ -8,8 +8,13 @@ use App\Models\DeviceIntilab;
 
 class DataLapanganUnion extends Sector
 {
-    protected $table = 'data_lapangan_union';
+    protected $connection = 'mysql';
     public $timestamps = false;
-
     protected $guarded = [];
+
+    public function getTable()
+    {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $mainDb . '.data_lapangan_union';
+    }
 }

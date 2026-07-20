@@ -6,7 +6,13 @@ use App\Models\Sector;
 
 class PersiapanSampelHeader extends Sector
 {
-    protected $table = 'persiapan_sampel_header';
+    protected $connection = 'mysql';
+
+    public function getTable()
+    {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $mainDb . '.persiapan_sampel_header';
+    }
 
     protected $fillable = [
         'no_order',
