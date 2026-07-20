@@ -139,19 +139,11 @@ return [
 
         'lims' => [
             'driver' => 'mysql',
-<<<<<<< HEAD
-            'host' => env('DB_LIMS_HOST', env('DB_HOST', '127.0.0.1')),
-            'port' => env('DB_LIMS_PORT', env('DB_PORT', 3306)),
-            'database' => env('DB_LIMS', 'lims'),
-            'username' => env('DB_LIMS_USERNAME', env('DB_USERNAME', 'forge')),
-            'password' => env('DB_LIMS_PASSWORD', env('DB_PASSWORD', '')),
-=======
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', 3306),
             'database' => env('DB_LIMS', 'forge'),
             'username' => env('DB_USERNAME', 'forge'),
             'password' => env('DB_PASSWORD', ''),
->>>>>>> 8e2f60b25747531820437d7aac40700927469a3e
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_general_ci'),
@@ -160,11 +152,7 @@ return [
             'engine' => env('DB_ENGINE', null),
             'timezone' => env('DB_TIMEZONE', '+00:00'),
         ],
-<<<<<<< HEAD
-
-=======
-        
->>>>>>> 8e2f60b25747531820437d7aac40700927469a3e
+    
         'pgsql' => [
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),
