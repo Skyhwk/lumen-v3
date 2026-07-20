@@ -15,6 +15,7 @@ class TrackingFdlController extends Controller
         try {
         $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1', 'no_quotation')
             ->withAnyDataLapangan()
+            ->whereNotNull('tanggal_terima')
             ->where('is_active', 1)
             ->whereMonth('tanggal_sampling', $request->bulan)
             ->whereYear('tanggal_sampling', $request->tahun)
@@ -108,6 +109,7 @@ class TrackingFdlController extends Controller
         try {
             $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1', 'no_quotation')
                 ->withAnyDataLapangan()
+                ->whereNull('tanggal_terima')
                 ->where('is_active', 1)
                 ->whereMonth('tanggal_sampling', $request->bulan)
                 ->whereYear('tanggal_sampling', $request->tahun)
