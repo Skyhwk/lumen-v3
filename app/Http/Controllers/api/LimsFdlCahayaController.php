@@ -29,10 +29,28 @@ use App\Models\AnalystFormula as Formula;
 
 class LimsFdlCahayaController extends Controller
 {
+    public function __construct(\Illuminate\Http\Request $request)
+    {
+        parent::__construct($request);
+        config(['is_lims' => true]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganCahaya::with('detail')->orderBy('id', 'desc');
+        $data = DataLapanganCahaya::has('detail')->with('detail')->orderBy('id', 'desc');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) == 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $data->whereHas('detail', function($q) use ($month, $year) {
+                    $q->whereMonth('tanggal_sampling', $month)
+                      ->whereYear('tanggal_sampling', $year);
+                });
+            }
+        }
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -386,7 +404,7 @@ class LimsFdlCahayaController extends Controller
 
     public function detail(Request $request)
     {
-        $data = DataLapanganCahaya::with('detail')
+        $data = DataLapanganCahaya::has('detail')->with('detail')
             ->where('id', $request->id)
             ->first();
 
