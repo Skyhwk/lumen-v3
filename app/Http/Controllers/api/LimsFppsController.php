@@ -640,7 +640,7 @@ class LimsFppsController extends Controller
                         $response = Http::asForm()
                             ->post($link, [
                                 'printer' => $request->printer,
-                                'file' => $url . '/utc/apps/public/stps/' . $cetak,
+                                'file' => $url . '/utc/apps/public/fpps/' . $cetak,
                             ]);
                     } catch (Exception $e) {
                         return response()->json([
@@ -1407,8 +1407,13 @@ class LimsFppsController extends Controller
 
 
             // ===================== OUTPUT PDF =====================
+            $fppsDir = public_path() . '/fpps';
+            if (!file_exists($fppsDir)) {
+                mkdir($fppsDir, 0755, true);
+            }
+
             $fileName = str_replace('/', '-', $no_document) . '.pdf';
-            $pdf->Output(public_path() . '/stps/' . $fileName, 'F');
+            $pdf->Output($fppsDir . '/' . $fileName, 'F');
 
             return $fileName;
 
