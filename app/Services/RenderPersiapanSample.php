@@ -14,7 +14,6 @@ class RenderPersiapanSample
 {
     private $data;
     private $periode;
-
     public function renderPdf($id)
     {
         DB::beginTransaction();
