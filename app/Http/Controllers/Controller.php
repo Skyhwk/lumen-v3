@@ -21,7 +21,8 @@ class Controller extends BaseController
         $cabang = null;
         $privilageCabang = null;
         $grade = null;
-        $department = null;
+        $id_department = null;
+        $department = null
         if ($request->attributes->has('user')) {
             $user = $request->attributes->get('user');
             if (isset($user->karyawan) && $user->karyawan != null) {
