@@ -1,0 +1,242 @@
+<?php
+
+namespace App\Http\Controllers\api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Yajra\Datatables\Datatables;
+use App\Models\Colorimetri;
+use App\Models\Titrimetri;
+use App\Models\Gravimetri;
+use App\Models\ParameterTotal;
+use App\Models\AnalisParameter;
+use App\Models\TemplateStp;
+use App\Models\OrderDetail;
+use App\Models\WsValueAir;
+use Carbon\Carbon;
+use DB;
+
+class LimsTotalAirController extends Controller
+{
+    public function index(Request $request){
+        $limsDb = DB::connection('lims')->getDatabaseName();
+
+        $data = Colorimetri::with('ws_value')
+            ->join(DB::raw("{$limsDb}.order_detail as order_detail"),'order_detail.no_sampel','=','colorimetri.no_sampel')
+            ->where('is_approved', $request->approve)
+            ->where('colorimetri.is_active', true)
+            ->where('is_total', false)
+            ->where('template_stp', $request->template_stp)
+            ->select('colorimetri.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN order_detail.tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                order_detail.tanggal_terima DESC
+            ");
+        
+        if ($request->filled('periode')) {
+            $periode = explode('-', $request->periode);
+            if (count($periode) == 2) {
+                $data->whereYear('colorimetri.created_at', $periode[0])
+                     ->whereMonth('colorimetri.created_at', $periode[1]);
+            }
+        }
+        return Datatables::of($data)
+            ->addColumn('tanggal_terima', function ($item) {
+                return $item->order_detail->tanggal_terima ?? '-';
+            })
+
+            ->addColumn('kategori_3', function ($item) {
+                return $item->order_detail->kategori_3 ?? '-';
+            })
+            ->addColumn('tanggal_sampling', function ($item) {
+                return $item->order_detail->tanggal_sampling ?? '-';
+            })
+
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                $query->where('order_detail.tanggal_terima', 'like', "%{$keyword}%");
+            })
+
+            ->filterColumn('kategori_3', function ($query, $keyword) {
+                $query->where('order_detail.kategori_3', 'like', "%{$keyword}%");
+            })
+
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                $query->where('order_detail.tanggal_sampling', 'like', "%{$keyword}%");
+            })
+
+            ->filter(function ($query) use ($request) {
+
+                if ($request->has('columns')) {
+                    $columns = $request->get('columns');
+
+                    foreach ($columns as $column) {
+
+                        if (!empty($column['search']['value'])) {
+
+                            $columnName = $column['name'] ?: $column['data'];
+                            $searchValue = $column['search']['value'];
+
+                            // HANYA BOLEH FILTER KOLOM colorimetri
+                            if (in_array($columnName, [
+                                'parameter',
+                                'jenis_pengujian',
+                                'created_at'
+                            ])) {
+                                $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
+                            }
+
+                        }
+                    }
+                }
+            })
+        ->make(true);
+    }
+
+    public function showDetail(Request $request){
+        $parent = ParameterTotal::where('parameter_name', $request->parameter)->where('is_active', 1)->first();
+        $children = json_decode($parent->id_child);
+        $analisParameter = AnalisParameter::whereIn('parameter_id', $children)
+            ->get()
+            ->map(function ($item) use ($request) {
+                $stp = TemplateStp::where('id', $item->id_stp)->where('is_active', 1)->first();
+                $header = null;
+                if($stp->name == 'GRAVIMETRI' && $stp->category_id == 1){
+                    $header = Gravimetri::with('ws_value')
+                        ->where('no_sampel', $request->no_sampel)
+                        ->where('parameter', $item->parameter_name)
+                        ->where('template_stp', $item->id_stp)
+                        ->where('is_active', 1)
+                        ->where('is_total', 1)
+                        ->first();
+                    if($header){
+                        $header->template = 'gravimetri';
+                    }
+                }else if (( ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
+                &&
+                $stp->category_id == 1
+                )) {
+                    $header = Colorimetri::with('ws_value')
+                        ->where('no_sampel', $request->no_sampel)
+                        ->where('parameter', $item->parameter_name)
+                        ->where('template_stp', $item->id_stp)
+                        ->where('is_active', 1)
+                        ->where('is_total', 1)
+                        ->first();
+                    if($header){
+                        $header->template = 'colorimetri';
+                    }
+                }else if($stp->name == 'TITRIMETRI' && $stp->category_id == 1){
+                    $header = Titrimetri::with('ws_value')
+                        ->where('no_sampel', $request->no_sampel)
+                        ->where('parameter', $item->parameter_name)
+                        ->where('template_stp', $item->id_stp)
+                        ->where('is_active', 1)
+                        ->where('is_total', 1)
+                        ->first();
+                    if($header){
+                        $header->template = 'titrimetri';
+                    }
+                }
+                return $header ?? null;
+            });
+
+        return response()->json([
+            'data' => json_decode($analisParameter)
+        ], 200);
+    }
+
+    public function approve(Request $request){
+        DB::beginTransaction();
+        try {
+            $Colorimetri = Colorimetri::where('id', $request->id)->first();
+            $Colorimetri->is_approved = true;
+            $Colorimetri->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message'=> 'Successfully Approved',
+                'data' => $Colorimetri
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'data' => $th
+            ], 500);
+        }
+    }
+
+    public function delete(Request $request){
+        DB::beginTransaction();
+        try {
+            $Colorimetri = Colorimetri::where('id', $request->id)->first();
+            $Colorimetri->is_active = false;
+            $Colorimetri->save();
+
+            $ws_value = WsValueAir::where('id_colorimetri', $Colorimetri->id)->first();
+            if($ws_value){
+                $ws_value->is_active = false;
+                $ws_value->save();
+            }
+
+            $parameter_total = ParameterTotal::where('parameter_name', $Colorimetri->parameter)->where('is_active', 1)->first();
+            $children = json_decode($parameter_total->id_child);
+            foreach ($children as $child) {
+                $analisParameter = AnalisParameter::where('parameter_id', $child)->first();
+                $stp = TemplateStp::where('id', $analisParameter->id_stp)->where('is_active', 1)->first();
+                if($stp->name == 'GRAVIMETRI' && $stp->category_id == 1){
+                    $graviChild = Gravimetri::where('template_stp', $analisParameter->id_stp)->where('no_sampel', $Colorimetri->no_sampel)->where('parameter', $analisParameter->parameter_name)->where('is_active', 1)->where('is_total', 1)->first();
+                    if($graviChild){
+                        $graviChild->is_active = false;
+                        $graviChild->save();
+                    }
+                    $ws_gravi = WsValueAir::where('id_gravimetri', $graviChild->id)->first();
+                    if($ws_gravi){
+                        $ws_gravi->is_active = false;
+                        $ws_gravi->save();
+                    }
+                }else if($stp->name == 'TITRIMETRI' && $stp->category_id == 1){
+                    $titriChild = Titrimetri::where('template_stp', $analisParameter->id_stp)->where('no_sampel', $Colorimetri->no_sampel)->where('parameter', $analisParameter->parameter_name)->where('is_active', 1)->where('is_total', 1)->first();
+                    if($titriChild){
+                        $titriChild->is_active = false;
+                        $titriChild->save();
+                    }
+                    $ws_titri = WsValueAir::where('id_titrimetri', $titriChild->id)->first();
+                    if($ws_titri){
+                        $ws_titri->is_active = false;
+                        $ws_titri->save();
+                    }
+                }if (( ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
+                &&
+                $stp->category_id == 1
+                )){
+                    $coloriChild = Colorimetri::where('template_stp', $analisParameter->id_stp)->where('no_sampel', $Colorimetri->no_sampel)->where('parameter', $analisParameter->parameter_name)->where('is_active', 1)->where('is_total', 1)->first();
+                    if($coloriChild){
+                        $coloriChild->is_active = false;
+                        $coloriChild->save();
+                    }
+                    $ws_colori = WsValueAir::where('id_colorimetri', $coloriChild->id)->first();
+                    if($ws_colori){
+                        $ws_colori->is_active = false;
+                        $ws_colori->save();
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message'=> 'Successfully Deleted',
+                'data' => $Colorimetri
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'data' => $th
+            ], 500);
+        }
+    }
+}

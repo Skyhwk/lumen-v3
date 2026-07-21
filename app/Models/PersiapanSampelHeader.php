@@ -56,6 +56,11 @@ class PersiapanSampelHeader extends Sector
         return $this->belongsTo(OrderHeader::class, 'no_order', 'no_order');
     }
 
+    public function limsOrderHeader()
+    {
+        return $this->belongsTo(Lims\OrderHeader::class, 'no_order', 'no_order');
+    }
+
     public function notCompleted()
     {
         return $this->hasOne(SampelTidakSelesai::class, 'no_order', 'no_order');

@@ -27,11 +27,31 @@ use App\Services\AnalystFormula;
 
 class LimsFdlPartikulatMeterController extends Controller
 {
+    public function __construct(\Illuminate\Http\Request $request)
+    {
+        parent::__construct($request);
+        config(['is_lims' => true]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganPartikulatMeter::with('detail')
-            ->orderBy('id', 'desc');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganPartikulatMeter::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('detail')->orderBy('id', 'desc');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) == 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $data->whereHas('detail', function($q) use ($month, $year) {
+                    $q->whereMonth('tanggal_sampling', $month)
+                      ->whereYear('tanggal_sampling', $year);
+                });
+            }
+        }
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -433,7 +453,7 @@ class LimsFdlPartikulatMeterController extends Controller
 
     public function detail(Request $request)
     {
-        $data = DataLapanganPartikulatMeter::with('detail')
+        $data = DataLapanganPartikulatMeter::has('detail')->with('detail')
             ->where('id', $request->id)
             ->first();
 

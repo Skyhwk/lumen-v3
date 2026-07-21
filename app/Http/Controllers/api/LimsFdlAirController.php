@@ -38,10 +38,31 @@ use Yajra\Datatables\Datatables;
 
 class LimsFdlAirController extends Controller
 {
+    public function __construct(\Illuminate\Http\Request $request)
+    {
+        parent::__construct($request);
+        config(['is_lims' => true]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
-        $data = DataLapanganAir::with('detail')->orderBy('id', 'desc');
+        $dbLims = config('database.connections.lims.database', 'lims');
+        $data = DataLapanganAir::whereHas('detail', function ($query) use ($dbLims) {
+            $query->from($dbLims . '.order_detail');
+        })->with('detail')->orderBy('id', 'desc');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) == 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $data->whereHas('detail', function($q) use ($month, $year) {
+                    $q->whereMonth('tanggal_sampling', $month)
+                      ->whereYear('tanggal_sampling', $year);
+                });
+            }
+        }
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -303,7 +324,7 @@ class LimsFdlAirController extends Controller
     public function detail(Request $request)
     {
         try {
-            $data = DataLapanganAir::with('detail')->where('id', $request->id)->first();
+            $data = DataLapanganAir::has('detail')->with('detail')->where('id', $request->id)->first();
             $this->resultx = 'get Detail sample lapangan success';
 
             if ($data->debit_air == null) {
@@ -522,7 +543,7 @@ class LimsFdlAirController extends Controller
             $nilairow = $cell;
             $user = MasterKaryawan::where('nama_lengkap', $this->karyawan)->first();
             $jabatan = MasterJabatan::where('id', $user->id_jabatan)->first();
-            $data = DataLapanganAir::with('detail')->where('no_sampel', $value)->first();
+            $data = DataLapanganAir::has('detail')->with('detail')->where('no_sampel', $value)->first();
             // dd($data);
             $jenis = MasterSubKategori::where('id', explode('-', $data->detail->kategori_3)[0])->first();
 
@@ -768,7 +789,7 @@ class LimsFdlAirController extends Controller
 
             $tangg = $date->day . ' ' . $monthName . ' ' . $date->year;
 
-            $data = DataLapanganAir::with('detail')
+            $data = DataLapanganAir::has('detail')->with('detail')
                 ->whereYear('created_at', $date->year)
                 ->whereMonth('created_at', $date->month)
                 ->whereDay('created_at', $date->day)
@@ -788,7 +809,7 @@ class LimsFdlAirController extends Controller
             $tangg = $monthName . ' ' . $date->year;
 
             // Query data berdasarkan bulan
-            $data = DataLapanganAir::with('detail')
+            $data = DataLapanganAir::has('detail')->with('detail')
                 ->whereYear('created_at', $date->year)
                 ->whereMonth('created_at', $date->month)
                 ->get();

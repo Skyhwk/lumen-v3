@@ -79,7 +79,7 @@ class WsFinalUdaraGetaranController extends Controller
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
 			->where('status', 0)
-			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "17-Getaran (Lengan & Tangan)"])
+			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
 			->whereNotNull('tanggal_terima')
 			->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
