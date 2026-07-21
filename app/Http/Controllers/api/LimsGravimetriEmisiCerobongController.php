@@ -17,14 +17,14 @@ class LimsGravimetriEmisiCerobongController extends Controller
 
     // 20-03-2025
     public function index(Request $request){
-        $limsDb = \Illuminate\Support\Facades\DB::connection('lims')->getDatabaseName();
+        $limsDb = DB::connection('lims')->getDatabaseName();
 
         $data = EmisiCerobongHeader::with('ws_value')
-            ->join(\Illuminate\Support\Facades\DB::raw("{$limsDb}.order_detail as order_detail"),'order_detail.no_sampel','=','emisi_cerobong_header.no_sampel')
+            ->join(DB::raw("{$limsDb}.order_detail as order_detail"),'order_detail.no_sampel','=','emisi_cerobong_header.no_sampel')
             ->where('is_approved', $request->approve)
             ->where('emisi_cerobong_header.is_active', true)
             ->where('template_stp', $request->template_stp)
-            ->select('emisi_cerobong_header.*', 'order_detail.tanggal_terima as od_tanggal_terima', 'order_detail.kategori_3 as od_kategori_3')
+            ->select('emisi_cerobong_header.*', 'order_detail.tanggal_terima as od_tanggal_terima', 'order_detail.kategori_3 as od_kategori_3', 'order_detail.tanggal_sampling as od_tanggal_sampling')
             ->orderByRaw("
                 CASE 
                     WHEN order_detail.tanggal_terima IS NULL THEN 1
@@ -52,6 +52,15 @@ class LimsGravimetriEmisiCerobongController extends Controller
             })
             ->editColumn('data_analis', function($item){
                 return json_decode($item->data_analis, true) ?? [];
+            })
+            ->addColumn('tanggal_terima', function($item){
+                return $item->od_tanggal_terima ?? $item->tanggal_terima;
+            })
+            ->addColumn('kategori_3', function($item){
+                return $item->od_kategori_3 ?? $item->kategori_3;
+            })
+            ->addColumn('tanggal_sampling', function($item){
+                return $item->od_tanggal_sampling ?? $item->tanggal_sampling;
             })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
@@ -85,6 +94,7 @@ class LimsGravimetriEmisiCerobongController extends Controller
                     }
                 }
             })
+            ->removeColumn('od_tanggal_terima', 'od_kategori_3', 'od_tanggal_sampling')
         ->make(true);
     }
 
