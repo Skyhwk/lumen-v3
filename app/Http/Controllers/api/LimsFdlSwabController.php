@@ -341,6 +341,18 @@ class LimsFdlSwabController extends Controller
 
             app(NotificationFdlService::class)->sendRejectNotification("Swab Test", $request->no_sampel, $request->reason, $this->karyawan, $data->created_by);
             
+            
+            try {
+                app(\App\Services\RejectFdlService::class)->recordReject(
+                    $data,
+                    $this->karyawan,
+                    $request->reason ?? null,
+                    'Fdl Swab'
+                );
+            } catch (\Exception $e) {
+                // Ignore if it fails
+            }
+
             return response()->json([
                 'message' => 'Data no sample ' . $data->no_sampel . ' telah di reject'
             ], 201);

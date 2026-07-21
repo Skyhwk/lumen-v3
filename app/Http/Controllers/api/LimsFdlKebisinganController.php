@@ -1002,6 +1002,18 @@ class LimsFdlKebisinganController extends Controller
 
             app(NotificationFdlService::class)->sendRejectNotification("Kebisingan pada Shift $data->jenis_durasi_sampling", $request->no_sampel, $request->reason, $this->karyawan, $data->created_by);
             
+            
+            try {
+                app(\App\Services\RejectFdlService::class)->recordReject(
+                    $data,
+                    $this->karyawan,
+                    $request->reason ?? null,
+                    'Fdl Kebisingan'
+                );
+            } catch (\Exception $e) {
+                // Ignore if it fails
+            }
+
             return response()->json([
                 'message' => 'Data no sample ' . $data->no_sampel . ' telah di reject'
             ], 201);
