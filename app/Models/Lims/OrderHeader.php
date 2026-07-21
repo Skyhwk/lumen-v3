@@ -2,37 +2,35 @@
 
 namespace App\Models\Lims;
 
-use App\Models\QuotationKontrakH;
-use App\Models\SamplingPlan;
+use App\Models\Sector;
+use App\Models\Invoice;
+use App\Models\AllQuote;
+use App\Models\CodingSampling;
 use App\Models\Jadwal;
-use App\Models\LhpsMedanLMHeader;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsSinarUVHeader;
+use App\Models\User;
+use App\Models\SamplingPlan;
+use App\Models\DocumentCodingSample;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
 use App\Models\PersiapanSampelHeader;
 use App\Models\LhpsAirHeader;
-use App\Models\LhpsEmisiCHeader;
-use App\Models\QuotationNonKontrak;
 use App\Models\LhpsEmisiHeader;
+use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsGetaranHeader;
-
-use App\Models\CodingSampling;
-use App\Models\EmailLhp;
+use App\Models\LhpsKebisinganHeader;
+use App\Models\LhpsLingHeader;
+use App\Models\LhpsMedanLMHeader;
+use App\Models\LhpsPencahayaanHeader;
+use App\Models\LhpsSinarUVHeader;
 use App\Models\MasterPelanggan;
-use App\Models\DocumentCodingSample;
 use App\Models\SampelDiantar;
-use App\Models\User;
-use App\Models\HoldHp;
-use App\Models\LhppUdaraPsikologiHeader;
-use App\Models\AllQuote;
-use App\Models\Invoice;
-use App\Models\MasterKaryawan;
 use App\Models\Qsd;
+use App\Models\LhppUdaraPsikologiHeader;
 use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\CoverLhp;
-
-use App\Models\Sector;
+use App\Models\HoldHp;
+use App\Models\EmailLhp;
+use App\Models\MasterKaryawan;
 
 class OrderHeader extends Sector
 {
@@ -112,7 +110,8 @@ class OrderHeader extends Sector
 
     public function sampling()
     {
-        return $this->hasMany(samplingPlan::class, 'no_quotation', 'no_document')->where('is_active', true)->with('jadwal');
+        return $this->hasMany(SamplingPlan::class, 'no_quotation', 'no_document')
+            ->where('is_active', true)->with('jadwal');
     }
 
     public function quotationkontrak()

@@ -13,28 +13,26 @@ Carbon::setLocale('id');
 
 use Yajra\DataTables\DataTables;
 use Exception;
-use App\Jobs\RenderPdfPersiapanSample;
+use App\Jobs\RenderPdfCOC;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
-use App\Models\{
-    OrderDetail,
-    MasterKaryawan,
-    QuotationKontrakH,
-    QuotationNonKontrak,
-    PersiapanSampelHeader,
-    PersiapanSampelDetail,
-    KonfigurasiPraSampling,
-    QrDocument,
-    JobTask,
-    Jadwal
-};
+use App\Models\Lims\OrderDetail;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
+use App\Models\PersiapanSampelHeader;
+use App\Models\PersiapanSampelDetail;
+use App\Models\Jadwal;
+use App\Models\KonfigurasiPraSampling;
+use App\Models\QrDocument;
+use App\Models\JobTask;
+
+use App\Models\MasterKaryawan;
 
 use App\Http\Controllers\api\RekapSampelController;
 use App\Services\SyncPersiapanService;
 
-class PersiapanSampleController extends Controller
-{
-    
+class LimsChainOfCustodyController extends Controller
+{ 
     public function indexRekapan(Request $request)
     {
         try {
@@ -45,8 +43,8 @@ class PersiapanSampleController extends Controller
 
             if ($interval->days > 31)
                 return response()->json(['message' => 'Periode tidak boleh lebih dari 1 bulan'], 403);
-            $myPrivileges = $this->privilageCabang;
-            $isOrangPusat = in_array("0", $myPrivileges);
+            $myPrivileges = $this->privilageCabang ?? [];
+            $isOrangPusat = in_array("0", $myPrivileges) || in_array("1", $myPrivileges) || in_array(1, $myPrivileges);
             $query = OrderDetail::query();
             if (!$isOrangPusat) {
                 $query->whereHas('orderHeader.samplingPlan.jadwal', function ($q) use ($myPrivileges) {
@@ -467,33 +465,19 @@ class PersiapanSampleController extends Controller
         
         try {
             $existingWork = DB::table('persiapan_sampel_header')
-            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal')
+            ->select('no_order', 'tanggal_sampling')
             ->where('is_active', true)
+            ->whereNotNull('filename')
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get();
             $doneList = [];
-            // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
-                // PENTING: Pecah nama di sini juga! 
-                // Karena di tabel persiapan mungkin tersimpan "Adji, Fajrul" dalam satu baris
-                $headerSamplers = explode(',', $row->sampler_jadwal ?? '');
-
-                foreach ($headerSamplers as $name) {
-                    $cleanName = strtolower(trim($name));
-                    if (empty($cleanName)) continue;
-
-                    // Kuncinya: Order + Tanggal + Nama Orang
-                    $key = sprintf('%s|%s|%s', 
-                        trim($row->no_order), 
-                        trim($row->tanggal_sampling), 
-                        $cleanName
-                    );
-                    $doneList[$key] = true;
-                }
+                $key = sprintf('%s|%s', trim($row->no_order), trim($row->tanggal_sampling));
+                $doneList[$key] = true;
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
-            $isOrangPusat = in_array("0", $myPrivileges);
+            $myPrivileges = $this->privilageCabang ?? [];
+            $isOrangPusat = in_array("0", $myPrivileges) || in_array("1", $myPrivileges) || in_array(1, $myPrivileges);
 
             $query =OrderDetail::query();
             /* if (!$isOrangPusat) {
@@ -502,7 +486,7 @@ class PersiapanSampleController extends Controller
                     $q->whereIn('id_cabang', $myPrivileges);
                 });
             } */
-           $query->whereHas('orderHeader.samplingPlan.jadwal', function($q) use ($request, $myPrivileges, $isOrangPusat) {
+           $query->whereHas('orderHeader.sampling.jadwal', function($q) use ($request, $myPrivileges, $isOrangPusat) {
                 $q->where('is_active', true)
                 ->whereColumn('tanggal', 'order_detail.tanggal_sampling'); // Match dates at DB level
 
@@ -518,11 +502,11 @@ class PersiapanSampleController extends Controller
                         'no_tlp_pic_sampling', 'jabatan_pic_sampling', 'jabatan_pic_order', 'is_revisi'
                     ]);
                 },
-                'orderHeader.samplingPlan' => function ($q) {
-                    $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
+                'orderHeader.sampling' => function ($q) {
+                    $q->select(['id', 'no_quotation', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true);
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
+                'orderHeader.sampling.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
@@ -599,36 +583,11 @@ class PersiapanSampleController extends Controller
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
-                     // LOGIKA FILTER DETIL (ATOMIC CHECK)
-                    // 2. Cek Satu Per Satu (ABSENSI)
-                    $currentSamplers = explode(',', $schedule->sampler ?? '');
-                    $pendingSamplers = [];
-                    foreach ($currentSamplers as $singleSampler) {
-                        $cleanTargetName = strtolower(trim($singleSampler));
-                        if (empty($cleanTargetName)) continue;
-
-                        $checkKey = sprintf('%s|%s|%s', 
-                            trim($item->no_order), 
-                            trim($schedule->tanggal), 
-                            $cleanTargetName
-                        );
-
-                        // Logic: Jika TIDAK ADA di doneList, berarti dia BELUM selesai -> Masukkan ke pending
-                        if (!isset($doneList[$checkKey])) {
-                            $pendingSamplers[] = trim($singleSampler);
-                        }
+                    // Filter: HANYA tampilkan data yang PDF Persiapan Sampel nya SUDAH siap (filename != null)
+                    $checkKey = sprintf('%s|%s', trim($item->no_order), trim($schedule->tanggal));
+                    if (!isset($doneList[$checkKey])) {
+                        continue;
                     }
-                    // 3. Keputusan Akhir untuk Row Ini
-                    // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
-                    if (empty($pendingSamplers)) {
-                        continue; 
-                    }
-
-                    // 4. Update Tampilan Sampler
-                    // Jika aslinya 3 orang, tapi "Adji" sudah selesai, maka implode ulang sisa 2 orang saja.
-                    // Sehingga nanti pas di Grouping, yang muncul hanya yang belum selesai.
-                    $schedule->sampler = implode(',', $pendingSamplers);
-
                     $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
@@ -907,11 +866,9 @@ class PersiapanSampleController extends Controller
     public function pdf(Request $request)
     {
         $dataList = PersiapanSampelHeader::where('no_order', $request->no_order)
-            // ->where('no_quotation', $request->nomor_quotation)
-            // ->where('tanggal_sampling', $request->tanggal_sampling)
             ->where('is_active', 1)
             ->get();
-        // dd($dataList);
+
         $psh = $dataList->first(function ($item) use ($request) {
             $noSampelDb = json_decode($item->no_sampel, true) ?? [];
             if (!$noSampelDb) return false;
@@ -919,8 +876,19 @@ class PersiapanSampleController extends Controller
             return count(array_intersect($noSampelDb, $request->no_sampel)) === count($noSampelDb);
         });
 
+        if (!$psh) {
+            $psh = PersiapanSampelHeader::where('no_order', $request->no_order)->where('is_active', 1)->first();
+        }
+
         if (!$psh)
             return response()->json(['message' => 'Sampel belum disiapkan pdf'], 404);
+
+        $render = new \App\Services\RenderCOC();
+        $renderedFilename = $render->renderHeader($psh->id);
+        if ($renderedFilename && is_string($renderedFilename)) {
+            $psh->filename = $renderedFilename;
+            $psh->save();
+        }
 
         return response()->json([$psh->filename], 200);
     }
@@ -1141,13 +1109,13 @@ class PersiapanSampleController extends Controller
             $this->saveQrDocument($psh);
 
             JobTask::insert([
-                'job' => 'RenderPdfPersiapanSample',
+                'job' => 'RenderPdfCOC',
                 'status' => 'processing',
                 'no_document' => $psh->no_document,
                 'timestamp' => Carbon::now()->format('Y-m-d H:i:s')
             ]);
 
-            $this->dispatch(new RenderPdfPersiapanSample($psh->id));
+            $this->dispatch(new RenderPdfCOC($psh->id));
 
             DB::commit();
             return response()->json(['message' => 'Saved successfully','status' => true], 200);
@@ -1255,13 +1223,13 @@ class PersiapanSampleController extends Controller
 
         foreach ($all_psh as $psh) {
             JobTask::insert([
-                'job' => 'RenderPdfPersiapanSample',
+                'job' => 'RenderPdfCOC',
                 'status' => 'processing',
                 'no_document' => $psh->no_document,
                 'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
-            $job = new RenderPdfPersiapanSample($psh->id);
+            $job = new RenderPdfCOC($psh->id);
             $this->dispatch($job);
         }
 

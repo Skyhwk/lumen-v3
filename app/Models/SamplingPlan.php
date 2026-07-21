@@ -6,18 +6,30 @@ use App\Models\Sector;
 
 class SamplingPlan extends Sector
 {
-    protected $table = 'sampling_plan';
+    protected $connection = 'mysql';
     public $timestamps = false;
     protected $guarded = [];
 
+    public function getTable()
+    {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $mainDb . '.sampling_plan';
+    }
+
     public function jadwal()
     {
-        return $this->hasMany(Jadwal::class, 'id_sampling')->where('is_active', true);
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $this->hasMany(Jadwal::class, 'id_sampling')
+            ->from($mainDb . '.jadwal')
+            ->where('is_active', true);
     }
 
     public function jadwalSP()
     {
-        return $this->hasOne(Jadwal::class, 'id_sampling', 'id')->where('is_active', true);
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $this->hasOne(Jadwal::class, 'id_sampling', 'id')
+            ->from($mainDb . '.jadwal')
+            ->where('is_active', true);
     }
 
     public function countJadwal()
@@ -60,7 +72,9 @@ class SamplingPlan extends Sector
 
     public function groupJadwal()
     {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
         return $this->hasMany(Jadwal::class, 'id_sampling')
+            ->from($mainDb . '.jadwal')
             ->selectRaw('tanggal, jam_mulai, jam_selesai, kategori, GROUP_CONCAT(sampler) as sampler', 'created_by')
             ->where('is_active', true)
             ->groupBy('tanggal', 'jam_mulai', 'jam_selesai', 'kategori', 'created_by');
