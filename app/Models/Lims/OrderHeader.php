@@ -38,7 +38,7 @@ class OrderHeader extends Sector
 {
     
     protected $connection = 'lims';
-protected $table = "order_header";
+    protected $table = "order_header";
     public $timestamps = false;
     protected $guarded = [];
 

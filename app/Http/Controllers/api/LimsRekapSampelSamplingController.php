@@ -214,6 +214,10 @@ class LimsRekapSampelSamplingController extends Controller
                     });
                 }
             })
+            ->filterColumn('permintaan_selesai', function ($query, $keyword) {
+            })
+            ->filterColumn('status_permintaan', function ($query, $keyword) {
+            })
             ->addColumn('parameter_status', function ($row) {
                 // Di-populate di post-processing untuk mencegah N+1 query
                 return '[]';

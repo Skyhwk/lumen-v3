@@ -7,14 +7,17 @@ use App\Models\Sector;
 
 class DataLapanganEmisiCerobong extends Sector
 {
-    protected $table = "data_lapangan_emisi_cerobong";
+protected $table = "data_lapangan_emisi_cerobong";
     public $timestamps = false;
 
     protected $guarded = [];
 
-    public function detail(){
-        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
-        ->where('is_active', true);
+    public function detail()
+    {
+        if (config('is_lims', false)) {
+            return $this->belongsTo(\App\Models\Lims\OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
+        }
+        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
     }
     // public function wsValueCerobong() {
     //     return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'no_sampel', 'no_sampel');
