@@ -2,18 +2,16 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
+use App\Models\DeviceIntilab;
 
 class DataLapanganUnion extends Sector
 {
-    protected $connection = 'mysql';
     public static $useLimsDetail = false;
-    public $timestamps = false;
-    protected $guarded = [];
 
-    public function getTable()
-    {
-        $mainDb = \DB::connection('mysql')->getDatabaseName();
-        return $mainDb . '.data_lapangan_union';
-    }
+    protected $table = 'data_lapangan_union';
+    public $timestamps = false;
+
+    protected $guarded = [];
 }
