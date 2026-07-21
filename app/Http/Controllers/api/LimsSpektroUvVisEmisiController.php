@@ -19,11 +19,11 @@ class LimsSpektroUvVisEmisiController extends Controller
         $limsDb =DB::connection('lims')->getDatabaseName();
 
         $data = EmisiCerobongHeader::with('ws_value')
-            ->join(\Illuminate\Support\Facades\DB::raw("{$limsDb}.order_detail as order_detail"),'order_detail.no_sampel','=','emisi_cerobong_header.no_sampel')
+            ->join(DB::raw("{$limsDb}.order_detail as order_detail"),'order_detail.no_sampel','=','emisi_cerobong_header.no_sampel')
             ->where('is_approved', $request->approve)
         ->where('emisi_cerobong_header.is_active', true)
         ->where('template_stp', $request->template_stp)
-        ->select('emisi_cerobong_header.*', 'order_detail.tanggal_terima as od_tanggal_terima', 'order_detail.kategori_3 as od_kategori_3')
+        ->select('emisi_cerobong_header.*', 'order_detail.tanggal_terima as od_tanggal_terima', 'order_detail.kategori_3 as od_kategori_3', 'order_detail.tanggal_sampling as od_tanggal_sampling')
         ->orderByRaw("
                 CASE 
                     WHEN order_detail.tanggal_terima IS NULL THEN 1
@@ -51,12 +51,20 @@ class LimsSpektroUvVisEmisiController extends Controller
                 return $item->od_kategori_3 ?? '-';
             })
 
+            ->addColumn('tanggal_sampling', function ($item) {
+                return $item->od_tanggal_sampling ?? '-';
+            })
+
             ->filterColumn('tanggal_terima', function ($query, $keyword) {
                 $query->where('order_detail.tanggal_terima', 'like', "%{$keyword}%");
             })
 
             ->filterColumn('kategori_3', function ($query, $keyword) {
                 $query->where('order_detail.kategori_3', 'like', "%{$keyword}%");
+            })
+
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                $query->where('order_detail.tanggal_sampling', 'like', "%{$keyword}%");
             })
 
             ->filter(function ($query) use ($request) {
@@ -84,6 +92,7 @@ class LimsSpektroUvVisEmisiController extends Controller
                     }
                 }
             })
+            ->removeColumn('od_tanggal_terima', 'od_kategori_3', 'od_tanggal_sampling')
         ->make(true);
     }
 
