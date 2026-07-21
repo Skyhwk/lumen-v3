@@ -73,9 +73,22 @@ class RenderLimsPsDocumentPdf
     private function stylesheet(): string
     {
         return '
-            body { font-family: roboto, sans-serif; font-size: 11px; color: #333; }
-            .doc-content { line-height: 1.5; text-align: justify; }
+            body { font-family: roboto, sans-serif; font-size: 11px; color: #333; line-height: 1.8; }
+            .doc-content { line-height: 1.8; text-align: justify; }
+            .doc-content p,
+            .doc-content li,
+            .doc-content div,
+            .doc-content span,
+            .doc-content td,
+            .doc-content th,
+            .doc-content h1,
+            .doc-content h2,
+            .doc-content h3,
+            .doc-content h4,
+            .doc-content h5,
+            .doc-content h6 { line-height: 1.8 !important; }
             .doc-content p { margin: 0 0 8px 0; }
+            .doc-content li > p { display: inline; margin: 0; padding: 0; line-height: 1.8 !important; }
             .doc-content table { border-collapse: collapse; width: 100%; }
             .doc-content table td, .doc-content table th { border: 1px solid #000; padding: 4px; }
             .auth-section { margin-top: 24px; page-break-inside: avoid; }
