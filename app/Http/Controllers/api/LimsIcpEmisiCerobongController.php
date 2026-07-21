@@ -24,7 +24,7 @@ class LimsIcpEmisiCerobongController extends Controller
             ->where('is_approved', $request->approve)
             ->where('emisi_cerobong_header.is_active', true)
             ->where('template_stp', $request->template_stp)
-            ->select('emisi_cerobong_header.*', 'order_detail.tanggal_terima as od_tanggal_terima', 'order_detail.kategori_3 as od_kategori_3')
+            ->select('emisi_cerobong_header.*', 'order_detail.tanggal_terima as od_tanggal_terima', 'order_detail.kategori_3 as od_kategori_3', 'order_detail.tanggal_sampling as od_tanggal_sampling')
             ->orderByRaw("
                 CASE 
                     WHEN order_detail.tanggal_terima IS NULL THEN 1
@@ -45,12 +45,20 @@ class LimsIcpEmisiCerobongController extends Controller
                 return $item->od_tanggal_terima ?? '-';
             })
 
+            ->addColumn('tanggal_sampling', function ($item) {
+                return $item->od_tanggal_sampling ?? '-';
+            })
+
             ->addColumn('kategori_3', function ($item) {
                 return $item->od_kategori_3 ?? '-';
             })
 
             ->filterColumn('tanggal_terima', function ($query, $keyword) {
                 $query->where('order_detail.tanggal_terima', 'like', "%{$keyword}%");
+            })
+
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                $query->where('order_detail.tanggal_sampling', 'like', "%{$keyword}%");
             })
 
             ->filterColumn('kategori_3', function ($query, $keyword) {
@@ -82,6 +90,7 @@ class LimsIcpEmisiCerobongController extends Controller
                     }
                 }
             })
+            ->removeColumn('od_tanggal_terima', 'od_kategori_3', 'od_tanggal_sampling')
         ->make(true);
     }
 
