@@ -268,20 +268,6 @@ class CreateInvoiceJob extends Job
         return $invoiceDate->setTimeFrom($today);
     }
 
-    private function getInvoiceDate($periode)
-    {
-        $today = Carbon::now();
-
-        if ($periode === null) {
-            return $today;
-        }
-
-        $invoiceDate = Carbon::createFromFormat('!Y-m-d', $periode . '-01');
-        $invoiceDate->day(min($today->day, $invoiceDate->daysInMonth));
-
-        return $invoiceDate->setTimeFrom($today);
-    }
-
     private function getJadwal($noDocument, $periode = null)
     {
         $query = Jadwal::where('no_quotation', $noDocument);
