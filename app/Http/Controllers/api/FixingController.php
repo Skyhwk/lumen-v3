@@ -769,6 +769,53 @@ class FixingController extends Controller
 
 
 
+    public function cekQrPsikologiExpired(Request $request)
+    {
+        try {
+            $orderHeaderIds = OrderDetail::where('no_quotation', $request->no_quotation)
+                ->pluck('id_order_header')
+                ->unique()
+                ->toArray();
+                
+            if (empty($orderHeaderIds)) {
+                return response()->json(['message' => 'No Quotation tidak ditemukan pada Order Detail!'], 404);
+            }
+
+            $qrPsikologi = DB::table('qr_psikologi')
+                ->whereIn('id_quotation', $orderHeaderIds)
+                ->where('type', 'administrator')
+                ->get();
+
+            if ($qrPsikologi->isEmpty()) {
+                return response()->json(['message' => 'Data QR Psikologi Administrator tidak ditemukan!'], 404);
+            }
+
+            return response()->json([
+                'data' => $qrPsikologi
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function updateQrPsikologiExpired(Request $request)
+    {
+        try {
+            $update = DB::table('qr_psikologi')
+                ->where('id', $request->id)
+                ->where('type', 'administrator')
+                ->update(['expired' => $request->expired]);
+
+            return response()->json(['message' => 'Berhasil update expired QR Psikologi!'], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     private function backupToSql(array $models, string $noSampel, string $prefix = ''): void
     {
         $safeName  = str_replace('/', '_', $noSampel);
