@@ -182,7 +182,10 @@ class LimsLhpAirController extends Controller
         ], 200);
     }
 
-    public function viewOnTheFly(Request $request) 
+
+
+
+    public function previewLhp(Request $request)
     {
         try {
             $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
@@ -194,36 +197,39 @@ class LimsLhpAirController extends Controller
             }
 
             $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-            $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+            $custom = LhpsAirDetail::where('id_header', $header->id)->get();
 
             $groupedByPage = [];
             if (!empty($custom)) {
-                foreach ($custom->toArray() as $item) {
-                    $page = $item['page'];
+                foreach ($custom->toArray() as $cItem) {
+                    $page = $cItem['page'];
                     if (!isset($groupedByPage[$page])) {
                         $groupedByPage[$page] = [];
                     }
-                    $groupedByPage[$page][] = $item;
+                    $groupedByPage[$page][] = $cItem;
                 }
             }
 
-            $fileName = LhpTemplate::setDataDetail($detail)
+            $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
                 ->render('downloadLHPFinal');
 
-            return response()->json([
-                'status' => true,
-                'file_name' => $fileName,
-                'message' => 'PDF generated on the fly'
-            ], 200);
+            // Find file
+            $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);
+            if (!file_exists($filePath)) {
+                $filePath = base_path('public/dokumen/LHP/' . $fileName);
+            }
 
+            if (file_exists($filePath)) {
+                $base64 = base64_encode(file_get_contents($filePath));
+                return response()->json(['data' => $base64]);
+            }
+
+            return response()->json(['message' => 'Gagal merender PDF'], 404);
         } catch (\Throwable $th) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
-            ], 500);
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 

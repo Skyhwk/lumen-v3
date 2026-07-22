@@ -180,10 +180,13 @@ class LimsLhpKebisinganPersonalController extends Controller
         }
     }
 
-    public function viewOnTheFly(Request $request) 
+
+
+
+    public function previewLhp(Request $request)
     {
         try {
-            $header = \App\Models\LhpsKebisinganPersonalHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsKebisinganHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             if (!$header) {
                 return response()->json([
                     'status' => false,
@@ -191,67 +194,40 @@ class LimsLhpKebisinganPersonalController extends Controller
                 ], 404);
             }
 
-            $detail = \App\Models\LhpsKebisinganPersonalDetail::where('id_header', $header->id)->get();
-            $detail = collect($detail)->sortBy([
-                ['tanggal_sampling', 'asc'],
-                ['no_sampel', 'asc']
-            ])->values()->toArray();
+            $detail = LhpsKebisinganPersonalDetail::where('id_header', $header->id)->get();
+            $custom = LhpsKebisinganPersonalDetail::where('id_header', $header->id)->get();
 
-            $custom = collect(\App\Models\LhpsKebisinganPersonalCustom::where('id_header', $header->id)->get())
-                ->groupBy('page')
-                ->toArray();
-
-            foreach ($custom as $idx => $cstm) {
-                $custom[$idx] = collect($cstm)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
-                ])->values()->toArray();
-            }
-
-            $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
-            $fileName = '';
-            
-            if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
-                $master_regulasi = \App\Models\MasterRegulasi::find($id_regulasii);
-                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
-                    $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
-                        ->setDataHeader($header)
-                        ->setDataCustom($custom)
-                        ->useLampiran(true)
-                        ->whereView('DraftKebisinganLh')
-                        ->render('downloadLHPFinal');
-                } else if (
-                    $master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' ||
-                    $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)' ||
-                    $master_regulasi->deskripsi == 'Kebisingan 24 Jam'
-                ) {
-                    $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
-                        ->setDataHeader($header)
-                        ->setDataCustom($custom)
-                        ->useLampiran(true)
-                        ->whereView('DraftKebisinganLh24Jam')
-                        ->render('downloadLHPFinal');
+            $groupedByPage = [];
+            if (!empty($custom)) {
+                foreach ($custom->toArray() as $cItem) {
+                    $page = $cItem['page'];
+                    if (!isset($groupedByPage[$page])) {
+                        $groupedByPage[$page] = [];
+                    }
+                    $groupedByPage[$page][] = $cItem;
                 }
-            } else {
-                $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($header)
-                    ->setDataCustom($custom)
-                    ->useLampiran(true)
-                    ->whereView('DraftKebisingan')
-                    ->render('downloadLHPFinal');
             }
 
-            return response()->json([
-                'status' => true,
-                'file_name' => $fileName,
-                'message' => 'PDF generated on the fly'
-            ], 200);
+            $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftKebisinganLh')
+                ->render('downloadLHPFinal');
 
+            // Find file
+            $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);
+            if (!file_exists($filePath)) {
+                $filePath = base_path('public/dokumen/LHP/' . $fileName);
+            }
+
+            if (file_exists($filePath)) {
+                $base64 = base64_encode(file_get_contents($filePath));
+                return response()->json(['data' => $base64]);
+            }
+
+            return response()->json(['message' => 'Gagal merender PDF'], 404);
         } catch (\Throwable $th) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
-            ], 500);
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 

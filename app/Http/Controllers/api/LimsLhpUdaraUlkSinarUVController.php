@@ -139,10 +139,13 @@ class LimsLhpUdaraUlkSinarUVController extends Controller
         ], 200);
     }
 
-    public function viewOnTheFly(Request $request) 
+
+
+
+    public function previewLhp(Request $request)
     {
         try {
-            $header = \App\Models\LhpsSinarUVHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsSinarUvHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             if (!$header) {
                 return response()->json([
                     'status' => false,
@@ -150,17 +153,17 @@ class LimsLhpUdaraUlkSinarUVController extends Controller
                 ], 404);
             }
 
-            $detail = \App\Models\LhpsSinarUVDetail::where('id_header', $header->id)->get();
-            $custom = \App\Models\LhpsSinarUVCustom::where('id_header', $header->id)->get();
+            $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
+            $custom = LhpsSinarUVDetail::where('id_header', $header->id)->get();
 
             $groupedByPage = [];
             if (!empty($custom)) {
-                foreach ($custom->toArray() as $item) {
-                    $page = $item['page'];
+                foreach ($custom->toArray() as $cItem) {
+                    $page = $cItem['page'];
                     if (!isset($groupedByPage[$page])) {
                         $groupedByPage[$page] = [];
                     }
-                    $groupedByPage[$page][] = $item;
+                    $groupedByPage[$page][] = $cItem;
                 }
             }
 
@@ -170,17 +173,20 @@ class LimsLhpUdaraUlkSinarUVController extends Controller
                 ->whereView('DraftUlkSinarUv')
                 ->render('downloadLHPFinal');
 
-            return response()->json([
-                'status' => true,
-                'file_name' => $fileName,
-                'message' => 'PDF generated on the fly'
-            ], 200);
+            // Find file
+            $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);
+            if (!file_exists($filePath)) {
+                $filePath = base_path('public/dokumen/LHP/' . $fileName);
+            }
 
+            if (file_exists($filePath)) {
+                $base64 = base64_encode(file_get_contents($filePath));
+                return response()->json(['data' => $base64]);
+            }
+
+            return response()->json(['message' => 'Gagal merender PDF'], 404);
         } catch (\Throwable $th) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
-            ], 500);
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 
