@@ -246,7 +246,7 @@ class LimsLhpKebisinganController extends Controller
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftKebisinganLh')
-                ->render('downloadLHPFinal');
+                ->render('downloadLHPFinal', 'S');
 
             // Find file
             $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);

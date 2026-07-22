@@ -214,7 +214,7 @@ class LimsLhpAirController extends Controller
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
-                ->render('downloadLHPFinal');
+                ->render('downloadLHPFinal', 'S');
 
             // Find file
             $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);
