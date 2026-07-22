@@ -181,4 +181,56 @@ class LimsLhpAirController extends Controller
             'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
         ], 200);
     }
+
+
+
+
+    public function previewLhp(Request $request)
+    {
+        try {
+            $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            if (!$header) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
+            }
+
+            $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+            $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+
+            $groupedByPage = [];
+            if (!empty($custom)) {
+                foreach ($custom->toArray() as $cItem) {
+                    $page = $cItem['page'];
+                    if (!isset($groupedByPage[$page])) {
+                        $groupedByPage[$page] = [];
+                    }
+                    $groupedByPage[$page][] = $cItem;
+                }
+            }
+
+            $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftAir')
+                ->render('downloadLHPFinal');
+
+            // Find file
+            $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);
+            if (!file_exists($filePath)) {
+                $filePath = base_path('public/dokumen/LHP/' . $fileName);
+            }
+
+            if (file_exists($filePath)) {
+                $base64 = base64_encode(file_get_contents($filePath));
+                return response()->json(['data' => $base64]);
+            }
+
+            return response()->json(['message' => 'Gagal merender PDF'], 404);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
 }
