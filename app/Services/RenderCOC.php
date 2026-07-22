@@ -108,7 +108,7 @@ class RenderCOC
         }
     }
 
-    public function renderHeader($id)
+    public function renderHeader($id, $outputMode = 'F')
     {
         try {
             $dataHeader = PersiapanSampelHeader::with([
@@ -430,6 +430,9 @@ class RenderCOC
             }
 
             $fileName = str_replace("/", "_", $dataHeader->no_document) . '.pdf';
+            if ($outputMode === 'S') {
+                return $pdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+            }
             $filePath = public_path('persiapan_sampel/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
 
@@ -638,6 +641,12 @@ class RenderCOC
             }
 
             $tdKondisi = $penjeratHtml . $plastikHtml;
+
+            if (empty($tdKondisi) && count($parameters) > 0) {
+                $thKondisi = '';
+                $tdKondisi = '';
+                $titleInformasiKondisiSampel = '';
+            }
         } else if ($isEmisi){
             $persiapanArr = is_string($od->persiapan) ? json_decode($od->persiapan, true) : ($od->persiapan ?? []);
             if (!is_array($persiapanArr)) {
