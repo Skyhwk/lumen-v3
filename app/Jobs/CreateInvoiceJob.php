@@ -163,7 +163,6 @@ class CreateInvoiceJob extends Job
     private function generateNoInvoice($cekRekening, $rekening, Carbon $invoiceDate)
     {
         $invoiceYear = $invoiceDate->format('Y');
-        $invoiceYear = $invoiceDate->format('Y');
         $shortYear = substr($invoiceYear, -2);
 
         $lastInvoice = Invoice::where('rekening', $cekRekening)
@@ -232,7 +231,6 @@ class CreateInvoiceJob extends Job
             'tgl_jatuh_tempo' => $tanggalJatuhTempo,
             'keterangan_tambahan' => null,
             'tgl_faktur' => date('Y-m-d H:i:s'),
-            'tgl_invoice' => $invoiceDate->format('Y-m-d H:i:s'),
             'tgl_invoice' => $invoiceDate->format('Y-m-d H:i:s'),
             'nilai_tagihan' => $nilaiTagihan,
             'total_tagihan' => $totalTagihan,
