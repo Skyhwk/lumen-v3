@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\{MasterKaryawan, Psikotes, PapiRule, DiscPattern, DiscResult, DiscRules};
 use App\Http\Controllers\Controller;
+use App\Helpers\ShioElemenHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -211,10 +212,17 @@ class KalkulasiEvaluasiController extends Controller
                 'cabang.nama_cabang',
                 'master_karyawan.shio',
                 'master_karyawan.elemen',
+                'master_karyawan.tanggal_lahir',
                 'master_karyawan.image'
             )
             ->where('master_karyawan.is_active', 1)
             ->where('master_karyawan.id', $request->id_user)->first();
+
+        if ($users) {
+            $shioElemen = ShioElemenHelper::resolve($users->tanggal_lahir, $users->shio, $users->elemen);
+            $users->shio = $shioElemen['shio'];
+            $users->elemen = $shioElemen['elemen'];
+        }
 
         $ist = Psikotes::join('soal_psikotes as b', 'psikotes.id_soal', '=', 'b.id')
             ->select(

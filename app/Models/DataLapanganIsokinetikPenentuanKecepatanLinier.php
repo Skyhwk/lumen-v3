@@ -7,7 +7,7 @@ use App\Models\Sector;
 
 class DataLapanganIsokinetikPenentuanKecepatanLinier extends Sector
 {
-    protected $table = "data_lapangan_isokinetik_penentuan_kecepatan_linier";
+protected $table = "data_lapangan_isokinetik_penentuan_kecepatan_linier";
     public $timestamps = false;
 
     protected $guarded = [];
@@ -17,9 +17,12 @@ class DataLapanganIsokinetikPenentuanKecepatanLinier extends Sector
         'uji_aliran' => 'array'
     ];
 
-    public function detail(){
-        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
-        ->where('is_active', true);
+    public function detail()
+    {
+        if (config('is_lims', false)) {
+            return $this->belongsTo(\App\Models\Lims\OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
+        }
+        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
     }
 
     public function survei(){

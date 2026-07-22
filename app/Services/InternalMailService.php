@@ -294,21 +294,29 @@ class InternalMailService
 
         $attachments = [];
         $inlineImages = [];
+        $inlineLinkIds = array_map(function ($id) {
+            return $this->normalizeContentId($id);
+        }, array_keys($mail->getInternalLinksPlaceholders()));
+
         foreach ($mail->getAttachments() as $attachment) {
+            if ($this->isMimeBodyPartAttachment($attachment)) {
+                continue;
+            }
+
             $fileName = $this->attachmentFileName($attachment->filePath);
-            $contentId = $this->normalizeContentId($this->getAttachmentContentId($attachment));
-            $url = env('APP_URL') . '/public/email/' . $this->storageKey() . '/attachments/' . rawurlencode($fileName);
-            $isInline = $contentId !== '';
+            $url = $this->buildAttachmentPublicUrl($fileName);
+            $contentId = $this->resolveAttachmentContentId($attachment);
+            $isInline = $this->isInlineAttachment($mail, $contentId, $inlineLinkIds);
 
             $attachments[] = [
                 'filename' => $attachment->name,
-                'size'     => $this->formatSize((int) ($attachment->size ?? 0)),
+                'size'     => $this->formatSize($this->resolveAttachmentSize($attachment)),
                 'url'      => $url,
                 'content_id' => $contentId,
                 'inline'   => $isInline,
             ];
 
-            if ($isInline) {
+            if ($isInline && $contentId !== '') {
                 $inlineImages[$contentId] = $url;
             }
         }
@@ -354,6 +362,72 @@ class InternalMailService
     {
         $normalized = str_replace('\\', '/', (string) $filePath);
         return basename($normalized);
+    }
+
+    private function buildAttachmentPublicUrl(string $fileName): string
+    {
+        $base = rtrim(env('APP_URL', request()->root()), '/');
+        $relative = '/email/' . $this->storageKey() . '/attachments/' . rawurlencode($fileName);
+
+        if (substr($base, -7) === '/public') {
+            return $base . $relative;
+        }
+
+        return $base . '/public' . $relative;
+    }
+
+    private function isMimeBodyPartAttachment($attachment): bool
+    {
+        $name = strtolower((string) ($attachment->name ?? ''));
+        if ($name === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/^[a-f0-9\-]+\.(html?|plain|txt)$/i', $name);
+    }
+
+    private function resolveAttachmentContentId($attachment): string
+    {
+        $rawId = $this->normalizeContentId($this->getAttachmentContentId($attachment));
+        if ($rawId === '') {
+            return '';
+        }
+
+        // php-imap memberi id numerik acak untuk lampiran file biasa (bukan Content-ID).
+        if (preg_match('/^\d+$/', $rawId)) {
+            return '';
+        }
+
+        return $rawId;
+    }
+
+    private function isInlineAttachment($mail, string $contentId, array $inlineLinkIds): bool
+    {
+        if ($contentId === '') {
+            return false;
+        }
+
+        if (in_array($contentId, $inlineLinkIds, true)) {
+            return true;
+        }
+
+        $html = $mail->textHtml ?? '';
+        if ($html !== '' && preg_match('/cid:' . preg_quote($contentId, '/') . '/i', $html)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function resolveAttachmentSize($attachment): int
+    {
+        if (!empty($attachment->size)) {
+            return (int) $attachment->size;
+        }
+
+        $path = $attachment->filePath ?? '';
+
+        return ($path !== '' && is_file($path)) ? (int) filesize($path) : 0;
     }
 
     private function getAttachmentContentId($attachment): string

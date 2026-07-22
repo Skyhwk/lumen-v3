@@ -230,7 +230,7 @@ class FdlMethodNbmController extends Controller
 
         $query = DataLapanganErgonomi::with('detail')
             ->where('created_by', $this->karyawan)->where('method', 1)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
 
         if ($search) {
             $query->where(function ($q) use ($search) {

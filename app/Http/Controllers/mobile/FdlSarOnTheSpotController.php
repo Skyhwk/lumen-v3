@@ -29,7 +29,7 @@ class FdlSarOnTheSpotController extends Controller
     public function indexDone(Request $request)
     {
         $date = Carbon::now()->locale('id')->format('Y-m-d H:i:s');
-        $endate = Carbon::parse($date)->subDays(2);
+        $endate = Carbon::parse($date)->subDays(config('app.fdl_index_subdays'));
 
         $data = SarOnthespotHeader::with('detail', 'hasilUji')
             ->where('status_order', 'done')
