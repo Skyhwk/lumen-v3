@@ -145,8 +145,6 @@ class LimsLhpIklimController extends Controller
                     GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
                 }
 
-               
-
                if($parameter == 'ISBB' || $parameter == 'ISBB (8 Jam)'){
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($header)
@@ -239,6 +237,85 @@ class LimsLhpIklimController extends Controller
                 'line' => $th->getLine(),
                 'file' => $th->getFile()
             ]);
+        }
+    }
+
+    public function previewLhp(Request $request)
+    {
+        try {
+            $header = LhpsIklimHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+            
+            if (!$header) {
+                return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
+            }
+
+            $parameter = null;
+            if ($request->has('parameter') && !empty($request->parameter)) {
+                $decoded = json_decode($request->parameter, true);
+                if (is_array($decoded) && count($decoded) > 0) {
+                    $parameter = explode(';', $decoded[0])[1] ?? null;
+                } else if (is_string($request->parameter)) {
+                    $firstChar = substr(trim($request->parameter), 0, 1);
+                    if ($firstChar === '[' || $firstChar === '{') {
+                        $dec = json_decode($request->parameter, true);
+                        if (is_array($dec) && count($dec) > 0) {
+                            $parameter = explode(';', $dec[0])[1] ?? null;
+                        }
+                    } else {
+                        $parameter = explode(';', $request->parameter)[1] ?? $request->parameter;
+                    }
+                }
+            }
+
+            if (!$parameter) {
+                $parameter = 'ISBB';
+            }
+
+            $detail = LhpsIklimDetail::where('id_header', $header->id)->get();
+            $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+
+            if ($header->file_qr == null) {
+                $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
+                $header->save();
+                GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
+            }
+
+            $pdfContent = '';
+            if ($parameter == 'ISBB' || $parameter == 'ISBB (8 Jam)') {
+                $pdfContent = LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($header)
+                    ->useLampiran(true)
+                    ->setDataCustom($custom)
+                    ->whereView('DraftIklimPanas')
+                    ->render('downloadLHPFinal', 'S');
+            } else {
+                $pdfContent = LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($header)
+                    ->useLampiran(true)
+                    ->setDataCustom($custom)
+                    ->whereView('DraftIklimDingin')
+                    ->render('downloadLHPFinal', 'S');
+            }
+
+            return response()->json([
+                'data' => base64_encode($pdfContent),
+                'message' => 'LHP berhasil dirender'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Gagal merender LHP: ' . $th->getMessage(),
+                'line' => $th->getLine()
+            ], 500);
         }
     }
 }
