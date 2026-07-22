@@ -88,6 +88,8 @@ class SyncLimsData extends Command
                         // Jika tahun inputan lebih kecil dari tahun saat ini (Tahun Lama), paksa status jadi 3
                         if ($year < $currentYear) {
                             $detailData['status'] = 3;
+                            $detailData['is_approve'] = true;
+                            $detailData['approved_by'] = 'lims_2026';
                         }
                         
                         LimsOrderDetail::updateOrCreate(['id' => $detail->id], $detailData);
@@ -126,7 +128,11 @@ class SyncLimsData extends Command
             'Rd - Alfa',
             'Rd - Beta',
             'Ergonomi',
-            'Psikologi'
+            'Psikologi',
+            'Plankton',
+            'Benthos',
+            'Bentos',
+            'Necton'
         ];
 
         // Query mencari Order Detail di LIMS yang mengandung parameter terlarang
