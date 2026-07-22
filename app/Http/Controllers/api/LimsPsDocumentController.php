@@ -539,6 +539,12 @@ class LimsPsDocumentController extends Controller
         }
 
         $content = preg_replace(
+            '/(<[^>]+\bstyle="[^"]*?)line-height\s*:\s*[^;"]+;?\s*/i',
+            '$1',
+            $content
+        );
+
+        $content = preg_replace(
             '/(<li\b[^>]*\bstyle="[^"]*?)white-space\s*:\s*pre\b([^"]*")/i',
             '$1white-space: normal$2',
             $content
