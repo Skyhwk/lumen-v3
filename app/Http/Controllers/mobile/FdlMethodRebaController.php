@@ -289,44 +289,44 @@ class FdlMethodRebaController extends Controller
     //         } else {
     //             if ($request->method == 1) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 1)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 2) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 2)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 3) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 3)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 4) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 4)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 5) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 5)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 6) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 6)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');;
     //             } else if ($request->method == 7) {
     //                 $data = DataLapanganErgonomi::with('detail')
     //                     ->where('method', 7)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 8) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 8)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 9) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 9)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             } else if ($request->method == 10) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 10)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             }
     //         }
@@ -343,7 +343,7 @@ class FdlMethodRebaController extends Controller
 
         $query = DataLapanganErgonomi::with('detail')
             ->where('created_by', $this->karyawan)->where('method', 2)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
