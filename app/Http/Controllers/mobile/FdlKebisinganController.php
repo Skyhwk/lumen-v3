@@ -117,6 +117,12 @@ class FdlKebisinganController extends Controller
                 ], 401);
             }
 
+            if(!isset($request->kategori_kebisingan)){
+                return response()->json([
+                    'message' => 'Pilih Kategori Kebisingan !'
+                ], 401);
+            }
+
             if (in_array($request->durasi_sampl, $nilai_array)) {
                 return response()->json([
                     'message' => 'Shift Pengambilan ' . $request->durasi_sampl . ' sudah ada !'
@@ -266,7 +272,7 @@ class FdlKebisinganController extends Controller
                 $query->where('is_rejected', 1)
                       ->orWhere(function ($q) {
                           $q->where('is_rejected', 0)
-                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
                       });
             });
             

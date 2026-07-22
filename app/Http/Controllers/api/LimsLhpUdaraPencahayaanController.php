@@ -1,0 +1,175 @@
+<?php
+
+namespace App\Http\Controllers\api;
+
+use App\Models\Lims\OrderDetail;
+use App\Models\LhpsPencahayaanHeader;
+use App\Models\LhpsPencahayaanDetail;
+use App\Models\LhpsPencahayaanCustom;
+use App\Services\{GenerateQrDocumentLhp,LhpTemplate,PrintLhp};
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\Controller;
+use Carbon\Carbon;
+use Yajra\Datatables\Datatables;
+
+class LimsLhpUdaraPencahayaanController extends Controller
+{
+    public function index(Request $request){
+         DB::connection('lims')->statement("SET SESSION sql_mode = ''");
+        $data = OrderDetail::with('lhps_pencahayaan','orderHeader','dataLapanganCahaya')
+            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+            ->where('is_approve', true)
+            ->where('is_active', true)
+            ->where('kategori_2', '4-Udara')
+            ->where('kategori_3', "28-Pencahayaan")
+            ->groupBy('cfr')
+            ->where('status', 3);
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsPencahayaanHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_lhp');
+                $data->whereIn('cfr', $matchingIds);
+            }
+        }
+
+        $data = $data->get();
+        
+        return Datatables::of($data)->make(true);
+    }
+
+    public function handleReject(Request $request) {
+        DB::beginTransaction();
+        try {
+            $header = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            if($header != null) {
+
+                $header->is_approve = 0;
+                $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
+                $header->rejected_by = $this->karyawan;
+                
+                // $header->file_qr = null;
+                $header->save();
+             OrderDetail::where('cfr', $request->cfr)
+                    ->where('status', 3)
+                    ->where('is_active', true)
+                    ->update([
+                    'status' => 2,
+                    'is_approve' => 0,
+                    'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'rejected_by' => $this->karyawan
+                    ]);
+                }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Reject no LHP '.$request->cfr.' berhasil!'
+            ]);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan '.$e->getMessage(),
+            ], 401);
+        }
+    }
+
+    public function handleDownload(Request $request)
+    {
+        try {
+            $lhpsGetaranHeader = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$lhpsGetaranHeader || !$lhpsGetaranHeader->file_lhp) {
+                return response()->json(['message' => 'File ' . $request->cfr . ' tidak ditemukan!']);
+            }
+
+            $fileName = $lhpsGetaranHeader->file_lhp;
+
+            return response()->json([
+                'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
+                'message' => 'Download file ' . $request->cfr . ' berhasil!'
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => 'Error download file ' . $th->getMessage()], 401);
+        }
+    }
+
+
+    public function rePrint(Request $request)
+    {
+        DB::beginTransaction();
+        $header = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+        $header->count_print = $header->count_print + 1;
+        $header->save();
+
+        $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
+        $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+        LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->get())
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
+                ->whereView('DraftPencahayaan')
+                ->render();
+        $servicePrint = new PrintLhp();
+        // $servicePrint->printByFilename($header->file_lhp, $detail);
+        $servicePrint->printByFilename($header->file_lhp, $detail, 'KPGI', $header->no_lhp);
+
+        if (!$servicePrint) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
+        ], 200);
+    }
+
+    public function previewLhp(Request $request)
+    {
+        try {
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            $header = LhpsPencahayaanHeader::where('no_lhp', $noLhp)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$header) {
+                return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
+            }
+
+            $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
+            $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            $pdfContent = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
+                ->whereView('DraftPencahayaan')
+                ->render('downloadLHPFinal', 'S');
+
+            return response()->json([
+                'data' => base64_encode($pdfContent),
+                'message' => 'LHP berhasil dirender'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Gagal merender LHP: ' . $th->getMessage(),
+                'line' => $th->getLine()
+            ], 500);
+        }
+    }
+}

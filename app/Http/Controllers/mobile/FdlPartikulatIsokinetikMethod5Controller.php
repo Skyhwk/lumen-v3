@@ -753,7 +753,7 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
 
         $query = DataLapanganIsokinetikPenentuanPartikulat::with(['detail', 'method2'])
             ->where('created_by', $this->karyawan)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
