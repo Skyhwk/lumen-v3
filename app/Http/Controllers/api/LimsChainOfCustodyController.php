@@ -884,13 +884,14 @@ class LimsChainOfCustodyController extends Controller
             return response()->json(['message' => 'Sampel belum disiapkan pdf'], 404);
 
         $render = new \App\Services\RenderCOC();
-        $renderedFilename = $render->renderHeader($psh->id);
-        if ($renderedFilename && is_string($renderedFilename)) {
-            $psh->filename = $renderedFilename;
-            $psh->save();
-        }
+        $pdfContent = $render->renderHeader($psh->id, 'S');
+        $fileName = str_replace("/", "_", $psh->no_document) . '.pdf';
 
-        return response()->json([$psh->filename], 200);
+        return response()->json([
+            'data' => base64_encode($pdfContent),
+            'filename' => $fileName,
+            'message' => 'PDF berhasil dibuat',
+        ], 200);
     }
 
     private function getRomanMonth($month)

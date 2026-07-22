@@ -1407,15 +1407,14 @@ class LimsFppsController extends Controller
 
 
             // ===================== OUTPUT PDF =====================
-            $fppsDir = public_path() . '/fpps';
-            if (!file_exists($fppsDir)) {
-                mkdir($fppsDir, 0755, true);
-            }
-
             $fileName = str_replace('/', '-', $no_document) . '.pdf';
-            $pdf->Output($fppsDir . '/' . $fileName, 'F');
-
-            return $fileName;
+            $pdfContent = $pdf->Output('', 'S');
+            
+            return response($pdfContent, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+                'X-Filename' => $fileName // frontend will need to read this if possible, or fallback to generated name
+            ]);
 
         } catch (\Throwable $th) {
              
