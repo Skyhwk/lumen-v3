@@ -49,7 +49,10 @@ class RenderLimsPsDocumentPdf
                 'setAutoTopMargin' => 'stretch',
                 'orientation' => 'P',
                 'tempDir' => storage_path('app/tmp'),
-                'fontDir' => array_merge($fontDirs, [__DIR__ . '/vendor/mpdf/mpdf/ttfonts']),
+                'fontDir' => array_merge($fontDirs, [
+                    __DIR__ . '/vendor/mpdf/mpdf/ttfonts',
+                    resource_path('fonts/Roboto'),
+                ]),
                 'fontdata' => $fontData + [
                     'roboto' => [
                         'R' => 'Roboto-Regular.ttf',
