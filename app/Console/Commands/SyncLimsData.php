@@ -61,10 +61,14 @@ class SyncLimsData extends Command
         $successCount = 0;
         $failedOrders = [];
 
+        // Tahun saat ini untuk referensi "Tahun Lama"
+        $currentYear = (int) date('Y');
+
         // 1. FASE COPY DATA KE LIMS
         foreach ($headers as $header) {
             try {
-                DB::connection('lims')->transaction(function () use ($header) {
+                // Passing $year dan $currentYear ke dalam closure
+                DB::connection('lims')->transaction(function () use ($header, $year, $currentYear) {
                     
                     $details = OrderDetail::where('id_order_header', $header->id)
                         ->whereNotIn('kategori_2', ['6-Padatan', '8-Tanah', '9-Pangan'])
@@ -77,8 +81,16 @@ class SyncLimsData extends Command
                     }
 
                     LimsOrderHeader::updateOrCreate(['id' => $header->id], $header->toArray());
+                    
                     foreach ($details as $detail) {
-                        LimsOrderDetail::updateOrCreate(['id' => $detail->id], $detail->toArray());
+                        $detailData = $detail->toArray();
+                        
+                        // Jika tahun inputan lebih kecil dari tahun saat ini (Tahun Lama), paksa status jadi 3
+                        if ($year < $currentYear) {
+                            $detailData['status'] = 3;
+                        }
+                        
+                        LimsOrderDetail::updateOrCreate(['id' => $detail->id], $detailData);
                     }
                 });
 
@@ -112,7 +124,9 @@ class SyncLimsData extends Command
             'Rd Beta',
             'Rd - Alfa NS1',
             'Rd - Alfa',
-            'Rd - Beta'
+            'Rd - Beta',
+            'Ergonomi',
+            'Psikologi'
         ];
 
         // Query mencari Order Detail di LIMS yang mengandung parameter terlarang
