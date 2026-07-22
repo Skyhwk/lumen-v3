@@ -19,6 +19,20 @@ class LimsLhpUdaraAmbientController extends Controller
 {
     public function index(Request $request){
         $data = OrderDetail::with('lhps_ling','orderHeader','dataLapanganLingkunganHidup')->where('is_approve', true)->where('is_active', true)->where('kategori_2', '4-Udara')->where('kategori_3', '11-Udara Ambient')->where('status', 3)->orderBy('tanggal_terima', 'desc');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsLingHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_lhp');
+                $data->whereIn('cfr', $matchingIds);
+            }
+        }
+
         return Datatables::of($data)->make(true);
     }
 

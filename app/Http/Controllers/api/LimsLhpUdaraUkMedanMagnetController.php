@@ -50,8 +50,22 @@ class LimsLhpUdaraUkMedanMagnetController extends Controller
                 }
             })
             ->groupBy('cfr')
-            ->where('status', 3)
-            ->get();
+            ->where('status', 3);
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsMedanLMHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_lhp');
+                $data->whereIn('cfr', $matchingIds);
+            }
+        }
+
+        $data = $data->get();
 
         return Datatables::of($data)->make(true);
     }

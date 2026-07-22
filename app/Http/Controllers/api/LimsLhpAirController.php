@@ -27,6 +27,20 @@ class LimsLhpAirController extends Controller
 {
     public function index(Request $request){
         $data = OrderDetail::with('lhps_air','orderHeader','dataLapanganAir')->where('is_approve', true)->where('is_active', true)->where('kategori_2', '1-Air')->where('status', 3)->orderBy('tanggal_terima', 'desc');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsAirHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_sampel');
+                $data->whereIn('no_sampel', $matchingIds);
+            }
+        }
+
         return Datatables::of($data)->make(true);
     }
 

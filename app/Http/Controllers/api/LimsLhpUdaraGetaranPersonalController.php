@@ -33,8 +33,22 @@ class LimsLhpUdaraGetaranPersonalController extends Controller
                 '20-Getaran (Seluruh Tubuh)',
                 '17-Getaran (Lengan & Tangan)'
             ])
-            ->where('status', 3)
-            ->groupBy('nama_perusahaan', 'no_order', 'cfr', 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
+            ->where('status', 3);
+
+        if (request()->has('month_year') && !empty(request()->month_year)) {
+            $parts = explode('-', request()->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsGetaranHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_lhp');
+                $data->whereIn('cfr', $matchingIds);
+            }
+        }
+
+        $data = $data->groupBy('nama_perusahaan', 'no_order', 'cfr', 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
             ->orderBy('tanggal_terima', 'desc');
 
         return Datatables::of($data)->make(true);
