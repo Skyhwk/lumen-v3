@@ -128,7 +128,11 @@ class SyncLimsData extends Command
             'Rd - Alfa',
             'Rd - Beta',
             'Ergonomi',
-            'Psikologi'
+            'Psikologi',
+            'Plankton',
+            'Benthos',
+            'Bentos',
+            'Necton'
         ];
 
         // Query mencari Order Detail di LIMS yang mengandung parameter terlarang
