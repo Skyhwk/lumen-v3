@@ -161,7 +161,6 @@ class CreateInvoiceJob extends Job
     }
 
     private function generateNoInvoice($cekRekening, $rekening, Carbon $invoiceDate)
-    private function generateNoInvoice($cekRekening, $rekening, Carbon $invoiceDate)
     {
         $invoiceYear = $invoiceDate->format('Y');
         $invoiceYear = $invoiceDate->format('Y');
@@ -183,7 +182,6 @@ class CreateInvoiceJob extends Job
         return "ISL/{$prefix}/{$shortYear}{$no}";
     }
 
-    private function buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, Carbon $invoiceDate, $first, $firstPeriode)
     private function buildInvoiceData($orderHeader, $quotation, $detail, $periode, $noInvoice, $cekRekening, Carbon $invoiceDate, $first, $firstPeriode)
     {
         $source = $detail ?: $quotation;
