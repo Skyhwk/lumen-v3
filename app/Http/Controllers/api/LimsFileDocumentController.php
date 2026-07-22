@@ -4,7 +4,6 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\LimsDocument;
-use App\Services\LimsDocumentWorkflowService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,21 +20,9 @@ class LimsFileDocumentController extends Controller
     private const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
     private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
-    private LimsDocumentWorkflowService $workflow;
-
     public function __construct(Request $request)
     {
         parent::__construct($request);
-        $this->workflow = app(LimsDocumentWorkflowService::class);
-    }
-
-    public function initialize(Request $request)
-    {
-        $karyawan = $request->attributes->get('user')->karyawan ?? null;
-
-        return response()->json([
-            'data' => $this->workflow->getComposerDefaults($karyawan, $this->karyawan),
-        ], 200);
     }
 
     public function index(Request $request)
@@ -61,35 +48,27 @@ class LimsFileDocumentController extends Controller
         $data = $query->orderBy('created_at', 'desc')->get();
 
         return DataTables::of($data)
-            ->addColumn('sub_header', fn($row) => $row->sub_header_dokumen)
-            ->addColumn('revisi', fn($row) => $row->revisian)
             ->addColumn('status_label', fn() => 'Menunggu Persetujuan')
             ->addColumn('file_type', fn($row) => $row->extra_data['file_type'] ?? 'pdf')
             ->addColumn('disahkan_oleh', fn($row) => $row->pengesahan)
+            ->addColumn('uploaded_at', fn($row) => $row->created_at)
             ->make(true);
     }
 
     public function saveDocument(Request $request)
     {
-        $required = ['menu_slug', 'no_dokumen', 'sub_header_dokumen', 'tanggal_cetak', 'disusun_oleh'];
-
-        foreach ($required as $field) {
-            if (!$request->filled($field)) {
-                return response()->json(['message' => ucfirst(str_replace('_', ' ', $field)) . ' wajib diisi'], 422);
-            }
+        if (!$request->filled('menu_slug')) {
+            return response()->json(['message' => 'menu_slug wajib diisi'], 422);
         }
 
-        if (!$request->hasFile('file_input')) {
+        $files = $request->file('file_input');
+
+        if (!$files) {
             return response()->json(['message' => 'File dokumen wajib diupload'], 422);
         }
 
-        $file = $request->file('file_input');
-        $extension = strtolower($file->getClientOriginalExtension());
-        $originalName = $file->getClientOriginalName();
-        $mimeType = $file->getClientMimeType();
-
-        if (!in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
-            return response()->json(['message' => 'Format file tidak didukung. Gunakan PDF atau gambar (jpg, png, gif, webp)'], 422);
+        if (!is_array($files)) {
+            $files = [$files];
         }
 
         DB::beginTransaction();
@@ -102,38 +81,63 @@ class LimsFileDocumentController extends Controller
                 File::makeDirectory($destinationDir, 0777, true);
             }
 
-            $cleanNoDokumen = preg_replace('/[^a-zA-Z0-9_-]/', '_', $request->no_dokumen);
-            $filename = $cleanNoDokumen . '_' . time() . '.' . $extension;
-            $file->move($destinationDir, $filename);
+            $savedCount = 0;
 
-            $relativePath = self::UPLOAD_DIR . '/' . $menuSlug . '/' . $filename;
-            $fileType = in_array($extension, self::IMAGE_EXTENSIONS, true) ? 'image' : 'pdf';
+            foreach ($files as $file) {
+                if (!$file || !$file->isValid()) {
+                    continue;
+                }
 
-            $document = new LimsDocument();
-            $document->menu_slug = $menuSlug;
-            $document->no_dokumen = $request->no_dokumen;
-            $document->nama_dokumen = $request->sub_header_dokumen;
-            $document->sub_header_dokumen = $request->sub_header_dokumen;
-            $document->tanggal_cetak = $request->tanggal_cetak;
-            $document->revisian = $request->filled('revisi') ? $request->revisi : null;
-            $document->disusun_oleh = $request->disusun_oleh;
-            $document->jabatan_penyusun = $request->jabatan_penyusun ?? null;
-            $document->content_file = $relativePath;
-            $document->extra_data = [
-                'source_type' => 'file',
-                'file_type' => $fileType,
-                'original_name' => $originalName,
-                'mime_type' => $mimeType,
-            ];
-            $document->status = self::STATUS_IN_REVIEW;
-            $document->is_active = true;
-            $document->created_by = $this->karyawan;
-            $document->created_at = Carbon::now();
-            $document->save();
+                $extension = strtolower($file->getClientOriginalExtension());
+                $originalName = $file->getClientOriginalName();
+                $mimeType = $file->getClientMimeType();
+
+                if (!in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
+                    continue;
+                }
+
+                $noDokumen = pathinfo($originalName, PATHINFO_FILENAME);
+                $cleanFilename = preg_replace('/[^a-zA-Z0-9_-]/', '_', $noDokumen);
+                $storedFilename = $cleanFilename . '_' . time() . '_' . uniqid() . '.' . $extension;
+                $file->move($destinationDir, $storedFilename);
+
+                $relativePath = self::UPLOAD_DIR . '/' . $menuSlug . '/' . $storedFilename;
+                $fileType = in_array($extension, self::IMAGE_EXTENSIONS, true) ? 'image' : 'pdf';
+
+                $document = new LimsDocument();
+                $document->menu_slug = $menuSlug;
+                $document->no_dokumen = $noDokumen;
+                $document->nama_dokumen = $noDokumen;
+                $document->content_file = $relativePath;
+                $document->extra_data = [
+                    'source_type' => 'file',
+                    'file_type' => $fileType,
+                    'original_name' => $originalName,
+                    'mime_type' => $mimeType,
+                ];
+                $document->status = self::STATUS_IN_REVIEW;
+                $document->is_active = true;
+                $document->created_by = $this->karyawan;
+                $document->created_at = Carbon::now();
+                $document->save();
+
+                $savedCount++;
+            }
+
+            if ($savedCount === 0) {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Tidak ada file valid yang berhasil diupload. Gunakan PDF atau gambar (jpg, png, gif, webp)',
+                ], 422);
+            }
 
             DB::commit();
 
-            return response()->json(['message' => 'Dokumen berhasil diupload'], 200);
+            return response()->json([
+                'message' => $savedCount . ' dokumen berhasil diupload',
+                'count' => $savedCount,
+            ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
 

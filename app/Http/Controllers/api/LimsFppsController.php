@@ -716,7 +716,7 @@ class LimsFppsController extends Controller
         }
     }
     
-    public function cetakPDFSTPS(Request $request)
+    public function cetakFpps(Request $request)
     {
         
         try {
@@ -1639,16 +1639,18 @@ class LimsFppsController extends Controller
         $sub8 = ['Kebisingan (24 Jam)', 'Kebisingan (Indoor)', 'Kebisingan'];
         $sub9 = ['Getaran (Lengan & Tangan)', 'Getaran (Seluruh Tubuh)'];
     
-        // Sub 10 -> TIDAK DIPROSES (kembalikan string kosong; ditangani oleh
+        $sub10 = ['Mikrobiologi Udara', 'Udara Angka Kuman'];
+
+        // Sub 11 -> TIDAK DIPROSES (kembalikan string kosong; ditangani oleh
         // getPlaceholderKategoriHTML() di pemanggilnya)
-        $sub10 = [
+        $sub11 = [
             'Getaran', 'Getaran (Bangunan)', 'Getaran (Kejut Bangunan)', 'Getaran (Kenyamanan & Kesehatan)',
             'Getaran (Lingkungan)', 'Getaran (Mesin)', 'Iklim Kerja', 'Kualitas Udara Dalam Ruang',
-            'Udara Lingkungan Kerja', 'Pencahayaan', 'Udara Umum', 'Mikrobiologi Udara', 'Udara Swab Test',
-            'Udara Kultur Bangunan', 'Ergonomi', 'Kelembapan', 'Higiene Sanitasi', 'Psikologi', 'Udara Angka Kuman'
+            'Udara Lingkungan Kerja', 'Pencahayaan', 'Udara Umum', 'Udara Swab Test',
+            'Udara Kultur Bangunan', 'Ergonomi', 'Kelembapan', 'Higiene Sanitasi', 'Psikologi'
         ];
     
-        if (in_array($katName, $sub10)) {
+        if (in_array($katName, $sub11)) {
             return "";
         }
     
@@ -2050,6 +2052,90 @@ class LimsFppsController extends Controller
                 <tr><td colspan="2">Segel Wadah</td><td>V</td></tr>
                 <tr><td colspan="2">Box Khusus Sampel</td><td>V</td></tr>
                 <tr><td colspan="2">Tindakan Pencegahan Selama Transportasi ke laboratorium</td><td>V</td></tr>
+            </table>';
+        }
+    
+        // ================== LOGIKA SUB KATEGORI 10 ==================
+        elseif (in_array($katName, $sub10)) {
+            $html .= '
+            <table border="1" cellpadding="4" cellspacing="0" width="100%" style="' . $tableStyle . '">
+                <tr style="background-color:#fff2cc;">
+                    <th width="30%">KATEGORI</th><th width="50%">ALAT/BAHAN</th><th width="10%">Jumlah</th><th width="10%">Ceklis</th>
+                </tr>
+                <tr><td style="font-weight:bold;">Tujuan Pengambilan Sampel</td><td>Pemantauan Kualitas Udara Terhadap Lingkungan Hidup</td><td colspan="2">V</td></tr>
+                <tr>
+                    <td rowspan="2" style="font-weight:bold;">Alat Pengambilan Contoh Uji</td>
+                    <td>Impinger Udara</td><td>2</td><td>-</td>
+                </tr>
+                <tr><td>Microbiologi Air Sampler</td><td>1</td><td>V</td></tr>
+    
+                <tr>
+                    <td rowspan="6" style="font-weight:bold;">Alat Ukur Parameter Lapangan</td>
+                    <td>Barometer</td><td>1</td><td>V</td>
+                </tr>
+                <tr><td>Thermohygrometer</td><td>2</td><td>V</td></tr>
+                <tr><td>Anemometer</td><td>2</td><td>V</td></tr>
+                <tr><td>Kompas</td><td>2</td><td>V</td></tr>
+                <tr><td>GPS</td><td>1</td><td>V</td></tr>
+                <tr><td>Stopwatch</td><td>2</td><td>V</td></tr>
+    
+                <tr>
+                    <td rowspan="9" style="font-weight:bold;">Alat Pendukung</td>
+                    <td>Kabel Roll</td><td>2</td><td>V</td>
+                </tr>
+                <tr><td>Genset</td><td>1</td><td>-</td></tr>
+                <tr><td>Tissue</td><td>1</td><td>V</td></tr>
+                <tr><td>Alkohol 70%</td><td>5</td><td>V</td></tr>
+                <tr><td>Aquadest</td><td>2</td><td>V</td></tr>
+                <tr><td>Toolbox</td><td>1</td><td>V</td></tr>
+                <tr><td>Tripot</td><td>2</td><td>V</td></tr>
+                <tr><td>Pinset</td><td>2</td><td>V</td></tr>
+                <tr><td>Pre-Filter</td><td>1</td><td>-</td></tr>
+    
+                <tr>
+                    <td rowspan="6" style="font-weight:bold;">K3 / ALAT PELINDUNG DIRI</td>
+                    <td>Masker</td><td>4</td><td>V</td>
+                </tr>
+                <tr><td>Sarung Tangan</td><td>4</td><td>V</td></tr>
+                <tr><td>Kacamata Safety</td><td>4</td><td>V</td></tr>
+                <tr><td>Helm Safety</td><td>4</td><td>V</td></tr>
+                <tr><td>Baju Lengan Panjang</td><td>4</td><td>V</td></tr>
+                <tr><td>Sepatu Safety</td><td>4</td><td>V</td></tr>
+    
+                <tr>
+                    <td rowspan="2" style="font-weight:bold;">Jenis Bahan Wadah Penyimpanan</td>
+                    <td>Plastik</td><td>6</td><td>V</td>
+                </tr>
+                <tr><td>Coolbox</td><td>2</td><td>V</td></tr>
+    
+                <tr><td colspan="4" style="font-weight:bold; background-color:#fff2cc;">INFORMASI PERENCANAAN KEGIATAN SAMPLING</td></tr>
+                <tr><td>a</td><td>Frekuensi Pengambilan (Kali)</td><td colspan="2">1</td></tr>
+                <tr><td>b</td><td>Waktu Pengambilan (Menit)</td><td colspan="2">10 Menit</td></tr>
+                <tr><td>c</td><td>Dokumentasi Lokasi</td><td colspan="2">Dengan Foto / Video</td></tr>
+                <tr><td>d</td><td>Dokumentasi Titik Sampling</td><td colspan="2">Dengan Foto / Video</td></tr>
+                <tr><td>e</td><td>Acuan Metode Sampling</td><td colspan="2">SNI 9099-2024</td></tr>
+    
+                <tr><td colspan="4" style="font-weight:bold; background-color:#fff2cc;">INFORMASI PERENCANAAN PENGATURAN JAMINAN TERHADAP SAMPEL</td></tr>
+                <tr>
+                    <td rowspan="3" style="font-weight:bold;">Pengendalian Mutu</td>
+                    <td colspan="2">Blanko Lapangan</td><td>V</td>
+                </tr>
+                <tr><td colspan="2">Blanko Peralatan</td><td>-</td></tr>
+                <tr><td colspan="2">Uji Kinerja Alat</td><td>V</td></tr>
+    
+                <tr>
+                    <td rowspan="4" style="font-weight:bold;">Pengamanan Contoh</td>
+                    <td colspan="2">Identifikasi Contoh</td><td>V</td>
+                </tr>
+                <tr><td colspan="2">Segel Wadah</td><td>V</td></tr>
+                <tr><td colspan="2">Box Khusus Sampel</td><td>V</td></tr>
+                <tr><td colspan="2">Tindakan Pencegahan Selama Transportasi ke laboratorium</td><td>V</td></tr>
+    
+                <tr>
+                    <td rowspan="2" style="font-weight:bold;">Alat Pengujian</td>
+                    <td colspan="2">Form Uji Kinerja Alat</td><td>V</td>
+                </tr>
+                <tr><td colspan="2">Sertifikat Kalibrasi Alat</td><td>V</td></tr>
             </table>';
         }
     

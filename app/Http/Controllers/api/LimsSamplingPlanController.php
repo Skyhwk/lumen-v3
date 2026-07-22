@@ -1042,29 +1042,35 @@ class LimsSamplingPlanController extends Controller
 
     public function renderPDF(Request $request)
     {
-        $samplingPlan = $request->sampling_plan;
-
-        if ($samplingPlan['status_quotation'] == 'kontrak') {
-            $chek = QuotationKontrakH::where('id', $samplingPlan['quotation_id'])->where('flag_status', 'rejected')->first();
-            if ($chek) {
-                return response()->json([
-                    'message' => 'No Dokumen ' . $chek->no_document . ' sedang di reject, tidak bisa di proses.,menunggu proses dari sales!',
-                    'status'  => '401',
-                ], 401);
+        try {
+            //code...
+            $samplingPlan = $request->sampling_plan;
+            
+            if ($samplingPlan['status_quotation'] == 'kontrak') {
+                $chek = QuotationKontrakH::where('id', $samplingPlan['quotation_id'])->where('flag_status', 'rejected')->first();
+                if ($chek) {
+                    return response()->json([
+                        'message' => 'No Dokumen ' . $chek->no_document . ' sedang di reject, tidak bisa di proses.,menunggu proses dari sales!',
+                        'status'  => '401',
+                    ], 401);
+                }
+                $filename = RenderSamplingPlanService::onKontrak($samplingPlan['quotation_id'])->onPeriode($samplingPlan['periode_kontrak'])->renderPartialKontrak();
+            } else {
+                $chek = QuotationNonKontrak::where('id', $samplingPlan['quotation_id'])->where('flag_status', 'rejected')->first();
+                if ($chek) {
+                    return response()->json([
+                        'message' => 'No Dokumen ' . $chek->no_document . ' sedang di reject, tidak bisa di proses.,menunggu proses dari sales!',
+                        'status'  => '401',
+                    ], 401);
+                }
+                $filename = RenderSamplingPlanService::onNonKontrak($samplingPlan['quotation_id'])->save();
             }
-            $filename = RenderSamplingPlanService::onKontrak($samplingPlan['quotation_id'])->onPeriode($samplingPlan['periode_kontrak'])->renderPartialKontrak();
-        } else {
-            $chek = QuotationNonKontrak::where('id', $samplingPlan['quotation_id'])->where('flag_status', 'rejected')->first();
-            if ($chek) {
-                return response()->json([
-                    'message' => 'No Dokumen ' . $chek->no_document . ' sedang di reject, tidak bisa di proses.,menunggu proses dari sales!',
-                    'status'  => '401',
-                ], 401);
-            }
-            $filename = RenderSamplingPlanService::onNonKontrak($samplingPlan['quotation_id'])->save();
+    
+            return response()->json($filename, 200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(['message'=>$th->getMessage(),'line'=>$th->getLine(),'file'=>$th->getFile()],400);
         }
-
-        return response()->json($filename, 200);
     }
 
     public function renderPDFSamplingPlan(Request $request)
