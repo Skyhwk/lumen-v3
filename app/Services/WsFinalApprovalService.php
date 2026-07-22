@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Helpers\HelperSatuan;
 use App\Models\DataLapanganAir;
+use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
 use Carbon\Carbon;
@@ -832,6 +834,11 @@ class WsFinalApprovalService
 
     private static function syncAirFieldParameters(OrderDetail $orderDetail): void
     {
+        self::syncAirFieldParametersToHeader(self::upsertHeader($orderDetail), $orderDetail);
+    }
+
+    private static function syncAirFieldParametersToHeader(int $headerId, OrderDetail $orderDetail): void
+    {
         if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) !== 'air') {
             return;
         }
@@ -859,6 +866,34 @@ class WsFinalApprovalService
                 'hasil' => $result,
             ]);
         }
+    }
+
+    private static function upsertDetailFromSource(int $headerId, $detailsBySample, Model $source): void
+    {
+        $noSampel = self::stringValue($source->getAttribute('no_sampel'));
+        $parameterLab = self::stringValue($source->getAttribute('parameter'));
+
+        if ($noSampel === null || $parameterLab === null) {
+            return;
+        }
+
+        $orderDetail = $detailsBySample->get($noSampel);
+        if (!$orderDetail instanceof OrderDetail) {
+            return;
+        }
+
+        DB::table('ws_final_approval_detail')->updateOrInsert([
+            'ws_final_approval_header_id' => $headerId,
+            'no_sampel' => $noSampel,
+            'parameter_lab' => self::limit($parameterLab, 70),
+        ], [
+            'no_sampel' => $noSampel,
+            'parameter_regulasi' => self::limit(
+                self::findParameterRegulasi($orderDetail, $parameterLab, $source) ?: '',
+                100
+            ),
+            'hasil' => self::limit(self::extractResult($source, $orderDetail), 50),
+        ]);
     }
 
     private static function refreshApprovalStatus(OrderDetail $orderDetail, ?string $approvedBy = null): void
@@ -911,6 +946,84 @@ class WsFinalApprovalService
                     : null,
             ]);
     }
+
+    private static function refreshApprovalStatusFromDetails(int $headerId, $orderDetails, ?string $approvedBy = null): void
+    {
+        $required = $orderDetails
+            ->flatMap(function (OrderDetail $detail) {
+                return collect(self::arrayValue($detail->parameter))
+                    ->map(function ($parameter) use ($detail) {
+                        return self::sampleParameterKey($detail->no_sampel, $parameter);
+                    });
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $approved = DB::table('ws_final_approval_detail')
+            ->where('ws_final_approval_header_id', $headerId)
+            ->get(['no_sampel', 'parameter_lab'])
+            ->map(function ($detail) {
+                return self::sampleParameterKey($detail->no_sampel, $detail->parameter_lab);
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $complete = $required->isNotEmpty()
+            && $required->diff($approved)->isEmpty();
+
+        DB::table('ws_final_approval_header')
+            ->where('id', $headerId)
+            ->update([
+                'is_approved' => $complete ? 1 : 0,
+                'approved_by' => $complete
+                    ? self::limit($approvedBy ?: self::currentUserName(), 100)
+                    : null,
+                'approved_at' => $complete
+                    ? Carbon::now()->format('Y-m-d H:i:s')
+                    : null,
+            ]);
+    }
+
+    // private static function refreshApprovalStatusFromDetails(int $headerId, $orderDetails, ?string $approvedBy = null): void
+    // {
+    //     $required = $orderDetails
+    //         ->flatMap(function (OrderDetail $detail) {
+    //             return collect(self::arrayValue($detail->parameter))
+    //                 ->map(function ($parameter) use ($detail) {
+    //                     return self::sampleParameterKey($detail->no_sampel, $parameter);
+    //                 });
+    //         })
+    //         ->filter()
+    //         ->unique()
+    //         ->values();
+
+    //     $approved = DB::table('ws_final_approval_detail')
+    //         ->where('ws_final_approval_header_id', $headerId)
+    //         ->get(['no_sampel', 'parameter_lab'])
+    //         ->map(function ($detail) {
+    //             return self::sampleParameterKey($detail->no_sampel, $detail->parameter_lab);
+    //         })
+    //         ->filter()
+    //         ->unique()
+    //         ->values();
+
+    //     $complete = $required->isNotEmpty()
+    //         && $required->diff($approved)->isEmpty();
+
+    //     DB::table('ws_final_approval_header')
+    //         ->where('id', $headerId)
+    //         ->update([
+    //             'is_approved' => $complete ? 1 : 0,
+    //             'approved_by' => $complete
+    //                 ? self::limit($approvedBy ?: self::currentUserName(), 100)
+    //                 : null,
+    //             'approved_at' => $complete
+    //                 ? Carbon::now()->format('Y-m-d H:i:s')
+    //                 : null,
+    //         ]);
+    // }
 
     private static function approvedParameterNames(string $noSampel): array
     {
@@ -1010,13 +1123,22 @@ class WsFinalApprovalService
         return null;
     }
 
-    private static function extractResult(Model $source): ?string
+    private static function extractResult(Model $source, ?OrderDetail $orderDetail = null): ?string
     {
-        foreach (['hasil', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
-            $value = $source->getAttribute($field);
-            if ($value !== null && $value !== '') {
-                return self::stringValue($value);
+        $isIsokinetik = $source instanceof \App\Models\IsokinetikHeader;
+        $isEmisiCerobong = $source instanceof \App\Models\EmisiCerobongHeader;
+        $satuan = self::resolveSatuan($source, $orderDetail);
+
+        if ($isIsokinetik) {
+            $result = self::extractIsokinetikResult($source);
+            if ($result !== null) {
+                return $result;
             }
+        }
+
+        $udaraResult = self::extractUdaraRelationResult($source, $satuan);
+        if ($udaraResult !== null) {
+            return $udaraResult;
         }
 
         foreach (['ws_value', 'ws_udara', 'ws_value_linkungan', 'ws_value_cerobong'] as $relation) {
@@ -1033,15 +1155,259 @@ class WsFinalApprovalService
                 continue;
             }
 
-            foreach (['hasil', 'nilai', 'C', 'C1', 'C2'] as $field) {
-                $result = $value->getAttribute($field);
-                if ($result !== null && $result !== '') {
-                    return self::stringValue($result);
+            if ($isIsokinetik) {
+                $result = self::extractIsokinetikResult($value);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+
+            if ($isEmisiCerobong) {
+                $result = self::extractEmisiCerobongResult($value, $satuan);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+
+            if (self::isUdaraValue($value)) {
+                $result = self::extractUdaraResult($value, $satuan);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+
+            $result = self::extractFirstFilledAttribute($value, ['hasil', 'hasil1', 'nilai', 'C', 'C1', 'C2']);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
+        foreach (['hasil', 'hasil1', 'hasil_akhir', 'hasil_uji', 'hasil_pengujian', 'nilai', 'C', 'C1', 'C2'] as $field) {
+            if (!array_key_exists($field, $source->getAttributes())) {
+                continue;
+            }
+
+            $value = $source->getAttribute($field);
+            if ($value !== null && $value !== '') {
+                $value = self::stringValue($value);
+                if (!self::rejectPlaceholderResult($value)) {
+                    return $value;
                 }
             }
         }
 
         return null;
+    }
+
+    private static function extractIsokinetikResult(Model $value): ?string
+    {
+        $result = self::extractFirstFilledAttribute($value, [
+            'f_koreksi_c', 'f_koreksi_c1', 'f_koreksi_c2', 'f_koreksi_c3', 'f_koreksi_c4', 'f_koreksi_c5',
+            'C', 'C1', 'C2', 'C3', 'C4', 'C5',
+        ]);
+
+        if ($result !== null) {
+            return $result;
+        }
+
+        $raw = self::extractFirstFilledAttribute($value, ['hasil_isokinetik']);
+        if ($raw === null || $raw === '[]') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return self::rejectPlaceholderResult($raw) ? null : $raw;
+        }
+
+        if (empty($decoded)) {
+            return null;
+        }
+
+        return self::jsonValue($decoded);
+    }
+
+    private static function extractUdaraRelationResult(Model $source, ?string $satuan = null): ?string
+    {
+        if (!method_exists($source, 'ws_udara')) {
+            return null;
+        }
+
+        try {
+            $value = $source->ws_udara()->first();
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (!$value || !self::isUdaraValue($value)) {
+            return null;
+        }
+
+        return self::extractUdaraResult($value, $satuan);
+    }
+
+    private static function extractEmisiCerobongResult(Model $value, ?string $satuan = null): ?string
+    {
+        $index = $satuan !== null ? HelperSatuan::emisi($satuan) : null;
+        if ($index !== null) {
+            $suffix = (string) $index;
+            $result = self::extractFirstFilledAttribute($value, [
+                'f_koreksi_c' . $suffix,
+                'C' . $suffix,
+            ]);
+
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
+        $correctedFields = array_merge(['f_koreksi_c'], array_map(function ($index) {
+            return 'f_koreksi_c' . $index;
+        }, range(1, 10)));
+
+        $result = self::extractFirstFilledAttribute($value, $correctedFields);
+        if ($result !== null) {
+            return $result;
+        }
+
+        return self::extractFirstFilledAttribute(
+            $value,
+            array_merge(['C'], array_map(function ($index) {
+                return 'C' . $index;
+            }, range(1, 10)))
+        );
+    }
+
+    private static function isUdaraValue(Model $value): bool
+    {
+        return $value instanceof \App\Models\WsValueUdara
+            || array_key_exists('f_koreksi_1', $value->getAttributes())
+            || array_key_exists('hasil19', $value->getAttributes());
+    }
+
+    private static function extractUdaraResult(Model $value, ?string $satuan = null): ?string
+    {
+        $index = $satuan !== null ? HelperSatuan::udara($satuan) : null;
+        if ($index !== null && $index !== '') {
+            $result = self::extractFirstFilledAttribute($value, ['f_koreksi_' . $index]);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
+        $result = self::extractFirstFilledAttribute($value, array_map(function ($index) {
+            return 'f_koreksi_' . $index;
+        }, range(1, 19)));
+
+        if ($result !== null) {
+            return $result;
+        }
+
+        if ($index !== null && $index !== '') {
+            $result = self::extractFirstFilledAttribute($value, ['hasil' . $index]);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
+        return self::extractFirstFilledAttribute($value, array_map(function ($index) {
+            return 'hasil' . $index;
+        }, range(1, 19)));
+    }
+
+    private static function extractFirstFilledAttribute(Model $model, array $fields): ?string
+    {
+        foreach ($fields as $field) {
+            if (!array_key_exists($field, $model->getAttributes())) {
+                continue;
+            }
+
+            $value = $model->getAttribute($field);
+            if ($value !== null && $value !== '') {
+                $value = self::stringValue($value);
+                return self::rejectPlaceholderResult($value) ? null : $value;
+            }
+        }
+
+        return null;
+    }
+
+    private static function rejectPlaceholderResult(?string $value): bool
+    {
+        return $value !== null && in_array(mb_strtolower(trim($value)), ['nows'], true);
+    }
+
+    private static function resolveSatuan(Model $source, ?OrderDetail $orderDetail): ?string
+    {
+        if (!$orderDetail) {
+            return null;
+        }
+
+        $parameterId = self::resolveParameterId($source, $orderDetail);
+        if ($parameterId === null) {
+            return null;
+        }
+
+        $regulasiIds = self::regulationIds($orderDetail);
+        if (!empty($regulasiIds)) {
+            $satuan = MasterBakumutu::where('id_parameter', $parameterId)
+                ->whereIn('id_regulasi', $regulasiIds)
+                ->where('is_active', true)
+                ->value('satuan');
+
+            if ($satuan !== null && $satuan !== '') {
+                return $satuan;
+            }
+        }
+
+        return Parameter::where('id', $parameterId)->value('satuan');
+    }
+
+    private static function resolveParameterId(Model $source, OrderDetail $orderDetail): ?int
+    {
+        $sourceParameterId = self::numericValue($source->getAttribute('id_parameter'));
+        if ($sourceParameterId !== null) {
+            return $sourceParameterId;
+        }
+
+        $parameterLab = self::stringValue($source->getAttribute('parameter'));
+        if ($parameterLab === null) {
+            return null;
+        }
+
+        $normalizedParameterLab = self::normalizeParameter($parameterLab);
+
+        return collect(self::arrayValue($orderDetail->parameter))
+            ->map(function ($parameter) {
+                $value = self::stringValue($parameter) ?: '';
+                $parts = explode(';', $value, 2);
+
+                return [
+                    'id' => isset($parts[1]) && ctype_digit(trim($parts[0]))
+                        ? (int) trim($parts[0])
+                        : null,
+                    'nama_lab' => trim(isset($parts[1]) ? $parts[1] : $parts[0]),
+                ];
+            })
+            ->first(function ($parameter) use ($normalizedParameterLab) {
+                return $parameter['id'] !== null
+                    && self::normalizeParameter($parameter['nama_lab']) === $normalizedParameterLab;
+            })['id'] ?? null;
+    }
+
+    private static function regulationIds(OrderDetail $orderDetail): array
+    {
+        return collect(self::arrayValue($orderDetail->regulasi))
+            ->map(function ($regulasi) {
+                $value = self::stringValue($regulasi) ?: '';
+                $parts = explode('-', $value, 2);
+
+                return ctype_digit(trim($parts[0])) ? (int) trim($parts[0]) : null;
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private static function findParameterRegulasi(
