@@ -249,7 +249,19 @@ class LimsFdlEmisiKendaraanController extends Controller
                 $data_order->save();
                 
                 DB::commit();
-                return response()->json([
+                
+            try {
+                app(\App\Services\RejectFdlService::class)->recordReject(
+                    $data,
+                    $this->karyawan,
+                    $request->reason ?? null,
+                    'Fdl Emisi Kendaraan'
+                );
+            } catch (\Exception $e) {
+                // Ignore if it fails
+            }
+
+            return response()->json([
                     'message' => 'Data no sampel '.$data->no_sampel.' berhasil di reject'
                 ], 200);
             } catch (\Throwable $th) {

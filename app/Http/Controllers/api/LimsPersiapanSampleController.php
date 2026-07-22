@@ -597,36 +597,7 @@ class LimsPersiapanSampleController extends Controller
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
-                     // LOGIKA FILTER DETIL (ATOMIC CHECK)
-                    // 2. Cek Satu Per Satu (ABSENSI)
-                    $currentSamplers = explode(',', $schedule->sampler ?? '');
-                    $pendingSamplers = [];
-                    foreach ($currentSamplers as $singleSampler) {
-                        $cleanTargetName = strtolower(trim($singleSampler));
-                        if (empty($cleanTargetName)) continue;
-
-                        $checkKey = sprintf('%s|%s|%s', 
-                            trim($item->no_order), 
-                            trim($schedule->tanggal), 
-                            $cleanTargetName
-                        );
-
-                        // Logic: Jika TIDAK ADA di doneList, berarti dia BELUM selesai -> Masukkan ke pending
-                        if (!isset($doneList[$checkKey])) {
-                            $pendingSamplers[] = trim($singleSampler);
-                        }
-                    }
-                    // 3. Keputusan Akhir untuk Row Ini
-                    // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
-                    if (empty($pendingSamplers)) {
-                        continue; 
-                    }
-
-                    // 4. Update Tampilan Sampler
-                    // Jika aslinya 3 orang, tapi "Adji" sudah selesai, maka implode ulang sisa 2 orang saja.
-                    // Sehingga nanti pas di Grouping, yang muncul hanya yang belum selesai.
-                    $schedule->sampler = implode(',', $pendingSamplers);
-
+                    // Tampilkan semua data (tidak menyembunyikan yang sudah selesai/punya PDF)
                     $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
@@ -1166,8 +1137,8 @@ class LimsPersiapanSampleController extends Controller
         $filename = str_replace("/", "_", $noDocument);
         $dir = public_path("qr_documents");
 
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
         }
 
         $path = $dir . "/$filename.svg";

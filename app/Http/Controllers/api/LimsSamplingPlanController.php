@@ -38,7 +38,15 @@ class LimsSamplingPlanController extends Controller
     {
         
         $active = $request->is_active == '' ? true : $request->is_active;
-        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
+        $limsDb = DB::connection('lims')->getDatabaseName();
+
+        $data = Jadwal::
+        whereExists(function ($query) use ($limsDb) {
+            $query->select(DB::raw(1))
+                ->from($limsDb . '.order_header')
+                ->whereColumn($limsDb . '.order_header.no_document', 'jadwal.no_quotation')
+                ->where('is_active', true);
+        })->with(['samplingPlan:id,created_at,filename,is_active',
         'samplingPlan' => function ($query) {
             $query->WithTypeModelSub();
         },])
