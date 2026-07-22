@@ -65,6 +65,9 @@ class WsFinalApprovalService
         25 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
         26 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
         28 => [\App\Models\DataLapanganCahaya::class],
+        31 => [\App\Models\DataLapanganEmisiKendaraan::class],
+        32 => [\App\Models\DataLapanganEmisiKendaraan::class],
+        116 => [\App\Models\DataLapanganEmisiKendaraan::class],
     ];
 
     private const PARAMETER_SOURCES = [
@@ -1362,9 +1365,7 @@ class WsFinalApprovalService
 
     private static function approvalColumn(string $table, bool $isLingkunganKerja = false): ?string
     {
-        $columns = $isLingkunganKerja
-            ? ['is_approve', 'is_approved', 'lhps']
-            : ['lhps', 'is_approve', 'is_approved'];
+        $columns = ['is_approve', 'is_approved', 'lhps'];
 
         foreach ($columns as $column) {
             if (self::hasColumnCached($table, $column)) {
