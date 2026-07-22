@@ -33,9 +33,22 @@ class LimsLhpKebisinganPersonalController extends Controller
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ["23-Kebisingan", '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'])
             ->whereJsonContains('parameter', '271;Kebisingan (P8J)')
-            ->where('status', 3)
-            ->groupBy('cfr')
-            ->get();
+            ->where('status', 3);
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsKebisinganHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_lhp');
+                $data->whereIn('cfr', $matchingIds);
+            }
+        }
+
+        $data = $data->groupBy('cfr')->get();
 
         return Datatables::of($data)->make(true);
     }
