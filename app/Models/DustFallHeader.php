@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SyncsWsFinalApproval;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class DustFallHeader extends Sector{
+    use SyncsWsFinalApproval;
 
     protected $table = 'dustfall_header';
     public $timestamps = false;

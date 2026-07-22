@@ -15,6 +15,60 @@ use Illuminate\Support\Facades\Schema;
 class WsFinalApprovalService
 {
     private static $parameterRegulationCache = [];
+    private static $hasTableCache = [];
+    private static $hasColumnCache = [];
+    private static $orderDetailCache = [];
+
+    private static function hasTableCached(string $table): bool
+    {
+        if (!isset(self::$hasTableCache[$table])) {
+            self::$hasTableCache[$table] = Schema::hasTable($table);
+        }
+        return self::$hasTableCache[$table];
+    }
+
+    private static function hasColumnCached(string $table, string $column): bool
+    {
+        $key = $table . '.' . $column;
+        if (!isset(self::$hasColumnCache[$key])) {
+            self::$hasColumnCache[$key] = Schema::hasColumn($table, $column);
+        }
+        return self::$hasColumnCache[$key];
+    }
+
+    private static function parameterSources(?string $category = null): array
+    {
+        if ($category !== null && mb_strtolower(trim($category)) === 'air') {
+            return [
+                \App\Models\Colorimetri::class,
+                \App\Models\Gravimetri::class,
+                \App\Models\Titrimetri::class,
+                \App\Models\Subkontrak::class,
+            ];
+        }
+
+        return self::PARAMETER_SOURCES;
+    }
+
+    private const KPGI_FIELD_SOURCES = [
+        13 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        14 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        15 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        16 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        17 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        18 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        19 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        20 => [\App\Models\DataLapanganGetaran::class, \App\Models\DataLapanganGetaranPersonal::class],
+        21 => [\App\Models\DataLapanganIklimPanas::class, \App\Models\DataLapanganIklimDingin::class],
+        23 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        24 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        25 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        26 => [\App\Models\DataLapanganKebisingan::class, \App\Models\DataLapanganKebisinganPersonal::class],
+        28 => [\App\Models\DataLapanganCahaya::class],
+        31 => [\App\Models\DataLapanganEmisiKendaraan::class],
+        32 => [\App\Models\DataLapanganEmisiKendaraan::class],
+        116 => [\App\Models\DataLapanganEmisiKendaraan::class],
+    ];
 
     private const PARAMETER_SOURCES = [
         \App\Models\Colorimetri::class,
@@ -39,26 +93,41 @@ class WsFinalApprovalService
         \App\Models\Titrimetri::class,
     ];
 
-    public static function syncParameter(Model $source): void
+    public static function syncParameter(Model $source, bool $refreshStatus = true, ?OrderDetail $orderDetail = null): void
     {
         $noSampel = $source->getAttribute('no_sampel');
         if (!$noSampel || !$source->getAttribute('parameter')) {
             return;
         }
 
-        $orderDetail = self::findOrderDetail($noSampel);
+        $orderDetail = $orderDetail ?: self::findOrderDetail($noSampel);
 
         if (!$orderDetail) {
             return;
         }
 
         // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
-        if ($orderDetail->kategori_3 && (
+        // Perkecualian khusus untuk parameter Ergonomi, Legionella, & Gelombang Elektro/Mikro agar tetap diproses
+        $isException = $orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
+            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'legionella') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang elektro') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang mikro')
+        );
+
+        if (!$isException && $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
             str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
             str_contains(strtolower($orderDetail->kategori_3), 'tidak bergerak')
         )) {
+            return;
+        }
+
+        // Bypass untuk kategori Air
+        $kategoriName = self::categoryName($orderDetail->kategori_2);
+        if ($kategoriName && mb_strtolower($kategoriName) === 'air') {
             return;
         }
 
@@ -78,19 +147,21 @@ class WsFinalApprovalService
 
                 DB::table('ws_final_approval_detail')->updateOrInsert([
                     'ws_final_approval_header_id' => $headerId,
+                    'no_sampel' => $noSampel,
                     'parameter_lab' => self::limit($parameterLab, 70),
                 ], [
-                    'no_sampel' => $noSampel,
                     'parameter_regulasi' => self::limit($parameterRegulasi, 100),
                     'hasil' => self::extractResult($source),
                 ]);
             }
         } else {
-            self::deleteParameterDetail($headerId, $parameterLab);
+            self::deleteParameterDetail($headerId, $parameterLab, $noSampel);
             return;
         }
 
-        self::refreshApprovalStatus($orderDetail);
+        if ($refreshStatus) {
+            self::refreshApprovalStatus($orderDetail);
+        }
     }
 
     public static function rejectParameter(Model $source): void
@@ -107,11 +178,6 @@ class WsFinalApprovalService
             return;
         }
 
-        self::deleteParameterDetail(self::upsertHeader($orderDetail), $parameterLab);
-    }
-
-    public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
-    {
         // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
         if ($orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
@@ -119,6 +185,42 @@ class WsFinalApprovalService
             str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
             str_contains(strtolower($orderDetail->kategori_3), 'tidak bergerak')
         )) {
+            return;
+        }
+
+        // Bypass untuk kategori Air
+        $kategoriName = self::categoryName($orderDetail->kategori_2);
+        if ($kategoriName && mb_strtolower($kategoriName) === 'air') {
+            return;
+        }
+
+        self::deleteParameterDetail(self::upsertHeader($orderDetail), $parameterLab, $noSampel);
+    }
+
+    public static function finalizeSample(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
+    {
+        // Bypass untuk subkategori Udara Lingkungan Kerja, Udara Lingkungan Hidup / Udara Ambient, dan Emisi Sumber Tidak Bergerak
+        // Perkecualian khusus untuk parameter Ergonomi, Legionella, & Gelombang Elektro/Mikro agar tetap diproses
+        $isException = $orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
+            str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'legionella') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang elektro') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'gelombang mikro')
+        );
+
+        if (!$isException && $orderDetail->kategori_3 && (
+            str_contains(strtolower($orderDetail->kategori_3), 'lingkungan kerja') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'lingkungan hidup') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'ambient') || 
+            str_contains(strtolower($orderDetail->kategori_3), 'tidak bergerak')
+        )) {
+            return;
+        }
+
+        // Bypass untuk kategori Air
+        $kategoriName = self::categoryName($orderDetail->kategori_2);
+        if ($kategoriName && mb_strtolower($kategoriName) === 'air') {
             return;
         }
 
@@ -143,7 +245,7 @@ class WsFinalApprovalService
             return;
         }
 
-        self::syncApprovedParameters($orderDetail->no_sampel);
+        self::syncApprovedParameters($orderDetail->no_sampel, $orderDetail);
         self::syncAirFieldParameters($orderDetail);
 
         self::refreshApprovalStatus($orderDetail, $approvedBy);
@@ -605,7 +707,21 @@ class WsFinalApprovalService
             );
         });
 
-        foreach (self::PARAMETER_SOURCES as $modelClass) {
+        $categories = $orderDetails->map(function ($od) {
+            return self::categoryName($od->kategori_2);
+        })->filter()->unique()->values();
+
+        $sources = collect();
+        if ($categories->isEmpty()) {
+            $sources = collect(self::PARAMETER_SOURCES);
+        } else {
+            foreach ($categories as $cat) {
+                $sources = $sources->concat(self::parameterSources($cat));
+            }
+            $sources = $sources->unique()->values();
+        }
+
+        foreach ($sources as $modelClass) {
             if (!class_exists($modelClass)) {
                 continue;
             }
@@ -613,7 +729,7 @@ class WsFinalApprovalService
             $model = new $modelClass();
             $table = $model->getTable();
 
-            if (!Schema::hasColumn($table, 'no_sampel') || !Schema::hasColumn($table, 'parameter')) {
+            if (!self::hasColumnCached($table, 'no_sampel') || !self::hasColumnCached($table, 'parameter')) {
                 continue;
             }
 
@@ -625,7 +741,7 @@ class WsFinalApprovalService
             $query = $modelClass::whereIn('no_sampel', $noSampel)
                 ->where($approvalColumn, 1);
 
-            if (Schema::hasColumn($table, 'is_active')) {
+            if (self::hasColumnCached($table, 'is_active')) {
                 $query->where('is_active', true);
             }
 
@@ -638,7 +754,24 @@ class WsFinalApprovalService
                 });
         }
 
-        return $orderDetails->mapWithKeys(function (OrderDetail $orderDetail) use ($approvedBySample) {
+        $fieldSamples = self::kpgiFieldSamples($orderDetails);
+
+        return $orderDetails->mapWithKeys(function (OrderDetail $orderDetail) use ($approvedBySample, $fieldSamples) {
+            $kpgiCategoryId = self::kpgiCategoryId($orderDetail);
+
+            if ($kpgiCategoryId !== null) {
+                $sampleKey = $kpgiCategoryId . '|' . $orderDetail->no_sampel;
+                $tested = isset($fieldSamples[$sampleKey]) ? 1 : 0;
+
+                return [
+                    $orderDetail->no_sampel => [
+                        'tested' => $tested,
+                        'total' => 1,
+                        'is_complete' => $tested === 1,
+                    ],
+                ];
+            }
+
             $required = collect(self::arrayValue($orderDetail->parameter))
                 ->map(function ($parameter) {
                     return self::normalizeParameter($parameter);
@@ -668,19 +801,129 @@ class WsFinalApprovalService
         })->all();
     }
 
+    private static function kpgiFieldSamples($orderDetails): array
+    {
+        $fieldSamples = [];
+        $samplesByCategory = collect($orderDetails)
+            ->mapToGroups(function (OrderDetail $orderDetail) {
+                $categoryId = self::kpgiCategoryId($orderDetail);
+
+                return $categoryId === null
+                    ? []
+                    : [$categoryId => $orderDetail->no_sampel];
+            });
+
+        foreach ($samplesByCategory as $categoryId => $samples) {
+            $samples = collect($samples)->filter()->unique()->values();
+
+            foreach (self::KPGI_FIELD_SOURCES[$categoryId] ?? [] as $modelClass) {
+                if (!class_exists($modelClass)) {
+                    continue;
+                }
+
+                $model = new $modelClass();
+                $table = $model->getTable();
+
+                if (!self::hasColumnCached($table, 'no_sampel')) {
+                    continue;
+                }
+
+                $query = $modelClass::whereIn('no_sampel', $samples);
+
+                if (self::hasColumnCached($table, 'is_active')) {
+                    $query->where('is_active', true);
+                }
+
+                $query->pluck('no_sampel')
+                    ->each(function ($sample) use (&$fieldSamples, $categoryId) {
+                        $fieldSamples[$categoryId . '|' . $sample] = true;
+                    });
+            }
+        }
+
+        return $fieldSamples;
+    }
+
+    private static function kpgiCategoryId(OrderDetail $orderDetail): ?int
+    {
+        $categoryId = self::numericValue(strtok((string) $orderDetail->kategori_3, '-'));
+
+        return $categoryId !== null && array_key_exists($categoryId, self::KPGI_FIELD_SOURCES)
+            ? $categoryId
+            : null;
+    }
+
     public static function appendProgressAndFilter(iterable $rows, $request)
     {
         $rows = collect($rows)->values();
-        $samples = $rows
-            ->flatMap(function ($row) {
-                return self::sampleNamesFromRow($row);
-            })
-            ->filter()
-            ->unique()
-            ->values();
-        $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
-            ->where('is_active', true)
-            ->get();
+
+        if ($rows->isNotEmpty()) {
+            $firstRow = $rows->first();
+            $kategori2 = isset($firstRow->kategori_2) ? strtolower($firstRow->kategori_2) : '';
+            $kategori3 = isset($firstRow->kategori_3) ? strtolower($firstRow->kategori_3) : '';
+            
+            // Bypass subkategori yang dilarang diotak-atik karena sudah produksi
+            // Perkecualian khusus untuk parameter Ergonomi & Gelombang Elektro agar tetap dihitung progress CFR-nya
+            $isBypassedSubcategory = (
+                str_contains($kategori3, 'lingkungan kerja') || 
+                str_contains($kategori3, 'lingkungan hidup') || 
+                str_contains($kategori3, 'ambient') || 
+                str_contains($kategori3, 'tidak bergerak') ||
+                str_contains($kategori3, 'isokinetik')
+            ) && !(
+                str_contains($kategori3, 'ergonomi') ||
+                str_contains(strtolower($firstRow->parameter ?? ''), 'ergonomi') ||
+                str_contains(strtolower($firstRow->parameter ?? ''), 'gelombang elektro')
+            );
+
+            // Cek apakah ini kategori Udara atau Emisi yang di-group per CFR/LHP dan bukan subkategori bypass
+            $isGroupedByCfr = (str_contains($kategori2, 'udara') || str_contains($kategori2, 'emisi')) && !$isBypassedSubcategory;
+
+            if ($isGroupedByCfr) {
+                // Ambil semua cfr unik dari rows
+                $cfrs = $rows->pluck('cfr')->filter()->unique()->values();
+
+                // Tarik semua order_detail untuk cfr tersebut yang is_active = 1 dan status = 0
+                // (tanpa memedulikan tanggal_terima null atau tidak)
+                $allOrderDetails = OrderDetail::whereIn('cfr', $cfrs)
+                    ->where('is_active', true)
+                    ->where('status', 0)
+                    ->get();
+
+                // Kelompokkan order_detail berdasarkan cfr
+                $orderDetailsByCfr = $allOrderDetails->groupBy('cfr');
+
+                // Update no_sampel di setiap row agar mencakup seluruh sampel untuk cfr tersebut
+                $rows->each(function ($row) use ($orderDetailsByCfr) {
+                    $cfr = $row->cfr;
+                    if ($cfr && isset($orderDetailsByCfr[$cfr])) {
+                        $cfrDetails = $orderDetailsByCfr[$cfr];
+                        $row->no_sampel = $cfrDetails->pluck('no_sampel')->unique()->implode(', ');
+                        
+                        // Update tanggal_sampling dan tanggal_terima agar mencakup seluruh sampel CFR
+                        $row->tanggal_sampling = $cfrDetails->pluck('tanggal_sampling')->filter()->unique()->implode(', ');
+                        $row->tanggal_terima = $cfrDetails->pluck('tanggal_terima')->filter()->unique()->implode(', ');
+                    }
+                });
+
+                // Gunakan allOrderDetails untuk menghitung progressBySample
+                $orderDetails = $allOrderDetails;
+            } else {
+                // Default logic untuk kategori lain (seperti Air, Padatan, dan subkategori bypass)
+                $samples = $rows
+                    ->flatMap(function ($row) {
+                        return self::sampleNamesFromRow($row);
+                    })
+                    ->filter()
+                    ->unique()
+                    ->values();
+                $orderDetails = OrderDetail::whereIn('no_sampel', $samples)
+                    ->where('is_active', true)
+                    ->get();
+            }
+        } else {
+            $orderDetails = collect();
+        }
 
         $progressBySample = self::progressBySample($orderDetails);
 
@@ -731,7 +974,7 @@ class WsFinalApprovalService
 
     private static function upsertHeader(OrderDetail $orderDetail, array $approval = []): int
     {
-        if (!Schema::hasTable('ws_final_approval_header')) {
+        if (!self::hasTableCached('ws_final_approval_header')) {
             return 0;
         }
 
@@ -762,21 +1005,25 @@ class WsFinalApprovalService
 
     private static function findOrderDetail(string $noSampel): ?OrderDetail
     {
-        return OrderDetail::where('no_sampel', $noSampel)
-            ->where('is_active', true)
-            ->orderByDesc('id')
-            ->first();
+        if (!array_key_exists($noSampel, self::$orderDetailCache)) {
+            self::$orderDetailCache[$noSampel] = OrderDetail::where('no_sampel', $noSampel)
+                ->where('is_active', true)
+                ->orderByDesc('id')
+                ->first();
+        }
+        return self::$orderDetailCache[$noSampel];
     }
 
-    private static function deleteParameterDetail(int $headerId, ?string $parameterLab): void
+    private static function deleteParameterDetail(int $headerId, ?string $parameterLab, string $noSampel): void
     {
-        if ($headerId === 0 || !Schema::hasTable('ws_final_approval_header')) {
+        if ($headerId === 0 || !self::hasTableCached('ws_final_approval_header')) {
             return;
         }
 
         if ($parameterLab !== null) {
             DB::table('ws_final_approval_detail')
                 ->where('ws_final_approval_header_id', $headerId)
+                ->where('no_sampel', $noSampel)
                 ->where('parameter_lab', self::limit($parameterLab, 70))
                 ->delete();
         }
@@ -804,9 +1051,13 @@ class WsFinalApprovalService
             || (int) $source->getAttribute('is_approved') === 1;
     }
 
-    private static function syncApprovedParameters(string $noSampel): void
+    private static function syncApprovedParameters(string $noSampel, ?OrderDetail $orderDetail = null): void
     {
-        foreach (self::PARAMETER_SOURCES as $modelClass) {
+        $orderDetail = $orderDetail ?: self::findOrderDetail($noSampel);
+        $category = $orderDetail ? self::categoryName($orderDetail->kategori_2) : null;
+        $sources = self::parameterSources($category);
+
+        foreach ($sources as $modelClass) {
             if (!class_exists($modelClass)) {
                 continue;
             }
@@ -814,7 +1065,7 @@ class WsFinalApprovalService
             $model = new $modelClass();
             $table = $model->getTable();
 
-            if (!Schema::hasColumn($table, 'no_sampel') || !Schema::hasColumn($table, 'parameter')) {
+            if (!self::hasColumnCached($table, 'no_sampel') || !self::hasColumnCached($table, 'parameter')) {
                 continue;
             }
 
@@ -826,8 +1077,8 @@ class WsFinalApprovalService
             $modelClass::where('no_sampel', $noSampel)
                 ->where($approvalColumn, 1)
                 ->get()
-                ->each(function (Model $source) {
-                    self::syncParameter($source);
+                ->each(function (Model $source) use ($orderDetail) {
+                    self::syncParameter($source, false, $orderDetail);
                 });
         }
     }
@@ -856,9 +1107,9 @@ class WsFinalApprovalService
         foreach (self::airFieldParameterValues($orderDetail, $fieldData) as $parameterLab => $result) {
             DB::table('ws_final_approval_detail')->updateOrInsert([
                 'ws_final_approval_header_id' => $headerId,
+                'no_sampel' => $orderDetail->no_sampel,
                 'parameter_lab' => self::limit($parameterLab, 70),
             ], [
-                'no_sampel' => $orderDetail->no_sampel,
                 'parameter_regulasi' => self::limit(
                     self::findParameterRegulasi($orderDetail, $parameterLab) ?: '',
                     100
@@ -910,7 +1161,7 @@ class WsFinalApprovalService
             ->unique()
             ->values();
 
-        $approvedParameters = self::approvedParameterNames($orderDetail->no_sampel);
+        $approvedParameters = self::approvedParameterNames($orderDetail->no_sampel, $orderDetail);
 
         if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'air') {
             $fieldData = self::approvedAirFieldData($orderDetail->no_sampel);
@@ -1028,8 +1279,11 @@ class WsFinalApprovalService
     private static function approvedParameterNames(string $noSampel): array
     {
         $parameters = [];
+        $orderDetail = $orderDetail ?: self::findOrderDetail($noSampel);
+        $category = $orderDetail ? self::categoryName($orderDetail->kategori_2) : null;
+        $sources = self::parameterSources($category);
 
-        foreach (self::PARAMETER_SOURCES as $modelClass) {
+        foreach ($sources as $modelClass) {
             if (!class_exists($modelClass)) {
                 continue;
             }
@@ -1037,7 +1291,7 @@ class WsFinalApprovalService
             $model = new $modelClass();
             $table = $model->getTable();
 
-            if (!Schema::hasColumn($table, 'no_sampel') || !Schema::hasColumn($table, 'parameter')) {
+            if (!self::hasColumnCached($table, 'no_sampel') || !self::hasColumnCached($table, 'parameter')) {
                 continue;
             }
 
@@ -1061,8 +1315,9 @@ class WsFinalApprovalService
     private static function approvedAirFieldData(string $noSampel): ?DataLapanganAir
     {
         $query = DataLapanganAir::where('no_sampel', $noSampel);
+        $table = (new DataLapanganAir())->getTable();
 
-        if (Schema::hasColumn((new DataLapanganAir())->getTable(), 'is_approve')) {
+        if (self::hasColumnCached($table, 'is_approve')) {
             $query->where('is_approve', 1);
         }
 
@@ -1110,12 +1365,10 @@ class WsFinalApprovalService
 
     private static function approvalColumn(string $table, bool $isLingkunganKerja = false): ?string
     {
-        $columns = $isLingkunganKerja
-            ? ['is_approve', 'is_approved', 'lhps']
-            : ['lhps', 'is_approve', 'is_approved'];
+        $columns = ['is_approve', 'is_approved', 'lhps'];
 
         foreach ($columns as $column) {
-            if (Schema::hasColumn($table, $column)) {
+            if (self::hasColumnCached($table, $column)) {
                 return $column;
             }
         }
@@ -1600,7 +1853,7 @@ class WsFinalApprovalService
                 'approved_by' => $karyawan,
             ]);
 
-            if (Schema::hasTable('ws_final_approval_header')) {
+            if (self::hasTableCached('ws_final_approval_header')) {
                 $existingHeader = DB::table('ws_final_approval_header')
                     ->where('no_lhp', $orderDetail->cfr)
                     ->first();
@@ -1660,6 +1913,7 @@ class WsFinalApprovalService
 
                         $existingDetail = DB::table('ws_final_approval_detail')
                             ->where('ws_final_approval_header_id', $headerId)
+                            ->where('no_sampel', $orderDetail->no_sampel)
                             ->where('parameter_lab', self::limit($parameterLab, 70))
                             ->first();
 

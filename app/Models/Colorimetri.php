@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SyncsWsFinalApproval;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 use App\Models\Concerns\SyncsWsValueAirFromChild;
 
 class Colorimetri extends Sector
 {
+    use SyncsWsFinalApproval;
+
     use SyncsWsValueAirFromChild;
     protected $table = "colorimetri";
     public $timestamps = false;

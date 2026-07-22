@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
@@ -10,6 +11,7 @@ use App\Models\LingkunganHeader;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\MasterRegulasi;
+use App\Models\MdlUdara;
 use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
@@ -17,7 +19,6 @@ use App\Models\Subkontrak;
 use App\Models\SwabTestHeader;
 use App\Models\WsValueLingkungan;
 use App\Models\WsValueUdara;
-use App\Models\MdlUdara;
 use Carbon\Carbon;
 use Datatables;
 use Illuminate\Http\Request;
@@ -28,7 +29,6 @@ class WsFinalUdaraSwabTesController extends Controller
 
     public function index(Request $request)
     {
-
         $date = explode('-', $request->date);
 
         $data = OrderDetail::selectRaw('
@@ -55,6 +55,9 @@ class WsFinalUdaraSwabTesController extends Controller
             ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', $date[0])->whereMonth('tanggal_sampling', $date[1]))
             ->groupBy('cfr')
             ->orderBy('tanggal_sampling');
+
+        $data = $data->get();
+        $data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
 
         return Datatables::of($data)->make(true);
     }
@@ -100,7 +103,7 @@ class WsFinalUdaraSwabTesController extends Controller
 
             $regulasiArray = json_decode($request->regulasi, true);
 
-// Extract ID regulasi (bagian sebelum dash)
+            // Extract ID regulasi (bagian sebelum dash)
             $id_regulasi = null;
             if (is_array($regulasiArray) && count($regulasiArray) > 0) {
                 $regulasiString = $regulasiArray[0];                // Ambil elemen pertama
@@ -108,14 +111,11 @@ class WsFinalUdaraSwabTesController extends Controller
                 $id_regulasi    = ((int) trim($parts[0]));          // Ambil bagian sebelum dash
             }
 
-            // dd($parameterNames); 
-            // Output: ["E.Coli (Swab Test)", "Total Kuman (Swab Test)"]
-
             $data = SwabTestHeader::with(['ws_udara'])
                 ->where('no_sampel', $request->no_sampel)
                 ->where('is_approved', 1)
                 ->where('status', 0)
-                ->whereIn('parameter', $parameterNames) // Query dengan nama parameter
+                ->whereIn('parameter', $parameterNames)
                 ->where('is_active', 1)
                 ->get();
 
@@ -124,7 +124,7 @@ class WsFinalUdaraSwabTesController extends Controller
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', 1)
                     ->where('status', 0)
-                    ->whereIn('parameter', $parameterNames) // Query dengan nama parameter
+                    ->whereIn('parameter', $parameterNames)
                     ->where('is_active', 1)
                     ->get();
             }
@@ -132,7 +132,7 @@ class WsFinalUdaraSwabTesController extends Controller
             $data2 = SubKontrak::with(['ws_value_linkungan', 'ws_udara'])
                 ->where('no_sampel', $request->no_sampel)
                 ->where('is_approve', 1)
-                ->whereIn('parameter', $parameterNames) // Query dengan nama parameter
+                ->whereIn('parameter', $parameterNames)
                 ->where('is_active', 1)
                 ->get();
 
@@ -155,115 +155,109 @@ class WsFinalUdaraSwabTesController extends Controller
                 $item->nama_header = $bakuMutu->nama_header ?? null;
             }
 
-            $getSatuan = new HelperSatuan;
+            $getSatuan  = new HelperSatuan;
             $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
-            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            $mdlUdara   = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
 
             $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
                 if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
                     $colToSearch = "hasil" . ($index ?: 1);
-                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
-                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
-                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    $mdl         = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdl && (float) $mdl->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdl->$colToSearch;
                     }
                 }
 
                 return $hasilUji;
             };
 
-			return Datatables::of($merge)
-				->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
-					// ambil satuan dan index (boleh null)
-					$satuan = $item->satuan ?? null;
-					$index  = $getSatuan->udara($satuan);
+            return Datatables::of($merge)
+                ->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
+                    $satuan = $item->satuan ?? null;
+                    $index  = $getSatuan->udara($satuan);
 
-					// pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
-					$source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
-					if (!$source) return 'noWs';
+                    $source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+                    if (!$source) {
+                        return 'noWs';
+                    }
 
-					// pastikan array
-					$hasil = is_array($source) ? $source : $source->toArray();
-					// helper kecil: cek tersedia dan tidak kosong
-					$has = function ($key) use ($hasil) {
-						return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
-					};
+                    $hasil = is_array($source) ? $source : $source->toArray();
+                    $has   = function ($key) use ($hasil) {
+                        return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
+                    };
 
-					// jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
-					if ($index === null) {
-						// 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
-						if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
+                    if ($index === null) {
+                        // 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
+                        if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
 
-						for ($i = 1; $i <= 16; $i++) {
-							$k = "f_koreksi_c{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
-						}
+                        for ($i = 1; $i <= 16; $i++) {
+                            $k = "f_koreksi_c{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
 
+                        // 2) C (tanpa nomor) lalu C1..C16
+                        if ($has('C')) return $hasil['C'];
+                        for ($i = 1; $i <= 16; $i++) {
+                            $k = "C{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
 
-						// 2) C (tanpa nomor) lalu C1..C16
-						if ($has('C')) return $hasil['C'];
-						for ($i = 1; $i <= 16; $i++) {
-							$k = "C{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
-						}
+                        // 3) f_koreksi_1..f_koreksi_17
+                        for ($i = 1; $i <= 17; $i++) {
+                            $k = "f_koreksi_{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
 
-						// 3) f_koreksi_1..f_koreksi_17
-						for ($i = 1; $i <= 17; $i++) {
-							$k = "f_koreksi_{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
-						}
+                        // 4) hasil1..hasil17
+                        for ($i = 1; $i <= 17; $i++) {
+                            $k = "hasil{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
 
-						// 4) hasil1..hasil17
-						for ($i = 1; $i <= 17; $i++) {
-							$k = "hasil{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
-						}
+                        return '-';
+                    }
 
-						// kalau semua gagal
-						return '-';
-					}
+                    $CIndex     = $index == 1 ? '' : $index - 1;
+                    $keysToTry  = [
+                        "f_koreksi_c{$index}",
+                        "C{$CIndex}",
+                        "f_koreksi_{$index}",
+                        "hasil{$index}",
+                    ];
 
-					$CIndex = $index == 1 ? '' : $index - 1;
-					// bila index diketahui, cek urutan preferensi khusus index itu
-					$keysToTry = [
-						"f_koreksi_c{$index}", // contoh: f_koreksi_c3
-						"C{$CIndex}",           // contoh: C3
-						"f_koreksi_{$index}",  // contoh: f_koreksi_3
-						"hasil{$index}"
-					];
+                    if ($index == 17) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    } elseif ($index == 15) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    } elseif ($index == 16) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+                            if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    } else {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+                            if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    }
 
-					if ($index == 17) {
-						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-					} if ($index == 15) {
-						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-					} if ($index == 16) {
-						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-					} else {
-						foreach ($keysToTry as $k) {
-							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
-						}
-					}
-
-					return '-';
-				})
-				->make(true);
+                    return '-';
+                })
+                ->make(true);
 
         } catch (\Throwable $th) {
             DB::rollBack();
@@ -277,7 +271,7 @@ class WsFinalUdaraSwabTesController extends Controller
     {
         $parameterNames = [];
 
-        if (! isset($request->parameter) || $request->parameter == null || $request->parameter == '') {
+        if (!isset($request->parameter) || $request->parameter == null || $request->parameter == '') {
             return response()->json(['message' => 'Parameter tidak ditemukan'], 401);
         }
 
@@ -303,11 +297,9 @@ class WsFinalUdaraSwabTesController extends Controller
         $totLapangan = $lapangan2->count();
 
         try {
-            $data = [];
-
             $data = DataLapanganSwab::where('no_sampel', $request->no_sampel)->first();
 
-            if (! $data) {
+            if (!$data) {
                 return response()->json(['message' => 'Data Lapangan Tidak Ditemukan'], 401);
             }
 
@@ -316,13 +308,10 @@ class WsFinalUdaraSwabTesController extends Controller
             $data['urutan']    = "{$urutanDisplay}/{$totLapangan}";
             $data['parameter'] = $parameterNames[0];
 
-            if ($data) {
-                return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-            }
+            return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
         } catch (\Exception $ex) {
             dd($ex);
         }
-
     }
 
     public function rejectAnalys(Request $request)
@@ -354,7 +343,6 @@ class WsFinalUdaraSwabTesController extends Controller
     public function approveWSApi(Request $request)
     {
         if ($request->id) {
-
             if (in_array($request->kategori, $this->categoryKebisingan)) {
                 $data = KebisinganHeader::where('parameter', $request->parameter)
                     ->where('lhps', 1)
@@ -437,10 +425,8 @@ class WsFinalUdaraSwabTesController extends Controller
 
     public function validasiApproveWSApi(Request $request)
     {
-
         DB::beginTransaction();
         try {
-
             if ($request->id) {
                 $data               = OrderDetail::where('id', $request->id)->first();
                 $data->status       = 1;
@@ -494,11 +480,9 @@ class WsFinalUdaraSwabTesController extends Controller
             $hasilujic      = html_entity_decode($request->hasil_c);
             $hasilujic1     = html_entity_decode($request->hasil_c1);
             $hasilujic2     = html_entity_decode($request->hasil_c2);
-            // dd($request->all());
 
             $hasil = $this->hitungKoreksi($request, $type_koreksi, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilPengujian, $hasilujic, $hasilujic1, $hasilujic2);
 
-            // Format hasil menjadi 4 angka di belakang koma jika numerik
             if (is_numeric($hasil)) {
                 $hasil = number_format((float) $hasil, 4, '.', '');
             }
@@ -526,37 +510,33 @@ class WsFinalUdaraSwabTesController extends Controller
 
     public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
     {
-
         $po = OrderDetail::where('no_sampel', $no_sampel)
             ->where('is_active', 1)
-            ->where('parameter', 'like', '%' . $parameter . '%') // Menambahkan kondisi where dengan like
+            ->where('parameter', 'like', '%' . $parameter . '%')
             ->first();
         try {
-            // Fungsi untuk menghapus karakter spesial dari nilai
             function removeSpecialChars($value)
             {
                 return is_string($value) ? str_replace('<', '', $value) : $value;
             }
 
-            // Fungsi untuk memeriksa apakah nilai mengandung karakter spesial '<'
             function cekSpecialChar($value)
             {
                 return is_string($value) && strpos($value, '<') !== false;
             }
 
-            // Fungsi untuk menerapkan rumus dengan cek terhadap nilai null
             function applyFormula($value, float $factor, $parameter)
             {
-                $cleanedValue = removeSpecialChars($value); // Hapus karakter spesial saat perhitungan
+                $cleanedValue = removeSpecialChars($value);
                 if ($cleanedValue == null || $cleanedValue === '') {
                     return '';
                 }
                 $hasil = '';
                 $MDL   = floatval($cleanedValue);
-                if (! is_nan($MDL)) {
-                    if (cekSpecialChar($value)) { // Cek karakter spesial sebelum perhitungan
+                if (!is_nan($MDL)) {
+                    if (cekSpecialChar($value)) {
                         $hasil = (($MDL / 0.072) * ($factor / 100)) + ($MDL / 0.072);
-                        return $hasil; // Tambahkan karakter spesial di depan hasil
+                        return $hasil;
                     } else {
                         $hasil = ($MDL * ($factor / 100)) + $MDL;
                         return $hasil;
@@ -565,35 +545,19 @@ class WsFinalUdaraSwabTesController extends Controller
                 return '';
             }
 
-            $hasil = ['hasilc' => '', 'hasilc1' => '', 'hasilc2' => '']; // Default hasil
+            $hasil = ['hasilc' => '', 'hasilc1' => '', 'hasilc2' => ''];
 
             $cases = [
-                'SO2',
-                "SO2 (6 Jam)",
-                "SO2 (8 Jam)",
-                "SO2 (24 Jam)",
-                'NO2',
-                "NO2 (6 Jam)",
-                "NO2 (8 Jam)",
-                "NO2 (24 Jam)",
-                'O3',
-                "O3 (8 Jam)",
-                'TSP',
-                "TSP (6 Jam)",
-                "TSP (8 Jam)",
-                "TSP (24 Jam)",
-                'PM 2.5',
-                "PM 2.5 (8 Jam)",
-                "PM 2.5 (24 Jam)",
-                'PM 10',
-                "PM 10 (8 Jam)",
-                "PM 10 (24 Jam)",
+                'SO2', "SO2 (6 Jam)", "SO2 (8 Jam)", "SO2 (24 Jam)",
+                'NO2', "NO2 (6 Jam)", "NO2 (8 Jam)", "NO2 (24 Jam)",
+                'O3', "O3 (8 Jam)",
+                'TSP', "TSP (6 Jam)", "TSP (8 Jam)", "TSP (24 Jam)",
+                'PM 2.5', "PM 2.5 (8 Jam)", "PM 2.5 (24 Jam)",
+                'PM 10', "PM 10 (8 Jam)", "PM 10 (24 Jam)",
             ];
 
             foreach ($cases as $case) {
-                // Cek apakah $case ada di dalam $parameter, memastikan perbandingan yang lebih spesifik
                 if ($case == $parameter) {
-                    // Jika ditemukan, lakukan perhitungan
                     $hasil['hasilc']  = (empty($hasilujic)) ? null : applyFormula($hasilujic, $faktor_koreksi, $parameter);
                     $hasil['hasilc1'] = (empty($hasilujic1)) ? null : applyFormula($hasilujic1, $faktor_koreksi, $parameter);
                     $hasil['hasilc2'] = (empty($hasilujic2)) ? null : applyFormula($hasilujic2, $faktor_koreksi, $parameter);
@@ -602,160 +566,74 @@ class WsFinalUdaraSwabTesController extends Controller
                 }
 
                 if ($parameter == 'NO2' || $parameter == 'NO2 (24 Jam)' || $parameter == 'NO2 (8 Jam)' || $parameter == 'NO2 (6 Jam)') {
-                    if ($hasil['hasilc'] < 0.4623) {
-                        $hasil['hasilc'] = '<0.4623';
-                    }
-
-                    if ($hasil['hasilc1'] < 0.00046) {
-                        $hasil['hasilc1'] = '<0.00046';
-                    }
-
-                    if ($hasil['hasilc2'] < 0.00025) {
-                        $hasil['hasilc2'] = '<0.00025';
-                    }
+                    if ($hasil['hasilc'] < 0.4623) $hasil['hasilc'] = '<0.4623';
+                    if ($hasil['hasilc1'] < 0.00046) $hasil['hasilc1'] = '<0.00046';
+                    if ($hasil['hasilc2'] < 0.00025) $hasil['hasilc2'] = '<0.00025';
                 }
 
                 if ($parameter == 'SO2' || $parameter == 'SO2 (24 Jam)' || $parameter == 'SO2 (8 Jam)' || $parameter == 'SO2 (6 Jam)') {
-                    // Pastikan hasil dari rumusUdara valid
-
-                    if ($hasil['hasilc'] < 2.1531) {
-                        $hasil['hasilc'] = '<2.1531';
-                    }
-
-                    if ($hasil['hasilc1'] < 0.0022) {
-                        $hasil['hasilc1'] = '<0.0022';
-                    }
-
-                    if ($hasil['hasilc2'] < 0.00082) {
-                        $hasil['hasilc2'] = '<0.00082';
-                    }
+                    if ($hasil['hasilc'] < 2.1531) $hasil['hasilc'] = '<2.1531';
+                    if ($hasil['hasilc1'] < 0.0022) $hasil['hasilc1'] = '<0.0022';
+                    if ($hasil['hasilc2'] < 0.00082) $hasil['hasilc2'] = '<0.00082';
                 }
 
                 if ($parameter == 'O3' || $parameter == 'O3 (8 Jam)') {
-                    // Pastikan hasil dari rumusUdara valid
-
-                    if ($hasil['hasilc'] < 0.1419) {
-                        $hasil['hasilc'] = '<0.1419';
-                    }
-
-                    if ($hasil['hasilc1'] < 0.00014) {
-                        $hasil['hasilc1'] = '<0.00014';
-                    }
-
-                    if ($hasil['hasilc2'] < 0.00007) {
-                        $hasil['hasilc2'] = '<0.00007';
-                    }
+                    if ($hasil['hasilc'] < 0.1419) $hasil['hasilc'] = '<0.1419';
+                    if ($hasil['hasilc1'] < 0.00014) $hasil['hasilc1'] = '<0.00014';
+                    if ($hasil['hasilc2'] < 0.00007) $hasil['hasilc2'] = '<0.00007';
                 }
 
                 if ($po->kategori_3 == 27) {
                     if ($parameter == 'TSP') {
-                        // Pastikan hasil dari rumusUdara valid
-                        if (! isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
+                        if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
                             return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
                         }
-                        // if($hasil['hasilc'] < 16.7){
-                        //     $hasil['hasilc'] = '<16.7';
-                        // }
-
-                        // if($hasil['hasilc1'] < 0.0167){
-                        //     $hasil['hasilc1'] = '<0.0167';
-                        // }
-                        if ($hasil['hasilc'] < 0.001) {
-                            $hasil['hasilc'] = '<0.001';
-                        }
-
-                        if ($hasil['hasilc1'] < 0.001) {
-                            $hasil['hasilc1'] = '<0.001';
-                        }
-
+                        if ($hasil['hasilc'] < 0.001) $hasil['hasilc'] = '<0.001';
+                        if ($hasil['hasilc1'] < 0.001) $hasil['hasilc1'] = '<0.001';
                         $hasil['hasilc2'] = null;
-                    } else if ($parameter == 'TSP (8 Jam)') {
-                        if (! isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
+                    } elseif ($parameter == 'TSP (8 Jam)') {
+                        if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
                             return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
                         }
-                        // if($hasil['hasilc'] < 0.0021){
-                        //     $hasil['hasilc'] = '<0.0021';
-                        // }
-
-                        // if($hasil['hasilc1'] < 2.1000){
-                        //     $hasil['hasilc1'] = '<2.1000';
-                        // }
-                        if ($hasil['hasilc'] < 0.001) {
-                            $hasil['hasilc'] = '<0.001';
-                        }
-
-                        if ($hasil['hasilc1'] < 0.001) {
-                            $hasil['hasilc1'] = '<0.001';
-                        }
-
+                        if ($hasil['hasilc'] < 0.001) $hasil['hasilc'] = '<0.001';
+                        if ($hasil['hasilc1'] < 0.001) $hasil['hasilc1'] = '<0.001';
                         $hasil['hasilc2'] = null;
                     }
-                } else if ($po->kategori_3 == 11) {
+                } elseif ($po->kategori_3 == 11) {
                     if ($parameter == 'TSP') {
-                        // Pastikan hasil dari rumusUdara valid
-                        if (! isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
+                        if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
                             return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
                         }
-                        if ($hasil['hasilc'] < 1.5151) {
-                            $hasil['hasilc'] = '<1.5151';
-                        }
-
-                        if ($hasil['hasilc1'] < 0.0015) {
-                            $hasil['hasilc1'] = '<0.0015';
-                        }
-                        if ($hasil['hasilc2'] == 0.0) {
-                            $hasil['hasilc2'] = '';
-                        }
+                        if ($hasil['hasilc'] < 1.5151) $hasil['hasilc'] = '<1.5151';
+                        if ($hasil['hasilc1'] < 0.0015) $hasil['hasilc1'] = '<0.0015';
+                        if ($hasil['hasilc2'] == 0.0) $hasil['hasilc2'] = '';
                     }
 
                     if ($parameter == 'TSP (24 Jam)') {
-                        // Pastikan hasil dari rumusUdara valid
-                        if (! isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
+                        if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
                             return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
                         }
-                        if ($hasil['hasilc'] < 0.0631) {
-                            $hasil['hasilc'] = '<0.0631';
-                        }
-
-                        if ($hasil['hasilc1'] < 0.000063) {
-                            $hasil['hasilc1'] = '<0.000063';
-                        }
-                        if ($hasil['hasilc2'] == 0.0) {
-                            $hasil['hasilc2'] = '';
-                        }
+                        if ($hasil['hasilc'] < 0.0631) $hasil['hasilc'] = '<0.0631';
+                        if ($hasil['hasilc1'] < 0.000063) $hasil['hasilc1'] = '<0.000063';
+                        if ($hasil['hasilc2'] == 0.0) $hasil['hasilc2'] = '';
                     }
                 }
 
                 if ($parameter == 'PM 10' || $parameter == 'PM 10 (8 Jam)' || $parameter == 'PM 10 (24 Jam)') {
-                    if ($hasil['hasilc'] < 0.56) {
-                        $hasil['hasilc'] = '<0.56';
-                    }
-
-                    if ($hasil['hasilc1'] < 0.00056) {
-                        $hasil['hasilc1'] = '<0.00056';
-                    }
-                    if ($hasil['hasilc2'] == 0.0) {
-                        $hasil['hasilc2'] = '';
-                    }
+                    if ($hasil['hasilc'] < 0.56) $hasil['hasilc'] = '<0.56';
+                    if ($hasil['hasilc1'] < 0.00056) $hasil['hasilc1'] = '<0.00056';
+                    if ($hasil['hasilc2'] == 0.0) $hasil['hasilc2'] = '';
                 }
 
                 if ($parameter == 'PM 2.5' || $parameter == 'PM 2.5 (8 Jam)' || $parameter == 'PM 2.5 (24 Jam)') {
-
-                    if ($hasil['hasilc'] < 0.58) {
-                        $hasil['hasilc'] = '<0.58';
-                    }
-
-                    if ($hasil['hasilc1'] < 0.00058) {
-                        $hasil['hasilc1'] = '<0.00058';
-                    }
-                    if ($hasil['hasilc2'] == 0.0) {
-                        $hasil['hasilc2'] = '';
-                    }
+                    if ($hasil['hasilc'] < 0.58) $hasil['hasilc'] = '<0.58';
+                    if ($hasil['hasilc1'] < 0.00058) $hasil['hasilc1'] = '<0.00058';
+                    if ($hasil['hasilc2'] == 0.0) $hasil['hasilc2'] = '';
                 }
             }
-            return $hasil; // Mengembalikan array hasil
+
+            return $hasil;
         } catch (\Exception $e) {
-            // Log error atau lakukan penanganan kesalahan yang sesuai
             \Log::error('Error in rumusUdara: ' . $e->getMessage());
             return ['error' => 'Terjadi kesalahan saat memproses data'];
         }
@@ -776,13 +654,13 @@ class WsFinalUdaraSwabTesController extends Controller
 
         if ($kategori_koreksi) {
             switch ($kategori_koreksi) {
-                //AIR
                 case '11':
                     $udara = LingkunganHeader::with('ws_value_linkungan')
                         ->where('no_sampel', $request->no_sampel)
                         ->where('is_active', 1)->first();
 
                     return $this->handleLingkungan($request, $no_sampel, $parameter, $hasil_c, $hasil_c1, $hasil_c2, $udara, $faktor_koreksi);
+
                 case '27':
                     $udara = LingkunganHeader::with('ws_value_linkungan')
                         ->where('no_sampel', $request->no_sampel)
@@ -801,7 +679,6 @@ class WsFinalUdaraSwabTesController extends Controller
     private function handleLingkungan($request, $no_sampel, $parameter, $hasil_c, $hasil_c1, $hasil_c2, $udara, $faktor_koreksi)
     {
         try {
-            // dd($faktor_koreksi, $udara);
             DB::beginTransaction();
             $po = OrderDetail::where('no_sampel', $no_sampel)
                 ->where('is_active', 1)
@@ -831,13 +708,13 @@ class WsFinalUdaraSwabTesController extends Controller
                     $lingkungan->tipe_koreksi = $nomor;
                     $lingkungan->save();
 
-                    if (! str_contains((string) $hasil_c, '<')) {
+                    if (!str_contains((string) $hasil_c, '<')) {
                         $hasil_c = number_format((float) $hasil_c, 4, '.', '');
                     }
-                    if (! str_contains((string) $hasil_c1, '<')) {
+                    if (!str_contains((string) $hasil_c1, '<')) {
                         $hasil_c1 = number_format((float) $hasil_c1, 4, '.', '');
                     }
-                    if (! str_contains((string) $hasil_c2, '<')) {
+                    if (!str_contains((string) $hasil_c2, '<')) {
                         $hasil_c2 = number_format((float) $hasil_c2, 4, '.', '');
                     }
 
@@ -865,20 +742,14 @@ class WsFinalUdaraSwabTesController extends Controller
 
     public function getKaryawan(Request $request)
     {
-        $data = MasterKaryawan::where('is_active', true)
-            ->get();
+        $data = MasterKaryawan::where('is_active', true)->get();
         return $data;
     }
 
     public function updateTindakan(Request $request)
     {
-
         try {
-            // dd($request->all());
-
-            if (
-                in_array($request->kategori, $this->categoryKebisingan)
-            ) {
+            if (in_array($request->kategori, $this->categoryKebisingan)) {
                 $data           = WsValueUdara::where('id', $request->id)->first();
                 $data->tindakan = $request->tindakan;
                 $data->save();
@@ -902,16 +773,16 @@ class WsFinalUdaraSwabTesController extends Controller
         DB::beginTransaction();
         try {
             $header = SwabTestHeader::where('no_sampel', $request->no_sampel)->update([
-                'is_approved'   => 0,
+                'is_approved'  => 0,
                 'is_active'    => 0,
                 'notes_reject' => $request->note,
                 'rejected_by'  => $this->karyawan,
                 'rejected_at'  => Carbon::now(),
             ]);
 
-            if (! $header) {
+            if (!$header) {
                 $header = MicrobioHeader::where('no_sampel', $request->no_sampel)->update([
-                    'is_approved'   => 0,
+                    'is_approved'  => 0,
                     'is_active'    => 0,
                     'notes_reject' => $request->note,
                     'rejected_by'  => $this->karyawan,
@@ -946,33 +817,29 @@ class WsFinalUdaraSwabTesController extends Controller
 
             foreach ($orderDetails as $detail) {
                 HistoryAppReject::insert([
-                    'no_lhp' => $detail->cfr,
-                    'no_sampel' => $detail->no_sampel,
-                    'kategori_2' => $detail->kategori_2,
-                    'kategori_3' => $detail->kategori_3,
-                    'menu' => 'WS Final Udara',
-                    'status' => 'approve',
+                    'no_lhp'      => $detail->cfr,
+                    'no_sampel'   => $detail->no_sampel,
+                    'kategori_2'  => $detail->kategori_2,
+                    'kategori_3'  => $detail->kategori_3,
+                    'menu'        => 'WS Final Udara',
+                    'status'      => 'approve',
                     'approved_at' => Carbon::now(),
                     'approved_by' => $this->karyawan,
                 ]);
             }
 
             $header = SwabTestHeader::whereIn('no_sampel', $request->no_sampel_list)
-                ->update([
-                    'lhps' => 1,
-                ]);
+                ->update(['lhps' => 1]);
 
-            if (! $header) {
+            if (!$header) {
                 $header = MicrobioHeader::whereIn('no_sampel', $request->no_sampel_list)
-                    ->update([
-                        'lhps' => 1,
-                    ]);
+                    ->update(['lhps' => 1]);
             }
 
             $header2 = SubKontrak::whereIn('no_sampel', $request->no_sampel_list)
-                ->update([
-                    'lhps' => 1,
-                ]);
+                ->update(['lhps' => 1]);
+
+            \App\Services\WsFinalApprovalService::finalizeSamples($orderDetails, true, $this->karyawan);
 
             DB::commit();
             return response()->json([

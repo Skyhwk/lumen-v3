@@ -812,4 +812,3 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 	}
 
 }
-
