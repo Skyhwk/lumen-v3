@@ -44,7 +44,7 @@ class FdlAirController extends Controller
             $q->where('is_rejected', 1)
             ->orWhere(function ($q2) {
                 $q2->where('is_rejected', 0)
-                    ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                    ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
             });
         });
 
@@ -67,7 +67,7 @@ class FdlAirController extends Controller
     public function dashboardData()
     {
         $datas = DataLapanganAir::where('created_by', $this->karyawan)
-        ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+        ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
         ->orderBy('id', 'desc')->get();
 
         $permukaan = 0;

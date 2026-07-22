@@ -331,7 +331,7 @@ class FdlMethodRwlController extends Controller
     //         } else {
     //             if ($request->method == 2) {
     //                 $data = DataLapanganErgonomi::with('detail')->where('method', 2)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
+    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
     //                     ->orderBy('id', 'desc');
     //             }
     //         }
@@ -350,7 +350,7 @@ class FdlMethodRwlController extends Controller
 
         $query = DataLapanganErgonomi::with('detail')
             ->where('created_by', $this->karyawan)->where('method', 5)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
