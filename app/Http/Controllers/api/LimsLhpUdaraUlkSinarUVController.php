@@ -138,4 +138,50 @@ class LimsLhpUdaraUlkSinarUVController extends Controller
             'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
         ], 200);
     }
+
+    public function viewOnTheFly(Request $request) 
+    {
+        try {
+            $header = \App\Models\LhpsSinarUVHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            if (!$header) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
+            }
+
+            $detail = \App\Models\LhpsSinarUVDetail::where('id_header', $header->id)->get();
+            $custom = \App\Models\LhpsSinarUVCustom::where('id_header', $header->id)->get();
+
+            $groupedByPage = [];
+            if (!empty($custom)) {
+                foreach ($custom->toArray() as $item) {
+                    $page = $item['page'];
+                    if (!isset($groupedByPage[$page])) {
+                        $groupedByPage[$page] = [];
+                    }
+                    $groupedByPage[$page][] = $item;
+                }
+            }
+
+            $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftUlkSinarUv')
+                ->render('downloadLHPFinal');
+
+            return response()->json([
+                'status' => true,
+                'file_name' => $fileName,
+                'message' => 'PDF generated on the fly'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
 }

@@ -181,4 +181,50 @@ class LimsLhpAirController extends Controller
             'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
         ], 200);
     }
+
+    public function viewOnTheFly(Request $request) 
+    {
+        try {
+            $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            if (!$header) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
+            }
+
+            $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+            $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+
+            $groupedByPage = [];
+            if (!empty($custom)) {
+                foreach ($custom->toArray() as $item) {
+                    $page = $item['page'];
+                    if (!isset($groupedByPage[$page])) {
+                        $groupedByPage[$page] = [];
+                    }
+                    $groupedByPage[$page][] = $item;
+                }
+            }
+
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftAir')
+                ->render('downloadLHPFinal');
+
+            return response()->json([
+                'status' => true,
+                'file_name' => $fileName,
+                'message' => 'PDF generated on the fly'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
 }

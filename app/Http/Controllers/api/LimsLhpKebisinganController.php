@@ -213,4 +213,80 @@ class LimsLhpKebisinganController extends Controller
             ], 401);
         }
     }
+
+    public function viewOnTheFly(Request $request) 
+    {
+        try {
+            $header = \App\Models\LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            if (!$header) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
+            }
+
+            $detail = \App\Models\LhpsKebisinganDetail::where('id_header', $header->id)->get();
+            $detail = collect($detail)->sortBy([
+                ['tanggal_sampling', 'asc'],
+                ['no_sampel', 'asc']
+            ])->values()->toArray();
+
+            $custom = collect(\App\Models\LhpsKebisinganCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+
+            $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
+            $fileName = '';
+            
+            if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+                $master_regulasi = \App\Models\MasterRegulasi::find($id_regulasii);
+                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                    $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($header)
+                        ->setDataCustom($custom)
+                        ->useLampiran(true)
+                        ->whereView('DraftKebisinganLh')
+                        ->render('downloadLHPFinal');
+                } else if (
+                    $master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' ||
+                    $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)' ||
+                    $master_regulasi->deskripsi == 'Kebisingan 24 Jam'
+                ) {
+                    $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($header)
+                        ->setDataCustom($custom)
+                        ->useLampiran(true)
+                        ->whereView('DraftKebisinganLh24Jam')
+                        ->render('downloadLHPFinal');
+                }
+            } else {
+                $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($header)
+                    ->setDataCustom($custom)
+                    ->useLampiran(true)
+                    ->whereView('DraftKebisingan')
+                    ->render('downloadLHPFinal');
+            }
+
+            return response()->json([
+                'status' => true,
+                'file_name' => $fileName,
+                'message' => 'PDF generated on the fly'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
 }
