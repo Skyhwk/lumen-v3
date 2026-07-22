@@ -155,4 +155,40 @@ class LimsLhpUdaraUkMedanMagnetController extends Controller
             'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
         ], 200);
     }
+
+    public function previewLhp(Request $request)
+    {
+        try {
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$header) {
+                return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
+            }
+
+            $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
+            $groupedByPage = collect(LhpsMedanLMCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            $pdfContent = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftUlkMedanMagnet')
+                ->render('downloadLHPFinal', 'S');
+
+            return response()->json([
+                'data' => base64_encode($pdfContent),
+                'message' => 'LHP berhasil dirender'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Gagal merender LHP: ' . $th->getMessage(),
+                'line' => $th->getLine()
+            ], 500);
+        }
+    }
 }

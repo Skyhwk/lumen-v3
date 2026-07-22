@@ -173,4 +173,52 @@ class LimsLhpUdaraAmbientController extends Controller
             'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
         ], 200);
     }
+
+     public function previewLhp(Request $request)
+    {
+        try {
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$header) {
+                return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
+            }
+
+            $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+            $detail = collect($detail)->sortBy([
+                ['tanggal_sampling', 'asc'],
+                ['no_sampel', 'asc']
+            ])->values()->toArray();
+
+            $groupedByPage = collect(LhpsLingCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            foreach ($groupedByPage as $idx => $cstm) {
+                $groupedByPage[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+
+            $pdfContent = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->useLampiran(true)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftUdaraAmbient')
+                ->render('downloadLHPFinal', 'S');
+
+            return response()->json([
+                'data' => base64_encode($pdfContent),
+                'message' => 'LHP berhasil dirender'
+            ], 200);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Gagal merender LHP: ' . $th->getMessage(),
+                'line' => $th->getLine()
+            ], 500);
+        }
+    }
 }
