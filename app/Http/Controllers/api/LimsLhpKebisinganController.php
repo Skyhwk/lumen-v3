@@ -229,7 +229,7 @@ class LimsLhpKebisinganController extends Controller
             }
 
             $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
-            $custom = LhpsKebisinganDetail::where('id_header', $header->id)->get();
+            $custom = LhpsKebisinganCustom::where('id_header', $header->id)->get();
 
             $groupedByPage = [];
             if (!empty($custom)) {

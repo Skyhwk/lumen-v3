@@ -154,7 +154,7 @@ class LimsLhpUdaraUlkSinarUVController extends Controller
             }
 
             $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
-            $custom = LhpsSinarUVDetail::where('id_header', $header->id)->get();
+            $custom = \App\Models\lhpsSinarUVCustom::where('id_header', $header->id)->get();
 
             $groupedByPage = [];
             if (!empty($custom)) {

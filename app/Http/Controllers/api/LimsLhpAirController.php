@@ -197,7 +197,7 @@ class LimsLhpAirController extends Controller
             }
 
             $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-            $custom = LhpsAirDetail::where('id_header', $header->id)->get();
+            $custom = LhpsAirCustom::where('id_header', $header->id)->get();
 
             $groupedByPage = [];
             if (!empty($custom)) {
