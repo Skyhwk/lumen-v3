@@ -252,27 +252,61 @@ class LHPHandleController extends BaseController
             return $values;
         }
 
+        $rawParameterId = null;
+        $rawParameterName = null;
+        if (is_string($rawParameter) && strpos($rawParameter, ';') !== false) {
+            [$rawParameterId, $rawParameterName] = explode(';', $rawParameter, 2);
+        }
+
+        $searchKeys = array_filter([$parameter, $rawParameterName, $rawParameter, $rawParameterId]);
+
+        // 1. Cari pada array of objects/arrays jika tiap elemen memiliki properti nama parameter
+        foreach ($values as $item) {
+            if (is_array($item)) {
+                $itemParam = $item['parameter_regulasi'] ?? $item['parameter'] ?? $item['parameter_lab'] ?? $item['name'] ?? null;
+                if ($itemParam !== null) {
+                    foreach ($searchKeys as $key) {
+                        if (strcasecmp(trim($itemParam), trim($key)) === 0) {
+                            return $item['hasil_uji'] ?? $item['hasilUji'] ?? $item['hasil'] ?? $item['value'] ?? null;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Cari jika $values merupakan associative array dengan key nama parameter
+        foreach ($searchKeys as $key) {
+            if (array_key_exists($key, $values)) {
+                $value = $values[$key];
+                return is_array($value)
+                    ? ($value['hasil_uji'] ?? $value['hasilUji'] ?? $value['hasil'] ?? $value['value'] ?? null)
+                    : $value;
+            }
+        }
+
+        // 3. Fallback ke index numerik jika elemen tidak memiliki properti nama parameter yang berbeda
         if (array_key_exists($index, $values)) {
             $value = $values[$index];
 
             if (is_array($value)) {
+                $itemParam = $value['parameter_regulasi'] ?? $value['parameter'] ?? $value['parameter_lab'] ?? null;
+                if ($itemParam !== null) {
+                    $matched = false;
+                    foreach ($searchKeys as $key) {
+                        if (strcasecmp(trim($itemParam), trim($key)) === 0) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if (!$matched) {
+                        return null;
+                    }
+                }
+
                 return $value['hasil_uji'] ?? $value['hasilUji'] ?? $value['hasil'] ?? $value['value'] ?? null;
             }
 
             return $value;
-        }
-
-        $rawParameterId = null;
-        if (is_string($rawParameter) && strpos($rawParameter, ';') !== false) {
-            [$rawParameterId] = explode(';', $rawParameter, 2);
-        }
-
-        foreach (array_filter([$parameter, $rawParameter, $rawParameterId]) as $key) {
-            if (array_key_exists($key, $values)) {
-                return is_array($values[$key])
-                    ? ($values[$key]['hasil_uji'] ?? $values[$key]['hasilUji'] ?? $values[$key]['hasil'] ?? $values[$key]['value'] ?? null)
-                    : $values[$key];
-            }
         }
 
         return null;
@@ -281,10 +315,14 @@ class LHPHandleController extends BaseController
     private function normalizeHasilUji($hasil): string
     {
         if (is_array($hasil)) {
-            $hasil = collect($hasil)->filter(fn($value) => $value !== null && $value !== '')->implode('<br />');
+            $hasil = collect($hasil)
+                ->filter(fn($value) => $value !== null && $value !== '' && $value !== '[]' && $value !== 'null')
+                ->implode('<br />');
         }
 
-        if ($hasil === null || $hasil === '') {
+        $trimmed = is_string($hasil) ? trim($hasil) : $hasil;
+
+        if ($hasil === null || $trimmed === '' || $trimmed === '[]' || $trimmed === 'null') {
             return '-';
         }
 
