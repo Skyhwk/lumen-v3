@@ -41,8 +41,22 @@ class LimsLhpIklimController extends Controller
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "21-Iklim Kerja")
             ->where('status', 3)
-            ->groupBy('cfr')
-            ->get();
+            ->groupBy('cfr');
+
+        if ($request->has('month_year') && !empty($request->month_year)) {
+            $parts = explode('-', $request->month_year);
+            if (count($parts) === 2) {
+                $year = $parts[0];
+                $month = $parts[1];
+                $matchingIds = \App\Models\LhpsIklimHeader::whereYear('tanggal_lhp', $year)
+                    ->whereMonth('tanggal_lhp', $month)
+                    ->where('is_active', true)
+                    ->pluck('no_lhp');
+                $data->whereIn('cfr', $matchingIds);
+            }
+        }
+
+        $data = $data->get();
 
         // Bersihin regulasi duplikat berdasarkan ID
         foreach ($data as $item) {
