@@ -40,6 +40,7 @@ class Kernel extends ConsoleKernel
         Commands\MonitorQsdForecast::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
+        Commands\LhpBackfillCommand::class,
     ];
 
     /**
