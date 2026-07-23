@@ -148,6 +148,15 @@ class LimsLhpUdaraPencahayaanController extends Controller
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
             }
 
+            if ($header->file_qr == null) {
+                $file_qr = new \App\Services\GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_PENCAHAYAAN', $header, $this->karyawan ?? 'System');
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
+            }
+
             $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
             $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')

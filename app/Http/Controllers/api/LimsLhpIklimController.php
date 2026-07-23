@@ -249,6 +249,15 @@ class LimsLhpIklimController extends Controller
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
             }
 
+            if ($header->file_qr == null) {
+                $file_qr = new \App\Services\GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_IKLIM', $header, $this->karyawan ?? 'System');
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
+            }
+
             $parameter = null;
             if ($request->has('parameter') && !empty($request->parameter)) {
                 $decoded = json_decode($request->parameter, true);
