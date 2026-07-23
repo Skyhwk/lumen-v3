@@ -8,7 +8,8 @@ use App\Models\OrderDetail;
 use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
 use App\Models\Parameter;
-
+use App\Models\WsFinalApprovalDetail;
+use App\Models\WsFinalApprovalHeader;
 use Schema;
 
 use Carbon\Carbon;
@@ -313,6 +314,85 @@ class CheckOrderActive extends Command
         return null;
     }
 
+    private function buildHasilUji(array $sampelNumbers, $kategori_2, array $expectedParams = [], $steps){
+       $details = WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)
+           ->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])
+           ->toArray();
+
+       $categoryName = '';
+       if (!empty($kategori_2)) {
+           $parts = explode('-', $kategori_2);
+           $categoryName = isset($parts[1]) ? trim($parts[1]) : trim($kategori_2);
+       }
+
+       $hasilJikaDetailKosong = null;
+
+       $orderDate = $steps['order']['date'] ?? '';
+       $samplingDate = $steps['sampling']['date'] ?? '';
+       $analisaDate = $steps['analisa']['date'] ?? '';
+
+       if ($orderDate !== '' && (!isset($samplingDate) || $samplingDate == '' || $samplingDate == null)){
+           $hasilJikaDetailKosong = 'Menunggu Sampling';
+       } else if ($samplingDate !== '' && (!isset($analisaDate) || $analisaDate == '' || $analisaDate == null)){
+           $hasilJikaDetailKosong = 'Menunggu Analisa';
+       } else if ($orderDate !== '' && $samplingDate !== '' && $analisaDate !== ''){
+            $hasHeader = WsFinalApprovalHeader::whereHas('details', function ($query) use ($sampelNumbers) {
+                $query->whereIn('no_sampel', $sampelNumbers);
+            })->exists();
+
+            if (!$hasHeader){
+                $hasilJikaDetailKosong = 'Sedang Diverifikasi';
+            }
+       }
+
+       $foundMap = [];
+       foreach ($details as &$detail) {
+           if (empty($detail['parameter_regulasi']) || $detail['parameter_regulasi'] == null) {
+               $param = Parameter::where('is_active', 1)
+                   ->where(function ($q) use ($detail) {
+                       $q->where('nama_lab', $detail['parameter_lab']);
+                   })->whereRaw("TRIM(nama_kategori) = ?", [$categoryName])->first();
+
+               if ($param) {
+                   $detail['parameter_regulasi'] = $param->nama_regulasi;
+               } else {
+                   $detail['parameter_regulasi'] = $detail['parameter_lab'];
+               }
+           }
+
+           foreach ($expectedParams as $expectedParam) {
+               $cleanExpected = strtolower(trim($expectedParam));
+               $cleanRegulasi = strtolower(trim($detail['parameter_regulasi']));
+               if ($cleanExpected === $cleanRegulasi || 
+                   (!empty($cleanRegulasi) && (str_contains($cleanExpected, $cleanRegulasi) || str_contains($cleanRegulasi, $cleanExpected)))) {
+                   $detail['parameter_regulasi'] = $expectedParam;
+                   break;
+               }
+           }
+
+           $key = $detail['no_sampel'] . '|' . ($detail['parameter_regulasi'] ?? '');
+           $foundMap[$key] = true;
+
+           unset($detail['parameter_lab']);
+       }
+
+        foreach ($sampelNumbers as $sampelNumber) {
+           foreach ($expectedParams as $expectedParam) {
+               $key = $sampelNumber . '|' . $expectedParam;
+               if (!isset($foundMap[$key])) {
+                   $details[] = [
+                       'no_sampel' => $sampelNumber,
+                       'parameter_regulasi' => $expectedParam,
+                       'hasil' => $hasilJikaDetailKosong
+                   ];
+                   $foundMap[$key] = true;
+               }
+           }
+        }
+
+       return $details;
+    }
+
     private function buildCfrDetail($group, string $orderDate, array $lhpRecords, $allParameter): array
     {
         $group = collect($group);
@@ -385,23 +465,35 @@ class CheckOrderActive extends Command
 
         $steps['activeStep'] = $this->detectActiveStep($steps);
 
-        return [
+       $lhpRilis = (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5);
+       $sampelNumbers = $group->pluck('no_sampel')->toArray();
+       $parameterHasil = json_decode($d['parameter'] ?? '', true);
+       $parameterRegulasi = $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter);
+       $kategori_2 = $d['kategori_2'] ?? '';
+
+        $result = [
             'no_order'      => $d['no_order'],
             'jumlah_sampel' => $group->count(),
             'cfr'           => $d['cfr'],
             'kategori_1'    => $d['kategori_1'],
-            'kategori_2'    => $d['kategori_2'],
+            'kategori_2'    => $kategori_2,
             'kategori_3'    => $d['kategori_3'],
-            'parameter'          => json_decode($d['parameter'] ?? '', true),
-            'parameter_regulasi' => $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter),
+            'parameter'          => $parameterHasil,
             'regulasi'           => json_decode($d['regulasi'] ?? '', true),
-            'lhp_rilis'     => (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5),
+            'lhp_rilis'     => $lhpRilis,
             'tgl_lhp_rilis' => $tglLhpRilis,
             'steps'         => $steps,
             'points'        => $group->pluck('keterangan_1')->toArray(),
             'categories'    => $group->pluck('kategori_3')->toArray(),
-            'sampelNumbers' => $group->pluck('no_sampel')->toArray(),
+            'sampelNumbers' => $sampelNumbers,          
         ];
+
+        if (!$lhpRilis) {
+            $result['parameter_regulasi'] = $parameterRegulasi;
+            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $kategori_2, $parameterRegulasi, $steps);
+        }
+
+        return $result;
     }
 
     private function buildParameterRegulasi(?string $parameterJson, array $allParameter): array

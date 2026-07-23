@@ -169,6 +169,10 @@ class AksesDatabaseController extends Controller
             $password   = $request->password;
             $ip         = $request->ip_address;
             $database   = $request->database_name;
+            $databases  = json_decode($database, true);
+            if (!is_array($databases)) {
+                $databases = array_map('trim', explode(',', $database));
+            }
             $privileges = $this->buildPrivilegeSQL($request->akses);
             
             // 1️⃣ Simpan ke tabel master
@@ -177,7 +181,7 @@ class AksesDatabaseController extends Controller
                 'username_mysql'=> $username,
                 'password_mysql'=> $password,
                 'ip_address'    => $ip,
-                'database_name' => $database,
+                'database_name' => json_encode($databases),
                 'privileges'    => $privileges,
                 'created_by'    => $this->karyawan ?? 'system',
                 'is_active'     => true
@@ -190,11 +194,15 @@ class AksesDatabaseController extends Controller
             ");
 
             // 3️⃣ Grant Privilege
-            DB::statement("
-                GRANT $privileges
-                ON `$database`.*
-                TO '$username'@'$ip'
-            ");
+            foreach ($databases as $db) {
+                if (!empty($db)) {
+                    DB::statement("
+                        GRANT $privileges
+                        ON `$db`.*
+                        TO '$username'@'$ip'
+                    ");
+                }
+            }
 
             DB::statement("FLUSH PRIVILEGES");
 
@@ -227,6 +235,10 @@ class AksesDatabaseController extends Controller
             $newPassword = $request->password;
             $newIp       = $request->ip_address;
             $database    = $request->database_name;
+            $databases   = json_decode($database, true);
+            if (!is_array($databases)) {
+                $databases = array_map('trim', explode(',', $database));
+            }
             $privileges  = $this->buildPrivilegeSQL($request->akses);
 
             // 1️⃣ Drop user lama
@@ -241,11 +253,15 @@ class AksesDatabaseController extends Controller
             ");
 
             // 3️⃣ Grant privilege baru
-            DB::statement("
-                GRANT $privileges
-                ON `$database`.*
-                TO '$newUsername'@'$newIp'
-            ");
+            foreach ($databases as $db) {
+                if (!empty($db)) {
+                    DB::statement("
+                        GRANT $privileges
+                        ON `$db`.*
+                        TO '$newUsername'@'$newIp'
+                    ");
+                }
+            }
 
             DB::statement("FLUSH PRIVILEGES");
 
@@ -255,7 +271,7 @@ class AksesDatabaseController extends Controller
                 'username_mysql'=> $newUsername,
                 'password_mysql'=> $newPassword,
                 'ip_address'    => $newIp,
-                'database_name' => $database,
+                'database_name' => json_encode($databases),
                 'privileges'    => $privileges,
                 'updated_by'    => $this->karyawan ?? 'system',
                 'updated_at'    => Carbon::now(),

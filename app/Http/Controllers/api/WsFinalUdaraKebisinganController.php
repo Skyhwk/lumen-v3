@@ -31,6 +31,7 @@ class WsFinalUdaraKebisinganController extends Controller
             DB::raw("MAX(parameter) as parameter"),
             DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
             DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			DB::raw("GROUP_CONCAT(DISTINCT no_sampel SEPARATOR ', ') as no_sampel"),
             'no_order',
             'nama_perusahaan',
             'cfr',
@@ -59,11 +60,20 @@ class WsFinalUdaraKebisinganController extends Controller
                     $q->orWhereJsonContains('parameter', $p);
                 }
             })
-            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
+                $from = $request->from . '-01';
+                $to = date('Y-m-t', strtotime($request->to . '-01'));
+
+                return $q->whereBetween('tanggal_sampling', [$from, $to]);
+            })
+            ->when(!$request->filled('from') && !$request->filled('to') && $request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
             ->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
             ->orderBy('tanggal_sampling');
 
-        return Datatables::of($data)->make(true);
+        $data = $data->get();
+		$data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
+
+		return Datatables::of($data)->make(true);
     }
 
     public function getDetailCfr(Request $request)
@@ -282,10 +292,14 @@ class WsFinalUdaraKebisinganController extends Controller
                 $ws = WsValueUdara::where('no_sampel', $request->no_sampel)
                     ->first();
                 if ($data) {
-                    $data->update(['lhps' => 0]);
+                    $data->lhps = 0;
+                    $data->save();
                 } else {
-                    KebisinganHeader::where('id', $request->id)
-                        ->update(['lhps' => 1]);
+                    $cek = KebisinganHeader::find($request->id);
+                    if ($cek) {
+                        $cek->lhps = 1;
+                        $cek->save();
+                    }
                 }
                 if ($ws) {
                     $ws->nab = $request->nab;
@@ -904,6 +918,7 @@ class WsFinalUdaraKebisinganController extends Controller
                     'lhps' => 1,
                 ]);
 
+            \App\Services\WsFinalApprovalService::finalizeSamples($orderDetails, true, $this->karyawan);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',

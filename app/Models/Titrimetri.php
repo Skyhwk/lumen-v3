@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SyncsWsFinalApproval;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 use App\Models\Concerns\SyncsWsValueAirFromChild;
 
 class Titrimetri extends Sector
 {
+    use SyncsWsFinalApproval;
+
     use SyncsWsValueAirFromChild;
     protected $table = "titrimetri";
     public $timestamps = false;

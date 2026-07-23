@@ -44,6 +44,7 @@ class Kernel extends ConsoleKernel
         Commands\TruncateLimsTesting::class,
         Commands\SyncShioElemen::class,
         Commands\BackfillPersiapanSampel::class,
+        Commands\GenerateWsFinalApproval::class,
     ];
 
     /**

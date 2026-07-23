@@ -57,9 +57,40 @@ class WsFinalUdaraController extends Controller
 		$data = OrderDetail::where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
 			->where('status', 0)
-			->whereNotNull('tanggal_terima')
-			->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
-			->orderBy('tanggal_sampling');
+			->whereNotNull('tanggal_terima');
+
+		if ($request->filled('from') && $request->filled('to')) {
+			$from = $request->from . '-01';
+			$to = date('Y-m-t', strtotime($request->to . '-01'));
+			$data->whereBetween('tanggal_sampling', [$from, $to]);
+		} elseif ($request->filled('date')) {
+			[$year, $month] = explode('-', $request->date);
+			$data->whereYear('tanggal_sampling', $year)
+				->whereMonth('tanggal_sampling', $month);
+		}
+
+		$data = $data->orderBy('tanggal_sampling')->get();
+		$progressBySample = \App\Services\WsFinalApprovalService::progressBySample($data);
+
+		$data = $data->filter(function ($item) use ($progressBySample, $request) {
+			$progress = $progressBySample[$item->no_sampel] ?? [
+				'tested' => 0,
+				'total' => 0,
+				'is_complete' => false,
+			];
+
+			$item->progress = $progress['tested'] . ' / ' . $progress['total'];
+
+			if ($request->uji_status === 'lengkap') {
+				return $progress['is_complete'];
+			}
+
+			if ($request->uji_status === 'belum_lengkap') {
+				return !$progress['is_complete'];
+			}
+
+			return true;
+		})->values();
 
 		return Datatables::of($data)->make(true);
 	}
