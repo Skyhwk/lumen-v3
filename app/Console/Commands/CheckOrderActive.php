@@ -9,7 +9,7 @@ use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
 use App\Models\Parameter;
 use App\Models\WsFinalApprovalDetail;
-
+use App\Models\WsFinalApprovalHeader;
 use Schema;
 
 use Carbon\Carbon;
@@ -335,6 +335,14 @@ class CheckOrderActive extends Command
            $hasilJikaDetailKosong = 'Menunggu Sampling';
        } else if ($samplingDate !== '' && (!isset($analisaDate) || $analisaDate == '' || $analisaDate == null)){
            $hasilJikaDetailKosong = 'Menunggu Analisa';
+       } else if ($orderDate !== '' && $samplingDate !== '' && $analisaDate !== ''){
+            $hasHeader = WsFinalApprovalHeader::whereHas('details', function ($query) use ($sampelNumbers) {
+                $query->whereIn('no_sampel', $sampelNumbers);
+            })->exists();
+
+            if (!$hasHeader){
+                $hasilJikaDetailKosong = 'Sedang Diverifikasi';
+            }
        }
 
        $foundMap = [];
