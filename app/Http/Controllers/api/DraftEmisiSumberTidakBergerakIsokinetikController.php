@@ -312,7 +312,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 $groupedByPage[$page][] = $item->toArray();
             }
 
-            $view = 'DraftESTB';
+            $view = 'DraftESTBIsokinetik';
 
             $fileName = LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($dataHeader)
