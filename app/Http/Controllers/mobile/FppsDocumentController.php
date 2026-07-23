@@ -14,8 +14,8 @@ use App\Models\MasterKaryawan;
 
 use Carbon\Carbon;
 
-use App\Models\OrderDetail;
-use App\Models\OrderHeader;
+use App\Models\Lims\OrderDetail;
+use App\Models\Lims\OrderHeader;
 use App\Models\Parameter;
 
 class FppsDocumentController extends Controller
