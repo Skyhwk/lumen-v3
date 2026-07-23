@@ -33,14 +33,17 @@ class FppsDocumentController extends Controller
                     $q->where('nama_jabatan', 'like', '%IT Programming%');
                 })
                 ->exists();
-
+            $periode_awal = Carbon::now()->startOfMonth()->toDateString(); 
+            $periode_akhir = Carbon::now()->endOfMonth()->toDateString();
             $existingWork = DB::table('persiapan_sampel_header')
                 ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded_stps', 'is_printed_stps')
                 ->where('is_active', true)
-                ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+                ->whereBetween('tanggal_sampling', [$periode_awal, $periode_akhir])
                 ->get();
 
             $doneList = [];
+
+            
 
             foreach ($existingWork as $row) {
                 $headerSamplers = explode(',', $row->sampler_jadwal ?? '');
@@ -87,7 +90,7 @@ class FppsDocumentController extends Controller
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
             ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+            ->whereBetween('tanggal_sampling', [$periode_awal, $periode_akhir])
             ->get();
 
             $cabangMap = [
