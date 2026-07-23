@@ -247,6 +247,7 @@ class WsFinalApprovalService
 
         self::syncApprovedParameters($orderDetail->no_sampel, $orderDetail);
         self::syncAirFieldParameters($orderDetail);
+        self::syncEmisiKendaraanFieldParameters($orderDetail);
 
         self::refreshApprovalStatus($orderDetail, $approvedBy);
     }
@@ -1119,6 +1120,71 @@ class WsFinalApprovalService
         }
     }
 
+    private static function syncEmisiKendaraanFieldParameters(OrderDetail $orderDetail): void
+    {
+        self::syncEmisiKendaraanFieldParametersToHeader(self::upsertHeader($orderDetail), $orderDetail);
+    }
+
+    private static function syncEmisiKendaraanFieldParametersToHeader(int $headerId, OrderDetail $orderDetail): void
+    {
+        $category = self::categoryName($orderDetail->kategori_2);
+        if (mb_strtolower((string) $category) !== 'emisi') {
+            return;
+        }
+
+        $subKategori = self::categoryName($orderDetail->kategori_3);
+        $normalizedSub = mb_strtolower((string) $subKategori);
+        if (!str_contains($normalizedSub, 'kendaraan') && !str_contains($normalizedSub, 'bergerak')) {
+            return;
+        }
+
+        $fieldData = \App\Models\DataLapanganEmisiKendaraan::where('no_sampel', $orderDetail->no_sampel)
+            ->where('is_approve', 1)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$fieldData) {
+            return;
+        }
+
+        $headerId = self::upsertHeader($orderDetail);
+        if ($headerId === 0) {
+            return;
+        }
+
+        foreach (self::arrayValue($orderDetail->parameter) as $parameter) {
+            $parameterLab = self::stripIdentifier($parameter);
+            $normalized = mb_strtolower(trim($parameterLab));
+            $result = null;
+
+            if ($normalized === 'co' || str_contains($normalized, 'co (bensin)') || str_contains($normalized, 'co (gas)')) {
+                $co = $fieldData->co;
+                if ($co !== null && floatval($co) < 0.02) {
+                    $co = '<0.02';
+                }
+                $result = $co;
+            } elseif ($normalized === 'hc' || str_contains($normalized, 'hc (bensin)') || str_contains($normalized, 'hc (gas)')) {
+                $result = $fieldData->hc;
+            } elseif ($normalized === 'opasitas' || str_contains($normalized, 'opasitas (solar)')) {
+                $result = $fieldData->opasitas;
+            }
+
+            if ($result !== null && $result !== '') {
+                DB::table('ws_final_approval_detail')->updateOrInsert([
+                    'ws_final_approval_header_id' => $headerId,
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'parameter_lab' => self::limit($parameterLab, 70),
+                ], [
+                    'parameter_regulasi' => self::limit(
+                        self::findParameterRegulasi($orderDetail, $parameterLab) ?: '',
+                        100
+                    ),
+                    'hasil' => self::fieldResultValue($result),
+                ]);
+            }
+        }
+    }
+
     private static function upsertDetailFromSource(int $headerId, $detailsBySample, Model $source): void
     {
         $noSampel = self::stringValue($source->getAttribute('no_sampel'));
@@ -1171,6 +1237,39 @@ class WsFinalApprovalService
                     $approvedParameters,
                     array_keys(self::airFieldParameterValues($orderDetail, $fieldData))
                 );
+            }
+        }
+
+        if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'emisi') {
+            $subKategori = self::categoryName($orderDetail->kategori_3);
+            $normalizedSub = mb_strtolower((string) $subKategori);
+            if (str_contains($normalizedSub, 'kendaraan') || str_contains($normalizedSub, 'bergerak')) {
+                $fieldData = \App\Models\DataLapanganEmisiKendaraan::where('no_sampel', $orderDetail->no_sampel)
+                    ->where('is_approve', 1)
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($fieldData) {
+                    $emisiParams = [];
+                    foreach (self::arrayValue($orderDetail->parameter) as $parameter) {
+                        $parameterLab = self::stripIdentifier($parameter);
+                        $normalized = mb_strtolower(trim($parameterLab));
+                        if ($normalized === 'co' || str_contains($normalized, 'co (bensin)') || str_contains($normalized, 'co (gas)')) {
+                            if ($fieldData->co !== null && $fieldData->co !== '') {
+                                $emisiParams[] = $parameterLab;
+                            }
+                        } elseif ($normalized === 'hc' || str_contains($normalized, 'hc (bensin)') || str_contains($normalized, 'hc (gas)')) {
+                            if ($fieldData->hc !== null && $fieldData->hc !== '') {
+                                $emisiParams[] = $parameterLab;
+                            }
+                        } elseif ($normalized === 'opasitas' || str_contains($normalized, 'opasitas (solar)')) {
+                            if ($fieldData->opasitas !== null && $fieldData->opasitas !== '') {
+                                $emisiParams[] = $parameterLab;
+                            }
+                        }
+                    }
+                    $approvedParameters = array_merge($approvedParameters, $emisiParams);
+                }
             }
         }
 
@@ -1940,6 +2039,8 @@ class WsFinalApprovalService
             if (Schema::hasTable('ws_final_approval_header')) {
                 if (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'air') {
                     self::syncAirFieldParameters($orderDetail);
+                } elseif (mb_strtolower((string) self::categoryName($orderDetail->kategori_2)) === 'emisi') {
+                    self::syncEmisiKendaraanFieldParameters($orderDetail);
                 }
             }
 
