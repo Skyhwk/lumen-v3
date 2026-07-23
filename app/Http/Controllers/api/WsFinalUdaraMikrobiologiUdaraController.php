@@ -2050,7 +2050,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
             ], 200);
 
         } catch (\Throwable $th) {
-
+            DB::rollBack();
             return response()->json([
 
                 'message' => 'Gagal mengapprove data: ' . $th->getMessage(),

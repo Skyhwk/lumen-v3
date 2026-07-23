@@ -1276,7 +1276,7 @@ class WsFinalApprovalService
     //         ]);
     // }
 
-    private static function approvedParameterNames(string $noSampel): array
+    private static function approvedParameterNames(string $noSampel, ?OrderDetail $orderDetail = null): array
     {
         $parameters = [];
         $orderDetail = $orderDetail ?: self::findOrderDetail($noSampel);
