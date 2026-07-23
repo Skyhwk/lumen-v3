@@ -3,10 +3,16 @@
 namespace App\Services;
 
 use App\Helpers\HelperSatuan;
+use App\Models\Colorimetri;
 use App\Models\DataLapanganAir;
+use App\Models\Gravimetri;
 use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
+use App\Models\Subkontrak;
+use App\Models\Titrimetri;
+use App\Models\WsFinalApprovalDetail;
+use App\Models\WsFinalApprovalHeader;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -2058,6 +2064,129 @@ class WsFinalApprovalService
                 'success' => false,
                 'message' => $e->getMessage(),
                 'status'  => 400,
+            ];
+        }
+    }
+
+    public static function approve($data, ?string $karyawan)
+    {
+        DB::beginTransaction();
+
+        try {
+            $noSampel = is_object($data) ? ($data->no_sampel ?? null) : ($data['no_sampel'] ?? null);
+
+            $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
+            if (!$orderDetail) {
+                DB::rollBack();
+                return [
+                    'success' => false,
+                    'message' => 'Order Detail Not Found!',
+                    'status'  => 401
+                ];
+            }
+
+            $parameterArray = self::arrayValue($orderDetail->parameter);
+            $totalParameter = count($parameterArray);
+            $approvedParameters = WsFinalApprovalDetail::where('no_sampel', $orderDetail->no_sampel)->count();
+            
+            $isApproved = ($totalParameter > 0 && $approvedParameters >= $totalParameter);
+
+            $headerId = self::upsertHeader($orderDetail, [
+                'is_approved' => $isApproved ? 1 : 0,
+                'approved_by' => self::limit($karyawan, 100),
+                'approved_at' => $isApproved ? Carbon::now() : null, 
+            ]);
+
+            $parameterLab = is_object($data) ? ($data->parameter ?? null) : ($data['parameter'] ?? null);
+            $templateStp  = is_object($data) ? ($data->template_stp ?? null) : ($data['template_stp'] ?? null);
+            $idSource     = is_object($data) ? ($data->id ?? null) : ($data['id'] ?? null);
+            $dataType     = is_object($data) ? ($data->data_type ?? $data->type ?? null) : ($data['data_type'] ?? $data['type'] ?? null);
+
+            if ($parameterLab) {
+                $itemSource = null;
+                $nilaiHasilUjiReq = is_object($data) ? ($data->nilai_uji ?? $data->hasil ?? null) : ($data['nilai_uji'] ?? $data['hasil'] ?? null);
+
+                if ($idSource) {
+                    if ($templateStp == 4) {
+                        $itemSource = Titrimetri::where('id', $idSource)->first();
+                    } elseif ($templateStp == 3) {
+                        $itemSource = Gravimetri::where('id', $idSource)->first();
+                    } elseif (in_array($templateStp, [7, 2, 5, 6, 8, 34, 76])) {
+                        $itemSource = Colorimetri::where('id', $idSource)->first();
+                    } elseif ($dataType == 'emisi_cerobong_header') {
+                        $itemSource = \App\Models\EmisiCerobongHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'lingkungan') {
+                        $itemSource = \App\Models\LingkunganHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'direct') {
+                        $itemSource = \App\Models\DirectLainHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'medan_lm') {
+                        $itemSource = \App\Models\MedanLmHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'microbio') {
+                        $itemSource = \App\Models\MicrobioHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'debu_personal') {
+                        $itemSource = \App\Models\DebuPersonalHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'partikulat') {
+                        $itemSource = \App\Models\PartikulatHeader::where('id', $idSource)->first();
+                    } elseif ($dataType == 'sinar_uv') {
+                        $itemSource = \App\Models\SinarUvHeader::where('id', $idSource)->first();
+                    } else {
+                        $itemSource = Subkontrak::where('id', $idSource)->first();
+                    }
+                }
+
+                $lhpsStatus = $itemSource ? (int)($itemSource->lhps ?? 1) : 1;
+
+                if ($lhpsStatus === 1) {
+                    $nilaiHasilUji = $nilaiHasilUjiReq;
+                    if ($nilaiHasilUji === null && $itemSource instanceof Model) {
+                        $nilaiHasilUji = self::extractResult($itemSource, $orderDetail);
+                    }
+                    if ($nilaiHasilUji === null && $itemSource) {
+                        $nilaiHasilUji = is_object($itemSource) ? ($itemSource->hasil ?? $itemSource->nilai_uji ?? '') : '';
+                    }
+                    if ($nilaiHasilUji === null) {
+                        $nilaiHasilUji = '';
+                    }
+
+                    $idKategori = 1;
+                    if ($orderDetail->kategori_2) {
+                        $idKategori = (int) explode('-', $orderDetail->kategori_2)[0];
+                    }
+                    $parameterRegulasi = Parameter::where('nama_lab', $parameterLab)
+                        ->where('id_kategori', $idKategori)
+                        ->value('nama_regulasi') ?? $parameterLab;
+
+                    WsFinalApprovalDetail::updateOrInsert([
+                        'ws_final_approval_header_id' => $headerId,
+                        'no_sampel'                   => $orderDetail->no_sampel,
+                        'parameter_lab'               => self::limit($parameterLab, 70),
+                    ], [
+                        'parameter_regulasi'          => self::limit($parameterRegulasi, 100),
+                        'hasil'                       => self::limit((string)$nilaiHasilUji, 50),
+                    ]);
+                } else {
+                    WsFinalApprovalDetail::where('ws_final_approval_header_id', $headerId)
+                        ->where('no_sampel', $orderDetail->no_sampel)
+                        ->where('parameter_lab', self::limit($parameterLab, 70))
+                        ->delete();
+                }
+            }
+            
+            DB::commit();
+
+            return [
+                'success'   => true,
+                'message'   => 'Approved successfully!',
+                'header_id' => $headerId,
+                'status'    => 200
+            ];
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return [
+                'success' => false,
+                'message' => $th->getMessage(),
+                'status'  => 500
             ];
         }
     }

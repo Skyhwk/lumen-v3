@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\api;
+use App\Jobs\ApproveWsParameterJob;
 use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\WsValueEmisiCerobong;
@@ -408,6 +409,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 
 	public function approveWSApi(Request $request)
 	{
+		$user = $request->attributes->get('user');
+		$karyawan = ($user && isset($user->karyawan) && $user->karyawan)
+			? $user->karyawan->nama_lengkap
+			: $request->header('token');
+
 		if ($request->type == "emisi_cerobong_header") {
 			$data = EmisiCerobongHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
 			// dd($data);
@@ -427,6 +433,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 				$dat = EmisiCerobongHeader::where('id', $request->id)->first();
 				$dat->lhps = 1;
 				$dat->save();
+
+				dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 				return response()->json([
 					'message' => 'Data has ben Approved',
 					'success' => true,
@@ -465,7 +474,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			])->update([
 				'lhps' => 1
 			]);
+
 			if ($data) {
+				dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
 				return response()->json([
 					'message' => 'Data has ben Approved',
 					'success' => true,
@@ -504,7 +515,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			])->update([
 				'lhps' => 1
 			]);
+			
 			if ($data) {
+				dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
 				return response()->json([
 					'message' => 'Data has ben Approved',
 					'success' => true,
