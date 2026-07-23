@@ -160,9 +160,11 @@ class LimsLhpUdaraUkMedanMagnetController extends Controller
     {
         try {
             $noLhp = $request->no_lhp ?? $request->cfr;
-            $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)
-                ->where('is_active', true)
-                ->first();
+            if ($noLhp) {
+                $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            }
 
             if (!$header) {
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
