@@ -76,7 +76,9 @@ class WsFinalEmisiEmisiSumberBergerakController extends Controller
 				$data = OrderDetail::where('id', $request->id)->first();
 				$data->status = 1;
 				$data->keterangan_1 = $request->keterangan_1;
-				$data->save();
+				$data->save();
+
+				\App\Services\WsFinalApprovalService::finalizeSample($data, true, $this->karyawan);
 
 				HistoryAppReject::insert([
 					'no_lhp' => $data->cfr,
