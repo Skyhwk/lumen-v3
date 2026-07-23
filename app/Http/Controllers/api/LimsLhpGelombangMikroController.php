@@ -179,9 +179,12 @@ class LimsLhpGelombangMikroController extends Controller
     public function previewLhp(Request $request)
     {
         try {
-            $header = LhpsMedanLMHeader::where('no_lhp', $request->no_lhp)
-                ->where('is_active', true)
-                ->first();
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            if ($noLhp) {
+                $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            }
 
             if (!$header) {
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
