@@ -184,7 +184,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 					$ws = (array) $item['ws_value'];
 					$index = 5;
 				} else {
-					return "Sudah di Analisa";
+					return "Sudah Dilakukan Analisa";
 				}
 
 				$ws = (array) $ws; // pastikan array
