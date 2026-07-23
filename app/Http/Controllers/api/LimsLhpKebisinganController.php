@@ -228,6 +228,15 @@ class LimsLhpKebisinganController extends Controller
                 ], 404);
             }
 
+            if ($header->file_qr == null) {
+                $file_qr = new \App\Services\GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_KEBISINGAN', $header, $this->karyawan ?? 'System');
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
+            }
+
             $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
             $custom = LhpsKebisinganCustom::where('id_header', $header->id)->get();
 
@@ -242,24 +251,13 @@ class LimsLhpKebisinganController extends Controller
                 }
             }
 
-            $fileName = \App\Services\LhpTemplate::setDataDetail($detail)
+            $pdfContent = \App\Services\LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftKebisinganLh')
                 ->render('downloadLHPFinal', 'S');
 
-            // Find file
-            $filePath = base_path('public/dokumen/LHP_DOWNLOAD/' . $fileName);
-            if (!file_exists($filePath)) {
-                $filePath = base_path('public/dokumen/LHP/' . $fileName);
-            }
-
-            if (file_exists($filePath)) {
-                $base64 = base64_encode(file_get_contents($filePath));
-                return response()->json(['data' => $base64]);
-            }
-
-            return response()->json(['message' => 'Gagal merender PDF'], 404);
+            return response()->json(['data' => base64_encode($pdfContent)]);
         } catch (\Throwable $th) {
             return response()->json(['message' => $th->getMessage()], 500);
         }

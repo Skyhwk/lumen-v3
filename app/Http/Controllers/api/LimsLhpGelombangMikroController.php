@@ -187,6 +187,15 @@ class LimsLhpGelombangMikroController extends Controller
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
             }
 
+            if ($header->file_qr == null) {
+                $file_qr = new \App\Services\GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_GELOMBANG_MIKRO', $header, $this->karyawan ?? 'System');
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
+            }
+
             $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
             $detail = collect($detail)->sortBy([
                 ['tanggal_sampling', 'asc'],
