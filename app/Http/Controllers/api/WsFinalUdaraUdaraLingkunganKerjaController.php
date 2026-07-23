@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\api;
+use App\Jobs\ApproveWsParameterJob;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganDebuPersonal;
@@ -597,6 +598,11 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
     public function approveWSApi(Request $request)
     {
+        $user = $request->attributes->get('user');
+        $karyawan = ($user && isset($user->karyawan) && $user->karyawan)
+            ? $user->karyawan->nama_lengkap
+            : $request->header('token');
+
         if ($request->id) {
             if (in_array($request->kategori, $this->categoryLingkunganKerja)) {
                 if ($request->data_type == 'lingkungan') {
@@ -615,11 +621,15 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = LingkunganHeader::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                         dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
                             'status'  => 200,
                         ], 200);
+
                     }
                 } else if ($request->data_type == 'subKontrak') {
                     $data = Subkontrak::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
@@ -636,6 +646,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = Subkontrak::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                         dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
@@ -657,6 +670,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = DirectLainHeader::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                         dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
@@ -679,6 +695,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = MedanLmHeader::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                         dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
@@ -701,6 +720,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = MicrobioHeader::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                        dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+                        
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
@@ -723,6 +745,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = DebuPersonalHeader::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                        dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
@@ -745,6 +770,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         $dat       = PartikulatHeader::where('id', $request->id)->first();
                         $dat->lhps = 1;
                         $dat->save();
+
+                         dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                         return response()->json([
                             'message' => 'Data has ben Approved',
                             'success' => true,
