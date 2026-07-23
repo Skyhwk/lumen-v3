@@ -87,6 +87,7 @@ class WsFinalApprovalService
         \App\Models\MicrobioHeader::class,
         \App\Models\PartikulatHeader::class,
         \App\Models\PencahayaanHeader::class,
+        \App\Models\PsikologiHeader::class,
         \App\Models\SinarUvHeader::class,
         \App\Models\Subkontrak::class,
         \App\Models\SwabTestHeader::class,
@@ -111,6 +112,7 @@ class WsFinalApprovalService
         $isException = $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
             str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'psikologi') ||
             str_contains(strtolower((string)$orderDetail->parameter), 'legionella') ||
             str_contains(strtolower((string)$orderDetail->parameter), 'gelombang elektro') ||
             str_contains(strtolower((string)$orderDetail->parameter), 'gelombang mikro')
@@ -204,6 +206,7 @@ class WsFinalApprovalService
         $isException = $orderDetail->kategori_3 && (
             str_contains(strtolower($orderDetail->kategori_3), 'ergonomi') || 
             str_contains(strtolower((string)$orderDetail->parameter), 'ergonomi') ||
+            str_contains(strtolower((string)$orderDetail->parameter), 'psikologi') ||
             str_contains(strtolower((string)$orderDetail->parameter), 'legionella') ||
             str_contains(strtolower((string)$orderDetail->parameter), 'gelombang elektro') ||
             str_contains(strtolower((string)$orderDetail->parameter), 'gelombang mikro')
@@ -1477,6 +1480,10 @@ class WsFinalApprovalService
 
     private static function extractResult(Model $source, ?OrderDetail $orderDetail = null): ?string
     {
+        if ($source instanceof \App\Models\ErgonomiHeader || $source instanceof \App\Models\PsikologiHeader) {
+            return 'Sudah Dilakukan Analisa';
+        }
+
         $isIsokinetik = $source instanceof \App\Models\IsokinetikHeader;
         $isEmisiCerobong = $source instanceof \App\Models\EmisiCerobongHeader;
         $satuan = self::resolveSatuan($source, $orderDetail);
