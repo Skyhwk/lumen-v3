@@ -93,20 +93,27 @@ class LimsLhpUdaraGetaranPersonalController extends Controller
     public function handleDownload(Request $request)
     {
         try {
-            $lhpsGetaranHeader = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
-                ->where('is_active', true)
-                ->first();
-
-            if (!$lhpsGetaranHeader || !$lhpsGetaranHeader->file_lhp) {
-                return response()->json(['message' => 'File ' . $request->no_lhp . ' tidak ditemukan!']);
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            if ($noLhp) {
+                $header = LhpsGetaranHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             }
 
-            $fileName = $lhpsGetaranHeader->file_lhp;
+            if ($header && $header->file_lhp) {
+                $filePath = public_path('dokumen/LHP_DOWNLOAD/' . $header->file_lhp);
+                if (file_exists($filePath)) {
+                    $pdfContent = file_get_contents($filePath);
+                    return response()->json([
+                        'data' => base64_encode($pdfContent),
+                        'is_base64' => true,
+                        'file_name' => $header->file_lhp,
+                        'message' => 'Download file berhasil!'
+                    ], 200);
+                }
+            }
 
-            return response()->json([
-                'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'message' => 'Download file ' . $request->no_lhp . ' berhasil!'
-            ]);
+            return $this->previewLhp($request);
         } catch (\Throwable $th) {
             return response()->json(['message' => 'Error download file ' . $th->getMessage()], 401);
         }
@@ -219,6 +226,8 @@ class LimsLhpUdaraGetaranPersonalController extends Controller
 
             return response()->json([
                 'data' => base64_encode($pdfContent),
+                'is_base64' => true,
+                'file_name' => $header->file_lhp ?? (str_replace("/", "_", $noLhp ?? $request->no_sampel) . '.pdf'),
                 'message' => 'LHP berhasil dirender'
             ], 200);
 

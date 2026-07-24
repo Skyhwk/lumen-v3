@@ -130,58 +130,32 @@ class LimsLhpIklimController extends Controller
 
     public function handleDownload(Request $request) {
         try {
-            $header = LhpsIklimHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
-            $parameter = explode(';', json_decode($request->parameter)[0])[1];
-            if($header != null && $header->file_lhp == null) {
-                $detail = LhpsIklimDetail::where('id_header', $header->id)->get();
-                 $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
-                ->groupBy('page')
-                ->toArray();
-
-                $fileName = '';
-                if($header->file_qr == null) {
-                    $header->file_qr = 'LHP-'.str_ireplace("/", "_",$header->no_lhp);
-                    $header->save();
-                    GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
-                }
-
-               if($parameter == 'ISBB' || $parameter == 'ISBB (8 Jam)'){
-                    $fileName = LhpTemplate::setDataDetail($detail)
-                        ->setDataHeader($header)
-                        ->useLampiran(true)
-                        ->setDataCustom($custom)
-                        ->whereView('DraftIklimPanas')
-                        ->render();
-                } else {
-                    $fileName = LhpTemplate::setDataDetail($detail)
-                        ->setDataHeader($header)
-                        ->useLampiran(true)
-                        ->setDataCustom($custom)
-                        ->whereView('DraftIklimDingin')
-                        ->render();
-                }
-
-                $data = LhpsIklimHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
-                $data->file_lhp = $fileName;
-                $data->save();
-
-            } else if($header != null && $header->file_lhp != null) {
-                $fileName = $header->file_lhp;
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            if ($noLhp) {
+                $header = LhpsIklimHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsIklimHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             }
 
-            return response()->json([
-                'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                // 'file_name' =>  'http://localhost/v3' . '/public/dokumen/LHP/' . $fileName,
-                'message' => 'Download file '.$request->no_lhp.' berhasil!'
-            ]);
+            if ($header && $header->file_lhp) {
+                $filePath = public_path('dokumen/LHP_DOWNLOAD/' . $header->file_lhp);
+                if (file_exists($filePath)) {
+                    $pdfContent = file_get_contents($filePath);
+                    return response()->json([
+                        'data' => base64_encode($pdfContent),
+                        'is_base64' => true,
+                        'file_name' => $header->file_lhp,
+                        'message' => 'Download file berhasil!'
+                    ], 200);
+                }
+            }
+
+            return $this->previewLhp($request);
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'Error download file '.$th->getMessage(),
-                'line' => $th->getLine(),
-                'file' => $th->getFile()
             ], 401);
         }
-        
     }
 
     public function rePrint(Request $request) 
@@ -322,6 +296,8 @@ class LimsLhpIklimController extends Controller
 
             return response()->json([
                 'data' => base64_encode($pdfContent),
+                'is_base64' => true,
+                'file_name' => $header->file_lhp ?? (str_replace("/", "_", $noLhp ?? $request->no_sampel) . '.pdf'),
                 'message' => 'LHP berhasil dirender'
             ], 200);
 
