@@ -359,7 +359,6 @@ class FdlSenyawaVolatileController extends Controller
             if ($request->param != null) {
                 foreach ($request->param as $en => $ab) {
                     $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->where('parameter', $ab)->get();
-                    
                     if ($request->shift !== "Sesaat") {
                         $nilai_array = array();
                         foreach ($cek as $key => $value) {
@@ -420,40 +419,7 @@ class FdlSenyawaVolatileController extends Controller
                         'Flow Akhir 2' => $request->akhir2[$in],
                         'Durasi 2' => $request->durasi2[$in] . ' menit',
                     ];
-                } else if (
-                    $a == "NH3" ||
-                    $a == "H2S" ||
-                    $a == "Al. Hidrokarbon" ||
-                    $a == "Al. Hidrokarbon (8 Jam)" ||
-                    $a == "Alcohol" ||
-                    $a == "Acetone" ||
-                    $a == "Alkana Gas" ||
-                    $a == "Asam Asetat" ||
-                    $a == "Butanon" ||
-                    $a == "Benzene" ||
-                    $a == "Benzene (8 Jam)" ||
-                    $a == "Cyclohexanone" ||
-                    $a == "EA" ||
-                    $a == "Ethanol" ||
-                    $a == "Etanol" ||
-                    $a == "HCL" ||
-                    $a == "HCL (8 Jam)" ||
-                    $a == "HF" ||
-                    $a == "IPA" ||
-                    $a == "MEK" ||
-                    $a == "Stirena" ||
-                    $a == "Stirena (8 Jam)" ||
-                    $a == "Toluene" ||
-                    $a == "Toluene (8 Jam)" ||
-                    $a == "Xylene" ||
-                    $a == "Xylene (8 Jam)"
-                ) {
-                    $pengukuran = [
-                        'Flow Awal' => $request->awal[$in],
-                        'Flow Akhir' => $request->akhir[$in],
-                        'Durasi' => $request->durasi[$in] . ' menit',
-                    ];
-                } else {
+                } else{
                     $pengukuran = [
                         'Flow Awal' => $request->awal[$in],
                         'Flow Akhir' => $request->akhir[$in],
