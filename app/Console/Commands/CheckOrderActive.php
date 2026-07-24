@@ -314,8 +314,8 @@ class CheckOrderActive extends Command
         return null;
     }
 
-    private function buildHasilUji(array $sampelNumbers, $kategori_2, array $expectedParams = [], $steps, $no_lhp){ 
-        $details = WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)
+    private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], $steps, $no_lhp){ 
+        $details = WsFinalApprovalDetail::where('no_sampel', $no_lhp)
            ->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])
            ->toArray();
 
@@ -469,7 +469,7 @@ class CheckOrderActive extends Command
 
         if (!$lhpRilis) {
             $result['parameter_regulasi'] = $parameterRegulasi;
-            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $kategori_2, $parameterRegulasi, $steps, $d['cfr']);
+            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $parameterRegulasi, $steps, $d['cfr']);
         }
 
         return $result;
