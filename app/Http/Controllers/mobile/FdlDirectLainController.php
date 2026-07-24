@@ -35,95 +35,99 @@ class FdlDirectLainController extends Controller
 {
     public function getSample(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
+      
         try {
             if (isset($request->no_sample) && $request->no_sample != null) {
-            $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','direct_lain')->where('kategori','4-Udara')->first();
-            $listParameter = json_decode($parameter->parameters, true);
-            $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->whereIn('kategori_3', ['27-Udara lingkungan Kerja', '11-Udara Ambient'])
-                ->where(function($q) use ($listParameter) {
-                    foreach ($listParameter as $param) {
-                        $q->orWhere('parameter', 'like', "%$param%");
-                    }
-                })
-                ->where('is_active', 1)->first();
-            if (is_null($data)) {
-                return response()->json([
-                    'message' => 'No Sample tidak ditemukan..'
-                ], 401);
-            } else {
-                $direct = DataLapanganDirectLain::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+              $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','direct_lain')->where('kategori','4-Udara')->first();
+              $listParameter = json_decode($parameter->parameters, true);
+              $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
+                  ->whereIn('kategori_3', ['27-Udara lingkungan Kerja', '11-Udara Ambient'])
+                  ->where(function($q) use ($listParameter) {
+                      foreach ($listParameter as $param) {
+                          $q->orWhere('parameter', 'like', "%$param%");
+                      }
+                  })
+                  ->where('is_active', 1)->first();
+              if (is_null($data)) {
+                  return response()->json([
+                      'message' => 'No Sample tidak ditemukan..'
+                  ], 401);
+              } else {
+                  $direct = DataLapanganDirectLain::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
-                if ($direct !== NULL) {
-                    \DB::statement("SET SQL_MODE=''");
-                
-                    $noSampel = strtoupper(trim($request->no_sample));
-                    $pDecoded = json_decode($data->parameter);
-                    $pDecoded = array_map(function ($item) {
-                        return explode(';', $item)[1];
-                    }, $pDecoded);
+                  if ($direct !== NULL) {
+                      \DB::statement("SET SQL_MODE=''");
 
-                    // Ambil parameter dari data lapangan
-                    $par = DataLapanganDirectLain::where('no_sampel', $noSampel)
-                        ->groupBy('parameter')
-                        ->pluck('parameter')
-                        ->toArray();
+                      $noSampel = strtoupper(trim($request->no_sample));
+                      $pDecoded = json_decode($data->parameter);
+                      $pDecoded = array_map(function ($item) {
+                          return explode(';', $item)[1];
+                      }, $pDecoded);
 
-                    $par2 = DataLapanganDirectLain::where('no_sampel', $noSampel)
-                        ->where('shift', '!=', 'Sesaat')
-                        ->groupBy('parameter')
-                        ->pluck('parameter')
-                        ->toArray();
+                      // Ambil parameter dari data lapangan
+                      $par = DataLapanganDirectLain::where('no_sampel', $noSampel)
+                          ->groupBy('parameter')
+                          ->pluck('parameter')
+                          ->toArray();
 
-                    // Ambil parameter yg sudah punya shift = Sesaat
-                    $parSesaat = DataLapanganDirectLain::where('no_sampel', $noSampel)
-                        ->where('shift', 'Sesaat')
-                        ->groupBy('parameter')
-                        ->pluck('parameter')
-                        ->toArray();
+                      $par2 = DataLapanganDirectLain::where('no_sampel', $noSampel)
+                          ->where('shift', '!=', 'Sesaat')
+                          ->groupBy('parameter')
+                          ->pluck('parameter')
+                          ->toArray();
 
-                    // Hitung parameter yang belum masuk ke $par
-                    $paramBelumAda = array_diff($pDecoded, $par);
-                    // Gabungkan hasil par2 (shift != Sesaat) dan param yang belum ada
-                    $gabungParam = array_unique(array_merge($par2, $paramBelumAda));
-                    // Eliminasi parameter yang sudah ada di shift = Sesaat
-                    $gabungParam = array_diff($gabungParam, $parSesaat);
-                    
-                    // Encode final
-                    $param_fin = json_encode(array_values($gabungParam), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-                    $cek = MasterSubKategori::find(explode('-', $data->kategori_3)[0]);
-                    return response()->json([
-                        'no_sample'  => $data->no_sampel,
-                        'jenis'      => $cek->nama_sub_kategori ?? '-',
-                        'keterangan' => $data->keterangan_1,
-                        'id_ket'     => explode('-', $data->kategori_3)[0],
-                        'param'      => json_decode($param_fin, true),
-                        'parameterList' => $listParameter
-                    ], 200);
-                }                
-                else {
-                    $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
-                    $pDecoded = json_decode($data->parameter);
-                    $pDecoded = array_map(function ($item) {
-                        return explode(';', $item)[1];
-                    }, $pDecoded);
+                      // Ambil parameter yg sudah punya shift = Sesaat
+                      $parSesaat = DataLapanganDirectLain::where('no_sampel', $noSampel)
+                          ->where('shift', 'Sesaat')
+                          ->groupBy('parameter')
+                          ->pluck('parameter')
+                          ->toArray();
 
-                    return response()->json([
-                        'no_sample'    => $data->no_sampel,
-                        'jenis'        => $cek->nama_sub_kategori,
-                        'keterangan' => $data->keterangan_1,
-                        'id_ket' => explode('-', $data->kategori_3)[0],
-                        'id_ket2' => explode('-', $data->kategori_2)[0],
-                        'param' => $pDecoded,
-                        'parameterList' => $listParameter
-                    ], 200);
-                }
-            }
-        } else {
-            return response()->json([
-                'message' => 'Fatal Error'
-            ], 401);
-        }
+                      // Hitung parameter yang belum masuk ke $par
+                      $paramBelumAda = array_diff($pDecoded, $par);
+                      // Gabungkan hasil par2 (shift != Sesaat) dan param yang belum ada
+                      $gabungParam = array_unique(array_merge($par2, $paramBelumAda));
+                      // Eliminasi parameter yang sudah ada di shift = Sesaat
+                      $gabungParam = array_diff($gabungParam, $parSesaat);
+
+                      // Encode final
+                      $param_fin = json_encode(array_values($gabungParam), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                      $cek = MasterSubKategori::find(explode('-', $data->kategori_3)[0]);
+                      return response()->json([
+                          'no_sample'  => $data->no_sampel,
+                          'jenis'      => $cek->nama_sub_kategori ?? '-',
+                          'keterangan' => $data->keterangan_1,
+                          'id_ket'     => explode('-', $data->kategori_3)[0],
+                          'param'      => json_decode($param_fin, true),
+                          'parameterList' => $listParameter
+                      ], 200);
+                  }                
+                  else {
+                      $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
+                      $pDecoded = json_decode($data->parameter);
+                      $pDecoded = array_map(function ($item) {
+                          return explode(';', $item)[1];
+                      }, $pDecoded);
+
+                      return response()->json([
+                          'no_sample'    => $data->no_sampel,
+                          'jenis'        => $cek->nama_sub_kategori,
+                          'keterangan' => $data->keterangan_1,
+                          'id_ket' => explode('-', $data->kategori_3)[0],
+                          'id_ket2' => explode('-', $data->kategori_2)[0],
+                          'param' => $pDecoded,
+                          'parameterList' => $listParameter
+                      ], 200);
+                  }
+              }
+          } else {
+              return response()->json([
+                  'message' => 'Fatal Error'
+              ], 401);
+          }
         } catch (\Exception $e) {
             dd($e);
             return response()->json([

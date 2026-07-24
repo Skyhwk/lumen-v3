@@ -36,6 +36,10 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
 {
     public function getSample(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
+
         $data = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
         if ($data) {
