@@ -74,49 +74,32 @@ class LimsLhpUdaraAmbientController extends Controller
 
     public function handleDownload(Request $request) {
         try {
-            $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-            if($header != null && $header->file_lhp == null) {
-                $detail = LhpsLingDetail::where('id_header', $header->id)->get();
-                $custom = LhpsLingCustom::where('id_header', $header->id)->get();
-
-                if($header->file_qr == null) {
-                    $header->file_qr = 'LHP-'.str_ireplace("/", "_",$header->no_lhp);
-                    $header->save();
-                    GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
-                }
-
-                $groupedByPage = [];
-                if(!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
-                    }
-                }
-
-                $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
-                $this->dispatch($job);
-
-                $data = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                $data->file_lhp = $fileName;
-                $data->save();
-
-            } else if($header != null && $header->file_lhp != null) {
-                $fileName = $header->file_lhp;
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            if ($noLhp) {
+                $header = LhpsLingHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             }
 
-            return response()->json([
-                'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'message' => 'Download file '.$request->no_sampel.' berhasil!'
-            ]);
+            if ($header && $header->file_lhp) {
+                $filePath = public_path('dokumen/LHP_DOWNLOAD/' . $header->file_lhp);
+                if (file_exists($filePath)) {
+                    $pdfContent = file_get_contents($filePath);
+                    return response()->json([
+                        'data' => base64_encode($pdfContent),
+                        'is_base64' => true,
+                        'file_name' => $header->file_lhp,
+                        'message' => 'Download file berhasil!'
+                    ], 200);
+                }
+            }
+
+            return $this->previewLhp($request);
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'Error download file '.$th->getMessage(),
             ], 401);
         }
-        
     }
 
     public function rePrint(Request $request) 
@@ -223,6 +206,8 @@ class LimsLhpUdaraAmbientController extends Controller
 
             return response()->json([
                 'data' => base64_encode($pdfContent),
+                'is_base64' => true,
+                'file_name' => $header->file_lhp ?? (str_replace("/", "_", $noLhp ?? $request->no_sampel) . '.pdf'),
                 'message' => 'LHP berhasil dirender'
             ], 200);
 
