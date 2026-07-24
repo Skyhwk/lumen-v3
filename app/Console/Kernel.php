@@ -41,6 +41,7 @@ class Kernel extends ConsoleKernel
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
         Commands\SyncLimsData::class,
+        Commands\SyncSpecificLimsData::class,
         Commands\TruncateLimsTesting::class,
         Commands\SyncShioElemen::class,
         Commands\BackfillPersiapanSampel::class,
