@@ -891,6 +891,18 @@ class LimsPersiapanSampleController extends Controller
         if (!$psh)
             return response()->json(['message' => 'Sampel belum disiapkan pdf'], 404);
 
+        // Periksa apakah file fisik benar-benar ada di server
+        $filePath = public_path('persiapan_sampel/' . $psh->filename);
+        if (!file_exists($filePath)) {
+            try {
+                // Generate ulang secara sinkronus (on-the-fly) agar langsung tersedia
+                $render = new \App\Services\RenderPersiapanSample();
+                $render->renderPdf($psh->id);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Gagal generate PDF Persiapan Sampel otomatis: " . $e->getMessage());
+            }
+        }
+
         return response()->json([$psh->filename], 200);
     }
 

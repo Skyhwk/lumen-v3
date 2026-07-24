@@ -105,14 +105,27 @@ class LimsLhpGelombangMikroController extends Controller
     public function handleDownload(Request $request)
     {
         try {
-            $header = LhpsMedanLMHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            if ($noLhp) {
+                $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            }
 
-            $fileName = $header->file_lhp;
+            if ($header && $header->file_lhp) {
+                $filePath = public_path('dokumen/LHP_DOWNLOAD/' . $header->file_lhp);
+                if (file_exists($filePath)) {
+                    $pdfContent = file_get_contents($filePath);
+                    return response()->json([
+                        'data' => base64_encode($pdfContent),
+                        'is_base64' => true,
+                        'file_name' => $header->file_lhp,
+                        'message' => 'Download file berhasil!'
+                    ], 200);
+                }
+            }
 
-            return response()->json([
-                'file_name' => env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'message'   => 'Download file ' . $request->cfr . ' berhasil!',
-            ]);
+            return $this->previewLhp($request);
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'Error download file ' . $th->getMessage(),
@@ -225,6 +238,8 @@ class LimsLhpGelombangMikroController extends Controller
 
             return response()->json([
                 'data' => base64_encode($pdfContent),
+                'is_base64' => true,
+                'file_name' => $header->file_lhp ?? (str_replace("/", "_", $noLhp ?? $request->no_sampel) . '.pdf'),
                 'message' => 'LHP berhasil dirender'
             ], 200);
 
