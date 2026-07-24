@@ -7,7 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Http\Controllers\Controller;
-use App\Models\{OrderDetail, ScanSampelTc};
+use App\Models\Lims\OrderDetail;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +17,7 @@ class LimsPenerimaanSampelController extends Controller
     {
         $date = Carbon::parse($request->date);
 
-        $data = ScanSampelTc::whereMonth('created_at', $date->month)
+        $data = OrderDetail::whereMonth('created_at', $date->month)
             ->whereYear('created_at', $date->year)
             ->orderBy('id', 'desc');
 
