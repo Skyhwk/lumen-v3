@@ -326,6 +326,11 @@ class RenderPersiapanSample
 
             $fileName = str_replace("/", "_", $dataHeader->no_document) . '.pdf';
 
+            $dirPath = public_path('persiapan_sampel');
+            if (!is_dir($dirPath)) {
+                mkdir($dirPath, 0775, true);
+            }
+
             $filePath = public_path('persiapan_sampel/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
 
