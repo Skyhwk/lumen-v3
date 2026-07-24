@@ -16,6 +16,18 @@ class LhpBackfillService
         'iklim_kerja',
     ];
 
+    private const KPGI_REFRESH_TYPES = [
+        'kebisingan',
+        'pencahayaan',
+        'getaran_personel',
+        'iklim_kerja',
+    ];
+
+    private const LING_REFRESH_TYPES = [
+        'udara_lingkungan_hidup',
+        'udara_lingkungan_kerja',
+    ];
+
     private const TYPE_CONFIG = [
         'air' => [
             'header_table' => 'lhps_air_header',
@@ -36,7 +48,7 @@ class LhpBackfillService
         'kebisingan' => [
             'header_table' => 'lhps_kebisingan_header',
             'detail_table' => 'lhps_kebisingan_detail',
-            'grouping' => 'sample',
+            'grouping' => 'cfr',
             'header_key' => 'no_lhp',
             'category_2' => '4-Udara',
             'category_3_in' => ['23-Kebisingan', '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'],
@@ -54,7 +66,7 @@ class LhpBackfillService
         'iklim_kerja' => [
             'header_table' => 'lhps_iklim_header',
             'detail_table' => 'lhps_iklim_detail',
-            'grouping' => 'sample',
+            'grouping' => 'cfr',
             'header_key' => 'no_lhp',
             'category_2' => '4-Udara',
             'category_3' => '21-Iklim Kerja',
@@ -62,7 +74,7 @@ class LhpBackfillService
         'getaran_personel' => [
             'header_table' => 'lhps_getaran_header',
             'detail_table' => 'lhps_getaran_detail',
-            'grouping' => 'sample',
+            'grouping' => 'cfr',
             'header_key' => 'no_lhp',
             'category_2' => '4-Udara',
             'category_3_in' => ['17-Getaran (Lengan & Tangan)', '20-Getaran (Seluruh Tubuh)'],
@@ -70,7 +82,7 @@ class LhpBackfillService
         'pencahayaan' => [
             'header_table' => 'lhps_pencahayaan_header',
             'detail_table' => 'lhps_pencahayaan_detail',
-            'grouping' => 'sample',
+            'grouping' => 'cfr',
             'header_key' => 'no_lhp',
             'category_2' => '4-Udara',
             'category_3' => '28-Pencahayaan',
@@ -160,6 +172,385 @@ class LhpBackfillService
         return array_values(array_unique($tables));
     }
 
+    public static function kpgiRefreshTypes()
+    {
+        return self::KPGI_REFRESH_TYPES;
+    }
+
+    public function refreshKpgiDetails(array $filters = [])
+    {
+        $typeOption = $filters['type'] ?? 'all';
+        $types = (!$typeOption || in_array($typeOption, ['all', 'kpgi'], true))
+            ? self::KPGI_REFRESH_TYPES
+            : [$typeOption];
+
+        foreach ($types as $type) {
+            if (!in_array($type, self::KPGI_REFRESH_TYPES, true)) {
+                throw new \InvalidArgumentException('Type refresh KPGI tidak dikenal: ' . $type);
+            }
+        }
+
+        $summary = [
+            'connection' => $this->connection,
+            'order_connection' => $this->orderConnection,
+            'dry_run' => !empty($filters['dry_run']),
+            'types' => [],
+            'total' => [
+                'scanned' => 0,
+                'matched' => 0,
+                'updated' => 0,
+                'deleted_details' => 0,
+                'inserted_details' => 0,
+                'skipped' => 0,
+                'failed' => 0,
+            ],
+        ];
+
+        foreach ($types as $type) {
+            $result = $this->refreshKpgiTypeDetails($type, $filters);
+            $summary['types'][$type] = $result;
+            foreach ($summary['total'] as $key => $value) {
+                $summary['total'][$key] += $result[$key] ?? 0;
+            }
+        }
+
+        return $summary;
+    }
+
+    private function refreshKpgiTypeDetails($type, array $filters)
+    {
+        $config = self::TYPE_CONFIG[$type];
+        $filtersForGroups = $filters;
+        $filtersForGroups['missing_only'] = false;
+        $groups = $this->candidateGroups($config, $filtersForGroups);
+        $createdBy = $filters['created_by'] ?? 'System';
+        $limit = !empty($filters['limit']) ? (int) $filters['limit'] : null;
+
+        $result = [
+            'scanned' => count($groups),
+            'processed' => 0,
+            'matched' => 0,
+            'updated' => 0,
+            'deleted_details' => 0,
+            'inserted_details' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'messages' => [],
+        ];
+        $this->reportRefreshProgress($type, $result, '-', $filters);
+
+        foreach (['header_table', 'detail_table'] as $tableKey) {
+            if (!Schema::connection($this->connection)->hasTable($config[$tableKey])) {
+                $result['failed'] = count($groups);
+                $result['messages'][] = "MISSING TABLE {$type}: " . $config[$tableKey];
+                return $result;
+            }
+        }
+
+        foreach ($groups as $groupKey => $details) {
+            if ($limit && $result['matched'] >= $limit) {
+                break;
+            }
+
+            $result['processed']++;
+            $this->reportRefreshProgress($type, $result, $groupKey, $filters);
+
+            try {
+                $headers = $this->kpgiSystemHeaders($config, $groupKey, $details, $createdBy);
+                if ($headers->isEmpty()) {
+                    $result['skipped']++;
+                    continue;
+                }
+
+                $result['matched'] += $headers->count();
+
+                foreach ($headers as $header) {
+                    $fullRows = $this->fullDetailRows($type, $details, $header->id);
+                    if (!$fullRows) {
+                        $result['skipped']++;
+                        $result['messages'][] = "SKIPPED {$type}: {$groupKey} - detail baru kosong";
+                        continue;
+                    }
+
+                    if (!empty($filters['dry_run'])) {
+                        $result['messages'][] = "DRY {$type}: {$groupKey} header_id={$header->id} (" . count($fullRows) . ' detail)';
+                        continue;
+                    }
+
+                    DB::connection($this->connection)->transaction(function () use ($config, $header, $fullRows, &$result) {
+                        $deleted = DB::connection($this->connection)
+                            ->table($config['detail_table'])
+                            ->where('id_header', $header->id)
+                            ->delete();
+
+                        foreach ($fullRows as $row) {
+                            DB::connection($this->connection)
+                                ->table($config['detail_table'])
+                                ->insert($row);
+                        }
+
+                        $result['deleted_details'] += $deleted;
+                        $result['inserted_details'] += count($fullRows);
+                    });
+
+                    $result['updated']++;
+                }
+            } catch (\Throwable $th) {
+                $result['failed']++;
+                $message = "FAILED {$type}: {$groupKey} - " . $th->getMessage();
+                $result['messages'][] = $message;
+                $this->reportFailure($message, $filters);
+            }
+        }
+
+        return $result;
+    }
+
+    private function kpgiSystemHeaders(array $config, $groupKey, array $details, $createdBy)
+    {
+        $query = DB::connection($this->connection)
+            ->table($config['header_table'])
+            ->where('is_active', 1)
+            ->where('created_by', $createdBy);
+
+        if ($config['header_key'] === 'no_sampel') {
+            return $query->where('no_sampel', $details[0]->no_sampel)->get();
+        }
+
+        return $query->where('no_lhp', $groupKey)->get();
+    }
+
+    private function reportRefreshProgress($type, array $result, $current, array $filters)
+    {
+        $callback = $filters['progress_callback'] ?? null;
+        $every = (int) ($filters['progress_every'] ?? 25);
+
+        if (!$callback || $every <= 0) {
+            return;
+        }
+
+        $processed = (int) ($result['processed'] ?? 0);
+        $scanned = (int) ($result['scanned'] ?? 0);
+        if ($processed !== 0 && $processed < $scanned && $processed % $every !== 0) {
+            return;
+        }
+
+        $callback([
+            'type' => $type,
+            'processed' => $processed,
+            'scanned' => $scanned,
+            'matched' => (int) ($result['matched'] ?? 0),
+            'updated' => (int) ($result['updated'] ?? 0),
+            'skipped' => (int) ($result['skipped'] ?? 0),
+            'failed' => (int) ($result['failed'] ?? 0),
+            'current' => $current,
+        ]);
+    }
+    public static function lingRefreshTypes()
+    {
+        return self::LING_REFRESH_TYPES;
+    }
+
+    public function refreshLingHeaders(array $filters = [])
+    {
+        $typeOption = $filters['type'] ?? 'all';
+        $types = (!$typeOption || in_array($typeOption, ['all', 'ling'], true))
+            ? self::LING_REFRESH_TYPES
+            : [$typeOption];
+
+        foreach ($types as $type) {
+            if (!in_array($type, self::LING_REFRESH_TYPES, true)) {
+                throw new \InvalidArgumentException('Type refresh lingkungan tidak dikenal: ' . $type);
+            }
+        }
+
+        $summary = [
+            'connection' => $this->connection,
+            'dry_run' => !empty($filters['dry_run']),
+            'types' => [],
+            'total' => [
+                'scanned' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'failed' => 0,
+            ],
+        ];
+
+        foreach ($types as $type) {
+            $result = $this->refreshLingTypeHeaders($type, $filters);
+            $summary['types'][$type] = $result;
+            foreach ($summary['total'] as $key => $value) {
+                $summary['total'][$key] += $result[$key] ?? 0;
+            }
+        }
+
+        return $summary;
+    }
+
+    private function refreshLingTypeHeaders($type, array $filters)
+    {
+        $config = self::TYPE_CONFIG[$type];
+        $createdBy = $filters['created_by'] ?? 'System';
+        $limit = !empty($filters['limit']) ? (int) $filters['limit'] : null;
+
+        $result = [
+            'scanned' => 0,
+            'processed' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'messages' => [],
+        ];
+
+        if (!Schema::connection($this->connection)->hasTable($config['header_table'])) {
+            $result['messages'][] = "MISSING TABLE {$type}: " . $config['header_table'];
+            $result['failed'] = 1;
+            return $result;
+        }
+
+        $query = DB::connection($this->connection)
+            ->table($config['header_table'])
+            ->where('is_active', 1)
+            ->where('created_by', $createdBy);
+
+        $categoryId = $this->categoryId($config['category_3'] ?? null);
+        if ($categoryId) {
+            $query->where('id_kategori_3', $categoryId);
+        } elseif (!empty($config['category_3'])) {
+            $query->where('sub_kategori', $this->categoryName($config['category_3']));
+        }
+
+        if (!empty($filters['month'])) {
+            $start = Carbon::createFromFormat('Y-m-d', $filters['month'] . '-01')->startOfMonth()->toDateString();
+            $end = Carbon::createFromFormat('Y-m-d', $filters['month'] . '-01')->addMonth()->startOfMonth()->toDateString();
+            $query->whereDate('tanggal_lhp', '>=', $start)->whereDate('tanggal_lhp', '<', $end);
+        } else {
+            if (!empty($filters['from'])) {
+                $query->whereDate('tanggal_lhp', '>=', $filters['from']);
+            }
+            if (!empty($filters['to'])) {
+                $query->whereDate('tanggal_lhp', '<', $filters['to']);
+            } elseif (!empty($filters['before'])) {
+                $query->whereDate('tanggal_lhp', '<', $filters['before']);
+            }
+        }
+
+        if (!empty($filters['no_lhp'])) {
+            $query->where('no_lhp', $filters['no_lhp']);
+        }
+
+        if (!empty($filters['no_sampel'])) {
+            $query->where('no_sampel', 'like', '%' . $filters['no_sampel'] . '%');
+        }
+
+        if ($limit) {
+            $query->limit($limit);
+        }
+
+        $headers = $query->orderBy('tanggal_lhp')->orderBy('id')->get();
+        $result['scanned'] = $headers->count();
+        $this->reportLingRefreshProgress($type, $result, '-', $filters);
+
+        foreach ($headers as $header) {
+            $result['processed']++;
+            $current = $header->no_lhp ?: $header->id;
+            $this->reportLingRefreshProgress($type, $result, $current, $filters);
+
+            try {
+                $samples = $this->parseSampleList($header->no_sampel ?? null);
+                if (!$samples) {
+                    $result['skipped']++;
+                    $result['messages'][] = "SKIPPED {$type}: {$current} - no_sampel kosong";
+                    continue;
+                }
+
+                $updates = $this->lingHeaderEnrichment($type, $samples, false);
+                $updates = array_filter($updates, function ($value) {
+                    return $value !== null && $value !== '' && $value !== [];
+                });
+                $updates = $this->filterColumns($config['header_table'], $updates);
+
+                if (!$updates) {
+                    $result['skipped']++;
+                    $result['messages'][] = "SKIPPED {$type}: {$current} - source detail/lapangan kosong";
+                    continue;
+                }
+
+                if (!empty($filters['dry_run'])) {
+                    $result['messages'][] = "DRY {$type}: {$current} (" . count($samples) . ' sampel, update=' . implode(', ', array_keys($updates)) . ')';
+                    continue;
+                }
+
+                DB::connection($this->connection)
+                    ->table($config['header_table'])
+                    ->where('id', $header->id)
+                    ->where('created_by', $createdBy)
+                    ->update($updates);
+
+                $result['updated']++;
+            } catch (\Throwable $th) {
+                $result['failed']++;
+                $message = "FAILED {$type}: {$current} - " . $th->getMessage();
+                $result['messages'][] = $message;
+                $this->reportFailure($message, $filters);
+            }
+        }
+
+        return $result;
+    }
+
+    private function parseSampleList($value)
+    {
+        if (!$value) {
+            return [];
+        }
+
+        if (is_array($value)) {
+            $items = $value;
+        } else {
+            $decoded = json_decode((string) $value, true);
+            $items = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', (string) $value);
+        }
+
+        $samples = [];
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $item = $item['no_sampel'] ?? $item['sample'] ?? null;
+            }
+            $item = trim((string) $item);
+            if ($item !== '') {
+                $samples[] = $item;
+            }
+        }
+
+        return array_values(array_unique($samples));
+    }
+
+    private function reportLingRefreshProgress($type, array $result, $current, array $filters)
+    {
+        $callback = $filters['progress_callback'] ?? null;
+        $every = (int) ($filters['progress_every'] ?? 25);
+
+        if (!$callback || $every <= 0) {
+            return;
+        }
+
+        $processed = (int) ($result['processed'] ?? 0);
+        $scanned = (int) ($result['scanned'] ?? 0);
+        if ($processed !== 0 && $processed < $scanned && $processed % $every !== 0) {
+            return;
+        }
+
+        $callback([
+            'type' => $type,
+            'processed' => $processed,
+            'scanned' => $scanned,
+            'updated' => (int) ($result['updated'] ?? 0),
+            'skipped' => (int) ($result['skipped'] ?? 0),
+            'failed' => (int) ($result['failed'] ?? 0),
+            'current' => $current,
+        ]);
+    }
     public function run(array $filters = [])
     {
         $types = $this->resolveTypes($filters['type'] ?? null, $filters['except'] ?? null);
@@ -497,11 +888,10 @@ class LhpBackfillService
         $noSampel = implode(', ', array_values(array_unique(array_map(function ($detail) {
             return $detail->no_sampel;
         }, $details))));
-        $tanggalSampling = implode(', ', array_values(array_unique(array_filter(array_map(function ($detail) {
-            return $detail->tanggal_sampling;
-        }, $details)))));
+        $tanggalSamplingList = $this->distinctDateList($details, ['tanggal_sampling']);
+        $tanggalSampling = $this->dateOnly($tanggalSamplingList ?: ($first->tanggal_sampling ?? null));
         $releaseDate = $this->releaseDateFromParameterSources($type, $details)
-            ?: ($first->tanggal_terima ?: ($first->tanggal_sampling ?? null));
+            ?: ($first->tanggal_terima ?: ($tanggalSampling ?? null));
 
         $signer = $this->signerForDate($releaseDate);
 
@@ -512,12 +902,13 @@ class LhpBackfillService
             'no_qt' => $first->no_penawaran ?? null,
             'no_quotation' => $first->no_penawaran ?? null,
             'status_sampling' => $first->kategori_1 ?? null,
-            'tanggal_sampling' => $tanggalSampling ?: ($first->tanggal_sampling ?? null),
+            'tanggal_sampling' => $tanggalSampling,
+            'tanggal_sampling_text' => $tanggalSamplingList,
             'tanggal_terima' => $first->tanggal_terima ?? null,
             'parameter_uji' => $this->parameterJson($details),
             'nama_pelanggan' => $first->nama_perusahaan ?: ($first->nama_pelanggan ?? null),
             'alamat_sampling' => $first->alamat_sampling ?? null,
-            'sub_kategori' => $first->kategori_3 ?? null,
+            'sub_kategori' => $this->categoryName($first->kategori_3 ?? null) ?: ($first->kategori_3 ?? null),
             'id_kategori_2' => $this->categoryId($first->kategori_2 ?? null),
             'id_kategori_3' => $this->categoryId($first->kategori_3 ?? null),
             'regulasi' => $this->jsonOrNull($first->regulasi ?? null),
@@ -533,8 +924,7 @@ class LhpBackfillService
         ];
 
         if (in_array($type, self::KPGI_TYPES, true)) {
-            $row['no_lhp'] = $first->cfr ?: $first->no_sampel;
-            $row['no_sampel'] = $first->no_sampel;
+            $row['no_lhp'] = $first->cfr ?: $groupKey;
         }
 
         $row = array_merge($row, $this->headerEnrichment($type, $details, $row));
@@ -580,9 +970,16 @@ class LhpBackfillService
 
         if ($type === 'air') {
             $lap = $this->lapanganRow('data_lapangan_air', $firstSample);
+            $airTanggalSampling = $this->airTanggalSampling($first, $firstSample) ?: ($baseRow['tanggal_sampling'] ?? null);
+            $row = array_merge($row, [
+                'tanggal_sampling' => $airTanggalSampling,
+                'keterangan' => $this->defaultLhpKeteranganJson(),
+                'periode_analisa' => $this->airPeriodeAnalisa($first, $firstSample, $airTanggalSampling),
+            ]);
+
             if ($lap) {
                 $row = array_merge($row, [
-                    'deskripsi_titik' => $lap->lokasi_titik_pengambilan ?? $lap->lokasi_sampling ?? $lap->keterangan ?? null,
+                    'deskripsi_titik' => $this->firstFilled($lap->lokasi_titik_pengambilan ?? null, $lap->lokasi_sampling ?? null, $lap->keterangan ?? null),
                     'titik_koordinat' => $this->coordinateFromLapangan($lap),
                     'suhu_air' => $lap->suhu_air ?? null,
                     'suhu_udara' => $lap->suhu_udara ?? null,
@@ -591,12 +988,10 @@ class LhpBackfillService
                     'do' => $lap->do ?? null,
                     'bau' => $lap->bau ?? null,
                     'warna' => $lap->warna ?? null,
-                    'keterangan' => !empty($lap->keterangan) ? json_encode([$lap->keterangan]) : null,
                 ]);
             }
             return array_filter($row, function ($value) { return $value !== null && $value !== ''; });
         }
-
         if (in_array($type, ['udara_lingkungan_hidup', 'udara_lingkungan_kerja'], true)) {
             $row = array_merge($row, $this->lingHeaderEnrichment($type, $samples));
             return array_filter($row, function ($value) { return $value !== null && $value !== ''; });
@@ -789,12 +1184,12 @@ class LhpBackfillService
             "\u{1E8D} Parameter belum terakreditasi.",
         ], JSON_UNESCAPED_UNICODE);
     }
-    private function lingHeaderEnrichment($type, array $samples)
+    private function lingHeaderEnrichment($type, array $samples, $requireApproved = true)
     {
         $detailTable = $type === 'udara_lingkungan_hidup' ? 'detail_lingkungan_hidup' : 'detail_lingkungan_kerja';
         $lapanganTable = $type === 'udara_lingkungan_hidup' ? 'data_lapangan_lingkungan_hidup' : 'data_lapangan_lingkungan_kerja';
-        $detailRows = $this->sampleRows($detailTable, $samples);
-        $lapanganRows = $this->sampleRows($lapanganTable, $samples);
+        $detailRows = $this->sampleRows($detailTable, $samples, $requireApproved);
+        $lapanganRows = $this->sampleRows($lapanganTable, $samples, $requireApproved);
         $pendukungRows = [];
         foreach ($lapanganRows as $lapangan) {
             $pendukungRows[] = $this->jsonObject($lapangan->data_pendukung ?? null);
@@ -833,7 +1228,7 @@ class LhpBackfillService
         ];
     }
 
-    private function sampleRows($table, array $samples)
+    private function sampleRows($table, array $samples, $requireApproved = true)
     {
         if (!$samples || !Schema::connection($this->connection)->hasTable($table)) {
             return collect();
@@ -848,7 +1243,7 @@ class LhpBackfillService
         if (in_array('is_active', $columns, true)) {
             $query->where('is_active', 1);
         }
-        if (in_array('is_approve', $columns, true)) {
+        if ($requireApproved && in_array('is_approve', $columns, true)) {
             $query->where(function ($q) {
                 $q->where('is_approve', 1)->orWhereNotNull('approved_at');
             });
@@ -1000,6 +1395,9 @@ class LhpBackfillService
                     ->table($config['detail_table'])
                     ->insert($this->filterColumns($config['detail_table'], $row));
             }
+            if ($type === 'emisi_isokinetik') {
+                $this->insertIsokinetikCustomRows($details, $headerId);
+            }
             return;
         }
 
@@ -1052,6 +1450,117 @@ class LhpBackfillService
 
         return [];
     }
+    private function airPeriodeAnalisa($detail, $sample, $startOverride = null)
+    {
+        $start = $this->dateOnly($startOverride)
+            ?: $this->dateOnly($detail->tanggal_sampling ?? null)
+            ?: $this->dateOnly($detail->tanggal_terima ?? null);
+        $end = $this->airLastApprovedAt($sample) ?: $start;
+
+        if (!$start && !$end) {
+            return null;
+        }
+
+        return ($start ?: $end) . ' - ' . ($end ?: $start);
+    }
+
+    private function airTanggalSampling($detail, $sample)
+    {
+        if (($detail->kategori_1 ?? null) !== 'SD') {
+            return $this->dateOnly($detail->tanggal_sampling ?? null);
+        }
+
+        return $this->dateOnly($detail->tanggal_sampling ?? null)
+            ?: $this->airSdTanggalDiantar($detail, $sample)
+            ?: $this->dateOnly($detail->tanggal_terima ?? null);
+    }
+
+    private function airSdTanggalDiantar($detail, $sample)
+    {
+        if (!$sample || !Schema::connection($this->connection)->hasTable('sampel_diantar') || !Schema::connection($this->connection)->hasTable('sampel_diantar_detail')) {
+            return null;
+        }
+
+        $query = DB::connection($this->connection)->table('sampel_diantar')
+            ->where(function ($q) use ($detail) {
+                if (!empty($detail->no_order)) {
+                    $q->orWhere('no_order', $detail->no_order);
+                }
+                if (!empty($detail->no_quotation)) {
+                    $q->orWhere('no_quotation', $detail->no_quotation);
+                }
+            });
+
+        if (!empty($detail->periode)) {
+            $query->where('periode_kontrak', $detail->periode);
+        }
+
+        $headers = $query->pluck('id')->all();
+        if (!$headers) {
+            return null;
+        }
+
+        $rows = DB::connection($this->connection)->table('sampel_diantar_detail')
+            ->whereIn('id_header', $headers)
+            ->where('is_active', 1)
+            ->get(['tanggal_sampling', 'penyerahan_tanggal_sampel', 'tanggal_diambil_oleh_pihak_pelanggan', 'created_at', 'internal_data']);
+
+        foreach ($rows as $row) {
+            $decoded = json_decode(html_entity_decode($row->internal_data ?? ''), true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+
+            foreach ($decoded as $item) {
+                if (($item['no_sampel'] ?? null) === $sample) {
+                    return $this->dateOnly($row->tanggal_sampling ?? null)
+                        ?: $this->dateOnly($row->penyerahan_tanggal_sampel ?? null)
+                        ?: $this->dateOnly($row->tanggal_diambil_oleh_pihak_pelanggan ?? null)
+                        ?: $this->dateOnly($item['date_time'] ?? null)
+                        ?: $this->dateOnly($row->created_at ?? null);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function airLastApprovedAt($sample)
+    {
+        if (!$sample || !Schema::connection($this->connection)->hasTable('ws_value_air')) {
+            return null;
+        }
+
+        $max = DB::connection($this->connection)->table('ws_value_air')
+            ->where('no_sampel', $sample)
+            ->where('is_active', 1)
+            ->whereNotNull('approved_at')
+            ->max('approved_at');
+
+        return $this->dateOnly($max);
+    }
+
+    private function dateOnly($value)
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (preg_match('/\d{4}-\d{2}-\d{2}/', $value, $matches)) {
+            return $matches[0];
+        }
+
+        try {
+            return Carbon::parse($value)->format('Y-m-d');
+        } catch (\Throwable $th) {
+            return strlen($value) >= 10 ? substr($value, 0, 10) : $value;
+        }
+    }
     private function airDetailRows(array $details, $headerId)
     {
         $rows = [];
@@ -1098,7 +1607,9 @@ class LhpBackfillService
                 $satuan = $this->firstFilled($bakumutu->satuan ?? null, $item->satuan ?? null, '-');
                 $method = $this->firstFilled($bakumutu->method ?? null, $item->method ?? null, '-');
                 $bakuMutu = [$bakumutu->baku_mutu ?? '-'];
-                $hasil = $item->hasil !== null ? str_replace('_', ' ', $item->hasil) : null;
+                $hasilParsed = $this->airParsedHasil($item->hasil ?? null, $item->hasil_json ?? null);
+                $hasil = $hasilParsed['hasil'];
+                $hasilJson = $hasilParsed['json'];
 
                 if ($hasil === '##') {
                     $satuan = '-';
@@ -1109,11 +1620,11 @@ class LhpBackfillService
                 $rows[] = [
                     'id_header' => $headerId,
                     'no_sampel' => $detail->no_sampel,
-                    'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : 'ẍ',
+                    'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : html_entity_decode('&#x1E8D;', ENT_QUOTES, 'UTF-8'),
                     'parameter_lab' => str_replace("'", '', $item->parameter),
                     'parameter' => $item->nama_lhp ?? $item->nama_regulasi ?? $item->parameter,
                     'hasil_uji' => $hasil ?? '',
-                    'hasil_uji_json' => $item->hasil_json ?? null,
+                    'hasil_uji_json' => $hasilJson,
                     'attr' => $item->faktor_koreksi ?? null,
                     'satuan' => $satuan,
                     'methode' => $method,
@@ -1127,6 +1638,38 @@ class LhpBackfillService
         return $rows;
     }
 
+    private function airParsedHasil($hasil, $hasilJson = null)
+    {
+        $json = $hasilJson ?: null;
+        if ($hasil === null) {
+            return ['hasil' => null, 'json' => $json];
+        }
+
+        $raw = trim((string) $hasil);
+        $decoded = json_decode($raw, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $json = $json ?: json_encode($decoded, JSON_UNESCAPED_UNICODE);
+            $nilai = $decoded['hasil_pengujian']
+                ?? $decoded['hasil pengujian']
+                ?? $decoded['hasil_uji']
+                ?? $decoded['hasil uji']
+                ?? $decoded['hasil']
+                ?? null;
+
+            if ($nilai === null) {
+                foreach ($decoded as $value) {
+                    if (is_scalar($value) && trim((string) $value) !== '') {
+                        $nilai = $value;
+                        break;
+                    }
+                }
+            }
+
+            return ['hasil' => $nilai !== null ? str_replace('_', ' ', (string) $nilai) : '', 'json' => $json];
+        }
+
+        return ['hasil' => str_replace('_', ' ', $raw), 'json' => $json];
+    }
     private function airFieldRows($detail, $headerId, $regulasiId)
     {
         if (($detail->kategori_1 ?? null) === 'SD') {
@@ -1151,7 +1694,7 @@ class LhpBackfillService
         }
 
         if (!empty($lapangan->suhu_air) && $this->orderHasParameter($detail, '160;Suhu')) {
-            $rows[] = $this->airFieldRow($detail, $headerId, $regulasiId, 'Suhu', 'Suhu', $lapangan->suhu_air, '�C');
+            $rows[] = $this->airFieldRow($detail, $headerId, $regulasiId, 'Suhu', 'Suhu', $lapangan->suhu_air, html_entity_decode('&deg;', ENT_QUOTES, 'UTF-8') . 'C');
         }
 
         if (!empty($lapangan->debit_air) && stripos((string) ($detail->parameter ?? ''), 'Debit Air') !== false) {
@@ -1180,7 +1723,7 @@ class LhpBackfillService
         }
 
         if ($this->orderHasParameter($detail, '160;Suhu') && !empty($sd['suhu'])) {
-            $rows[] = $this->airFieldRow($detail, $headerId, $regulasiId, 'Suhu', 'Suhu', $sd['suhu'], '�C');
+            $rows[] = $this->airFieldRow($detail, $headerId, $regulasiId, 'Suhu', 'Suhu', $sd['suhu'], html_entity_decode('&deg;', ENT_QUOTES, 'UTF-8') . 'C');
         }
 
         if (!empty($sd['debit']) && stripos((string) ($detail->parameter ?? ''), 'Debit Air') !== false) {
@@ -1382,7 +1925,7 @@ class LhpBackfillService
                     'id_header' => $headerId,
                     'no_sampel' => $item->no_sampel,
                     'param' => $item->parameter,
-                    'hasil' => $isDingin ? null : $this->iklimPanasHasil($item->hasil1),
+                    'hasil' => $isDingin ? null : $this->iklimPanasHasil($item->hasil1, $lapPanas),
                     'indeks_suhu_basah' => $isDingin ? $this->iklimDinginIndeks($item->hasil1) : null,
                     'kecepatan_angin' => $item->rata_kecepatan_angin ?? null,
                     'suhu_temperatur' => $item->rata_suhu ?? null,
@@ -1482,7 +2025,7 @@ class LhpBackfillService
                 'nab' => $nab,
                 'methode' => $this->firstFilled($item->method ?? null, $bakumutu->method ?? null),
                 'tanggal_sampling' => $order->tanggal_sampling ?? null,
-                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : 'ẍ',
+                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : html_entity_decode('&#x1E8D;', ENT_QUOTES, 'UTF-8'),
             ];
         }
 
@@ -1522,10 +2065,10 @@ class LhpBackfillService
                 'page' => 1,
                 'hasil' => $nilai,
                 'hasil_uji' => $nilai,
-                'satuan' => $item->parameter === 'Power Density' ? 'mW/cm�' : ($item->parameter === 'Medan Magnit Statis' ? 'mT' : ($item->parameter === 'Medan Listrik' ? 'tesla' : '')),
+                'satuan' => $item->parameter === 'Power Density' ? html_entity_decode('mW/cm&sup2;', ENT_QUOTES, 'UTF-8') : ($item->parameter === 'Medan Magnit Statis' ? 'mT' : ($item->parameter === 'Medan Listrik' ? 'tesla' : '')),
                 'nab' => $item->nab ?? $item->nab_power_density ?? $item->nab_medan_magnet ?? $item->nab_medan_listrik,
                 'methode' => $item->method ?? null,
-                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : 'ẍ',
+                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : html_entity_decode('&#x1E8D;', ENT_QUOTES, 'UTF-8'),
                 'tanggal_sampling' => $order->tanggal_sampling ?? null,
             ];
         }
@@ -1628,7 +2171,7 @@ class LhpBackfillService
                 'methode' => $this->firstFilled($bakumutu->method ?? null, $item->method ?? null, '-'),
                 'baku_mutu' => json_encode([$bakumutu->baku_mutu ?? '-']),
                 'durasi' => $item->durasi ?? null,
-                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : 'ẍ',
+                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : html_entity_decode('&#x1E8D;', ENT_QUOTES, 'UTF-8'),
                 'tanggal_sampling' => $order->tanggal_sampling ?? null,
                 'created_by' => 'System',
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
@@ -1682,7 +2225,7 @@ class LhpBackfillService
                 'satuan' => $this->firstFilled($item->satuan ?? null, $item->ws_satuan ?? null, '-'),
                 'spesifikasi_metode' => $item->method ?? '-',
                 'baku_mutu' => '-',
-                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : 'ẍ',
+                'akr' => ($item->status ?? null) === 'AKREDITASI' ? '' : html_entity_decode('&#x1E8D;', ENT_QUOTES, 'UTF-8'),
             ];
         }
 
@@ -1691,6 +2234,325 @@ class LhpBackfillService
         }));
     }
 
+    public function refreshIsokinetikCustom(array $filters = [])
+    {
+        $config = self::TYPE_CONFIG['emisi_isokinetik'];
+        $createdBy = $filters['created_by'] ?? 'System';
+        $limit = !empty($filters['limit']) ? (int) $filters['limit'] : null;
+        $result = [
+            'scanned' => 0,
+            'processed' => 0,
+            'updated' => 0,
+            'deleted_custom' => 0,
+            'inserted_custom' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'messages' => [],
+        ];
+
+        foreach ([$config['header_table'], 'lhps_emisi_isokinetik_custom'] as $table) {
+            if (!Schema::connection($this->connection)->hasTable($table)) {
+                $result['failed'] = 1;
+                $result['messages'][] = 'MISSING TABLE emisi_isokinetik: ' . $table;
+                return $result;
+            }
+        }
+
+        $query = DB::connection($this->connection)
+            ->table($config['header_table'])
+            ->where('is_active', 1)
+            ->where('created_by', $createdBy);
+
+        if (!empty($filters['month'])) {
+            $start = Carbon::createFromFormat('Y-m-d', $filters['month'] . '-01')->startOfMonth()->toDateString();
+            $end = Carbon::createFromFormat('Y-m-d', $filters['month'] . '-01')->addMonth()->startOfMonth()->toDateString();
+            $query->whereDate('tanggal_lhp', '>=', $start)->whereDate('tanggal_lhp', '<', $end);
+        } else {
+            if (!empty($filters['from'])) {
+                $query->whereDate('tanggal_lhp', '>=', $filters['from']);
+            }
+            if (!empty($filters['to'])) {
+                $query->whereDate('tanggal_lhp', '<', $filters['to']);
+            }
+        }
+
+        if (!empty($filters['no_lhp'])) {
+            $query->where('no_lhp', $filters['no_lhp']);
+        }
+        if (!empty($filters['no_sampel'])) {
+            $query->where('no_sampel', 'like', '%' . $filters['no_sampel'] . '%');
+        }
+        if ($limit) {
+            $query->limit($limit);
+        }
+
+        $headers = $query->orderBy('tanggal_lhp')->orderBy('id')->get();
+        $result['scanned'] = $headers->count();
+        $this->reportIsokinetikCustomProgress($result, '-', $filters);
+
+        foreach ($headers as $header) {
+            $result['processed']++;
+            $current = $header->no_lhp ?: $header->id;
+            $this->reportIsokinetikCustomProgress($result, $current, $filters);
+
+            try {
+                $samples = $this->parseSampleList($header->no_sampel ?? null);
+                if (!$samples) {
+                    $result['skipped']++;
+                    $result['messages'][] = "SKIPPED emisi_isokinetik: {$current} - no_sampel kosong";
+                    continue;
+                }
+
+                $details = array_map(function ($sample) {
+                    return (object) ['no_sampel' => $sample];
+                }, $samples);
+                $rows = $this->isokinetikCustomRows($details, $header->id);
+                if (!$rows) {
+                    $result['skipped']++;
+                    $detailCount = $this->isokinetikCerobongDetailCount($samples);
+                    $reason = $detailCount > 0
+                        ? 'custom hasil_isokinetik kosong, detail cerobong ada ' . $detailCount . ' row'
+                        : 'hasil_isokinetik kosong dan detail cerobong tidak ditemukan';
+                    $result['messages'][] = "SKIPPED emisi_isokinetik: {$current} - " . $reason;
+                    continue;
+                }
+
+                if (!empty($filters['dry_run'])) {
+                    $result['messages'][] = "DRY emisi_isokinetik: {$current} (" . count($rows) . ' custom)';
+                    continue;
+                }
+
+                DB::connection($this->connection)->transaction(function () use ($header, $rows, &$result) {
+                    $deleted = DB::connection($this->connection)
+                        ->table('lhps_emisi_isokinetik_custom')
+                        ->where('id_header', $header->id)
+                        ->delete();
+
+                    foreach ($rows as $row) {
+                        DB::connection($this->connection)
+                            ->table('lhps_emisi_isokinetik_custom')
+                            ->insert($this->filterColumns('lhps_emisi_isokinetik_custom', $row));
+                    }
+
+                    $result['deleted_custom'] += $deleted;
+                    $result['inserted_custom'] += count($rows);
+                });
+
+                $result['updated']++;
+            } catch (\Throwable $th) {
+                $result['failed']++;
+                $message = "FAILED emisi_isokinetik: {$current} - " . $th->getMessage();
+                $result['messages'][] = $message;
+                $this->reportFailure($message, $filters);
+            }
+        }
+
+        return $result;
+    }
+
+    private function isokinetikCerobongDetailCount(array $samples)
+    {
+        if (!$samples || !Schema::connection($this->connection)->hasTable('emisi_cerobong_header')) {
+            return 0;
+        }
+
+        return DB::connection($this->connection)->table('emisi_cerobong_header')
+            ->whereIn('no_sampel', $samples)
+            ->where('is_active', 1)
+            ->where('is_approved', 1)
+            ->count();
+    }
+    private function insertIsokinetikCustomRows(array $details, $headerId)
+    {
+        $rows = $this->isokinetikCustomRows($details, $headerId);
+        foreach ($rows as $row) {
+            DB::connection($this->connection)
+                ->table('lhps_emisi_isokinetik_custom')
+                ->insert($this->filterColumns('lhps_emisi_isokinetik_custom', $row));
+        }
+    }
+
+    private function isokinetikCustomRows(array $details, $headerId)
+    {
+        if (!Schema::connection($this->connection)->hasTable('ws_value_emisi_cerobong')) {
+            return [];
+        }
+
+        $samples = array_values(array_unique(array_filter(array_map(function ($detail) { return $detail->no_sampel ?? null; }, $details))));
+        if (!$samples) {
+            return [];
+        }
+
+        $items = collect();
+
+        if (Schema::connection($this->connection)->hasTable('emisi_cerobong_header')) {
+            $cerobongItems = DB::connection($this->connection)->table('emisi_cerobong_header as src')
+                ->join('ws_value_emisi_cerobong as ws', 'ws.id_emisi_cerobong_header', '=', 'src.id')
+                ->whereIn('src.no_sampel', $samples)
+                ->where('src.is_active', 1)
+                ->where('src.is_approved', 1)
+                ->where('ws.is_active', 1)
+                ->whereNotNull('ws.hasil_isokinetik')
+                ->select('src.no_sampel', 'ws.hasil_isokinetik')
+                ->get();
+            $items = $items->merge($cerobongItems);
+        }
+
+        if (Schema::connection($this->connection)->hasTable('isokinetik_header')) {
+            $isoItems = DB::connection($this->connection)->table('isokinetik_header as src')
+                ->join('ws_value_emisi_cerobong as ws', 'ws.id_isokinetik', '=', 'src.id')
+                ->whereIn('src.no_sampel', $samples)
+                ->where('src.is_active', 1)
+                ->where('src.is_approved', 1)
+                ->where('ws.is_active', 1)
+                ->whereNotNull('ws.hasil_isokinetik')
+                ->select('src.no_sampel', 'ws.hasil_isokinetik')
+                ->get();
+            $items = $items->merge($isoItems);
+
+            if (Schema::connection($this->connection)->hasTable('emisi_cerobong_header')) {
+                $isoViaCerobongItems = DB::connection($this->connection)->table('isokinetik_header as src')
+                    ->join('emisi_cerobong_header as ech', 'ech.no_sampel', '=', 'src.no_sampel')
+                    ->join('ws_value_emisi_cerobong as ws', 'ws.id_emisi_cerobong_header', '=', 'ech.id')
+                    ->whereIn('src.no_sampel', $samples)
+                    ->where('src.is_active', 1)
+                    ->where('src.is_approved', 1)
+                    ->where('ech.is_active', 1)
+                    ->where('ech.is_approved', 1)
+                    ->where('ws.is_active', 1)
+                    ->whereNotNull('ws.hasil_isokinetik')
+                    ->select('src.no_sampel', 'ws.hasil_isokinetik')
+                    ->get();
+                $items = $items->merge($isoViaCerobongItems);
+            }
+        }
+
+        $items = $items->unique(function ($item) {
+            return ($item->no_sampel ?? '') . '|' . md5((string) ($item->hasil_isokinetik ?? ''));
+        })->values();
+
+        $rows = [];
+        foreach ($items as $item) {
+            $hasilIsokinetik = $this->decodeMaybeJson($item->hasil_isokinetik);
+            if (!is_array($hasilIsokinetik)) {
+                continue;
+            }
+
+            $rows = array_merge($rows, $this->isokinetikCustomPage2Rows($hasilIsokinetik, $headerId));
+            $rows = array_merge($rows, $this->isokinetikCustomPage3Rows($hasilIsokinetik, $headerId));
+        }
+
+        return $rows;
+    }
+
+    private function isokinetikCustomPage2Rows(array $data, $headerId)
+    {
+        $mapping = [
+            'berat_molekul_kering_method5' => ['Berat Molekul Kering', '-', 'g/gmol', 'SNI 7177.15:2009'],
+            'uap_air_dalam_aliran_gas' => ['Kadar Uap Air', '-', '%', 'SNI 7177.16:2009'],
+            'kecepatan_volumetrik_aktual' => ['Kecepatan Linier (Laju Alir Volumetrik)', '-', html_entity_decode('m&sup3;/s', ENT_QUOTES, 'UTF-8'), 'SNI 7177.14:2009'],
+            'traverse_poin_partikulat' => ['Lokasi dan Titik - Titik Lintas (Traverse Point)', '-', '-', 'SNI 7177.13:2009'],
+            'persen_sampling_isokinetik' => ['Persen Isokinetik', '90-110', '%', 'SNI 7177.17:2009'],
+        ];
+
+        return $this->isokinetikCustomMappedRows($data, $mapping, $headerId, 2);
+    }
+
+    private function isokinetikCustomPage3Rows(array $data, $headerId)
+    {
+        foreach ([
+            'luas_penampang_cerobong', 'rata_rata_tekanan_pitot', 'co_dmw', 'co2_dmw', 'co_mole', 'o2_mole', 'co2_mole', 'n2_mole',
+            'nox_dmw', 'so2_dmw', 'rata_suhu_cerobong', 'rata_suhu_gas_standar', 'uap_air_dalam_aliran_gas_hide', 'konstanta_2',
+            'konstanta_4', 'konstanta_5', 'konsentrasi_co', 'konsentrasi_co2', 'konsentrasi_o2', 'konsentrasi_nox', 'konsentrasi_so2',
+            'co_method3', 'co2_method3', 'o2_method3', 'n2_method3', 'rata_rata_tekanan_pitot_method_2', 'rata_rata_tekanan_pitot_method_5',
+        ] as $key) {
+            unset($data[$key]);
+        }
+
+        $mapping = [
+            'traverse_poin_partikulat' => ['Titik Lintas Partikulat', '-', 'Titik', 'Perhitungan'],
+            'traverse_poin_kecepatan_linier' => ['Titik Lintas Kecepatan Linier', '-', 'Titik', 'Perhitungan'],
+            'diameter_cerobong' => ['Diameter Cerobong', '-', 'm', 'Pengukuran'],
+            'ukuran_lubang_sampling' => ['Ukuran Lubang Sampling', '-', 'm', 'Pengukuran'],
+            'jumlah_lubang_sampling' => ['Jumlah Lubang Sampling', '-', 'Unit', 'Pengukuran'],
+            'jarak_upstream' => ['Jarak Upstream', '-', 'm', 'Pengukuran'],
+            'jarak_downstream' => ['Jarak Downstream', '-', 'm', 'Pengukuran'],
+            'kategori_upstream' => ['Kategori Upstream', '-', 'D', 'Perhitungan'],
+            'kategori_downstream' => ['Kategori Downstream', '-', 'D', 'Perhitungan'],
+            'kp' => ['Kp', '-', '-', 'Ketetapan'],
+            'cp' => ['Cp', '-', '-', 'Ketetapan'],
+            'selisih_tekanan_barometer_method_5' => ['Selisih Tekanan Udara Lingkungan dan Gas Buang', '-', 'mmHg', 'Perhitungan'],
+            'tekanan_barometer' => ['Tekanan Udara Lingkungan', '-', 'mmHg', 'Pengukuran'],
+            'kecepatan_linier_method_5' => ['Kecepatan Linier', '-', 'm/s', 'Perhitungan'],
+            'kecepatan_volumetrik_aktual' => ['Kecepatan Volumetrik Actual', '-', html_entity_decode('m&sup3;/s', ENT_QUOTES, 'UTF-8'), 'Pengukuran'],
+            'berat_molekul_kering_method5' => ['Berat Molekul Kering', '-', 'g/gmol', 'Perhitungan'],
+            'berat_molekul_basah_method5' => ['Berat Molekul Basah', '-', 'g/gmol', 'Perhitungan'],
+            'durasi_waktu' => ['Durasi Sampling', '-', 'Menit', 'Pengukuran'],
+            'volume_uap_air' => ['Volume Uap Air Sampel Gas (Standar)', '-', html_entity_decode('m&sup3;', ENT_QUOTES, 'UTF-8'), 'Pengukuran'],
+            'kecepatan_volumetrik_standar' => ['Kecepatan Volumetrik Standar', '-', html_entity_decode('m&sup3;/s', ENT_QUOTES, 'UTF-8'), 'Perhitungan'],
+            'uap_air_dalam_aliran_gas' => ['Kadar Uap Air', '-', '%', 'Perhitungan'],
+            'koefisien_dry_gas' => ['Koefisien Dry Gas Meter', '-', '-', 'Kalibrasi'],
+            'delta_h_calibrate' => [html_entity_decode('&Delta;h Calibrate', ENT_QUOTES, 'UTF-8'), '-', html_entity_decode('mm H&sub2;O', ENT_QUOTES, 'UTF-8'), 'Kalibrasi'],
+            'volume_sampel_dari_dry_gas' => ['Volume Sampel dari Dry Gas Meter', '-', html_entity_decode('m&sup3;', ENT_QUOTES, 'UTF-8'), 'Pengukuran'],
+            'volume_sampel_gas_standar' => ['Volume Sampel Gas (Standar)', '-', html_entity_decode('m&sup3;', ENT_QUOTES, 'UTF-8'), 'Perhitungan'],
+            'rata_rata_suhu_gas_buang' => ['Rata-Rata Suhu Gas Buang', '-', html_entity_decode('&deg;C', ENT_QUOTES, 'UTF-8'), 'Perhitungan'],
+            'tekanan_gas_buang' => ['Tekanan Gas Buang', '-', 'mmHg', 'Pengukuran'],
+            'diameter_nozzle' => ['Diameter Nozzle', '-', 'm', 'Pengukuran'],
+            'luas_penampang_nozzle' => ['Luas Penampang Nozzle', '-', html_entity_decode('m&sup2;', ENT_QUOTES, 'UTF-8'), 'Perhitungan'],
+            'persen_sampling_isokinetik' => ['Persen Sampling Isokinetik', '-', '%', 'Perhitungan'],
+            'effisiensi_pembakaran' => ['Effisiensi Pembakaran', '-', '%', 'Perhitungan'],
+        ];
+
+        return $this->isokinetikCustomMappedRows($data, $mapping, $headerId, 3);
+    }
+
+    private function isokinetikCustomMappedRows(array $data, array $mapping, $headerId, $page)
+    {
+        $rows = [];
+        foreach ($mapping as $key => $meta) {
+            if (!array_key_exists($key, $data)) {
+                continue;
+            }
+            [$parameter, $bakuMutu, $satuan, $method] = $meta;
+            $rows[] = [
+                'id_header' => $headerId,
+                'page' => $page,
+                'akr' => '',
+                'parameter_lab' => $parameter,
+                'parameter' => $parameter,
+                'hasil_uji' => $data[$key],
+                'baku_mutu' => $bakuMutu,
+                'satuan' => $satuan,
+                'spesifikasi_metode' => $method,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function reportIsokinetikCustomProgress(array $result, $current, array $filters)
+    {
+        $callback = $filters['progress_callback'] ?? null;
+        $every = (int) ($filters['progress_every'] ?? 25);
+        if (!$callback || $every <= 0) {
+            return;
+        }
+
+        $processed = (int) ($result['processed'] ?? 0);
+        $scanned = (int) ($result['scanned'] ?? 0);
+        if ($processed !== 0 && $processed < $scanned && $processed % $every !== 0) {
+            return;
+        }
+
+        $callback([
+            'processed' => $processed,
+            'scanned' => $scanned,
+            'updated' => (int) ($result['updated'] ?? 0),
+            'skipped' => (int) ($result['skipped'] ?? 0),
+            'failed' => (int) ($result['failed'] ?? 0),
+            'current' => $current,
+        ]);
+    }
     private function firstValue($row, array $columns)
     {
         foreach ($columns as $column) {
@@ -1713,7 +2575,7 @@ class LhpBackfillService
 
         return $values ? implode('; ', $values) : null;
     }
-    private function iklimPanasHasil($value)
+    private function iklimPanasHasil($value, $lapangan = null)
     {
         $decoded = $this->decodeMaybeJson($value);
         if (!is_array($decoded)) {
@@ -1745,7 +2607,34 @@ class LhpBackfillService
             return $this->formatOneDecimal(array_sum($values) / count($values));
         }
 
-        return null;
+        return $this->iklimPanasHasilFromLapangan($lapangan);
+    }
+
+    private function iklimPanasHasilFromLapangan($lapangan)
+    {
+        if (!$lapangan || empty($lapangan->pengukuran)) {
+            return null;
+        }
+
+        $pengukuran = $this->decodeMaybeJson($lapangan->pengukuran);
+        if (!is_array($pengukuran)) {
+            return null;
+        }
+
+        $values = [];
+        foreach ($pengukuran as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            foreach (['wbtgc_in', 'wbtgc_out'] as $key) {
+                if (isset($row[$key]) && is_numeric($row[$key])) {
+                    $values[] = (float) $row[$key];
+                }
+            }
+        }
+
+        return $values ? $this->formatOneDecimal(array_sum($values) / count($values)) : null;
     }
 
     private function iklimDinginIndeks($value)
@@ -1859,11 +2748,7 @@ class LhpBackfillService
         foreach ($rows as $row) {
             foreach ($columns as $column) {
                 if (isset($row->$column) && trim((string) $row->$column) !== '') {
-                    try {
-                        $dates[] = Carbon::parse($row->$column)->format('Y-m-d');
-                    } catch (\Throwable $th) {
-                        $dates[] = trim((string) $row->$column);
-                    }
+                    $dates[] = $this->dateOnly($row->$column);
                     break;
                 }
             }
@@ -2044,9 +2929,9 @@ class LhpBackfillService
 
         if ($nab !== null && $nab !== '-') {
             $observasi[] = 'Berdasarkan frekuensi yang didapat NAB gelombang mikro mengacu pada parameter power density.';
-            $observasi[] = 'NAB untuk parameter power density didapatkan ' . $this->formatNumber($nab) . ' mW/cm�.';
+            $observasi[] = 'NAB untuk parameter power density didapatkan ' . $this->formatNumber($nab) . ' ' . html_entity_decode('mW/cm&sup2;', ENT_QUOTES, 'UTF-8') . '.';
             $kesimpulan = [
-                'Berdasarkan NAB dengan parameter power density, Gelombang Mikro dapat disimpulkan ' . $this->memenuhiText($hasil, $nab) . ' NAB dengan nilai ' . $this->formatNumber($hasil) . ' mW/cm�.',
+                'Berdasarkan NAB dengan parameter power density, Gelombang Mikro dapat disimpulkan ' . $this->memenuhiText($hasil, $nab) . ' NAB dengan nilai ' . $this->formatNumber($hasil) . ' ' . html_entity_decode('mW/cm&sup2;', ENT_QUOTES, 'UTF-8') . '.',
             ];
         } else {
             $observasi[] = 'Berdasarkan waktu pemaparan yang didapatkan gelombang mikro tidak dapat dibandingkan dengan NAB.';

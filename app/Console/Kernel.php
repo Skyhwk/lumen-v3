@@ -41,6 +41,9 @@ class Kernel extends ConsoleKernel
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
         Commands\LhpBackfillCommand::class,
+        Commands\LhpRefreshKpgiDetailCommand::class,
+        Commands\LhpRefreshLingHeaderCommand::class,
+        Commands\LhpRefreshIsokinetikCustomCommand::class,
     ];
 
     /**
