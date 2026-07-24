@@ -428,16 +428,12 @@ class FdlSenyawaVolatileController extends Controller
                 }
                 
                 $shift2 = $request->shift_pengambilan;
-                if ($request->kateg_uji[$in] == null) {
-                    $shift_peng = 'Sesaat';
+                $kateg = strtolower($request->kateg_uji[$in] ?? '');
+
+                if (empty($kateg)) {
                     $shift2 = 'Sesaat';
-                } else if ($request->kateg_uji[$in] == '24 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
-                } else if ($request->kateg_uji[$in] == '8 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
-                } else if ($request->kateg_uji[$in] == '6 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
-                }else if ($request->kateg_uji[$in] == '3 Jam') {
+                    $shift_peng = 'Sesaat';
+                } elseif (strpos($kateg, 'jam') !== false) {
                     $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
                 }
 
