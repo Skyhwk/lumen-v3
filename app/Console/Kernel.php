@@ -45,6 +45,10 @@ class Kernel extends ConsoleKernel
         Commands\SyncShioElemen::class,
         Commands\BackfillPersiapanSampel::class,
         Commands\GenerateWsFinalApproval::class,
+        // Commands\LhpBackfillCommand::class,
+        // Commands\LhpRefreshKpgiDetailCommand::class,
+        // Commands\LhpRefreshLingHeaderCommand::class,
+        // Commands\LhpRefreshIsokinetikCustomCommand::class,
     ];
 
     /**
