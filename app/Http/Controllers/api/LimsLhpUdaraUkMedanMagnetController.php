@@ -160,12 +160,23 @@ class LimsLhpUdaraUkMedanMagnetController extends Controller
     {
         try {
             $noLhp = $request->no_lhp ?? $request->cfr;
-            $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)
-                ->where('is_active', true)
-                ->first();
+            if ($noLhp) {
+                $header = LhpsMedanLMHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            }
 
             if (!$header) {
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
+            }
+
+            if ($header->file_qr == null) {
+                $file_qr = new \App\Services\GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_MEDAN_MAGNET', $header, $this->karyawan ?? 'System');
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
             }
 
             $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();

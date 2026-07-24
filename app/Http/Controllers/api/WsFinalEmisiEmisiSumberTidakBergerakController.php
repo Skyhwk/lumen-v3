@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\api;
+use App\Jobs\ApproveWsParameterJob;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganEmisiCerobong;
@@ -331,6 +332,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
     public function approveWSApi(Request $request)
     {
+        $user = $request->attributes->get('user');
+        $karyawan = ($user && isset($user->karyawan) && $user->karyawan)
+            ? $user->karyawan->nama_lengkap
+            : $request->header('token');
+
         if ($request->type == "emisi_cerobong_header") {
             $data = EmisiCerobongHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
             // dd($data);
@@ -350,6 +356,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 $dat       = EmisiCerobongHeader::where('id', $request->id)->first();
                 $dat->lhps = 1;
                 $dat->save();
+
+                dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                 return response()->json([
                     'message' => 'Data has ben Approved',
                     'success' => true,
@@ -386,7 +395,10 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             ])->update([
                 'lhps' => 1,
             ]);
+
+            
             if ($data) {
+                dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
                 return response()->json([
                     'message' => 'Data has ben Approved',
                     'success' => true,
@@ -412,6 +424,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 $dat       = IsokinetikHeader::where('id', $request->id)->first();
                 $dat->lhps = 1;
                 $dat->save();
+
+                dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
                 return response()->json([
                     'message' => 'Data has ben Approved',
                     'success' => true,

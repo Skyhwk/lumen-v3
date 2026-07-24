@@ -25,6 +25,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\MasterPelanggan;
 use App\Models\PengajuanFeeSampling;
 use App\Models\PengajuanFeeSamplingDetail;
+use App\Models\QrDocument;
 use App\Models\RecordPembayaranInvoice;
 use App\Models\SalesInDetail;
 use App\Models\SummaryInvoice;
@@ -72,6 +73,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class FixingController extends Controller
 {
@@ -323,7 +325,7 @@ class FixingController extends Controller
                                     }
                                 }
 
-                                // ✅ Gunakan key dinamis sesuai urutan detail
+                                // Gunakan key dinamis sesuai urutan detail
                                 $dsDetail = [
                                     (string) ($detailIndex + 1) => $dsDetail,
                                 ];
@@ -344,7 +346,7 @@ class FixingController extends Controller
                             continue;
                         }
 
-                        // Struktur lama → bungkus jadi struktur baru dengan key dinamis
+                        // Struktur lama dibungkus jadi struktur baru dengan key dinamis
                         $originalStructure = [
                             (string) ($detailIndex + 1) => [
                                 "periode_kontrak" => $detail->periode_kontrak,
@@ -1428,6 +1430,102 @@ class FixingController extends Controller
         }
     }
 
+    public function generateQrInvoice(Request $request)
+    {
+        $noInvoice = trim((string) $request->input('no_invoice'));
+        if ($noInvoice === '') {
+            return response()->json([
+                'message' => 'Nomor invoice wajib diisi.',
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $invoice = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->first();
+
+            if (!$invoice) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => "Invoice {$noInvoice} tidak ditemukan atau tidak aktif.",
+                ], 404);
+            }
+
+            $filename = str_replace('/', '_', $noInvoice);
+            $directory = public_path('qr_documents');
+            $path = $directory . '/' . $filename . '.svg';
+            $link = 'https://www.intilab.com/validation/';
+
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            $qr = QrDocument::where('type_document', 'invoice')
+                ->where('file', $filename)
+                ->first();
+
+            if ($qr && file_exists($path)) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => "QR Invoice {$noInvoice} sudah ada pada server.",
+                    'data' => [
+                        'no_invoice' => $noInvoice,
+                        'kode_qr' => $qr->kode_qr,
+                        'file' => $filename,
+                        'path' => $path,
+                    ],
+                ], 200);
+            }
+
+            $kodeQr = $qr->kode_qr ?? ('isldc' . (int) floor(microtime(true) * 1000));
+            QrCode::size(200)->generate($link . $kodeQr, $path);
+
+            $dataQr = [
+                'type_document' => 'invoice',
+                'kode_qr' => $kodeQr,
+                'file' => $filename,
+                'data' => json_encode([
+                    'no_document' => $noInvoice,
+                    'nama_customer' => $invoice->nama_perusahaan,
+                    'type_document' => 'invoice',
+                    'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'Disahkan_Oleh' => $invoice->nama_pj,
+                    'Jabatan' => $invoice->jabatan_pj,
+                ]),
+                'created_at' => Carbon::now(),
+                'created_by' => 'System Fixing',
+            ];
+
+            if ($qr) {
+                $qr->update($dataQr);
+                $status = 'updated';
+            } else {
+                QrDocument::create($dataQr);
+                $status = 'created';
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => "QR Invoice {$noInvoice} berhasil digenerate.",
+                'data' => [
+                    'status' => $status,
+                    'no_invoice' => $noInvoice,
+                    'kode_qr' => $kodeQr,
+                    'file' => $filename,
+                    'path' => $path,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
     public function renderSmallInvoiceSignature(Request $request)
     {
         $noInvoice = trim((string) $request->no_invoice);

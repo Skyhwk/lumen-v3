@@ -329,12 +329,24 @@ class LimsLhpULKController extends Controller
       public function previewLhp(Request $request)
     {
         try {
-            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
-                ->where('is_active', true)
-                ->first();
+            $noLhp = $request->no_lhp ?? $request->cfr;
+            if ($noLhp) {
+                $header = LhpsLingHeader::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            } else {
+                $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            }
 
             if (!$header) {
                 return response()->json(['message' => 'Header LHP tidak ditemukan'], 404);
+            }
+
+            if ($header->file_qr == null) {
+                $file_qr = new \App\Services\GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_ULK', $header, $this->karyawan ?? 'System');
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
             }
 
             $detail = LhpsLingDetail::where('id_header', $header->id)->get();
