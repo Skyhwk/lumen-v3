@@ -74,7 +74,7 @@ class RequestQrController extends Controller
                         }else{
                             $query->where('nama_pelanggan', $item['nama_pelanggan']);
                         }
-                    })->first();
+                    })->where('is_active',1)->first();
                     return $exist !== null ? $exist->id_pelanggan : null;
                     // return $item['pelanggan_info'] !== null ? $item['pelanggan_info']->id_pelanggan : null;
                 })
