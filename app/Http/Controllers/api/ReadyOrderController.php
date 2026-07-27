@@ -727,7 +727,16 @@ class ReadyOrderController extends Controller
                     /*
                         Generate order kusus untuk tanpa pengujian
                     */
-                    return self::orderNonKontrakNonPengujian($dataQuotation, $no_order, $request);
+                    $data_lama = null;
+                    if ($dataQuotation->data_lama != null) {
+                        $data_lama = json_decode($dataQuotation->data_lama);
+                    }
+
+                    if ($data_lama != null && $data_lama->no_order != null) {
+                        return self::reOrderNonKontrak($dataQuotation, $no_order, null, $data_lama, $request);
+                    } else {
+                        return self::orderNonKontrakNonPengujian($dataQuotation, $no_order, $request);
+                    }
                 } else {
                     $dataJadwal = null;
                     if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
