@@ -727,16 +727,7 @@ class ReadyOrderController extends Controller
                     /*
                         Generate order kusus untuk tanpa pengujian
                     */
-                    $data_lama = null;
-                    if ($dataQuotation->data_lama != null) {
-                        $data_lama = json_decode($dataQuotation->data_lama);
-                    }
-
-                    if ($data_lama != null && $data_lama->no_order != null) {
-                        return self::reOrderNonKontrak($dataQuotation, $no_order, null, $data_lama, $request);
-                    } else {
-                        return self::orderNonKontrakNonPengujian($dataQuotation, $no_order, $request);
-                    }
+                    return self::orderNonKontrakNonPengujian($dataQuotation, $no_order, $request);
                 } else {
                     $dataJadwal = null;
                     if (!in_array($dataQuotation->status_sampling, ['SD', 'SAR'])) {
@@ -975,7 +966,7 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
-            self::updateCustomer($request);
+            
             $data_lama = null;
             if ($dataQuotation->data_lama != null) {
                 $data_lama = json_decode($dataQuotation->data_lama);
@@ -983,7 +974,7 @@ class ReadyOrderController extends Controller
                     $no_order = $data_lama->no_order;
                 }
             }
-            // dd($no_order);
+            
             if ($data_lama != null && $data_lama->no_order != null) {
                 OrderDetail::where('no_order', $no_order)->where('is_active', 1)->update(['is_active' => 0]);
 
@@ -1034,6 +1025,7 @@ class ReadyOrderController extends Controller
                         'message' => 'No Quotation already Ordered.!',
                     ], 401);
                 } else {
+                    self::updateCustomer($request);
                     $cek_no_order = OrderHeader::where('no_order', $no_order)->where('is_active', 1)->first();
                     if ($cek_no_order != null) {
                         return response()->json([
