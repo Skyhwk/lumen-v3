@@ -1083,62 +1083,14 @@ class LimsFppsController extends Controller
             $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                 ->where('no_order', $dataOrder->no_order)
                 ->where('tanggal_sampling', $request->jadwal)
-                ->where('is_active', 1)
-                ->where('sampler_jadwal', $request->sampler);
+                ->where('is_active', 1);
 
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
             
             if (!$psHeader) {
-                $request->no_document = $request->nomor_quotation;
-                $request->no_sampel = $pra_no_sample;
-
-                $response = $psController->preview($request);
-                $preview = json_decode($response->getContent(), true);
-            
-                $isMustPrepared = false;
-                // foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
-                //     foreach ($preview[$kategori] as $sampel) {
-                //         if (isset($sampel['no_sampel'])) {
-                //             $isMustPrepared = true;
-                //             break;
-                //         };
-                //     }
-                // }
-
-                if ($isMustPrepared) {
-                    return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!'], 401);
-                } else {
-                    $requestPsData = new Request([
-                        'no_order' => $request->no_order,
-                        'no_quotation' => $request->no_document,
-                        'tanggal_sampling' => $request->jadwal,
-                        'nama_perusahaan' => $request->nama_perusahaan,
-                        'kategori_jadwal' => $request->kategori,
-                        'sampler_jadwal' => $request->sampler,
-                        'periode' => $request->periode,
-                        'analis_berangkat' => null,
-                        'sampler_berangkat' => null,
-                        'analis_pulang' => null,
-                        'sampler_pulang' => null,
-                        'masker' => ['disiapkan' => 2, 'tambahan' => ""],
-                        'sarung_tangan_karet' => ['disiapkan' => 2, 'tambahan' => ""],
-                        'sarung_tangan_bintik' => ['disiapkan' => 2, 'tambahan' => ""],
-                        'detail' => [],
-                        'plastik_benthos' => ["tambahan" => "", "disiapkan" => ""],
-                        'media_petri_dish' => ["tambahan" => "", "disiapkan" => ""],
-                        'media_tabung' => ["tambahan" => "", "disiapkan" => ""],
-                    ]);
-
-                    $psController->save($requestPsData);
-
-                    $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
-                        ->where('no_order', $dataOrder->no_order)
-                        ->where('tanggal_sampling', $request->jadwal)
-                        ->where('sampler_jadwal', $request->sampler)
-                        ->first();
-                }
+                return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update persiapan sampel terlebih dahulu.!'], 401);
             }
 
             $noDocument = explode('/', $psHeader->no_document);
