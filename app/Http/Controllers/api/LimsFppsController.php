@@ -1098,14 +1098,14 @@ class LimsFppsController extends Controller
                 $preview = json_decode($response->getContent(), true);
             
                 $isMustPrepared = false;
-                foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
-                    foreach ($preview[$kategori] as $sampel) {
-                        if (isset($sampel['no_sampel'])) {
-                            $isMustPrepared = true;
-                            break;
-                        };
-                    }
-                }
+                // foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
+                //     foreach ($preview[$kategori] as $sampel) {
+                //         if (isset($sampel['no_sampel'])) {
+                //             $isMustPrepared = true;
+                //             break;
+                //         };
+                //     }
+                // }
 
                 if ($isMustPrepared) {
                     return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!'], 401);
