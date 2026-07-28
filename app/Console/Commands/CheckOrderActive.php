@@ -314,60 +314,61 @@ class CheckOrderActive extends Command
         return null;
     }
 
-    private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], $steps, $no_lhp){ 
-        $details = WsFinalApprovalDetail::where('no_sampel', $no_lhp)
-           ->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])
-           ->toArray();
+    private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], array $steps = [], string $cfrNo = ''): array
+    {
+        $details = empty($sampelNumbers)
+            ? WsFinalApprovalDetail::where('no_sampel', $cfrNo)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray()
+            : WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray();
 
-       $hasilJikaDetailKosong = null;
-       $orderDate = $steps['order']['date'] ?? '';
-       $samplingDate = $steps['sampling']['date'] ?? '';
-       $analisaDate = $steps['analisa']['date'] ?? '';
+        $orderDate    = $steps['order']['date'] ?? null;
+        $samplingDate = $steps['sampling']['date'] ?? null;
+        $analisaDate  = $steps['analisa']['date'] ?? null;
 
-        if ($orderDate !== '' && empty($samplingDate)){
-           $hasilJikaDetailKosong = 'Menunggu Sampling';
-        } else if (!empty($samplingDate) && empty($analisaDate)){
-           $hasilJikaDetailKosong = 'Menunggu Analisa';
-       } else if ($orderDate !== '' && $samplingDate !== '' && $analisaDate !== ''){
-           $hasilJikaDetailKosong = 'Sedang Diverifikasi';
-       }
+        $hasilJikaDetailKosong = null;
+        if ($orderDate && !$samplingDate) {
+            $hasilJikaDetailKosong = 'Menunggu Sampling';
+        } elseif ($samplingDate && !$analisaDate) {
+            $hasilJikaDetailKosong = 'Menunggu Analisa';
+        } elseif ($orderDate && $samplingDate && $analisaDate) {
+            $hasilJikaDetailKosong = 'Sedang Diverifikasi';
+        }
 
-        $paramsData = [];
+        $paramsMap = [];
         foreach ($expectedParams as $param) {
-            $paramsData[strtolower(trim($param))] = $param;
+            $paramsMap[strtolower(trim($param))] = $param;
         }
 
         $foundMap = [];
-        $result = [];
+        $result   = [];
 
         foreach ($details as $detail) {
-            $regulasi = $detail['parameter_regulasi'] ?: $detail['parameter_lab'];
-            $cleanReg = strtolower(trim($regulasi));
-            $finalName = $paramsData[$cleanReg] ?? $regulasi;
+            $regulasi  = $detail['parameter_regulasi'] ?: $detail['parameter_lab'];
+            $cleanReg  = strtolower(trim($regulasi));
+            $finalName = $paramsMap[$cleanReg] ?? $regulasi;
 
-            $key = $detail['no_sampel'] . '|' . $finalName;
+            $key = "{$detail['no_sampel']}|{$finalName}";
             $foundMap[$key] = true;
 
             $result[] = [
                 'no_sampel'          => $detail['no_sampel'],
                 'parameter_regulasi' => $finalName,
-                'hasil'              => $detail['hasil']
+                'hasil'              => $detail['hasil'],
             ];
-       }
+        }
 
-       foreach ($sampelNumbers as $sampelNumber) {
-           foreach ($expectedParams as $expectedParam) {
-               $key = $sampelNumber . '|' . $expectedParam;
-               if (!isset($foundMap[$key])) {
+        foreach ($sampelNumbers as $sampelNumber) {
+            foreach ($expectedParams as $expectedParam) {
+                $key = "{$sampelNumber}|{$expectedParam}";
+                if (!isset($foundMap[$key])) {
                     $result[] = [
                         'no_sampel'          => $sampelNumber,
-                       'parameter_regulasi' => $expectedParam,
-                        'hasil'              => $hasilJikaDetailKosong
-                   ];
-                   $foundMap[$key] = true;
-               }
-           }
-       }
+                        'parameter_regulasi' => $expectedParam,
+                        'hasil'              => $hasilJikaDetailKosong,
+                    ];
+                    $foundMap[$key] = true;
+                }
+            }
+        }
 
         return $result;
     }
