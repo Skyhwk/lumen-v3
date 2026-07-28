@@ -314,83 +314,63 @@ class CheckOrderActive extends Command
         return null;
     }
 
-    private function buildHasilUji(array $sampelNumbers, $kategori_2, array $expectedParams = [], $steps){
-       $details = WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)
-           ->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])
-           ->toArray();
+    private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], array $steps = [], string $cfrNo = ''): array
+    {
+        $details = empty($sampelNumbers)
+            ? WsFinalApprovalDetail::where('no_sampel', $cfrNo)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray()
+            : WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray();
 
-       $categoryName = '';
-       if (!empty($kategori_2)) {
-           $parts = explode('-', $kategori_2);
-           $categoryName = isset($parts[1]) ? trim($parts[1]) : trim($kategori_2);
-       }
+        $orderDate    = $steps['order']['date'] ?? null;
+        $samplingDate = $steps['sampling']['date'] ?? null;
+        $analisaDate  = $steps['analisa']['date'] ?? null;
 
-       $hasilJikaDetailKosong = null;
-
-       $orderDate = $steps['order']['date'] ?? '';
-       $samplingDate = $steps['sampling']['date'] ?? '';
-       $analisaDate = $steps['analisa']['date'] ?? '';
-
-       if ($orderDate !== '' && (!isset($samplingDate) || $samplingDate == '' || $samplingDate == null)){
-           $hasilJikaDetailKosong = 'Menunggu Sampling';
-       } else if ($samplingDate !== '' && (!isset($analisaDate) || $analisaDate == '' || $analisaDate == null)){
-           $hasilJikaDetailKosong = 'Menunggu Analisa';
-       } else if ($orderDate !== '' && $samplingDate !== '' && $analisaDate !== ''){
-            $hasHeader = WsFinalApprovalHeader::whereHas('details', function ($query) use ($sampelNumbers) {
-                $query->whereIn('no_sampel', $sampelNumbers);
-            })->exists();
-
-            if (!$hasHeader){
-                $hasilJikaDetailKosong = 'Sedang Diverifikasi';
-            }
-       }
-
-       $foundMap = [];
-       foreach ($details as &$detail) {
-           if (empty($detail['parameter_regulasi']) || $detail['parameter_regulasi'] == null) {
-               $param = Parameter::where('is_active', 1)
-                   ->where(function ($q) use ($detail) {
-                       $q->where('nama_lab', $detail['parameter_lab']);
-                   })->whereRaw("TRIM(nama_kategori) = ?", [$categoryName])->first();
-
-               if ($param) {
-                   $detail['parameter_regulasi'] = $param->nama_regulasi;
-               } else {
-                   $detail['parameter_regulasi'] = $detail['parameter_lab'];
-               }
-           }
-
-           foreach ($expectedParams as $expectedParam) {
-               $cleanExpected = strtolower(trim($expectedParam));
-               $cleanRegulasi = strtolower(trim($detail['parameter_regulasi']));
-               if ($cleanExpected === $cleanRegulasi || 
-                   (!empty($cleanRegulasi) && (str_contains($cleanExpected, $cleanRegulasi) || str_contains($cleanRegulasi, $cleanExpected)))) {
-                   $detail['parameter_regulasi'] = $expectedParam;
-                   break;
-               }
-           }
-
-           $key = $detail['no_sampel'] . '|' . ($detail['parameter_regulasi'] ?? '');
-           $foundMap[$key] = true;
-
-           unset($detail['parameter_lab']);
-       }
-
-        foreach ($sampelNumbers as $sampelNumber) {
-           foreach ($expectedParams as $expectedParam) {
-               $key = $sampelNumber . '|' . $expectedParam;
-               if (!isset($foundMap[$key])) {
-                   $details[] = [
-                       'no_sampel' => $sampelNumber,
-                       'parameter_regulasi' => $expectedParam,
-                       'hasil' => $hasilJikaDetailKosong
-                   ];
-                   $foundMap[$key] = true;
-               }
-           }
+        $hasilJikaDetailKosong = null;
+        if ($orderDate && !$samplingDate) {
+            $hasilJikaDetailKosong = 'Menunggu Sampling';
+        } elseif ($samplingDate && !$analisaDate) {
+            $hasilJikaDetailKosong = 'Menunggu Analisa';
+        } elseif ($orderDate && $samplingDate && $analisaDate) {
+            $hasilJikaDetailKosong = 'Sedang Diverifikasi';
         }
 
-       return $details;
+        $paramsMap = [];
+        foreach ($expectedParams as $param) {
+            $paramsMap[strtolower(trim($param))] = $param;
+        }
+
+        $foundMap = [];
+        $result   = [];
+
+        foreach ($details as $detail) {
+            $regulasi  = $detail['parameter_regulasi'] ?: $detail['parameter_lab'];
+            $cleanReg  = strtolower(trim($regulasi));
+            $finalName = $paramsMap[$cleanReg] ?? $regulasi;
+
+            $key = "{$detail['no_sampel']}|{$finalName}";
+            $foundMap[$key] = true;
+
+            $result[] = [
+                'no_sampel'          => $detail['no_sampel'],
+                'parameter_regulasi' => $finalName,
+                'hasil'              => $detail['hasil'],
+            ];
+        }
+
+        foreach ($sampelNumbers as $sampelNumber) {
+            foreach ($expectedParams as $expectedParam) {
+                $key = "{$sampelNumber}|{$expectedParam}";
+                if (!isset($foundMap[$key])) {
+                    $result[] = [
+                        'no_sampel'          => $sampelNumber,
+                        'parameter_regulasi' => $expectedParam,
+                        'hasil'              => $hasilJikaDetailKosong,
+                    ];
+                    $foundMap[$key] = true;
+                }
+            }
+        }
+
+        return $result;
     }
 
     private function buildCfrDetail($group, string $orderDate, array $lhpRecords, $allParameter): array
@@ -490,7 +470,7 @@ class CheckOrderActive extends Command
 
         if (!$lhpRilis) {
             $result['parameter_regulasi'] = $parameterRegulasi;
-            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $kategori_2, $parameterRegulasi, $steps);
+            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $parameterRegulasi, $steps, $d['cfr']);
         }
 
         return $result;
