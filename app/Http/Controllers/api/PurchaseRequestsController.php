@@ -40,7 +40,7 @@ class PurchaseRequestsController extends Controller
     public function index(Request $request)
     {
         $employee = $request->attributes->get('user')->karyawan;
-        $scope = $request->input('scope', 'ongoing');
+        $scope = $request->input('scope', 'create');
 
         if ($scope === 'void') {
             return $this->indexVoidRequests($employee);
@@ -57,23 +57,56 @@ class PurchaseRequestsController extends Controller
         $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
 
         if ($scope === 'completed') {
-            $purchaseRequests = $purchaseRequests->where(function ($query) {
-                $query->where('status', 'Done')
-                    ->orWhere('finance_status', 'Distributed');
-            });
+            $purchaseRequests = $this->applyCompletedScope($purchaseRequests);
+        } elseif ($scope === 'ongoing') {
+            $purchaseRequests = $this->applyOngoingScope($purchaseRequests);
         } else {
-            $purchaseRequests = $purchaseRequests->where(function ($query) {
-                $query->where(function ($q) {
-                    $q->where('status', '!=', 'Done')
-                        ->where(function ($q2) {
-                            $q2->whereNull('finance_status')
-                                ->orWhere('finance_status', '!=', 'Distributed');
-                        });
-                });
-            });
+            $purchaseRequests = $this->applyCreateScope($purchaseRequests);
         }
 
         return $this->purchaseRequestDataTable($purchaseRequests, $employee);
+    }
+
+    private function applyCreateScope($query)
+    {
+        return $query->where(function ($query) {
+            $query->whereIn('status', ['Pending', 'Reopened', 'Partially Approved', 'Rejected'])
+                ->orWhere(function ($q) {
+                    $q->where('status', 'Approved')
+                        ->where(function ($q2) {
+                            $q2->whereNull('finance_status')
+                                ->orWhereIn('finance_status', ['Waiting to Delegate', 'Rejected']);
+                        });
+                });
+        });
+    }
+
+    private function applyOngoingScope($query)
+    {
+        return $query->whereIn('finance_status', [
+            'Waiting to Create PO',
+            'PO Created',
+            'Waiting Process',
+            'On Process',
+            'Pending',
+            'Waiting Vendor Receipt',
+            'Waiting User Receipt',
+            'Distributing',
+        ])->where(function ($query) {
+            $query->where('status', '!=', 'Done')
+                ->where(function ($q) {
+                    $q->whereNull('finance_status')
+                        ->orWhere('finance_status', '!=', 'Distributed');
+                });
+        });
+    }
+
+    private function applyCompletedScope($query)
+    {
+        return $query->where(function ($query) {
+            $query->where('status', 'Done')
+                ->orWhere('finance_status', 'Distributed');
+        });
     }
 
     private function indexVoidRequests($employee)

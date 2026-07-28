@@ -456,11 +456,10 @@ class DraftUlkSinarUvController extends Controller
 
                 ], 201);
             } else {
-
+                $order_sampel = OrderDetail::where('cfr', $request->cfr)->where('is_active', 1)->get()->pluck('no_sampel')->toArray();
                 $mainData = [];
                 $otherRegulations = [];
-                
-                $parameterIds = SinarUvHeader::whereIn('no_sampel', $noSampel)
+                $parameterIds = SinarUvHeader::whereIn('no_sampel', $order_sampel)
                     ->where('is_approved', 1)
                     ->where('is_active', true)
                     ->pluck('id_parameter')
@@ -489,7 +488,7 @@ class DraftUlkSinarUvController extends Controller
 
                 foreach ($models as $model) {
                     $data = $model::with('ws_udara', 'master_parameter')
-                        ->whereIn('no_sampel', $noSampel)
+                        ->whereIn('no_sampel', $order_sampel)
                         ->where('is_approved', 1)
                         ->where('is_active', true)
                         ->where('lhps', 1)
@@ -515,7 +514,7 @@ class DraftUlkSinarUvController extends Controller
                     ['no_sampel', 'asc'],
                     ['parameter', 'asc']
                 ])->values()->toArray();
-
+                
                 foreach ($otherRegulations as $id => $regulations) {
                     $otherRegulations[$id] = collect($regulations)->sortBy(function ($item) {
                         return mb_strtolower($item['parameter']);

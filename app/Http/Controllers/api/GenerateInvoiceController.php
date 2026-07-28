@@ -189,6 +189,7 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(invoice.pelanggan_id) AS pelanggan_id'),
                 DB::raw('MAX(invoice.detail_pendukung) AS detail_pendukung'),
                 DB::raw('MAX(invoice.nama_perusahaan) AS nama_customer'),
+                DB::raw('MAX(order_header.konsultan) AS consultant'),
 
                 // 🔥 INI PENTING
                 DB::raw("
@@ -239,6 +240,9 @@ class GenerateInvoiceController extends Controller
             return Datatables::of($data)
                 ->filterColumn('nama_customer', function ($query, $keyword) {
                     $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                })
+                ->filterColumn('consultant', function ($query, $keyword) {
+                    $query->whereRaw('LOWER(order_header.konsultan) LIKE ?', ['%' . strtolower($keyword) . '%']);
                 })
                 ->filterColumn('document', function ($query, $keyword) {
                     $query->whereExists(function ($q) use ($keyword) {

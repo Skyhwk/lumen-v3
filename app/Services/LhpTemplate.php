@@ -145,7 +145,7 @@ class LhpTemplate
         return self::$instance;
     }
 
-    public function render($value = null)
+    public function render($value = null, $outputMode = 'F')
     {
         if (!$this->view) {
             throw new \Exception("View belum diset. Gunakan setView('namaView') sebelum render().");
@@ -173,20 +173,20 @@ class LhpTemplate
         if (!$value) {
             $resultName = '';
             foreach ($modes as $mode) {
-                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $this->lampiran);
+                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $this->lampiran, $outputMode);
             }
 
             self::$instance = null;
             return $resultName;
         }
 
-        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $this->lampiran);
+        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $this->lampiran, $outputMode);
 
         self::$instance = null;
         return $resultName;
     }
 
-    private function execute($header, $detail, $prefix, $view, $customs, $mode, $lampiran)
+    private function execute($header, $detail, $prefix, $view, $customs, $mode, $lampiran, $outputMode = 'F')
     {
         $namaFile = '';
         if ($this->filename) {
@@ -199,7 +199,7 @@ class LhpTemplate
 
         $dir = $this->folderLocation($mode);
 
-        if (!file_exists($dir)) {
+        if ($outputMode !== 'S' && !file_exists($dir)) {
             mkdir($dir, 0777, true);
         }
 
@@ -302,6 +302,7 @@ class LhpTemplate
 
             'fontDir' => array_merge($fontDirs, [
                 __DIR__ . '/vendor/mpdf/mpdf/ttfonts', // pastikan path sesuai!
+                resource_path('fonts/Roboto'),
             ]),
 
             // Tambahkan font Roboto
@@ -384,6 +385,10 @@ class LhpTemplate
                     $mpdf->WriteHTML($pdfLampiranCustom[$page]);
                 }
             }
+        }
+
+        if ($outputMode === 'S') {
+            return $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
         }
 
         $mpdf->Output($filePath, \Mpdf\Output\Destination::FILE);

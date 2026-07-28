@@ -196,6 +196,18 @@ class FdlKebisinganSoundMeterController extends Controller
     public function rejectData(Request $request)
     {
         if (!isset($request->id) || $request->id == null) {
+            
+            try {
+                app(\App\Services\RejectFdlService::class)->recordReject(
+                    $data,
+                    $this->karyawan,
+                    $request->reason ?? null,
+                    'Fdl Kebisingan Sound Meter'
+                );
+            } catch (\Exception $e) {
+                // Ignore if it fails
+            }
+
             return response()->json(['message' => 'Gagal Reject Data'], 401);
         }
 

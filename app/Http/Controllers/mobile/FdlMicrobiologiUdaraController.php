@@ -122,20 +122,29 @@ class FdlMicrobiologiUdaraController extends Controller
                     'message' => 'Jam pengambilan tidak boleh kosong .!'
                 ], 401);
             }
+            $processed = [];
             if ($request->param != null) {
                 foreach ($request->param as $en => $ab) {
+                    $shift = $request->shift[$en];
+
+                    // Cek duplikasi di dalam form (request) yang sama
+                    if (isset($processed[$ab]) && in_array($shift, $processed[$ab])) {
+                        return response()->json([
+                            'message' => 'Pengambilan ' . $ab . ' Shift ' . $shift . ' pada No Sample ' . strtoupper(trim($request->no_sampel)) . ' dengan parameter ' . $ab . ' sudah ada !'
+                        ], 401);
+                    }
+                    $processed[$ab][] = $shift;
+
                     $cek = DetailMicrobiologi::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('parameter', $ab)->get();
 
-                    if ($request->shift[$en] !== "Sesaat") {
-                        $nilai_array = array();
-                        foreach ($cek as $key => $value) {
-                            $nilai_array[$key] = $value->shift_pengambilan;
-                        }
-                        if (in_array($request->shift[$en], $nilai_array)) {
-                            return response()->json([
-                                'message' => 'Pengambilan' . $ab . ' Shift ' . $request->shift[$en] . ' sudah ada !'
-                            ], 401);
-                        }
+                    $nilai_array = array();
+                    foreach ($cek as $key => $value) {
+                        $nilai_array[$key] = $value->shift_pengambilan;
+                    }
+                    if (in_array($shift, $nilai_array)) {
+                        return response()->json([
+                            'message' => 'Pengambilan ' . $ab . ' Shift ' . $shift . ' sudah ada !'
+                        ], 401);
                     }
                 }
             }
@@ -233,7 +242,7 @@ class FdlMicrobiologiUdaraController extends Controller
                     $query->where('is_rejected', 1)
                           ->orWhere(function ($q) {
                               $q->where('is_rejected', 0)
-                                ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                                ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
                           });
                 });
 

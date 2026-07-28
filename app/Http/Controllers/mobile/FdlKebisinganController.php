@@ -117,19 +117,36 @@ class FdlKebisinganController extends Controller
                 ], 401);
             }
 
+            if(!isset($request->kategori_kebisingan)){
+                return response()->json([
+                    'message' => 'Pilih Kategori Kebisingan !'
+                ], 401);
+            }
+
             if (in_array($request->durasi_sampl, $nilai_array)) {
                 return response()->json([
                     'message' => 'Shift Pengambilan ' . $request->durasi_sampl . ' sudah ada !'
                 ], 401);
             }
 
+            if($request->kategori_kebisingan == 'Lingkungan Kerja' && ($request->jam_pemaparan == null || $request->jam_pemaparan == "" || empty($request->jam_pemaparan)) ){
+                return response()->json([
+                    'message' => 'Jam Pemaparan Wajib Diisi !'
+                ], 401);
+            }
+
             $jendur = $request->jenis_durasi;
             if ($request->jenis_durasi == "24 Jam" || $request->jenis_durasi == '8 Jam') {
-                $jendur = $request->jenis_durasi . '-' . json_encode($request->durasi_sampl);
+                if(isset($request->durasi_sampl) && $request->durasi_sampl){
+                    $jendur = $request->jenis_durasi . '-' . json_encode($request->durasi_sampl);
+                } else {
+                    return response()->json([
+                        'message' => 'Durasi sampling wajib diisi !'
+                    ], 401);
+                }
             }
 
             $data = new DataLapanganKebisingan();
-
             $data->no_sampel = strtoupper(trim($request->no_sample));
 
             if ($request->keterangan_4) {
@@ -179,25 +196,20 @@ class FdlKebisinganController extends Controller
 
                     // ubah ke string agar desimal tidak hilang
                     $str = (string)$value;
-
                     // cek ada titik atau tidak
                     if (strpos($str, '.') !== false) {
                         // pisahkan integer dan desimal
                         [$int, $des] = explode('.', $str);
-
                         // ambil hanya 1 digit desimal tanpa pembulatan
                         $des = substr($des, 0, 1);
-
                         // jika desimal kosong (misal "63."), set jadi "0"
                         if ($des === "") $des = "0";
-
                         $nilai[] = $int . '.' . $des;
                     } else {
                         // tidak ada desimal → tambahkan ".0"
                         $nilai[] = $str . '.0';
                     }
                 }
-
 
                 $data->value_kebisingan = json_encode($nilai);
             }
@@ -260,7 +272,7 @@ class FdlKebisinganController extends Controller
                 $query->where('is_rejected', 1)
                       ->orWhere(function ($q) {
                           $q->where('is_rejected', 0)
-                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
                       });
             });
             

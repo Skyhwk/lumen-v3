@@ -4,6 +4,7 @@ namespace App\Http\Controllers\external;
 
 use Laravel\Lumen\Routing\Controller as BaseController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Helpers\HelperSatuan;
 use App\Services\GroupedCfrByLhp;
 
@@ -69,12 +70,19 @@ class LHPHandleController extends BaseController
     public function newCheckLhp(Request $request)
     {
         
-        // 1. Sanitasi Token: Ganti spasi dengan plus (+) handle URL decoding issue.
-        $token = str_replace(' ', '+', $request->token);
+        // 1. Sanitasi Token: handle plus (+), spasi, dan token yang terlanjur URL-encoded.
+        $token = $request->token;
         if (!$token) return response()->json(['message' => 'Token is required'], 430);
 
+        $tokenCandidates = collect([
+            $token,
+            str_replace(' ', '+', $token),
+            rawurldecode($token),
+            str_replace(' ', '+', rawurldecode($token)),
+        ])->filter()->unique()->values()->all();
+
         // 2. Rangkaian pengecekan data ke Database
-        $generateLink = GenerateLink::where('token', $token)->first();
+        $generateLink = GenerateLink::whereIn('token', $tokenCandidates)->first();
         if (!$generateLink) return response()->json(['message' => 'Token not found'], 401);
 
         $linkLhp = LinkLhp::where('id_token', $generateLink->id)->first();
@@ -95,17 +103,25 @@ class LHPHandleController extends BaseController
         }
         
         // 5. Transformasi Data (Core Logic)
-        $dataGrouped = collect((new GroupedCfrByLhp($orderHeader, $linkLhp->periode))->get()->toArray())
-            ->map(function ($item) {
-                // Build rekap pengujian
-                // return response()->json(['message' => $item], 430);
-                $item['rekap_pengujian'] = $this->getRekapPengujian($item['order_details'] ?? []);
+        // Prefer snapshot order_berjalan agar endpoint publik tidak mengulang query LHP yang berat.
+        $orderBerjalan = DB::table('order_berjalan')
+            ->where('no_order', $linkLhp->no_order)
+            ->first();
 
-                // Hapus data mentah order_details agar response payload lebih ringan
-                unset($item['order_details']);
+        $dataGrouped = $this->getLhpDataFromOrderBerjalan(
+            $orderBerjalan->dataOrderDetail ?? null,
+            $linkLhp->periode
+        );
 
-                return $item;
-            });
+        if ($dataGrouped->isEmpty()) {
+            $dataGrouped = collect((new GroupedCfrByLhp($orderHeader, $linkLhp->periode))->get()->toArray())
+                ->map(function ($item) {
+                    $item['rekap_pengujian'] = $this->getRekapPengujian($item['order_details'] ?? []);
+                    unset($item['order_details']);
+
+                    return $item;
+                });
+        }
         // return response()->json(['data' => $dataGrouped], 200);
         return response()->json([
             'message' => 'LHP data retrieved successfully',
@@ -118,6 +134,212 @@ class LHPHandleController extends BaseController
         ], 200);
     }
 
+    private function getLhpDataFromOrderBerjalan($dataOrderDetail, $periode)
+    {
+        if (empty($dataOrderDetail)) {
+            return collect();
+        }
+
+        $decoded = is_string($dataOrderDetail)
+            ? json_decode($dataOrderDetail, true)
+            : $dataOrderDetail;
+
+        if (!is_array($decoded)) {
+            return collect();
+        }
+
+        return collect($decoded)
+            ->when(!empty($periode), function ($items) use ($periode) {
+                return $items->where('periode', $periode);
+            })
+            ->flatMap(function ($periodeGroup) use ($periode) {
+                $details = $periodeGroup['detail'] ?? [];
+                $groupPeriode = $periodeGroup['periode'] ?? $periode;
+
+                return collect($details)->map(function ($detail) use ($groupPeriode) {
+                    $sampleNumbers = $detail['sampelNumbers'] ?? [];
+                    $points = $detail['points'] ?? [];
+
+                    return [
+                        'cfr' => $detail['cfr'] ?? null,
+                        'periode' => $groupPeriode,
+                        'keterangan_1' => $points,
+                        'kategori_3' => $detail['categories'] ?? [$detail['kategori_3'] ?? null],
+                        'no_sampel' => $sampleNumbers,
+                        'total_no_sampel' => $detail['jumlah_sampel'] ?? count($sampleNumbers),
+                        'steps' => $detail['steps'] ?? $this->initializeStepsFromOrderBerjalan(),
+                        'rekap_pengujian' => $this->getRekapPengujianFromOrderBerjalan($detail),
+                    ];
+                });
+            })
+            ->filter(fn($item) => !empty($item['cfr']))
+            ->values();
+    }
+
+    private function getRekapPengujianFromOrderBerjalan(array $detail): array
+    {
+        if (!empty($detail['rekap_pengujian']) && is_array($detail['rekap_pengujian'])) {
+            return collect($detail['rekap_pengujian'])
+                ->map(function ($item) use ($detail) {
+                    $item = (array) $item;
+
+                    return [
+                        'no_sampel' => $item['no_sampel'] ?? $this->getNoSampelFromOrderBerjalan($detail),
+                        'parameter' => $item['parameter'] ?? '-',
+                        'hasil_uji' => $this->normalizeHasilUji($item['hasil_uji'] ?? $item['hasilUji'] ?? $item['hasil'] ?? null),
+                    ];
+                })
+                ->values()
+                ->all();
+        }
+
+        $parameters = $detail['parameter_regulasi'] ?? [];
+
+        if (empty($parameters)) {
+            $parameters = collect($detail['parameter'] ?? [])
+                ->map(function ($parameter) {
+                    $parts = explode(';', $parameter, 2);
+                    return $parts[1] ?? $parameter;
+                })
+                ->all();
+        }
+
+        $rawParameters = $detail['parameter'] ?? [];
+        $noSampel = $this->getNoSampelFromOrderBerjalan($detail);
+
+        return collect($parameters)
+            ->filter()
+            ->values()
+            ->map(function ($parameter, $index) use ($detail, $rawParameters, $noSampel) {
+                return [
+                    'no_sampel' => $noSampel,
+                    'parameter' => $parameter,
+                    'hasil_uji' => $this->resolveHasilUjiFromOrderBerjalan($detail, $index, $parameter, $rawParameters[$index] ?? null),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function getNoSampelFromOrderBerjalan(array $detail): ?string
+    {
+        $sampleNumbers = $detail['sampelNumbers'] ?? [];
+
+        return count($sampleNumbers) > 1
+            ? implode('<br />', $sampleNumbers)
+            : ($sampleNumbers[0] ?? ($detail['cfr'] ?? null));
+    }
+
+    private function resolveHasilUjiFromOrderBerjalan(array $detail, int $index, $parameter, $rawParameter = null): string
+    {
+        foreach (['hasil_uji', 'hasilUji', 'hasil'] as $key) {
+            if (!array_key_exists($key, $detail)) {
+                continue;
+            }
+
+            $hasil = $this->pickHasilUjiValue($detail[$key], $index, $parameter, $rawParameter);
+            if ($hasil !== null && $hasil !== '') {
+                return $this->normalizeHasilUji($hasil);
+            }
+        }
+
+        return '-';
+    }
+
+    private function pickHasilUjiValue($values, int $index, $parameter, $rawParameter = null)
+    {
+        if (!is_array($values)) {
+            return $values;
+        }
+
+        $rawParameterId = null;
+        $rawParameterName = null;
+        if (is_string($rawParameter) && strpos($rawParameter, ';') !== false) {
+            [$rawParameterId, $rawParameterName] = explode(';', $rawParameter, 2);
+        }
+
+        $searchKeys = array_filter([$parameter, $rawParameterName, $rawParameter, $rawParameterId]);
+
+        // 1. Cari pada array of objects/arrays jika tiap elemen memiliki properti nama parameter
+        foreach ($values as $item) {
+            if (is_array($item)) {
+                $itemParam = $item['parameter_regulasi'] ?? $item['parameter'] ?? $item['parameter_lab'] ?? $item['name'] ?? null;
+                if ($itemParam !== null) {
+                    foreach ($searchKeys as $key) {
+                        if (strcasecmp(trim($itemParam), trim($key)) === 0) {
+                            return $item['hasil_uji'] ?? $item['hasilUji'] ?? $item['hasil'] ?? $item['value'] ?? null;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Cari jika $values merupakan associative array dengan key nama parameter
+        foreach ($searchKeys as $key) {
+            if (array_key_exists($key, $values)) {
+                $value = $values[$key];
+                return is_array($value)
+                    ? ($value['hasil_uji'] ?? $value['hasilUji'] ?? $value['hasil'] ?? $value['value'] ?? null)
+                    : $value;
+            }
+        }
+
+        // 3. Fallback ke index numerik jika elemen tidak memiliki properti nama parameter yang berbeda
+        if (array_key_exists($index, $values)) {
+            $value = $values[$index];
+
+            if (is_array($value)) {
+                $itemParam = $value['parameter_regulasi'] ?? $value['parameter'] ?? $value['parameter_lab'] ?? null;
+                if ($itemParam !== null) {
+                    $matched = false;
+                    foreach ($searchKeys as $key) {
+                        if (strcasecmp(trim($itemParam), trim($key)) === 0) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if (!$matched) {
+                        return null;
+                    }
+                }
+
+                return $value['hasil_uji'] ?? $value['hasilUji'] ?? $value['hasil'] ?? $value['value'] ?? null;
+            }
+
+            return $value;
+        }
+
+        return null;
+    }
+
+    private function normalizeHasilUji($hasil): string
+    {
+        if (is_array($hasil)) {
+            $hasil = collect($hasil)
+                ->filter(fn($value) => $value !== null && $value !== '' && $value !== '[]' && $value !== 'null')
+                ->implode('<br />');
+        }
+
+        $trimmed = is_string($hasil) ? trim($hasil) : $hasil;
+
+        if ($hasil === null || $trimmed === '' || $trimmed === '[]' || $trimmed === 'null') {
+            return '-';
+        }
+
+        return (string) $hasil;
+    }
+
+    private function initializeStepsFromOrderBerjalan(): array
+    {
+        return [
+            'order' => ['label' => 'Order', 'date' => null],
+            'sampling' => ['label' => 'Sampling', 'date' => null],
+            'analisa' => ['label' => 'Analisa', 'date' => null],
+            'drafting' => ['label' => 'Drafting', 'date' => null],
+            'lhp_release' => ['label' => 'LHP Release', 'date' => null],
+            'activeStep' => 0,
+        ];
+    }
     /**
      * Mencari hasil uji dari berbagai sumber (Lab & Lapangan).
      */
@@ -311,3 +533,4 @@ class LHPHandleController extends BaseController
         return isset($data['lhps']) && (int) $data['lhps'] === 1;
     }
 }
+

@@ -252,6 +252,13 @@ class WsFinalPsikologiController extends Controller
 			$data->status = 2;
 			$data->save();
 
+			PsikologiHeader::where('no_sampel', $data->no_sampel)->update([
+				'is_approve' => 1,
+				'lhps' => 1
+			]);
+
+			\App\Services\WsFinalApprovalService::finalizeSample($data, true, $this->karyawan);
+
 			HistoryAppReject::insert([
 				'no_lhp' => $data->cfr,
 				'no_sampel' => $data->no_sampel,

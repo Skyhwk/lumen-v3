@@ -13,6 +13,8 @@ use App\Models\MasterSubKategori;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\IsokinetikHeader;
+use App\Models\SubKontrak;
+use App\Models\EmisiCerobongHeader;
 use App\Models\WsValueEmisiCerobong;
 
 use App\Http\Controllers\Controller;
@@ -317,6 +319,9 @@ class FdlPartikulatIsokinetikController extends Controller
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
                 })
+                ->filterColumn('no_sampel_lama', function ($query, $keyword) {
+                    $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
+                })
                 ->filterColumn('id_lapangan', function ($query, $keyword) {
                     $query->where('id_lapangan', 'like', '%' . $keyword . '%');
                 })
@@ -372,6 +377,9 @@ class FdlPartikulatIsokinetikController extends Controller
                 })
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
+                })
+                ->filterColumn('no_sampel_lama', function ($query, $keyword) {
+                    $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
                 })
                 ->filterColumn('diameter', function ($query, $keyword) {
                     $query->where('diameter', 'like', '%' . $keyword . '%');
@@ -433,6 +441,9 @@ class FdlPartikulatIsokinetikController extends Controller
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
                 })
+                ->filterColumn('no_sampel_lama', function ($query, $keyword) {
+                    $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
+                })
                 ->filterColumn('survei', function ($query, $keyword) {
                     $query->whereHas('survei', function ($q) use ($keyword) {
                         $q->where('no_survei', 'like', '%' . $keyword . '%');
@@ -464,6 +475,9 @@ class FdlPartikulatIsokinetikController extends Controller
                 })
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
+                })
+                ->filterColumn('no_sampel_lama', function ($query, $keyword) {
+                    $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
                 })
                 ->filterColumn('survei', function ($query, $keyword) {
                     $query->whereHas('survei', function ($q) use ($keyword) {
@@ -526,6 +540,9 @@ class FdlPartikulatIsokinetikController extends Controller
                 })
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
+                })
+                ->filterColumn('no_sampel_lama', function ($query, $keyword) {
+                    $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
                 })
                 ->filterColumn('survei', function ($query, $keyword) {
                     $query->whereHas('survei', function ($q) use ($keyword) {
@@ -1474,6 +1491,94 @@ class FdlPartikulatIsokinetikController extends Controller
         }
     }
 
+    public function update_no_sampel(Request $request)
+    {
+        // Validasi input wajib
+        if (!$request->filled(['no_sampel_lama', 'no_sampel_baru'])) {
+            return response()->json([
+                'message' => 'Data input (lama atau baru) tidak boleh kosong'
+            ], 400);
+        }
+
+        // Daftar semua model lapangan yang harus di-update
+        $modelMap = [
+            DataLapanganIsokinetikPenentuanKecepatanLinier::class,
+            DataLapanganIsokinetikBeratMolekul::class,
+            DataLapanganIsokinetikKadarAir::class,
+            DataLapanganIsokinetikPenentuanPartikulat::class,
+            DataLapanganIsokinetikHasil::class,
+        ];
+
+        $updateData = [
+            'no_sampel' => $request->no_sampel_baru,
+            // Mengubah array PHP menjadi string JSON agar bisa disimpan di kolom TEXT
+            'no_sampel_lama' => json_encode([
+                'no_sampel_lama' => $request->no_sampel_lama,
+                'updated_by'     => $this->karyawan,
+                'updated_at'     => Carbon::now() // Pastikan dalam format string tanggal
+            ])
+        ];
+
+        try {
+            DB::transaction(function () use ($request, $modelMap, $updateData) {
+                
+                // 1. LOOPING: Update semua model lapangan yang ada di array
+                foreach ($modelMap as $modelClass) {
+                    $modelClass::where('no_sampel', $request->no_sampel_lama)->whereNull('no_sampel_lama')
+                        ->update($updateData);
+                }
+
+                // 2. Isokinetik Header & WsValue
+                $headerIds = IsokinetikHeader::where('no_sampel', $request->no_sampel_lama)->whereNull('no_sampel_lama')
+                    ->pluck('id');
+
+                if ($headerIds->isNotEmpty()) {
+                    IsokinetikHeader::whereIn('id', $headerIds)->update($updateData);
+                    WsValueEmisiCerobong::whereIn('id_isokinetik', $headerIds)->update($updateData);
+                }
+
+                // 3. Emisi Cerobong Header & WsValue
+                $cerobongHeaderIds = EmisiCerobongHeader::where('no_sampel', $request->no_sampel_lama)->whereNull('no_sampel_lama')
+                    ->pluck('id');
+
+                if ($cerobongHeaderIds->isNotEmpty()) {
+                    EmisiCerobongHeader::whereIn('id', $cerobongHeaderIds)->update($updateData);
+                    WsValueEmisiCerobong::whereIn('id_emisi_cerobong_header', $cerobongHeaderIds)->update($updateData);
+                }
+
+                // 4. Sub Kontrak & WsValue
+                $subKontrakIds = SubKontrak::where('no_sampel', $request->no_sampel_lama)->whereNull('no_sampel_lama')
+                    ->pluck('id');
+
+                if ($subKontrakIds->isNotEmpty()) {
+                    SubKontrak::whereIn('id', $subKontrakIds)->update($updateData);
+                    WsValueEmisiCerobong::whereIn('id_subkontrak', $subKontrakIds)->update($updateData);
+                }
+
+                // 5. Update Tanggal Terima di OrderDetail
+                $orderDetailLama = OrderDetail::where('no_sampel', $request->no_sampel_lama)->first();
+                $orderDetailBaru = OrderDetail::where('no_sampel', $request->no_sampel_baru)->first();
+
+                if ($orderDetailLama && $orderDetailBaru) {
+                    OrderDetail::where('id', $orderDetailBaru->id)
+                        ->update([
+                            'tanggal_terima' => $orderDetailLama->tanggal_terima,
+                        ]);
+                }
+            });
+
+            return response()->json([
+                'message' => 'Berhasil ubah no sampel ' . $request->no_sampel_lama . ' menjadi ' . $request->no_sampel_baru . ' di semua model.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal ubah no sampel ' . $request->no_sampel_lama,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function detail(Request $request)
     {
         if ($request->method == 1) {
@@ -1729,4 +1834,5 @@ class FdlPartikulatIsokinetikController extends Controller
         $tgl = Carbon::now()->subDays(3);
         $data = $model::where('is_blocked', false)->orWhere('is_blocked', null)->where('created_at', '<=', $tgl)->update(['is_blocked' => true, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
     }
+
 }

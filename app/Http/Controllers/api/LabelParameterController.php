@@ -80,7 +80,7 @@ class LabelParameterController extends Controller
     public function getParameterDetail(Request $request)
     {
         $parameterDetail = OrderDetail::with('TrackingSatu')
-            ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_laboratory', $request->selectedDate))
+            ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_verifier', $request->selectedDate))
             ->where([
                 'kategori_2' => $request->selectedCategory . "-" . MasterKategori::find($request->selectedCategory)->nama_kategori,
                 'is_active' => true
@@ -94,7 +94,7 @@ class LabelParameterController extends Controller
                 ])->first()->id . ";" . $request->selectedParameter
             )
             ->get()
-            ->sortByDesc(fn($item) => optional($item->TrackingSatu)->ftc_laboratory)
+            ->sortByDesc(fn($item) => optional($item->TrackingSatu)->ftc_verifier)
             ->values();
 
         return response()->json([
@@ -107,7 +107,7 @@ class LabelParameterController extends Controller
     {
         try {
             $parameterDetail = OrderDetail::with('TrackingSatu')
-                ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_laboratory', $request->selectedDate))
+                ->whereHas('TrackingSatu', fn($q) => $q->whereDate('ftc_verifier', $request->selectedDate))
                 ->where([
                     'kategori_2' => $request->selectedCategory . "-" . MasterKategori::find($request->selectedCategory)->nama_kategori,
                     'is_active' => true,

@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
-namespace App\Http\Controllers\api;
-
 use App\Http\Controllers\Controller;
+use App\Models\AnalisParameter;
 use App\Models\TemplateStp;
 use App\Models\MasterCabang;
 use App\Models\MasterKategori;
@@ -50,10 +49,11 @@ class AppAnalystController extends Controller
     public function getparam(Request $request){
         try {
             if($request->mode == 'getParam'){
-                if(isset($request->tgl) && $request->tgl!=null && isset($request->category) && $request->category!=null && $request->param !=null){
-                    $parame = array();
-                    
-                    $join = OrderDetail::where('tanggal_terima', $request->tgl)->where('kategori_2',$request->category)->where('is_active', true)->get();
+                if(isset($request->tgl) && $request->tgl!=null && isset($request->category) && $request->category!=null && $request->param !=null && $request->parameter != null){
+                    $kategori = $this->resolveCategoryId($request->category);
+                    $parameterName = $this->resolveParameterName($request->parameter);
+
+                    $join = OrderDetail::where('tanggal_terima', $request->tgl)->where('kategori_2', $kategori)->where('is_active', true)->get();
                     // $par = TemplateStp::where('id', $request->param)->first();
 					
                     if($join->isEmpty()){
@@ -61,8 +61,7 @@ class AppAnalystController extends Controller
                             'status'=>1
                         ], 200);
                     }
-                    // $select = json_decode($par->param);
-                    $select = array($request->parameter);
+                    $select = array($parameterName);
                     
                     $jumlah = count($join);
         
@@ -351,14 +350,27 @@ class AppAnalystController extends Controller
                             }
                         }
                     }
-                    // dd($tes1);
+                    $analisParameter = AnalisParameter::with('input')
+                        ->where('parameter_name', $parameterName)
+                        ->where('id_stp', $request->param)
+                        ->where('is_active', true)
+                        ->first();
+
+                    $forminput = [];
+                    $hasChild = 0;
+                    if ($analisParameter && $analisParameter->input) {
+                        $forminput = json_decode($analisParameter->input->body, true) ?? [];
+                        $hasChild = $analisParameter->has_child;
+                    }
+
                     return response()->json([
                         'status'=>0,
                         'columns'=>$select,
                         'data' => $tes,
                         'nilai' => $tes1,
                         'approve' => $approve,
-        
+                        'form_input' => $forminput,
+                        'has_child' => $hasChild,
                     ], 200);
                 } else {
                     return response()->json([
@@ -371,7 +383,8 @@ class AppAnalystController extends Controller
                     $par = TemplateStp::where('id', $request->param)->first();
                     if ($par) {
                         foreach (json_decode($par->param) as $q) {
-                            $options .= "<option value='$q'> $q </option>";
+                            $label = str_contains($q, ';') ? explode(';', $q)[1] : $q;
+                            $options .= "<option value='$q'> $label </option>";
                         }
                     }
                 }
@@ -390,6 +403,12 @@ class AppAnalystController extends Controller
 
     public function addValueParamApi(Request $request){
         try {
+            if ($request->filled('parameter')) {
+                $request->merge([
+                    'parameter' => $this->resolveParameterName($request->parameter),
+                ]);
+            }
+
             $stp = TemplateStp::with('sample')->where('id', $request->par)->select('name','category_id')->first();
             // dd($stp);
             if($stp->name == 'TITRIMETRI' && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
@@ -2588,6 +2607,94 @@ class AppAnalystController extends Controller
         }
     }
 
+    public function getInputForm(Request $request)
+    {
+        try {
+            $parameterName = $this->resolveParameterName($request->parameter);
+            $idStp = $request->id_stp ?? $request->par;
+
+            $data = AnalisParameter::with('input')
+                ->where('parameter_name', $parameterName)
+                ->where('id_stp', $idStp)
+                ->where('is_active', true)
+                ->first();
+
+            if (!isset($data->input)) {
+                return response()->json(['form' => null], 200);
+            }
+
+            return response()->json([
+                'form' => json_decode($data->input->body),
+                'has_child' => $data->has_child,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal mengambil data: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getKategori(Request $request)
+    {
+        $data = MasterKategori::where('is_active', true)
+            ->orderBy('nama_kategori')
+            ->get(['id', 'nama_kategori'])
+            ->map(function ($item) {
+                return [
+                    'value' => $item->id . '-' . $item->nama_kategori,
+                    'label' => $item->nama_kategori,
+                ];
+            })
+            ->values();
+
+        return response()->json(['data' => $data], 200);
+    }
+
+    public function getTemplate(Request $request)
+    {
+        $categoryId = $this->resolveCategoryId($request->id ?? $request->category_id ?? $request->category);
+
+        $data = TemplateStp::where('is_active', true)
+            ->where('category_id', $categoryId)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(function ($item) {
+                return [
+                    'value' => (string) $item->id,
+                    'label' => $item->name,
+                ];
+            })
+            ->values();
+
+        return response()->json(['data' => $data], 200);
+    }
+
+    public function getParameter(Request $request)
+    {
+        $templateId = $request->param ?? $request->template_id ?? $request->template;
+        $stp = TemplateStp::where('id', $templateId)->where('is_active', true)->first();
+
+        if (!$stp || !$stp->param) {
+            return response()->json(['data' => []], 200);
+        }
+
+        $data = collect(json_decode($stp->param, true) ?? [])
+            ->filter()
+            ->map(function ($item) {
+                $label = str_contains((string) $item, ';')
+                    ? explode(';', (string) $item)[1]
+                    : $item;
+
+                return [
+                    'value' => $item,
+                    'label' => trim($label),
+                ];
+            })
+            ->values();
+
+        return response()->json(['data' => $data], 200);
+    }
+
     public function showDataApi(Request $request){
         if($request->tipe == 1) {
 
@@ -2668,9 +2775,53 @@ class AppAnalystController extends Controller
                 'data' => $data,
             ], 200);
         }else if($request->tipe == 2) {
-            $date = date('Y-m-d');
             $user = $this->karyawan;
-            $data = DB::select("SELECT COUNT(*) as tot, param FROM titrimetri WHERE created_by = '$user' AND DATE(created_at) = '$date' GROUP BY param UNION SELECT COUNT(*) as tot, param FROM gravimetri WHERE created_by = '$user' AND DATE(created_at) = '$date' GROUP BY param UNION SELECT COUNT(*) as tot, param FROM colorimetri WHERE created_by = '$user' AND DATE(created_at) = '$date' GROUP BY param");
+            $dateStart = $request->tanggal ?? $request->tgl ?? $request->tgl_mulai ?? date('Y-m-d');
+            $dateEnd = $request->tanggal ?? $request->tgl ?? $request->tgl_akhir ?? $dateStart;
+
+            if ($dateStart > $dateEnd) {
+                return response()->json([
+                    'message' => 'Tanggal mulai tidak boleh lebih besar dari tanggal akhir',
+                ], 400);
+            }
+
+            $sourceTables = [
+                'titrimetri',
+                'gravimetri',
+                'colorimetri',
+                'lingkungan_header',
+                'emisi_cerobong_header',
+            ];
+
+            $merged = [];
+
+            foreach ($sourceTables as $table) {
+                $rows = DB::table($table)
+                    ->select('parameter as param', DB::raw('COUNT(*) as tot'))
+                    ->where('created_by', $user)
+                    ->where('is_active', true)
+                    ->whereBetween(DB::raw('DATE(created_at)'), [$dateStart, $dateEnd])
+                    ->groupBy('parameter')
+                    ->get();
+
+                foreach ($rows as $row) {
+                    if (!$row->param) {
+                        continue;
+                    }
+                    $merged[$row->param] = ($merged[$row->param] ?? 0) + (int) $row->tot;
+                }
+            }
+
+            $data = collect($merged)
+                ->map(function ($tot, $param) {
+                    return (object) [
+                        'param' => $param,
+                        'tot' => $tot,
+                    ];
+                })
+                ->sortBy('param')
+                ->values();
+
             return response()->json([
                 'data' => $data,
             ], 200);
@@ -2700,7 +2851,8 @@ class AppAnalystController extends Controller
     public function cmbTemplate(Request $request){                
         echo "<option value=''>Pilih Template</option>";
 
-        $data = TemplateStp::where('is_active',true)->where('category_id', $request->id)->get();
+        $categoryId = $this->resolveCategoryId($request->id);
+        $data = TemplateStp::where('is_active',true)->where('category_id', $categoryId)->get();
         
         foreach ($data as $q){
             $id = $q->id;
@@ -2833,6 +2985,38 @@ class AppAnalystController extends Controller
             'kategori' => $data1,
             'stp' => $data2,
         ], 201);
+    }
+
+    private function resolveCategoryId($category)
+    {
+        if ($category === null || $category === '') {
+            return $category;
+        }
+
+        if (is_numeric($category)) {
+            return (int) $category;
+        }
+
+        if (str_contains((string) $category, '-')) {
+            return (int) explode('-', (string) $category)[0];
+        }
+
+        return $category;
+    }
+
+    private function resolveParameterName($parameter)
+    {
+        if ($parameter === null || $parameter === '') {
+            return $parameter;
+        }
+
+        if (str_contains((string) $parameter, ';')) {
+            $parts = explode(';', (string) $parameter);
+
+            return end($parts);
+        }
+
+        return $parameter;
     }
 
 	public function logout(Request $request) {

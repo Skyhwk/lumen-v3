@@ -6,8 +6,14 @@ use App\Models\Sector;
 
 class TcOrderDetail extends Sector
 {
-    protected $table = "tc_order_detail";
+    protected $connection = 'mysql';
     public $timestamps = false;
+
+    public function getTable()
+    {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $mainDb . '.tc_order_detail';
+    }
 
     public function orderDetail()
     {

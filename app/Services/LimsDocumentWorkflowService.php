@@ -101,6 +101,7 @@ class LimsDocumentWorkflowService
             'disusun_oleh' => $karyawan->nama_lengkap ?? $fallbackName ?? '',
             'jabatan_penyusun' => $karyawan->jabatan ?? '',
             'tanggal_cetak' => Carbon::today()->format('Y-m-d'),
+            'tanggal_disusun' => Carbon::today()->format('Y-m-d'),
         ];
     }
 

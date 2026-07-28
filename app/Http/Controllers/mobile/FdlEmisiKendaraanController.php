@@ -654,7 +654,7 @@ class FdlEmisiKendaraanController extends Controller
 
     protected function autoBlock()
     {
-        $tgl = Carbon::now()->subDays(3);
+        $tgl = Carbon::now()->subDays(config('app.fdl_index_subdays'));
         $data = DataLapanganEmisiKendaraan::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
     }
 

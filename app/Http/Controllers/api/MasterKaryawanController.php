@@ -23,6 +23,7 @@ use App\Models\{
 };
 
 use App\Jobs\NonaktifKaryawanJob;
+use App\Helpers\ShioElemenHelper;
 
 class MasterKaryawanController extends Controller
 {
@@ -30,17 +31,18 @@ class MasterKaryawanController extends Controller
     {
         $data = MasterKaryawan::with(['medical', 'user'])->where('is_active', true);
         return Datatables::of($data)->addColumn('personal', function ($row) {
+            $shioElemen = ShioElemenHelper::resolve($row->tanggal_lahir, $row->shio, $row->elemen);
             return [
                 'nama_lengkap' => $row->nama_lengkap,
                 'birth_place' => $row->tempat_lahir,
-                'shio' => $row->shio,
+                'shio' => $shioElemen['shio'],
                 'gender' => $row->jenis_kelamin,
                 'marital_status' => $row->status_pernikahan,
                 'marital_date' => $row->tgl_nikah,
                 'marital_place' => $row->tempat_nikah,
                 'nik_ktp' => $row->nik_ktp,
                 'date_birth' => $row->tanggal_lahir,
-                'elemen' => $row->elemen,
+                'elemen' => $shioElemen['elemen'],
                 'nationality' => $row->kebangsaan,
                 'religion' => $row->agama,
                 'salutation' => $row->nama_panggilan,
@@ -337,6 +339,12 @@ class MasterKaryawanController extends Controller
                     return response()->json(['message' => 'Karyawan tidak ditemukan'], 404);
                 }
 
+                $shioElemen = ShioElemenHelper::resolve(
+                    $request->personal['date_birth'] ?? null,
+                    $request->personal['shio'] ?? null,
+                    $request->personal['elemen'] ?? null
+                );
+
                 $dataKaryawan = [
                     'nama_lengkap' => $request->personal['nama_lengkap'],
                     'nama_panggilan' => $request->personal['salutation'],
@@ -349,8 +357,8 @@ class MasterKaryawanController extends Controller
                     'status_pernikahan' => $request->personal['marital_status'],
                     'tempat_nikah' => $request->personal['marital_place'],
                     'tgl_nikah' => ($request->personal['marital_date'] != '' ? $request->personal['marital_date'] : null),
-                    'shio' => $request->personal['shio'],
-                    'elemen' => $request->personal['elemen']
+                    'shio' => $shioElemen['shio'],
+                    'elemen' => $shioElemen['elemen']
                 ];
 
                 if ($request->has('contact')) {
@@ -469,6 +477,12 @@ class MasterKaryawanController extends Controller
         } else {
             // CREATE NEW KARYAWAN
             return DB::transaction(function () use ($request) {
+                $shioElemen = ShioElemenHelper::resolve(
+                    $request->personal['date_birth'] ?? null,
+                    $request->personal['shio'] ?? null,
+                    $request->personal['elemen'] ?? null
+                );
+
                 $dataKaryawan = [
                     'nama_lengkap' => $request->personal['nama_lengkap'],
                     'nama_panggilan' => $request->personal['salutation'],
@@ -481,8 +495,8 @@ class MasterKaryawanController extends Controller
                     'status_pernikahan' => $request->personal['marital_status'],
                     'tempat_nikah' => $request->personal['marital_place'],
                     'tgl_nikah' => ($request->personal['marital_date'] != '' ? $request->personal['marital_date'] : null),
-                    'shio' => $request->personal['shio'],
-                    'elemen' => $request->personal['elemen']
+                    'shio' => $shioElemen['shio'],
+                    'elemen' => $shioElemen['elemen']
                 ];
 
                 if ($request->has('contact')) {

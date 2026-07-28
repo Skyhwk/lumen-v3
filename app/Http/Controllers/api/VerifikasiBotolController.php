@@ -327,10 +327,10 @@ class VerifikasiBotolController extends Controller
                 if($ftc == null){
                     $ftc = new Ftc();
                     $ftc->no_sample = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
+                    $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
+                    $ftc->user_verifier = $this->user_id;
+                    $ftc->save();
                 }
-                $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
-                $ftc->user_verifier = $this->user_id;
-                $ftc->save();
 
                 $scanSampelTc = ScanSampelTc::where('no_sampel', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
                 if ($scanSampelTc) {
@@ -406,10 +406,11 @@ class VerifikasiBotolController extends Controller
                     $ftc->no_sample = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
                     $ftc->user_verifier = $this->user_id;
-                } else {
-                    $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
-                    $ftc->user_verifier = $this->user_id;
-                }
+                } 
+                // else {
+                //     $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
+                //     $ftc->user_verifier = $this->user_id;
+                // }
 
                 $ftc->save();
 

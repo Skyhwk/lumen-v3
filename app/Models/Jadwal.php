@@ -6,10 +6,16 @@ use App\Models\Sector;
 
 class Jadwal extends Sector
 {
-    protected $table = "jadwal";
+    protected $connection = 'mysql';
     public $timestamps = false;
 
     protected $fillable = ["*"];
+
+    public function getTable()
+    {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $mainDb . '.jadwal';
+    }
 
     public function samplingPlan()
     {
@@ -28,6 +34,14 @@ class Jadwal extends Sector
     {
         return $this->belongsTo(OrderHeader::class, "no_quotation", "no_document");
     }
+
+   public function limsOrderHeader(){
+    $limsDb = \DB::connection('lims')->getDatabaseName();
+    return $this->belongsTo(Lims\OrderHeader::class, "no_quotation", "no_document")
+                ->from($limsDb . '.order_header')
+                ->where('is_active', true);
+}
+
 
     public function quotationKontrakH()
     {

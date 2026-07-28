@@ -1168,8 +1168,8 @@ class PersiapanSampleController extends Controller
         $filename = str_replace("/", "_", $noDocument);
         $dir = public_path("qr_documents");
 
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
         }
 
         $path = $dir . "/$filename.svg";

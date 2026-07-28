@@ -457,6 +457,7 @@ class InputParameterController extends Controller
                     ->orderBy('parameter')
                     ->orderBy('no_sampel', 'asc')
 					->get()->groupBy('parameter');
+					
 					// if($stp->sample->nama_kategori == 'Air') {
 					// 	$parameterData = $parameterData->with('TrackingSatu');
 					// }
@@ -494,48 +495,41 @@ class InputParameterController extends Controller
                     }
                 }
             }else if(($stp->name == 'SPEKTRO UV-VIS' || $stp->name == 'ICP' || $stp->name == 'GRAVIMETRI') && $stp->sample->nama_kategori == 'Udara'){
-                $loop = LingkunganHeader::with('TrackingSatu')
+                $linghidupDataAll = LingkunganHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
 					})
-                    ->select('parameter')
                     ->whereIn('parameter', $select)
                     ->where('is_active', true)
-                    ->groupBy('parameter')
+                    ->orderBy('no_sampel', 'asc')
                     ->get();
-				// dump($select);
+
+                $dustfallDataAll = DustFallHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
+                $debuDataAll = DebuPersonalHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                    ->whereIn('parameter', $select)
+                    ->where('is_active', true)
+                    ->orderBy('no_sampel', 'asc')
+                    ->get();
+
                 foreach($select as $k => $parameter) {
 					if($parameter == 'PM 10 (24 Jam)' || $parameter == 'PM 2.5 (24 Jam)') {
 						$tes[$k] = array_values(array_diff($tes[$k], $pm24_samples_excluded));
 					}
-                    // Get data for Linghidup
-                    $linghidupData = LingkunganHeader::with('TrackingSatu')
-					->whereHas('TrackingSatu', function($q) use ($request) {
-						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
-					})
-                        ->where('parameter', $parameter)
-                        ->where('is_active', true)
-                        ->orderBy('no_sampel', 'asc')
-                        ->get();
-
-                    $dustfallData = DustFallHeader::with('TrackingSatu')
-					->whereHas('TrackingSatu', function($q) use ($request) {
-						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
-					})
-                        ->where('parameter', $parameter)
-                        ->where('is_active', true)
-                        ->orderBy('no_sampel', 'asc')
-                        ->get();
-
-                    // Get data for DebuPersonal
-                    $debuData = DebuPersonalHeader::with('TrackingSatu')
-					->whereHas('TrackingSatu', function($q) use ($request) {
-						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
-					})
-                        ->where('parameter', $parameter)
-                        ->where('is_active', true)
-                        ->orderBy('no_sampel', 'asc')
-                        ->get();
+                    
+                    $linghidupData = $linghidupDataAll->where('parameter', $parameter);
+                    $dustfallData = $dustfallDataAll->where('parameter', $parameter);
+                    $debuData = $debuDataAll->where('parameter', $parameter);
 
                     // Combine data from both sources
                     $combinedData = $linghidupData
@@ -815,6 +809,25 @@ class InputParameterController extends Controller
                 ->key($request->tgl)
                 // ->save(json_encode($filtered_sample_request, JSON_PRETTY_PRINT));
                 ->save(json_encode($filtered_sample_repo, JSON_PRETTY_PRINT));
+
+            $isTesEmpty = true;
+            if (is_array($tes)) {
+                foreach ($tes as $t) {
+                    if (!empty($t)) {
+                        $isTesEmpty = false;
+                        break;
+                    }
+                }
+            } else {
+                $isTesEmpty = empty($tes);
+            }
+
+            if ($isTesEmpty) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'data tidak ditemukan'
+                ], 404);
+            }
 
             return response()->json([
                 'status'=>0,
