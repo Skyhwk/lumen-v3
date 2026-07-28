@@ -40,6 +40,16 @@ class Kernel extends ConsoleKernel
         Commands\MonitorQsdForecast::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
+        Commands\SyncLimsData::class,
+        Commands\SyncSpecificLimsData::class,
+        Commands\TruncateLimsTesting::class,
+        Commands\SyncShioElemen::class,
+        Commands\BackfillPersiapanSampel::class,
+        Commands\GenerateWsFinalApproval::class,
+        // Commands\LhpBackfillCommand::class,
+        // Commands\LhpRefreshKpgiDetailCommand::class,
+        // Commands\LhpRefreshLingHeaderCommand::class,
+        // Commands\LhpRefreshIsokinetikCustomCommand::class,
     ];
 
     /**

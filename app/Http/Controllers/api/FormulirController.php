@@ -66,113 +66,45 @@ class FormulirController extends Controller
                     
                     $extension = strtolower($file->getClientOriginalExtension());
                     $originalName = $file->getClientOriginalName();
-                    
-                    if ($extension === 'pdf') {
-                        $pdfBaseName = pathinfo($originalName, PATHINFO_FILENAME);
-                        $pdfBaseNameClean = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $pdfBaseName));
-                        $pdfBaseNameClean = rtrim($pdfBaseNameClean, '_-');
-                        if (empty($pdfBaseNameClean)) {
-                            $pdfBaseNameClean = 'pdf';
-                        }
-                        
-                        $timestampVal = time();
-                        $pdfFolder = $pdfBaseNameClean . '_' . $timestampVal;
-                        
-                        $pdfSubdir = $destinationDir . '/' . $pdfFolder;
-                        if (!file_exists($pdfSubdir)) {
-                            mkdir($pdfSubdir, 0777, true);
-                        }
-                        
-                        $tempPdfName = $timestampVal . '_' . str_replace(' ', '_', $originalName);
-                        $file->move($pdfSubdir, $tempPdfName);
-                        $pdfPath = $pdfSubdir . '/' . $tempPdfName;
-                        
-                        $outputPrefix = $pdfSubdir . '/Page';
-                        $command = "pdftoppm -jpeg -r 150 " . escapeshellarg($pdfPath) . " " . escapeshellarg($outputPrefix);
-                        exec($command, $output, $returnVar);
-                        
-                        if (file_exists($pdfPath)) {
-                            unlink($pdfPath);
-                        }
-                        
-                        $pattern = $pdfSubdir . '/Page-*.jpg';
-                        $generatedFiles = glob($pattern);
-                        
-                        if (empty($generatedFiles)) {
-                            throw new \Exception("Gagal mengonversi PDF ke gambar.");
-                        }
-                        
-                        natsort($generatedFiles);
-                        
-                        $savedFiles = [];
-                        foreach ($generatedFiles as $gFile) {
-                            if (preg_match('/Page-(\d+)\.jpg$/', $gFile, $matches)) {
-                                $pageNum = $matches[1];
-                                $newFilename = $pdfBaseNameClean . '_' . $timestampVal . '_' . $pageNum . '.jpg';
-                                $newFilePath = $pdfSubdir . '/' . $newFilename;
-                                rename($gFile, $newFilePath);
-                                $savedFiles[] = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $pdfFolder . '/' . $newFilename;
-                            }
-                        }
-                        
-                        $newUploaders = [];
-                        $timestamp = date('Y-m-d H:i:s');
-                        foreach ($savedFiles as $newFile) {
-                            $newUploaders[] = [
-                                'file' => $newFile,
-                                'uploader' => $this->karyawan ?: 'System',
-                                'uploaded_at' => $timestamp
-                            ];
-                        }
-                        
-                        if ($old && !empty($old->source)) {
-                            $existingFiles = is_array($old->source) ? $old->source : [$old->source];
-                            $savedFiles = array_merge($existingFiles, $savedFiles);
-                        }
-                        
-                        $data['source'] = json_encode($savedFiles);
+                    $allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
 
-                        $existingUploaders = ($old && !empty($old->uploader)) ? (is_array($old->uploader) ? $old->uploader : json_decode($old->uploader, true)) : [];
-                        if (!is_array($existingUploaders)) {
-                            $existingUploaders = [];
-                        }
-                        $allUploaders = array_merge($existingUploaders, $newUploaders);
-                        $data['uploader'] = json_encode($allUploaders);
-                    } else {
-                        $nameWithoutExt = pathinfo($originalName, PATHINFO_FILENAME);
-                        $cleanName = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $nameWithoutExt));
-                        $cleanName = rtrim($cleanName, '_-');
-                        if (empty($cleanName)) {
-                            $cleanName = 'document';
-                        }
-                        $filename = $cleanName . '_' . time() . '.' . $extension;
-                        $file->move($destinationDir, $filename);
-                        
-                        $newFile = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $filename;
-                        
-                        $newUploaders = [
-                            [
-                                'file' => $newFile,
-                                'uploader' => $this->karyawan ?: 'System',
-                                'uploaded_at' => date('Y-m-d H:i:s')
-                            ]
-                        ];
-                        
-                        if ($old && !empty($old->source)) {
-                            $existingFiles = is_array($old->source) ? $old->source : [$old->source];
-                            $savedFiles = array_merge($existingFiles, [$newFile]);
-                            $data['source'] = json_encode($savedFiles);
-                        } else {
-                            $data['source'] = $newFile;
-                        }
-
-                        $existingUploaders = ($old && !empty($old->uploader)) ? (is_array($old->uploader) ? $old->uploader : json_decode($old->uploader, true)) : [];
-                        if (!is_array($existingUploaders)) {
-                            $existingUploaders = [];
-                        }
-                        $allUploaders = array_merge($existingUploaders, $newUploaders);
-                        $data['uploader'] = json_encode($allUploaders);
+                    if (!in_array($extension, $allowedExtensions, true)) {
+                        throw new \Exception('Format file tidak didukung. Gunakan PDF, JPG, JPEG, atau PNG.');
                     }
+
+                    $nameWithoutExt = pathinfo($originalName, PATHINFO_FILENAME);
+                    $cleanName = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s_-]/', '', $nameWithoutExt));
+                    $cleanName = rtrim($cleanName, '_-');
+                    if (empty($cleanName)) {
+                        $cleanName = 'document';
+                    }
+                    $filename = $cleanName . '_' . time() . '.' . $extension;
+                    $file->move($destinationDir, $filename);
+
+                    $newFile = 'uploads/akreditasi/dokumen-implementatif/' . $formFolder . '/' . $filename;
+
+                    $newUploaders = [
+                        [
+                            'file' => $newFile,
+                            'uploader' => $this->karyawan ?: 'System',
+                            'uploaded_at' => date('Y-m-d H:i:s')
+                        ]
+                    ];
+
+                    if ($old && !empty($old->source)) {
+                        $existingFiles = is_array($old->source) ? $old->source : [$old->source];
+                        $savedFiles = array_merge($existingFiles, [$newFile]);
+                        $data['source'] = json_encode($savedFiles);
+                    } else {
+                        $data['source'] = $newFile;
+                    }
+
+                    $existingUploaders = ($old && !empty($old->uploader)) ? (is_array($old->uploader) ? $old->uploader : json_decode($old->uploader, true)) : [];
+                    if (!is_array($existingUploaders)) {
+                        $existingUploaders = [];
+                    }
+                    $allUploaders = array_merge($existingUploaders, $newUploaders);
+                    $data['uploader'] = json_encode($allUploaders);
                 } else if ($id) {
                     if ($old) {
                         $data['source'] = $old->source;
@@ -183,6 +115,17 @@ class FormulirController extends Controller
                     $data['url_form'] = $request->url_form;
                 }
             } else {
+                $source = trim($source ?? '');
+                $url_form = trim($url_form ?? '');
+
+                if ($url_form !== '' && $source === '') {
+                    return response()->json(['message' => 'Link Spreadsheet wajib diisi jika Link Form diisi.'], 422);
+                }
+
+                if ($url_form === '' && $source === '') {
+                    return response()->json(['message' => 'Link Spreadsheet atau Link Form harus diisi.'], 422);
+                }
+
                 $data['source'] = $source;
                 $data['url_form'] = $url_form;
             }
@@ -229,6 +172,48 @@ class FormulirController extends Controller
             return response()->json(['message' => 'Data formulir berhasil dihapus.'], 200);
         } catch (\Exception $e) {
             DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function previewDocument(Request $request)
+    {
+        try {
+            $path = str_replace('\\', '/', trim((string) $request->path));
+            $path = ltrim($path, '/');
+
+            if ($path === '' || strpos($path, '..') !== false) {
+                return response()->json(['message' => 'Path file tidak valid.'], 422);
+            }
+
+            if (!preg_match('#^uploads/akreditasi/dokumen-implementatif/#', $path)) {
+                return response()->json(['message' => 'Path file tidak valid.'], 403);
+            }
+
+            $fullPath = public_path($path);
+            if (!file_exists($fullPath) || !is_file($fullPath)) {
+                return response()->json(['message' => 'File tidak ditemukan.'], 404);
+            }
+
+            $extension = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+            $mimeMap = [
+                'pdf' => 'application/pdf',
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+            ];
+
+            if (!isset($mimeMap[$extension])) {
+                return response()->json(['message' => 'Format file tidak didukung untuk preview.'], 422);
+            }
+
+            return response()->json([
+                'message' => 'OK',
+                'data' => base64_encode(file_get_contents($fullPath)),
+                'mime' => $mimeMap[$extension],
+                'filename' => basename($fullPath),
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }
     }

@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 use App\Services\Crypto;
 use App\Helpers\Helper;
+use App\Helpers\ShioElemenHelper;
 use Carbon\Carbon;
 
 
@@ -96,8 +97,9 @@ class RecruitmentController extends Controller{
                 if($request->organisasi != '') $data->organisasi                        = $request->organisasi;
                 if($request->sertifikat != '') $data->sertifikat                        = $request->sertifikat;
                 if($request->kursus != '') $data->kursus                                = $request->kursus;
-                if($request->shio != '') $data->shio                                    = $request->shio;
-                if($request->elemen != '') $data->elemen                                = $request->elemen;
+                $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, $request->shio, $request->elemen);
+                if(!empty($shioElemen['shio'])) $data->shio                          = $shioElemen['shio'];
+                if(!empty($shioElemen['elemen'])) $data->elemen                        = $shioElemen['elemen'];
                 if($request->orang_dalam != '') $data->orang_dalam                      = $request->orang_dalam;
                 if($request->bagian_di_lamar != '') $data->bagian_di_lamar              = $request->bagian_di_lamar;
                 if ($request->foto_selfie != '') $data->foto_selfie                     = self::convertFile($request->foto_selfie, $p, $request->nik_ktp);
@@ -169,8 +171,9 @@ class RecruitmentController extends Controller{
                 if($request->organisasi != '') $data->organisasi                        = $request->organisasi;
                 if($request->sertifikat != '') $data->sertifikat                        = $request->sertifikat;
                 if($request->kursus != '') $data->kursus                                = $request->kursus;
-                if($request->shio != '') $data->shio                                    = $request->shio;
-                if($request->elemen != '') $data->elemen                                = $request->elemen;
+                $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, $request->shio, $request->elemen);
+                if(!empty($shioElemen['shio'])) $data->shio                          = $shioElemen['shio'];
+                if(!empty($shioElemen['elemen'])) $data->elemen                        = $shioElemen['elemen'];
                 if($request->orang_dalam != '') $data->orang_dalam                      = $request->orang_dalam;
                 if($request->bagian_di_lamar != '') $data->bagian_di_lamar              = $request->bagian_di_lamar;
                 if ($request->foto_selfie != '') $data->foto_selfie                     = self::convertFile($request->foto_selfie, $p, $request->nik_ktp);

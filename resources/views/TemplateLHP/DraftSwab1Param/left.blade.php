@@ -47,10 +47,10 @@
 
             @php
                 $rowNo = 0;
-                $groupedByKet = $data->groupBy('keterangan');
+                $groupedByKet = $data->groupBy('no_sampel');
             @endphp
 
-            @foreach ($groupedByKet as $keterangan => $rows)
+            @foreach ($groupedByKet as $noSampelKey => $rows)
                 @php
                     $rowNo++;
                     $rows = collect($rows)->map(fn($r) => (array) $r);
@@ -59,6 +59,7 @@
                     $rowClass = $rowNo == $groupedByKet->count() ? 'solid' : 'dot';
 
                     $noSampel = $ref['no_sampel'] ?? '';
+                    $keterangan = $ref['keterangan'] ?? '-';
                     $hasilUji = $ref['hasil_uji'] ?? '-';
                     $bakuMutu = $ref['baku_mutu'] ?? '-';
                     $satuan = $ref['satuan'] ?? '-';

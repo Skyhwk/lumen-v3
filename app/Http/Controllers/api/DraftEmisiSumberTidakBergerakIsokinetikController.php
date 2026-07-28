@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 //models
@@ -89,7 +90,10 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
             $parameter_uji = explode(', ', $request->parameter_uji);
             try {
-                $regulasiId = collect($request->regulasi_custom_id)->first();
+                $regulasiId = !empty($request->regulasi_custom_id)
+                    ? collect($request->regulasi_custom_id)->first()
+                    : $request->id_regulasi_detail;
+
                 $regulasi_custom = collect($request->regulasi_custom ?? [])
                     ->map(function ($item, $page) use ($regulasiId) {
                         $data = [
@@ -308,7 +312,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 $groupedByPage[$page][] = $item->toArray();
             }
 
-            $view = 'DraftESTB';
+            $view = 'DraftESTBIsokinetik';
 
             $fileName = LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($dataHeader)
@@ -499,6 +503,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     'next_page'          => $data_custom,
                     'addition_page_1'    => $additionPage1,
                     'addition_page_2'    => $additionPage2,
+                    'id_regulasi'        => (int)$request->regulasi,
                     'spesifikasi_method' => $returnMethods,
                     'keterangan'         => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
@@ -657,6 +662,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     'addition_page_1'    => $additionPage1,
                     'addition_page_2'    => $additionPage2,
                     'spesifikasi_method' => $resultMethods,
+                    'id_regulasi'        => (int)$request->regulasi,
                     'keterangan'         => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',

@@ -14,6 +14,7 @@ class LimsDocument extends Sector
         'is_active' => 'boolean',
         'disahkan_pada' => 'date',
         'tanggal_cetak' => 'date',
+        'tanggal_disusun' => 'date',
         'tanggal_pengesahan' => 'date',
     ];
 

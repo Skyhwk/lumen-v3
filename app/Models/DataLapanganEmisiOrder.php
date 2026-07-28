@@ -7,6 +7,8 @@ use App\Models\Sector;
 
 class DataLapanganEmisiOrder extends Sector
 {
+    public static $useLimsDetail = false;
+
     protected $table = "data_lapangan_emisi_order";
     public $timestamps = false;
 

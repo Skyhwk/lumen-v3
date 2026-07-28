@@ -119,7 +119,7 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
                 $index = $getSatuan->emisi($item->satuan);
                 $ws    = $item->ws_value_cerobong ?? $item->ws_value ?? null;
                 if (! $ws) {
-                    return "noWs";
+                    return "Sudah Dilakukan Analisa";
                 }
 
                 $ws    = $ws->toArray();

@@ -620,6 +620,18 @@ class FdlDirectLainController extends Controller
 
             app(NotificationFdlService::class)->sendRejectNotification("Direct Lain dengan shift($data->shift)", "$request->no_sampel($data->parameter)", $request->reason, $this->karyawan, $data->created_by);
             
+            
+            try {
+                app(\App\Services\RejectFdlService::class)->recordReject(
+                    $data,
+                    $this->karyawan,
+                    $request->reason ?? null,
+                    'Fdl Direct Lain'
+                );
+            } catch (\Exception $e) {
+                // Ignore if it fails
+            }
+
             return response()->json([
                 'message' => 'Data no sample ' . $data->no_sampel . ' telah di reject'
             ], 201);

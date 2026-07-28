@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Jobs\ApproveWsParameterJob;
 use App\Models\OrderDetail;
 use App\Models\Titrimetri;
 use App\Models\Gravimetri;
@@ -304,6 +305,10 @@ class WsFinalAirController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
+		$user = $request->attributes->get('user');
+		$karyawan = ($user && isset($user->karyawan) && $user->karyawan)
+			? $user->karyawan->nama_lengkap
+			: $request->header('token');
 		DB::beginTransaction();
 		try {
 			if ($request->template_stp == 4) {
@@ -314,6 +319,9 @@ class WsFinalAirController extends Controller
 						$cek->lhps = 0;
 						$cek->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Rejected',
 							'success' => true,
@@ -324,6 +332,9 @@ class WsFinalAirController extends Controller
 						$dat->lhps = 1;
 						$dat->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+						
 						return response()->json([
 							'message' => 'Data has ben Approved',
 							'success' => true,
@@ -343,6 +354,9 @@ class WsFinalAirController extends Controller
 						$cek->lhps = 0;
 						$cek->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Rejected',
 							'success' => true,
@@ -353,6 +367,9 @@ class WsFinalAirController extends Controller
 						$dat->lhps = 1;
 						$dat->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Approved',
 							'success' => true,
@@ -372,6 +389,9 @@ class WsFinalAirController extends Controller
 						$cek->lhps = 0;
 						$cek->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Rejected',
 							'success' => true,
@@ -382,6 +402,9 @@ class WsFinalAirController extends Controller
 						$dat->lhps = 1;
 						$dat->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Approved',
 							'success' => true,
@@ -395,7 +418,7 @@ class WsFinalAirController extends Controller
 						'status' => 401
 					], 401);
 				}
-			} else {
+			} else {				
 				if ($request->id) {
 					$data = Subkontrak::where('parameter', $request->parameter)->where('lhps', 1)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
 					if ($data != null) {
@@ -403,6 +426,9 @@ class WsFinalAirController extends Controller
 						$cek->lhps = 0;
 						$cek->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Rejected',
 							'status' => 201,
@@ -413,6 +439,9 @@ class WsFinalAirController extends Controller
 						$dat->lhps = 1;
 						$dat->save();
 						DB::commit();
+
+						dispatch(new ApproveWsParameterJob($request->all(), $karyawan));
+
 						return response()->json([
 							'message' => 'Data has ben Approved',
 							'status' => 200,

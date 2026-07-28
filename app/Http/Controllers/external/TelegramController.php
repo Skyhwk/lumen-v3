@@ -1,12 +1,10 @@
 <?php
 namespace App\Http\Controllers\external;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Telegram\Bot\Keyboard\Keyboard;
 use Telegram\Bot\Laravel\Facades\Telegram;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use SevenEcks\Tableify\Tableify;
 use App\Models\MasterKaryawan;
 use Illuminate\Support\Facades\Http;
@@ -19,7 +17,7 @@ class TelegramController extends Controller
 
     public function __construct()
     {
-        $this->tele_it = ['680526259', '1342214372', '158724236']; //asep belum masuk , '158724236' pak eko , '1405440715' punya kojok
+        $this->tele_it = ['680526259', '1342214372', '158724236', '1930446131']; //asep belum masuk , '158724236' pak eko , '1405440715' punya kojok
     }
 
     public function mqtt($data){

@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SyncsWsFinalApproval;
+use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class KebisinganHeader extends Sector{
+    use SyncsWsFinalApproval;
 
     protected $table = 'kebisingan_header';
     public $timestamps = false;

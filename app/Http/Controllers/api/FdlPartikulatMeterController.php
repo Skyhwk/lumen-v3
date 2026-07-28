@@ -475,4 +475,37 @@ class FdlPartikulatMeterController extends Controller
         $tgl = Carbon::now()->subDays(7);
         $data = DataLapanganPartikulatMeter::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
     }
+
+    public function rejectData(Request $request)
+    {
+        if (isset($request->id) && $request->id != null) {
+            $data = DataLapanganPartikulatMeter::where('id', $request->id)->first();
+
+            $data->is_rejected = true;
+            $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->rejected_by = $this->karyawan;
+            $data->save();
+
+            app(NotificationFdlService::class)->sendRejectNotification("Fdl Partikulat Meter", $request->no_sampel, $request->reason, $this->karyawan, $data->created_by);
+
+            try {
+                app(\App\Services\RejectFdlService::class)->recordReject(
+                    $data,
+                    $this->karyawan,
+                    $request->reason ?? null,
+                    'Fdl Partikulat Meter'
+                );
+            } catch (\Exception $e) {
+                // Ignore if it fails
+            }
+
+            return response()->json([
+                'message' => 'Data no sample ' . $data->no_sampel . ' telah di reject'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Gagal Approve'
+            ], 401);
+        }
+    }
 }

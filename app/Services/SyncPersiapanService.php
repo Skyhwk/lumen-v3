@@ -94,8 +94,9 @@ class SyncPersiapanService
                     $newItem['file']        = $match['file'];
                     $newItem['disiapkan']   = $newItem['disiapkan'];
                 } else {
-                    if (!file_exists(public_path() . '/barcode/botol')) {
-                        mkdir(public_path() . '/barcode/botol', 0777, true);
+                    $botolPath = public_path('/barcode/botol');
+                    if (!is_dir($botolPath)) {
+                        @mkdir($botolPath, 0777, true);
                     }
 
                     $this->generateQR($newItem['koding'], '/barcode/botol');
@@ -115,8 +116,9 @@ class SyncPersiapanService
                     $newItem['koding']      = $match['koding'];
                     $newItem['file']        = $match['file'];
                 } else {
-                    if (!file_exists(public_path() . '/barcode/penjerap')) {
-                        mkdir(public_path() . '/barcode/penjerap', 0777, true);
+                    $penjerapPath = public_path('/barcode/penjerap');
+                    if (!is_dir($penjerapPath)) {
+                        @mkdir($penjerapPath, 0777, true);
                     }
 
                     $this->generateQR($newItem['koding'], '/barcode/penjerap');

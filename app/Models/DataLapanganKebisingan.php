@@ -7,13 +7,16 @@ use App\Models\Sector;
 
 class DataLapanganKebisingan extends Sector
 {
-    protected $table = "data_lapangan_kebisingan";
+protected $table = "data_lapangan_kebisingan";
     public $timestamps = false;
     protected $guarded = [];
 
-    public function detail(){
-        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')
-        ->where('is_active', true);
+    public function detail()
+    {
+        if (config('is_lims', false)) {
+            return $this->belongsTo(\App\Models\Lims\OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
+        }
+        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')->where('is_active', true);
     }
     
 }

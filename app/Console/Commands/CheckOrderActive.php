@@ -8,7 +8,8 @@ use App\Models\OrderDetail;
 use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
 use App\Models\Parameter;
-
+use App\Models\WsFinalApprovalDetail;
+use App\Models\WsFinalApprovalHeader;
 use Schema;
 
 use Carbon\Carbon;
@@ -313,6 +314,65 @@ class CheckOrderActive extends Command
         return null;
     }
 
+    private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], array $steps = [], string $cfrNo = ''): array
+    {
+        $details = empty($sampelNumbers)
+            ? WsFinalApprovalDetail::where('no_sampel', $cfrNo)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray()
+            : WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray();
+
+        $orderDate    = $steps['order']['date'] ?? null;
+        $samplingDate = $steps['sampling']['date'] ?? null;
+        $analisaDate  = $steps['analisa']['date'] ?? null;
+
+        $hasilJikaDetailKosong = null;
+        if ($orderDate && !$samplingDate) {
+            $hasilJikaDetailKosong = 'Menunggu Sampling';
+        } elseif ($samplingDate && !$analisaDate) {
+            $hasilJikaDetailKosong = 'Menunggu Analisa';
+        } elseif ($orderDate && $samplingDate && $analisaDate) {
+            $hasilJikaDetailKosong = 'Sedang Diverifikasi';
+        }
+
+        $paramsMap = [];
+        foreach ($expectedParams as $param) {
+            $paramsMap[strtolower(trim($param))] = $param;
+        }
+
+        $foundMap = [];
+        $result   = [];
+
+        foreach ($details as $detail) {
+            $regulasi  = $detail['parameter_regulasi'] ?: $detail['parameter_lab'];
+            $cleanReg  = strtolower(trim($regulasi));
+            $finalName = $paramsMap[$cleanReg] ?? $regulasi;
+
+            $key = "{$detail['no_sampel']}|{$finalName}";
+            $foundMap[$key] = true;
+
+            $result[] = [
+                'no_sampel'          => $detail['no_sampel'],
+                'parameter_regulasi' => $finalName,
+                'hasil'              => $detail['hasil'],
+            ];
+        }
+
+        foreach ($sampelNumbers as $sampelNumber) {
+            foreach ($expectedParams as $expectedParam) {
+                $key = "{$sampelNumber}|{$expectedParam}";
+                if (!isset($foundMap[$key])) {
+                    $result[] = [
+                        'no_sampel'          => $sampelNumber,
+                        'parameter_regulasi' => $expectedParam,
+                        'hasil'              => $hasilJikaDetailKosong,
+                    ];
+                    $foundMap[$key] = true;
+                }
+            }
+        }
+
+        return $result;
+    }
+
     private function buildCfrDetail($group, string $orderDate, array $lhpRecords, $allParameter): array
     {
         $group = collect($group);
@@ -385,23 +445,35 @@ class CheckOrderActive extends Command
 
         $steps['activeStep'] = $this->detectActiveStep($steps);
 
-        return [
+       $lhpRilis = (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5);
+       $sampelNumbers = $group->pluck('no_sampel')->toArray();
+       $parameterHasil = json_decode($d['parameter'] ?? '', true);
+       $parameterRegulasi = $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter);
+       $kategori_2 = $d['kategori_2'] ?? '';
+
+        $result = [
             'no_order'      => $d['no_order'],
             'jumlah_sampel' => $group->count(),
             'cfr'           => $d['cfr'],
             'kategori_1'    => $d['kategori_1'],
-            'kategori_2'    => $d['kategori_2'],
+            'kategori_2'    => $kategori_2,
             'kategori_3'    => $d['kategori_3'],
-            'parameter'          => json_decode($d['parameter'] ?? '', true),
-            'parameter_regulasi' => $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter),
+            'parameter'          => $parameterHasil,
             'regulasi'           => json_decode($d['regulasi'] ?? '', true),
-            'lhp_rilis'     => (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5),
+            'lhp_rilis'     => $lhpRilis,
             'tgl_lhp_rilis' => $tglLhpRilis,
             'steps'         => $steps,
             'points'        => $group->pluck('keterangan_1')->toArray(),
             'categories'    => $group->pluck('kategori_3')->toArray(),
-            'sampelNumbers' => $group->pluck('no_sampel')->toArray(),
+            'sampelNumbers' => $sampelNumbers,          
         ];
+
+        if (!$lhpRilis) {
+            $result['parameter_regulasi'] = $parameterRegulasi;
+            $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $parameterRegulasi, $steps, $d['cfr']);
+        }
+
+        return $result;
     }
 
     private function buildParameterRegulasi(?string $parameterJson, array $allParameter): array

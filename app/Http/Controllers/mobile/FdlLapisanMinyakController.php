@@ -58,7 +58,7 @@ class FdlLapisanMinyakController extends Controller
                 $query->where('is_rejected', 1)
                       ->orWhere(function ($q) {
                           $q->where('is_rejected', 0)
-                            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
                       });
             })
             ->orderBy('id', 'desc');

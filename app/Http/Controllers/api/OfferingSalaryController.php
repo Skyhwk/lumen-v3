@@ -28,6 +28,7 @@ use App\Services\GenerateMessageWhatsapp;
 use Illuminate\Database\QueryException;
 use App\Services\SendWhatsapp;
 use App\Services\SendEmail;
+use App\Helpers\ShioElemenHelper;
 
 class OfferingSalaryController extends Controller
 {
@@ -554,8 +555,13 @@ class OfferingSalaryController extends Controller
             $karyawan->status_pernikahan = $request->personal['marital_status'] != '' ? $request->personal['marital_status'] : $karyawan->status_pernikahan;
             $karyawan->tempat_nikah = $request->personal['marital_place'] != '' ? $request->personal['marital_place'] : $karyawan->tempat_nikah;
             $karyawan->tgl_nikah = $request->personal['marital_date'] != '' ? $request->personal['marital_date'] : $karyawan->tgl_nikah;
-            $karyawan->shio = $request->personal['shio'] != '' ? $request->personal['shio'] : $karyawan->shio;
-            $karyawan->elemen = $request->personal['elemen'] != '' ? $request->personal['elemen'] : $karyawan->elemen;
+            $shioElemen = ShioElemenHelper::resolve(
+                $request->personal['date_birth'] ?? $karyawan->tanggal_lahir,
+                $request->personal['shio'] ?? $karyawan->shio,
+                $request->personal['elemen'] ?? $karyawan->elemen
+            );
+            $karyawan->shio = $shioElemen['shio'] ?? $karyawan->shio;
+            $karyawan->elemen = $shioElemen['elemen'] ?? $karyawan->elemen;
 
 
             $karyawan->nik_karyawan = $request->employee['nik'] != '' ? $request->employee['nik'] : $karyawan->nik_karyawan;

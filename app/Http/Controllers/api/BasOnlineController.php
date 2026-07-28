@@ -2103,7 +2103,10 @@ class BasOnlineController extends Controller
 
         // ── Render PDF ────────────────────────────────────────────────
         $isFirstPage = true;
-
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: *');
+        // header('Access-Control-Allow-Headers: *');
+        // dd($samplingBySampler);
         foreach ($samplingBySampler as $samplerName => $samplerSamplingData) {
             if (!$isFirstPage) {
                 $pdf->AddPage();

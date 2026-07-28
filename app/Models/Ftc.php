@@ -6,9 +6,15 @@ use App\Models\Sector;
 
 class Ftc extends Sector
 {
-    protected $table = 't_ftc';
+    protected $connection = 'mysql';
     public $timestamps = false;
     protected $guarded = [];
+
+    public function getTable()
+    {
+        $mainDb = \DB::connection('mysql')->getDatabaseName();
+        return $mainDb . '.t_ftc';
+    }
 
     public function order_detail()
     {

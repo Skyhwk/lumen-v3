@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SyncsWsFinalApproval;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class EmisiCerobongHeader extends Sector
 {
+    use SyncsWsFinalApproval;
+
     protected $table = 'emisi_cerobong_header';
     public $timestamps = false;
 
