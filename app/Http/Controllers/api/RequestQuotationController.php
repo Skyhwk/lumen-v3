@@ -6259,10 +6259,9 @@ class RequestQuotationController extends Controller
     }
 
     public function getSampledData(Request $request){
-        $noDocument = $request->no_document;
-        $baseDoc = preg_replace('/R\d+$/i', '', $noDocument);
+        $noOrder = $request->no_order;
 
-        $headers = OrderHeader::where('no_document', 'LIKE', $baseDoc . '%')->get();
+        $headers = OrderHeader::where('no_order', $noOrder)->get();
         if($headers->isEmpty()){
             return response()->json([
                 'message' => 'Header data not found',
