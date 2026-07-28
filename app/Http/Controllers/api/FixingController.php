@@ -77,6 +77,33 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class FixingController extends Controller
 {
+    public function repairWsFinalApprovalEmptyResults(Request $request)
+    {
+        try {
+            $result = \App\Services\WsFinalApprovalService::repairEmptyDetailResults([
+                'dry_run' => $request->input('dry_run', true),
+                'limit' => $request->input('limit'),
+                'no_sampel' => $request->input('no_sampel'),
+                'category' => $request->input('category'),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => ($result['summary']['dry_run'] ?? true)
+                    ? 'Preview repair WS final approval selesai.'
+                    : 'Repair WS final approval selesai.',
+                'summary' => $result['summary'],
+                'changes' => $result['changes'],
+                'skipped' => $result['skipped'],
+                'errors' => $result['errors'],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
     public function syncLinkLhpRilis(Request $request)
     {
@@ -2077,3 +2104,4 @@ class FixingController extends Controller
         }
     }
 }
+
