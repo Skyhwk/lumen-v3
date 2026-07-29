@@ -361,7 +361,7 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
         //         $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
         //         dd($data);
         //         $data->is_rejected = 0;
-            $data->save();
+        //         $data->save();
 
         //         // UPDATE ORDER DETAIL
         //         DB::table('order_detail')

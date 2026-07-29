@@ -124,7 +124,7 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
                 $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
             }
 
-            $data->is_rejected = 0;
+            // $data->is_rejected = 0;
             $data->save();
             
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();

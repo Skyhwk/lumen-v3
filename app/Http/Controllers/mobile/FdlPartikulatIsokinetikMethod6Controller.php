@@ -171,8 +171,7 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
                     $data->permission = $request->permis;
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data->is_rejected = 0;
-            $data->save();
+                $data->save();
 
                 // UPDATE ORDER DETAIL
                 $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
