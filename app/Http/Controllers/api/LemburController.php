@@ -447,7 +447,7 @@ class LemburController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Anggota telah memiliki form lembur pada tanggal tersebut, Mohon di cek kembali',
-                ], 500);
+                ], 400);
             }
 
             $header->update([
@@ -509,6 +509,21 @@ class LemburController extends Controller
     {
         DB::beginTransaction();
         try {
+            $exist = OvertimeRequestMembers::on('intilab_apps')
+                ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
+                ->where('h.start_date', $request->tanggal_lembur)
+                ->whereIn('overtime_request_members.employee_id', $request->data)
+                ->whereNull('h.rejected_atasan_by')
+                ->get();
+
+            if ($exist->count() > 0) {
+                DB::rollback();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anggota telah memiliki form lembur pada tanggal tersebut, Mohon di cek kembali',
+                ], 400);
+            }
+
             $no_document = str_replace('.', '/', microtime(true));
             $status = $this->grade === 'MANAGER' ? 'Approved Atasan' : 'Pending';
             $header = OvertimeRequest::on('intilab_apps')->create([
@@ -528,21 +543,6 @@ class LemburController extends Controller
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'is_active' => 1
             ]);
-
-            $exist = OvertimeRequestMembers::on('intilab_apps')
-                ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
-                ->where('h.start_date', $request->tanggal_lembur)
-                ->whereIn('overtime_request_members.employee_id', $request->data)
-                ->whereNull('h.rejected_atasan_by')
-                ->get();
-
-            if ($exist->count() > 0) {
-                DB::rollback();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anggota telah memiliki form lembur pada tanggal tersebut, Mohon di cek kembali',
-                ], 500);
-            }
 
             $details = [];
             foreach ($request->data as $detail) {
