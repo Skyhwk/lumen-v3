@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{PurchaseOrderDocument, PurchaseRequest};
-use App\Services\{KaryawanProfileService, Notification};
+use App\Services\{KaryawanProfileService, Notification, PurchaseReceiptService};
 use DataTables;
 use Illuminate\Http\Request;
 
@@ -44,6 +44,7 @@ class PurchaseRequestApprovalController extends Controller
             ->addColumn('unit', fn($row) => optional($row->items->first())->unit)
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi($row->employee))
             ->addColumn('finance_display_status', fn($row) => $this->resolveFinanceDisplayStatus($row))
+            ->addColumn('can_void', fn($row) => PurchaseReceiptService::canPurchasingVoidPurchaseRequest($row))
             ->filterColumn('item_name', function ($query, $keyword) {
                 $query->whereHas('items', function ($sub) use ($keyword) {
                     $sub->where('item_name', 'like', "%{$keyword}%");
@@ -146,6 +147,41 @@ class PurchaseRequestApprovalController extends Controller
         return response()->json(['message' => "Permintaan pembelian barang berhasil di{$request->action}"], 201);
     }
 
+    public function delete(Request $request)
+    {
+        $purchaseRequest = PurchaseRequest::findOrFail($request->id);
+
+        if (!PurchaseReceiptService::canPurchasingVoidPurchaseRequest($purchaseRequest)) {
+            return response()->json(['message' => 'Permintaan tidak dapat divoid pada tahap ini'], 422);
+        }
+
+        $voidNote = trim((string) $request->input('void_note', ''));
+        if ($voidNote === '') {
+            return response()->json(['message' => 'Keterangan void wajib diisi'], 422);
+        }
+
+        $purchaseRequest->deleted_by = $this->karyawan;
+        $purchaseRequest->deleted_at = date('Y-m-d H:i:s');
+        $purchaseRequest->void_note = $voidNote;
+        $purchaseRequest->void_source = 'finance';
+        $purchaseRequest->is_active = false;
+        $purchaseRequest->save();
+
+        $purchaseRequest->items()->update([
+            'deleted_by' => $this->karyawan,
+            'deleted_at' => date('Y-m-d H:i:s'),
+            'is_active' => false,
+        ]);
+
+        Notification::where('nama_lengkap', $purchaseRequest->created_by)
+            ->title('Permintaan Pembelian Barang Dibatalkan')
+            ->message("Permintaan pembelian barang {$purchaseRequest->request_number} telah dibatalkan oleh purchasing pada " . date('d-m-Y') . " dengan alasan: {$voidNote}")
+            ->url('/request/purchase-requests')
+            ->send();
+
+        return response()->json(['message' => 'Permintaan pembelian barang berhasil divoid'], 201);
+    }
+
     private function isPurchasingApprover($employee): bool
     {
         // if (in_array((int) $employee->id_jabatan, [45, 48], true)) {
@@ -176,6 +212,10 @@ class PurchaseRequestApprovalController extends Controller
 
         if (in_array($row->finance_status, ['Waiting Process', 'On Process', 'Pending'])) {
             return $row->finance_status;
+        }
+
+        if ($row->finance_status === 'Waiting Purchase Process') {
+            return 'Waiting Purchase Process';
         }
 
         if ($row->finance_status === 'Distributed' || $row->status === 'Done') {

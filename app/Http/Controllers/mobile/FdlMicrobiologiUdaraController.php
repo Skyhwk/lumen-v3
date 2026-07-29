@@ -202,7 +202,13 @@ class FdlMicrobiologiUdaraController extends Controller
                 $data->created_by                                             = $this->karyawan;
                 $data->created_at                                            = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+            }else{
+                $data = DataLapanganMicrobiologi::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+                $data->is_rejected = 0;
+                $data->save();
             }
+
+            
 
             $this->resultx = "Data Sampling FDL MICROBIOLOGI Dengan No Sample $request->no_sampel berhasil disimpan oleh $this->karyawan";
 
@@ -371,6 +377,12 @@ class FdlMicrobiologiUdaraController extends Controller
             $data = DetailMicrobiologi::where('no_sampel', strtoupper(trim($request->no_sampel)))
                 ->where('id', $request->id)
                 ->first();
+            $header = DataLapanganMicrobiologi::where('no_sampel', strtoupper(trim($request->no_sampel)))
+                ->first();
+
+            $header->update([
+                'is_rejected' => false,
+            ]);
 
             if (!$data) {
                 return response()->json(['message' => 'Data tidak ditemukan'], 404);

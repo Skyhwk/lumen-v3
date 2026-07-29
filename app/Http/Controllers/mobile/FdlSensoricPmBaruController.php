@@ -210,7 +210,8 @@ class FdlSensoricPmBaruController extends Controller
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->catatan_sampler = $request->catatan_kondisi_lapangan ?: null; // catatan kondisi lapangan
-                $data->save();
+                $data->is_rejected = 0;
+            $data->save();
             }
 
             // Update Order Detail

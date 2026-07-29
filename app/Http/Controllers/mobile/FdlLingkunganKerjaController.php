@@ -695,7 +695,13 @@ class FdlLingkunganKerjaController extends Controller
                 $data->created_by                                                  = $this->karyawan;
                 $data->created_at                                                 = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+            }else{
+                $data = DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                $data->is_rejected = 0;
+                $data->save();
             }
+
+            
 
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
@@ -901,6 +907,9 @@ class FdlLingkunganKerjaController extends Controller
     {
         $detail = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sampel)))->get();
         $detailToDelete = DetailLingkunganKerja::where('id', $request->id)->first();
+        $header = DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+        $header->is_rejected = 0;
+        $header->save();
         
         $nama = $this->karyawan;
         $message = "Fdl LK parameter {$detail->first()->parameter} di no sample {$detail->first()->no_sampel} berhasil dihapus oleh {$nama}!";
@@ -912,7 +921,7 @@ class FdlLingkunganKerjaController extends Controller
                 'kategori' => 1
             ], 201);
         } else {
-            DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sampel)))->delete();
+            $header->delete();
             $detailToDelete->delete();
             return response()->json([
                 'message' => $message,
