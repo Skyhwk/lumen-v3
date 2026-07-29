@@ -194,7 +194,8 @@ class FdlMedanListrikDanMagnetController extends Controller
                         if ($request->foto_lain != '') $data->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
                         $data->created_by                     = $this->karyawan;
                         $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
-                        $data->save();
+                        $data->is_rejected = 0;
+            $data->save();
                     }
                 } else if ($request->selected_parameter == 'Medan Listrik') {
                     if ($request->listrik3 != '') {

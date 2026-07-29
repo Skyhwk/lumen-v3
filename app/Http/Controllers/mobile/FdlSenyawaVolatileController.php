@@ -392,6 +392,21 @@ class FdlSenyawaVolatileController extends Controller
                 }
             }
 
+            $fdl = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                
+            if (is_null($fdl)) {
+                $data = new DataLapanganSenyawaVolatile();
+                if ($request->categori != '') $data->kategori_3                 = $request->categori;
+                $data->no_sampel                                                = strtoupper(trim($request->no_sample));
+                $data->permission                                                = $request->permission;
+                $data->created_by                                                   = $this->karyawan;
+                $data->created_at                                                  = date('Y-m-d H:i:s');
+                $data->save();
+            }
+
+            $fdl->is_rejected = 0;
+            $fdl->save();
+
             foreach ($request->param as $in => $a) {
                 $pengukuran = array();
                 $durasii = null;
@@ -435,18 +450,6 @@ class FdlSenyawaVolatileController extends Controller
                     $shift_peng = 'Sesaat';
                 } elseif (strpos($kateg, 'jam') !== false) {
                     $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
-                }
-
-                $fdl = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-                
-                if (is_null($fdl)) {
-                    $data = new DataLapanganSenyawaVolatile();
-                    if ($request->categori != '') $data->kategori_3                 = $request->categori;
-                    $data->no_sampel                                                = strtoupper(trim($request->no_sample));
-                    $data->permission                                                = $request->permission;
-                    $data->created_by                                                   = $this->karyawan;
-                    $data->created_at                                                  = date('Y-m-d H:i:s');
-                    $data->save();
                 }
 
                 $fdlvalue = new DetailSenyawaVolatile();
@@ -669,6 +672,12 @@ class FdlSenyawaVolatileController extends Controller
             $data = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sampel)))
                 ->where('id', $request->id)
                 ->first();
+            $header = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sampel)))
+                ->first();
+
+            $header->update([
+                'is_rejected' => false,
+            ]);
 
             if (!$data) {
                 return response()->json(['message' => 'Data tidak ditemukan'], 404);
@@ -717,327 +726,6 @@ class FdlSenyawaVolatileController extends Controller
             ], 500);
         }   
     }
-
-    // public function delete(Request $request)
-    // {
-    //     try {
-    //         DB::beginTransaction();
-
-    //         if (isset($request->id) || $request->id != null || isset($request->shift) || $request->shift != null) {
-
-    //             $data = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
-
-    //             if ($request->tip == 1) {
-    //                 $convert_par = ["TSP", "TSP (24 Jam)", "TSP (6 Jam)", "TSP (8 Jam)", "As", "Cd", "Cr", "Cu", "Fe", "Fe (8 Jam)", "Hg", "Sb", "Se", "Sn", "Zn", "Pb", "Pb (24 Jam)", "Pb (6 Jam)", "Pb (8 Jam)", "Mn", "Ni"];
-    //                 $convert_24jam = ["TSP (24 Jam)", "Pb (24 Jam)"];
-    //                 $convert_8jam = ["TSP (8 Jam)", "Fe (8 Jam)", "Pb (8 Jam)"];
-    //                 $convert_6jam = ["TSP (6 Jam)", "Pb (6 Jam)"];
-    //                 $convert_sesaat = ["TSP", "As", "Cd", "Cr", "Cu", "Fe", "Hg", "Sb", "Se", "Sn", "Zn", "Pb", "Mn", "Ni"];
-    //                 $status_par = '';
-
-    //                 if (in_array($request->parameter, $convert_par)) {
-
-    //                     if (in_array($request->parameter, $convert_sesaat)) {
-    //                         $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //                             ->where('shift_pengambilan', $request->shift)
-    //                             ->whereIn('parameter', $convert_sesaat)
-    //                             ->get();
-    //                         $cek->each->delete();
-    //                         $status_par = json_encode($convert_sesaat);
-
-    //                     } else if (in_array($request->parameter, $convert_24jam)) {
-    //                         $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //                             ->where('shift_pengambilan', $request->shift)
-    //                             ->whereIn('parameter', $convert_24jam)
-    //                             ->get();
-    //                         $cek->each->delete();
-    //                         $status_par = json_encode($convert_24jam);
-
-    //                     } else if (in_array($request->parameter, $convert_8jam)) {
-    //                         $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //                             ->where('shift_pengambilan', $request->shift)
-    //                             ->whereIn('parameter', $convert_8jam)
-    //                             ->get();
-    //                         $cek->each->delete();
-    //                         $status_par = json_encode($convert_8jam);
-
-    //                     } else if (in_array($request->parameter, $convert_6jam)) {
-    //                         $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //                             ->where('shift_pengambilan', $request->shift)
-    //                             ->whereIn('parameter', $convert_6jam)
-    //                             ->get();
-    //                         $cek->each->delete();
-    //                         $status_par = json_encode($convert_6jam);
-    //                     }
-
-    //                     $cek2 = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
-
-    //                     if ($cek2->count() > 0) {
-    //                         $nama = $this->karyawan;
-    //                         $this->resultx = "Fdl SenyawaVolatile parameter $status_par di no sample $request->no_sample berhasil dihapus oleh $nama.!";
-    //                         DB::commit();
-
-    //                         return response()->json([
-    //                             'message' => $this->resultx,
-    //                             'cat' => 1
-    //                         ], 201);
-    //                     } else {
-    //                         $cek4 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-    //                         $cek4->delete();
-    //                         $nama = $this->karyawan;
-    //                         $this->resultx = "Fdl SenyawaVolatile parameter $status_par di no sample $request->no_sample berhasil dihapus $nama.!";
-    //                         DB::commit();
-
-    //                         return response()->json([
-    //                             'message' => $this->resultx,
-    //                             'cat' => 2
-    //                         ], 201);
-    //                     }
-
-    //                 } else {
-    //                     $cek = DetailSenyawaVolatile::where('id', $request->id)->first();
-    //                     if ($data->count() > 1) {
-    //                         $cek->delete();
-    //                         $nama = $this->karyawan;
-    //                         $this->resultx = "Fdl Senyawa Volatile parameter $cek->parameter di no sample $cek->no_sample berhasil dihapus oleh $nama.!";
-    //                         DB::commit();
-
-    //                         return response()->json([
-    //                             'message' => $this->resultx,
-    //                             'cat' => 1
-    //                         ], 201);
-    //                     } else {
-    //                         $cek2 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-    //                         $cek->delete();
-    //                         $cek2->delete();
-    //                         $nama = $this->karyawan;
-    //                         $this->resultx = "Fdl Senyawa Volatile parameter $cek->parameter di no sample $cek->no_sample berhasil dihapus oleh $nama.!";
-    //                         DB::commit();
-
-    //                         return response()->json([
-    //                             'message' => $this->resultx,
-    //                             'cat' => 2
-    //                         ], 201);
-    //                     }
-    //                 }
-
-    //             } else if ($request->tip == 2) {
-    //                 $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //                     ->where('shift_pengambilan', $request->shift)->get();
-
-    //                 $shift = [];
-    //                 foreach ($data as $dat) {
-    //                     $shift[$dat['shift_pengambilan']][] = $dat;
-    //                 }
-
-    //                 if (count($shift) > 1) {
-    //                     $cek->each->delete();
-    //                     $nama = $this->karyawan;
-    //                     $this->resultx = "Fdl Senyawa Volatile shift $request->shift di no sample $request->no_sample berhasil dihapus oleh $nama.!";
-    //                     DB::commit();
-
-    //                     return response()->json([
-    //                         'message' => $this->resultx,
-    //                         'cat' => 1
-    //                     ], 201);
-    //                 } else {
-    //                     $cek2 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-    //                     $cek->each->delete();
-    //                     $cek2->delete();
-                        
-    //                     $nama = $this->karyawan;
-    //                     $this->resultx = "Fdl Senyawa Volatile shift $request->shift di no sample $request->no_sample berhasil dihapus oleh $nama.!";
-    //                     DB::commit();
-
-    //                     return response()->json([
-    //                         'message' => $this->resultx,
-    //                         'cat' => 2
-    //                     ], 201);
-    //                 }
-
-    //             } else if ($request->tip == 3) {
-    //                 $cek = DataLapanganSenyawaVolatile::where('id', $request->id)->first();
-    //                 DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->delete();
-    //                 $cek->delete();
-
-    //                 $nama = $this->karyawan;
-    //                 $this->resultx = "Fdl Senyawa Volatile dengan no sampel $request->no_sample berhasil dihapus oleh $nama.!";
-
-    //                 DB::commit();
-
-    //                 return response()->json([
-    //                     'message' => $this->resultx
-    //                 ], 201);
-    //             }
-
-    //         } else {
-    //             return response()->json([
-    //                 'message' => 'Gagal Delete'
-    //             ], 401);
-    //         }
-
-    //     } catch (\Exception $e) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'message' => 'Terjadi kesalahan: ' . $e->getMessage()
-    //         ], 500);
-    //     }
-
-    // }
-    
-    // public function delete(Request $request)
-    // {
-    //     if (isset($request->id) || $request->id != null || isset($request->shift) || $request->shift != null) {
-    //         $data = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
-    //         if ($request->tip == 1) {
-    //             $convert_par = ["TSP", "TSP (24 Jam)", "TSP (6 Jam)", "TSP (8 Jam)", "As", "Cd", "Cr", "Cu", "Fe", "Fe (8 Jam)", "Hg", "Sb", "Se", "Sn", "Zn", "Pb", "Pb (24 Jam)", "Pb (6 Jam)", "Pb (8 Jam)", "Mn", "Ni"];
-    //             $convert_24jam = ["TSP (24 Jam)", "Pb (24 Jam)"];
-    //             $convert_8jam = ["TSP (8 Jam)", "Fe (8 Jam)", "Pb (8 Jam)"];
-    //             $convert_6jam = ["TSP (6 Jam)", "Pb (6 Jam)"];
-    //             $convert_sesaat = ["TSP", "As", "Cd", "Cr", "Cu", "Fe", "Hg", "Sb", "Se", "Sn", "Zn", "Pb", "Mn", "Ni"];
-    //             $status_par = '';
-
-    //             if (in_array($request->parameter, $convert_par)) {
-    //                 if (in_array($request->parameter, $convert_sesaat)) {
-    //                     $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->where('shift_pengambilan', $request->shift)->whereIn('parameter', $convert_sesaat)->get();
-    //                     $cek->each->delete();
-    //                     $status_par = json_encode($convert_sesaat);
-    //                 } else if (in_array($request->parameter, $convert_24jam)) {
-    //                     $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->where('shift_pengambilan', $request->shift)->whereIn('parameter', $convert_24jam)->get();
-    //                     $cek->each->delete();
-    //                     $status_par = json_encode($convert_24jam);
-    //                 } else if (in_array($request->parameter, $convert_8jam)) {
-    //                     $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->where('shift_pengambilan', $request->shift)->whereIn('parameter', $convert_8jam)->get();
-    //                     $cek->each->delete();
-    //                     $status_par = json_encode($convert_8jam);
-    //                 } else if (in_array($request->parameter, $convert_6jam)) {
-    //                     $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->where('shift_pengambilan', $request->shift)->whereIn('parameter', $convert_6jam)->get();
-    //                     $cek->each->delete();
-    //                     $status_par = json_encode($convert_6jam);
-    //                 }
-
-    //                 $cek2 = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
-    //                 if ($cek2->count() > 0) {
-    //                     $nama = $this->karyawan;
-    //                     $this->resultx = "Fdl SenyawaVolatile parameter $status_par di no sample $request->no_sample berhasil dihapus oleh $nama.!";
-
-    //                     // if($this->pin!=null){
-    //                     //     $telegram = new Telegram();
-    //                     //     $telegram->send($this->pin, $this->resultx);
-    //                     // }
-
-    //                     return response()->json([
-    //                         'message' => $this->resultx,
-    //                         'cat' => 1
-    //                     ], 201);
-    //                 } else {
-    //                     $cek4 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-    //                     $cek4->delete();
-    //                     $nama = $this->karyawan;
-    //                     $this->resultx = "Fdl SenyawaVolatile parameter $status_par di no sample $request->no_sample berhasil dihapus $nama.!";
-
-    //                     // if($this->pin!=null){
-    //                     //     $telegram = new Telegram();
-    //                     //     $telegram->send($this->pin, $this->resultx);
-    //                     // }
-
-    //                     return response()->json([
-    //                         'message' => $this->resultx,
-    //                         'cat' => 2
-    //                     ], 201);
-    //                 }
-    //             } else {
-    //                 $cek = DetailSenyawaVolatile::where('id', $request->id)->first();
-    //                 if ($data->count() > 1) {
-    //                     $cek->delete();
-    //                     $nama = $this->karyawan;
-    //                     $this->resultx = "Fdl Senyawa Volatile parameter $cek->parameter di no sample $cek->no_sample berhasil dihapus oleh $nama.!";
-    //                     // if($this->pin!=null){
-    //                     //     $telegram = new Telegram();
-    //                     //     $telegram->send($this->pin, $this->resultx);
-    //                     // }
-    //                     return response()->json([
-    //                         'message' => $this->resultx,
-    //                         'cat' => 1
-    //                     ], 201);
-    //                 } else {
-    //                     $cek2 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-    //                     $cek->delete();
-    //                     $cek2->delete();
-
-    //                     $nama = $this->karyawan;
-    //                     $this->resultx = "Fdl Senyawa Volatile parameter $cek->parameter di no sample $cek->no_sample berhasil dihapus oleh $nama.!";
-
-    //                     // if($this->pin!=null){
-    //                     //     $telegram = new Telegram();
-    //                     //     $telegram->send($this->pin, $this->resultx);
-    //                     // }
-
-    //                     return response()->json([
-    //                         'message' => $this->resultx,
-    //                         'cat' => 2
-    //                     ], 201);
-    //                 }
-    //             }
-    //         } else if ($request->tip == 2) {
-    //             $cek = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->where('shift_pengambilan', $request->shift)->get();
-    //             $shift = array();
-    //             foreach ($data as $dat) {
-    //                 $shift[$dat['shift_pengambilan']][] = $dat;
-    //             }
-    //             if (count($shift) > 1) {
-    //                 $cek->each->delete();
-
-    //                 $this->resultx = "Fdl Senyawa Volatile shift $request->shift di no sample $request->no_sample berhasil dihapus oleh $nama.!";
-    //                 // $nama = $this->karyawan;
-    //                 // if($this->pin!=null){
-    //                 //     $telegram = new Telegram();
-    //                 //     $telegram->send($this->pin, $this->resultx);
-    //                 // }
-
-    //                 return response()->json([
-    //                     'message' => $this->resultx,
-    //                     'cat' => 1
-    //                 ], 201);
-    //             } else {
-    //                 $cek2 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-    //                 $cek->each->delete();
-    //                 $cek2->delete();
-
-    //                 $this->resultx = "Fdl Senyawa Volatile shift $request->shift di no sample $request->no_sample berhasil dihapus oleh $nama.!";
-    //                 // $nama = $this->karyawan;
-    //                 // if($this->pin!=null){
-    //                 //     $telegram = new Telegram();
-    //                 //     $telegram->send($this->pin, $this->resultx);
-    //                 // }
-
-    //                 return response()->json([
-    //                     'message' => $this->resultx,
-    //                     'cat' => 2
-    //                 ], 201);
-    //             }
-    //         } else if ($request->tip == 3) {
-    //             $cek = DataLapanganSenyawaVolatile::where('id', $request->id)->first();
-    //             $cek2 = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->delete();
-    //             $cek->delete();
-    //             $nama = $this->karyawan;
-    //             $this->resultx = "Fdl Senyawa Volatile dengan no sampel $request->no_sample berhasil dihapus oleh $nama.!";
-    //             // if ($this->pin != null) {
-
-    //             //     $telegram = new Telegram();
-    //             //     $telegram->send($this->pin, $this->resultx);
-    //             // }
-
-    //             return response()->json([
-    //                 'message' => $this->resultx,
-    //             ], 201);
-    //         }
-    //     } else {
-    //         return response()->json([
-    //             'message' => 'Gagal Delete'
-    //         ], 401);
-    //     }
-    // }
     
     public function convertImg($foto = '', $type = '', $user = '')
     {
