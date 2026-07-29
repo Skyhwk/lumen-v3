@@ -266,6 +266,211 @@ class WsFinalApprovalService
         return self::PARAMETER_SOURCES;
     }
 
+    public static function repairEmptyDetailResults(array $options = []): array
+    {
+        $dryRun = filter_var($options['dry_run'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $limit = (int) ($options['limit'] ?? 0);
+        $noSampel = self::stringValue($options['no_sampel'] ?? null);
+        $categoryFilter = self::stringValue($options['category'] ?? null);
+
+        $summary = [
+            'checked' => 0,
+            'updated' => 0,
+            'unchanged' => 0,
+            'missing_order_detail' => 0,
+            'missing_source' => 0,
+            'empty_result' => 0,
+            'errors' => 0,
+            'dry_run' => $dryRun,
+        ];
+        $changes = [];
+        $skipped = [];
+        $errors = [];
+
+        $query = DB::table('ws_final_approval_detail as d')
+            ->join('ws_final_approval_header as h', 'h.id', '=', 'd.ws_final_approval_header_id')
+            ->select([
+                'd.id',
+                'd.ws_final_approval_header_id',
+                'd.no_sampel',
+                'd.parameter_lab',
+                'd.parameter_regulasi',
+                'd.hasil',
+                'h.kategori',
+                'h.no_sampel as header_no_sampel',
+            ])
+            ->where(function ($query) {
+                $query->where('d.hasil', '[]')
+                    ->orWhereRaw("TRIM(COALESCE(d.hasil, '')) = '[]'");
+            })
+            ->orderBy('d.id');
+
+        if ($noSampel !== null) {
+            $query->where('d.no_sampel', $noSampel);
+        }
+
+        if ($categoryFilter !== null) {
+            $query->where('h.kategori', $categoryFilter);
+        }
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        foreach ($query->get() as $detail) {
+            $summary['checked']++;
+
+            try {
+                $orderDetail = self::findOrderDetail($detail->no_sampel);
+                if (!$orderDetail) {
+                    $summary['missing_order_detail']++;
+                    $skipped[] = self::repairMessage($detail, 'order_detail tidak ditemukan');
+                    continue;
+                }
+
+                $repair = self::resolveRepairResultForDetail($detail, $orderDetail);
+                if (!$repair['source_found']) {
+                    $summary['missing_source']++;
+                    $skipped[] = self::repairMessage($detail, 'source approved tidak ditemukan');
+                    continue;
+                }
+
+                if ($repair['hasil'] === null || $repair['hasil'] === '') {
+                    $summary['empty_result']++;
+                    $skipped[] = self::repairMessage($detail, 'hasil source masih kosong');
+                    continue;
+                }
+
+                $newResult = self::limit((string) $repair['hasil'], 50);
+                $changes[] = [
+                    'detail_id' => $detail->id,
+                    'no_sampel' => $detail->no_sampel,
+                    'parameter_lab' => $detail->parameter_lab,
+                    'kategori' => self::categoryName($orderDetail->kategori_2) ?: $detail->kategori,
+                    'source' => $repair['source'],
+                    'before' => $detail->hasil,
+                    'after' => $newResult,
+                ];
+
+                if (!$dryRun) {
+                    DB::table('ws_final_approval_detail')
+                        ->where('id', $detail->id)
+                        ->update(['hasil' => $newResult]);
+                }
+
+                $summary['updated']++;
+            } catch (\Throwable $e) {
+                $summary['errors']++;
+                $errors[] = [
+                    'detail_id' => $detail->id,
+                    'no_sampel' => $detail->no_sampel,
+                    'parameter_lab' => $detail->parameter_lab,
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        $summary['unchanged'] = max(0, $summary['checked']
+            - $summary['updated']
+            - $summary['missing_order_detail']
+            - $summary['missing_source']
+            - $summary['empty_result']
+            - $summary['errors']);
+
+        return [
+            'summary' => $summary,
+            'changes' => array_slice($changes, 0, 100),
+            'skipped' => array_slice($skipped, 0, 100),
+            'errors' => array_slice($errors, 0, 100),
+        ];
+    }
+
+    private static function resolveRepairResultForDetail($detail, OrderDetail $orderDetail): array
+    {
+        $category = self::categoryName($orderDetail->kategori_2) ?: $detail->kategori;
+        $sources = self::parameterSources($category);
+
+        foreach ($sources as $modelClass) {
+            $source = self::findApprovedSourceForDetail($modelClass, $detail);
+            if (!$source) {
+                continue;
+            }
+
+            $hasil = self::extractResult($source, $orderDetail);
+            if ($hasil !== null && $hasil !== '') {
+                $hasil = self::stringValue($hasil);
+                if ($hasil !== null && !self::rejectPlaceholderResult($hasil)) {
+                    return [
+                        'source_found' => true,
+                        'source' => class_basename($modelClass),
+                        'hasil' => $hasil,
+                    ];
+                }
+            }
+
+            return [
+                'source_found' => true,
+                'source' => class_basename($modelClass),
+                'hasil' => null,
+            ];
+        }
+
+        return [
+            'source_found' => false,
+            'source' => null,
+            'hasil' => null,
+        ];
+    }
+
+    private static function findApprovedSourceForDetail(string $modelClass, $detail): ?Model
+    {
+        if (!class_exists($modelClass)) {
+            return null;
+        }
+
+        $model = new $modelClass();
+        $table = $model->getTable();
+        if (!self::hasColumnCached($table, 'no_sampel') || !self::hasColumnCached($table, 'parameter')) {
+            return null;
+        }
+
+        $approvalColumn = self::approvalColumn($table);
+        if ($approvalColumn === null) {
+            return null;
+        }
+
+        $query = $modelClass::where('no_sampel', $detail->no_sampel)
+            ->where($approvalColumn, 1);
+
+        if (self::hasColumnCached($table, 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        $parameterLab = self::stringValue($detail->parameter_lab);
+        if ($parameterLab !== null) {
+            $exact = (clone $query)->where('parameter', $parameterLab)->orderByDesc('id')->first();
+            if ($exact instanceof Model) {
+                return $exact;
+            }
+        }
+
+        $normalizedTarget = self::normalizeParameter($parameterLab);
+        return $query->orderByDesc('id')
+            ->get()
+            ->first(function (Model $source) use ($normalizedTarget) {
+                return self::normalizeParameter($source->getAttribute('parameter')) === $normalizedTarget;
+            });
+    }
+
+    private static function repairMessage($detail, string $reason): array
+    {
+        return [
+            'detail_id' => $detail->id,
+            'no_sampel' => $detail->no_sampel,
+            'parameter_lab' => $detail->parameter_lab,
+            'reason' => $reason,
+        ];
+    }
     public static function finalizeLhpFromLhpTables(OrderDetail $orderDetail, bool $approved, ?string $approvedBy = null): void
     {
         $headerId = self::upsertHeader($orderDetail);
@@ -2198,3 +2403,4 @@ class WsFinalApprovalService
         }
     }
 }
+
