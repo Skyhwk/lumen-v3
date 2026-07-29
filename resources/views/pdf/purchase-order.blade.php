@@ -272,6 +272,10 @@
                         <td>: {{ $poDocument->pic ?: '-' }}</td>
                     </tr>
                     <tr>
+                        <td class="info-label">Metode Pembayaran</td>
+                        <td>: {{ ucfirst($poDocument->payment_method ?: 'transfer') }}</td>
+                    </tr>
+                    <tr>
                         <td class="info-label">Pembayaran</td>
                         <td>: {{ $poDocument->payment_term ?: '-' }}</td>
                     </tr>

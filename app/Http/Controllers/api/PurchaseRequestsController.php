@@ -89,6 +89,7 @@ class PurchaseRequestsController extends Controller
             'Waiting Process',
             'On Process',
             'Pending',
+            'Waiting Purchase Process',
             'Waiting Vendor Receipt',
             'Waiting User Receipt',
             'Distributing',
@@ -732,6 +733,10 @@ class PurchaseRequestsController extends Controller
 
         if ($row->finance_status === 'On Process' || $row->finance_status === 'Pending') {
             return 'Dalam Proses';
+        }
+
+        if ($row->finance_status === 'Waiting Purchase Process') {
+            return 'Menunggu Transaksi Pembelian';
         }
 
         if ($row->finance_status === 'Waiting Vendor Receipt' || $row->finance_status === 'Waiting User Receipt') {

@@ -56,7 +56,7 @@ class PurchaseReceiptService
             ->where(function ($query) {
                 $query->where('is_voided', false)->orWhereNull('is_voided');
             })
-            ->whereIn('po_status', ['draft', 'active'])
+            ->whereIn('po_status', ['draft', 'approved', 'active'])
             ->sum('quantity'), 2);
     }
 
@@ -326,7 +326,7 @@ class PurchaseReceiptService
             ->where(function ($query) {
                 $query->where('is_voided', false)->orWhereNull('is_voided');
             })
-            ->whereIn('po_status', ['draft', 'active'])
+            ->whereIn('po_status', ['draft', 'approved', 'active'])
             ->latest('id')
             ->first();
 
