@@ -392,6 +392,21 @@ class FdlSenyawaVolatileController extends Controller
                 }
             }
 
+            $fdl = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                
+            if (is_null($fdl)) {
+                $data = new DataLapanganSenyawaVolatile();
+                if ($request->categori != '') $data->kategori_3                 = $request->categori;
+                $data->no_sampel                                                = strtoupper(trim($request->no_sample));
+                $data->permission                                                = $request->permission;
+                $data->created_by                                                   = $this->karyawan;
+                $data->created_at                                                  = date('Y-m-d H:i:s');
+                $data->save();
+            }
+
+            $fdl->is_rejected = 0;
+            $fdl->save();
+
             foreach ($request->param as $in => $a) {
                 $pengukuran = array();
                 $durasii = null;
@@ -435,19 +450,6 @@ class FdlSenyawaVolatileController extends Controller
                     $shift_peng = 'Sesaat';
                 } elseif (strpos($kateg, 'jam') !== false) {
                     $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
-                }
-
-                $fdl = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-                
-                if (is_null($fdl)) {
-                    $data = new DataLapanganSenyawaVolatile();
-                    if ($request->categori != '') $data->kategori_3                 = $request->categori;
-                    $data->no_sampel                                                = strtoupper(trim($request->no_sample));
-                    $data->permission                                                = $request->permission;
-                    $data->created_by                                                   = $this->karyawan;
-                    $data->created_at                                                  = date('Y-m-d H:i:s');
-                    $data->is_rejected = 0;
-            $data->save();
                 }
 
                 $fdlvalue = new DetailSenyawaVolatile();
