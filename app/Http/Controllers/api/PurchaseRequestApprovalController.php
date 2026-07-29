@@ -155,8 +155,15 @@ class PurchaseRequestApprovalController extends Controller
             return response()->json(['message' => 'Permintaan tidak dapat divoid pada tahap ini'], 422);
         }
 
+        $voidNote = trim((string) $request->input('void_note', ''));
+        if ($voidNote === '') {
+            return response()->json(['message' => 'Keterangan void wajib diisi'], 422);
+        }
+
         $purchaseRequest->deleted_by = $this->karyawan;
         $purchaseRequest->deleted_at = date('Y-m-d H:i:s');
+        $purchaseRequest->void_note = $voidNote;
+        $purchaseRequest->void_source = 'finance';
         $purchaseRequest->is_active = false;
         $purchaseRequest->save();
 
@@ -168,7 +175,7 @@ class PurchaseRequestApprovalController extends Controller
 
         Notification::where('nama_lengkap', $purchaseRequest->created_by)
             ->title('Permintaan Pembelian Barang Dibatalkan')
-            ->message("Permintaan pembelian barang {$purchaseRequest->request_number} telah dibatalkan oleh purchasing pada " . date('d-m-Y'))
+            ->message("Permintaan pembelian barang {$purchaseRequest->request_number} telah dibatalkan oleh purchasing pada " . date('d-m-Y') . " dengan alasan: {$voidNote}")
             ->url('/request/purchase-requests')
             ->send();
 

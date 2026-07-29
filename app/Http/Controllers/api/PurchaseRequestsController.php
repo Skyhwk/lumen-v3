@@ -381,8 +381,15 @@ class PurchaseRequestsController extends Controller
             return response()->json(['message' => 'Permintaan tidak dapat divoid pada tahap ini'], 422);
         }
 
+        $voidNote = trim((string) $request->input('void_note', ''));
+        if ($voidNote === '') {
+            return response()->json(['message' => 'Keterangan void wajib diisi'], 422);
+        }
+
         $purchaseRequest->deleted_by = $this->karyawan;
         $purchaseRequest->deleted_at = date('Y-m-d H:i:s');
+        $purchaseRequest->void_note = $voidNote;
+        $purchaseRequest->void_source = 'requester';
         $purchaseRequest->is_active = false;
         $purchaseRequest->save();
 
@@ -511,8 +518,6 @@ class PurchaseRequestsController extends Controller
         $purchaseRequest->goods_voided_by = $this->karyawan;
         $purchaseRequest->goods_voided_at = $now;
         $purchaseRequest->goods_void_note = $voidNote;
-        $purchaseRequest->finance_status = 'Void';
-        $purchaseRequest->status = 'Void';
         $purchaseRequest->updated_by = $this->karyawan;
         $purchaseRequest->updated_at = $now;
         $purchaseRequest->save();
@@ -720,7 +725,9 @@ class PurchaseRequestsController extends Controller
         }
 
         if (!$row->is_active && $row->deleted_at) {
-            return 'Void PR';
+            return $this->resolveVoidSource($row) === 'finance'
+                ? 'Void PR - Finance'
+                : 'Void PR - Pemohon';
         }
 
         if ($row->finance_status === 'Rejected') {
@@ -793,15 +800,11 @@ class PurchaseRequestsController extends Controller
     private function resolveVoidReason($row): string
     {
         if ($row->is_goods_voided) {
-            return 'Barang ditolak user';
+            return $row->goods_void_note ?: 'Barang ditolak user';
         }
 
         if (!$row->is_active && $row->deleted_at) {
-            if ($row->deleted_by && $row->deleted_by !== $row->created_by) {
-                return 'Void oleh purchasing';
-            }
-
-            return 'Void oleh pemohon';
+            return $row->void_note ?: '-';
         }
 
         if ($row->finance_status === 'Rejected') {
@@ -813,6 +816,19 @@ class PurchaseRequestsController extends Controller
         }
 
         return '-';
+    }
+
+    private function resolveVoidSource($row): string
+    {
+        if (!empty($row->void_source)) {
+            return $row->void_source;
+        }
+
+        if ($row->deleted_by && $row->deleted_by !== $row->created_by) {
+            return 'finance';
+        }
+
+        return 'requester';
     }
 
     private function resolveSigner(?string $name, ?string $fallbackPosition = null): array
