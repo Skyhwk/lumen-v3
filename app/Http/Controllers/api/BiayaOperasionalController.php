@@ -29,9 +29,11 @@ class BiayaOperasionalController extends Controller
 
         $destinations = BiayaOperasional::whereNotNull('destination')
             ->where('destination', '!=', '')
-            ->distinct()
-            ->orderBy('destination')
             ->pluck('destination')
+            ->flatMap(fn($destination) => $this->parseDestinations($destination))
+            ->filter()
+            ->unique()
+            ->sort()
             ->values();
 
         return response()->json([
@@ -105,7 +107,8 @@ class BiayaOperasionalController extends Controller
             return response()->json(['message' => 'Checklist kebutuhan minimal 1'], 422);
         }
 
-        if (!$request->person_in_charge || !$request->destination || !$request->travel_date) {
+        $destinations = $this->parseDestinations($request->input('destination', []));
+        if (!$request->person_in_charge || !count($destinations) || !$request->travel_date) {
             return response()->json(['message' => 'Penanggung jawab, tujuan, dan tanggal perjalanan wajib diisi'], 422);
         }
 
@@ -114,7 +117,7 @@ class BiayaOperasionalController extends Controller
             $bo = BiayaOperasional::create([
                 'bo_number' => $this->generateBoNumber(),
                 'person_in_charge' => $request->person_in_charge,
-                'destination' => $request->destination,
+                'destination' => json_encode(array_values(array_unique($destinations))),
                 'travel_date' => $request->travel_date,
                 'status' => 'requested',
                 'is_active' => true,
@@ -143,6 +146,7 @@ class BiayaOperasionalController extends Controller
     {
         $bo = BiayaOperasional::with(['items', 'receipts'])->findOrFail($request->id);
         $bo->needs_summary = $bo->items->pluck('need_name')->join(', ');
+        $bo->destination_text = $this->destinationText($bo->destination);
         $bo->display_status = $this->displayStatus($bo->status);
         $bo->total_prepared = $bo->items->sum('prepared_amount');
         $bo->total_used = $bo->items->sum('used_amount');
@@ -329,6 +333,29 @@ class BiayaOperasionalController extends Controller
         }
     }
 
+    private function parseDestinations($destination): array
+    {
+        if (is_array($destination)) {
+            return array_values(array_filter(array_map('trim', $destination)));
+        }
+
+        if (!$destination) {
+            return [];
+        }
+
+        $decoded = json_decode($destination, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return array_values(array_filter(array_map('trim', $decoded)));
+        }
+
+        return array_values(array_filter(array_map('trim', [$destination])));
+    }
+
+    private function destinationText($destination): string
+    {
+        $destinations = $this->parseDestinations($destination);
+        return count($destinations) ? implode(', ', $destinations) : '-';
+    }
     private function generateBoNumber(): string
     {
         $year = date('y');
@@ -383,6 +410,7 @@ class BiayaOperasionalController extends Controller
 
         $total = number_format($bo->items->sum('prepared_amount'), 0, ',', '.');
         $travelDate = $this->formatIndonesianDate($bo->travel_date);
+        $destinationText = $this->destinationText($bo->destination);
         $logoPath = public_path('isl_logo.png');
         $logo = file_exists($logoPath)
             ? '<img src="' . $logoPath . '" style="height:22px; margin-bottom:2px;">'
@@ -397,7 +425,7 @@ class BiayaOperasionalController extends Controller
                 <table style="width:100%; font-size:9px; border-collapse:collapse; line-height:1.25;">
                     <tr><td style="padding:1px 0;">No BO</td><td style="padding:1px 0; text-align:right">' . e($bo->bo_number) . '</td></tr>
                     <tr><td style="padding:1px 0;">PJ</td><td style="padding:1px 0; text-align:right">' . e($bo->person_in_charge) . '</td></tr>
-                    <tr><td style="padding:1px 0;">Tujuan</td><td style="padding:1px 0; text-align:right">' . e($bo->destination) . '</td></tr>
+                    <tr><td style="padding:1px 0;">Tujuan</td><td style="padding:1px 0; text-align:right">' . e($destinationText) . '</td></tr>
                     <tr><td style="padding:1px 0;">Tanggal</td><td style="padding:1px 0; text-align:right">' . e($travelDate) . '</td></tr>
                 </table>
                 ' . $dash . '
@@ -414,6 +442,7 @@ class BiayaOperasionalController extends Controller
         ';
     }
 }
+
 
 
 

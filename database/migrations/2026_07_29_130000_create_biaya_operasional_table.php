@@ -17,7 +17,7 @@ class CreateBiayaOperasionalTable extends Migration
             $table->id();
             $table->string('bo_number', 50)->unique();
             $table->string('person_in_charge', 150);
-            $table->string('destination');
+            $table->json('destination');
             $table->date('travel_date');
             $table->enum('status', ['requested', 'approved', 'prepared', 'completed', 'void'])->default('requested');
             $table->boolean('is_active')->default(true);
@@ -56,3 +56,4 @@ class CreateBiayaOperasionalTable extends Migration
         Schema::dropIfExists('biaya_operasional');
     }
 }
+
