@@ -335,6 +335,47 @@ class FdlLingkunganHidupController extends Controller
         // Buat output JSON yang sesuai
         $param_fin = json_encode($filtered_param, JSON_UNESCAPED_UNICODE);
         $parameterVolatile = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile_lh')->first();
+        
+        $volatile_array = json_decode($parameterVolatile->parameters, true) ?? [];
+        $volatile_lower = array_map('strtolower', $volatile_array);
+
+        $form_mappings = [];
+        foreach ($filtered_param as $p) {
+            $pLower = strtolower($p);
+            $kateg = '';
+            if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                $kateg = '24 Jam';
+            } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                $kateg = '8 Jam';
+            } else if (str_contains($pLower, '6 jam')) {
+                $kateg = '6 Jam';
+            }
+
+            $satuan = '(L/m)';
+            if (str_contains($pLower, 'tsp') || str_contains($pLower, 'pm 10') || str_contains($pLower, 'pm 2.5')) {
+                $satuan = '(m3/menit)';
+            }
+
+            $type = 6;
+            if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 10 (8 jam)", "pm 2.5 (24 jam)", "pm 2.5 (8 jam)"])) {
+                $type = 1;
+            } else if (str_starts_with($pLower, "o3") || $pLower === "ox") {
+                $type = 2;
+            } else if (in_array($pLower, $volatile_lower)) {
+                $type = 3;
+            } else if (str_contains($pLower, "dustfall")) {
+                $type = 4;
+            } else if (in_array($pLower, ["passive so2", "passive no2"])) {
+                $type = 5;
+            }
+
+            $form_mappings[$p] = [
+                'type' => $type,
+                'kateg' => $kateg,
+                'satuan' => $satuan
+            ];
+        }
+
         if ($data) {
             return response()->json([
                 'non'      => 1,
@@ -369,7 +410,7 @@ class FdlLingkunganHidupController extends Controller
                 'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
                 'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
                 // 'parameter_no2' => $parameter_no2
-
+                'form_mappings' => $form_mappings
             ], 200);
             $this->resultx = 'get shift sample lingkuhan hidup success';
         } else {
@@ -385,6 +426,7 @@ class FdlLingkunganHidupController extends Controller
                 'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
                 'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
                 // 'parameter_no2' => $parameter_no2
+                'form_mappings' => $form_mappings
             ], 200);
         }
     }

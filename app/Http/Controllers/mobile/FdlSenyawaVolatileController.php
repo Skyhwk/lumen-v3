@@ -279,6 +279,27 @@ class FdlSenyawaVolatileController extends Controller
         $param_fin = json_encode($filtered_param);
         $parameterList = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile')->first();
 
+        $form_mappings = [];
+        foreach ($filtered_param as $p) {
+            $pLower = strtolower($p);
+            $kateg = '';
+            if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                $kateg = '24 Jam';
+            } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                $kateg = '8 Jam';
+            } else if (str_contains($pLower, '6 jam')) {
+                $kateg = '6 Jam';
+            } else if (str_contains($pLower, '3 jam')) {
+                $kateg = '3 Jam';
+            }
+
+            $form_mappings[$p] = [
+                'type' => 1,
+                'kateg' => $kateg,
+                'satuan' => '(L/m)'
+            ];
+        }
+
         if ($data) {
             return response()->json([
                 'non'      => 1,
@@ -311,7 +332,8 @@ class FdlSenyawaVolatileController extends Controller
                 'is_filled' => true,
                 // 'important_keyword' => $importantKeyword,
                 'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
-                'parameter_no2' => $parameter_no2
+                'parameter_no2' => $parameter_no2,
+                'form_mappings' => $form_mappings
             ], 200);
 
             $this->resultx = 'get shift Senyawa Volatile success';
@@ -327,7 +349,8 @@ class FdlSenyawaVolatileController extends Controller
                 'is_filled' => false,
                 // 'important_keyword' => $importantKeyword,
                 'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
-                'parameter_no2' => $parameter_no2
+                'parameter_no2' => $parameter_no2,
+                'form_mappings' => $form_mappings
             ], 200);
         }
     }

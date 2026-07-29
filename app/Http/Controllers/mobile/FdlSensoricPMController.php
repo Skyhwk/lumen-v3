@@ -91,6 +91,27 @@ class FdlSensoricPMController extends Controller
                     $id_ket = explode('-', $data->kategori_3)[0];
                     $cek = MasterSubKategori::find($id_ket);
 
+                    $form_mappings = [];
+                    foreach ($param_fin as $p) {
+                        $pLower = strtolower($p);
+                        $kategori = 'Sesaat';
+                        $jam = 0;
+                        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                            $kategori = '24 Jam';
+                            $jam = 24;
+                        } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                            $kategori = '8 Jam';
+                            $jam = 8;
+                        } else if (str_contains($pLower, '6 jam')) {
+                            $kategori = '6 Jam';
+                            $jam = 6;
+                        }
+                        $form_mappings[$p] = [
+                            'kategori' => $kategori,
+                            'jam' => $jam
+                        ];
+                    }
+
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
                         'jenis'      => $cek->nama_sub_kategori ?? null,
@@ -98,6 +119,7 @@ class FdlSensoricPMController extends Controller
                         'id_ket'     => $id_ket,
                         'parameter'  => $param_fin,
                         'listParameter' => $listParameter,
+                        'form_mappings' => $form_mappings
                     ], 200);
 
                 } else {
@@ -106,6 +128,28 @@ class FdlSensoricPMController extends Controller
                     $id_ket = explode('-', $data->kategori_3)[0];
                     $id_ket2 = explode('-', $data->kategori_2)[0];
                     $cek = MasterSubKategori::find($id_ket);
+
+                    $form_mappings = [];
+                    foreach ($parameters as $p) {
+                        $pLower = strtolower($p);
+                        $kategori = 'Sesaat';
+                        $jam = 0;
+                        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                            $kategori = '24 Jam';
+                            $jam = 24;
+                        } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                            $kategori = '8 Jam';
+                            $jam = 8;
+                        } else if (str_contains($pLower, '6 jam')) {
+                            $kategori = '6 Jam';
+                            $jam = 6;
+                        }
+                        $form_mappings[$p] = [
+                            'kategori' => $kategori,
+                            'jam' => $jam
+                        ];
+                    }
+
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
                         'jenis'      => $cek->nama_sub_kategori ?? null,
@@ -114,6 +158,7 @@ class FdlSensoricPMController extends Controller
                         'id_ket2'    => $id_ket2,
                         'parameter'  => $parameters,
                         'listParameter' => $listParameter,
+                        'form_mappings' => $form_mappings
                     ], 200);
                 }
 
