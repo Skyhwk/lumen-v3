@@ -629,7 +629,8 @@ class FdlLingkunganKerjaController extends Controller
                     }
                     $fdlvalue->created_by                                                  = $this->karyawan;
                     $fdlvalue->created_at                                                 = Carbon::now()->format('Y-m-d H:i:s');
-                    $fdlvalue->save();
+                    $fdlvalue->is_rejected = 0;
+            $fdlvalue->save();
                 }
             }else{
                 $order_detail = OrderDetail::select('parameter')->where('no_sampel', strtoupper(trim($request->no_sample)))->first();

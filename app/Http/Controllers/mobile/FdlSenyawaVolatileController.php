@@ -473,7 +473,8 @@ class FdlSenyawaVolatileController extends Controller
                     $data->permission                                                = $request->permission;
                     $data->created_by                                                   = $this->karyawan;
                     $data->created_at                                                  = date('Y-m-d H:i:s');
-                    $data->save();
+                    $data->is_rejected = 0;
+            $data->save();
                 }
 
                 $fdlvalue = new DetailSenyawaVolatile();
