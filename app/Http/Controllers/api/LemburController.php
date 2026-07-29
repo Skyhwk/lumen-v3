@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\Lemburan;
-use App\Models\{FormHeader, FormDetail};
+use App\Models\{FormHeader, OvertimeRequestMembers, OvertimeRequest};
 use App\Models\Rfid;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
@@ -28,57 +28,54 @@ class LemburController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
-        // dd($request);
-        $data = FormHeader::on('intilab_apps')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+        $data = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                        WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-                        WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                        WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-                        WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-                        WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-                        WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                        WHEN overtime_requests.status = "APPROVED ATASAN" OR overtime_requests.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+                        WHEN overtime_requests.status = "APPROVED HRD" OR overtime_requests.status = "Approved HRD" THEN "APPROVED HRD" 
+                        WHEN overtime_requests.status = "APPROVED FINANCE" OR overtime_requests.status = "Approved Finance" THEN "APPROVED FINANCE" 
+                        WHEN overtime_requests.status = "REJECTED ATASAN" OR overtime_requests.status = "Rejected Atasan" THEN "REJECTED" 
+                        WHEN overtime_requests.status = "REJECTED HRD" OR overtime_requests.status = "Rejected HRD" THEN "REJECTED HRD" 
+                        WHEN overtime_requests.status = "REJECTED FINANCE" OR overtime_requests.status = "Rejected Finance" THEN "REJECTED FINANCE" 
                         ELSE "WAITING" 
                     END as status'),
 
                 DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
-                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+                DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
-                // ambil salah satu (karena per dokumen harusnya sama)
-                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
-                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
-                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
-                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
-                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
-                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
+                'overtime_requests.approved_hrd_by',
+                'overtime_requests.approved_hrd_at',
+                'overtime_requests.approved_finance_by',
+                'overtime_requests.approved_finance_at',
+                'overtime_requests.approved_atasan_by',
+                'overtime_requests.approved_atasan_at',
 
-                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
-                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
-                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+                'overtime_requests.start_date as tanggal',
+                'overtime_requests.start_time as jam_mulai',
+                'overtime_requests.end_time as jam_selesai',
 
-                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
-                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
-                DB::raw('MAX(fd.keterangan) as keterangan')
+                'overtime_requests.created_by as nama_pengaju',
+                'overtime_requests.created_at as diajukan_pada',
+                'overtime_requests.description as keterangan'
             )
             ->groupBy(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
-                'form_header.status'
+                'overtime_requests.status'
             )
-            ->where('form_header.type_document', 'lembur')
-            ->whereNotNull('fd.approved_atasan_by')
-            ->whereNull('fd.approved_hrd_by')
-            ->whereNull('fd.approved_finance_by')
-            ->whereNull('fd.rejected_atasan_by')
-            ->whereNull('fd.rejected_hrd_by')
-            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->whereNotNull('overtime_requests.approved_atasan_by')
+            ->whereNull('overtime_requests.approved_hrd_by')
+            ->whereNull('overtime_requests.approved_finance_by')
+            ->whereNull('overtime_requests.rejected_atasan_by')
+            ->whereNull('overtime_requests.rejected_hrd_by')
+            ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
             ->transform(function ($item) {
                 $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
@@ -91,58 +88,55 @@ class LemburController extends Controller
     public function indexProcessed(Request $request)
     {
 
-        $data = FormHeader::on('intilab_apps')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+        $data = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-                                WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-                                WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-                                WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                                WHEN overtime_requests.status = "APPROVED ATASAN" OR overtime_requests.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+                                WHEN overtime_requests.status = "APPROVED HRD" OR overtime_requests.status = "Approved HRD" THEN "APPROVED HRD" 
+                                WHEN overtime_requests.status = "APPROVED FINANCE" OR overtime_requests.status = "Approved Finance" THEN "APPROVED FINANCE" 
+                                WHEN overtime_requests.status = "REJECTED ATASAN" OR overtime_requests.status = "Rejected Atasan" THEN "REJECTED" 
+                                WHEN overtime_requests.status = "REJECTED HRD" OR overtime_requests.status = "Rejected HRD" THEN "REJECTED HRD" 
+                                WHEN overtime_requests.status = "REJECTED FINANCE" OR overtime_requests.status = "Rejected Finance" THEN "REJECTED FINANCE" 
                                 ELSE "WAITING" 
                             END as status'),
 
                 DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
-                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+                DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
-                // ambil salah satu (karena per dokumen harusnya sama)
-                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
-                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
-                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
-                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
-                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
-                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
+                'overtime_requests.approved_hrd_by',
+                'overtime_requests.approved_hrd_at',
+                'overtime_requests.approved_finance_by',
+                'overtime_requests.approved_finance_at',
+                'overtime_requests.approved_atasan_by',
+                'overtime_requests.approved_atasan_at',
 
-                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
-                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
-                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+                'overtime_requests.start_date as tanggal',
+                'overtime_requests.start_time as jam_mulai',
+                'overtime_requests.end_time as jam_selesai',
 
-                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
-                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
-                DB::raw('MAX(fd.keterangan) as keterangan')
-
+                'overtime_requests.created_by as nama_pengaju',
+                'overtime_requests.created_at as diajukan_pada',
+                'overtime_requests.description as keterangan'
 
             )
             ->groupBy(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
-                'form_header.status'
+                'overtime_requests.status'
             )
-            ->where('form_header.type_document', 'Lembur')
-            ->whereNotNull('fd.approved_atasan_by')
-            ->whereNotNull('fd.approved_hrd_by')
-            ->whereNull('fd.rejected_atasan_by')
-            ->whereNull('fd.rejected_hrd_by')
-            ->whereNull('fd.rejected_finance_by')
-            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->whereNotNull('overtime_requests.approved_atasan_by')
+            ->whereNotNull('overtime_requests.approved_hrd_by')
+            ->whereNull('overtime_requests.rejected_atasan_by')
+            ->whereNull('overtime_requests.rejected_hrd_by')
+            ->whereNull('overtime_requests.rejected_finance_by')
+            ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
             ->transform(function ($item) {
                 $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
@@ -154,57 +148,54 @@ class LemburController extends Controller
 
     public function indexUnprocessedFinance(Request $request)
     {
-        $data = FormHeader::on('intilab_apps')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+        $data = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-                                WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-                                WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-                                WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                                WHEN overtime_requests.status = "APPROVED ATASAN" OR overtime_requests.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+                                WHEN overtime_requests.status = "APPROVED HRD" OR overtime_requests.status = "Approved HRD" THEN "APPROVED HRD" 
+                                WHEN overtime_requests.status = "APPROVED FINANCE" OR overtime_requests.status = "Approved Finance" THEN "APPROVED FINANCE" 
+                                WHEN overtime_requests.status = "REJECTED ATASAN" OR overtime_requests.status = "Rejected Atasan" THEN "REJECTED" 
+                                WHEN overtime_requests.status = "REJECTED HRD" OR overtime_requests.status = "Rejected HRD" THEN "REJECTED HRD" 
+                                WHEN overtime_requests.status = "REJECTED FINANCE" OR overtime_requests.status = "Rejected Finance" THEN "REJECTED FINANCE" 
                                 ELSE "WAITING" 
                             END as status'),
 
                 DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
-                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+                DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
-                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
-                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
-                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
-                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+                'overtime_requests.approved_hrd_by',
+                'overtime_requests.approved_hrd_at',
+                'overtime_requests.approved_finance_by',
+                'overtime_requests.approved_finance_at',
 
-                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
-                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
-                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+                'overtime_requests.start_date as tanggal',
+                'overtime_requests.start_time as jam_mulai',
+                'overtime_requests.end_time as jam_selesai',
 
-                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
-                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
-                DB::raw('MAX(fd.keterangan) as keterangan')
-
+                'overtime_requests.created_by as nama_pengaju',
+                'overtime_requests.created_at as diajukan_pada',
+                'overtime_requests.description as keterangan'
 
             )
             ->groupBy(
-                'form_header.id',
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
-                'form_header.status'
+                'overtime_requests.status'
             )
-            ->where('form_header.type_document', 'Lembur')
-            ->whereNotNull('fd.approved_atasan_by')
-            ->whereNotNull('fd.approved_hrd_by')
-            ->whereNull('fd.approved_finance_by')
-            ->whereNull('fd.rejected_atasan_by')
-            ->whereNull('fd.rejected_hrd_by')
-            ->whereNull('fd.rejected_finance_by')
-            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->whereNotNull('overtime_requests.approved_atasan_by')
+            ->whereNotNull('overtime_requests.approved_hrd_by')
+            ->whereNull('overtime_requests.approved_finance_by')
+            ->whereNull('overtime_requests.rejected_atasan_by')
+            ->whereNull('overtime_requests.rejected_hrd_by')
+            ->whereNull('overtime_requests.rejected_finance_by')
+            ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
             ->transform(function ($item) {
                 $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
@@ -218,56 +209,54 @@ class LemburController extends Controller
 
     public function indexProcessedFinance(Request $request)
     {
-        $data = FormHeader::on('intilab_apps')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+        $data = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-                                WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-                                WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-                                WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                                WHEN overtime_requests.status = "APPROVED ATASAN" OR overtime_requests.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+                                WHEN overtime_requests.status = "APPROVED HRD" OR overtime_requests.status = "Approved HRD" THEN "APPROVED HRD" 
+                                WHEN overtime_requests.status = "APPROVED FINANCE" OR overtime_requests.status = "Approved Finance" THEN "APPROVED FINANCE" 
+                                WHEN overtime_requests.status = "REJECTED ATASAN" OR overtime_requests.status = "Rejected Atasan" THEN "REJECTED" 
+                                WHEN overtime_requests.status = "REJECTED HRD" OR overtime_requests.status = "Rejected HRD" THEN "REJECTED HRD" 
+                                WHEN overtime_requests.status = "REJECTED FINANCE" OR overtime_requests.status = "Rejected Finance" THEN "REJECTED FINANCE" 
                                 ELSE "WAITING" 
                             END as status'),
 
                 DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
-                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+                DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
-                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
-                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
-                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
-                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+                'overtime_requests.approved_hrd_by',
+                'overtime_requests.approved_hrd_at',
+                'overtime_requests.approved_finance_by',
+                'overtime_requests.approved_finance_at',
 
-                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
-                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
-                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+                'overtime_requests.start_date as tanggal',
+                'overtime_requests.start_time as jam_mulai',
+                'overtime_requests.end_time as jam_selesai',
 
-                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
-                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
-                DB::raw('MAX(fd.keterangan) as keterangan')
+                'overtime_requests.created_by as nama_pengaju',
+                'overtime_requests.created_at as diajukan_pada',
+                'overtime_requests.description as keterangan'
 
             )
             ->groupBy(
-                'form_header.id',
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
-                'form_header.status'
+                'overtime_requests.status'
             )
-            ->where('form_header.type_document', 'Lembur')
-            ->whereNotNull('fd.approved_atasan_by')
-            ->whereNotNull('fd.approved_hrd_by')
-            ->whereNotNull('fd.approved_finance_by')
-            ->whereNull('fd.rejected_atasan_by')
-            ->whereNull('fd.rejected_hrd_by')
-            ->whereNull('fd.rejected_finance_by')
-            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->whereNotNull('overtime_requests.approved_atasan_by')
+            ->whereNotNull('overtime_requests.approved_hrd_by')
+            ->whereNotNull('overtime_requests.approved_finance_by')
+            ->whereNull('overtime_requests.rejected_atasan_by')
+            ->whereNull('overtime_requests.rejected_hrd_by')
+            ->whereNull('overtime_requests.rejected_finance_by')
+            ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
             ->transform(function ($item) {
                 $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
@@ -280,60 +269,55 @@ class LemburController extends Controller
     public function indexByOwner(Request $request)
     {
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
-        $data = FormHeader::on('intilab_apps')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+        $data = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-                                WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-                                WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-                                WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                                WHEN overtime_requests.status = "APPROVED ATASAN" OR overtime_requests.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+                                WHEN overtime_requests.status = "APPROVED HRD" OR overtime_requests.status = "Approved HRD" THEN "APPROVED HRD" 
+                                WHEN overtime_requests.status = "APPROVED FINANCE" OR overtime_requests.status = "Approved Finance" THEN "APPROVED FINANCE" 
+                                WHEN overtime_requests.status = "REJECTED ATASAN" OR overtime_requests.status = "Rejected Atasan" THEN "REJECTED" 
+                                WHEN overtime_requests.status = "REJECTED HRD" OR overtime_requests.status = "Rejected HRD" THEN "REJECTED HRD" 
+                                WHEN overtime_requests.status = "REJECTED FINANCE" OR overtime_requests.status = "Rejected Finance" THEN "REJECTED FINANCE" 
                                 ELSE "WAITING" 
                             END as status'),
 
                 DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
-                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+                DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
-                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
-                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
-                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
-                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
-                DB::raw('MAX(fd.rejected_atasan_by) as rejected_atasan_by'),
-                DB::raw('MAX(fd.rejected_atasan_at) as rejected_atasan_at'),
-                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
-                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+                'overtime_requests.approved_hrd_by',
+                'overtime_requests.approved_hrd_at',
+                'overtime_requests.approved_atasan_by',
+                'overtime_requests.approved_atasan_at',
+                'overtime_requests.rejected_atasan_by',
+                'overtime_requests.rejected_atasan_at',
+                'overtime_requests.approved_finance_by',
+                'overtime_requests.approved_finance_at',
 
-                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
-                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
-                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+                'overtime_requests.start_date as tanggal',
+                'overtime_requests.start_time as jam_mulai',
+                'overtime_requests.end_time as jam_selesai',
 
-                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
-                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
-                DB::raw('MAX(fd.keterangan) as keterangan')
+                'overtime_requests.created_by as nama_pengaju',
+                'overtime_requests.created_at as diajukan_pada',
+                'overtime_requests.description as keterangan'
 
             )
             ->groupBy(
-                'form_header.id',
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
-                'form_header.status'
+                'overtime_requests.status'
             )
-            ->havingRaw("
-                (
-                    (MAX(fd.approved_finance_by) IS NULL AND MAX(fd.approved_hrd_by) IS NULL)
-                )
-            ")
-            ->where('form_header.type_document', 'Lembur')
-            ->whereIn('form_header.created_by', $bawahan)
-            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->whereNull('overtime_requests.approved_finance_by')
+            ->whereNull('overtime_requests.approved_hrd_by')
+            ->whereIn('overtime_requests.created_by', $bawahan)
+            ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
             ->transform(function ($item) {
                 $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
@@ -350,60 +334,57 @@ class LemburController extends Controller
     public function indexByOwnerProcessed(Request $request)
     {
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
-        $data = FormHeader::on('intilab_apps')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+        $data = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-                                WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-                                WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-                                WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                                WHEN overtime_requests.status = "APPROVED ATASAN" OR overtime_requests.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+                                WHEN overtime_requests.status = "APPROVED HRD" OR overtime_requests.status = "Approved HRD" THEN "APPROVED HRD" 
+                                WHEN overtime_requests.status = "APPROVED FINANCE" OR overtime_requests.status = "Approved Finance" THEN "APPROVED FINANCE" 
+                                WHEN overtime_requests.status = "REJECTED ATASAN" OR overtime_requests.status = "Rejected Atasan" THEN "REJECTED" 
+                                WHEN overtime_requests.status = "REJECTED HRD" OR overtime_requests.status = "Rejected HRD" THEN "REJECTED HRD" 
+                                WHEN overtime_requests.status = "REJECTED FINANCE" OR overtime_requests.status = "Rejected Finance" THEN "REJECTED FINANCE" 
                                 ELSE "WAITING" 
                             END as status'),
 
                 DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
-                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+                DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
-                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
-                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
-                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
-                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
-                DB::raw('MAX(fd.rejected_atasan_by) as rejected_atasan_by'),
-                DB::raw('MAX(fd.rejected_atasan_at) as rejected_atasan_at'),
-                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
-                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+                'overtime_requests.approved_hrd_by',
+                'overtime_requests.approved_hrd_at',
+                'overtime_requests.approved_atasan_by',
+                'overtime_requests.approved_atasan_at',
+                'overtime_requests.rejected_atasan_by',
+                'overtime_requests.rejected_atasan_at',
+                'overtime_requests.approved_finance_by',
+                'overtime_requests.approved_finance_at',
 
-                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
-                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
-                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+                'overtime_requests.start_date as tanggal',
+                'overtime_requests.start_time as jam_mulai',
+                'overtime_requests.end_time as jam_selesai',
 
-                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
-                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
-                DB::raw('MAX(fd.keterangan) as keterangan')
+                'overtime_requests.created_by as nama_pengaju',
+                'overtime_requests.created_at as diajukan_pada',
+                'overtime_requests.description as keterangan'
 
             )
             ->groupBy(
-                'form_header.id',
-                'form_header.id',
-                'form_header.no_document',
+                'overtime_requests.id',
+                'overtime_requests.no_document',
                 'd.nama_divisi',
-                'form_header.status'
+                'overtime_requests.status'
             )
-            ->where('form_header.type_document', 'Lembur')
-            ->havingRaw("
-                (
-                    (MAX(fd.approved_finance_by) IS NOT NULL OR MAX(fd.approved_hrd_by) IS NOT NULL)
-                )
-            ")
-            ->whereIn('form_header.created_by', $bawahan)
-            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->where(function ($query) {
+                $query->whereNotNull('overtime_requests.approved_finance_by')
+                    ->orWhereNotNull('overtime_requests.approved_hrd_by');
+            })
+            ->whereIn('overtime_requests.created_by', $bawahan)
+            ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
             ->transform(function ($item) {
                 $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
@@ -445,16 +426,16 @@ class LemburController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = FormHeader::on('intilab_apps')->find($request->id);
+            $header = OvertimeRequest::on('intilab_apps')->find($request->id);
 
-            $exist = FormDetail::on('intilab_apps')->where(
+            $exist = OvertimeRequestMembers::on('intilab_apps')->where(
                 [
-                    'tanggal_mulai' => $request->tanggal_lembur,
-                    'department_id' => $this->department
+                    // 'tanggal_mulai' => $request->tanggal_lembur,
+                    // 'department_id' => $this->department
                 ]
             )
-                ->whereIn('user_id', $request->data)
-                ->whereNull('rejected_atasan_by')
+                ->whereIn('employee_id', $request->data)
+                // ->whereNull('rejected_atasan_by')
                 ->where('no_document', '!=', $header->no_document)
                 ->get();
 
@@ -466,7 +447,7 @@ class LemburController extends Controller
                 ], 500);
             }
 
-            FormDetail::on('intilab_apps')->where('no_document', $header->no_document)->delete();
+            OvertimeRequestMembers::on('intilab_apps')->where('no_document', $header->no_document)->delete();
 
             foreach ($request->data as $detail) {
                 $atasan = MasterKaryawan::select('atasan_langsung')->where('id', $detail)->first()->atasan_langsung;
@@ -487,7 +468,7 @@ class LemburController extends Controller
                 ];
             }
             // dd($details);
-            FormDetail::on('intilab_apps')->insert($details);
+            OvertimeRequestMembers::on('intilab_apps')->insert($details);
 
             $title = 'Request Lembur Kamu Berhasil Diperbaharui!';
 
@@ -522,7 +503,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
             $no_document = str_replace('.', '/', microtime(true));
-            FormHeader::on('intilab_apps')->create([
+            OvertimeRequest::on('intilab_apps')->create([
                 'no_document' => $no_document,
                 'type_document' => 'Lembur',
                 'tanggal' => $request->tanggal_lembur,
@@ -531,14 +512,14 @@ class LemburController extends Controller
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
             $details = [];
-            $exist = FormDetail::on('intilab_apps')->where(
+            $exist = OvertimeRequestMembers::on('intilab_apps')->where(
                 [
-                    'tanggal_mulai' => $request->tanggal_lembur,
-                    'department_id' => $this->department
+                    // 'tanggal_mulai' => $request->tanggal_lembur,
+                    // 'department_id' => $this->department
                 ]
             )
-                ->whereIn('user_id', $request->data)
-                ->whereNull('rejected_atasan_by')
+                ->whereIn('employee_id', $request->data)
+                // ->whereNull('rejected_atasan_by')
                 ->get();
 
             if ($exist->count() > 0) {
@@ -568,7 +549,7 @@ class LemburController extends Controller
                 ];
             }
             // dd($details);
-            FormDetail::on('intilab_apps')->insert($details);
+            OvertimeRequestMembers::on('intilab_apps')->insert($details);
 
             $sendNotifTo = [];
             if ($this->grade === 'MANAGER') {
@@ -639,7 +620,7 @@ class LemburController extends Controller
 
     private function getLatestNumber($no_document)
     {
-        $latestDocument = FormHeader::on('intilab_apps')->where('no_document', 'LIKE', $no_document . '%')->orderBy('no_document', 'DESC')->first();
+        $latestDocument = OvertimeRequest::on('intilab_apps')->where('no_document', 'LIKE', $no_document . '%')->orderBy('no_document', 'DESC')->first();
 
         if ($latestDocument) {
             $lastNumber = intval(substr($latestDocument->no_document, -6));
@@ -655,7 +636,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on('intilab_apps')->where('id', $request->id)->first();
+            $formHeader = OvertimeRequest::on('intilab_apps')->where('id', $request->id)->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -664,18 +645,18 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $OvertimeRequestMembersIds = OvertimeRequestMembers::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
-            $formHeader->status = 'APPROVE HRD';
+            $formHeader->status = 'Approved HRD';
             $formHeader->save();
 
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('intilab_apps')->where('id', $formDetailId)->first();
-                $formDetail->approved_hrd_by = $this->karyawan;
-                $formDetail->approved_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->rejected_finance_by = null;
-                $formDetail->rejected_finance_at = null;
-                $formDetail->save();
+            foreach ($OvertimeRequestMembersIds as $OvertimeRequestMembersId) {
+                $OvertimeRequestMembers = OvertimeRequestMembers::on('intilab_apps')->where('id', $OvertimeRequestMembersId)->first();
+                $OvertimeRequestMembers->approved_hrd_by = $this->karyawan;
+                $OvertimeRequestMembers->approved_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
+                $OvertimeRequestMembers->rejected_finance_by = null;
+                $OvertimeRequestMembers->rejected_finance_at = null;
+                $OvertimeRequestMembers->save();
             }
 
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
@@ -715,7 +696,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on('intilab_apps')->where('id', $request->id)->first();
+            $formHeader = OvertimeRequest::on('intilab_apps')->where('id', $request->id)->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -724,19 +705,19 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $OvertimeRequestMembersIds = OvertimeRequestMembers::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
-            $formHeader->status = 'DRAFT';
+            $formHeader->status = 'Pending';
             $formHeader->save();
 
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('intilab_apps')->where('id', $formDetailId)->first();
-                $formDetail->rejected_hrd_by = $this->karyawan;
-                $formDetail->rejected_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->approved_atasan_at = null;
-                $formDetail->approved_atasan_by = null;
-                $formDetail->keterangan_reject = $request->keterangan;
-                $formDetail->save();
+            foreach ($OvertimeRequestMembersIds as $OvertimeRequestMembersId) {
+                $OvertimeRequestMembers = OvertimeRequestMembers::on('intilab_apps')->where('id', $OvertimeRequestMembersId)->first();
+                $OvertimeRequestMembers->rejected_hrd_by = $this->karyawan;
+                $OvertimeRequestMembers->rejected_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
+                $OvertimeRequestMembers->approved_atasan_at = null;
+                $OvertimeRequestMembers->approved_atasan_by = null;
+                $OvertimeRequestMembers->keterangan_reject = $request->keterangan;
+                $OvertimeRequestMembers->save();
             }
 
             $message = 'Form lembur telah di reject';
@@ -777,7 +758,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on('intilab_apps')->where('id', $request->id)->first();
+            $formHeader = OvertimeRequest::on('intilab_apps')->where('id', $request->id)->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -786,16 +767,16 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $OvertimeRequestMembersIds = OvertimeRequestMembers::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
-            $formHeader->status = 'APPROVE ATASAN';
+            $formHeader->status = 'Approved Atasan';
             $formHeader->save();
 
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('intilab_apps')->where('id', $formDetailId)->first();
-                $formDetail->approved_atasan_by = $this->karyawan;
-                $formDetail->approved_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->save();
+            foreach ($OvertimeRequestMembersIds as $OvertimeRequestMembersId) {
+                $OvertimeRequestMembers = OvertimeRequestMembers::on('intilab_apps')->where('id', $OvertimeRequestMembersId)->first();
+                $OvertimeRequestMembers->approved_atasan_by = $this->karyawan;
+                $OvertimeRequestMembers->approved_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
+                $OvertimeRequestMembers->save();
             }
 
             $message = 'Form lembur telah di approve';
@@ -827,7 +808,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on('intilab_apps')->where('id', $request->id)->first();
+            $formHeader = OvertimeRequest::on('intilab_apps')->where('id', $request->id)->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -836,17 +817,17 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $OvertimeRequestMembersIds = OvertimeRequestMembers::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
-            $formHeader->status = 'DRAFT';
+            $formHeader->status = 'Pending';
             $formHeader->save();
 
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('intilab_apps')->where('id', $formDetailId)->first();
-                $formDetail->rejected_atasan_by = $this->karyawan;
-                $formDetail->rejected_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->keterangan_reject = $request->keterangan;
-                $formDetail->save();
+            foreach ($OvertimeRequestMembersIds as $OvertimeRequestMembersId) {
+                $OvertimeRequestMembers = OvertimeRequestMembers::on('intilab_apps')->where('id', $OvertimeRequestMembersId)->first();
+                $OvertimeRequestMembers->rejected_atasan_by = $this->karyawan;
+                $OvertimeRequestMembers->rejected_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
+                $OvertimeRequestMembers->keterangan_reject = $request->keterangan;
+                $OvertimeRequestMembers->save();
             }
 
             $message = 'Form lembur telah di reject';
@@ -885,7 +866,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on('intilab_apps')->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
+            $formHeader = OvertimeRequest::on('intilab_apps')->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -894,16 +875,16 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $OvertimeRequestMembersIds = OvertimeRequestMembers::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
-            $formHeader->status = 'APPROVE FINANCE';
+            $formHeader->status = 'Approved Finance';
             $formHeader->save();
 
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('intilab_apps')->where('id', $formDetailId)->first();
-                $formDetail->approved_finance_by = $this->karyawan;
-                $formDetail->approved_finance_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->save();
+            foreach ($OvertimeRequestMembersIds as $OvertimeRequestMembersId) {
+                $OvertimeRequestMembers = OvertimeRequestMembers::on('intilab_apps')->where('id', $OvertimeRequestMembersId)->first();
+                $OvertimeRequestMembers->approved_finance_by = $this->karyawan;
+                $OvertimeRequestMembers->approved_finance_at = Carbon::now()->format('Y-m-d H:i:s');
+                $OvertimeRequestMembers->save();
             }
 
 
@@ -935,7 +916,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on('intilab_apps')->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
+            $formHeader = OvertimeRequest::on('intilab_apps')->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -944,19 +925,19 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $OvertimeRequestMembersIds = OvertimeRequestMembers::on('intilab_apps')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
-            $formHeader->status = 'APPROVE ATASAN';
+            $formHeader->status = 'Approved Atasan';
             $formHeader->save();
 
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('intilab_apps')->where('id', $formDetailId)->first();
-                $formDetail->rejected_finance_by = $this->karyawan;
-                $formDetail->rejected_finance_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->approved_hrd_at = null;
-                $formDetail->approved_hrd_by = null;
-                $formDetail->keterangan_reject = $request->keterangan;
-                $formDetail->save();
+            foreach ($OvertimeRequestMembersIds as $OvertimeRequestMembersId) {
+                $OvertimeRequestMembers = OvertimeRequestMembers::on('intilab_apps')->where('id', $OvertimeRequestMembersId)->first();
+                $OvertimeRequestMembers->rejected_finance_by = $this->karyawan;
+                $OvertimeRequestMembers->rejected_finance_at = Carbon::now()->format('Y-m-d H:i:s');
+                $OvertimeRequestMembers->approved_hrd_at = null;
+                $OvertimeRequestMembers->approved_hrd_by = null;
+                $OvertimeRequestMembers->keterangan_reject = $request->keterangan;
+                $OvertimeRequestMembers->save();
             }
 
 
