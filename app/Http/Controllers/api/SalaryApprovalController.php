@@ -116,6 +116,12 @@ class SalaryApprovalController extends Controller
                 : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
 
             if ($decision === 'reject') {
+                DB::table('new_recruitment')->where('id', $recruitment->id)->update([
+                    'rejected_salary' => 1,
+                    'rejected_salary_reason' => $rejectReason,
+                    'updated_at' => $now,
+                ]);
+
                 $salaryOffer = DB::table('sallary_offer')
                     ->where('new_recruitment_id', $recruitment->id)
                     ->where('is_active', true)

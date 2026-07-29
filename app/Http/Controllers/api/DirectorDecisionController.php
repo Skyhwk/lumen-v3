@@ -35,7 +35,7 @@ class DirectorDecisionController extends Controller
     public function decide(Request $request)
     {
         $decision = strtolower(trim((string) $request->input('decision')));
-        if (!in_array($decision, ['approve', 'reject'], true)) {
+        if (!in_array($decision, ['approve', 'reject', 'keep'], true)) {
             return response()->json(['message' => 'Keputusan tidak valid.'], 422);
         }
         $rejectReason = trim((string) $request->input('reject_reason'));
@@ -57,6 +57,15 @@ class DirectorDecisionController extends Controller
             $history = is_array($history) ? $history : [];
             $lastHistory = !empty($history) ? $history[count($history) - 1] : [];
             $lastHistoryStatus = (string) ($lastHistory['status'] ?? '');
+            if ($decision === 'keep' && $lastHistoryStatus === 'management_decision_kept' && (int) ($recruitment->is_keep ?? 0) === 1) {
+                $result = $this->result($recruitment, 'kept', $lastHistory['at'] ?? null, true);
+                $result['requested_decision'] = 'keep';
+                $result['remind_at'] = !empty($lastHistory['at'])
+                    ? Carbon::parse($lastHistory['at'])->addDays(7)->toDateTimeString()
+                    : null;
+                return response()->json($result);
+            }
+
             $finalStatus = null;
             if (preg_match('/_(approved|rejected)$/', $lastHistoryStatus, $matches)) {
                 $finalStatus = $matches[1];
@@ -84,14 +93,35 @@ class DirectorDecisionController extends Controller
             }
 
             $now = Carbon::now();
+            if ($decision === 'keep') {
+                DB::table('new_recruitment')->where('id', $recruitment->id)->update([
+                    'is_keep' => 1,
+                    'updated_at' => $now,
+                ]);
+                (new RecruitmentStatusService())->update(
+                    $recruitment->id,
+                    'management_decision',
+                    $now,
+                    'management_decision_kept'
+                );
+
+                $result = $this->result($recruitment, 'kept', $now->toDateTimeString(), false);
+                $result['requested_decision'] = 'keep';
+                $result['remind_at'] = $now->copy()->addDays(7)->toDateTimeString();
+                return response()->json($result);
+            }
+
             $status = $decision === 'approve' ? 'internal_sallary_offer' : 'interview_hrd';
             $historyStatus = $recruitment->status . '_' . ($decision === 'approve' ? 'approved' : 'rejected');
             DB::table('new_recruitment')->where('id', $recruitment->id)->update(
                 $decision === 'approve'
-                    ? ['approved_by' => 'Direktur', 'approved_at' => $now]
+                    ? ['approved_by' => 'Direktur', 'approved_at' => $now, 'is_keep' => 0]
                     : [
                         'rejected_by' => 'Direktur',
                         'rejected_at' => $now,
+                        'rejected_decision' => 1,
+                        'rejected_decision_reason' => $rejectReason,
+                        'is_keep' => 0,
                         'is_approved_interview_hrd' => 0,
                         'is_approve_interview_user' => 0,
                     ]
