@@ -409,6 +409,7 @@ class DraftUdaraKebisinganController extends Controller
             if (in_array($id_regulasii, $this->lh_ids)) {
 
                 $master_regulasi = MasterRegulasi::find($id_regulasii);
+                dd($master_regulasi);
                 if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
@@ -416,7 +417,7 @@ class DraftUdaraKebisinganController extends Controller
                         ->useLampiran(true)
                         ->whereView('DraftKebisinganLh')
                         ->render('downloadLHPFinal');
-                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
+                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)' || $master_regulasi->deskripsi == 'Kebisingan 24 Jam') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
                         ->setDataCustom($custom)
