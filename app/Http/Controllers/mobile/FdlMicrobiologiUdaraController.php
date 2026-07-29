@@ -193,7 +193,8 @@ class FdlMicrobiologiUdaraController extends Controller
                 }
                 $fdlvalue->created_by                                                  = $this->karyawan;
                 $fdlvalue->created_at                                                 = Carbon::now()->format('Y-m-d H:i:s');
-                $fdlvalue->save();
+                $fdlvalue->is_rejected = 0;
+            $fdlvalue->save();
             }
             if (is_null($fdl)) {
                 $data = new DataLapanganMicrobiologi();

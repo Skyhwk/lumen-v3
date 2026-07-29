@@ -195,6 +195,7 @@ class FdlMethodNbmController extends Controller
             $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->is_rejected = 0;
             $data->save();
 
             // UPDATE ORDER DETAIL
