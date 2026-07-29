@@ -34,6 +34,10 @@ class FdlMethodNbmController extends Controller
 {
     public function getSample(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
+
         $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
         // Check if method is valid and execute accordingly

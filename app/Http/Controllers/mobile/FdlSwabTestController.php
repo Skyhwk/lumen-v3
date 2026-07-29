@@ -33,6 +33,10 @@ class FdlSwabTestController extends Controller
 {
     public function getSample(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'swab_test')->where('is_active', 1)->first();
             $listParameter = json_decode($parameter->parameters, true);
