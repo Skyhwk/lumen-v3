@@ -61,6 +61,18 @@ class DraftUdaraKebisinganController extends Controller
             ->where('status', 2)
             ->get();
 
+        $lh_ids = ["46", "54", "151", "167", "168", "382", "1321", "1672", "1740", "1786"];
+        $data->map(function ($item) use ($lh_ids) {
+            $regulasiArr = json_decode($item->regulasi, true);
+            $extractedRegul = null;
+            if (is_array($regulasiArr) && count($regulasiArr) > 0) {
+                $parts = explode('-', $regulasiArr[0]);
+                $extractedRegul = trim(str_replace([']', '"'], '', $parts[0]));
+            }
+            $item->is_lh_template = in_array($extractedRegul, $lh_ids);
+            return $item;
+        });
+
         return Datatables::of($data)->make(true);
     }
 
