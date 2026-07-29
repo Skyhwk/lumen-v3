@@ -178,6 +178,10 @@ class PurchaseRequestApprovalController extends Controller
             return $row->finance_status;
         }
 
+        if ($row->finance_status === 'Waiting Purchase Process') {
+            return 'Waiting Purchase Process';
+        }
+
         if ($row->finance_status === 'Distributed' || $row->status === 'Done') {
             return 'Distributed';
         }
