@@ -402,10 +402,13 @@ class FdlSenyawaVolatileController extends Controller
                 $data->created_by                                                   = $this->karyawan;
                 $data->created_at                                                  = date('Y-m-d H:i:s');
                 $data->save();
+            }else{
+                $data = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                $data->is_rejected = 0;
+                $data->save();
             }
 
-            $fdl->is_rejected = 0;
-            $fdl->save();
+            
 
             foreach ($request->param as $in => $a) {
                 $pengukuran = array();

@@ -47,14 +47,14 @@ class PurchaseRequestsController extends Controller
         }
 
         $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
-            ->where('is_active', true)
             ->where(function ($query) {
-                $query->where('is_goods_voided', false)
-                    ->orWhereNull('is_goods_voided');
+                $query->where('is_active', true)
+                    ->orWhereNull('is_active');
             })
             ->latest();
 
         $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
+        $purchaseRequests = $this->excludeVoidRequests($purchaseRequests);
 
         if ($scope === 'completed') {
             $purchaseRequests = $this->applyCompletedScope($purchaseRequests);
@@ -70,12 +70,12 @@ class PurchaseRequestsController extends Controller
     private function applyCreateScope($query)
     {
         return $query->where(function ($query) {
-            $query->whereIn('status', ['Pending', 'Reopened', 'Partially Approved', 'Rejected'])
+            $query->whereIn('status', ['Pending', 'Reopened', 'Partially Approved'])
                 ->orWhere(function ($q) {
                     $q->where('status', 'Approved')
                         ->where(function ($q2) {
                             $q2->whereNull('finance_status')
-                                ->orWhereIn('finance_status', ['Waiting to Delegate', 'Rejected']);
+                                ->orWhere('finance_status', 'Waiting to Delegate');
                         });
                 });
         });
@@ -112,14 +112,37 @@ class PurchaseRequestsController extends Controller
 
     private function indexVoidRequests($employee)
     {
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee'])
-            ->where('is_active', true)
-            ->where('is_goods_voided', true)
-            ->latest('goods_voided_at');
-
+        $purchaseRequests = PurchaseRequest::with(['items', 'employee']);
+        $purchaseRequests = $this->applyVoidScope($purchaseRequests);
         $purchaseRequests = $this->applyEmployeeScope($purchaseRequests, $employee);
 
         return $this->purchaseRequestDataTable($purchaseRequests, $employee);
+    }
+
+    private function applyVoidScope($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('is_goods_voided', true)
+                ->orWhere('finance_status', 'Rejected')
+                ->orWhere('status', 'Rejected')
+                ->orWhere(function ($sub) {
+                    $sub->where('is_active', false)->whereNotNull('deleted_at');
+                });
+        })->orderByRaw('COALESCE(goods_voided_at, rejected_finance_at, rejected_at, deleted_at, updated_at) DESC');
+    }
+
+    private function excludeVoidRequests($query)
+    {
+        return $query->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->where('is_goods_voided', false)->orWhereNull('is_goods_voided');
+            })->where(function ($sub) {
+                $sub->where('finance_status', '!=', 'Rejected')->orWhereNull('finance_status');
+            })->where('status', '!=', 'Rejected')
+                ->where(function ($sub) {
+                    $sub->where('is_active', true)->orWhereNull('is_active');
+                });
+        });
     }
 
     private function purchaseRequestDataTable($purchaseRequests, $employee)
@@ -137,6 +160,7 @@ class PurchaseRequestsController extends Controller
             ->addColumn('can_void', fn($row) => $this->canUserVoid($employee, $row))
             ->addColumn('can_receive_goods', fn($row) => $this->canUserReceiveGoods($employee, $row))
             ->addColumn('display_status', fn($row) => $this->resolveDisplayStatus($row))
+            ->addColumn('void_reason', fn($row) => $this->resolveVoidReason($row))
             ->filterColumn('request_number', fn($query, $keyword) => $query->where('request_number', 'like', "%{$keyword}%"))
             ->filterColumn('item_name', fn($query, $keyword) => $query->whereHas('items', function ($q) use ($keyword) {
                 $q->where('item_name', 'like', "%{$keyword}%");
@@ -183,7 +207,6 @@ class PurchaseRequestsController extends Controller
         $employee = $request->attributes->get('user')->karyawan;
 
         $purchaseRequest = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
-            ->where('is_active', true)
             ->findOrFail($request->id);
 
         if ($employee->grade === 'STAFF' && $purchaseRequest->created_by !== $employee->nama_lengkap) {
@@ -696,6 +719,10 @@ class PurchaseRequestsController extends Controller
             return 'Void - Tolak Barang';
         }
 
+        if (!$row->is_active && $row->deleted_at) {
+            return 'Void PR';
+        }
+
         if ($row->finance_status === 'Rejected') {
             return 'Ditolak Purchasing';
         }
@@ -761,6 +788,31 @@ class PurchaseRequestsController extends Controller
         }
 
         return 'Menunggu Persetujuan Atasan';
+    }
+
+    private function resolveVoidReason($row): string
+    {
+        if ($row->is_goods_voided) {
+            return 'Barang ditolak user';
+        }
+
+        if (!$row->is_active && $row->deleted_at) {
+            if ($row->deleted_by && $row->deleted_by !== $row->created_by) {
+                return 'Void oleh purchasing';
+            }
+
+            return 'Void oleh pemohon';
+        }
+
+        if ($row->finance_status === 'Rejected') {
+            return 'Ditolak purchasing';
+        }
+
+        if ($row->status === 'Rejected') {
+            return 'Ditolak atasan';
+        }
+
+        return '-';
     }
 
     private function resolveSigner(?string $name, ?string $fallbackPosition = null): array

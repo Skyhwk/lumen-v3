@@ -39,6 +39,12 @@ use Yajra\Datatables\Datatables;
 
 class DraftUdaraKebisinganController extends Controller
 {
+    // id regulasi untuk template lh
+    private $lh_ids = [
+        "46", "54", "151", "167", "168",
+        "382", "1321", "1672", "1740", "1786"
+    ];
+
     // done if status = 2
     // AmanghandleDatadetail
     public function index(Request $request)
@@ -61,7 +67,7 @@ class DraftUdaraKebisinganController extends Controller
             ->where('status', 2)
             ->get();
 
-        $lh_ids = ["46", "54", "151", "167", "168", "382", "1321", "1672", "1740", "1786"];
+        $lh_ids = $this->lh_ids;
         $data->map(function ($item) use ($lh_ids) {
             $regulasiArr = json_decode($item->regulasi, true);
             $extractedRegul = null;
@@ -290,7 +296,7 @@ class DraftUdaraKebisinganController extends Controller
                 }
                 $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
                 $fileName = null;
-                if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382, 1321, 1672, 1740])) {
+                if (in_array($id_regulasii, $this->lh_ids)) {
 
                     $parameter = json_decode($header->parameter_uji)[0];
                     if (strpos($parameter, '24 Jam') !== false) {
@@ -400,7 +406,7 @@ class DraftUdaraKebisinganController extends Controller
             }
 
             $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
-            if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+            if (in_array($id_regulasii, $this->lh_ids)) {
 
                 $master_regulasi = MasterRegulasi::find($id_regulasii);
                 if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {

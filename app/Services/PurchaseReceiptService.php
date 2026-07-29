@@ -599,6 +599,38 @@ class PurchaseReceiptService
         ];
     }
 
+    public static function hasVendorReceiptActivity(PurchaseRequest $purchaseRequest): bool
+    {
+        if ((float) ($purchaseRequest->vendor_received_total ?? 0) > 0) {
+            return true;
+        }
+
+        if (!empty($purchaseRequest->vendor_receipt_at)) {
+            return true;
+        }
+
+        return PurchaseReceiptBatch::where('purchase_request_id', $purchaseRequest->id)
+            ->whereNotNull('vendor_receipt_at')
+            ->exists();
+    }
+
+    public static function canPurchasingVoidPurchaseRequest(PurchaseRequest $purchaseRequest): bool
+    {
+        if ($purchaseRequest->is_active === false || $purchaseRequest->is_goods_voided) {
+            return false;
+        }
+
+        if (in_array($purchaseRequest->finance_status, ['Waiting to Delegate', 'Rejected'], true)) {
+            return false;
+        }
+
+        if (!in_array($purchaseRequest->status, ['Approved', 'Partially Approved'], true)) {
+            return false;
+        }
+
+        return !self::hasVendorReceiptActivity($purchaseRequest);
+    }
+
     public static function parseAttachments($attachmentField): array
     {
         if (empty($attachmentField)) {
