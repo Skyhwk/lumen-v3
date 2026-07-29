@@ -264,7 +264,8 @@ class FdlEmisiKendaraanController extends Controller
                             $data_fdl->foto_sampling = self::convertImg($request->foto_lain, 3, $this->user_id);
                         $data_fdl->created_by    = $this->karyawan;
                         $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
-                        $data_fdl->save();
+                        $data_fdl->is_rejected = 0;
+            $data_fdl->save();
 
                         $data_order = new DataLapanganEmisiOrder;
                         // $data_order->id_po			= $cek_po->id;
