@@ -87,7 +87,8 @@ class FdlSampahController extends Controller
                 $data->save();
 
                 // update OrderDetail
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)->first();
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
 
                 if ($order_detail_lama) {
                     OrderDetail::where('no_sampel', $request->no_sampel_baru)
@@ -95,6 +96,9 @@ class FdlSampahController extends Controller
                         ->update([
                             'tanggal_terima' => $order_detail_lama->tanggal_terima
                         ]);
+                    
+                    $order_detail_lama->tanggal_terima = NULL;
+                    $order_detail_lama->save();
                 }
 
                 DB::commit();
