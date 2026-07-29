@@ -14,7 +14,7 @@ class IzinController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
-        $permissions = PermissionRequest::query()
+        $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
             ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
@@ -64,7 +64,7 @@ class IzinController extends Controller
             ->whereNotNull('pr.approved_atasan_at')
             ->whereYear('pr.created_at', $request->periode);
 
-        $leaves = LeaveRequest::query()
+        $leaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
             ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
@@ -121,7 +121,7 @@ class IzinController extends Controller
 
     public function indexProcessed(Request $request)
     {
-         $permissions = PermissionRequest::query()
+         $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
             ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
@@ -167,7 +167,7 @@ class IzinController extends Controller
             ->whereYear('pr.created_at', $request->periode)
             ->whereNotNull('pr.approved_atasan_by');
 
-        $leaves = LeaveRequest::query()
+        $leaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
             ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
