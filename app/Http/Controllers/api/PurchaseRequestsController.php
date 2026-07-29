@@ -797,6 +797,10 @@ class PurchaseRequestsController extends Controller
         }
 
         if (!$row->is_active && $row->deleted_at) {
+            if ($row->deleted_by && $row->deleted_by !== $row->created_by) {
+                return 'Void oleh purchasing';
+            }
+
             return 'Void oleh pemohon';
         }
 
