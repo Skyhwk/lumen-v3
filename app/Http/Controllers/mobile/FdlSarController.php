@@ -102,6 +102,7 @@ class FdlSarController extends Controller
 
         if($cekHeader->waktu_mulai_sampling == null) {
             $cekHeader->waktu_mulai_sampling = Carbon::now()->format('Y-m-d H:i:s');
+            $cekHeader->is_rejected = 0;
             $cekHeader->save();
         }
 

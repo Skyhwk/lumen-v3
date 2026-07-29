@@ -299,6 +299,7 @@ class FdlPartikulatIsokinetikMethod1Controller extends Controller
             $data->no_survei = substr(str_replace(".", "", microtime(true)), 0, 8);
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            // $data->is_rejected = 0;
             $data->save();
 
             // // UPDATE ORDER DETEAIL
