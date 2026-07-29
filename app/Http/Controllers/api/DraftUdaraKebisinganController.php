@@ -406,7 +406,7 @@ class DraftUdaraKebisinganController extends Controller
             }
 
             $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
-            if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+            if (in_array($id_regulasii, $this->lh_ids)) {
 
                 $master_regulasi = MasterRegulasi::find($id_regulasii);
                 if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
