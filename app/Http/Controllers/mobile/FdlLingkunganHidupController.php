@@ -609,8 +609,7 @@ class FdlLingkunganHidupController extends Controller
                     }
                     $fdlvalue->created_by                     = $this->karyawan;
                     $fdlvalue->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
-                    $fdlvalue->is_rejected = 0;
-            $fdlvalue->save();
+                    $fdlvalue->save();
                 }
             }else{
                 $order_detail = OrderDetail::select('parameter')->where('no_sampel', strtoupper(trim($request->no_sample)))->first();
@@ -726,6 +725,9 @@ class FdlLingkunganHidupController extends Controller
                 $data->created_at                                               = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
             }
+
+            $fdl->is_rejected = 0;
+            $fdl->save();
 
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
@@ -875,6 +877,10 @@ class FdlLingkunganHidupController extends Controller
     {
         $detail = DetailLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sampel)))->get();
         $detailToDelete = DetailLingkunganHidup::where('id', $request->id)->first();
+
+        $header = DataLapanganLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+        $header->is_rejected = 0;
+        $header->save();
         
         $nama = $this->karyawan;
         $message = "Fdl LH parameter {$detail->first()->parameter} di no sample {$detail->first()->no_sampel} berhasil dihapus oleh {$nama}!";
@@ -886,7 +892,7 @@ class FdlLingkunganHidupController extends Controller
                 'kategori' => 1
             ], 201);
         } else {
-            DataLapanganLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sampel)))->delete();
+            $header->delete();
             $detailToDelete->delete();
             return response()->json([
                 'message' => $message,
