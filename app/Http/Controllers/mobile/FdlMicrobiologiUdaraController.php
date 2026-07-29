@@ -374,6 +374,12 @@ class FdlMicrobiologiUdaraController extends Controller
             $data = DetailMicrobiologi::where('no_sampel', strtoupper(trim($request->no_sampel)))
                 ->where('id', $request->id)
                 ->first();
+            $header = DataLapanganMicrobiologi::where('no_sampel', strtoupper(trim($request->no_sampel)))
+                ->first();
+
+            $header->update([
+                'is_rejected' => false,
+            ]);
 
             if (!$data) {
                 return response()->json(['message' => 'Data tidak ditemukan'], 404);
