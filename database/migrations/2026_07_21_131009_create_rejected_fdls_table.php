@@ -23,6 +23,7 @@ class CreateRejectedFdlsTable extends Migration
             $table->text('note_reject')->nullable();
             $table->datetime('rejected_at')->nullable();
             $table->string('rejected_by')->nullable();
+            $table->boolean('is_checked')->default(0);
             $table->timestamps();
         });
     }
