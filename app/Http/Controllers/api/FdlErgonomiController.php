@@ -1180,6 +1180,21 @@ class FdlErgonomiController extends Controller
                     $item->save(); // Save for each item
                 }
 
+                
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
+
+                if ($order_detail_lama) {
+                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
+                        ->where('is_active', 1)
+                        ->update([
+                            'tanggal_terima' => $order_detail_lama->tanggal_terima
+                        ]);
+                    
+                    $order_detail_lama->tanggal_terima = NULL;
+                    $order_detail_lama->save();
+                }
+
                 DB::commit();
                 return response()->json([
                     'message' => 'Berhasil ubah no sampel ' . $request->no_sampel_lama . ' menjadi ' . $request->no_sampel_baru

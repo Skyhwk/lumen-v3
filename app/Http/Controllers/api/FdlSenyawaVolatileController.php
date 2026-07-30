@@ -72,6 +72,9 @@ class FdlSenyawaVolatileController extends Controller
                             ->update([
                                 'tanggal_terima' => $order_detail_lama->tanggal_terima
                             ]);
+                        
+                        $order_detail_lama->tanggal_terima = NULL;
+                        $order_detail_lama->save();
                     }
 
                     DB::commit();
