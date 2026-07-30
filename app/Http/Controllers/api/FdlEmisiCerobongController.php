@@ -110,7 +110,9 @@ class FdlEmisiCerobongController extends Controller
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)->first();
+                // update OrderDetail
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
 
                 if ($order_detail_lama) {
                     OrderDetail::where('no_sampel', $request->no_sampel_baru)
@@ -118,6 +120,9 @@ class FdlEmisiCerobongController extends Controller
                         ->update([
                             'tanggal_terima' => $order_detail_lama->tanggal_terima
                         ]);
+                    
+                    $order_detail_lama->tanggal_terima = NULL;
+                    $order_detail_lama->save();
                 }
                 DB::commit();
                 return response()->json([

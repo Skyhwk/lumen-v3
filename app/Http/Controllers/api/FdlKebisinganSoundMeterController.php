@@ -276,7 +276,22 @@ class FdlKebisinganSoundMeterController extends Controller
     public function updateNoSampel(Request $request)
     {
         if (!isset($request->id) || $request->id == null) {
-            return response()->json(['message' => 'No Sampel tidak boleh kosong'], 401);
+            
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
+
+                if ($order_detail_lama) {
+                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
+                        ->where('is_active', 1)
+                        ->update([
+                            'tanggal_terima' => $order_detail_lama->tanggal_terima
+                        ]);
+                    
+                    $order_detail_lama->tanggal_terima = NULL;
+                    $order_detail_lama->save();
+                }
+
+                return response()->json(['message' => 'No Sampel tidak boleh kosong'], 401);
         }
 
         DB::beginTransaction();
@@ -301,12 +316,20 @@ class FdlKebisinganSoundMeterController extends Controller
                 'no_sampel' => $request->no_sampel_baru,
             ]);
 
-            $orderDetailLama = OrderDetail::where('no_sampel', $request->no_sampel_lama)->first();
-            if ($orderDetailLama) {
-                OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                    ->where('is_active', 1)
-                    ->update(['tanggal_terima' => $orderDetailLama->tanggal_terima]);
-            }
+            // update OrderDetail
+            $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
+
+                if ($order_detail_lama) {
+                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
+                        ->where('is_active', 1)
+                        ->update([
+                            'tanggal_terima' => $order_detail_lama->tanggal_terima
+                        ]);
+                    
+                    $order_detail_lama->tanggal_terima = NULL;
+                    $order_detail_lama->save();
+                }
 
             $data->no_sampel = $request->no_sampel_baru;
             $data->no_sampel_lama = $request->no_sampel_lama;
