@@ -28,6 +28,10 @@ class ReleaseAppsFdlController extends Controller
         $startTime = Carbon::now();
 
         try {
+            // ╔══════════════════════════════════════════════════════════════╗
+            // ║  BLOK SERVER PRODUCTION                                     ║
+            // ║  Remark seluruh blok ini jika ingin test di lokal Windows   ║
+            // ╚══════════════════════════════════════════════════════════════╝
             $projectDir = '/var/www/javascript/apps-fdl';
             $buildDir   = "$projectDir/build";
             $deployDir  = '/var/www/html/apps-fdl';
@@ -35,14 +39,14 @@ class ReleaseAppsFdlController extends Controller
 
             $commands = [
                 "cd $projectDir && git pull --ff-only origin main",
-                "cd $projectDir && npm i && npm run build",
+                "cd $projectDir && npm i && node scripts/generate-version.js && npm run build",
                 "mkdir -p $backupDir && cp -r $deployDir/* $backupDir/ || true",
                 "rsync -a --delete $buildDir/ $deployDir/"
             ];
 
             foreach ($commands as $cmd) {
                 $process = Process::fromShellCommandline($cmd);
-                $process->setTimeout(1200); // 20 menit
+                $process->setTimeout(1200);
                 $process->run();
 
                 $outputLog[] = [
@@ -61,6 +65,54 @@ class ReleaseAppsFdlController extends Controller
                     ], 500);
                 }
             }
+
+            // ╔══════════════════════════════════════════════════════════════╗
+            // ║  BLOK LOCAL WINDOWS (UNTUK TESTING)                         ║
+            // ║  Unremark blok ini & remark blok server di atas untuk test  ║
+            // ╚══════════════════════════════════════════════════════════════╝
+            // $projectDir = 'D:\ReactJs\apps-fdl';
+            // $buildDir   = "$projectDir\\build";
+            // $deployDir  = 'D:\ReactJs\backup\apps-fdl_deploy';
+            // $backupDir  = 'D:\ReactJs\backup\apps-fdl\backup-' . date('dmyHi');
+            //
+            // $commands = [
+            //     ['cmd' => 'C:/PROGRA~1/nodejs/node.exe scripts/generate-version.js', 'cwd' => $projectDir],
+            //     ['cmd' => 'C:/PROGRA~1/nodejs/npm.cmd run build', 'cwd' => $projectDir],
+            //     ['cmd' => "if not exist \"$backupDir\" mkdir \"$backupDir\"", 'cwd' => null],
+            //     ['cmd' => "if exist \"$deployDir\" xcopy /E /I /Y \"$deployDir\" \"$backupDir\"", 'cwd' => null],
+            //     ['cmd' => "if not exist \"$deployDir\" mkdir \"$deployDir\"", 'cwd' => null],
+            //     ['cmd' => "xcopy /E /I /Y \"$buildDir\" \"$deployDir\"", 'cwd' => null],
+            // ];
+            //
+            // foreach ($commands as $item) {
+            //     $process = Process::fromShellCommandline($item['cmd']);
+            //     $process->setTimeout(1200);
+            //     if ($item['cwd']) {
+            //         $process->setWorkingDirectory($item['cwd']);
+            //     }
+            //     $env = array_merge($_SERVER, $_ENV, [
+            //         'CI'   => 'false',
+            //         'PATH' => getenv('PATH') . ';C:\\Program Files\\nodejs',
+            //     ]);
+            //     $process->setEnv($env);
+            //     $process->run();
+            //
+            //     $outputLog[] = [
+            //         'command' => $item['cmd'],
+            //         'output'  => $process->getOutput(),
+            //         'error'   => $process->getErrorOutput(),
+            //         'success' => $process->isSuccessful()
+            //     ];
+            //
+            //     if (!$process->isSuccessful()) {
+            //         DB::rollBack();
+            //         return response()->json([
+            //             'success' => false,
+            //             'message' => "Command gagal: " . $item['cmd'],
+            //             'logs' => $outputLog
+            //         ], 500);
+            //     }
+            // }
 
             // Catat waktu selesai
             $endTime = Carbon::now();
