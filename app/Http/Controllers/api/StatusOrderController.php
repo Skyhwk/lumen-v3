@@ -10,7 +10,7 @@ use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Services\GetBawahan;
-use App\Services\GroupedCfrByLhp;
+use App\Services\CfrDetails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Datatables;
@@ -25,7 +25,7 @@ class StatusOrderController extends Controller
     {
         $orderHeader = OrderHeader::find($request->id_order_header);
         
-        $groupedData = (new GroupedCfrByLhp($orderHeader, $request->periode))->get();
+        $groupedData = (new CfrDetails($orderHeader, $request->periode))->get();
         
         return response()->json(['groupedCFRs' => $groupedData], 200);
     }
