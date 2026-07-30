@@ -700,9 +700,9 @@ class CheckOrderActive extends Command
         try {
             $ids = collect($orders)->pluck('id')->toArray();
 
-            DB::table('order_berjalan')
-                ->whereNotIn('id', $ids)
-                ->delete();
+            // DB::table('order_berjalan')
+            //     ->whereNotIn('id', $ids)
+            //     ->delete();
 
             $mappedOrders = collect($orders)->map(function ($item) {
                 return [
