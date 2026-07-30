@@ -1495,7 +1495,22 @@ class FdlPartikulatIsokinetikController extends Controller
     {
         // Validasi input wajib
         if (!$request->filled(['no_sampel_lama', 'no_sampel_baru'])) {
-            return response()->json([
+            
+                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
+                    ->first();
+
+                if ($order_detail_lama) {
+                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
+                        ->where('is_active', 1)
+                        ->update([
+                            'tanggal_terima' => $order_detail_lama->tanggal_terima
+                        ]);
+                    
+                    $order_detail_lama->tanggal_terima = NULL;
+                    $order_detail_lama->save();
+                }
+
+                return response()->json([
                 'message' => 'Data input (lama atau baru) tidak boleh kosong'
             ], 400);
         }

@@ -6259,23 +6259,28 @@ class RequestQuotationController extends Controller
     }
 
     public function getSampledData(Request $request){
-        $header = OrderHeader::where('no_document', $request->no_document)->first();
-        if(!$header){
+        $noOrder = $request->no_order;
+
+        $headers = OrderHeader::where('no_order', $noOrder)->get();
+        if($headers->isEmpty()){
             return response()->json([
                 'message' => 'Header data not found',
-                'data' => 0,
+                'data' => [],
                 'is_found' => false
             ], 404);
         }
 
-        $data = OrderDetail::where('id_order_header', $header->id)->get();
+        $headerIds = $headers->pluck('id')->toArray();
+        
+        $data = OrderDetail::whereIn('id_order_header', $headerIds)->get();
         $data_sampled = $data->filter(function ($item) {
             return $item->tanggal_terima !== null;
         })->toArray();
 
-        $data_return = array_map(function ($item) {
-            return explode('/',$item['no_sampel'])[1];
-        }, $data_sampled);
+        $data_return = array_values(array_unique(array_map(function ($item) {
+            $parts = explode('/', $item['no_sampel']);
+            return isset($parts[1]) ? $parts[1] : $item['no_sampel'];
+        }, $data_sampled)));
 
         return response()->json([
             'message' => 'Success',
