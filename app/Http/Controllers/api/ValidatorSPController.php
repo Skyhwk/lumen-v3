@@ -12,6 +12,7 @@ use App\Services\EmailJadwal;
 use App\Services\GenerateQrDocument;
 use App\Services\JadwalServices;
 use App\Services\Notification;
+use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -258,4 +259,25 @@ class ValidatorSPController extends Controller
         return $return;
     }
 
+    public function renderPDF(Request $request)
+    {
+        $data = $request->data;
+        
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            if(json_last_error() === JSON_ERROR_NONE) {
+                $data = $decoded;
+            }
+        }
+
+        $status_quotation = $data['status_quotation'] ?? '';
+        
+        if ($status_quotation == 'kontrak') {
+            $filename = RenderSamplingPlanService::onKontrak($data['quotation_id'])->onPeriode($data['periode_kontrak'])->renderPartialKontrak();
+        } else {
+            $filename = RenderSamplingPlanService::onNonKontrak($data['quotation_id'])->save();
+        }
+
+        return response()->json($filename, 200);
+    }
 }
