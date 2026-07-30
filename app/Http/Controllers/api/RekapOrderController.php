@@ -177,6 +177,21 @@ class RekapOrderController extends Controller
 
                 return ['total' => $total, 'selesai' => $selesai];
             })
+            ->addColumn('catatan_keterangan', function ($data) {
+                static $catatanCache = [];
+                $key = $data->no_order . '_' . ($data->kontrak === 'C' ? $data->periode : '');
+                
+                if (!array_key_exists($key, $catatanCache)) {
+                    $cat = DB::table('catatan_lhp_rilis')
+                        ->where('no_order', $data->no_order)
+                        ->when($data->kontrak === 'C', fn($q) => $q->where('periode', $data->periode))
+                        ->when($data->kontrak !== 'C', fn($q) => $q->whereNull('periode'))
+                        ->first();
+                    $catatanCache[$key] = $cat ? $cat->keterangan : null;
+                }
+                
+                return $catatanCache[$key];
+            })
             ->filterColumn('no_order', function ($query, $keyword) {
                 $query->where('order_detail.no_order', 'like', '%' . $keyword . '%');
             })
