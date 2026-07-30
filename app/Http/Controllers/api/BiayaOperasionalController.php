@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{BiayaOperasional, BiayaOperasionalItem, BiayaOperasionalReceipt, MasterKaryawan};
+use App\Services\GetBawahan;
 use DataTables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,7 +57,7 @@ class BiayaOperasionalController extends Controller
         switch ($scope) {
             case 'create':
             case 'request':
-                $query->where('is_active', true)->where('status', 'requested');
+                $query->where('is_active', true)->whereIn('status', ['requested', 'request_approved']);
                 break;
             case 'ongoing':
             case 'transit':
@@ -78,12 +79,17 @@ class BiayaOperasionalController extends Controller
                 $query->where('is_active', false)->where('status', 'void');
                 break;
             case 'approval':
-                $query->where('is_active', true)->where('status', 'requested');
+                $query->where('is_active', true)->where('status', 'request_approved');
                 break;
             case 'process':
                 $query->where('is_active', true)->whereIn('status', ['approved', 'prepared']);
                 break;
         }
+
+        if (in_array($scope, ['create', 'request', 'ongoing', 'completed', 'void'], true)) {
+            $query = $this->applyRequestEmployeeScope($query, $request);
+        }
+
         return DataTables::of($query)
             ->addColumn('needs_summary', fn($row) => $row->items->pluck('need_name')->join(', '))
             ->addColumn('display_status', fn($row) => $this->displayStatus($row->status))
@@ -100,6 +106,33 @@ class BiayaOperasionalController extends Controller
             ->make(true);
     }
 
+    private function applyRequestEmployeeScope($query, Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan ?? null;
+
+        if (!$employee) {
+            return $query->where('created_by', $this->karyawan);
+        }
+
+        if (in_array($employee->grade, ['SUPERVISOR', 'MANAGER'], true)) {
+            $creators = GetBawahan::where('id', $employee->id)
+                ->get()
+                ->pluck('nama_lengkap')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            if (!in_array($employee->nama_lengkap, $creators, true)) {
+                $creators[] = $employee->nama_lengkap;
+            }
+
+            return $query->whereIn('created_by', $creators);
+        }
+
+        return $query->where('created_by', $employee->nama_lengkap ?: $this->karyawan);
+    }
+
     public function save(Request $request)
     {
         $needs = $request->input('needs', []);
@@ -110,6 +143,10 @@ class BiayaOperasionalController extends Controller
         $destinations = $this->parseDestinations($request->input('destination', []));
         if (!$request->person_in_charge || !count($destinations) || !$request->travel_date) {
             return response()->json(['message' => 'Penanggung jawab, tujuan, dan tanggal perjalanan wajib diisi'], 422);
+        }
+
+        if (strtotime($request->travel_date) < strtotime(date('Y-m-d'))) {
+            return response()->json(['message' => 'Tanggal perjalanan tidak boleh back date'], 422);
         }
 
         DB::beginTransaction();
@@ -155,28 +192,28 @@ class BiayaOperasionalController extends Controller
         return response()->json(['data' => $bo, 'message' => 'Detail BO berhasil diambil'], 200);
     }
 
-    public function approveBo(Request $request)
+    public function approveRequestBo(Request $request)
     {
         $bo = BiayaOperasional::findOrFail($request->id);
         if ($bo->status !== 'requested' || !$bo->is_active) {
-            return response()->json(['message' => 'BO hanya bisa diapprove saat status requested'], 422);
+            return response()->json(['message' => 'BO hanya bisa diapprove request saat status requested'], 422);
         }
 
-        $bo->status = 'approved';
-        $bo->approved_by = $this->karyawan;
-        $bo->approved_at = date('Y-m-d H:i:s');
+        $bo->status = 'request_approved';
+        $bo->request_approved_by = $this->karyawan;
+        $bo->request_approved_at = date('Y-m-d H:i:s');
         $bo->updated_by = $this->karyawan;
         $bo->updated_at = date('Y-m-d H:i:s');
         $bo->save();
 
-        return response()->json(['data' => $bo, 'message' => 'BO berhasil diapprove'], 200);
+        return response()->json(['data' => $bo, 'message' => 'Request BO berhasil diapprove'], 200);
     }
 
-    public function rejectBo(Request $request)
+    public function rejectRequestBo(Request $request)
     {
         $bo = BiayaOperasional::findOrFail($request->id);
         if ($bo->status !== 'requested' || !$bo->is_active) {
-            return response()->json(['message' => 'BO hanya bisa direject saat status requested'], 422);
+            return response()->json(['message' => 'BO hanya bisa direject request saat status requested'], 422);
         }
 
         $bo->status = 'void';
@@ -189,7 +226,44 @@ class BiayaOperasionalController extends Controller
         $bo->updated_at = date('Y-m-d H:i:s');
         $bo->save();
 
-        return response()->json(['data' => $bo, 'message' => 'BO berhasil direject'], 200);
+        return response()->json(['data' => $bo, 'message' => 'Request BO berhasil direject'], 200);
+    }
+
+    public function approveBo(Request $request)
+    {
+        $bo = BiayaOperasional::findOrFail($request->id);
+        if ($bo->status !== 'request_approved' || !$bo->is_active) {
+            return response()->json(['message' => 'BO hanya bisa diapprove finance setelah request approved'], 422);
+        }
+
+        $bo->status = 'approved';
+        $bo->approved_by = $this->karyawan;
+        $bo->approved_at = date('Y-m-d H:i:s');
+        $bo->updated_by = $this->karyawan;
+        $bo->updated_at = date('Y-m-d H:i:s');
+        $bo->save();
+
+        return response()->json(['data' => $bo, 'message' => 'BO berhasil diapprove finance'], 200);
+    }
+
+    public function rejectBo(Request $request)
+    {
+        $bo = BiayaOperasional::findOrFail($request->id);
+        if ($bo->status !== 'request_approved' || !$bo->is_active) {
+            return response()->json(['message' => 'BO hanya bisa direject finance setelah request approved'], 422);
+        }
+
+        $bo->status = 'void';
+        $bo->is_active = false;
+        $bo->rejected_by = $this->karyawan;
+        $bo->rejected_at = date('Y-m-d H:i:s');
+        $bo->deleted_by = $this->karyawan;
+        $bo->deleted_at = date('Y-m-d H:i:s');
+        $bo->updated_by = $this->karyawan;
+        $bo->updated_at = date('Y-m-d H:i:s');
+        $bo->save();
+
+        return response()->json(['data' => $bo, 'message' => 'BO berhasil direject finance'], 200);
     }
     public function prepareBudget(Request $request)
     {
@@ -270,7 +344,7 @@ class BiayaOperasionalController extends Controller
     public function voidBo(Request $request)
     {
         $bo = BiayaOperasional::findOrFail($request->id);
-        if (!in_array($bo->status, ['requested', 'prepared'])) {
+        if (!in_array($bo->status, ['requested', 'request_approved', 'approved', 'prepared'])) {
             return response()->json(['message' => 'BO hanya bisa divoid sebelum selesai'], 422);
         }
 
@@ -376,6 +450,7 @@ class BiayaOperasionalController extends Controller
     {
         return [
             'requested' => 'Menunggu Approval',
+            'request_approved' => 'Menunggu Finance',
             'approved' => 'Approved',
             'prepared' => 'Transit',
             'completed' => 'Selesai',
@@ -442,6 +517,8 @@ class BiayaOperasionalController extends Controller
         ';
     }
 }
+
+
 
 
 

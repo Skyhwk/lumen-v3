@@ -19,9 +19,11 @@ class CreateBiayaOperasionalTable extends Migration
             $table->string('person_in_charge', 150);
             $table->json('destination');
             $table->date('travel_date');
-            $table->enum('status', ['requested', 'approved', 'prepared', 'completed', 'void'])->default('requested');
+            $table->enum('status', ['requested', 'request_approved', 'approved', 'prepared', 'completed', 'void'])->default('requested');
             $table->boolean('is_active')->default(true);
 
+            $table->string('request_approved_by', 150)->nullable();
+            $table->dateTime('request_approved_at')->nullable();
             $table->string('approved_by', 150)->nullable();
             $table->dateTime('approved_at')->nullable();
             $table->string('rejected_by', 150)->nullable();
@@ -56,4 +58,5 @@ class CreateBiayaOperasionalTable extends Migration
         Schema::dropIfExists('biaya_operasional');
     }
 }
+
 
