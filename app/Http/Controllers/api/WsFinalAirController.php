@@ -133,21 +133,28 @@ class WsFinalAirController extends Controller
 		}
 
 
-		$data->each(function ($item) {
-			$query = SampelDiantar::with('detail')
-				->where('no_order', $item->no_order);
+		$noOrders = $data->pluck('no_order')->unique()->toArray();
+		
+		if (!empty($noOrders)) {
+			$sampelDiantars = SampelDiantar::with('detail')
+				->whereIn('no_order', $noOrders)
+				->get();
 
-			// kalau periode order_detail ada
-			if (!empty($item->periode)) {
-				$query->where('periode_kontrak', $item->periode);
-			}
+			$data->each(function ($item) use ($sampelDiantars) {
+				$query = $sampelDiantars->where('no_order', $item->no_order);
 
-			// override relasi sampelDiantar
-			$item->setRelation(
-				'sampelDiantar',
-				$query->first()
-			);
-		});
+				// kalau periode order_detail ada
+				if (!empty($item->periode)) {
+					$query = $query->where('periode_kontrak', $item->periode);
+				}
+
+				// override relasi sampelDiantar
+				$item->setRelation(
+					'sampelDiantar',
+					$query->first()
+				);
+			});
+		}
 
 		return Datatables::of($data)->make(true);
 	}
