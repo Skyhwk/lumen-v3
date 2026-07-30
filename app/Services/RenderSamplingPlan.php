@@ -48,8 +48,17 @@ class RenderSamplingPlan
     public function save()
     {
         try {
-            $sampling = '';
             $data = $this->data;
+            $sampling_plan = $data->sampling->first();
+            $fileName = preg_replace('/\\//', '-', $sampling_plan->no_document) . '.pdf';
+            $dir = public_path('sampling_plan/');
+            $filePath = $dir . '/' . $fileName;
+
+            if (file_exists($filePath)) {
+                return $fileName;
+            }
+
+            $sampling = '';
 
             if ($data->status_sampling == 'SAR') {
                 $sampling = 'SAMPLING ANTI RIBET';
@@ -95,8 +104,6 @@ class RenderSamplingPlan
                 $status_kontrak = 'CONTRACT';
                 $periode_ = self::tanggal_indonesia($sampling_plan->periode_kontrak, 'period');
             }
-
-            $fileName = preg_replace('/\\//', '-', $sampling_plan->no_document) . '.pdf';
 
             $pdf->SetHTMLHeader('
                 <table class="tabel" width="100%">
@@ -544,6 +551,14 @@ class RenderSamplingPlan
                 ->sortByDesc('id')
                 ->first();
 
+            $fileName = preg_replace('/\\//', '-', $sampling_plan->no_document) . '.pdf';
+            $dir = public_path('sampling_plan/');
+            $filePath = $dir . '/' . $fileName;
+
+            if (file_exists($filePath)) {
+                return $fileName;
+            }
+
             $mpdfConfig = array(
                 'mode' => 'utf-8',
                 'format' => 'A4',
@@ -598,8 +613,6 @@ class RenderSamplingPlan
                 $status_kontrak = 'CONTRACT';
                 $periode_ = self::tanggal_indonesia($sampling_plan->periode_kontrak, 'period');
             }
-
-            $fileName = preg_replace('/\\//', '-', $sampling_plan->no_document) . '.pdf';
 
             $pdf->SetHTMLHeader('
                     <table class="tabel" width="100%">
