@@ -61,7 +61,7 @@ class BiayaOperasionalController extends Controller
                 break;
             case 'ongoing':
             case 'transit':
-                $query->where('is_active', true)->where('status', 'prepared');
+                $query->where('is_active', true)->whereIn('status', ['approved', 'prepared']);
                 break;
             case 'completed':
                 $query->where('is_active', true)->where('status', 'completed');
@@ -79,7 +79,11 @@ class BiayaOperasionalController extends Controller
                 $query->where('is_active', false)->where('status', 'void');
                 break;
             case 'approval':
+            case 'pending':
                 $query->where('is_active', true)->where('status', 'request_approved');
+                break;
+            case 'approved':
+                $query->where('is_active', true)->whereIn('status', ['approved', 'prepared', 'completed']);
                 break;
             case 'process':
                 $query->where('is_active', true)->whereIn('status', ['approved', 'prepared']);
@@ -344,8 +348,11 @@ class BiayaOperasionalController extends Controller
     public function voidBo(Request $request)
     {
         $bo = BiayaOperasional::findOrFail($request->id);
-        if (!in_array($bo->status, ['requested', 'request_approved', 'approved', 'prepared'])) {
-            return response()->json(['message' => 'BO hanya bisa divoid sebelum selesai'], 422);
+        if ($bo->status === 'prepared' || $bo->status === 'completed') {
+            return response()->json(['message' => 'BO yang sudah diproses tidak dapat divoid'], 422);
+        }
+        if (!in_array($bo->status, ['requested', 'request_approved', 'approved'])) {
+            return response()->json(['message' => 'BO tidak dapat divoid'], 422);
         }
 
         $bo->status = 'void';
@@ -451,8 +458,8 @@ class BiayaOperasionalController extends Controller
         return [
             'requested' => 'Menunggu Approval',
             'request_approved' => 'Menunggu Finance',
-            'approved' => 'Approved',
-            'prepared' => 'Transit',
+            'approved' => 'Menunggu Diproses',
+            'prepared' => 'On Process',
             'completed' => 'Selesai',
             'void' => 'Void',
         ][$status] ?? '-';
