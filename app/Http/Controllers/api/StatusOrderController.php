@@ -18,15 +18,66 @@ use Exception;
 
 class StatusOrderController extends Controller
 {
-
-    
-
     public function detail(Request $request)
     {
         $orderHeader = OrderHeader::find($request->id_order_header);
-        
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        $raw = \Illuminate\Support\Facades\DB::table('order_berjalan')
+            ->where('no_order', $orderHeader->no_order)
+            ->value('dataOrderDetail');
+
+        if (!empty($raw)) {
+            $parsed = json_decode($raw, true) ?? [];
+            
+            if ($request->periode) {
+                $periodePrefix = substr($request->periode, 0, 7);
+                $parsed = array_filter($parsed, function($g) use ($periodePrefix) {
+                    return substr($g['periode'] ?? '', 0, 7) === $periodePrefix;
+                });
+            }
+
+            $groupedData = [];
+            foreach ($parsed as $group) {
+                $periode = $group['periode'] ?? null;
+                $details = $group['detail'] ?? [];
+                
+                foreach ($details as $d) {
+                    $orderDetails = [];
+                    $sampelNumbers = $d['sampelNumbers'] ?? [];
+                    $points = $d['points'] ?? [];
+                    
+                    foreach ($sampelNumbers as $idx => $noSampel) {
+                        $orderDetails[] = [
+                            'no_sampel' => $noSampel,
+                            'periode' => $periode,
+                            'kategori_3' => $d['kategori_3'] ?? '',
+                            'keterangan_1' => $points[$idx] ?? ($points[0] ?? ''),
+                            'steps' => $d['steps'] ?? []
+                        ];
+                    }
+
+                    $groupedData[] = [
+                        'cfr' => $d['cfr'] ?? '',
+                        'periode' => $periode,
+                        'keterangan_1' => $points,
+                        'kategori_3' => isset($d['kategori_3']) ? [$d['kategori_3']] : [],
+                        'no_sampel' => $sampelNumbers,
+                        'total_no_sampel' => count($sampelNumbers) > 0 ? count($sampelNumbers) : ($d['jumlah_sampel'] ?? 1),
+                        'steps' => $d['steps'] ?? [],
+                        'order_details' => $orderDetails
+                    ];
+                }
+            }
+            
+            // Return collection list of values to re-index array correctly
+            return response()->json(['groupedCFRs' => array_values($groupedData)], 200);
+        }
+
+        // Fallback jika order_berjalan belum ada
         $groupedData = (new GroupedCfrByLhp($orderHeader, $request->periode))->get();
-        
         return response()->json(['groupedCFRs' => $groupedData], 200);
     }
     //==== masak
@@ -39,31 +90,23 @@ class StatusOrderController extends Controller
 
             // ===== STEP 1: QUERY SEDERHANA DENGAN INDEX =====
             if ($mode == 'non_kontrak') {
-                // Query BASE - hanya filter utama (cepat dengan index)
                 $data = QuotationNonKontrak::query()
                     ->with([
                         'sales',
-                        'sampling' => function ($q) {
-                            $q->orderBy('periode_kontrak', 'asc');
-                        },
+                        'sampling.jadwal',
                         'orderHeader.getInvoice.recordWithdraw'
                     ])
                     ->where('id_cabang', $request->cabang)
                     ->where('is_approved', true)
                     ->where('is_emailed', true)
                     ->whereYear('tanggal_penawaran', $request->year)
-                    // ->whereMonth('tanggal_penawaran', '>=', 11)
-                    ->whereHas('orderHeader') // Harus punya order
+                    ->whereHas('orderHeader')
                     ->orderBy('tanggal_penawaran', 'desc');
 
-                // Filter jabatan
                 if ($jabatan == 24 || $jabatan == 86) {
                     $data->where('sales_id', $this->user_id);
                 } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
-                    // $bawahan = GetBawahan::where('id', $this->user_id)->pluck('id')->toArray();
-                    // $bawahan[] = $this->user_id;
-
-                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    $bawahan = GetBawahan::where('id', $this->user_id)->pluck('id')->toArray();
                     array_push($bawahan, $this->user_id);
                     $data->whereIn('sales_id', $bawahan);
                 }
@@ -71,14 +114,11 @@ class StatusOrderController extends Controller
                 $rawData = $data->get();
 
             } else if ($mode == 'kontrak') {
-                // Query kontrak - sederhana
                 $data = QuotationKontrakD::query()
                     ->select('request_quotation_kontrak_D.*')
                     ->with([
                         'header.sales',
-                        'header.sampling' => function ($q) {
-                            $q->orderBy('periode_kontrak', 'asc');
-                        },
+                        'header.sampling.jadwal',
                         'header.orderHeader.getInvoice.recordWithdraw'
                     ])
                     ->whereHas('header', function ($q) use ($request) {
@@ -87,19 +127,15 @@ class StatusOrderController extends Controller
                             ->where('is_emailed', true)
                             ->where('is_active', true)
                             ->whereYear('tanggal_penawaran', $request->year)
-                            // ->whereMonth('tanggal_penawaran', '>=', 11)
                             ->whereHas('orderHeader');
                     });
 
-                // Filter jabatan
-                
                 if ($jabatan == 24 || $jabatan == 86) {
                     $data->whereHas('header', function ($q) {
                         $q->where('sales_id', $this->user_id);
                     });
                 } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
-                    // $bawahan[] = $this->user_id;
-                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    $bawahan = GetBawahan::where('id', $this->user_id)->pluck('id')->toArray();
                     array_push($bawahan, $this->user_id);
                     $data->whereHas('header', function ($q) use ($bawahan) {
                         $q->whereIn('sales_id', $bawahan);
@@ -110,7 +146,25 @@ class StatusOrderController extends Controller
                 $rawData = $data->get();
             }
 
-            // ===== STEP 2: MAPPING COLLECTION + LOGIC BUSINESS =====
+
+            // ===== STEP 2: PRE-LOAD order_berjalan SEKALI untuk semua order =====
+            $noOrders = $rawData->map(function($item) use ($mode) {
+                if ($mode === 'non_kontrak') {
+                    return $item->orderHeader->no_order ?? null;
+                } else {
+                    return $item->header->orderHeader->no_order ?? null;
+                }
+            })->filter()->unique()->values()->toArray();
+
+            $obCache = DB::table('order_berjalan')
+                ->whereIn('no_order', $noOrders)
+                ->pluck('dataOrderDetail', 'no_order')
+                ->toArray();
+
+            // Inject cache ke static property getLhpProgress
+            $this->primeObCache($obCache);
+
+            // ===== STEP 3: MAPPING COLLECTION + LOGIC BUSINESS =====
             $mappedData = $rawData->map(function ($item) use ($mode, $filterStatusType) {
                 // Calculate status untuk setiap item
                 $status = $this->calculateItemStatus($item, $mode);
@@ -127,7 +181,7 @@ class StatusOrderController extends Controller
                 return $this->mapItemForDataTable($item, $mode, $status);
             })->filter()->values(); // Remove null values & reindex
 
-            // ===== STEP 3: KIRIM KE DATATABLE =====
+            // ===== STEP 4: KIRIM KE DATATABLE =====
             // Gunakan DataTables::collection() untuk array/collection
             return DataTables::collection($mappedData)
                 // Semua column sudah ada di array, langsung akses
@@ -150,7 +204,6 @@ class StatusOrderController extends Controller
                 ->filter(function ($instance) use ($request, $mode) {
                     $globalSearch = $request->input('search.value');
                     $columns = $request->input('columns');
-                    \Log::info('Columns received:', $columns);
                     $instance->collection = $instance->collection->filter(function ($row) use ($globalSearch, $columns, $mode) {
                         $row = (array) $row;
                         // ===== LOGIKA GLOBAL SEARCH =====
@@ -211,32 +264,58 @@ class StatusOrderController extends Controller
         }
     }
 
+    /** Runtime cache untuk order_berjalan (pre-loaded batch) */
+    private array $_obCache = [];
+
+    /**
+     * HELPER: Pre-fill _obCache dengan data batch dari DB
+     */
+    private function primeObCache(array $obCache): void
+    {
+        $this->_obCache = $obCache;
+    }
+
     private function getLhpProgress($noOrder, $mode, $periode = null)
     {
-        if (empty($noOrder)) return null;
+        if (empty($noOrder) || $mode === 'prime_cache_init') return null;
 
-        static $cache = [];
-        if (!array_key_exists($noOrder, $cache)) {
-            $raw = DB::table('order_berjalan')
-                ->where('no_order', $noOrder)
-                ->value('dataOrderDetail');
-            $cache[$noOrder] = $raw;
+        // Cek instance cache dulu (batch pre-loaded)
+        if (array_key_exists($noOrder, $this->_obCache)) {
+            $raw = $this->_obCache[$noOrder];
+        } else {
+            // Fallback: query per-item jika tidak ada di batch cache
+            static $queryCache = [];
+            if (!array_key_exists($noOrder, $queryCache)) {
+                $queryCache[$noOrder] = \Illuminate\Support\Facades\DB::table('order_berjalan')
+                    ->where('no_order', $noOrder)
+                    ->value('dataOrderDetail');
+            }
+            $raw = $queryCache[$noOrder];
         }
-        $raw = $cache[$noOrder];
+
         if (empty($raw)) return null;
 
         $groups = collect(json_decode($raw, true) ?? []);
 
         if ($mode === 'kontrak' && !empty($periode)) {
-            $groups = $groups->where('periode', $periode)->values();
+            $periodePrefix = substr($periode, 0, 7);
+            $groups = $groups->filter(function($g) use ($periodePrefix) {
+                $gPeriode = substr($g['periode'] ?? '', 0, 7);
+                return $gPeriode === $periodePrefix;
+            })->values();
         }
 
         $total   = 0;
         $selesai = 0;
         foreach ($groups as $group) {
-            [$s, $t] = array_pad(explode('/', $group['proses'] ?? '0/0', 2), 2, 0);
-            $selesai += (int) $s;
-            $total   += (int) $t;
+            if (isset($group['jumlah_lhp'])) {
+                $total += (int) $group['jumlah_lhp'];
+                $selesai += (int) ($group['jumlah_lhp_selesai'] ?? 0);
+            } else {
+                [$s, $t] = array_pad(explode('/', $group['proses'] ?? '0/0', 2), 2, 0);
+                $selesai += (int) $s;
+                $total   += (int) $t;
+            }
         }
 
         return [
@@ -344,25 +423,17 @@ class StatusOrderController extends Controller
 
     private function getNestedValue($array, $key, $mode = null)
     {
-        // Handle kasus khusus untuk sales
-        \Log::info('Columns received:', ['key' => $key]);
         if ($key === 'sales') {
-            // Pastikan $array['sales'] ada DAN berupa array sebelum akses key di dalamnya
             if (isset($array['sales']) && is_array($array['sales'])) {
                 return $array['sales']['nama_lengkap'] ?? null;
             }
-            return null; // Return null jika sales tidak ada atau format salah
+            return null;
         }
-        
-        // Jika key sederhana (tanpa dot)
         if (!str_contains($key, '.')) {
             return $array[$key] ?? null;
         }
-        
-        // Jika key nested (contoh: 'sales.nama_lengkap')
-        $keys = explode('', $key);
+        $keys = explode('.', $key);
         $value = $array;
-        
         foreach ($keys as $k) {
             if (is_array($value) && isset($value[$k])) {
                 $value = $value[$k];
@@ -370,7 +441,6 @@ class StatusOrderController extends Controller
                 return null;
             }
         }
-        
         return $value;
     }
 
@@ -433,7 +503,7 @@ class StatusOrderController extends Controller
                 'nilai_pelunasan' => $item->orderHeader && $item->orderHeader->getInvoice 
                     ? $item->orderHeader->getInvoice->sum('nilai_pelunasan') 
                     : 0,
-                'invoice' => $this->getInvoicesForItem($item, $mode),
+                'invoice' => $invoicesData,
                 'invoice_searchable' => !empty($invoicesData) 
                 ? implode(', ', array_column($invoicesData, 'no_invoice')) 
                 : null,
