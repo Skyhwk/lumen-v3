@@ -48,7 +48,7 @@ class FollowUpQuotationController extends Controller
                     ->where('request_quotation.is_active', true)
                     ->where('is_approved', true)
                     ->where('is_emailed', true)
-                    ->where('status_sampling','!=', 'SD')
+                    ->where('status_sampling','!=','SD')
                     ->whereYear('tanggal_penawaran', $request->year)
                     ->orderBy('tanggal_penawaran', 'desc')
                     ->orderBy('id', 'desc');
