@@ -56,6 +56,7 @@ use App\Models\LhpUdaraPsikologiHeader;
 
 
 use App\Services\GenerateFeeSampling;
+use App\Services\FdlBasTimingExportService;
 use App\Services\RenderInvoice;
 use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
@@ -105,6 +106,31 @@ class FixingController extends Controller
         }
     }
 
+
+    public function exportFdlBasTiming(Request $request)
+    {
+        try {
+            $service = new FdlBasTimingExportService();
+            $result = $service->export($request->all());
+
+            if (filter_var($request->download, FILTER_VALIDATE_BOOLEAN)) {
+                return response()->download($result['full_path']);
+            }
+
+            unset($result['full_path']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Excel tracking FDL BAS berhasil dibuat',
+                'data' => $result,
+            ]);
+        } catch (\Exception $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
     public function syncLinkLhpRilis(Request $request)
     {
         $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
