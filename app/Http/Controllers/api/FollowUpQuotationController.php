@@ -72,7 +72,7 @@ class FollowUpQuotationController extends Controller
                     ->orderBy('tanggal_penawaran', 'desc')
                     ->orderBy('id', 'desc');
             }
-
+         
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -86,6 +86,8 @@ class FollowUpQuotationController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
+           
+          
 
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
@@ -159,7 +161,7 @@ class FollowUpQuotationController extends Controller
                     ->orderBy('tanggal_penawaran', 'desc')
                     ->orderBy('id', 'desc');
             }
-
+            
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -173,6 +175,7 @@ class FollowUpQuotationController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
+          
 
             $data = $data->get();
             

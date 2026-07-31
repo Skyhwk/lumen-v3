@@ -19,8 +19,6 @@ use Exception;
 class StatusOrderController extends Controller
 {
 
-    
-
     public function detail(Request $request)
     {
         $orderHeader = OrderHeader::find($request->id_order_header);
