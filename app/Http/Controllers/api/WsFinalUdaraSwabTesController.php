@@ -29,8 +29,6 @@ class WsFinalUdaraSwabTesController extends Controller
 
     public function index(Request $request)
     {
-        $date = explode('-', $request->date);
-
         $data = OrderDetail::selectRaw('
             cfr,
             GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
@@ -52,7 +50,11 @@ class WsFinalUdaraSwabTesController extends Controller
             ->where('is_active', true)
             ->where('kategori_3', '46-Udara Swab Test')
             ->where('status', 0)
-            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', $date[0])->whereMonth('tanggal_sampling', $date[1]))
+            ->when($request->from && $request->to, function ($q) use ($request) {
+                $from = $request->from . '-01';
+                $to = date('Y-m-t', strtotime($request->to . '-01'));
+                $q->whereBetween('tanggal_sampling', [$from, $to]);
+            })
             ->groupBy('cfr')
             ->orderBy('tanggal_sampling');
 
