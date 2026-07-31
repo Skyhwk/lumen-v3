@@ -46,8 +46,7 @@ class StatusOrderController extends Controller
                         'sampling' => function ($q) {
                             $q->orderBy('periode_kontrak', 'asc');
                         },
-                        'orderHeader.getInvoice.recordWithdraw',
-                        'link_lhp' // Eager load untuk cek status
+                        'orderHeader.getInvoice.recordWithdraw'
                     ])
                     ->where('id_cabang', $request->cabang)
                     ->where('is_approved', true)
@@ -80,8 +79,7 @@ class StatusOrderController extends Controller
                         'header.sampling' => function ($q) {
                             $q->orderBy('periode_kontrak', 'asc');
                         },
-                        'header.orderHeader.getInvoice.recordWithdraw',
-                        'header.link_lhp'
+                        'header.orderHeader.getInvoice.recordWithdraw'
                     ])
                     ->whereHas('header', function ($q) use ($request) {
                         $q->where('id_cabang', $request->cabang)
@@ -145,8 +143,8 @@ class StatusOrderController extends Controller
                 ->addColumn('invoice', function ($row) {
                     return $row['invoice'];
                 })
-                ->editColumn('link_lhp', function ($row) {
-                    return $row['link_lhp'];
+                ->addColumn('jumlah_lhp_ob', function ($row) {
+                    return $row['jumlah_lhp_ob'];
                 })
                 // Filter custom untuk search
                 ->filter(function ($instance) use ($request, $mode) {
@@ -213,6 +211,40 @@ class StatusOrderController extends Controller
         }
     }
 
+    private function getLhpProgress($noOrder, $mode, $periode = null)
+    {
+        if (empty($noOrder)) return null;
+
+        static $cache = [];
+        if (!array_key_exists($noOrder, $cache)) {
+            $raw = DB::table('order_berjalan')
+                ->where('no_order', $noOrder)
+                ->value('dataOrderDetail');
+            $cache[$noOrder] = $raw;
+        }
+        $raw = $cache[$noOrder];
+        if (empty($raw)) return null;
+
+        $groups = collect(json_decode($raw, true) ?? []);
+
+        if ($mode === 'kontrak' && !empty($periode)) {
+            $groups = $groups->where('periode', $periode)->values();
+        }
+
+        $total   = 0;
+        $selesai = 0;
+        foreach ($groups as $group) {
+            [$s, $t] = array_pad(explode('/', $group['proses'] ?? '0/0', 2), 2, 0);
+            $selesai += (int) $s;
+            $total   += (int) $t;
+        }
+
+        return [
+            'total' => $total,
+            'selesai' => $selesai,
+        ];
+    }
+
     /**
      * HELPER: Hitung status item (completed/incompleted)
      */
@@ -220,7 +252,9 @@ class StatusOrderController extends Controller
     {
         if ($mode == 'non_kontrak') {
             // 1. Cek LHP
-            $lhpCompleted = $item->link_lhp && $item->link_lhp->is_completed;
+            $noOrder = $item->orderHeader ? $item->orderHeader->no_order : null;
+            $lhpProgress = $this->getLhpProgress($noOrder, $mode);
+            $lhpCompleted = $lhpProgress && $lhpProgress['total'] > 0 && $lhpProgress['selesai'] === $lhpProgress['total'];
             
             // 2. Cek Invoice - HARUS ADA dan SEMUA LUNAS
             $hasInvoice = false;
@@ -258,11 +292,9 @@ class StatusOrderController extends Controller
 
         } else if ($mode == 'kontrak') {
             // 1. Check LHP untuk periode ini
-            $lhpCompleted = false;
-            if ($item->header && $item->header->link_lhp) {
-                $lhp = $item->header->link_lhp->where('periode', $item->periode_kontrak)->first();
-                $lhpCompleted = $lhp && $lhp->is_completed;
-            }
+            $noOrder = ($item->header && $item->header->orderHeader) ? $item->header->orderHeader->no_order : null;
+            $lhpProgress = $this->getLhpProgress($noOrder, $mode, $item->periode_kontrak);
+            $lhpCompleted = $lhpProgress && $lhpProgress['total'] > 0 && $lhpProgress['selesai'] === $lhpProgress['total'];
 
             // 2. Check invoice untuk periode ini - HARUS ADA dan SEMUA LUNAS
             $hasInvoice = false;
@@ -405,7 +437,7 @@ class StatusOrderController extends Controller
                 'invoice_searchable' => !empty($invoicesData) 
                 ? implode(', ', array_column($invoicesData, 'no_invoice')) 
                 : null,
-                'link_lhp' => json_decode($item->link_lhp, true),
+                'jumlah_lhp_ob' => $this->getLhpProgress($item->orderHeader ? $item->orderHeader->no_order : null, $mode),
                 'order_header'=>[
                     'id' =>  $item->orderHeader ? $item->orderHeader->id : null,
                     'tanggal_order' =>  $item->orderHeader ? $item->orderHeader->tanggal_order : null,
@@ -449,21 +481,6 @@ class StatusOrderController extends Controller
                 })->values()->toArray();
             }
 
-            $lhpData = null;
-            if ($item->header && $item->header->link_lhp && $item->header->link_lhp->isNotEmpty()) {
-                $lhp = $item->header->link_lhp->where('periode', $item->periode_kontrak)->first();
-                if ($lhp) {
-                    $lhpData = [
-                        'id' => $lhp->id,
-                        'no_quotation' => $lhp->no_quotation,
-                        'periode' => $lhp->periode,
-                        'jumlah_lhp' => $lhp->jumlah_lhp,
-                        'jumlah_lhp_rilis' => $lhp->jumlah_lhp_rilis,
-                        'is_completed' => $lhp->is_completed
-                    ];
-                }
-            }
-
             return [
                 'id' => $item->header->id,
                 'no_document' => $item->header->no_document ?? null,
@@ -486,7 +503,7 @@ class StatusOrderController extends Controller
                 ? implode(', ', array_column($invoicesData, 'no_invoice')) 
                 : null,
                 'invoice' => $invoicesData,
-                'link_lhp' => $lhpData,
+                'jumlah_lhp_ob' => $this->getLhpProgress($item->header && $item->header->orderHeader ? $item->header->orderHeader->no_order : null, $mode, $item->periode_kontrak),
                 'order_header'=>[
                     'id' =>  $item->header->orderHeader->id,
                     'tanggal_order' =>  $item->header->orderHeader->tanggal_order,
