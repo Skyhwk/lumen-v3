@@ -42,8 +42,8 @@ class CheckOrderActive extends Command
     public function handle()
     {
         $commandStartedAt = microtime(true);
-        // $startDate = Carbon::now()->subMonths(6)->format('Y-m-d');
-        $startDate = '2026-01-01';
+        $startDate = Carbon::now()->subMonths(6)->format('Y-m-d');
+        // $startDate = '2026-01-01';
         $endDate = Carbon::now()->format('Y-m-d');
 
         $this->info("===== Start Command: CheckOrderActive =====");
