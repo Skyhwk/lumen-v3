@@ -162,7 +162,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                         return $ws['f_koreksi_c'] ?? '-';
                     }
                     $nilai = null;
-                    for ($i = 0; $i <= 10; $i++) {
+                    for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                         $key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
                         if (!empty($ws[$key])) {
                             $nilai = $ws[$key];
@@ -170,7 +170,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                         }
                     }
                     if ($nilai === null) {
-                        for ($i = 0; $i <= 10; $i++) {
+                        for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                             $key = $i === 0 ? 'C' : 'C' . $i;
                             if ($i == 3) {
                                 $nilai = !empty($ws[$key])

@@ -303,23 +303,23 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                     if ($index === null) {
                         // 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
                         if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
-                        for ($i = 1; $i <= 16; $i++) {
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                             $k = "f_koreksi_c{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
                         // 2) C (tanpa nomor) lalu C1..C16
                         if ($has('C')) return $getHasilUji(1, $item->id_parameter, $hasil['C']);
-                        for ($i = 1; $i <= 16; $i++) {
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                             $k = "C{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
                         // 3) f_koreksi_1..f_koreksi_17
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $k = "f_koreksi_{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
                         // 4) hasil1..hasil17
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $k = "hasil{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
@@ -882,7 +882,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             $faktor_koreksi = (float) $request->faktor_koreksi;
             // Ambil hasil_c sampai hasil_c16 secara dinamis
             $hasilC = [];
-            for ($i = 0; $i <= 18; $i++) {
+            for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                 $key        = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
                 $hasilC[$i] = html_entity_decode($request->$key ?? '');
             }
@@ -999,7 +999,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
         $faktor_koreksi   = (float) $request->faktor_koreksi;
         // Ambil hasil_c sampai hasil_c19
         $hasilC = [];
-        for ($i = 0; $i <= 18; $i++) {
+        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
             $key        = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
             $hasilC[$i] = $request->$key ?? null;
         }
@@ -1246,7 +1246,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						->where('parameter', $request->parameter)
 						->exists();
 					if ($valid) {
-						for ($i = 1; $i <= 19; $i++) {
+						for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 							$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
 						}
 						$wsUdara->save();
@@ -1264,7 +1264,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 							->where('parameter', $request->parameter)
 							->exists();
 						if ($valid) {
-							for ($i = 1; $i <= 19; $i++) {
+							for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 								$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
 							}
 							$wsUdara->save();
@@ -1297,7 +1297,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				$wsUdara->$field = null;
 			}
 			$wsUdara->id_subkontrak = $subkontrak->id;
-			for ($i = 1; $i <= 19; $i++) {
+			for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 				$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
 			}
 			$wsUdara->save();

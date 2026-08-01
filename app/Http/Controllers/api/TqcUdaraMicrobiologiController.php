@@ -136,8 +136,7 @@ class TqcUdaraMicrobiologiController extends Controller
                     $index = $getSatuan->udara($bakuMutu->satuan ?? null);
 
                     if ($index === null) {
-                        // cari f_koreksi_1..17 dulu
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $key = "f_koreksi_$i";
                             if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
@@ -145,9 +144,8 @@ class TqcUdaraMicrobiologiController extends Controller
                             }
                         }
 
-                        // kalau masih kosong, cari hasil1..17
                         if ($nilai === '-' || $nilai === null || $nilai === '') {
-                            for ($i = 1; $i <= 17; $i++) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
                                 if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];

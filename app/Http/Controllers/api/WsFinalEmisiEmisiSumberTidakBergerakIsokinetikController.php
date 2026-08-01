@@ -191,7 +191,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 				$ws = (array) $ws; // pastikan array
 				if ($index === null) {
 					$nilai = null;
-					for ($i = 0; $i <= 10; $i++) {
+					for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
 						$key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
 						if (!empty($ws[$key])) {
 							$nilai = $ws[$key];
@@ -201,7 +201,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 					}
 
 					if ($nilai === null) {
-						for ($i = 0; $i <= 10; $i++) {
+						for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
 							$key = $i === 0 ? 'C' : 'C' . $i;
 							if($i == 3) {
 								if (!empty($ws[$key])) {
