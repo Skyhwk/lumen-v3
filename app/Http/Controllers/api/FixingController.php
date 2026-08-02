@@ -56,6 +56,7 @@ use App\Models\LhpUdaraPsikologiHeader;
 
 
 use App\Services\GenerateFeeSampling;
+use App\Services\FdlBasTimingExportService;
 use App\Services\RenderInvoice;
 use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
@@ -105,6 +106,31 @@ class FixingController extends Controller
         }
     }
 
+
+    public function exportFdlBasTiming(Request $request)
+    {
+        try {
+            $service = new FdlBasTimingExportService();
+            $result = $service->export($request->all());
+
+            if (filter_var($request->download, FILTER_VALIDATE_BOOLEAN)) {
+                return response()->download($result['full_path']);
+            }
+
+            unset($result['full_path']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Excel tracking FDL BAS berhasil dibuat',
+                'data' => $result,
+            ]);
+        } catch (\Exception $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
     public function syncLinkLhpRilis(Request $request)
     {
         $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
@@ -1404,6 +1430,7 @@ class FixingController extends Controller
                         'filename' => $filename,
                         'path' => $filename ? 'invoice/' . $filename : null,
                     ],
+                    'diagnostics' => $this->buildInvoiceDiagnostics($noInvoice, $invoiceRows),
                 ],
             ], 200);
         } catch (\Throwable $th) {
@@ -1412,6 +1439,307 @@ class FixingController extends Controller
                 'line' => $th->getLine(),
             ], 500);
         }
+    }
+    public function fixInvoiceIssue(Request $request)
+    {
+        $noInvoice = trim((string) $request->input('no_invoice'));
+        $action = trim((string) $request->input('action'));
+
+        if ($noInvoice === '') {
+            return response()->json(['message' => 'Nomor invoice wajib diisi.'], 422);
+        }
+
+        $allowedActions = [
+            'normalize_order_detail_konsultan',
+            'sync_invoice_nilai_pelunasan',
+            'clear_small_invoice_upload_file',
+        ];
+
+        if (!in_array($action, $allowedActions, true)) {
+            return response()->json(['message' => 'Action fixing tidak dikenali.'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $invoiceRows = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->get();
+
+            if ($invoiceRows->isEmpty()) {
+                DB::rollBack();
+                return response()->json(['message' => 'Invoice tidak ditemukan atau tidak aktif.'], 404);
+            }
+
+            $payload = [];
+            $message = 'Data invoice berhasil diperbaiki.';
+
+            if ($action === 'normalize_order_detail_konsultan') {
+                $noOrders = $invoiceRows->pluck('no_order')->filter()->unique()->values();
+                if ($noOrders->isEmpty()) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Invoice tidak memiliki no_order.'], 422);
+                }
+
+                $payload['updated_order_detail'] = OrderDetail::whereIn('no_order', $noOrders)
+                    ->where('is_active', true)
+                    ->where('konsultan', '')
+                    ->update([
+                        'konsultan' => null,
+                        'updated_by' => $this->karyawan,
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                $payload['updated_daily_qsd'] = DB::table('daily_qsd')
+                    ->whereIn('no_order', $noOrders)
+                    ->where('konsultan', '')
+                    ->update([
+                        'konsultan' => null,
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                $message = 'Konsultan kosong berhasil dinormalisasi ke NULL. Jika nilai compare masih belum berubah, tunggu scheduler QSD / jalankan update daily_qsd.';
+            }
+
+            if ($action === 'sync_invoice_nilai_pelunasan') {
+                $totalPembayaran = (float) RecordPembayaranInvoice::where('no_invoice', $noInvoice)
+                    ->where('is_active', true)
+                    ->sum('nilai_pembayaran');
+
+                $firstInvoiceId = $invoiceRows->sortBy('id')->first()->id;
+
+                $payload['updated_invoice_rows_reset'] = Invoice::where('no_invoice', $noInvoice)
+                    ->where('is_active', true)
+                    ->where('id', '!=', $firstInvoiceId)
+                    ->update([
+                        'nilai_pelunasan' => 0,
+                        'updated_by' => $this->karyawan,
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                $payload['updated_invoice_rows'] = Invoice::where('id', $firstInvoiceId)
+                    ->where('is_active', true)
+                    ->update([
+                        'nilai_pelunasan' => $totalPembayaran,
+                        'updated_by' => $this->karyawan,
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                $payload['nilai_pelunasan_target'] = $totalPembayaran;
+                $message = 'Nilai pelunasan invoice berhasil disamakan dengan total pembayaran real.';
+            }
+
+            if ($action === 'clear_small_invoice_upload_file') {
+                $payload['updated_invoice_rows'] = Invoice::where('no_invoice', $noInvoice)
+                    ->where('is_active', true)
+                    ->whereNotNull('upload_file')
+                    ->where(function ($query) {
+                        $query->where('nilai_tagihan', '<', 5000000)
+                            ->orWhere(function ($subQuery) {
+                                $subQuery->whereNull('nilai_tagihan')
+                                    ->where('total_tagihan', '<', 5000000);
+                            });
+                    })
+                    ->update([
+                        'upload_file' => null,
+                        'updated_by' => $this->karyawan,
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                $message = 'Upload file invoice kecil berhasil dihapus. Setelah ini invoice perlu dirender ulang.';
+            }
+
+            DB::commit();
+
+            $invoiceRows = Invoice::where('no_invoice', $noInvoice)
+                ->where('is_active', true)
+                ->get();
+
+            $payload['diagnostics'] = $this->buildInvoiceDiagnostics($noInvoice, $invoiceRows);
+
+            return response()->json([
+                'message' => $message,
+                'data' => $payload,
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    private function buildInvoiceDiagnostics(string $noInvoice, $invoiceRows): array
+    {
+        $issues = [];
+        $noOrders = collect($invoiceRows)->pluck('no_order')->filter()->unique()->values();
+        $invoiceValue = (float) collect($invoiceRows)->sum(function ($item) {
+            return (float) ($item->nilai_tagihan ?? $item->total_tagihan ?? 0);
+        });
+
+        $totalPembayaranReal = (float) RecordPembayaranInvoice::where('no_invoice', $noInvoice)
+            ->where('is_active', true)
+            ->sum('nilai_pembayaran');
+        $nilaiPelunasanInvoice = (float) collect($invoiceRows)->sum('nilai_pelunasan');
+        $nilaiPelunasanDifference = abs($nilaiPelunasanInvoice - $totalPembayaranReal);
+
+        if ($nilaiPelunasanDifference > 1) {
+            $issues[] = [
+                'code' => 'INVOICE_NILAI_PELUNASAN_MISMATCH',
+                'severity' => 'warning',
+                'title' => 'Nilai pelunasan invoice tidak sesuai',
+                'message' => 'Nilai pelunasan invoice berbeda dari total pembayaran aktif. Fix ini hanya update nilai_pelunasan invoice.',
+                'detail' => [
+                    'nilai_pelunasan_invoice' => $nilaiPelunasanInvoice,
+                    'total_pembayaran_real' => $totalPembayaranReal,
+                    'difference' => $nilaiPelunasanDifference,
+                ],
+                'fixable' => true,
+                'action' => 'sync_invoice_nilai_pelunasan',
+                'button_label' => 'Fix Nilai Pelunasan',
+            ];
+        }
+
+        $smallInvoiceUploads = collect($invoiceRows)
+            ->filter(function ($row) {
+                $nilaiTagihan = (float) ($row->nilai_tagihan ?? $row->total_tagihan ?? 0);
+                return $nilaiTagihan < 5000000 && !empty($row->upload_file);
+            })
+            ->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'no_order' => $row->no_order,
+                    'nilai_tagihan' => (float) ($row->nilai_tagihan ?? $row->total_tagihan ?? 0),
+                    'upload_file' => $row->upload_file,
+                ];
+            })
+            ->values();
+
+        if ($smallInvoiceUploads->isNotEmpty()) {
+            $issues[] = [
+                'code' => 'SMALL_INVOICE_UPLOAD_FILE_EXISTS',
+                'severity' => 'warning',
+                'title' => 'Invoice kecil masih punya file upload',
+                'message' => 'Nilai tagihan di bawah 5 juta tapi invoice.upload_file masih terisi. Hapus upload_file lalu render ulang invoice.',
+                'detail' => [
+                    'rows' => $smallInvoiceUploads,
+                ],
+                'fixable' => true,
+                'action' => 'clear_small_invoice_upload_file',
+                'button_label' => 'Hapus Upload File',
+                'needs_rerender' => true,
+            ];
+        }
+        $dailyQsdRows = DB::table('daily_qsd')
+            ->whereRaw("REPLACE(no_invoice, ' (Lunas)', '') = ?", [$noInvoice])
+            ->get([
+                'uuid',
+                'no_order',
+                'no_invoice',
+                'no_quotation',
+                'nama_perusahaan',
+                'konsultan',
+                'biaya_akhir',
+                'nilai_invoice',
+                'tanggal_sampling_min',
+            ]);
+
+        $dailyQsdRows->each(function ($row) use (&$issues) {
+            $biayaAkhir = (float) ($row->biaya_akhir ?? 0);
+            $nilaiInvoice = (float) ($row->nilai_invoice ?? 0);
+            $difference = abs($biayaAkhir - $nilaiInvoice);
+
+            if ($difference > 50) {
+                $issues[] = [
+                    'code' => 'DAILY_QSD_COMPARE_MISMATCH',
+                    'severity' => 'danger',
+                    'title' => 'Invoice terdeteksi masuk compare',
+                    'message' => 'Nilai biaya akhir di daily_qsd tidak sesuai dengan nilai invoice.',
+                    'detail' => [
+                        'no_order' => $row->no_order,
+                        'biaya_akhir' => $biayaAkhir,
+                        'nilai_invoice' => $nilaiInvoice,
+                        'difference' => $difference,
+                    ],
+                    'fixable' => false,
+                ];
+            }
+        });
+
+        $orderDetailStats = null;
+        if ($noOrders->isNotEmpty()) {
+            $orderDetailStats = DB::table('order_detail')
+                ->whereIn('no_order', $noOrders)
+                ->where('is_active', true)
+                ->selectRaw("COUNT(*) as total, SUM(CASE WHEN konsultan IS NULL THEN 1 ELSE 0 END) as konsultan_null, SUM(CASE WHEN konsultan = '' THEN 1 ELSE 0 END) as konsultan_empty")
+                ->first();
+
+            $emptyCount = (int) ($orderDetailStats->konsultan_empty ?? 0);
+            $nullCount = (int) ($orderDetailStats->konsultan_null ?? 0);
+
+            if ($emptyCount > 0) {
+                $issues[] = [
+                    'code' => 'ORDER_DETAIL_KONSULTAN_EMPTY_STRING',
+                    'severity' => 'warning',
+                    'title' => 'Konsultan order detail belum seragam',
+                    'message' => "Ada {$emptyCount} order_detail.konsultan berisi string kosong. Normalisasi ke NULL supaya grouping QSD tidak pecah.",
+                    'detail' => [
+                        'no_orders' => $noOrders->values(),
+                        'konsultan_null' => $nullCount,
+                        'konsultan_empty' => $emptyCount,
+                    ],
+                    'fixable' => true,
+                    'action' => 'normalize_order_detail_konsultan',
+                    'button_label' => 'Fix Konsultan Kosong',
+                ];
+            }
+
+            if ($emptyCount > 0 && $nullCount > 0) {
+                $issues[] = [
+                    'code' => 'ORDER_DETAIL_KONSULTAN_MIXED_NULL_EMPTY',
+                    'severity' => 'warning',
+                    'title' => 'Konsultan order detail campur NULL dan string kosong',
+                    'message' => 'Kondisi ini bisa membuat SalesDailyQSD membaca order yang sama sebagai grup berbeda sebelum digabung ke invoice.',
+                    'detail' => [
+                        'no_orders' => $noOrders->values(),
+                        'konsultan_null' => $nullCount,
+                        'konsultan_empty' => $emptyCount,
+                    ],
+                    'fixable' => true,
+                    'action' => 'normalize_order_detail_konsultan',
+                    'button_label' => 'Fix Konsultan Kosong',
+                ];
+            }
+        }
+
+        if ($dailyQsdRows->isEmpty()) {
+            $issues[] = [
+                'code' => 'DAILY_QSD_NOT_FOUND',
+                'severity' => 'secondary',
+                'title' => 'Data daily_qsd tidak ditemukan',
+                'message' => 'Compare invoice membaca dari daily_qsd, tapi invoice ini belum ada di daily_qsd.',
+                'fixable' => false,
+            ];
+        }
+
+        return [
+            'has_error' => !empty($issues),
+            'issues' => $issues,
+            'source' => [
+                'compare_table' => 'daily_qsd',
+                'compare_controller' => 'CompareInvoiceController::needCompareIndex',
+                'qsd_builder' => 'SalesDailyQSD',
+            ],
+            'invoice_value' => $invoiceValue,
+            'payment_check' => [
+                'total_pembayaran_real' => $totalPembayaranReal,
+                'nilai_pelunasan_invoice' => $nilaiPelunasanInvoice,
+                'difference' => $nilaiPelunasanDifference,
+            ],
+            'small_invoice_uploads' => $smallInvoiceUploads,
+            'daily_qsd_rows' => $dailyQsdRows->values(),
+            'order_detail_konsultan' => $orderDetailStats,
+        ];
     }
     public function checkSmallInvoiceSignature(Request $request)
     {

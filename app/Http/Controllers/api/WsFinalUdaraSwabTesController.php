@@ -29,8 +29,6 @@ class WsFinalUdaraSwabTesController extends Controller
 
     public function index(Request $request)
     {
-        $date = explode('-', $request->date);
-
         $data = OrderDetail::selectRaw('
             cfr,
             GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
@@ -50,9 +48,13 @@ class WsFinalUdaraSwabTesController extends Controller
                 'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
             ])
             ->where('is_active', true)
-            ->where('kategori_3', '46-Udara Swab Test')
+            ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
             ->where('status', 0)
-            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', $date[0])->whereMonth('tanggal_sampling', $date[1]))
+            ->when($request->from && $request->to, function ($q) use ($request) {
+                $from = $request->from . '-01';
+                $to = date('Y-m-t', strtotime($request->to . '-01'));
+                $q->whereBetween('tanggal_sampling', [$from, $to]);
+            })
             ->groupBy('cfr')
             ->orderBy('tanggal_sampling');
 
@@ -190,26 +192,26 @@ class WsFinalUdaraSwabTesController extends Controller
                         // 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
                         if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
 
-                        for ($i = 1; $i <= 16; $i++) {
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                             $k = "f_koreksi_c{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
 
                         // 2) C (tanpa nomor) lalu C1..C16
                         if ($has('C')) return $hasil['C'];
-                        for ($i = 1; $i <= 16; $i++) {
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                             $k = "C{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
 
                         // 3) f_koreksi_1..f_koreksi_17
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $k = "f_koreksi_{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
 
                         // 4) hasil1..hasil17
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $k = "hasil{$i}";
                             if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
                         }
