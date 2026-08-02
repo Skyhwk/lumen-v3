@@ -141,10 +141,10 @@ class SamplerTrackingService
         };
 
         $sessions = SamplerTrackingSession::with([
-                'activeMembers.events' => function ($query) {
-                    $query->orderBy('event_at')->orderBy('id');
-                },
-            ])
+            'activeMembers.events' => function ($query) {
+                $query->orderBy('event_at')->orderBy('id');
+            },
+        ])
             ->where('is_active', true)
             ->whereHas('activeMembers', $memberFilter)
             ->where(function ($query) use ($date, $hasSamplerFilter, $memberFilter) {
@@ -156,7 +156,7 @@ class SamplerTrackingService
                             ->whereHas('activeMembers', function ($memberQuery) use ($date, $memberFilter) {
                                 $memberFilter($memberQuery);
                                 $memberQuery->whereRaw(
-                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(sampler_tracking_members.effective_duration, ''), NULLIF(sampler_tracking_members.durasi_personal, ''), NULLIF(sampler_tracking_members.duration, ''), 0) AS SIGNED) - 1, 0) DAY) >= ?",
+                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(NULLIF(sampler_tracking_members.effective_duration, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.durasi_personal, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.duration, ''), '0'), 0) AS SIGNED) - 1, 0) DAY) >= ?",
                                     [$date]
                                 );
                                 $memberQuery->whereDoesntHave('events', function ($eventQuery) {
@@ -342,15 +342,19 @@ class SamplerTrackingService
         $data = $columns[$columnIndex]['data'] ?? 'tanggal_sampling';
 
         return $direction === 'desc'
-            ? $rows->sortByDesc(function ($row) use ($data) { return $row[$data] ?? ''; })
-            : $rows->sortBy(function ($row) use ($data) { return $row[$data] ?? ''; });
+            ? $rows->sortByDesc(function ($row) use ($data) {
+                return $row[$data] ?? '';
+            })
+            : $rows->sortBy(function ($row) use ($data) {
+                return $row[$data] ?? '';
+            });
     }
 
     protected function uniqueValues($values)
     {
         return collect($values)->filter(function ($value) {
-                return $value !== null && $value !== '' && $value !== '-';
-            })
+            return $value !== null && $value !== '' && $value !== '-';
+        })
             ->unique()
             ->values()
             ->all();
@@ -398,13 +402,13 @@ class SamplerTrackingService
     protected function teamRouteKey($date, $sessions)
     {
         $route = collect($sessions)->map(function ($session) {
-                return implode('~', [
-                    $session->jam_mulai ?: '-',
-                    $session->jam_selesai ?: '-',
-                    $session->no_order ?: ($session->no_quotation ?: '-'),
-                    $session->nama_perusahaan ?: '-',
-                ]);
-            })
+            return implode('~', [
+                $session->jam_mulai ?: '-',
+                $session->jam_selesai ?: '-',
+                $session->no_order ?: ($session->no_quotation ?: '-'),
+                $session->nama_perusahaan ?: '-',
+            ]);
+        })
             ->sort()
             ->values()
             ->implode('|');
@@ -883,6 +887,3 @@ class SamplerTrackingService
         return ((int) SamplerTrackingEvent::where('sampler_tracking_member_id', $memberId)->max('sequence_no')) + 1;
     }
 }
-
-
-
