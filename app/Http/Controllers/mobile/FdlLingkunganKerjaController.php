@@ -36,9 +36,9 @@ class FdlLingkunganKerjaController extends Controller
 {
     public function getSample(Request $request)
     {
-        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-            return $response;
-        }
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
 
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_kerja')->where('is_active', 1)->first();

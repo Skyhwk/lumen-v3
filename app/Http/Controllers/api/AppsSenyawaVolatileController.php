@@ -38,9 +38,9 @@ class AppsSenyawaVolatileController extends Controller
 {
     public function getSample(Request $request)
     {
-        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-            return $response;
-        }
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
 
         if (isset($request->no_sampel) && $request->no_sampel != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->whereIn('kategori_3', ['11-Udara Ambient', '27-Udara Lingkungan Kerja'])->where('is_active', true)->first();
