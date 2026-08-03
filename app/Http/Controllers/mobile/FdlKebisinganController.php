@@ -35,9 +35,9 @@ class FdlKebisinganController extends Controller
 {
     public function getSample(Request $request)
     {
-        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-            return $response;
-        }
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
 
         if (!empty($request->no_sample)) {
 
