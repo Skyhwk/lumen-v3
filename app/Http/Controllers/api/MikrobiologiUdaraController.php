@@ -26,16 +26,16 @@ class MikrobiologiUdaraController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = MicrobioHeader::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->is_approved)
+            ->where('microbio_header.is_approved', $request->is_approved)
             ->where('microbio_header.is_active', true)
-            ->where('template_stp', $request->template_stp)
+            ->where('microbio_header.template_stp', $request->template_stp)
             ->select('microbio_header.*')
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN microbio_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                microbio_header.tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
@@ -67,6 +67,18 @@ class MikrobiologiUdaraController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -81,9 +93,15 @@ class MikrobiologiUdaraController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("microbio_header.$columnName", 'like', "%{$searchValue}%");
                             }

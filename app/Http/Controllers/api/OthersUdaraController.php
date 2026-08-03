@@ -25,47 +25,71 @@ class OthersUdaraController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = Subkontrak::with('ws_value', 'order_detail')
-            ->where('is_approve', $request->approve)
+            ->leftJoin('order_detail', 'order_detail.no_sampel', '=', 'subkontrak.no_sampel')
+            ->where('subkontrak.is_approve', $request->approve)
             ->where('subkontrak.is_active', true)
-            ->where('category_id',4)
-            ->orderBy('subkontrak.created_at', 'desc');
+            ->where('subkontrak.category_id', 4)
+            ->select('subkontrak.*', 'order_detail.tanggal_terima')
+            ->orderByRaw("
+                    CASE
+                        WHEN order_detail.tanggal_terima IS NULL THEN 1
+                        ELSE 0
+                    END,
+                    order_detail.tanggal_terima DESC
+            ");
         return Datatables::of($data)
-            ->orderColumn('tanggal_terima', function ($query, $order) {
-                $query->orderBy('tanggal_terima', $order);
+            ->addColumn('tanggal_terima', function ($item) {
+                return $item->order_detail->tanggal_terima ?? '-';
             })
-            ->orderColumn('created_at', function ($query, $order) {
-                $query->orderBy('created_at', $order);
+
+            ->addColumn('kategori_3', function ($item) {
+                return $item->order_detail->kategori_3 ?? '-';
             })
-            ->orderColumn('no_sampel', function ($query, $order) {
-                $query->orderBy('no_sampel', $order);
+
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('tanggal_terima', 'like', "%{$keyword}%");
+                });
             })
+
+            ->filterColumn('kategori_3', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
                     foreach ($columns as $column) {
-                        if (isset($column['search']) && !empty($column['search']['value'])) {
+                        if (!empty($column['search']['value'])) {
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
-                            
-                            // Skip columns that aren't searchable
-                            if (isset($column['searchable']) && $column['searchable'] === 'false') {
-                                continue;
-                            }
-                            
-                            // Special handling for date fields
-                            if ($columnName === 'tanggal_terima') {
-                                // Assuming the search value is a date or part of a date
-                                $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
-                            } 
-                            // Handle created_at separately if needed
-                            elseif ($columnName === 'created_at') {
-                                $query->whereDate('created_at', 'like', "%{$searchValue}%");
-                            }
-                            // Standard text fields
-                            elseif (in_array($columnName, [
-                                'no_sampel', 'parameter', 'jenis_pengujian'
+
+                            if (in_array($columnName, [
+                                'no_sampel',
+                                'parameter',
+                                'jenis_pengujian',
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
-                                $query->where($columnName, 'like', "%{$searchValue}%");
+                                $query->where("subkontrak.$columnName", 'like', "%{$searchValue}%");
                             }
                         }
                     }
