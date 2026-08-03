@@ -33,10 +33,10 @@ class SpektroUvVisUdaraController extends Controller
             ->select('lingkungan_header.*')
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN lingkungan_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                lingkungan_header.tanggal_terima DESC
             ");
 
         return Datatables::of($data)
@@ -80,9 +80,15 @@ class SpektroUvVisUdaraController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("lingkungan_header.$columnName", 'like', "%{$searchValue}%");
                             }

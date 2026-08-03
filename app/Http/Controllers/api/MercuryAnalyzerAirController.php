@@ -30,7 +30,14 @@ class MercuryAnalyzerAirController extends Controller
             ->where('colorimetri.is_active', true)
             ->where('colorimetri.is_total', false)
             ->where('template_stp', $request->template_stp)
-            ->select('colorimetri.*');
+            ->select('colorimetri.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN colorimetri.tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                colorimetri.tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
@@ -66,9 +73,15 @@ class MercuryAnalyzerAirController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
                             }

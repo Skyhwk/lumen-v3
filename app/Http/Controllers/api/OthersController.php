@@ -71,9 +71,15 @@ class OthersController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
+                                'approved_by',
+                                'approved_at',
                                 'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("subkontrak.$columnName", 'like', "%{$searchValue}%");
                             }

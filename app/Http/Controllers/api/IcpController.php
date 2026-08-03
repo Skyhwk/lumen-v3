@@ -36,10 +36,10 @@ class IcpController extends Controller
                 ->select('colorimetri.*')
                 ->orderByRaw("
                     CASE 
-                        WHEN tanggal_terima IS NULL THEN 1
-                        ELSE 0
-                    END,
-                    tanggal_terima DESC
+                        WHEN colorimetri.tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                colorimetri.tanggal_terima DESC
                 ");
 
             return Datatables::of($data)
@@ -78,12 +78,18 @@ class IcpController extends Controller
 
                                 // HANYA BOLEH FILTER KOLOM colorimetri
                                 if (in_array($columnName, [
-                                    'parameter',
-                                    'jenis_pengujian',
-                                    'created_at'
-                                ])) {
-                                    $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
-                                }
+                                'no_sampel',
+                                'parameter',
+                                'jenis_pengujian',
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
+                            ])) {
+                                $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
+                            }
 
                             }
                         }

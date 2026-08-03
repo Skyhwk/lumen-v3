@@ -34,10 +34,10 @@ class TitrimetriController extends Controller
             ->select('titrimetri.*')
                 ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN titrimetri.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                titrimetri.tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
@@ -74,9 +74,15 @@ class TitrimetriController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("titrimetri.$columnName", 'like', "%{$searchValue}%");
                             }
