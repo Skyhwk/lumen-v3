@@ -154,7 +154,7 @@ class FdlGetaranPersonalController extends Controller
                 if ($request->adaptor != '') $data->adaptor                     = $request->adaptor;
                 $data->pengukuran                                               = json_encode($pengukuran);
                 if (isset($request->ke)) $data->bobot_frekuensi                 = json_encode(["ke" => $request->ke, "kd" => $request->kd, "kf" => $request->kf]);
-                if ($request->koordinat_pengukuran != '') $data->posisi_pengukuran = $request->koordinat_pengukuran;
+                if ($request->posisi_pengukuran != '') $data->posisi_pengukuran = $request->posisi_pengukuran;
                 if ($request->permission != '') $data->permission                   = $request->permission;
                 if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
                 if ($request->foto_lain != '') $data->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
