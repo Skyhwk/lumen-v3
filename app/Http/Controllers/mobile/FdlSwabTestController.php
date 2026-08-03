@@ -39,7 +39,11 @@ class FdlSwabTestController extends Controller
 
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'swab_test')->where('is_active', 1)->first();
-            $listParameter = json_decode($parameter->parameters, true);
+            $parameterUdaraSwab = ParameterFdl::select('parameters')->where('nama_fdl', 'udara_swab')->where('is_active', 1)->first();
+            
+            $listParameter1 = $parameter ? (json_decode($parameter->parameters, true) ?? []) : [];
+            $listParameter2 = $parameterUdaraSwab ? (json_decode($parameterUdaraSwab->parameters, true) ?? []) : [];
+            $listParameter = array_unique(array_merge($listParameter1, $listParameter2));
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
             ->where(function ($q) use ($listParameter) {
                 foreach ($listParameter as $keyword) {
