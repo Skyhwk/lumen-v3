@@ -85,9 +85,9 @@ class FdlGetaranPersonalController extends Controller
                         'message' => 'Jam pengambilan tidak boleh kosong .!'
                     ], 401);
                 }
-                if ($request->foto_alat == '') {
+                if ($request->foto_lokasi_sampel == '') {
                     return response()->json([
-                        'message' => 'Foto alat saat digunakan tidak boleh kosong .!'
+                        'message' => 'Foto lokasi sampling tidak boleh kosong .!'
                     ], 401);
                 }
 
