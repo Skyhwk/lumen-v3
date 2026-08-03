@@ -739,6 +739,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
             $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan', 'detail')
                 ->whereIn('no_sampel', $no_sampel)
+                ->where('is_active', true)
                 ->get();
 
             if ($lapangan->isNotEmpty()) {
