@@ -63,7 +63,7 @@ class TqcEmisiKendaraanController extends Controller
             ->make(true);
     }
 
-  public function handleApproveSelected(Request $request)
+    public function handleApproveSelected(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -87,7 +87,8 @@ class TqcEmisiKendaraanController extends Controller
             ], 500);
         }
     }
-  public function handleRejectSelected(Request $request)
+
+    public function handleRejectSelected(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -111,6 +112,7 @@ class TqcEmisiKendaraanController extends Controller
             ], 500);
         }
     }
+    
     public function getTrend(Request $request)
     {
         $orderDetails = OrderDetail::where('cfr', $request->cfr)
@@ -120,7 +122,7 @@ class TqcEmisiKendaraanController extends Controller
 
         $data = [];
         foreach ($orderDetails as $orderDetail) {
-            $emisiOrder = DataLapanganEmisiOrder::where('no_sampel', $orderDetail->no_sampel)->first() ?? null;
+            $emisiOrder = DataLapanganEmisiOrder::where('no_sampel', $orderDetail->no_sampel)->where('is_active', 1)->first() ?? null;
             
             if(!$emisiOrder){
                 continue;
@@ -129,16 +131,18 @@ class TqcEmisiKendaraanController extends Controller
             $id_kendaraan = $emisiOrder->id_kendaraan;
 
             $idFdlList = DataLapanganEmisiOrder::where('id_kendaraan', $id_kendaraan)
+                ->where('is_active', 1)
                 ->pluck('id_fdl')->toArray();
 
             $dataLapanganEmisiKendaraan = DataLapanganEmisiKendaraan::whereIn('id', $idFdlList)->get();
 
             $mapHasil = fn($col) => $col->values()
                 ->map(fn($hasil_uji) => json_encode([
-                    'co2' => $hasil_uji->co2,
-                    'co'  => $hasil_uji->co,
-                    'hc'  => $hasil_uji->hc,
-                    'o2'  => $hasil_uji->o2,
+                    'co2'       => $hasil_uji->co2,
+                    'co'        => $hasil_uji->co,
+                    'hc'        => $hasil_uji->hc,
+                    'o2'        => $hasil_uji->o2,
+                    'opasitas'  => $hasil_uji->opasitas,
                 ]))
                 ->toArray();
 
