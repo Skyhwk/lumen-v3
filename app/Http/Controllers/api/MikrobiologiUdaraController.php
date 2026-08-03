@@ -26,9 +26,9 @@ class MikrobiologiUdaraController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = MicrobioHeader::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->is_approved)
+            ->where('microbio_header.is_approved', $request->is_approved)
             ->where('microbio_header.is_active', true)
-            ->where('template_stp', $request->template_stp)
+            ->where('microbio_header.template_stp', $request->template_stp)
             ->select('microbio_header.*')
             ->orderByRaw("
                 CASE 
@@ -64,6 +64,18 @@ class MikrobiologiUdaraController extends Controller
             ->filterColumn('kategori_3', function ($query, $keyword) {
                 $query->whereHas('order_detail', function ($query) use ($keyword) {
                     $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
                 });
             })
 

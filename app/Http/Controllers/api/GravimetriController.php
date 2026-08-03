@@ -27,10 +27,10 @@ class GravimetriController extends Controller
     public function index(Request $request)
     {
         $data = Gravimetri::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('gravimetri.is_approved', $request->approve)
             ->where('gravimetri.is_active', true)
             ->where('gravimetri.is_total', false)
-            ->where('template_stp', $request->template_stp)
+            ->where('gravimetri.template_stp', $request->template_stp)
             ->select('gravimetri.*')
             ->orderByRaw("
                 CASE 
@@ -57,6 +57,18 @@ class GravimetriController extends Controller
             ->filterColumn('kategori_3', function ($query, $keyword) {
                 $query->whereHas('order_detail', function ($query) use ($keyword) {
                     $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
                 });
             })
 

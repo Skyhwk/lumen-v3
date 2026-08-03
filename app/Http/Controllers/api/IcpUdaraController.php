@@ -16,9 +16,9 @@ class IcpUdaraController extends Controller
 {
     public function index(Request $request){
         $data = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
-            ->where('is_approved', $request->approve)
+            ->where('lingkungan_header.is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
-            ->where('template_stp', $request->template_stp)
+            ->where('lingkungan_header.template_stp', $request->template_stp)
             ->select('lingkungan_header.*')
             ->orderByRaw("
                 CASE 
@@ -55,6 +55,16 @@ class IcpUdaraController extends Controller
             ->filterColumn('kategori_3', function ($query, $keyword) {
                 $query->whereHas('order_detail', function ($query) use ($keyword) {
                     $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
                 });
             })
             ->filter(function ($query) use ($request) {

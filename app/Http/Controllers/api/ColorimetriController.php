@@ -27,10 +27,10 @@ class ColorimetriController extends Controller
     public function index(Request $request)
     {
         $data = Colorimetri::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('colorimetri.is_approved', $request->approve)
             ->where('colorimetri.is_active', true)
             ->where('colorimetri.is_total', false)
-            ->where('template_stp', $request->template_stp)
+            ->where('colorimetri.template_stp', $request->template_stp)
             ->select('colorimetri.*')
             ->orderByRaw("
                 CASE 
@@ -57,6 +57,18 @@ class ColorimetriController extends Controller
             ->filterColumn('kategori_3', function ($query, $keyword) {
                 $query->whereHas('order_detail', function ($query) use ($keyword) {
                     $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
                 });
             })
 

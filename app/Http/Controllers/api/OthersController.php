@@ -57,6 +57,18 @@ class OthersController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
