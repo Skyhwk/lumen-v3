@@ -151,7 +151,7 @@ class FdlGetaranPersonalController extends Controller
                 if ($request->lokasi_unit != '') $data->lokasi_unit             = $request->lokasi_unit;
                 if ($request->alat_ukur != '') $data->alat_ukur                 = $request->alat_ukur;
                 if ($request->durasi_pengukuran != '') $data->durasi_pengukuran = $request->durasi_pengukuran;
-                if ($request->adaptor != '') $data->adaptor                     = $request->adaptor;
+                if ($request->set_adaptor != '') $data->adaptor                     = $request->set_adaptor;
                 $data->pengukuran                                               = json_encode($pengukuran);
                 if (isset($request->ke)) $data->bobot_frekuensi                 = json_encode(["ke" => $request->ke, "kd" => $request->kd, "kf" => $request->kf]);
                 if ($request->posisi_pengukuran != '') $data->posisi_pengukuran = $request->posisi_pengukuran;
