@@ -203,6 +203,34 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
                 return $hasilUji;
             };
 
+			$parameterHasKoreksi = [
+				"SO2",
+				"SO2 (6 Jam)",
+				"SO2 (8 Jam)",
+				"SO2 (24 Jam)",
+				"NO2",
+				"NO2 (6 Jam)",
+				"NO2 (8 Jam)",
+				"NO2 (24 Jam)",
+				"O3",
+				"O3 (8 Jam)",
+				"TSP",
+				"TSP (6 Jam)",
+				"TSP (24 Jam)",
+				"TSP (8 Jam)",
+				"PM 10",
+				"PM 10 (8 Jam)",
+				"PM 10 (24 Jam)",
+				"PM 2.5 (8 Jam)",
+				"PM 2.5 (24 Jam)",
+				"PM 2.5",
+				"CO",
+				"C O",
+				"CO (24 Jam)",
+				"CO (8 Jam)",
+				"CO (6 Jam)",
+			];
+
 			return Datatables::of($processedData)
 				->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
 					// ambil satuan dan index (boleh null)
@@ -294,6 +322,11 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					}
 
 					return '-';
+				})->addColumn("koreksi_udara", function($item) use ($parameterHasKoreksi) {
+					return $parameterHasKoreksi;
+				})->addColumn("index_satuan", function($item) use ($getSatuan) {
+					$satuan = $item->satuan ?? null;
+					return $getSatuan->udara($satuan);
 				})
 				->make(true);
 		} catch (\Throwable $th) {
