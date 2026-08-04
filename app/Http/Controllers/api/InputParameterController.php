@@ -3323,12 +3323,12 @@ class InputParameterController extends Controller
 				
 				WsValueUdara::create($data_udara);
 
-				$data_kalkulasi['lingkungan_header_id'] = $data->id;
-				$data_kalkulasi['tanggal_terima']       = $tgl_terima;
-				$data_kalkulasi['no_sampel']            = $request->no_sample;
-				unset($data_kalkulasi['satuan']);
+				// $data_kalkulasi['lingkungan_header_id'] = $data->id;
+				// $data_kalkulasi['tanggal_terima']       = $tgl_terima;
+				// $data_kalkulasi['no_sampel']            = $request->no_sample;
+				// unset($data_kalkulasi['satuan']);
 				
-				WsValueLingkungan::create($data_kalkulasi);
+				// WsValueLingkungan::create($data_kalkulasi);
 
 				DB::commit();
 				return (object)[
