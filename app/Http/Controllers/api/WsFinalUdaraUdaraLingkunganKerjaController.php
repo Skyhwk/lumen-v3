@@ -130,9 +130,286 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
     public function detail(Request $request)
     {
         try {
-            $data = app(WsFinalUdaraLingkunganKerjaDetailService::class)->buildDetail($request);
+            $parameters     = json_decode(html_entity_decode($request->parameter), true);
+            $parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
+            // ERGONOMI
+            if ($parameterArray[1] == 'Ergonomi') {
+                $data = ErgonomiHeader::with('datalapangan')
+                    ->where('no_sampel', $request->no_sampel)
+                    ->where('is_approve', true)
+                    ->where('is_active', true)
+                    ->select('*') // pastikan select ada
+                    ->addSelect(DB::raw("'ergonomi' as data_type"));
+                return Datatables::of($data)->make(true);
+            } else if ($parameterArray[1] == 'Sinar UV') {
+                $data = SinarUvHeader::with('datalapangan', 'ws_udara', "order_detail")
+                    ->where('no_sampel', $request->no_sampel)
+                    ->where('is_approved', true)
+                    ->where('is_active', true)
+                    ->select('*')
+                    ->addSelect(DB::raw("'sinar_uv' as data_type"))
+                    ->get();
+                foreach ($data as $item) {
+                    $waktu = $item->datalapangan->waktu_pemaparan ?? null;
+                    if ($waktu !== null) {
+                        if ($waktu >= 1 && $waktu < 5) {
+                            $item->nab = 0.05;
+                        } elseif ($waktu >= 5 && $waktu < 10) {
+                            $item->nab = 0.01;
+                        } elseif ($waktu >= 10 && $waktu < 15) {
+                            $item->nab = 0.005;
+                        } elseif ($waktu >= 15 && $waktu < 30) {
+                            $item->nab = 0.0033;
+                        } elseif ($waktu >= 30 && $waktu < 60) {
+                            $item->nab = 0.0017;
+                        } elseif ($waktu >= 60 && $waktu < 120) {
+                            $item->nab = 0.0008;
+                        } elseif ($waktu >= 120 && $waktu < 240) {
+                            $item->nab = 0.0004;
+                        } elseif ($waktu >= 240 && $waktu < 480) {
+                            $item->nab = 0.0002;
+                        } elseif ($waktu >= 480) {
+                            $item->nab = 0.0001;
+                        } else {
+                            $item->nab = null;
+                        }
+                    } else {
+                        $item->nab = null;
+                    }
+                    $regulasi     = json_decode($item->order_detail->regulasi);
+                    $item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
+                }
+                return Datatables::of($data)->make(true);
+            } else if ($parameterArray[1] == 'Medan Magnit Statis' || $parameterArray[1] == 'Medan Listrik' || $parameterArray[1] == 'Power Density') {
+                $data = MedanLmHeader::with('datalapangan', 'ws_udara')
+                    ->where('no_sampel', $request->no_sampel)
+                    ->where('is_approve', true)
+                    ->where('is_active', true)
+                    ->select('*')
+                    ->addSelect(DB::raw("'medan_lm' as data_type"))->get();
+                foreach ($data as $item) {
+                    $regulasi     = json_decode($item->orderDetail->regulasi);
+                    $item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
+                }
+                return Datatables::of($data)->make(true);
+            }
+            $directData = DirectLainHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'direct' as data_type"))
+                ->get();
+            $partikulat = PartikulatHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'partikulat' as data_type"))
+                ->get();
+            $lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'lingkungan' as data_type"))
+                ->get();
+            $subkontrak = Subkontrak::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+                ->addSelect(DB::raw("'subKontrak' as data_type"))
+                ->get();
+            $microbio = MicrobioHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'microbio' as data_type"))
+                ->get();
+            $debuPersonal = DebuPersonalHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('is_active', 1)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'debu_personal' as data_type"))
+                ->get();
+            $combinedData = collect()
+                ->merge($lingkunganData)
+                ->merge($subkontrak)
+                ->merge($partikulat)
+                ->merge($directData)
+                ->merge($microbio)
+                ->merge($debuPersonal);
+            $processedData = $combinedData->map(function ($item) {
+                switch ($item->data_type) {
+                    case 'lingkungan':
+                        $item->source = 'Lingkungan';
+                        break;
+                    case 'subKontrak':
+                        $item->source = 'Subkontrak';
+                        break;
+                    case 'direct':
+                        $item->source = 'Direct Lain';
+                        break;
+                    case 'partikulat':
+                        $item->source = 'Partikulat';
+                        break;
+                    case 'microbio':
+                        $item->source = 'Mikrobiologi';
+                        break;
+                    case 'debu_personal':
+                        $item->source = 'Debu Personal';
+                        break;
+                }
+                return $item;
+            });
+            // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
+            $id_regulasi = $request->regulasi;
+            foreach ($processedData as $item) {
+                $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
+                    ->select('durasi_pengambilan')
+                    ->where('parameter', $item->parameter)
+                    ->first();
+                $bakuMutu = MasterBakumutu::where("parameter", $item->parameter)
+                    ->where('id_regulasi', $id_regulasi)
+                    ->where('is_active', 1)
+                    ->select('baku_mutu', 'satuan', 'method', 'nama_header')
+                    ->first();
+                $item->durasi      = $dataLapangan->durasi_pengambilan ?? null;
+                $item->satuan      = $bakuMutu->satuan ?? null;
+                $item->baku_mutu   = $bakuMutu->baku_mutu ?? null;
+                $item->method      = $bakuMutu->method ?? null;
+                $item->nama_header = $bakuMutu->nama_header ?? null;
+            }
+            $getSatuan = new HelperSatuan;
+            $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    }
+                }
+                return $hasilUji;
+            };
 
-            return Datatables::of($data)->make(true);
+            $parameterHasKoreksi = [
+				"SO2",
+				"SO2 (6 Jam)",
+				"SO2 (8 Jam)",
+				"SO2 (24 Jam)",
+				"NO2",
+				"NO2 (6 Jam)",
+				"NO2 (8 Jam)",
+				"NO2 (24 Jam)",
+				"O3",
+				"O3 (8 Jam)",
+				"TSP",
+				"TSP (6 Jam)",
+				"TSP (24 Jam)",
+				"TSP (8 Jam)",
+				"PM 10",
+				"PM 10 (8 Jam)",
+				"PM 10 (24 Jam)",
+				"PM 2.5 (8 Jam)",
+				"PM 2.5 (24 Jam)",
+				"PM 2.5",
+				"CO",
+				"C O",
+				"CO (24 Jam)",
+				"CO (8 Jam)",
+				"CO (6 Jam)",
+			];
+            return Datatables::of($processedData)
+                ->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
+                    // ambil satuan dan index (boleh null)
+                    $satuan = $item->satuan ?? null;
+                    $index  = $getSatuan->udara($satuan);
+                    // pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
+                    $source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+                    if (! $source) {
+                        return 'noWs';
+                    }
+                    // pastikan array
+                    $hasil = is_array($source) ? $source : $source->toArray();
+                    // helper kecil: cek tersedia dan tidak kosong
+                    $has = function ($key) use ($hasil) {
+                        return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
+                    };
+                    // jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
+                    if ($index === null) {
+                        // 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
+                        if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
+                            $k = "f_koreksi_c{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
+                        // 2) C (tanpa nomor) lalu C1..C16
+                        if ($has('C')) return $getHasilUji(1, $item->id_parameter, $hasil['C']);
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
+                            $k = "C{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
+                        // 3) f_koreksi_1..f_koreksi_17
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
+                            $k = "f_koreksi_{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
+                        // 4) hasil1..hasil17
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
+                            $k = "hasil{$i}";
+                            if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+                        }
+                        // kalau semua gagal
+                        return '-';
+                    }
+                    // bila index diketahui, cek urutan preferensi khusus index itu
+                    $keysToTry = [
+                        "f_koreksi_{$index}",
+                        "hasil{$index}",
+                        "f_koreksi_c{$index}",
+                        "C{$index}",
+                    ];
+                   if ($index == 17) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    } elseif ($index == 15) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    } elseif ($index == 16) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    } else {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                        foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+                            if ($has($k) && $hasil[$k] !== null && $hasil[$k] !== '') return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+                        }
+                    }
+                    return '-';
+                })->addColumn("koreksi_udara", function($item) use ($parameterHasKoreksi) {
+					return $parameterHasKoreksi;
+				})->addColumn("index_satuan", function($item) use ($getSatuan) {
+					$satuan = $item->satuan ?? null;
+					return $getSatuan->udara($satuan);
+				})
+                ->make(true);
         } catch (\Throwable $th) {
             return response()->json(
                 [
