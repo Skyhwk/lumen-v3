@@ -212,7 +212,7 @@ class FdlSensoricPMController extends Controller
 
                             // Jika parameter yang sama dan shift sudah ada, tidak perlu disimpan lagi
                             if (in_array($request->shift_pengambilan[$en], $nilai_array)) {
-                                continue 2;  // Skip jika shift sudah ada
+                                return response()->json(['message' => "Shift {$request->shift_pengambilan[$en]} pada Parameter {$ab} sudah terinput di no sample ini oleh {$value->created_by} .!"], 401);
                             }
                         }
                     }
