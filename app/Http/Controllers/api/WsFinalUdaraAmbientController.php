@@ -1167,8 +1167,6 @@ class WsFinalUdaraAmbientController extends Controller
 		}
 	}
 
-
-
 	public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
 	{
 
