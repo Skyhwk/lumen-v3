@@ -1056,135 +1056,101 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
     public function KalkulasiKoreksi(Request $request)
     {
         try {
-            $type_koreksi = $request->type;
-            $id = $request->id;
-            $no_sampel = $request->no_sampel;
-            $parameter = $request->parameter;
+            $id             = $request->id;
+            $no_sampel      = $request->no_sampel;
+            $parameter      = $request->parameter;
             $faktor_koreksi = (float) $request->faktor_koreksi;
-            // Ambil hasil_c sampai hasil_c16 secara dinamis
-            $hasilC = [];
-            for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
-                $key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
-                $hasilC[$i] = html_entity_decode($request->$key ?? '');
+			
+            $index_satuan = $request->index_satuan;
+            $keyToFetch = 'hasil' . $index_satuan;
+            $inputValue = html_entity_decode($request->$keyToFetch ?? '');
+
+            $hasilKalkulasi = $this->hitungKoreksi($request, $no_sampel, $faktor_koreksi, $parameter, $inputValue, $index_satuan);
+
+            if (is_numeric($hasilKalkulasi)) {
+                $hasilKalkulasi = number_format((float) $hasilKalkulasi, 4, '.', '');
             }
-            $hasil = $this->hitungKoreksi($request, $type_koreksi, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilC);
-            // Format hasil menjadi 4 angka di belakang koma jika numerik
-            foreach ($hasil as $key => $val) {
-                if (is_numeric($val)) {
-                    $hasil[$key] = number_format((float) $val, 4, '.', '');
-                }
-            }
-            return response()->json(['hasil' => $hasil]);
+
+            return response()->json([
+                'hasil' => [
+                    $keyToFetch => $hasilKalkulasi
+                ]
+            ]);
         } catch (\Exception $e) {
             \Log::error('Error dalam KalkulasiKoreksi: ' . $e->getMessage());
             return response()->json(['error' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
         }
     }
-    private function hitungKoreksi($request, $type_koreksi, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilC)
+
+    private function hitungKoreksi($request, $no_sampel, $faktor_koreksi, $parameter, $inputValue, $index_satuan)
     {
         try {
-            return $this->rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilC);
+            return $this->rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $inputValue, $index_satuan);
         } catch (\Exception $e) {
             \Log::error('Error dalam hitungKoreksi: ' . $e->getMessage());
             throw $e;
         }
     }
 
-    public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, array $hasilC)
+    public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $inputValue, $index_satuan)
     {
         $po = OrderDetail::where('no_sampel', $no_sampel)
             ->where('is_active', 1)
             ->where('parameter', 'like', '%' . $parameter . '%')
             ->first();
+            
         try {
-            // Fungsi bantu
-            function removeSpecialChars($value)
-            {
-                return is_string($value) ? str_replace('<', '', $value) : $value;
+            if ($inputValue === null || $inputValue === '' || $inputValue === '-') {
+                return null;
             }
-            function cekSpecialChar($value)
-            {
-                return is_string($value) && strpos($value, '<') !== false;
+
+            $cleaned = is_string($inputValue) ? str_replace('<', '', $inputValue) : $inputValue;
+            $num = floatval($cleaned);
+            if (is_nan($num)) return null;
+
+            $cekSpecialChar = is_string($inputValue) && strpos($inputValue, '<') !== false;
+            
+            if ($cekSpecialChar) {
+                $result = (($num / 0.3856) * ($faktor_koreksi / 100)) + ($num / 0.3856);
+            } else {
+                $result = ($num * ($faktor_koreksi / 100)) + $num;
             }
-            function applyFormula($value, float $factor)
-            {
-                $cleaned = removeSpecialChars($value);
-                if ($cleaned === null || $cleaned === '') {
-                    return null;
-                }
-                $num = floatval($cleaned);
-                if (is_nan($num)) {
-                    return null;
-                }
-                if (cekSpecialChar($value)) {
-                    $result = ($num / 0.3856) * ($factor / 100) + $num / 0.3856;
-                } else {
-                    $result = $num * ($factor / 100) + $num;
-                }
-                return $result;
-            }
-            // Hitung hasil untuk semua C
-            $hasil = [];
-            foreach ($hasilC as $i => $val) {
-                // kalau index 0 -> hasilc, sisanya hasilc1, hasilc2, dst.
-                $key = $i === 0 ? 'hasilc' : "hasilc{$i}";
-                if ($val === null || $val === '' || $val === '-') {
-                    $hasil[$key] = null;
-                } else {
-                    $hasil[$key] = applyFormula($val, $faktor_koreksi);
-                }
-            }
-            // Contoh kondisi O3
-            if ($parameter == 'O3' || $parameter == 'O3 (8 Jam)') {
-                if ($hasil['hasilc'] < 0.1419) {
-                    $hasil['hasilc'] = '<0.1419';
-                }
-                if ($hasil['hasilc1'] < 0.00014) {
-                    $hasil['hasilc1'] = '<0.00014';
-                }
-                if ($hasil['hasilc2'] < 0.00007) {
-                    $hasil['hasilc2'] = '<0.00007';
-                }
-            }
-            if ($parameter == 'C O' || $parameter == 'CO' || $parameter == 'CO (8 Jam)' || $parameter == 'CO (24 Jam)' || $parameter == 'CO (6 Jam)') {
-                if ($hasil['hasilc2'] < 0.01) {
-                    $hasil['hasilc2'] = '<0.01';
-                }
-                if ($hasil['hasilc15'] < 11.45) {
-                    $hasil['hasilc15'] = '<11.45';
-                }
-                if ($hasil['hasilc16'] < 0.01145) {
-                    $hasil['hasilc16'] = '<0.01145';
-                }
-            }
-            if ($parameter == 'SO2' || $parameter == 'SO2 (6 Jam)' || $parameter == 'SO2 (8 Jam)' || $parameter == 'SO2 (24 Jam)') {
-                if ($hasil['hasilc'] < 25.91) {
-                    $hasil['hasilc'] = '<25.91';
-                }
-                if ($hasil['hasilc2'] < 0.00082) {
-                    $hasil['hasilc2'] = '<0.00082';
-                }
-                if ($hasil['hasilc16'] < 0.0259) {
-                    $hasil['hasilc16'] = '<0.0259';
-                }
-            }
-            if ($parameter == 'NO2' || $parameter == 'NO2 (6 Jam)' || $parameter == 'NO2 (8 Jam)' || $parameter == 'NO2 (24 Jam)') {
-                if ($hasil['hasilc'] < 5.83) {
-                    $hasil['hasilc'] = '<5.83';
-                }
-                if ($hasil['hasilc2'] < 0.00025) {
-                    $hasil['hasilc2'] = '<0.00025';
-                }
-                if ($hasil['hasilc16'] < 0.00583) {
-                    $hasil['hasilc16'] = '<0.00583';
-                }
-            }
-            return $hasil;
+
+			// Kondisi spesifik parameter O3
+			if (in_array($parameter, ['O3', 'O3 (8 Jam)'])) {
+				if ($index_satuan == 1 && $result < 0.1419) $result = '<0.1419';
+				if ($index_satuan == 2 && $result < 0.00014) $result = '<0.00014';
+				if ($index_satuan == 3 && $result < 0.00007) $result = '<0.00007';
+			}
+
+			// Kondisi spesifik parameter CO
+			if (in_array($parameter, ['C O', 'CO', 'CO (8 Jam)', 'CO (24 Jam)', 'CO (6 Jam)'])) {
+				if ($index_satuan == 3 && $result < 0.01) $result = '<0.01';
+				if ($index_satuan == 16 && $result < 11.45) $result = '<11.45';
+				if ($index_satuan == 17 && $result < 0.01145) $result = '<0.01145';
+			}
+
+			// Kondisi spesifik parameter SO2
+            if (in_array($parameter, ['SO2', 'SO2 (6 Jam)', 'SO2 (8 Jam)', 'SO2 (24 Jam)'])) {
+				if ($index_satuan == 1 && $result < 25.91) $result = '<25.91';
+				if ($index_satuan == 3 && $result < 0.00082) $result = '<0.00082';
+				if ($index_satuan == 17 && $result < 0.0259) $result = '<0.0259';
+			}
+
+			// Kondisi spesifik parameter NO2
+            if (in_array($parameter, ['NO2', 'NO2 (6 Jam)', 'NO2 (8 Jam)', 'NO2 (24 Jam)'])) {
+				if ($index_satuan == 1 && $result < 5.83) $result = '<5.83';
+				if ($index_satuan == 3 && $result < 0.00025) $result = '<0.00025';
+				if ($index_satuan == 17 && $result < 0.00583) $result = '<0.00583';
+			}
+
+            return $result;
         } catch (\Exception $e) {
             \Log::error('Error in rumusUdara: ' . $e->getMessage());
-            return ['error' => 'Terjadi kesalahan saat memproses data'];
+            return null;
         }
     }
+
     // ========================
     // 🔽 SAVE DATA SECTION 🔽
     // ========================
@@ -1192,22 +1158,20 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
     public function saveData(Request $request)
     {
         $kategori_koreksi = $request->kategori;
-        $id = $request->id;
-        $no_sampel = $request->no_sampel;
-        $parameter = $request->parameter;
-        $faktor_koreksi = (float) $request->faktor_koreksi;
-        // Ambil hasil_c sampai hasil_c19
-        $hasilC = [];
-        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
-            $key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
-            $hasilC[$i] = $request->$key ?? null;
-        }
+        $id               = $request->id;
+        $no_sampel        = $request->no_sampel;
+        $parameter        = $request->parameter;
+        $faktor_koreksi   = (float) $request->faktor_koreksi;
+        
+        $index_satuan = $request->index_satuan;
+        $keyToFetch = 'f_koreksi_' . $index_satuan;
+        $hasilKoreksi = $request->$keyToFetch ?? null;
+
         if ($kategori_koreksi) {
             switch ($kategori_koreksi) {
                 case '11':
                 case '27':
-                    $udara = LingkunganHeader::with('ws_value_linkungan')->where('no_sampel', $no_sampel)->where('is_active', 1)->first();
-                    return $this->handleLingkungan($request, $no_sampel, $parameter, $hasilC, $udara, $faktor_koreksi);
+                    return $this->handleLingkungan($request, $no_sampel, $parameter, $hasilKoreksi, $faktor_koreksi, $index_satuan);
                 default:
                     return response()->json(['message' => 'Type koreksi tidak valid.'], 400);
             }
@@ -1215,7 +1179,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             return response()->json(['message' => 'Type koreksi harus diisi.'], 400);
         }
     }
-    private function handleLingkungan($request, $no_sampel, $parameter, $hasilC, $udara, $faktor_koreksi)
+
+    private function handleLingkungan($request, $no_sampel, $parameter, $hasilKoreksi, $faktor_koreksi, $index_satuan)
     {
         try {
             DB::beginTransaction();
@@ -1223,18 +1188,22 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 ->where('is_active', 1)
                 ->where('parameter', 'like', '%' . $parameter . '%')
                 ->first();
-            if (!$po) {
-                return response()->json(['message' => 'Data tidak ditemukan di kategori AIR.'], 404);
+            if (! $po) {
+                return response()->json(['message' => 'Data tidak ditemukan di kategori Udara.'], 404);
             }
             $lingkungan = LingkunganHeader::where('no_sampel', $no_sampel)->where('parameter', $parameter)->where('is_active', 1)->first();
             if (!$lingkungan) {
                 return response()->json(['message' => 'Data Lingkungan tidak ditemukan.'], 404);
             }
-            $valuews = WsValueLingkungan::where('no_sampel', $no_sampel)->where('lingkungan_header_id', $lingkungan->id)->where('is_active', 1)->first();
-            $wsUdara = WsValueUdara::where('no_sampel', $no_sampel)->where('id_lingkungan_header', $lingkungan->id)->where('is_active', 1)->first();
-            if (!$valuews || !$wsUdara) {
-                return response()->json(['message' => 'Data Valuews tidak ditemukan.'], 404);
+            
+            $wsUdara = WsValueUdara::where('no_sampel', $no_sampel)
+                ->where('id_lingkungan_header', $lingkungan->id)
+                ->where('is_active', 1)
+                ->first();
+            if (! $wsUdara) {
+                return response()->json(['message' => 'Data pada ws final tidak ditemukan.'], 404);
             }
+
             $nomor = $lingkungan->tipe_koreksi ? ($lingkungan->tipe_koreksi < 5 ? $lingkungan->tipe_koreksi + 1 : 5) : 1;
             if ($nomor > 5) {
                 return response()->json(['message' => 'Koreksi tidak bisa dilakukan lagi.'], 400);
@@ -1242,30 +1211,18 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             $lingkungan->tipe_koreksi = $nomor;
             $lingkungan->input_koreksi = $faktor_koreksi;
             $lingkungan->save();
-            // Simpan hasil C0–C16 di ws lingkungan
-            foreach ($hasilC as $i => $val) {
-                // ubah "-" atau string kosong jadi null
-                if ($val === '-' || $val === '' || $val === null) {
-                    $val = null;
-                } elseif (!str_contains((string) $val, '<') && is_numeric($val)) {
-                    $val = number_format((float) $val, 4, '.', '');
-                }
-                $col = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
-                $valuews->$col = $val;
+            
+            $val = $hasilKoreksi;
+            if ($val === '-' || $val === '' || $val === null) {
+                $val = null;
+            } elseif (! str_contains((string) $val, '<') && is_numeric($val)) {
+                $val = number_format((float) $val, 4, '.', '');
             }
-            // Simpan hasil C0–C16 di ws udara
-            foreach ($hasilC as $i => $val) {
-                if ($val === '-' || $val === '' || $val === null) {
-                    $val = null;
-                } elseif (!str_contains((string) $val, '<') && is_numeric($val)) {
-                    $val = number_format((float) $val, 4, '.', '');
-                }
-                $col = 'f_koreksi_' . ($i + 1); // index 0 → f_koreksi_1
-                $wsUdara->$col = $val;
-            }
-            $valuews->input_koreksi = $faktor_koreksi;
-            $valuews->save();
+
+            $colUdara = 'f_koreksi_' . $index_satuan; 
+            $wsUdara->$colUdara = $val;
             $wsUdara->save();
+
             DB::commit();
             return response()->json(['message' => 'Data berhasil diupdate.', 'status' => 200, 'success' => true], 200);
         } catch (\Exception $ex) {
