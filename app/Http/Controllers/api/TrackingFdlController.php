@@ -107,14 +107,23 @@ class TrackingFdlController extends Controller
     
     public function getNotInputtedFdl(Request $request) {
         try {
-            $data = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1', 'no_quotation')
+            $now = Carbon::now();
+            $isCurrentMonth = ((int) $request->bulan === (int) $now->month && (int) $request->tahun === (int) $now->year);
+
+            $query = OrderDetail::select('no_sampel', 'tanggal_sampling', 'kategori_3', 'parameter', 'keterangan_1', 'no_quotation')
                 ->withAnyDataLapangan()
                 ->whereNull('tanggal_terima')
                 ->where('is_active', 1)
                 ->whereMonth('tanggal_sampling', $request->bulan)
                 ->whereYear('tanggal_sampling', $request->tahun)
                 ->whereNotIn('kategori_1', ['SD', 'SP'])
-                ->get();
+                ->whereNotIn('kategori_3', ['118-Psikologi']);
+
+            if ($isCurrentMonth) {
+                $query->whereDate('tanggal_sampling', '<', $now->toDateString());
+            }
+
+            $data = $query->get();
 
             if ($data->isEmpty()) {
                 return DataTables::of([])->make(true);
