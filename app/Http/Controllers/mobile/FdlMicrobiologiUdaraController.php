@@ -18,6 +18,7 @@ use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\ParameterFdl;
+use App\Models\WsValueUdara;
 
 // SERVICE
 use App\Services\SendTelegram;

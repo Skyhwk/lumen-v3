@@ -1897,7 +1897,7 @@ class RenderInvoice
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td style="height:30mm; line-height:30mm;">&nbsp;</td>
+                                        <td style="height:22mm; line-height:22mm;">&nbsp;</td>
                                     </tr>
                                     <tr>
                                         <td style="text-align:center; border-bottom:1px solid #000; font-size:10px;">
@@ -2345,7 +2345,7 @@ class RenderInvoice
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td style="height:30mm; line-height:30mm;">&nbsp;</td>
+                                        <td style="height:22mm; line-height:22mm;">&nbsp;</td>
                                     </tr>
                                     <tr>
                                         <td style="text-align:center; border-bottom:1px solid #000; font-size:10px;">

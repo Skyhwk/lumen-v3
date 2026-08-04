@@ -452,8 +452,8 @@ class CheckOrderActive extends Command
             $steps['drafting']['date'] = !empty($lhps['created_at'])
                 ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
                 : null;
-
-            if ($steps['drafting']['date'] != null) {
+            //TODO: perlu di cek fungsinya
+            if ($steps['drafting']['date'] != null && $steps['analisa']['date'] == null) {
                 $steps['analisa']['date'] = !empty($lhps['created_at'])
                     ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
                     : null;
