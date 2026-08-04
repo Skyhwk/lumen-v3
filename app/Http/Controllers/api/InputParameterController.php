@@ -3287,30 +3287,47 @@ class InputParameterController extends Controller
 
 				$data_udara['id_lingkungan_header'] = $data->id;
 				$data_udara['no_sampel']            = $request->no_sample;
-				$data_udara['hasil1']  = isset($data_kalkulasi['C'])   ? $data_kalkulasi['C']   : null;
-				$data_udara['hasil2']  = isset($data_kalkulasi['C1'])  ? $data_kalkulasi['C1']  : null;
-				$data_udara['hasil3']  = isset($data_kalkulasi['C2'])  ? $data_kalkulasi['C2']  : null;
-				$data_udara['hasil4']  = isset($data_kalkulasi['C3'])  ? $data_kalkulasi['C3']  : null;
-				$data_udara['hasil5']  = isset($data_kalkulasi['C4'])  ? $data_kalkulasi['C4']  : null;
-				$data_udara['hasil6']  = isset($data_kalkulasi['C5'])  ? $data_kalkulasi['C5']  : null;
-				$data_udara['hasil7']  = isset($data_kalkulasi['C6'])  ? $data_kalkulasi['C6']  : null;
-				$data_udara['hasil8']  = isset($data_kalkulasi['C7'])  ? $data_kalkulasi['C7']  : null;
-				$data_udara['hasil9']  = isset($data_kalkulasi['C8'])  ? $data_kalkulasi['C8']  : null;
-				$data_udara['hasil10'] = isset($data_kalkulasi['C9'])  ? $data_kalkulasi['C9']  : null;
-				$data_udara['hasil11'] = isset($data_kalkulasi['C10']) ? $data_kalkulasi['C10'] : null;
-				$data_udara['hasil12'] = isset($data_kalkulasi['C11']) ? $data_kalkulasi['C11'] : null;
-				$data_udara['hasil13'] = isset($data_kalkulasi['C12']) ? $data_kalkulasi['C12'] : null;
-				$data_udara['hasil14'] = isset($data_kalkulasi['C13']) ? $data_kalkulasi['C13'] : null;
-				$data_udara['hasil15'] = isset($data_kalkulasi['C14']) ? $data_kalkulasi['C14'] : null;
-				$data_udara['hasil16'] = isset($data_kalkulasi['C15']) ? $data_kalkulasi['C15'] : null;
-				$data_udara['hasil17'] = isset($data_kalkulasi['C16']) ? $data_kalkulasi['C16'] : null;
-				$data_udara['satuan']  = $data_kalkulasi['satuan'];
+				$minWsUdara = env('MIN_COLUMN_WS_UDARA', 1);
+				$maxWsUdara = env('MAX_COLUMN_WS_UDARA', 23);
+				$minWsLingkungan = env('MIN_COLUMN_WS_LINGKUNGAN', 0);
+				$maxWsLingkungan = env('MAX_COLUMN_WS_LINGKUNGAN', 18);
+
+				$idxLingkungan = $minWsLingkungan;
+				for ($i = $minWsUdara; $i <= $maxWsUdara; $i++) {
+					if ($idxLingkungan > $maxWsLingkungan) break;
+					$keyC = $idxLingkungan == 0 ? 'C' : 'C' . $idxLingkungan;
+					$data_udara['hasil' . $i] = isset($data_kalkulasi[$keyC]) ? $data_kalkulasi[$keyC] : null;
+					$idxLingkungan++;
+				}
+				$data_udara['flow'] 			 	= isset($data_kalkulasi['flow']) ? $data_kalkulasi['flow'] : null;
+				$data_udara['satuan']  			 	= isset($data_kalkulasi['satuan']) ? $data_kalkulasi['satuan'] : null;
+				$data_udara['durasi'] 			 	= isset($data_kalkulasi['durasi']) ? $data_kalkulasi['durasi'] : null;
+				$data_udara['tekanan_udara'] 		= isset($data_kalkulasi['tekanan_u']) ? $data_kalkulasi['tekanan_u'] : null;
+				$data_udara['suhu'] 			 	= isset($data_kalkulasi['suhu']) ? $data_kalkulasi['suhu'] : null;
+				$data_udara['k_sample'] 			= isset($data_kalkulasi['k_sample']) ? $data_kalkulasi['k_sample'] : null;
+				$data_udara['k_blanko'] 			= isset($data_kalkulasi['k_blanko']) ? $data_kalkulasi['k_blanko'] : null;
+				$data_udara['Qs'] 			 		= isset($data_kalkulasi['Qs']) ? $data_kalkulasi['Qs'] : null;
+				$data_udara['w1'] 			 		= isset($data_kalkulasi['w1']) ? $data_kalkulasi['w1'] : null;
+				$data_udara['w2'] 			 		= isset($data_kalkulasi['w2']) ? $data_kalkulasi['w2'] : null;
+				$data_udara['b1'] 			 		= isset($data_kalkulasi['b1']) ? $data_kalkulasi['b1'] : null;
+				$data_udara['b2'] 			 		= isset($data_kalkulasi['b2']) ? $data_kalkulasi['b2'] : null;
+				$data_udara['vl']					= isset($data_kalkulasi['vl']) ? $data_kalkulasi['vl'] : null;
+				$data_udara['st']					= isset($data_kalkulasi['st']) ? $data_kalkulasi['st'] : null;
+				$data_udara['Vstd']					= isset($data_kalkulasi['Vstd']) ? $data_kalkulasi['Vstd'] : null;
+				$data_udara['V']					= isset($data_kalkulasi['V']) ? $data_kalkulasi['V'] : null;
+				$data_udara['Vu']					= isset($data_kalkulasi['Vu']) ? $data_kalkulasi['Vu'] : null;
+				$data_udara['Vs']					= isset($data_kalkulasi['Vs']) ? $data_kalkulasi['Vs'] : null;
+				$data_udara['Ta']					= isset($data_kalkulasi['Ta']) ? $data_kalkulasi['Ta'] : null;
+				$data_udara['t']					= isset($data_kalkulasi['t']) ? $data_kalkulasi['t'] : null; // ini khusus duftall
+				$data_udara['a']					= isset($data_kalkulasi['a']) ? $data_kalkulasi['a'] : null; // ini khusus duftall
+				
 				WsValueUdara::create($data_udara);
 
 				$data_kalkulasi['lingkungan_header_id'] = $data->id;
 				$data_kalkulasi['tanggal_terima']       = $tgl_terima;
 				$data_kalkulasi['no_sampel']            = $request->no_sample;
 				unset($data_kalkulasi['satuan']);
+				
 				WsValueLingkungan::create($data_kalkulasi);
 
 				DB::commit();
