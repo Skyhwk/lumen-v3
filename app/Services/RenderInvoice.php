@@ -1872,16 +1872,16 @@ class RenderInvoice
             ');
 
             $needsSignature = self::shouldRenderSignature($nilai_tagihan, $forceSignature);
-            $footerReservedHeight = $needsSignature ? 30 : 15;
-            $signatureRequiredHeight = $needsSignature ? 100 : 25;
-            $remainingPageHeight = $pdf->h - $pdf->y - $footerReservedHeight;
+            $pageBreakTrigger = isset($pdf->PageBreakTrigger) ? $pdf->PageBreakTrigger : ($pdf->h - 20);
+            $signatureRequiredHeight = $needsSignature ? 80 : 25;
+            $remainingPageHeight = $pageBreakTrigger - $pdf->y;
 
             if ($remainingPageHeight < $signatureRequiredHeight) {
                 $pdf->AddPage();
             }
 
             $pdf->writeHTML('
-                <table style="margin-top: 30px;" width="100%">
+                <table style="margin-top: 10mm; page-break-inside: avoid;" width="100%">
                     <tr>
                         <td style="padding-right:50px;">
                         </td>
@@ -1897,7 +1897,7 @@ class RenderInvoice
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td style="font-size:100px; line-height:100px;">&nbsp;</td>
+                                        <td style="height:45mm; line-height:45mm;">&nbsp;</td>
                                     </tr>
                                     <tr>
                                         <td style="text-align:center; border-bottom:1px solid #000; font-size:10px;">

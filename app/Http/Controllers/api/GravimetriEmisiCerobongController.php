@@ -26,26 +26,50 @@ class GravimetriEmisiCerobongController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = EmisiCerobongHeader::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('emisi_cerobong_header.is_approved', $request->approve)
             ->where('emisi_cerobong_header.is_active', true)
-            ->where('template_stp', $request->template_stp)
+            ->where('emisi_cerobong_header.template_stp', $request->template_stp)
+            ->select('emisi_cerobong_header.*')
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN emisi_cerobong_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                emisi_cerobong_header.tanggal_terima DESC
             ");
         return Datatables::of($data)
-            ->orderColumn('tanggal_terima', function ($query, $order) {
-                $query->orderBy('tanggal_terima', $order);
+            ->addColumn('tanggal_terima', function ($item) {
+                return $item->order_detail->tanggal_terima ?? '-';
             })
-            ->orderColumn('created_at', function ($query, $order) {
-                $query->orderBy('created_at', $order);
+
+            ->addColumn('kategori_3', function ($item) {
+                return $item->order_detail->kategori_3 ?? '-';
             })
-            ->orderColumn('no_sampel', function ($query, $order) {
-                $query->orderBy('no_sampel', $order);
+
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('tanggal_terima', 'like', "%{$keyword}%");
+                });
             })
+
+            ->filterColumn('kategori_3', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->editColumn('data_analis', function($item){
                 return json_decode($item->data_analis, true) ?? [];
             })
@@ -53,29 +77,22 @@ class GravimetriEmisiCerobongController extends Controller
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
                     foreach ($columns as $column) {
-                        if (isset($column['search']) && !empty($column['search']['value'])) {
+                        if (!empty($column['search']['value'])) {
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
-                            
-                            // Skip columns that aren't searchable
-                            if (isset($column['searchable']) && $column['searchable'] === 'false') {
-                                continue;
-                            }
-                            
-                            // Special handling for date fields
-                            if ($columnName === 'tanggal_terima') {
-                                // Assuming the search value is a date or part of a date
-                                $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
-                            } 
-                            // Handle created_at separately if needed
-                            elseif ($columnName === 'created_at') {
-                                $query->whereDate('created_at', 'like', "%{$searchValue}%");
-                            }
-                            // Standard text fields
-                            elseif (in_array($columnName, [
-                                'no_sampel', 'parameter', 'jenis_pengujian'
+
+                            if (in_array($columnName, [
+                                'no_sampel',
+                                'parameter',
+                                'jenis_pengujian',
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
-                                $query->where($columnName, 'like', "%{$searchValue}%");
+                                $query->where("emisi_cerobong_header.$columnName", 'like', "%{$searchValue}%");
                             }
                         }
                     }

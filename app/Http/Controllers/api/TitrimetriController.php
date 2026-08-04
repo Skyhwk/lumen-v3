@@ -27,17 +27,17 @@ class TitrimetriController extends Controller
     public function index(Request $request)
     {
         $data = Titrimetri::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('titrimetri.is_approved', $request->approve)
             ->where('titrimetri.is_active', true)
             ->where('titrimetri.is_total', false)
-            ->where('template_stp', $request->template_stp)
+            ->where('titrimetri.template_stp', $request->template_stp)
             ->select('titrimetri.*')
                 ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN titrimetri.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                titrimetri.tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
@@ -60,6 +60,18 @@ class TitrimetriController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -74,9 +86,15 @@ class TitrimetriController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("titrimetri.$columnName", 'like', "%{$searchValue}%");
                             }

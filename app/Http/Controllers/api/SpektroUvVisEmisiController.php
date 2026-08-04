@@ -26,16 +26,16 @@ class SpektroUvVisEmisiController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = EmisiCerobongHeader::with('ws_value', 'order_detail')
-        ->where('is_approved', $request->approve)
-        ->where('emisi_cerobong_header.is_active', true)
-        ->where('template_stp', $request->template_stp)
-        ->select('emisi_cerobong_header.*')
-        ->orderByRaw("
+            ->where('emisi_cerobong_header.is_approved', $request->approve)
+            ->where('emisi_cerobong_header.is_active', true)
+            ->where('emisi_cerobong_header.template_stp', $request->template_stp)
+            ->select('emisi_cerobong_header.*')
+            ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN emisi_cerobong_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                emisi_cerobong_header.tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->editColumn('data_analis', function ($data) {
@@ -61,6 +61,18 @@ class SpektroUvVisEmisiController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -73,11 +85,17 @@ class SpektroUvVisEmisiController extends Controller
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
 
-                            // HANYA BOLEH FILTER KOLOM colorimetri
+                            // HANYA BOLEH FILTER KOLOM emisi_cerobong_header
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("emisi_cerobong_header.$columnName", 'like', "%{$searchValue}%");
                             }

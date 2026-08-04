@@ -38,6 +38,14 @@ class SamplerTrackingController extends Controller
         ]);
     }
 
+    public function previewSync(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $this->service->previewSync($request->tanggal),
+        ]);
+    }
+
     public function sync(Request $request)
     {
         $sessions = $this->service->sync($request->tanggal);
@@ -46,9 +54,9 @@ class SamplerTrackingController extends Controller
             'success' => true,
             'message' => 'Data tracking sampler berhasil disinkronkan.',
             'total_session' => $sessions->count(),
+            'data' => $this->service->previewSync($request->tanggal),
         ]);
     }
-
     public function storeEvent(Request $request)
     {
         $this->validate($request, [
