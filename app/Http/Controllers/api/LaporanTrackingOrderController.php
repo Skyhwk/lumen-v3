@@ -368,7 +368,6 @@ class LaporanTrackingOrderController extends Controller
                 ], 200);
             }
 
-            // ===== 3. STEP DRAFTING =====
             if ($type === 'drafting') {
                 $orderDetail = OrderDetail::withAnyLhps()
                     ->where('is_active', true)
@@ -392,10 +391,39 @@ class LaporanTrackingOrderController extends Controller
                 $firstLhp = $anyLhps ? $anyLhps->first() : null;
 
                 $details = [];
-                foreach ($firstLhp->lhpsSwabTesDetail as $detail) {
-                    if ($detail->no_sampel == $noSampel) {
-                        $details = $detail;
-                        break;
+
+                if ($firstLhp) {
+                    $relations = method_exists($firstLhp, 'getRelations') ? $firstLhp->getRelations() : [];
+                    $rawItems = [];
+
+                    foreach ($relations as $relName => $relationData) {
+                        if (empty($relationData) || $relName === 'link') continue;
+
+                        if (is_iterable($relationData)) {
+                            foreach ($relationData as $item) {
+                                if (is_object($item)) {
+                                    $rawItems[] = $item;
+                                }
+                            }
+                        } elseif (is_object($relationData)) {
+                            $rawItems[] = $relationData;
+                        }
+                    }
+
+                    if (empty($rawItems)) {
+                        $rawItems[] = $firstLhp;
+                    }
+
+                    foreach ($rawItems as $item) {
+                        $namaParam = $item->nama_parameter ?? $item->parameter ?? $item->parameter_lab ?? $item->parameter_regulasi ?? null;
+                        $hasilUji = $item->hasil_uji ?? $item->hasil ?? null;
+
+                        if ($namaParam !== null || $hasilUji !== null) {
+                            $details[] = [
+                                'nama_parameter' => $namaParam,
+                                'hasil_uji' => $hasilUji,
+                            ];
+                        }
                     }
                 }
 
@@ -413,7 +441,6 @@ class LaporanTrackingOrderController extends Controller
                 ], 200);
             }
 
-            // ===== 4. STEP LHP RELEASE =====
             if ($type === 'lhp_release') {
                 $orderDetail = OrderDetail::withAnyLhps()
                     ->where('is_active', true)
