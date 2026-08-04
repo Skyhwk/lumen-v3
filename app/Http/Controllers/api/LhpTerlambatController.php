@@ -8,7 +8,7 @@ use App\Models\OrderDetail;
 use Illuminate\Http\Request;
 
 use Datatables;
-use App\Models\{OrderHeader,QuotationKontrakH, QuotationNonKontrak, LiburPerusahaan};
+use App\Models\{OrderHeader, QuotationKontrakH, QuotationNonKontrak, LiburPerusahaan, OrderBerjalan};
 use App\Services\GroupedCfrByLhp;
 use App\Services\GetBawahan;
 use Illuminate\Support\Carbon;
@@ -210,18 +210,80 @@ class LhpTerlambatController extends Controller
 
     public function getGroupedCFR(Request $request)
     {
-        $orderHeader = OrderHeader::where('is_active', true)
-            ->where('no_order', $request->no_order)
-            ->first();
-        if (is_null($orderHeader)) {
+        $orderHeader = OrderHeader::where('no_order', $request->no_order)->first();
+        if (!$orderHeader && $request->filled('id_order_header')) {
+            $orderHeader = OrderHeader::find($request->id_order_header);
+        }
+
+        if (!$orderHeader) {
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        $groupedCFRs = (new GroupedCfrByLhp($orderHeader, $request->periode))->get();
+        $orderBerjalan = OrderBerjalan::where('no_order', $orderHeader->no_order)->first();
 
-        $groupedCFRs = $groupedCFRs->filter(function ($item) use ($request) {
-            return $item['cfr'] == $request->no_lhp;
-        })->values();
+        if (!$orderBerjalan || empty($orderBerjalan->dataOrderDetail)) {
+            return response()->json([
+                'no_order' => $orderHeader->no_order,
+                'no_document' => $orderHeader->no_document,
+                'nama_perusahaan' => $orderHeader->nama_perusahaan,
+                'konsultan' => $orderHeader->konsultan,
+                'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
+                'tanggal_order' => $orderHeader->tanggal_order,
+                'groupedCFRs' => []
+            ], 200);
+        }
+
+        $dataOrderDetail = is_string($orderBerjalan->dataOrderDetail)
+            ? json_decode($orderBerjalan->dataOrderDetail, true)
+            : $orderBerjalan->dataOrderDetail;
+
+        if (!is_array($dataOrderDetail)) {
+            return response()->json([
+                'no_order' => $orderHeader->no_order,
+                'no_document' => $orderHeader->no_document,
+                'nama_perusahaan' => $orderHeader->nama_perusahaan,
+                'konsultan' => $orderHeader->konsultan,
+                'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
+                'tanggal_order' => $orderHeader->tanggal_order,
+                'groupedCFRs' => []
+            ], 200);
+        }
+
+        $periodeRequested = $request->periode;
+
+        $groupedData = collect($dataOrderDetail)
+            ->when(!empty($periodeRequested), function ($items) use ($periodeRequested) {
+                return collect($items)->where('periode', $periodeRequested);
+            })
+            ->flatMap(function ($periodeGroup) use ($periodeRequested) {
+                $details = $periodeGroup['detail'] ?? [];
+                $groupPeriode = $periodeGroup['periode'] ?? $periodeRequested;
+
+                return collect($details)->map(function ($detail) use ($groupPeriode) {
+                    $sampleNumbers = $detail['sampelNumbers'] ?? [];
+                    $points = $detail['points'] ?? [];
+
+                    return [
+                        'cfr' => $detail['cfr'] ?? null,
+                        'periode' => $groupPeriode,
+                        'keterangan_1' => $points,
+                        'kategori_3' => $detail['categories'] ?? [$detail['kategori_3'] ?? null],
+                        'no_sampel' => $sampleNumbers,
+                        'total_no_sampel' => $detail['jumlah_sampel'] ?? count($sampleNumbers),
+                        'steps' => $detail['steps'] ?? [],
+                        // Karena order_berjalan snapshot tidak menyimpan order_details lengkap, 
+                        // balikin array kosong atau bisa disesuaikan jika frontend butuh data lain.
+                        'order_details' => []
+                    ];
+                });
+            })
+            ->filter(fn($item) => !empty($item['cfr']))
+            ->when($request->filled('no_lhp'), function ($items) use ($request) {
+                return $items->filter(fn($item) => $item['cfr'] == $request->no_lhp);
+            })
+            ->values()
+            ->toArray();
+
         return response()->json([
             'no_order' => $orderHeader->no_order,
             'no_document' => $orderHeader->no_document,
@@ -229,7 +291,7 @@ class LhpTerlambatController extends Controller
             'konsultan' => $orderHeader->konsultan,
             'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
             'tanggal_order' => $orderHeader->tanggal_order,
-            'groupedCFRs' => $groupedCFRs
+            'groupedCFRs' => $groupedData
         ], 200);
     }
 }
