@@ -19,16 +19,120 @@ class SamplerTrackingService
     public function sync($date = null)
     {
         $date = $date ?: Carbon::now()->toDateString();
-        $now = Carbon::now();
 
         $jadwals = Jadwal::where('is_active', true)
             ->whereDate('tanggal', $date)
             ->get();
 
+        return $this->syncJadwalRows($jadwals, $date, true);
+    }
+
+    public function previewSync($date = null)
+    {
+        $date = $date ?: Carbon::now()->toDateString();
+        $date = Carbon::parse($date)->toDateString();
+
+        $jadwals = Jadwal::where('is_active', true)
+            ->whereDate('tanggal', $date)
+            ->get();
+
+        $groups = $jadwals->groupBy(function ($row) {
+            return $this->makeTeamKey($row);
+        });
+
+        $teamKeys = $groups->keys()->values();
+        $existingSessions = SamplerTrackingSession::whereDate('tanggal_sampling', $date)->get();
+        $activeSessions = $existingSessions->where('is_active', true)->values();
+        $existingByTeamKey = $activeSessions->keyBy('team_key');
+        $missing = collect();
+        $existing = collect();
+
+        foreach ($groups as $teamKey => $rows) {
+            $first = $rows->first();
+            $item = [
+                'team_key' => $teamKey,
+                'no_quotation' => $first->no_quotation,
+                'tanggal_sampling' => $first->tanggal,
+                'jam' => trim(($first->jam_mulai ?: '-') . ' - ' . ($first->jam_selesai ?: '-')),
+                'nama_perusahaan' => $first->nama_perusahaan,
+                'sampler' => $rows->pluck('sampler')->filter()->unique()->values()->implode(', '),
+                'jumlah_jadwal' => $rows->count(),
+            ];
+
+            if ($existingByTeamKey->has($teamKey)) {
+                $session = $existingByTeamKey->get($teamKey);
+                $item['session_id'] = $session->id;
+                $existing->push($item);
+            } else {
+                $missing->push($item);
+            }
+        }
+
+        $willDeactivate = $groups->isEmpty()
+            ? collect()
+            : $activeSessions
+                ->filter(function ($session) use ($teamKeys) {
+                    return !$teamKeys->contains($session->team_key);
+                })
+                ->map(function ($session) {
+                    return [
+                        'session_id' => $session->id,
+                        'team_key' => $session->team_key,
+                        'no_quotation' => $session->no_quotation,
+                        'no_order' => $session->no_order,
+                        'tanggal_sampling' => $session->tanggal_sampling,
+                        'jam' => trim(($session->jam_mulai ?: '-') . ' - ' . ($session->jam_selesai ?: '-')),
+                        'nama_perusahaan' => $session->nama_perusahaan,
+                    ];
+                })
+                ->values();
+
+        return [
+            'tanggal' => $date,
+            'total_jadwal' => $jadwals->count(),
+            'total_team_jadwal' => $groups->count(),
+            'total_session_aktif' => $activeSessions->count(),
+            'sudah_ada' => $existing->count(),
+            'belum_kebentuk' => $missing->count(),
+            'akan_dinonaktifkan' => $willDeactivate->count(),
+            'preview' => [
+                'belum_kebentuk' => $missing->take(20)->values(),
+                'akan_dinonaktifkan' => $willDeactivate->take(20)->values(),
+            ],
+        ];
+    }
+
+    public function syncByPersiapanHeader(PersiapanSampelHeader $psh)
+    {
+        if (!$psh->no_quotation || !$psh->tanggal_sampling) {
+            return collect();
+        }
+
+        $samplers = $this->parseSamplerNames($psh->sampler_jadwal ?? null);
+        $date = Carbon::parse($psh->tanggal_sampling)->toDateString();
+
+        $jadwals = Jadwal::where('is_active', true)
+            ->where('no_quotation', $psh->no_quotation)
+            ->whereDate('tanggal', $date)
+            ->when(count($samplers) > 0, function ($query) use ($samplers) {
+                $query->whereIn('sampler', $samplers);
+            })
+            ->get();
+
+        return $this->syncJadwalRows($jadwals, $date, false);
+    }
+
+    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false)
+    {
+        if ($jadwals->isEmpty()) {
+            return collect();
+        }
+
+        $now = Carbon::now();
         $sessions = [];
         $activeTeamKeys = [];
 
-        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date) {
+        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions) {
             $jadwals->groupBy(function ($row) {
                 return $this->makeTeamKey($row);
             })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys) {
@@ -60,12 +164,11 @@ class SamplerTrackingService
                 $session->save();
 
                 $activeMemberIds = [];
+                $movementGroup = $this->makeMovementGroupCode($session);
 
                 foreach ($rows as $row) {
                     $member = $this->findMember($session->id, $row);
-                    $effectiveDuration = $this->firstFilledValue([$row->durasi_personal, $row->durasi]);
-
-                    $movementGroup = $this->makeMovementGroupCodeFromRow($row);
+                    $effectiveDuration = $this->resolveEffectiveDuration($row->durasi_personal, $row->durasi);
 
                     $memberValues = $this->onlyExistingColumns($member->getTable(), [
                         'sampler_tracking_session_id' => $session->id,
@@ -111,23 +214,23 @@ class SamplerTrackingService
                 $sessions[] = $session;
             });
 
-            $sessionInactiveUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
-            if (count($sessionInactiveUpdate) > 0) {
-                SamplerTrackingSession::where('tanggal_sampling', $date)
-                    ->when(count($activeTeamKeys) > 0, function ($query) use ($activeTeamKeys) {
-                        $query->whereNotIn('team_key', $activeTeamKeys);
-                    })
-                    ->update($sessionInactiveUpdate);
+            if ($deactivateMissingSessions) {
+                $sessionInactiveUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
+                if (count($sessionInactiveUpdate) > 0) {
+                    SamplerTrackingSession::where('tanggal_sampling', $date)
+                        ->when(count($activeTeamKeys) > 0, function ($query) use ($activeTeamKeys) {
+                            $query->whereNotIn('team_key', $activeTeamKeys);
+                        })
+                        ->update($sessionInactiveUpdate);
+                }
             }
         }, 5);
 
         return collect($sessions);
     }
-
     public function listByDate($date = null, $samplerId = null, $samplerName = null)
     {
         $date = $date ?: Carbon::now()->toDateString();
-        $this->sync($date);
 
         $hasSamplerFilter = !empty($samplerId) || !empty($samplerName);
         $memberFilter = function ($query) use ($samplerId, $samplerName) {
@@ -141,10 +244,11 @@ class SamplerTrackingService
         };
 
         $sessions = SamplerTrackingSession::with([
-                'activeMembers.events' => function ($query) {
-                    $query->orderBy('event_at')->orderBy('id');
-                },
-            ])
+            'activeMembers.events' => function ($query) {
+                $query->orderBy('event_at')->orderBy('id');
+            },
+            'activeMembers.events.triggeredBy',
+        ])
             ->where('is_active', true)
             ->whereHas('activeMembers', $memberFilter)
             ->where(function ($query) use ($date, $hasSamplerFilter, $memberFilter) {
@@ -156,7 +260,7 @@ class SamplerTrackingService
                             ->whereHas('activeMembers', function ($memberQuery) use ($date, $memberFilter) {
                                 $memberFilter($memberQuery);
                                 $memberQuery->whereRaw(
-                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(sampler_tracking_members.effective_duration, ''), NULLIF(sampler_tracking_members.durasi_personal, ''), NULLIF(sampler_tracking_members.duration, ''), 0) AS SIGNED) - 1, 0) DAY) >= ?",
+                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(NULLIF(sampler_tracking_members.effective_duration, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.durasi_personal, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.duration, ''), '0'), 0) AS SIGNED) - 1, 0) DAY) >= ?",
                                     [$date]
                                 );
                                 $memberQuery->whereDoesntHave('events', function ($eventQuery) {
@@ -342,15 +446,19 @@ class SamplerTrackingService
         $data = $columns[$columnIndex]['data'] ?? 'tanggal_sampling';
 
         return $direction === 'desc'
-            ? $rows->sortByDesc(function ($row) use ($data) { return $row[$data] ?? ''; })
-            : $rows->sortBy(function ($row) use ($data) { return $row[$data] ?? ''; });
+            ? $rows->sortByDesc(function ($row) use ($data) {
+                return $row[$data] ?? '';
+            })
+            : $rows->sortBy(function ($row) use ($data) {
+                return $row[$data] ?? '';
+            });
     }
 
     protected function uniqueValues($values)
     {
         return collect($values)->filter(function ($value) {
-                return $value !== null && $value !== '' && $value !== '-';
-            })
+            return $value !== null && $value !== '' && $value !== '-';
+        })
             ->unique()
             ->values()
             ->all();
@@ -363,6 +471,52 @@ class SamplerTrackingService
         })->first();
     }
 
+    protected function parseSamplerNames($value)
+    {
+        if (!$value) {
+            return [];
+        }
+
+        if (is_array($value)) {
+            $items = $value;
+        } else {
+            $decoded = json_decode($value, true);
+            $items = json_last_error() === JSON_ERROR_NONE && is_array($decoded)
+                ? $decoded
+                : preg_split('/[,;|]/', $value);
+        }
+
+        return collect($items)
+            ->map(function ($item) {
+                if (is_array($item)) {
+                    return $item['sampler'] ?? $item['nama'] ?? $item['name'] ?? null;
+                }
+
+                return $item;
+            })
+            ->filter(function ($item) {
+                return $item !== null && trim((string) $item) !== '';
+            })
+            ->map(function ($item) {
+                return trim((string) $item);
+            })
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    protected function resolveEffectiveDuration($personalDuration, $defaultDuration)
+    {
+        if (is_numeric($personalDuration) && (int) $personalDuration > 0) {
+            return $personalDuration;
+        }
+
+        if (is_numeric($defaultDuration) && (int) $defaultDuration > 0) {
+            return $defaultDuration;
+        }
+
+        return $this->firstFilledValue([$personalDuration, $defaultDuration]);
+    }
     protected function firstFilledValue(array $values)
     {
         foreach ($values as $value) {
@@ -398,13 +552,13 @@ class SamplerTrackingService
     protected function teamRouteKey($date, $sessions)
     {
         $route = collect($sessions)->map(function ($session) {
-                return implode('~', [
-                    $session->jam_mulai ?: '-',
-                    $session->jam_selesai ?: '-',
-                    $session->no_order ?: ($session->no_quotation ?: '-'),
-                    $session->nama_perusahaan ?: '-',
-                ]);
-            })
+            return implode('~', [
+                $session->jam_mulai ?: '-',
+                $session->jam_selesai ?: '-',
+                $session->no_order ?: ($session->no_quotation ?: '-'),
+                $session->nama_perusahaan ?: '-',
+            ]);
+        })
             ->sort()
             ->values()
             ->implode('|');
@@ -883,6 +1037,3 @@ class SamplerTrackingService
         return ((int) SamplerTrackingEvent::where('sampler_tracking_member_id', $memberId)->max('sequence_no')) + 1;
     }
 }
-
-
-

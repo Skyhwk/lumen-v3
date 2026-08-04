@@ -26,6 +26,8 @@ use App\Models\DataLapanganDebuPersonal;
 use App\Models\MasterKaryawan;
 use App\Models\Subkontrak;
 use App\Models\MasterBakumutu;
+use App\Models\Parameter;
+use App\Services\AnalystFormula;
 
 use App\Models\LingkunganHeader;
 use App\Models\DirectLainHeader;
@@ -223,7 +225,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						// 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
 						if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
 
-						for ($i = 1; $i <= 16; $i++) {
+						for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
 							$k = "f_koreksi_c{$i}";
 							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
@@ -231,19 +233,19 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 						// 2) C (tanpa nomor) lalu C1..C16
 						if ($has('C')) return $hasil['C'];
-						for ($i = 1; $i <= 16; $i++) {
+						for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
 							$k = "C{$i}";
 							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
 
 						// 3) f_koreksi_1..f_koreksi_17
-						for ($i = 1; $i <= 17; $i++) {
+						for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 							$k = "f_koreksi_{$i}";
 							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
 
 						// 4) hasil1..hasil17
-						for ($i = 1; $i <= 17; $i++) {
+						for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 							$k = "hasil{$i}";
 							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
@@ -758,47 +760,118 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 	public function AddSubKontrak(Request $request)
 	{
+		$allowedGrades = ['MANAGER', 'SENIOR MANAGER', 'DIRECTOR'];
+		if (!$this->grade || !in_array(strtoupper($this->grade), $allowedGrades)) {
+			return response()->json([
+				'message' => 'Akses ditolak. Hanya MANAGER, SENIOR MANAGER, dan DIRECTOR yang dapat menambah data.',
+				'success' => false,
+				'status' => 403,
+			], 403);
+		}
+
 		DB::beginTransaction();
 		try {
-			if ($request->subCategory == 11 || $request->subCategory == 27) {
-				$data = new Subkontrak();
-				$data->no_sampel = $request->no_sampel;
-				$data->category_id = $request->category;
-				$data->parameter = $request->parameter;
-				$data->note = $request->keterangan;
-				$data->jenis_pengujian = $request->jenis_pengujian;
-				$data->is_active = true;
-				$data->is_approve = 1;
-				$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-				$data->approved_by = $this->karyawan;
-				$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-				$data->created_by = $this->karyawan;
-				$data->save();
+			$orderDetail = OrderDetail::where('no_sampel', $request->no_sampel)
+				->where('is_active', true)
+				->first();
 
-				$ws = new WsValueLingkungan();
-				$ws->no_sampel = $request->no_sampel;
-				$ws->id_subkontrak = $data->id;
-				$ws->flow = $request->flow;
-				$ws->durasi = $request->durasi;
-				$ws->C = $request->C;
-				$ws->C1 = $request->C1;
-				$ws->C2 = $request->C2;
-				$ws->is_active = true;
-				$ws->status = 0;
-				$ws->save();
+			if (!$orderDetail) {
+				return response()->json([
+					'message' => 'No Sample tidak ditemukan.',
+					'success' => false,
+					'status' => 404,
+				], 404);
 			}
+
+			$categoryId = $request->category ?? 4;
+
+			$dataParameter = Parameter::where('nama_lab', $request->parameter)
+				->where('id_kategori', $categoryId)
+				->where('is_active', true)
+				->first();
+
+			if (!$dataParameter) {
+				return response()->json([
+					'message' => 'Parameter tidak ditemukan.',
+					'success' => false,
+					'status' => 404,
+				], 404);
+			}
+
+			$dataParsing = (object) [
+				'hp' => $request->hp,
+				'fp' => $request->fp ?? 1,
+				'parameter' => $request->parameter,
+				'no_sample' => $request->no_sampel,
+			];
+
+			$dataKalkulasi = AnalystFormula::where('function', 'OthersSubkontrak')
+				->where('data', $dataParsing)
+				->where('id_parameter', $dataParameter->id)
+				->process();
+
+			if (!is_array($dataKalkulasi) && $dataKalkulasi == 'Coming Soon') {
+				return response()->json([
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter,
+					'success' => false,
+					'status' => 404,
+				], 404);
+			}
+
+			$exist = Subkontrak::where('no_sampel', trim($request->no_sampel))
+				->where('category_id', $categoryId)
+				->where('parameter', $request->parameter)
+				->where('is_active', true)
+				->first();
+
+			if (isset($exist->id)) {
+				$data = Subkontrak::find($exist->id);
+				WsValueUdara::where('id_subkontrak', $data->id)
+					->where('is_active', true)
+					->update(['is_active' => false]);
+			} else {
+				$data = new Subkontrak();
+				$data->created_by = $this->karyawan;
+				$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+			}
+
+			$data->no_sampel = trim($request->no_sampel);
+			$data->category_id = $categoryId;
+			$data->parameter = $request->parameter;
+			$data->jenis_pengujian = $request->jenis_pengujian ?? 'sample';
+			$data->hp = $request->hp;
+			$data->fp = $request->fp ?? null;
+			$data->note = $request->keterangan ?? $request->note ?? null;
+			$data->is_active = true;
+			$data->is_approve = 1;
+			$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+			$data->approved_by = $this->karyawan;
+			$data->save();
+
+			$dataUdara = [
+				'id_subkontrak' => $data->id,
+				'no_sampel' => trim($request->no_sampel),
+				'is_active' => true,
+			];
+
+			for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
+				$dataUdara['f_koreksi_' . $i] = $dataKalkulasi['hasil'];
+			}
+
+			WsValueUdara::create($dataUdara);
 
 			DB::commit();
 			return response()->json([
-				'message' => 'Data has ben Added',
+				'message' => 'Data berhasil disimpan dan di-approve oleh ' . $this->karyawan,
 				'success' => true,
 				'status' => 200,
 			], 200);
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return response()->json([
 				'message' => $e->getMessage(),
-				'status' => 401
+				'success' => false,
+				'status' => 401,
 			], 401);
 		}
 	}
@@ -825,7 +898,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			// Ambil hasil_c sampai hasil_c16 secara dinamis
 			$hasilC = [];
-			for ($i = 0; $i <= 18; $i++) {
+			for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
 				$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 				$hasilC[$i] = html_entity_decode($request->$key ?? '');
 			}
@@ -949,7 +1022,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 		// Ambil hasil_c sampai hasil_c19
 		$hasilC = [];
-		for ($i = 0; $i <= 18; $i++) {
+		for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
 			$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 			$hasilC[$i] = $request->$key ?? null;
 		}
@@ -983,7 +1056,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->first();
 
 			if (!$po) {
-				return response()->json(['message' => 'Data tidak ditemukan di kategori AIR.'], 404);
+				return response()->json(['message' => 'Data tidak ditemukan di kategori Udara.'], 404);
 			}
 
 			$lingkungan = LingkunganHeader::where('no_sampel', $no_sampel)
@@ -1194,7 +1267,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						->exists();
 
 					if ($valid) {
-						for ($i = 1; $i <= 19; $i++) {
+						for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 							$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
 						}
 						$wsUdara->save();
@@ -1215,7 +1288,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 							->exists();
 
 						if ($valid) {
-							for ($i = 1; $i <= 19; $i++) {
+							for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 								$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
 							}
 							$wsUdara->save();
@@ -1254,7 +1327,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			$wsUdara->id_subkontrak = $subkontrak->id;
 
-			for ($i = 1; $i <= 19; $i++) {
+			for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 				$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
 			}
 

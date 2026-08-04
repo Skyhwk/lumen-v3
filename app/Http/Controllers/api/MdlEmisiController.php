@@ -52,7 +52,7 @@ class MdlEmisiController extends Controller
         }
 
         $mdlEmisi->parameter_id = $request->parameter_id;
-        for ($i = 0; $i <= 11; $i++) {
+        for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
             if (!$i) {
                 $mdlEmisi->C = $request->C;
             } else {

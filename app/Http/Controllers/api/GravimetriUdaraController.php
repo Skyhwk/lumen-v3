@@ -33,10 +33,10 @@ class GravimetriUdaraController extends Controller
             ->where('template_stp', $request->template_stp)
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN lingkungan_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                lingkungan_header.tanggal_terima DESC
             ")
             ->get();
 
@@ -46,10 +46,10 @@ class GravimetriUdaraController extends Controller
             ->where('template_stp', $request->template_stp)
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN dustfall_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                dustfall_header.tanggal_terima DESC
             ")
             ->get();
 
@@ -59,10 +59,10 @@ class GravimetriUdaraController extends Controller
             ->where('template_stp', $request->template_stp)
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN debu_personal_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                debu_personal_header.tanggal_terima DESC
             ")
             ->get();
 
@@ -73,6 +73,12 @@ class GravimetriUdaraController extends Controller
             ->values();
             
         return Datatables::of($data)
+            ->addColumn('tanggal_terima', function ($item) {
+                return $item->order_detail->tanggal_terima ?? '-';
+            })
+            ->addColumn('kategori_3', function ($item) {
+                return $item->order_detail->kategori_3 ?? '-';
+            })
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })

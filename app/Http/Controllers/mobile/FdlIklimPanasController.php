@@ -34,9 +34,9 @@ class FdlIklimPanasController extends Controller
 {
     public function getSample(Request $request)
     {
-        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-            return $response;
-        }
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
 
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'iklim_panas')->where('is_active', 1)->first();

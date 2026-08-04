@@ -35,9 +35,9 @@ class FdlGetaranPersonalController extends Controller
 {
     public function getSample(Request $request)
     {
-        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-            return $response;
-        }
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
 
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameterList = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','getaran_personal')->where('kategori','4-Udara')->first();
@@ -88,11 +88,6 @@ class FdlGetaranPersonalController extends Controller
                 if ($request->foto_lokasi_sampel == '') {
                     return response()->json([
                         'message' => 'Foto lokasi sampling tidak boleh kosong .!'
-                    ], 401);
-                }
-                if ($request->foto_lain == '') {
-                    return response()->json([
-                        'message' => 'Foto lain-lain tidak boleh kosong .!'
                     ], 401);
                 }
 
@@ -156,10 +151,10 @@ class FdlGetaranPersonalController extends Controller
                 if ($request->lokasi_unit != '') $data->lokasi_unit             = $request->lokasi_unit;
                 if ($request->alat_ukur != '') $data->alat_ukur                 = $request->alat_ukur;
                 if ($request->durasi_pengukuran != '') $data->durasi_pengukuran = $request->durasi_pengukuran;
-                if ($request->adaptor != '') $data->adaptor                     = $request->adaptor;
+                if ($request->set_adaptor != '') $data->adaptor                     = $request->set_adaptor;
                 $data->pengukuran                                               = json_encode($pengukuran);
                 if (isset($request->ke)) $data->bobot_frekuensi                 = json_encode(["ke" => $request->ke, "kd" => $request->kd, "kf" => $request->kf]);
-                if ($request->koordinat_pengukuran != '') $data->posisi_pengukuran = $request->koordinat_pengukuran;
+                if ($request->posisi_pengukuran != '') $data->posisi_pengukuran = $request->posisi_pengukuran;
                 if ($request->permission != '') $data->permission                   = $request->permission;
                 if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
                 if ($request->foto_lain != '') $data->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
