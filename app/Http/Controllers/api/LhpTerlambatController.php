@@ -210,6 +210,31 @@ class LhpTerlambatController extends Controller
 
     public function getGroupedCFR(Request $request)
     {
+        $orderHeader = OrderHeader::where('is_active', true)
+            ->where('no_order', $request->no_order)
+            ->first();
+        if (is_null($orderHeader)) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        $groupedCFRs = (new GroupedCfrByLhp($orderHeader, $request->periode))->get();
+
+        $groupedCFRs = $groupedCFRs->filter(function ($item) use ($request) {
+            return $item['cfr'] == $request->no_lhp;
+        })->values();
+        return response()->json([
+            'no_order' => $orderHeader->no_order,
+            'no_document' => $orderHeader->no_document,
+            'nama_perusahaan' => $orderHeader->nama_perusahaan,
+            'konsultan' => $orderHeader->konsultan,
+            'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
+            'tanggal_order' => $orderHeader->tanggal_order,
+            'groupedCFRs' => $groupedCFRs
+        ], 200);
+    }
+
+    public function detailFromOrderBerjalan(Request $request)
+    {
         $orderHeader = OrderHeader::where('no_order', $request->no_order)->first();
         if (!$orderHeader && $request->filled('id_order_header')) {
             $orderHeader = OrderHeader::find($request->id_order_header);
