@@ -11,10 +11,26 @@ use Exception;
 
 class LaporanTrackingOrderController extends Controller
 {
-    public function indexOrderBerjalan(Request $request)
+    public function indexOrder(Request $request)
     {
         try {
+            $statusSelesai = $request->input('status_selesai', 0);
+            if ($statusSelesai === 'selesai' || $statusSelesai === '1' || $statusSelesai === 1 || $statusSelesai === true) {
+                $statusSelesai = 1;
+            } else {
+                $statusSelesai = 0;
+            }
+
+            $subOd = DB::table('order_detail')
+                ->select(
+                    'no_order',
+                    DB::raw("MIN(COALESCE(NULLIF(periode, ''), tanggal_sampling)) as periode_detail")
+                )
+                ->where('is_active', true)
+                ->groupBy('no_order');
+
             $query = DB::table("order_berjalan as ob") 
+                ->leftJoinSub($subOd, 'od', 'od.no_order', '=', 'ob.no_order')
                 ->leftJoin("order_header as oh", "oh.no_order", "=", "ob.no_order")
                 ->leftJoin("master_karyawan as mk", "mk.id", "=", "ob.sales_id")
                 ->select([
@@ -32,25 +48,21 @@ class LaporanTrackingOrderController extends Controller
                             ' %'
                         ) as persentase
                     "),
-                    'ob.tgl_order as periode',
+                    'od.periode_detail as periode',
                     'ob.no_penawaran as no_quotation',
                     'ob.nama_perusahaan as nama_pelanggan',
                     'oh.konsultan as nama_konsultan',
                     'mk.nama_lengkap as sales_penanggung_jawab',
                 ])
+                ->where('ob.status_selesai', $statusSelesai)
                 ->where(function ($q) {
-                    $q->where('ob.status_selesai', 0);
-                    //   ->orWhereRaw("
-                    //       CAST(
-                    //           JSON_UNQUOTE(
-                    //               JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')
-                    //           ) AS UNSIGNED
-                    //       ) < 100
-                    //   ");
+                    $q->where('ob.jenis_order', 'NORMAL')
+                      ->orWhereNull('ob.jenis_order');
                 });
 
             if ($request->filled('periode')) {
-                $query->whereYear('ob.tgl_order', $request->periode);
+                $periodeVal = $request->periode;
+                $query->where('od.periode_detail', 'like', "{$periodeVal}%");
             }
 
             return Datatables::of($query)
@@ -61,7 +73,7 @@ class LaporanTrackingOrderController extends Controller
                     $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')) like ?", ["%{$keyword}%"]);
                 })
                 ->filterColumn('periode', function ($query, $keyword) {
-                    $query->where('ob.tgl_order', 'like', "%{$keyword}%");
+                    $query->where('od.periode_detail', 'like', "%{$keyword}%");
                 })
                 ->filterColumn('no_quotation', function ($query, $keyword) {
                     $query->where('ob.no_penawaran', 'like', "%{$keyword}%");
@@ -84,117 +96,79 @@ class LaporanTrackingOrderController extends Controller
         }
     }
 
-    public function detailOrderBerjalan(Request $request)
+    public function indexOrderKontrak(Request $request)
     {
         try {
-            $noOrder = $request->no_order;
+            $statusSelesai = $request->input('status_selesai', 0);
+            $targetSelesai = ($statusSelesai === 'selesai' || $statusSelesai === '1' || $statusSelesai === 1 || $statusSelesai === true);
 
-            if (!empty($noOrder)) {
-                $order = DB::table('order_berjalan as ob')
-                    ->leftJoin("order_header as oh", "oh.no_order", "=", "ob.no_order")
-                    ->leftJoin("master_karyawan as mk", "mk.id", "=", "ob.sales_id")
-                    ->select([
-                        'ob.*',
-                        'oh.konsultan as nama_konsultan',
-                        'mk.nama_lengkap as sales_penanggung_jawab',
-                    ])
-                    ->where('ob.no_order', $noOrder)
-                    ->first();
+            $query = DB::table("order_berjalan as ob") 
+                ->leftJoin("order_header as oh", "oh.no_order", "=", "ob.no_order")
+                ->leftJoin("master_karyawan as mk", "mk.id", "=", "ob.sales_id")
+                ->select([
+                    'ob.id',
+                    'ob.no_order',
+                    'ob.no_penawaran as no_quotation',
+                    'ob.nama_perusahaan as nama_pelanggan',
+                    'oh.konsultan as nama_konsultan',
+                    'mk.nama_lengkap as sales_penanggung_jawab',
+                    'ob.dataOrderDetail',
+                    'ob.tgl_order',
+                ])
+                ->where('ob.jenis_order', 'KONTRAK');
 
-                if ($order) {
-                    $listJadwal = DB::table('jadwal')
-                        ->where('no_quotation', $order->no_penawaran)
-                        ->where('is_active', true)
-                        ->get();
-                    return response()->json([
-                        'status' => 'success',
-                        'message' => 'Detail Order Berhasil Ditemukan',
-                        'data' => [
-                            'order' => $order,
-                            'jadwal' => $listJadwal
-                        ]
-                    ], 200);
+            $periodFilter = $request->input('periode');
+            if (!empty($periodFilter)) {
+                if (strlen($periodFilter) === 7) {
+                    $query->where('ob.dataOrderDetail', 'like', "%\"{$periodFilter}\"%");
+                } else {
+                    $query->where('ob.dataOrderDetail', 'like', "%\"{$periodFilter}-%");
                 }
             }
 
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No Order Tidak Ditemukan'
-            ], 404);
-            
-        } catch (Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
+            $orders = $query->get();
+            $rows = collect();
 
-      public function indexOrderSelesai(Request $request)
-    {
-        try {
-            $query = DB::table("order_berjalan as ob") 
-                ->leftJoin("order_header as oh", "oh.no_order", "=", "ob.no_order")
-                ->leftJoin("master_karyawan as mk", "mk.id", "=", "ob.sales_id")
-                ->select([
-                    'ob.id',
-                    'ob.no_order',
-                    DB::raw("
-                        CONCAT(
-                            ROUND(
-                                CAST(
-                                    JSON_UNQUOTE(
-                                        JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')
-                                    ) AS DECIMAL(10,6)
-                                )
-                            ),
-                            ' %'
-                        ) as persentase
-                    "),
-                    'ob.tgl_order as periode',
-                    'ob.no_penawaran as no_quotation',
-                    'ob.nama_perusahaan as nama_pelanggan',
-                    'oh.konsultan as nama_konsultan',
-                    'mk.nama_lengkap as sales_penanggung_jawab',
-                ])
-                ->where(function ($q) {
-                    $q->where('ob.status_selesai', 1);
-                    //   ->orWhereRaw("
-                    //       CAST(
-                    //           JSON_UNQUOTE(
-                    //               JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')
-                    //           ) AS UNSIGNED
-                    //       ) = 100
-                    //   ");
-                });
+            foreach ($orders as $ob) {
+                $details = is_string($ob->dataOrderDetail) ? json_decode($ob->dataOrderDetail, true) : $ob->dataOrderDetail;
+                if (is_array($details)) {
+                    foreach ($details as $p) {
+                        $isSelesai = !empty($p['status_selesai']);
+                        if ($isSelesai === $targetSelesai) {
+                            $periodeStr = $p['periode'] ?? '-';
 
-            if ($request->filled('periode')) {
-                $query->whereYear('ob.tgl_order', $request->periode);
+                            if (!empty($periodFilter)) {
+                                if (strlen($periodFilter) === 7) {
+                                    if ($periodeStr !== $periodFilter) {
+                                        continue;
+                                    }
+                                } else {
+                                    $year = substr($periodeStr, 0, 4);
+                                    if ($year != $periodFilter) {
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            $persentaseNum = isset($p['persentase_lhp_selesai']) ? round((float)$p['persentase_lhp_selesai']) : 0;
+                            $proses = isset($p['jumlah_lhp_selesai']) && isset($p['jumlah_lhp']) ? " ({$p['jumlah_lhp_selesai']}/{$p['jumlah_lhp']})" : "";
+
+                            $rows->push([
+                                'id' => $ob->id,
+                                'no_order' => $ob->no_order,
+                                'persentase' => $persentaseNum . ' %' . $proses,
+                                'periode' => $periodeStr,
+                                'no_quotation' => $ob->no_quotation,
+                                'nama_pelanggan' => $ob->nama_pelanggan,
+                                'nama_konsultan' => $ob->nama_konsultan,
+                                'sales_penanggung_jawab' => $ob->sales_penanggung_jawab,
+                            ]);
+                        }
+                    }
+                }
             }
 
-            return Datatables::of($query)
-                ->filterColumn('no_order', function ($query, $keyword) {
-                    $query->where('ob.no_order', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('persentase', function ($query, $keyword) {
-                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')) like ?", ["%{$keyword}%"]);
-                })
-                ->filterColumn('periode', function ($query, $keyword) {
-                    $query->where('ob.tgl_order', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('no_quotation', function ($query, $keyword) {
-                    $query->where('ob.no_penawaran', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('nama_pelanggan', function ($query, $keyword) {
-                    $query->where('ob.nama_perusahaan', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('nama_konsultan', function ($query, $keyword) {
-                    $query->where('oh.konsultan', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('sales_penanggung_jawab', function ($query, $keyword) {
-                    $query->where('mk.nama_lengkap', 'like', "%{$keyword}%");
-                })
-                ->make(true);
+            return Datatables::of($rows)->make(true);
         } catch (Exception $e) {
             return response()->json([
                 'status' => 'error',
@@ -203,7 +177,7 @@ class LaporanTrackingOrderController extends Controller
         }
     }
 
-     public function detailOrderSelesai(Request $request)
+      public function detailOrder(Request $request)
     {
         try {
             $noOrder = $request->no_order;
@@ -221,10 +195,26 @@ class LaporanTrackingOrderController extends Controller
                     ->first();
 
                 if ($order) {
-                    $listJadwal = DB::table('jadwal')
+                    $periode = $request->periode;
+                    if (strtoupper($order->jenis_order) === 'KONTRAK' && !empty($periode) && !empty($order->dataOrderDetail)) {
+                        $details = is_string($order->dataOrderDetail) ? json_decode($order->dataOrderDetail, true) : $order->dataOrderDetail;
+                        if (is_array($details)) {
+                            $filtered = array_values(array_filter($details, function ($item) use ($periode) {
+                                return isset($item['periode']) && $item['periode'] === $periode;
+                            }));
+                            $order->dataOrderDetail = json_encode($filtered);
+                        }
+                    }
+
+                    $jadwalQuery = DB::table('jadwal')
                         ->where('no_quotation', $order->no_penawaran)
-                        ->where('is_active', true)
-                        ->get();
+                        ->where('is_active', true);
+
+                    if (strtoupper($order->jenis_order) === 'KONTRAK' && !empty($periode)) {
+                        $jadwalQuery->where('periode', $periode);
+                    }
+
+                    $listJadwal = $jadwalQuery->get();
                     return response()->json([
                         'status' => 'success',
                         'message' => 'Detail Order Berhasil Ditemukan',
@@ -292,6 +282,8 @@ class LaporanTrackingOrderController extends Controller
                     ];
                 }
                 
+                $tanggalSampling = ($firstLap && $firstLap->created_at) ? (string) $firstLap->created_at : ($orderDetail->tanggal_sampling ?? $orderDetail->tanggal_terima);
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Detail step sampling berhasil ditemukan',
@@ -301,7 +293,7 @@ class LaporanTrackingOrderController extends Controller
                         'no_lhp' => $orderDetail->cfr,
                         'kategori' => $orderDetail->kategori_3,
                         'titik_lokasi' => $orderDetail->keterangan_1,
-                        'tanggal_sampling' => $orderDetail->tanggal_sampling ?? $orderDetail->tanggal_terima,
+                        'tanggal_sampling' => $tanggalSampling,
                         'data_lapangan' => $dataLapanganFiltered,
                     ]
                 ], 200);
@@ -370,6 +362,7 @@ class LaporanTrackingOrderController extends Controller
 
             if ($type === 'drafting') {
                 $orderDetail = OrderDetail::withAnyLhps()
+                    ->withAnyDataLapangan()
                     ->where('is_active', true)
                     ->where(function ($q) use ($noSampel, $noLhp) {
                         if ($noSampel) {
@@ -390,6 +383,10 @@ class LaporanTrackingOrderController extends Controller
                 $anyLhps = $orderDetail->any_lhps;
                 $firstLhp = $anyLhps ? $anyLhps->first() : null;
 
+                $dataLapangan = $orderDetail->any_data_lapangan;
+                $firstLap = $dataLapangan ? $dataLapangan->first() : null;
+                $tanggalSampling = ($firstLap && $firstLap->created_at) ? (string) $firstLap->created_at : ($orderDetail->tanggal_sampling ?? null);
+
                 $details = [];
 
                 if ($firstLhp) {
@@ -401,12 +398,20 @@ class LaporanTrackingOrderController extends Controller
 
                         if (is_iterable($relationData)) {
                             foreach ($relationData as $item) {
-                                if (is_object($item)) {
-                                    $rawItems[] = $item;
+                                if (!is_object($item)) continue;
+
+                                $itemNoSampel = $item->no_sampel ?? $item->no_sample ?? null;
+                                if ($noSampel && $itemNoSampel && $itemNoSampel != $noSampel) {
+                                    continue;
                                 }
+
+                                $rawItems[] = $item;
                             }
                         } elseif (is_object($relationData)) {
-                            $rawItems[] = $relationData;
+                            $itemNoSampel = $relationData->no_sampel ?? $relationData->no_sample ?? null;
+                            if (!$noSampel || !$itemNoSampel || $itemNoSampel == $noSampel) {
+                                $rawItems[] = $relationData;
+                            }
                         }
                     }
 
@@ -415,13 +420,14 @@ class LaporanTrackingOrderController extends Controller
                     }
 
                     foreach ($rawItems as $item) {
-                        $namaParam = $item->nama_parameter ?? $item->parameter ?? $item->parameter_lab ?? $item->parameter_regulasi ?? null;
+                        $namaParam = $item->nama_parameter ?? $item->parameter ?? $item->parameter_lab ?? $item->parameter_regulasi ?? $item->param ?? null;
                         $hasilUji = $item->hasil_uji ?? $item->hasil ?? null;
 
                         if ($namaParam !== null || $hasilUji !== null) {
                             $details[] = [
                                 'nama_parameter' => $namaParam,
                                 'hasil_uji' => $hasilUji,
+                                'tanggal_sampling' => $tanggalSampling,
                             ];
                         }
                     }
@@ -436,11 +442,13 @@ class LaporanTrackingOrderController extends Controller
                         'no_lhp' => $orderDetail->cfr,
                         'kategori' => $orderDetail->kategori_3,
                         'titik_lokasi' => $orderDetail->keterangan_1,
+                        'tanggal_sampling' => $tanggalSampling,
                         'detail' => $details,
                     ]
                 ], 200);
             }
 
+            // lhp
             if ($type === 'lhp_release') {
                 $orderDetail = OrderDetail::withAnyLhps()
                     ->where('is_active', true)
