@@ -16,9 +16,19 @@ class SamplerTrackingService
 {
     protected $columnsByTable = [];
 
+    protected function now()
+    {
+        return Carbon::now('Asia/Jakarta');
+    }
+
+    protected function today()
+    {
+        return $this->now()->toDateString();
+    }
+
     public function sync($date = null)
     {
-        $date = $date ?: Carbon::now()->toDateString();
+        $date = $date ?: $this->today();
 
         $jadwals = Jadwal::where('is_active', true)
             ->whereDate('tanggal', $date)
@@ -29,7 +39,7 @@ class SamplerTrackingService
 
     public function previewSync($date = null)
     {
-        $date = $date ?: Carbon::now()->toDateString();
+        $date = $date ?: $this->today();
         $date = Carbon::parse($date)->toDateString();
 
         $jadwals = Jadwal::where('is_active', true)
@@ -128,7 +138,7 @@ class SamplerTrackingService
             return collect();
         }
 
-        $now = Carbon::now();
+        $now = $this->now();
         $sessions = [];
         $activeTeamKeys = [];
 
@@ -230,8 +240,7 @@ class SamplerTrackingService
     }
     public function listByDate($date = null, $samplerId = null, $samplerName = null)
     {
-        $date = $date ?: Carbon::now()->toDateString();
-
+        $date = $this->today();
         $hasSamplerFilter = !empty($samplerId) || !empty($samplerName);
         $memberFilter = function ($query) use ($samplerId, $samplerName) {
             if ($samplerId) {
@@ -279,7 +288,7 @@ class SamplerTrackingService
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
-        $date = $request->tanggal ?: Carbon::now()->toDateString();
+        $date = $request->tanggal ?: $this->today();
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
         $recordsTotal = $rows->count();
 
@@ -568,7 +577,7 @@ class SamplerTrackingService
 
     protected function teamMovementCode($date, $groupKey)
     {
-        $compactDate = $date ? substr(str_replace('-', '', $date), 2) : Carbon::now()->format('ymd');
+        $compactDate = $date ? substr(str_replace('-', '', $date), 2) : $this->now()->format('ymd');
 
         return 'TRK-' . $compactDate . '-' . strtoupper(substr(sha1($groupKey), 0, 8));
     }
@@ -626,7 +635,7 @@ class SamplerTrackingService
                     'bas_warning_message' => $basWarning['message'] ?? null,
                     'is_auto' => $targetMember->id !== $member->id,
                     'sequence_no' => $this->nextSequence($targetMember->id),
-                    'event_at' => $payload['event_at'] ?? Carbon::now(),
+                    'event_at' => $payload['event_at'] ?? $this->now(),
                 ]));
             }
 
@@ -719,7 +728,7 @@ class SamplerTrackingService
 
     public function updateMovementGroup(array $memberIds, $movementGroup = null)
     {
-        $movementGroup = $movementGroup ?: ('TRK-' . Carbon::now()->format('ymd') . '-GRP-' . mt_rand(100, 999));
+        $movementGroup = $movementGroup ?: ('TRK-' . $this->now()->format('ymd') . '-GRP-' . mt_rand(100, 999));
         $member = new SamplerTrackingMember();
         $movementUpdate = $this->onlyExistingColumns($member->getTable(), ['current_movement_group' => $movementGroup]);
 
@@ -739,13 +748,13 @@ class SamplerTrackingService
             throw new \Exception('Tabel sampler_tracking_route_overrides belum ada.');
         }
 
-        $date = $payload['tanggal'] ?? Carbon::now()->toDateString();
+        $date = $this->today();
         $samplerId = $payload['sampler_id'] ?? null;
         $samplerName = $payload['sampler_name'] ?? $actorName;
         $samplerKey = $this->samplerRouteKey($samplerId, $samplerName);
         $reason = trim($payload['reason'] ?? '');
         $items = collect($payload['items'] ?? [])->values();
-        $now = Carbon::now();
+        $now = $this->now();
 
         if (!$samplerKey || $items->isEmpty() || $reason === '') {
             throw new \Exception('Urutan tujuan dan keterangan wajib diisi.');
@@ -840,7 +849,7 @@ class SamplerTrackingService
     {
         $date = $session && $session->tanggal_sampling
             ? Carbon::parse($session->tanggal_sampling)->format('ymd')
-            : Carbon::now()->format('ymd');
+            : $this->now()->format('ymd');
 
         $sequence = $session && $session->id
             ? str_pad($session->id, 4, '0', STR_PAD_LEFT)
@@ -855,7 +864,7 @@ class SamplerTrackingService
     {
         $date = $row && $row->tanggal
             ? Carbon::parse($row->tanggal)->format('ymd')
-            : Carbon::now()->format('ymd');
+            : $this->now()->format('ymd');
 
         $samplerKey = $row && ($row->userid || $row->sampler)
             ? ($row->userid ?: $row->sampler)
@@ -907,7 +916,7 @@ class SamplerTrackingService
             mkdir($directory, 0777, true);
         }
 
-        $fileName = 'tracking_' . Carbon::now()->format('YmdHis') . '_' . uniqid() . '.' . $extension;
+        $fileName = 'tracking_' . $this->now()->format('YmdHis') . '_' . uniqid() . '.' . $extension;
         $path = $directory . DIRECTORY_SEPARATOR . $fileName;
 
         file_put_contents($path, base64_decode($data));
