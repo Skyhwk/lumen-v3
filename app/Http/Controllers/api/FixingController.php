@@ -2523,5 +2523,29 @@ class FixingController extends Controller
             return response()->json(['message' => 'Gagal menghapus data: ' . $e->getMessage()], 500);
         }
     }
-}
 
+    public function runCheckOrderActive(Request $request)
+    {
+        try {
+            $options = [];
+            if ($request->has('start_date') && !empty($request->start_date)) {
+                $options['--start_date'] = $request->start_date;
+            }
+            if ($request->has('end_date') && !empty($request->end_date)) {
+                $options['--end_date'] = $request->end_date;
+            }
+
+            \Illuminate\Support\Facades\Artisan::call('checkorder', $options);
+            return response()->json([
+                'success' => true,
+                'message' => 'Command checkorder berhasil dijalankan.',
+                'output' => \Illuminate\Support\Facades\Artisan::output()
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
+}
