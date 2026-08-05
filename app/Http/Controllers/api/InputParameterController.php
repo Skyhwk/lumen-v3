@@ -3287,10 +3287,10 @@ class InputParameterController extends Controller
 
 				$data_udara['id_lingkungan_header'] = $data->id;
 				$data_udara['no_sampel']            = $request->no_sample;
-				$minWsUdara = env('MIN_COLUMN_WS_UDARA', 1);
-				$maxWsUdara = env('MAX_COLUMN_WS_UDARA', 23);
-				$minWsLingkungan = env('MIN_COLUMN_WS_LINGKUNGAN', 0);
-				$maxWsLingkungan = env('MAX_COLUMN_WS_LINGKUNGAN', 18);
+				$minWsUdara = config('column_ws.ws_value_udara.min', 1);
+				$maxWsUdara = config('column_ws.ws_value_udara.max', 23);
+				$minWsLingkungan = config('column_ws.ws_value_lingkungan.min', 0);
+				$maxWsLingkungan = config('column_ws.ws_value_lingkungan.max', 18);
 
 				$idxLingkungan = $minWsLingkungan;
 				for ($i = $minWsUdara; $i <= $maxWsUdara; $i++) {
