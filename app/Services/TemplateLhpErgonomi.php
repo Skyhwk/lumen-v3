@@ -107,7 +107,13 @@ class TemplateLhpErgonomi
             $pengukuran = json_decode($dataRwl->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
             
-            $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
+            // 1. Bersihkan simbol dari string
+            $awal_bersih = str_replace(['<', '>', '='], '', $pengukuran->frekuensi_jumlah_awal);
+            $akhir_bersih = str_replace(['<', '>', '='], '', $pengukuran->frekuensi_jumlah_akhir);
+
+            // 2. Ubah menjadi tipe data float dan hitung
+            $avrageFrequesi = ((float) $awal_bersih + (float) $akhir_bersih) / 2;
+            // $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
             $pengukuran->jarak_vertikal = $dataRwl->jarak_vertikal;
             $pengukuran->berat_beban = $dataRwl->berat_beban;
             $pengukuran->frekuensi_jumlah_angkatan = $dataRwl->frekuensi_jumlah_angkatan;
@@ -140,8 +146,6 @@ class TemplateLhpErgonomi
                 "periode_analisis" => null,
                 "divisi" => $dataRwl->divisi,
             ];
-            
-        //    dd($pengukuran);
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonomirwl',compact('pengukuran','personal','ttd'))->render();
             return $html;
