@@ -456,9 +456,7 @@ class CheckOrderActive extends Command
                 : null;
             //TODO: perlu di cek fungsinya
             if ($steps['drafting']['date'] != null && $steps['analisa']['date'] == null) {
-                $steps['analisa']['date'] = !empty($lhps['created_at'])
-                    ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
-                    : null;
+                $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
             $tglLhpRilis = !empty($lhps['approved_at'])
