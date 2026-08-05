@@ -44,7 +44,7 @@ class MonitoringLhpController extends Controller
                 order_detail.kontrak,
                 MAX(order_detail.kategori_1) as status_sampling,
                 GROUP_CONCAT(DISTINCT order_detail.kategori_3 SEPARATOR ", ") as subkategori,
-                SUM(CASE 
+                MAX(CASE 
                     WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) 
                     THEN JSON_LENGTH(order_detail.parameter) 
                     ELSE 0 
@@ -171,10 +171,10 @@ class MonitoringLhpController extends Controller
                 $isKontrak = $data->kontrak == 'C' ? true : false;
                 if($isKontrak) {
                     $quotation = QuotationKontrakH::with('sales')->where('no_document', $data->no_quotation)->first();
-                    return $quotation->sales->nama_lengkap;
+                    return $quotation->sales->nama_lengkap ?? '-';
                 }else{
                     $quotation = QuotationNonKontrak::with('sales')->where('no_document', $data->no_quotation)->first();
-                    return $quotation->sales->nama_lengkap;
+                    return $quotation->sales->nama_lengkap ?? '-';
                 }
             })
 
@@ -187,7 +187,11 @@ class MonitoringLhpController extends Controller
             })
 
             ->filterColumn('total_parameter', function ($query, $keyword) {
-                $query->havingRaw('SUM(CASE WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) THEN JSON_LENGTH(order_detail.parameter) ELSE 0 END) like ?', ['%' . $keyword . '%']);
+                $query->havingRaw('MAX(CASE 
+                    WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) 
+                    THEN JSON_LENGTH(order_detail.parameter) 
+                    ELSE 0 
+                END) like ?', ['%' . $keyword . '%']);
             })
 
             ->filterColumn('no_order', function ($query, $keyword) {
