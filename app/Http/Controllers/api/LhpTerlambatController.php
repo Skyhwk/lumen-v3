@@ -43,6 +43,13 @@ class LhpTerlambatController extends Controller
                 order_detail.periode,
                 order_detail.kontrak,
                 MAX(order_detail.kategori_1) as status_sampling,
+                GROUP_CONCAT(DISTINCT order_detail.kategori_3 SEPARATOR ", ") as subkategori,
+                SUM(CASE 
+                    WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) 
+                    THEN JSON_LENGTH(order_detail.parameter) 
+                    ELSE 0 
+                END) as total_parameter,
+                COALESCE(MAX(order_header.is_revisi), 0) as is_revisi,
                 MIN(order_detail.tanggal_sampling) as tanggal_sampling,
                 MIN(order_detail.is_approve) as is_approve,
                 MIN(order_detail.status) as status
@@ -169,6 +176,18 @@ class LhpTerlambatController extends Controller
                     $quotation = QuotationNonKontrak::with('sales')->where('no_document', $data->no_quotation)->first();
                     return $quotation->sales->nama_lengkap;
                 }
+            })
+
+            ->filterColumn('status_sampling', function ($query, $keyword) {
+                $query->where('order_detail.kategori_1', 'like', '%' . $keyword . '%');
+            })
+
+            ->filterColumn('subkategori', function ($query, $keyword) {
+                $query->where('order_detail.kategori_3', 'like', '%' . $keyword . '%');
+            })
+
+            ->filterColumn('total_parameter', function ($query, $keyword) {
+                $query->havingRaw('SUM(CASE WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) THEN JSON_LENGTH(order_detail.parameter) ELSE 0 END) like ?', ['%' . $keyword . '%']);
             })
 
             ->filterColumn('no_order', function ($query, $keyword) {
