@@ -21,6 +21,7 @@ use App\Services\InsertActivityFdl;
 use App\Services\SendTelegram;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -858,13 +859,13 @@ class FdlLingkunganHidupController extends Controller
     
                     if ($request->permission != '') $fdlvalue->permission                      = $request->permission;
                     if ($request->statFoto == 'adaFoto') {
-                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel   = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel     = self::convertImg($request->foto_alat, 2, $this->user_id);
-                        if ($request->foto_lain != '') $fdlvalue->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel   = ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel     = ImageConvertService::fromBase64($request->foto_alat, 2, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_lain != '') $fdlvalue->foto_lain                 = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                     } else {
-                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel   = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel     = self::convertImg($request->foto_alat, 2, $this->user_id);
-                        if ($request->foto_lain != '') $fdlvalue->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel   = ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel     = ImageConvertService::fromBase64($request->foto_alat, 2, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_lain != '') $fdlvalue->foto_lain                 = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                     }
                     $fdlvalue->created_by                     = $this->karyawan;
                     $fdlvalue->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
@@ -959,13 +960,13 @@ class FdlLingkunganHidupController extends Controller
                     $fdlvalue->satuan = $satuan;
 
                     if ($request->statFoto == 'adaFoto') {
-                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel = self::convertImg($request->foto_alat, 2, $this->user_id);
-                        if ($request->foto_lain != '') $fdlvalue->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel = , 'dokumentasi/sampling'($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel = ImageConvertService::fromBase64($request->foto_alat, 2, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_lain != '') $fdlvalue->foto_lain = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                     } else {
-                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel = self::convertImg($request->foto_alat, 2, $this->user_id);
-                        if ($request->foto_lain != '') $fdlvalue->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel = ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel = ImageConvertService::fromBase64($request->foto_alat, 2, $this->user_id, 'dokumentasi/sampling');
+                        if ($request->foto_lain != '') $fdlvalue->foto_lain = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                     }
 
                     $fdlvalue->created_by = $this->karyawan;

@@ -23,6 +23,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -135,11 +136,11 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
                 if ($request->vs != '') $data->vs = $request->vs;
                 if ($request->nil_vs != '') $data->vs = $request->nil_vs;
                 if ($request->d_cerobong != '') $data->diameter_cerobong = $request->d_cerobong;
-                if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
+                if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel = ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
                 if ($request->foto_sampel != '')
-                    $data->foto_kondisi_sampel = self::convertImg($request->foto_sampel, 2, $this->user_id);
+                    $data->foto_kondisi_sampel = ImageConvertService::fromBase64($request->foto_sampel, 2, $this->user_id, 'dokumentasi/sampling');
                 if ($request->foto_lain != '')
-                    $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+                    $data->foto_lain = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                 if ($request->permission != '')
                     $data->permission = $request->permission;
                 $data->created_by = $this->karyawan;

@@ -21,6 +21,7 @@ use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -123,7 +124,7 @@ class FdlKecerahanController extends Controller
             if ($request->kedalaman_secchi_3 != '') $data->kedalaman_secchi_3    = $request->kedalaman_secchi_3;
             if ($request->nilai_kecerahan != '') $data->nilai_kecerahan          = $request->nilai_kecerahan;
             if ($request->permission != '') $data->permission                    = $request->permission;
-            if ($request->foto_aktifitas_sampling != '') $data->foto_aktifitas_sampling   = self::convertImg($request->foto_aktifitas_sampling, 1, $this->user_id);
+            if ($request->foto_aktifitas_sampling != '') $data->foto_aktifitas_sampling   = ImageConvertService::fromBase64($request->foto_aktifitas_sampling, 1, $this->user_id, 'dokumentasi/sampling');
             $data->created_by                                                    = $this->karyawan;
             $data->created_at                                                    = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_rejected = 0;

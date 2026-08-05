@@ -14,6 +14,7 @@ use Yajra\Datatables\Datatables;
 
 use App\Models\Canvasing;
 use App\Models\MasterWilayahSampling;
+use App\Services\ImageConvertService;
 
 class FdlCanvasingController extends Controller
 {
@@ -55,8 +56,8 @@ class FdlCanvasingController extends Controller
             $data->longitude = $request->longitude;
             $data->titik_koordinat = $request->titik_koordinat;
             $data->jumlah_flyer = $request->jumlah_flyer;
-            $data->foto_1                 = $request->foto_lokasi_1 ? self::convertImg($request->foto_lokasi_1, 1, $this->user_id) : null;
-            $data->foto_2                 = $request->foto_lokasi_2 ? self::convertImg($request->foto_lokasi_2, 2, $this->user_id) : null;
+            $data->foto_1                 = $request->foto_lokasi_1 ? ImageConvertService::fromBase64($request->foto_lokasi_1, 1, $this->user_id, 'dokumentasi/canvasing') : null;
+            $data->foto_2                 = $request->foto_lokasi_2 ? ImageConvertService::fromBase64($request->foto_lokasi_2, 2, $this->user_id, 'dokumentasi/canvasing') : null;
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_rejected = 0;

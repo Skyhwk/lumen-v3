@@ -23,6 +23,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -291,10 +292,10 @@ class FdlPartikulatIsokinetikMethod1Controller extends Controller
                 ? json_encode($request->jarakLin_s)
                 : json_encode($request->jarakpersegiLin_s);
             // dd($request->all());
-            $data->filename_denah = $request->foto_lain ? self::convertImg($request->foto_lain, 0, $this->user_id) : '';
-            $data->foto_lokasi_sampel = $request->foto_lokasi_sampel ? self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id) : '';
-            $data->foto_kondisi_sampel = $request->akses_naik ? self::convertImg($request->akses_naik, 2, $this->user_id) : '';
-            $data->foto_lain = $request->foto_lubang ? self::convertImg($request->foto_lubang, 3, $this->user_id) : '';
+            $data->filename_denah = $request->foto_lain ? ImageConvertService::fromBase64($request->foto_lain, 0, $this->user_id, 'dokumentasi/sampling') : '';
+            $data->foto_lokasi_sampel = $request->foto_lokasi_sampel ? ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling') : '';
+            $data->foto_kondisi_sampel = $request->akses_naik ? ImageConvertService::fromBase64($request->akses_naik, 2, $this->user_id, 'dokumentasi/sampling') : '';
+            $data->foto_lain = $request->foto_lubang ? ImageConvertService::fromBase64($request->foto_lubang, 3, $this->user_id, 'dokumentasi/sampling') : '';
             $data->permission = $request->permission ?? '';
             $data->no_survei = substr(str_replace(".", "", microtime(true)), 0, 8);
             $data->created_by = $this->karyawan;

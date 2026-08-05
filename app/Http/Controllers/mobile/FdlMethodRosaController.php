@@ -20,6 +20,7 @@ use App\Services\InsertActivityFdl;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -256,13 +257,13 @@ class FdlMethodRosaController extends Controller
             $data->method = 4;
             $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($request->foto_samping_kiri != '')
-                $data->foto_samping_kiri = self::convertImg($request->foto_samping_kiri, 1, $this->user_id);
+                $data->foto_samping_kiri = ImageConvertService::fromBase64($request->foto_samping_kiri, 1, $this->user_id, 'dokumentasi/sampling');
             if ($request->foto_samping_kanan != '')
-                $data->foto_samping_kanan = self::convertImg($request->foto_samping_kanan, 2, $this->user_id);
+                $data->foto_samping_kanan = ImageConvertService::fromBase64($request->foto_samping_kanan, 2, $this->user_id, 'dokumentasi/sampling');
             if ($request->foto_depan != '')
-                $data->foto_depan = self::convertImg($request->foto_depan, 3, $this->user_id);
+                $data->foto_depan = ImageConvertService::fromBase64($request->foto_depan, 3, $this->user_id, 'dokumentasi/sampling');
             if ($request->foto_belakang != '')
-                $data->foto_belakang = self::convertImg($request->foto_belakang, 4, $this->user_id);
+                $data->foto_belakang = ImageConvertService::fromBase64($request->foto_belakang, 4, $this->user_id, 'dokumentasi/sampling');
             $data->aktivitas_ukur = $request->aktivitas_ukur;
             $data->permission = $request->permission;
             $data->created_by = $this->karyawan;

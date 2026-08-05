@@ -21,6 +21,7 @@ use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -39,21 +40,21 @@ class FdlAirController extends Controller
         $search = $request->input('search');
 
         $query = DataLapanganAir::with('detail')
-        ->where('created_by', $this->karyawan)
-        ->where(function ($q) {
-            $q->where('is_rejected', 1)
-            ->orWhere(function ($q2) {
-                $q2->where('is_rejected', 0)
-                    ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
+            ->where('created_by', $this->karyawan)
+            ->where(function ($q) {
+                $q->where('is_rejected', 1)
+                    ->orWhere(function ($q2) {
+                        $q2->where('is_rejected', 0)
+                            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')));
+                    });
             });
-        });
 
 
         if ($search) {
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('jenis_sampel', 'like', "%$search%")
-                ->orWhere('lokasi_titik_pengambilan', 'like', "%$search%")
-                ->orWhere('keterangan', 'like', "%$search%");
+                    ->orWhere('lokasi_titik_pengambilan', 'like', "%$search%")
+                    ->orWhere('keterangan', 'like', "%$search%");
             });
         }
 
@@ -67,8 +68,8 @@ class FdlAirController extends Controller
     public function dashboardData()
     {
         $datas = DataLapanganAir::where('created_by', $this->karyawan)
-        ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
-        ->orderBy('id', 'desc')->get();
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(config('app.fdl_index_subdays')))
+            ->orderBy('id', 'desc')->get();
 
         $permukaan = 0;
         $limbah = 0;
@@ -77,21 +78,21 @@ class FdlAirController extends Controller
         $bersih = 0;
         $khusus = 0;
 
-        if(!empty($datas) && count($datas) > 0){
+        if (!empty($datas) && count($datas) > 0) {
             foreach ($datas as $data) {
                 $status = $this->checkJenisSample($data->jenis_sampel);
-                if($status == 'permukaan'){
+                if ($status == 'permukaan') {
                     $permukaan++;
-                } else if($status == 'limbah'){
-                    $limbah++;  
-                } else if($status == 'tanah'){
+                } else if ($status == 'limbah') {
+                    $limbah++;
+                } else if ($status == 'tanah') {
                     $tanah++;
-                } else if($status == 'bersih'){
+                } else if ($status == 'bersih') {
                     $bersih++;
-                } else if($status == 'lain'){
-                    if($data->lokasi_titik_pengambilan != null || $data->arah_arus != null){
+                } else if ($status == 'lain') {
+                    if ($data->lokasi_titik_pengambilan != null || $data->arah_arus != null) {
                         $laut++;
-                    } else if($data->lokasi_titik_pengambilan == null && $data->jenis_sampel == null && $data->keterangan != null){
+                    } else if ($data->lokasi_titik_pengambilan == null && $data->jenis_sampel == null && $data->keterangan != null) {
                         $khusus++;
                     }
                 }
@@ -107,10 +108,11 @@ class FdlAirController extends Controller
                 'bersih' => $bersih,
                 'khusus' => $khusus
             ]
-            ]);
+        ]);
     }
 
-    private function checkJenisSample($jenis) {
+    private function checkJenisSample($jenis)
+    {
         switch ($jenis) {
             case 'Air Sungai':
             case 'Air Danau':
@@ -119,9 +121,9 @@ class FdlAirController extends Controller
             case 'Air Akuifer':
             case 'Air Rawa':
             case 'Air Muara':
-            case 'Air dari Mata Air':    
-            case 'Air Mata Air':    
-            case 'Air Lindi':    
+            case 'Air dari Mata Air':
+            case 'Air Mata Air':
+            case 'Air Lindi':
                 return 'permukaan';
                 break;
             case 'Limbah Domestik':
@@ -160,8 +162,8 @@ class FdlAirController extends Controller
 
         if (isset($request->no_sample) && $request->no_sample != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-            ->where('kategori_2', '1-Air')
-            ->where('is_active', 1)->first();
+                ->where('kategori_2', '1-Air')
+                ->where('is_active', 1)->first();
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sample tidak ditemukan di kategori Air'
@@ -177,14 +179,15 @@ class FdlAirController extends Controller
                     'param' => $data->parameter
                 ], 200);
             }
-        }else {
+        } else {
             return response()->json([
                 'message' => 'Nomor sample tidak boleh kosong'
             ], 401);
         }
     }
 
-    public function store(Request $request){
+    public function store(Request $request)
+    {
         // dd($request->all());
         DB::beginTransaction();
         try {
@@ -318,15 +321,30 @@ class FdlAirController extends Controller
                             $data->klor_bebas = $request->klor ?? '';
 
                             if ($request->foto_lok != '') {
-                                $data->foto_lokasi_sampel = self::convertImg($request->foto_lok, 1, $this->user_id);
+                                $data->foto_lokasi_sampel = ImageConvertService::fromBase64(
+                                    $request->foto_lok,
+                                    1,
+                                    $this->user_id,
+                                    'dokumentasi/sampling'
+                                );
                             }
 
                             if ($request->foto_sampl != '') {
-                                $data->foto_kondisi_sampel = self::convertImg($request->foto_sampl, 2, $this->user_id);
+                                $data->foto_kondisi_sampel = ImageConvertService::fromBase64(
+                                    $request->foto_sampl,
+                                    2,
+                                    $this->user_id,
+                                    'dokumentasi/sampling'
+                                );
                             }
 
                             if ($request->foto_lain != '') {
-                                $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+                                $data->foto_lain = ImageConvertService::fromBase64(
+                                    $request->foto_lain,
+                                    3,
+                                    $this->user_id,
+                                    'dokumentasi/sampling'
+                                );
                             }
 
                             $data->permission = $request->permission ?? '';
@@ -339,8 +357,8 @@ class FdlAirController extends Controller
                             $nama = $this->karyawan;
                             $this->resultx = "Data Sampling AIR dengan No Sample $request->no_sampel berhasil disimpan oleh $nama";
                             InsertActivityFdl::by($this->user_id)->action('input')->target("Air ($data->jenis_sample) pada nomor sampel $request->no_sampel")->save();
-                            
-                            DB::commit(); 
+
+                            DB::commit();
                             return response()->json([
                                 'message' => $this->resultx
                             ], 200);
@@ -353,7 +371,7 @@ class FdlAirController extends Controller
                 ], 401);
             }
         } catch (Exception $e) {
-            DB::rollBack(); 
+            DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
                 'code' => $e->getCode(),
@@ -368,14 +386,14 @@ class FdlAirController extends Controller
             $data = DataLapanganAir::with('detail')->where('id', $request->id)->first();
 
             $po = OrderDetail::where('no_sampel', $data->no_sampel)->first();
-            
-            if($po){
+
+            if ($po) {
                 if ($data->debit_air == null) {
                     $debit = 'Data By Customer';
                 } else {
                     $debit = $data->debit_air;
                 }
-    
+
                 return response()->json([
                     'id'                        => $data->id,
                     'no_sample'                 => $data->no_sampel,
@@ -435,13 +453,13 @@ class FdlAirController extends Controller
                     'status'                    => '200'
                 ], 200);
             }
-
         } catch (\exception $err) {
             dd($err);
         }
     }
 
-    public function delete(Request $request){
+    public function delete(Request $request)
+    {
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {
@@ -463,7 +481,7 @@ class FdlAirController extends Controller
                 $data->delete();
 
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Air ($jenis_sampel) dengan nomor sampel $no_sample")->save();
-                
+
                 DB::commit();
                 return response()->json([
                     'message' => 'Data has ben Delete',
@@ -517,15 +535,15 @@ class FdlAirController extends Controller
         }
     }
 
-    public function convertImg($foto = '', $type = '', $user = '')
-    {
-        $img = str_replace('data:image/jpeg;base64,', '', $foto);
-        $file = base64_decode($img);
-        $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
-        return $safeName;
-    }
+    // public function convertImg($foto = '', $type = '', $user = '')
+    // {
+    //     $img = str_replace('data:image/jpeg;base64,', '', $foto);
+    //     $file = base64_decode($img);
+    //     $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
+    //     $destinationPath = public_path() . '/dokumentasi/sampling/';
+    //     $success = file_put_contents($destinationPath . $safeName, $file);
+    //     return $safeName;
+    // }
 
     // Select Category
     public function cmbCategory(Request $request)

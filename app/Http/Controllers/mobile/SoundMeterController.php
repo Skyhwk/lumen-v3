@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DeviceIntilab;
 use App\Models\DeviceIntilabRunning;
 use App\Models\OrderDetail;
+use App\Services\ImageConvertService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -86,11 +87,11 @@ class SoundMeterController extends Controller
             }
 
             if ($request->foto_lok) {
-                $data->foto_lokasi_sampel = self::convertImg($request->foto_lok, 1, $this->user_id);
+                $data->foto_lokasi_sampel = ImageConvertService::fromBase64($request->foto_lok, 1, $this->user_id, 'dokumentasi/sampling');
             }
 
             if ($request->foto_lain) {
-                $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+                $data->foto_lain = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
             }
 
             $data->created_by = $this->karyawan;
@@ -452,6 +453,3 @@ class SoundMeterController extends Controller
         return response()->json(['data' => $devices], 200);
     }
 }
-
-
-

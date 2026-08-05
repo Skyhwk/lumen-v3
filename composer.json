@@ -23,6 +23,7 @@
         "intervention/image": "^2.7",
         "irazasyed/telegram-bot-sdk": "^3.9",
         "laravel/lumen-framework": "^8.0",
+        "league/flysystem": "1.1",
         "maatwebsite/excel": "^3.1",
         "mpdf/mpdf": "^8.1",
         "niklasravnsborg/laravel-pdf": "^4.1",

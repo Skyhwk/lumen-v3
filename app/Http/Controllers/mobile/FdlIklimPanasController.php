@@ -21,6 +21,7 @@ use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -200,8 +201,8 @@ class FdlIklimPanasController extends Controller
             if ($request->aktifitas != '') $data->aktifitas                      = $request->aktifitas;
 
             if ($request->permission != '') $data->permission                      = $request->permission;
-            if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel        = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-            if ($request->foto_lain != '') $data->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
+            if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel        = ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
+            if ($request->foto_lain != '') $data->foto_lain                 = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
             $data->created_by                     = $this->karyawan;
             $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_rejected = 0;

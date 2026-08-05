@@ -23,6 +23,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -354,11 +355,11 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
         //         if ($request->Total_time != '')
         //             $data->Total_time = $request->Total_time;
         //         if ($request->foto_lok != '')
-        //             $data->foto_lokasi_sampel = self::convertImg($request->foto_lok, 1, $this->user_id);
+        //             $data->foto_lokasi_sampel = ImageConvertService::fromBase64($request->foto_lok, 1, $this->user_id);
         //         if ($request->foto_sampl != '')
-        //             $data->foto_kondisi_sampel = self::convertImg($request->foto_sampl, 2, $this->user_id);
+        //             $data->foto_kondisi_sampel = ImageConvertService::fromBase64($request->foto_sampl, 2, $this->user_id);
         //         if ($request->foto_lain != '')
-        //             $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+        //             $data->foto_lain = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id);
         //         if ($request->permis != '')
         //             $data->permission = $request->permis;
         //         $data->created_by = $this->karyawan;
@@ -715,11 +716,11 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
                     if ($request->Total_time != '')
                         $data->Total_time = $request->Total_time;
                     if ($request->foto_lokasi_sampel != '')
-                        $data->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
+                        $data->foto_lokasi_sampel = ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling');
                     if ($request->foto_sampl != '')
-                        $data->foto_kondisi_sampel = self::convertImg($request->foto_sampl, 2, $this->user_id);
+                        $data->foto_kondisi_sampel = ImageConvertService::fromBase64($request->foto_sampl, 2, $this->user_id, 'dokumentasi/sampling');
                     if ($request->foto_lain != '')
-                        $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        $data->foto_lain = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                     if ($request->permission != '')
                         $data->permission = $request->permission;
                     $data->created_by = $this->karyawan;

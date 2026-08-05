@@ -17,6 +17,7 @@ use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -128,10 +129,10 @@ class FdlLapisanMinyakController extends Controller
             if ($request->longitude != '') $data->longitude                     = $request->longitude;
             if ($request->waktu != '') $data->waktu_pengambilan                 = $request->waktu;
             if ($request->permission != '') $data->permission                   = $request->permission;
-            if ($request->foto_lokasi_utara != '') $data->foto_lokasi_utara     = self::convertImg($request->foto_lokasi_utara, 1, $this->user_id);
-            if ($request->foto_lokasi_selatan != '') $data->foto_lokasi_selatan = self::convertImg($request->foto_lokasi_selatan, 2, $this->user_id);
-            if ($request->foto_lokasi_timur != '') $data->foto_lokasi_timur     = self::convertImg($request->foto_lokasi_timur, 3, $this->user_id);
-            if ($request->foto_lokasi_barat != '') $data->foto_lokasi_barat     = self::convertImg($request->foto_lokasi_barat, 4, $this->user_id);
+            if ($request->foto_lokasi_utara != '') $data->foto_lokasi_utara     = ImageConvertService::fromBase64($request->foto_lokasi_utara, 1, $this->user_id, 'dokumentasi/sampling');
+            if ($request->foto_lokasi_selatan != '') $data->foto_lokasi_selatan = ImageConvertService::fromBase64($request->foto_lokasi_selatan, 2, $this->user_id, 'dokumentasi/sampling');
+            if ($request->foto_lokasi_timur != '') $data->foto_lokasi_timur     = ImageConvertService::fromBase64($request->foto_lokasi_timur, 3, $this->user_id, 'dokumentasi/sampling');
+            if ($request->foto_lokasi_barat != '') $data->foto_lokasi_barat     = ImageConvertService::fromBase64($request->foto_lokasi_barat, 4, $this->user_id, 'dokumentasi/sampling');
             $data->created_by                                                   = $this->karyawan;
             $data->created_at                                                   = Carbon::now()->format('Y-m-d H:i:s');
             $data->is_rejected = 0;

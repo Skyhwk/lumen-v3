@@ -21,6 +21,8 @@ use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
+use App\Services\VideoStoreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -88,29 +90,29 @@ class FdlMethodBahayaErgonomiController extends Controller
     public function storeVideo(Request $request)
     {
         // Simpan file
-        if ($request->hasFile('video')) {
-            $video = $request->file('video');
-            $noSampelSafe = preg_replace('/[^A-Za-z0-9_\-]/', '_', $request->no_sampel);
-            $safeName = 'video_' . time() . '_' . $noSampelSafe . '.' . $video->getClientOriginalExtension();
+        if (
+            $request->hasFile('video')
+            && $request->file('video')->isValid()
+        ) {
+            $safeName = VideoStoreService::store(
+                $request->file('video'),
+                $request->no_sampel,
+                self::VIDEO_DOKUMENTASI_FOLDER
+            );
 
-            $destinationPath = public_path() . self::VIDEO_DOKUMENTASI_FOLDER;
-            if (!is_dir($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $video->move($destinationPath, $safeName);
-            // Simpan referensi ke database
-            DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', 8)->update([
-                'video_dokumentasi' => $safeName
-            ]);
+            DataLapanganErgonomi::where(
+                'no_sampel',
+                $request->no_sampel
+            )
+                ->where('method', 8)
+                ->update([
+                    'video_dokumentasi' => $safeName,
+                ]);
 
             return response()->json([
                 'success' => true,
             ]);
         }
-
-        return response()->json([
-            'success' => false,
-        ]);
     }
 
     private function getVideoDokumentasiPath($filename)
@@ -266,13 +268,13 @@ class FdlMethodBahayaErgonomiController extends Controller
             $data->permission = $request->permission;
             $data->created_by = $this->karyawan;
             if ($request->foto_samping_kiri != '')
-                $data->foto_samping_kiri = self::convertImg($request->foto_samping_kiri, 1, $this->user_id);
+                $data->foto_samping_kiri = ImageConvertService::fromBase64($request->foto_samping_kiri, 1, $this->user_id, 'dokumentasi/sampling');
             if ($request->foto_samping_kanan != '')
-                $data->foto_samping_kanan = self::convertImg($request->foto_samping_kanan, 2, $this->user_id);
+                $data->foto_samping_kanan = ImageConvertService::fromBase64($request->foto_samping_kanan, 2, $this->user_id, 'dokumentasi/sampling');
             if ($request->foto_depan != '')
-                $data->foto_depan = self::convertImg($request->foto_depan, 3, $this->user_id);
+                $data->foto_depan = ImageConvertService::fromBase64($request->foto_depan, 3, $this->user_id, 'dokumentasi/sampling');
             if ($request->foto_belakang != '')
-                $data->foto_belakang = self::convertImg($request->foto_belakang, 4, $this->user_id);
+                $data->foto_belakang = ImageConvertService::fromBase64($request->foto_belakang, 4, $this->user_id, 'dokumentasi/sampling');
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
 
             // Simpan data ke database

@@ -19,6 +19,7 @@ use App\Models\ParameterFdl;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -257,8 +258,8 @@ class FdlSensoricPMController extends Controller
                     $data->shift_pengambilan = $shift_pengambilan;
                     $data->pengukuran = json_encode($pengukuran);
                     $data->permission = $request->permission ?: null;
-                    $data->foto_lokasi_sampel = $request->foto_lokasi_sampel ? self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id) : null;
-                    $data->foto_lain = $request->foto_lain ? self::convertImg($request->foto_lain, 3, $this->user_id) : null;
+                    $data->foto_lokasi_sampel = $request->foto_lokasi_sampel ? ImageConvertService::fromBase64($request->foto_lokasi_sampel, 1, $this->user_id, 'dokumentasi/sampling') : null;
+                    $data->foto_lain = $request->foto_lain ? ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling') : null;
                     $data->created_by = $this->karyawan;
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected = 0;

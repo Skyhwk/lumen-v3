@@ -13,6 +13,7 @@ use App\Models\Parameter;
 use App\Models\MasterRegulasi;
 use App\Models\MasterBakumutu;
 use App\Http\Controllers\Controller;
+use App\Services\ImageConvertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -257,11 +258,11 @@ class FdlEmisiKendaraanController extends Controller
                         $data_fdl->rpm        = $rpm;
                         $data_fdl->suhu_oli = $oli;
                         if ($request->foto_lok != '')
-                            $data_fdl->foto_depan = self::convertImg($request->foto_lok, 1, $this->user_id);
+                            $data_fdl->foto_depan = ImageConvertService::fromBase64($request->foto_lok, 1, $this->user_id, 'dokumentasi/sampling');
                         if ($request->foto_sampl != '')
-                            $data_fdl->foto_belakang = self::convertImg($request->foto_sampl, 2, $this->user_id);
+                            $data_fdl->foto_belakang = ImageConvertService::fromBase64($request->foto_sampl, 2, $this->user_id, 'dokumentasi/sampling');
                         if ($request->foto_lain != '')
-                            $data_fdl->foto_sampling = self::convertImg($request->foto_lain, 3, $this->user_id);
+                            $data_fdl->foto_sampling = ImageConvertService::fromBase64($request->foto_lain, 3, $this->user_id, 'dokumentasi/sampling');
                         $data_fdl->created_by    = $this->karyawan;
                         $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
                         $data_fdl->is_rejected = 0;
