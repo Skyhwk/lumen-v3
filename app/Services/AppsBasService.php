@@ -1335,7 +1335,7 @@ class AppsBasService
             }
 
             $ccArray = [];
-            $bcc = ['abdulpatah@intilab.com'];
+            $bcc = ['faidhah@intilab.com'];
 
             if (!empty($cc)) {
                 if (is_array($cc)) {
@@ -1344,7 +1344,6 @@ class AppsBasService
                     $ccArray = array_filter(array_map('trim', explode(',', $cc)));
                 }
             }
-            /*
             $emailInstance = SendEmail::where('to', $to)
                 ->where('cc', $ccArray)
                 ->where('bcc', $bcc)
@@ -1368,10 +1367,9 @@ class AppsBasService
                     $emailInstance = $emailInstance->where('attachment', $validAttachments);
                 }
             }
-            */
 
-            // $sent = $emailInstance->send();
-            $sent = true;
+            $sent = $emailInstance->send();
+            
             if ($sent) {
 
                 $persiapanHeaders = PersiapanSampelHeader::where('no_quotation', $noDocument)
