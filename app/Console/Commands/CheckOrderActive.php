@@ -16,7 +16,7 @@ use DB;
 
 class CheckOrderActive extends Command
 {
-    protected $signature = 'checkorder';
+    protected $signature = 'checkorder {--start_date=} {--end_date=}';
     protected $description = 'Check order active satu tahun terakhir';
     protected $lhpRelations = [
         'lhps_air' => 'LhpsAirHeader',
@@ -42,9 +42,11 @@ class CheckOrderActive extends Command
     public function handle()
     {
         $commandStartedAt = microtime(true);
-        $startDate = Carbon::now()->subMonths(6)->format('Y-m-d');
-        // $startDate = '2026-01-01';
-        $endDate = Carbon::now()->format('Y-m-d');
+        $startDateOption = $this->option('start_date');
+        $endDateOption = $this->option('end_date');
+
+        $startDate = $startDateOption ? Carbon::parse($startDateOption)->format('Y-m-d') : Carbon::now()->subMonths(6)->format('Y-m-d');
+        $endDate = $endDateOption ? Carbon::parse($endDateOption)->format('Y-m-d') : Carbon::now()->format('Y-m-d');
 
         $this->info("===== Start Command: CheckOrderActive =====");
         $this->info("Waktu mulai  : " . Carbon::now()->toDateTimeString());
@@ -452,11 +454,14 @@ class CheckOrderActive extends Command
             $steps['drafting']['date'] = !empty($lhps['created_at'])
                 ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
                 : null;
+            //TODO: perlu di cek fungsinya
+            if ($steps['drafting']['date'] != null && $steps['analisa']['date'] == null) {
+                $steps['analisa']['date'] = $steps['sampling']['date'];
+            }
 
-            if ($steps['drafting']['date'] != null) {
-                $steps['analisa']['date'] = !empty($lhps['created_at'])
-                    ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
-                    : null;
+            if($steps['analisa']['date'] != null && $steps['drafting']['date'] != null && Carbon::parse($steps['analisa']['date']) > Carbon::parse($steps['drafting']['date']))
+            {
+                $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
             $tglLhpRilis = !empty($lhps['approved_at'])

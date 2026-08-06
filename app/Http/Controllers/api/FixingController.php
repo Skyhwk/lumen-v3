@@ -2040,6 +2040,98 @@ class FixingController extends Controller
 
         return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
     }
+    public function renderInvoiceByDate(Request $request)
+    {
+        $tanggal = trim((string) $request->input('tanggal'));
+        $dryRun = filter_var($request->input('dry_run', true), FILTER_VALIDATE_BOOLEAN);
+        $isCopy = filter_var($request->input('is_copy', false), FILTER_VALIDATE_BOOLEAN);
+
+        if ($tanggal === '') {
+            return response()->json([
+                'message' => 'Tanggal invoice wajib diisi.',
+            ], 422);
+        }
+
+        try {
+            $date = Carbon::parse($tanggal)->format('Y-m-d');
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Format tanggal invoice tidak valid.',
+            ], 422);
+        }
+
+        $invoiceRows = Invoice::select([
+                'no_invoice',
+                'nama_perusahaan',
+                'no_order',
+                'no_quotation',
+                'tgl_invoice',
+                'filename',
+                'is_custom',
+                'is_generate',
+            ])
+            ->whereDate('tgl_invoice', $date)
+            ->where('is_active', true)
+            ->whereNotNull('no_invoice')
+            ->where('no_invoice', '!=', '')
+            ->orderBy('no_invoice')
+            ->get()
+            ->unique('no_invoice')
+            ->values();
+
+        $summary = [
+            'tanggal' => $date,
+            'dry_run' => $dryRun,
+            'is_copy' => $isCopy,
+            'total_invoice' => $invoiceRows->count(),
+            'rendered' => 0,
+            'failed' => 0,
+        ];
+
+        if ($dryRun) {
+            return response()->json([
+                'message' => 'Preview render ulang invoice per hari selesai.',
+                'data' => [
+                    'summary' => $summary,
+                    'invoices' => $invoiceRows,
+                ],
+            ], 200);
+        }
+
+        $rendered = [];
+        $failed = [];
+
+        foreach ($invoiceRows as $invoice) {
+            try {
+                $render = $isCopy ? new RenderInvoiceTitik() : new RenderInvoice();
+                $render->renderInvoice($invoice->no_invoice);
+
+                $rendered[] = [
+                    'no_invoice' => $invoice->no_invoice,
+                    'nama_perusahaan' => $invoice->nama_perusahaan,
+                ];
+                $summary['rendered']++;
+            } catch (\Throwable $th) {
+                $failed[] = [
+                    'no_invoice' => $invoice->no_invoice,
+                    'nama_perusahaan' => $invoice->nama_perusahaan,
+                    'message' => $th->getMessage(),
+                ];
+                $summary['failed']++;
+            }
+        }
+
+        return response()->json([
+            'message' => $summary['failed'] > 0
+                ? 'Render ulang invoice per hari selesai dengan sebagian gagal.'
+                : 'Render ulang invoice per hari berhasil.',
+            'data' => [
+                'summary' => $summary,
+                'rendered' => $rendered,
+                'failed' => $failed,
+            ],
+        ], $summary['failed'] > 0 ? 207 : 200);
+    }
 
     public function fixInvoiceNumber(Request $request)
     {
@@ -2431,5 +2523,29 @@ class FixingController extends Controller
             return response()->json(['message' => 'Gagal menghapus data: ' . $e->getMessage()], 500);
         }
     }
-}
 
+    public function runCheckOrderActive(Request $request)
+    {
+        try {
+            $options = [];
+            if ($request->has('start_date') && !empty($request->start_date)) {
+                $options['--start_date'] = $request->start_date;
+            }
+            if ($request->has('end_date') && !empty($request->end_date)) {
+                $options['--end_date'] = $request->end_date;
+            }
+
+            \Illuminate\Support\Facades\Artisan::call('checkorder', $options);
+            return response()->json([
+                'success' => true,
+                'message' => 'Command checkorder berhasil dijalankan.',
+                'output' => \Illuminate\Support\Facades\Artisan::output()
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
+}

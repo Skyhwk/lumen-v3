@@ -10,7 +10,7 @@ use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 
 use App\Models\MicrobioHeader;
-use App\Models\WsValueMicrobio;
+use App\Models\WsValueUdara;
 
 use App\Services\NotificationFdlService;
 

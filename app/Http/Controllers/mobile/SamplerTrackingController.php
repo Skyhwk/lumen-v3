@@ -22,7 +22,7 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
     public function updateRouteOrder(Request $request)
     {
         $this->validate($request, [
-            'tanggal' => 'required',
+            'tanggal' => 'nullable',
             'reason' => 'required',
             'items' => 'required|array',
             'items.*.session_id' => 'required',

@@ -2833,6 +2833,27 @@ class AppsBasService
 
     public function storeSampelTidakSelesai(Request $request) // store sampelTidakSelesai
     {
+        if (empty($request->status)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Status sampel wajib diisi',
+            ], 422);
+        }
+
+        if ($request->status === 'Dilanjutkan' && (empty($request->tanggal_dilanjutkan) || trim($request->tanggal_dilanjutkan) === '')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tanggal dilanjutkan wajib diisi jika status Dilanjutkan',
+            ], 422);
+        }
+
+        if ($request->status === 'Belum Selesai' && empty($request->alasan) && empty($request->keterangan)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Alasan wajib diisi jika status Belum Selesai',
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             $id_persiapan = $request->id_persiapan ?? null;
@@ -2840,6 +2861,30 @@ class AppsBasService
                 $psd = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
                 if ($psd) {
                     $id_persiapan = $psd->id_persiapan_sampel_header;
+                }
+                else {
+                    // Fallback cari di PersiapanSampelHeader (untuk parameter Fisika/On-The-Spot seperti Kebisingan, Pencahayaan, dll yang tidak punya PSD)
+                    $psh = PersiapanSampelHeader::where('is_active', true)
+                        ->where(function ($query) use ($request) {
+                            $query->whereJsonContains('no_sampel', $request->no_sampel)
+                                  ->orWhere('no_sampel', 'LIKE', '%"' . $request->no_sampel . '"%')
+                                  ->orWhere('no_sampel', 'LIKE', '%' . $request->no_sampel . '%');
+                        })
+                        ->orderBy('id', 'desc')
+                        ->first();
+                
+                    if ($psh) {
+                        $id_persiapan = $psh->id;
+                    } elseif ($request->no_order) {
+                        $pshByOrder = PersiapanSampelHeader::where('no_order', $request->no_order)
+                            ->where('is_active', true)
+                            ->orderBy('id', 'desc')
+                            ->first();
+                
+                        if ($pshByOrder) {
+                            $id_persiapan = $pshByOrder->id;
+                        }
+                    }
                 }
             }
 
