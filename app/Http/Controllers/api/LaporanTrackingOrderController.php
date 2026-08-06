@@ -166,7 +166,7 @@ class LaporanTrackingOrderController extends Controller
                             }
 
                             $persentaseNum = isset($p['persentase_lhp_selesai']) ? round((float)$p['persentase_lhp_selesai'], 2) : 0;
-                            $proses = isset($p['jumlah_lhp_selesai']) && isset($p['jumlah_lhp']) ? " ({$p['jumlah_lhp_selesai']}/{$p['jumlah_lhp']})" : "";
+                            $proses = isset($p['jumlah_lhp_selesai']) && isset($p['jumlah_lhp']) ? " {$p['jumlah_lhp_selesai']}/{$p['jumlah_lhp']}" : "";
 
                             $rows->push([
                                 'id' => $ob->id,
