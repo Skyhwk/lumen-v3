@@ -8,7 +8,7 @@ use App\Models\OrderDetail;
 use Illuminate\Http\Request;
 
 use Datatables;
-use App\Models\{OrderHeader, QuotationKontrakH, QuotationNonKontrak, LiburPerusahaan, OrderBerjalan};
+use App\Models\{OrderHeader, QuotationKontrakH, QuotationNonKontrak, LiburPerusahaan, OrderBerjalan, StatusLhpTerlambat};
 use App\Services\GroupedCfrByLhp;
 use App\Services\GetBawahan;
 use Illuminate\Support\Carbon;
@@ -52,12 +52,17 @@ class MonitoringLhpController extends Controller
                 COALESCE(MAX(order_header.is_revisi), 0) as is_revisi,
                 MIN(order_detail.tanggal_sampling) as tanggal_sampling,
                 MIN(order_detail.is_approve) as is_approve,
-                MIN(order_detail.status) as status
+                MIN(order_detail.status) as status,
+                MAX(status_lhp_terlambat.status) as status_lhp
             ')
             ->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) {
                 $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
             })
             ->leftJoin('order_header', 'order_detail.no_order', '=', 'order_header.no_order')
+            ->leftJoin('status_lhp_terlambat', function ($join) {
+                $join->on('order_detail.no_order', '=', 'status_lhp_terlambat.no_order')
+                     ->whereRaw('COALESCE(order_detail.cfr, "") = COALESCE(status_lhp_terlambat.no_lhp, "")');
+            })
             ->where('order_detail.tanggal_sampling','<=', $workDayWithLibur)
             ->where('order_detail.is_active', true)
             ->where('order_detail.is_approve', false)
@@ -228,7 +233,58 @@ class MonitoringLhpController extends Controller
                 }
             })
 
+            ->filterColumn('status_lhp', function ($query, $keyword) {
+                $query->where('status_lhp_terlambat.status', 'like', '%' . $keyword . '%');
+            })
+
             ->make(true);
+    }
+
+    public function updateStatus(Request $request)
+    {
+        if (empty($request->no_order)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nomor order tidak boleh kosong',
+            ], 422);
+        }
+
+        $noOrder = $request->input('no_order');
+        $noLhp = $request->input('no_lhp');
+        $status = $request->input('status'); // 'Pengujian Dibatalkan', 'Belum Revisi Order', or null
+
+        $record = StatusLhpTerlambat::where('no_order', $noOrder)
+            ->where(function ($q) use ($noLhp) {
+                if (!empty($noLhp)) {
+                    $q->where('no_lhp', $noLhp);
+                } else {
+                    $q->whereNull('no_lhp')->orWhere('no_lhp', '');
+                }
+            })
+            ->first();
+
+        if ($record) {
+            $record->status = $status;
+            $record->updated_by = $this->karyawan ?? $this->user_id;
+            $record->save();
+        } else {
+            StatusLhpTerlambat::create([
+                'no_order' => $noOrder,
+                'no_lhp' => $noLhp,
+                'status' => $status,
+                'created_by' => $this->karyawan ?? $this->user_id,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Status LHP berhasil diperbarui',
+            'data' => [
+                'no_order' => $noOrder,
+                'no_lhp' => $noLhp,
+                'status' => $status,
+            ],
+        ], 200);
     }
 
     public function getGroupedCFR(Request $request)
