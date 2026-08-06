@@ -459,6 +459,11 @@ class CheckOrderActive extends Command
                 $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
+            if($steps['analisa']['date'] != null && $steps['drafting']['date'] != null && Carbon::parse($steps['analisa']['date']) > Carbon::parse($steps['drafting']['date']))
+            {
+                $steps['analisa']['date'] = $steps['sampling']['date'];
+            }
+
             $tglLhpRilis = !empty($lhps['approved_at'])
                 ? Carbon::parse($lhps['approved_at'])->format('Y-m-d')
                 : null;
