@@ -644,135 +644,77 @@ class JadwalServices
                 $noqt = $dataUpdate->no_quotation;
             }
 
-            /* untuk notif */
-            // if ($tanggal == $tglNow || $tanggal <= $tglBesok) {
-            //     foreach ($samplers as $num => $noc) {
-            //         $jadwals = Jadwal::where('no_quotation', $noqt)
-            //             ->where('tanggal', $tanggal)
-            //             ->where('userid', $noc)
-            //             ->where('is_active', true)
-            //             ->where('notif', 0)
-            //             ->get();
+            /* untuk notif 
+            if ($tanggal == $tglNow || $tanggal <= $tglBesok) {
+                foreach ($samplers as $num => $noc) {
+                    $jadwals = Jadwal::where('no_quotation', $noqt)
+                        ->where('tanggal', $tanggal)
+                        ->where('userid', $noc)
+                        ->where('is_active', true)
+                        ->where('notif', 0)
+                        ->get();
 
-            //         if (!$jadwals->isEmpty()) {
-            //             $txt = "Jadwal anda tanggal <b>$tanggal</b> berubah menjadi : \n \n";
-            //             foreach ($jadwals as $key => $val) {
-            //                 $val->notif = 1;
-            //                 $val->save();
+                    if (!$jadwals->isEmpty()) {
+                        $txt = "Jadwal anda tanggal <b>$tanggal</b> berubah menjadi : \n \n";
+                        foreach ($jadwals as $key => $val) {
+                            $val->notif = 1;
+                            $val->save();
 
-            //                 $tes = $val->no_quotation;
-            //                 $users = Jadwal::where('no_quotation', $tes)
-            //                     ->where('kategori', $val->kategori)
-            //                     ->where('durasi', $val->durasi)
-            //                     ->where('tanggal', $val->tanggal)
-            //                     ->where('is_active', true)
-            //                     ->get();
+                            $tes = $val->no_quotation;
+                            $users = Jadwal::where('no_quotation', $tes)
+                                ->where('kategori', $val->kategori)
+                                ->where('durasi', $val->durasi)
+                                ->where('tanggal', $val->tanggal)
+                                ->where('is_active', true)
+                                ->get();
 
-            //                 foreach ($users as $keys => $var) {
-            //                     $user[$keys] = $var->sampler;
-            //                 }
+                            foreach ($users as $keys => $var) {
+                                $user[$keys] = $var->sampler;
+                            }
 
-            //                 $status = 'Sesaat';
-            //                 if ($val->durasi == 1)
-            //                     $status = '8 Jam';
-            //                 if ($val->durasi == 2)
-            //                     $status = '1 x 24 Jam';
-            //                 if ($val->durasi == 3)
-            //                     $status = '2 x 24 Jam';
-            //                 if ($val->durasi == 4)
-            //                     $status = '3 x 24 Jam';
+                            $status = 'Sesaat';
+                            if ($val->durasi == 1)
+                                $status = '8 Jam';
+                            if ($val->durasi == 2)
+                                $status = '1 x 24 Jam';
+                            if ($val->durasi == 3)
+                                $status = '2 x 24 Jam';
+                            if ($val->durasi == 4)
+                                $status = '3 x 24 Jam';
 
-            //                 $no_qt = $val->no_quotation;
-            //                 $pt = $val->nama_perusahaan;
-            //                 $alamat = $val->alamat;
-            //                 $kat = str_replace("[", "", $val->kategori);
-            //                 $kat = str_replace("]", "", $kat);
-            //                 $kat = str_replace('"', "", $kat);
-            //                 $usr = str_replace('[', "", json_encode($user));
-            //                 $usr = str_replace(']', "", $usr);
-            //                 $usr = str_replace('"', "", $usr);
+                            $no_qt = $val->no_quotation;
+                            $pt = $val->nama_perusahaan;
+                            $alamat = $val->alamat;
+                            $kat = str_replace("[", "", $val->kategori);
+                            $kat = str_replace("]", "", $kat);
+                            $kat = str_replace('"', "", $kat);
+                            $usr = str_replace('[', "", json_encode($user));
+                            $usr = str_replace(']', "", $usr);
+                            $usr = str_replace('"', "", $usr);
 
 
-            //                 $txt .= "\n Nomor QT : <b>$no_qt</b>";
-            //                 $txt .= "\n Nama Client : <b>$pt</b>";
-            //                 $txt .= "\n Alamat : <b>$alamat</b>";
-            //                 $txt .= "\n Kategori : <b>$kat</b>";
-            //                 $txt .= "\n Sampler : <b>$usr</b>";
-            //                 $txt .= "\n Durasi : <b>$status</b>";
+                            $txt .= "\n Nomor QT : <b>$no_qt</b>";
+                            $txt .= "\n Nama Client : <b>$pt</b>";
+                            $txt .= "\n Alamat : <b>$alamat</b>";
+                            $txt .= "\n Kategori : <b>$kat</b>";
+                            $txt .= "\n Sampler : <b>$usr</b>";
+                            $txt .= "\n Durasi : <b>$status</b>";
 
-            //             }
-            //             $u = MasterKaryawan::where('id', $noc)->first();
-            //             /* debug on
-            //             if($u->pin_user!=null){
-            //                 $telegram = new Telegram();
-            //                 $telegram->send($u->pin_user, $txt);
-            //             } */
-            //         }
-            //     }
-            // }
+                        }
+                        $u = MasterKaryawan::where('id', $noc)->first();
+                        //debug on
+                        // if($u->pin_user!=null){
+                        //     $telegram = new Telegram();
+                        //     $telegram->send($u->pin_user, $txt);
+                        // } 
+                    }
+                }
+            }
+            */
             //update order
             
             if ($dataUpdate->kategori != null) {
-                $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
-                if ($tipe_qt == 'QTC') {
-                    $status_order = QuotationKontrakH::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                    if ($status_order != null && $status_order->flag_status == 'ordered') {
-
-                        $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                        if ($orderh != null) {
-
-                            $array_no_samples = [];
-                            foreach ($dataUpdate->kategori as $x => $y) {
-                                $pra_no_sample = explode(" - ", $y)[1];
-                                $no_samples = $orderh->no_order . '/' . $pra_no_sample;
-                                $array_no_samples[] = $no_samples;
-                            }
-
-                            $query = OrderDetail::where('id_order_header', $orderh->id)
-                            ->where('is_active', true)
-                            ->whereIn('no_sampel', $array_no_samples);
-
-                            $exists = $query->exists();;
-
-                            if(!$exists){
-                                throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
-                            }else{
-                                $updated = OrderDetail::where('id_order_header', $orderh->id)
-                                    ->where('is_active', true)
-                                    ->whereIn('no_sampel', $array_no_samples)
-                                    ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                            }
-                        }
-                    }
-
-                } else {
-                    $status_order = QuotationNonKontrak::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                    if ($status_order != null && $status_order->flag_status == 'ordered') {
-                        $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                        if ($orderh != null) {
-                            $array_no_samples = [];
-                            foreach ($dataUpdate->kategori as $x => $y) {
-                                $pra_no_sample = explode(" - ", $y)[1];
-                                $no_samples = $orderh->no_order . '/' . $pra_no_sample;
-                                $array_no_samples[] = $no_samples;
-                            }
-                            $query = OrderDetail::where('id_order_header', $orderh->id)
-                            ->where('is_active', true)
-                            ->whereIn('no_sampel', $array_no_samples);
-
-                            $exists = $query->exists();
-
-                            if(!$exists){
-                                throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
-                            }else{
-                                $updated = OrderDetail::where('id_order_header', $orderh->id)
-                                    ->where('is_active', true)
-                                    ->whereIn('no_sampel', $array_no_samples)
-                                    ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                            }
-                        }
-                    }
-                }
+                self::syncTanggalSamplingOrderDetail($dataUpdate->no_quotation, $dataUpdate->kategori, $dataUpdate->tanggal);
             }
 
             // LOGIC UPDATE PSHEADER
@@ -1072,72 +1014,10 @@ class JadwalServices
 
             // update
             if ($dataUpdate->kategori != null) {
-                $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
-                //udpate order
-                if ($tipe_qt == 'QTC') {
-                    try {
-                        $status_order = QuotationKontrakH::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                        if ($status_order != null && $status_order->flag_status == 'ordered') {
-                            $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                            if ($orderh != null) {
-                                $array_no_samples = [];
-                                foreach ($dataUpdate->kategori as $x => $y) {
-                                    $pra_no_sample = explode(" - ", $y)[1];
-                                    $no_samples = $orderh->no_order . '/' . $pra_no_sample;
-                                    $array_no_samples[] = $no_samples;
-                                }
-
-                                $query = OrderDetail::where('id_order_header', $orderh->id)
-                                ->where('is_active', true)
-                                ->whereIn('no_sampel', $array_no_samples);
-
-                                $exists = $query->exists();;
-
-                                if(!$exists){
-                                    throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
-                                }else{
-                                    $updated = OrderDetail::where('id_order_header', $orderh->id)
-                                        ->where('is_active', true)
-                                        ->whereIn('no_sampel', $array_no_samples)
-                                        ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                                }
-                            }
-                        }
-                    } catch (Exception $ex) {
-                        throw new Exception($ex->getMessage(), 401);
-                    }
-                } else {
-                    try {
-                        $status_order = QuotationNonKontrak::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                        if ($status_order != null && $status_order->flag_status == 'ordered') {
-                            $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                            if ($orderh != null) {
-                                $array_no_samples = [];
-                                foreach ($dataUpdate->kategori as $x => $y) {
-                                    $pra_no_sample = explode(" - ", $y)[1];
-                                    $no_samples = $orderh->no_order . '/' . $pra_no_sample;
-                                    $array_no_samples[] = $no_samples;
-                                }
-
-                                $query = OrderDetail::where('id_order_header', $orderh->id)
-                                ->where('is_active', true)
-                                ->whereIn('no_sampel', $array_no_samples);
-
-                                $exists = $query->exists();
-
-                                if(!$exists){
-                                    throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
-                                }else{
-                                    $updated = OrderDetail::where('id_order_header', $orderh->id)
-                                        ->where('is_active', true)
-                                        ->whereIn('no_sampel', $array_no_samples)
-                                        ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                                }
-                            }
-                        }
-                    } catch (Exception $ex) {
-                        throw new Exception($ex->getMessage(), 401);
-                    }
+                try {
+                    self::syncTanggalSamplingOrderDetail($dataUpdate->no_quotation, $dataUpdate->kategori, $dataUpdate->tanggal);
+                } catch (Exception $ex) {
+                    throw new Exception($ex->getMessage(), 401);
                 }
             }
 
@@ -1622,32 +1502,8 @@ class JadwalServices
 
                 $update = Jadwal::insert($body);
             }
-            $status_order = QuotationKontrakH::where('no_document', $dataParsial->no_quotation)->where('is_active', true)->first();
-            if ($status_order != null && $status_order->flag_status == 'ordered') {
-                $orderh = OrderHeader::where('no_document', $dataParsial->no_quotation)->where('is_active', true)->first();
-                $notFound =false;
-                foreach ($dataParsial->kategori as $x => $y) {
-                    $datsamp = explode(" - ", $y);
-                    $kateg = MasterSubKategori::where('nama_sub_kategori', $datsamp[0])->where('is_active', true)->first();
-                    $kateg1 = $kateg->id . '-' . $kateg->nama_sub_kategori;
-
-                    $order_detail = OrderDetail::where('id_order_header', $orderh->id)
-                        ->where('is_active', true)
-                        ->where('kategori_3', $kateg1)
-                        ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $datsamp[1])
-                        ->first();
-                    if ($order_detail != null) {
-                        $order_detail->tanggal_sampling = date('Y-m-d', strtotime($dataParsial->tanggal));
-                        $order_detail->save();
-                    }else{
-                        $notFound =true;
-                    }
-                }
-                if ($notFound) {
-                    throw new \Exception("Ada nomor sampel yang tidak ditemukan, silakan hubungi IT untuk pengecekan.");
-                    // atau bisa pakai response JSON kalau API
-                    // return response()->json(['status' => false, 'message' => 'Ada nomor sampel yang tidak ditemukan, silakan hubungi IT.'], 400);
-                }
+            if ($dataParsial->kategori != null) {
+                self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);
             }
 
             $sales = JadwalServices::on('no_quotation', $dataParsial->no_quotation)->getQuotation()->sales_id;
@@ -1806,24 +1662,8 @@ class JadwalServices
                 $update = Jadwal::insert($body);
             }
 
-            $status_order = QuotationNonKontrak::where('no_document', $dataParsial->no_quotation)->where('is_active', true)->first();
-            if ($status_order != null && $status_order->flag_status == 'ordered') {
-                $orderh = OrderHeader::where('no_document', $dataParsial->no_quotation)->where('is_active', true)->first();
-                foreach ($dataParsial->kategori as $x => $y) {
-                    $datsamp = explode(" - ", $y);
-                    $kateg = MasterSubKategori::where('nama_sub_kategori', $datsamp[0])->where('is_active', true)->first();
-                    $kateg1 = $kateg->id . '-' . $kateg->nama_sub_kategori;
-
-                    $order_detail = OrderDetail::where('id_order_header', $orderh->id)
-                        ->where('is_active', true)
-                        ->where('kategori_3', $kateg1)
-                        ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $datsamp[1])
-                        ->first();
-                    if ($order_detail != null) {
-                        $order_detail->tanggal_sampling = date('Y-m-d', strtotime($dataParsial->tanggal));
-                        $order_detail->save();
-                    }
-                }
+            if ($dataParsial->kategori != null) {
+                self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);
             }
 
             $sales = JadwalServices::on('no_quotation', $dataParsial->no_quotation)->getQuotation()->sales_id;
@@ -1985,5 +1825,96 @@ class JadwalServices
             . '<tbody>' . $rows . '</tbody>'
             . '</table>'
             . '</body></html>';
+    }
+
+    public static function syncTanggalSamplingOrderDetail($no_quotation, $kategori_array, $tanggal_baru)
+    {
+        \Log::channel('sampling')->info("[START] Sync OrderDetail untuk No QT: {$no_quotation}");
+        $type = explode('/', $no_quotation)[1];
+
+        // 1. Check Quotation Status
+        if ($type == 'QTC') {
+            $quotation = QuotationKontrakH::where('no_document', $no_quotation)->where('is_active', true)->first();
+        } else {
+            $quotation = QuotationNonKontrak::where('no_document', $no_quotation)->where('is_active', true)->first();
+        }
+
+        if (!$quotation) {
+            \Log::channel('sampling')->warning("[SKIP] Quotation tidak ditemukan atau tidak aktif.");
+            return;
+        }
+
+        if ($quotation->flag_status !== 'ordered') {
+            \Log::channel('sampling')->info("[SKIP] Status Quotation bukan 'ordered' (Status: {$quotation->flag_status}).");
+            return;
+        }
+
+        // 2. Find OrderHeader
+        $orderh = OrderHeader::where('no_document', $no_quotation)->where('is_active', true)->first();
+        if (!$orderh) {
+            \Log::channel('sampling')->warning("[SKIP] OrderHeader tidak ditemukan untuk QT 'ordered'.");
+            return;
+        }
+
+        \Log::channel('sampling')->info("[CHECK] OrderHeader DITEMUKAN (ID: {$orderh->id}).");
+
+        $tanggal_format = date('Y-m-d', strtotime($tanggal_baru));
+        $success_count = 0;
+        $missing_samples = [];
+
+        // 3. Process each category
+        foreach ($kategori_array as $kategori_raw) {
+            \Log::channel('sampling')->info("[LOOP] Memproses Kategori: {$kategori_raw}");
+            
+            // Format 1: "Nama Kategori - 001" -> extract "001"
+            $parts = explode(" - ", $kategori_raw);
+            if (!isset($parts[1])) {
+                \Log::channel('sampling')->error("[FORMAT ERROR] Gagal parse kategori: {$kategori_raw}");
+                $missing_samples[] = $kategori_raw;
+                continue;
+            }
+            
+            $pra_no_sample = trim($parts[1]);
+            $no_sampel_full = $orderh->no_order . '/' . $pra_no_sample;
+
+            \Log::channel('sampling')->info("[LOOP] Mencari OrderDetail dengan no_sampel: {$no_sampel_full}");
+
+            $order_detail = OrderDetail::where('id_order_header', $orderh->id)
+                ->where('is_active', true)
+                ->where('no_sampel', $no_sampel_full)
+                ->first();
+
+            // Alternatif pencarian menggunakan logika insertParsial jika no_sampel_full gagal
+            if (!$order_detail) {
+                $kateg = MasterSubKategori::where('nama_sub_kategori', trim($parts[0]))->where('is_active', true)->first();
+                if ($kateg) {
+                    $kateg1 = $kateg->id . '-' . $kateg->nama_sub_kategori;
+                    $order_detail = OrderDetail::where('id_order_header', $orderh->id)
+                        ->where('is_active', true)
+                        ->where('kategori_3', $kateg1)
+                        ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $pra_no_sample)
+                        ->first();
+                }
+            }
+
+            if ($order_detail) {
+                $old_date = $order_detail->tanggal_sampling;
+                $order_detail->tanggal_sampling = $tanggal_format;
+                $order_detail->save();
+                \Log::channel('sampling')->info("[SUCCESS] OrderDetail terupdate. ID: {$order_detail->id} | {$old_date} -> {$tanggal_format}");
+                $success_count++;
+            } else {
+                \Log::channel('sampling')->error("[FAILED] OrderDetail TIDAK DITEMUKAN untuk: {$no_sampel_full}");
+                $missing_samples[] = $no_sampel_full;
+            }
+        }
+
+        \Log::channel('sampling')->info("[SUMMARY] Berhasil mengupdate {$success_count} dari " . count($kategori_array) . " sampel.");
+
+        if (count($missing_samples) > 0) {
+            $msg = "Ada " . count($missing_samples) . " nomor sampel yang tidak ditemukan di Order Detail (" . implode(', ', $missing_samples) . "). Silakan hubungi IT.";
+            \Log::channel('sampling')->error("[ROLLBACK] " . $msg);
+            throw new \Exception($msg);
+        }
     }
 }
