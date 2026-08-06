@@ -9,6 +9,7 @@ use App\Services\Crypto;
 use Datatables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
 
 class PesawatTelephoneController extends Controller
 {
@@ -184,7 +185,7 @@ class PesawatTelephoneController extends Controller
 
             $config->cnf_filename = $fileInfo['filename'];
             $config->cnf_file_path = $fileInfo['path'];
-            $config->last_generated_at = now();
+            $config->last_generated_at = Carbon::now();
             $config->save();
 
             return response()->json([
@@ -236,7 +237,7 @@ class PesawatTelephoneController extends Controller
 
             $config->cnf_filename = $fileInfo['filename'];
             $config->cnf_file_path = $fileInfo['path'];
-            $config->last_generated_at = now();
+            $config->last_generated_at = Carbon::now();
             $config->save();
 
             return response()->json([
