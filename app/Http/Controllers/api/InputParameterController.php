@@ -667,7 +667,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'SWAB TEST' && $stp->sample->nama_kategori == 'Udara'){
+            }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Udara' || $stp->sample->nama_kategori == 'Swab Test')){
                 $swab = SwabTestHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -1780,7 +1780,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		}else if($stp->name == 'SWAB TEST' && $stp->sample->nama_kategori == 'Udara'){
+		}else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Udara' || $stp->sample->nama_kategori == 'Swab Test')){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
