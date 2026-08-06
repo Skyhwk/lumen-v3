@@ -43,10 +43,22 @@ class LaporanTrackingOrderController extends Controller
                                     JSON_UNQUOTE(
                                         JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')
                                     ) AS DECIMAL(10,6)
-                                )
+                                ),
+                                2
                             ),
                             ' %'
                         ) as persentase
+                    "),
+                    DB::raw("
+                        CASE 
+                            WHEN JSON_EXTRACT(ob.dataOrderDetail, '$[0].jumlah_lhp') IS NOT NULL 
+                            THEN CONCAT(                              
+                                JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].jumlah_lhp_selesai')),
+                                '/',
+                                JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].jumlah_lhp'))                           
+                            )
+                            ELSE ''
+                        END as progres
                     "),
                     'od.periode_detail as periode',
                     'ob.no_penawaran as no_quotation',
@@ -71,6 +83,9 @@ class LaporanTrackingOrderController extends Controller
                 })
                 ->filterColumn('persentase', function ($query, $keyword) {
                     $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].persentase_lhp_selesai')) like ?", ["%{$keyword}%"]);
+                })
+                ->filterColumn('progres', function ($query, $keyword) {
+                    $query->whereRaw("CONCAT(JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].jumlah_lhp_selesai')), '/', JSON_UNQUOTE(JSON_EXTRACT(ob.dataOrderDetail, '$[0].jumlah_lhp'))) like ?", ["%{$keyword}%"]);
                 })
                 ->filterColumn('periode', function ($query, $keyword) {
                     $query->where('od.periode_detail', 'like', "%{$keyword}%");
@@ -150,13 +165,14 @@ class LaporanTrackingOrderController extends Controller
                                 }
                             }
 
-                            $persentaseNum = isset($p['persentase_lhp_selesai']) ? round((float)$p['persentase_lhp_selesai']) : 0;
-                            $proses = isset($p['jumlah_lhp_selesai']) && isset($p['jumlah_lhp']) ? " ({$p['jumlah_lhp_selesai']}/{$p['jumlah_lhp']})" : "";
+                            $persentaseNum = isset($p['persentase_lhp_selesai']) ? round((float)$p['persentase_lhp_selesai'], 2) : 0;
+                            $proses = isset($p['jumlah_lhp_selesai']) && isset($p['jumlah_lhp']) ? " {$p['jumlah_lhp_selesai']}/{$p['jumlah_lhp']}" : "";
 
                             $rows->push([
                                 'id' => $ob->id,
                                 'no_order' => $ob->no_order,
-                                'persentase' => $persentaseNum . ' %' . $proses,
+                                'persentase' => $persentaseNum . ' %',
+                                'progres' => $proses,
                                 'periode' => $periodeStr,
                                 'no_quotation' => $ob->no_quotation,
                                 'nama_pelanggan' => $ob->nama_pelanggan,
