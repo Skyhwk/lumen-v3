@@ -199,7 +199,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                     if ($index == null) {
                         for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                             $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
-                            if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                            if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
                                 break;
                             }
@@ -207,7 +207,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                         if ($nilai == null) {
                             for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                                 $key = $i === 0 ? 'C' : "C$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }
@@ -217,7 +217,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                         if ($nilai == null) {
                             for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "f_koreksi_$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }
@@ -227,7 +227,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                         if ($nilai == null) {
                             for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }
