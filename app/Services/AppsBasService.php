@@ -1336,7 +1336,7 @@ class AppsBasService
 
             $ccArray = [];
             $bcc = ['faidhah@intilab.com'];
-
+            
             if (!empty($cc)) {
                 if (is_array($cc)) {
                     $ccArray = $cc;
@@ -1497,6 +1497,8 @@ class AppsBasService
                                 'no_sampel_selesai' => array_values($noSampelSelesaiWithOrder),
                                 'catatan' => $detailBas['catatan'] ?? null,
                                 'informasi_teknis' => $detailBas['informasi_teknis'] ?? null,
+                                'submit' => $detailBas['bysubmit'] ?? null,
+                                'tanda_tangan' => $detailBas['tanda_tangan'] ?? null
                             ];
                         }
 
