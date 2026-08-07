@@ -102,6 +102,14 @@ class FdlLingkunganKerjaController extends Controller
                             ]
                         );
 
+                    WsValueUdara::where('no_sampel', $request->no_sampel_lama)
+                    ->update(
+                        [
+                            'no_sampel' => $request->no_sampel_baru,
+                            'no_sampel_lama' => $request->no_sampel_lama
+                        ]
+                    );
+
                     // update OrderDetail
                     $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
                         ->first();

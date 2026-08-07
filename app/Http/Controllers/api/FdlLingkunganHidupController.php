@@ -505,6 +505,14 @@ class FdlLingkunganHidupController extends Controller
                     ]
                 );
 
+                WsValueUdara::where('no_sampel', $request->no_sampel_lama)
+                ->update(
+                    [
+                        'no_sampel' => $request->no_sampel_baru,
+                        'no_sampel_lama' => $request->no_sampel_lama
+                    ]
+                );
+
                 $data->no_sampel = $request->no_sampel_baru;
                 $data->no_sampel_lama = $request->no_sampel_lama;
                 $data->updated_by = $this->karyawan;
