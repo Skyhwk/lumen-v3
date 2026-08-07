@@ -668,7 +668,7 @@ class InputParameterController extends Controller
                     );
                 }
             }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Udara' || $stp->sample->nama_kategori == 'Swab Test')){
-                $swab = SwabTestHeader::with('TrackingSatu')
+                $swab = MicrobioHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
 					})
