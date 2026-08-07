@@ -5,6 +5,9 @@ namespace App\Http\Controllers\api;
 use App\Models\DataLapanganSenyawaVolatile;
 use App\Models\DetailSenyawaVolatile;
 use App\Models\OrderDetail;
+use App\Models\LingkunganHeader;
+use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
 use App\Models\MasterSubKategori;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
@@ -55,6 +58,14 @@ class FdlSenyawaVolatileController extends Controller
                     );
 
                     WsValueLingkungan::where('no_sampel', $request->no_sampel_lama)
+                    ->update(
+                        [
+                            'no_sampel' => $request->no_sampel_baru,
+                            'no_sampel_lama' => $request->no_sampel_lama
+                        ]
+                    );
+                    
+                    WsValueUdara::where('no_sampel', $request->no_sampel_lama)
                     ->update(
                         [
                             'no_sampel' => $request->no_sampel_baru,

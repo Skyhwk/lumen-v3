@@ -48,6 +48,7 @@ class Kernel extends ConsoleKernel
         Commands\GenerateWsFinalApproval::class,
         Commands\SyncOrderDetaolFromJadwal::class,
         Commands\SyncOrderDetail::class,
+        Commands\UpdateFtcVerifierFromScanTc::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,

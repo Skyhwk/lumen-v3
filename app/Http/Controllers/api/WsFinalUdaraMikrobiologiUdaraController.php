@@ -354,30 +354,30 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 
     public function rejectAnalys(Request $request)
     {
+        DB::beginTransaction();
         try {
-            if (in_array($request->kategori, $this->categoryMicrobio)) {
-                $data = MicrobioHeader::where('id', $request->id)->update([
-                    'is_approved' => 0,
-                    'notes_reject' => $request->note,
-                    'rejected_by' => $this->karyawan,
-                    'rejected_at' => Carbon::now(),
-                    'approved_by' => null,
-                    'approved_at' => null,
+            $data = MicrobioHeader::where('id', $request->id)->update([
+                'is_approved' => 0,
+                'notes_reject' => $request->note,
+                'rejected_by' => $this->karyawan,
+                'rejected_at' => Carbon::now(),
+                'approved_by' => null,
+                'approved_at' => null,
+            ]);
+            if ($data) {
+                DB::commit();
+                return response()->json([
+                    'message' => 'Berhasil, Silahkan Cek di Analys!',
+                    'success' => true,
+                    'status' => 200,
                 ]);
-                if ($data) {
-                    return response()->json([
-                        'message' => 'Berhasil, Silahkan Cek di Analys!',
-                        'success' => true,
-                        'status' => 200,
-                    ]);
-                } else {
-                    return response()->json(['message' => 'Gagal']);
-                }
             } else {
-                $data = [];
+                DB::rollBack();
+                return response()->json(['message' => 'Gagal Reject']);
             }
         } catch (\Exception $ex) {
-            dd($ex);
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal Reject']);
         }
     }
 

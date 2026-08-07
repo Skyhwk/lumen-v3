@@ -44,6 +44,15 @@ class PesawatTelephoneController extends Controller
                 'meet_me' => 'Default nonaktif (URI kosong). Isi Meet Me URI dari PBX jika ingin conference dial-in.',
                 'shared_line' => 'Aktifkan per line untuk shared extension / group appearance.',
             ],
+            'preferred_codecs' => [
+                ['value' => 'g711ulaw', 'label' => 'G.711 μ-law (PCMU) — disarankan PSTN'],
+                ['value' => 'g711alaw', 'label' => 'G.711 A-law (PCMA)'],
+                ['value' => 'g729a', 'label' => 'G.729a (low bandwidth)'],
+            ],
+            'audio_notes' => [
+                'pstn' => 'Panggilan ke nomor regular/PSTN sebaiknya pakai PCMU (G.711 μ-law) dan nonaktifkan G.722/G.729 untuk hindari double-transcoding.',
+                'vad' => 'Voice Activity Detection (VAD) bisa menyebabkan suara putus-putus/noise saat gateway PSTN. Default: nonaktif.',
+            ],
             'tftp_path' => env('CISCO_TFTP_PATH', '/srv/tftp'),
         ], 200);
     }
@@ -121,7 +130,7 @@ class PesawatTelephoneController extends Controller
             $payload = $this->buildConfigPayload($request);
             $mac = $payload['mac_address'];
 
-            $existing = CiscoPhoneConfig::where('mac_address', $mac)->first();
+            $existing = CiscoPhoneConfig::where('mac_address', $mac)->where('is_active', true)->first();
             if ($existing && (!$request->id || (int) $request->id !== (int) $existing->id)) {
                 return response()->json(['message' => 'MAC address sudah terdaftar'], 400);
             }
@@ -151,9 +160,9 @@ class PesawatTelephoneController extends Controller
             $config->label = $request->label;
             $config->phone_model = $payload['phone_model'];
             $config->extension = $payload['extension'];
-            $config->display_name = $request->display_name ?: $payload['extension'];
+            $config->display_name = $payload['display_name'] ?: $payload['extension'];
             $config->sip_server = $payload['sip_server'];
-            $config->auth_name = $request->auth_name ?: $payload['extension'];
+            $config->auth_name = $payload['auth_name'] ?: $payload['extension'];
             $config->auth_password = $crypto->encrypt($request->auth_password);
             $config->phone_password = $request->phone_password
                 ? $crypto->encrypt($request->phone_password)
@@ -163,18 +172,16 @@ class PesawatTelephoneController extends Controller
             $config->is_active = true;
             $config->save();
 
-            $plainConfig = $payload['config_json'];
-            foreach ($plainConfig['lines'] ?? [] as $index => &$line) {
-                $line['auth_password'] = $request->auth_password;
-            }
-            unset($line);
+            $plainConfig = $this->plainConfigForXml($payload['config_json'], $request->auth_password);
+
+            $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $request->auth_password;
 
             $xml = $this->cnfService()->generate(
                 $plainConfig,
                 $mac,
                 $payload['phone_model'],
                 $payload['extension'],
-                $request->auth_password
+                $primaryLinePassword
             );
 
             $fileInfo = $this->cnfService()->writeToTftp($xml, $mac);
@@ -283,7 +290,17 @@ class PesawatTelephoneController extends Controller
             $configJson = [];
         }
 
-        $configJson = CiscoPhoneCnfXmlService::mergeConfig(array_replace_recursive($defaults, $configJson));
+        // Lines dari request adalah sumber kebenaran (hindari default merge menimpa edit)
+        $lines = $this->parseLinesFromRequest($request, $configJson);
+
+        $defaultsWithoutLines = $defaults;
+        unset($defaultsWithoutLines['lines']);
+        $configJson = array_replace_recursive($defaultsWithoutLines, $configJson);
+        if (!empty($lines)) {
+            $configJson['lines'] = $lines;
+        }
+
+        $configJson = CiscoPhoneCnfXmlService::mergeConfig($configJson);
 
         $configJson['sip_server'] = $request->sip_server ?: ($configJson['sip_server'] ?? $defaults['sip_server']);
         $configJson['phone_password'] = $request->phone_password ?? ($configJson['phone_password'] ?? '');
@@ -303,18 +320,23 @@ class PesawatTelephoneController extends Controller
             }
         }
 
-        if ($request->filled('lines')) {
-            $lines = $request->lines;
-            if (is_string($lines)) {
-                $lines = json_decode($lines, true) ?: [];
-            }
-            if (is_array($lines) && count($lines) > 0) {
-                $configJson['lines'] = $lines;
-            }
-        }
+        $line1 = $configJson['lines'][0] ?? null;
+        $extension = trim((string) ($line1['name'] ?? $request->extension ?? ''));
 
-        $extension = trim((string) $request->extension);
-        if (empty($configJson['lines'][0]['name'])) {
+        if ($line1 && $extension !== '') {
+            $configJson['lines'][0]['name'] = $extension;
+            $configJson['lines'][0]['display_name'] = $line1['display_name'] ?? ($request->display_name ?: $extension);
+            $configJson['lines'][0]['auth_name'] = $line1['auth_name'] ?? ($request->auth_name ?: $extension);
+            $configJson['lines'][0]['contact'] = $line1['contact'] ?? $extension;
+            $configJson['lines'][0]['proxy'] = $line1['proxy'] ?? $configJson['sip_server'];
+            if (empty($configJson['lines'][0]['auth_password'])) {
+                $configJson['lines'][0]['auth_password'] = $request->auth_password;
+            }
+        } elseif ($extension !== '') {
+            $configJson['lines'][0] = array_replace_recursive(
+                $defaults['lines'][0] ?? [],
+                $configJson['lines'][0] ?? []
+            );
             $configJson['lines'][0]['name'] = $extension;
             $configJson['lines'][0]['display_name'] = $request->display_name ?: $extension;
             $configJson['lines'][0]['auth_name'] = $request->auth_name ?: $extension;
@@ -327,9 +349,68 @@ class PesawatTelephoneController extends Controller
             'mac_address' => $mac,
             'phone_model' => trim((string) $request->phone_model),
             'extension' => $extension,
+            'display_name' => $configJson['lines'][0]['display_name'] ?? ($request->display_name ?: $extension),
+            'auth_name' => $configJson['lines'][0]['auth_name'] ?? ($request->auth_name ?: $extension),
             'sip_server' => $configJson['sip_server'],
             'config_json' => $configJson,
         ];
+    }
+
+    private function parseLinesFromRequest(Request $request, array $configJson): array
+    {
+        if ($request->has('lines')) {
+            $rawLines = $request->lines;
+            if (is_string($rawLines)) {
+                $decoded = json_decode($rawLines, true);
+                if (is_array($decoded) && count($decoded) > 0) {
+                    return $this->normalizeLinesArray($decoded, $configJson['sip_server'] ?? null);
+                }
+            }
+            if (is_array($rawLines) && count($rawLines) > 0) {
+                return $this->normalizeLinesArray($rawLines, $configJson['sip_server'] ?? null);
+            }
+        }
+
+        if (!empty($configJson['lines']) && is_array($configJson['lines'])) {
+            return $this->normalizeLinesArray($configJson['lines'], $configJson['sip_server'] ?? null);
+        }
+
+        return [];
+    }
+
+    private function normalizeLinesArray(array $lines, ?string $sipServer = null): array
+    {
+        return array_values(array_map(function ($line, $index) use ($sipServer) {
+            if (!is_array($line)) {
+                return [];
+            }
+
+            $line['button'] = $index + 1;
+            $line['feature_id'] = $line['feature_id'] ?? 9;
+            $line['proxy'] = $line['proxy'] ?? $sipServer ?? '';
+            $line['port'] = (int) ($line['port'] ?? 5060);
+            $line['shared_line'] = filter_var($line['shared_line'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $line['auto_answer'] = filter_var($line['auto_answer'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $line['caller_name'] = filter_var($line['caller_name'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            $line['caller_number'] = filter_var($line['caller_number'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            $line['redirected_number'] = filter_var($line['redirected_number'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $line['dialed_number'] = filter_var($line['dialed_number'] ?? true, FILTER_VALIDATE_BOOLEAN);
+
+            return $line;
+        }, $lines, array_keys($lines)));
+    }
+
+    private function plainConfigForXml(array $configJson, string $fallbackPassword): array
+    {
+        $plain = $configJson;
+        foreach ($plain['lines'] ?? [] as $index => &$line) {
+            if (empty($line['auth_password'])) {
+                $line['auth_password'] = $fallbackPassword;
+            }
+        }
+        unset($line);
+
+        return $plain;
     }
 
     private function phoneVendors(): array
