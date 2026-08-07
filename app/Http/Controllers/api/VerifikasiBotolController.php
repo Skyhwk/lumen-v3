@@ -330,10 +330,11 @@ class VerifikasiBotolController extends Controller
                     $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
                     $ftc->user_verifier = $this->user_id;
                     $ftc->save();
-                }  else {
+                } else {
                     if ($ftc->ftc_verifier == null && $ftc->user_verifier == null) {
                         $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
                         $ftc->user_verifier = $this->user_id;
+                        $ftc->save();
                     }
                 }
 
