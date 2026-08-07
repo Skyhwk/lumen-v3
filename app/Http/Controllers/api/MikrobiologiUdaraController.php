@@ -26,16 +26,15 @@ class MikrobiologiUdaraController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = MicrobioHeader::with('ws_value', 'order_detail')
-            ->where('microbio_header.is_approved', $request->is_approved)
-            ->where('microbio_header.is_active', true)
-            ->where('microbio_header.template_stp', $request->template_stp)
-            ->select('microbio_header.*')
+            ->where('is_approved', $request->is_approved)
+            ->where('is_active', true)
+            ->whereIn('template_stp', [22, 32])
             ->orderByRaw("
                 CASE 
-                    WHEN microbio_header.tanggal_terima IS NULL THEN 1
+                    WHEN tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                microbio_header.tanggal_terima DESC
+                tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
