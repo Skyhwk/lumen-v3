@@ -43,4 +43,9 @@ class WsValueEmisiCerobong extends Sector
         }
         return null;
     }
+
+     public function getParameterAttribute()
+    {
+        return optional($this->getDataAnalyst())->parameter;
+    }
 }
