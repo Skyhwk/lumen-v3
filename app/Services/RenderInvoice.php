@@ -750,6 +750,7 @@ class RenderInvoice
                 ');
 
                 $no = 1;
+                $invoiceSummaryReserveRows = self::countInvoiceSummaryReserveRows($dataHead, $harga1);
 
 
                 foreach ($data1 as $k => $valSampling) {
@@ -939,6 +940,10 @@ class RenderInvoice
                             if (isset($values->keterangan_lainnya)) {
                                 $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                             }
+
+                            if ($k == count($data1) - 1) {
+                                $tambah += $invoiceSummaryReserveRows;
+                            }
                             // dd($cekArray);
                             $resetData = reset($cekArray);
                             $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
@@ -948,6 +953,28 @@ class RenderInvoice
                             $chunks = self::chunkByContentHeight($usingData, $tambah);
                             // dd($usingData, $tambah, $chunks);
                             for ($i = 0; $i < count($chunks); $i++) {
+                                if ($i > 0) {
+                                    $pdf->writeHTML('
+                                            </tbody>
+                                        </table>
+                                    ');
+                                    $pdf->AddPage();
+                                    $pdf->writeHTML('
+                                        <table style="border-collapse: collapse;">
+                                            <thead>
+                                                <tr>
+                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                    ');
+                                }
+
                                 foreach ($chunks[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
                                         if ($i == count($chunks) - 1) {
@@ -1268,7 +1295,8 @@ class RenderInvoice
                         } else { // kondisi object
                             // dd('bawah');
 
-                            foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
+                            $dataPendukungSampling = json_decode($values->data_pendukung_sampling);
+                            foreach ($dataPendukungSampling as $keys => $dataSampling) {
 
                                 $tambah = 0;
 
@@ -1315,6 +1343,10 @@ class RenderInvoice
 
                                 if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
                                     $extra_row++;
+                                }
+
+                                if ($k == count($data1) - 1 && $keys == count($dataPendukungSampling) - 1) {
+                                    $extra_row += $invoiceSummaryReserveRows;
                                 }
 
                                 $chunks = self::chunkByContentHeight($dataSampling->data_sampling, $extra_row);
@@ -1634,6 +1666,17 @@ class RenderInvoice
                 $spk = '';
             }
 
+            if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
+                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
+            } else {
+                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
+            }
+            $hasTagihanBerjalan = $dataTagihanBerjalan->count() > 0;
+            $sisaPembayaran = $total_tagihan - $nilai_tagihan;
+            $invoiceTotalRows = self::countInvoiceSummaryRows($diskon, $ppn, $pph, $pajak, $harga1, $hasTagihanBerjalan, $sisaPembayaran);
+            $leftInfoRows = 7 + ($dataHead->keterangan_tambahan ? count($dataHead->keterangan_tambahan) + 2 : 0) + ($spk ? 1 : 0);
+            self::ensureInvoiceSummaryFits($pdf, $invoiceTotalRows, $leftInfoRows);
+
             $space = '<p style="font-size:4px;">&nbsp;</p>';
             $spaceSection = '<p style="font-size:8px;">&nbsp;</p>';
 
@@ -1817,12 +1860,7 @@ class RenderInvoice
                 <td style="border: 1px solid; font-size: 9px; width:33%; text-align:center;" class="text-right">' . self::rupiah($total_harga) . '</td></tr>
             ');
 
-            if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
-                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
-            } else {
-                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
-            }
-            if ($dataTagihanBerjalan->count() > 0) {
+            if ($hasTagihanBerjalan) {
                 $tagihanBerjalan = $dataTagihanBerjalan->sum('nilai_tagihan');
                 $nomorInvoiceBerjalan = $dataTagihanBerjalan->pluck('no_invoice')->implode(', ');
                 $pdf->writeHTML('
@@ -1848,7 +1886,7 @@ class RenderInvoice
             ');
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
-            $sisa_tagihan = $total_tagihan - $nilai_tagihan;
+            $sisa_tagihan = $sisaPembayaran;
             if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr >
@@ -2001,6 +2039,46 @@ class RenderInvoice
                 }
             }
 
+            $qr_img = '';
+            $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            $customNeedsSignature = self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature);
+            if ($qr) {
+                if ($customNeedsSignature) {
+                    $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+                } else {
+                    $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
+                }
+            }
+
+            $footer = array(
+                'odd' => array(
+                    'C' => array(
+                        'content' => 'Hal {PAGENO} dari {nbpg}',
+                        'font-size' => 6,
+                        'font-style' => 'I',
+                        'font-family' => 'serif',
+                        'color' => '#606060'
+                    ),
+                    'R' => array(
+                        'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                        'font-size' => 5,
+                        'font-style' => 'I',
+                        'font-family' => 'serif',
+                        'color' => '#000000'
+                    ),
+                    'L' => array(
+                        'content' => $customNeedsSignature ? '' . $qr_img . '' : '',
+                        'font-size' => 4,
+                        'font-style' => 'I',
+                        'font-family' => 'serif',
+                        'color' => '#000000'
+                    ),
+                    'line' => -1,
+                )
+            );
+            $pdf->setFooter($footer);
+
             $konsultant = $dataHead->nama_perusahaan;
             $jab_pic = '';
 
@@ -2118,37 +2196,64 @@ class RenderInvoice
                         <tbody>
                         ');
 
-            $no = 1;
-
+            $customSummaryReserveRows = self::countCustomInvoiceSummaryRows($customInvoice->harga) + 7 + ($dataHead->keterangan_tambahan ? count($dataHead->keterangan_tambahan) + 2 : 0);
             foreach ($customInvoice->data as $k => $invoice) {
                 // Debugging the invoice details
-
-                $pdf->writeHTML(
-                    '<tr style="border: 1px solid; font-size: 9px;">
-                                    <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . (count($invoice->invoiceDetails) + 1) . '">' . ($k + 1) . '</td>
-                                    <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . (count($invoice->invoiceDetails) + 1) . '">
-                                    <span><b>' . $invoice->no_order . '</b></span><br>
-                                    <span><b>' . $invoice->no_document . '</b></span><br>
-                                    <span><b>' . $pr . '</b></span>
-                                    </td>
-                                    </tr>'
+                $detailChunks = self::chunkByContentHeight(
+                    $invoice->invoiceDetails,
+                    $k == count($customInvoice->data) - 1 ? $customSummaryReserveRows : null
                 );
 
-                foreach ($invoice->invoiceDetails as $k => $itemInvoice) {
-                    // Handle empty values
-                    $titk = !empty($itemInvoice->titk) ? $itemInvoice->titk : ' ';  // Default to 'N/A' if empty
-                    $keterangan = !empty($itemInvoice->keterangan) ? $itemInvoice->keterangan : 'No Description'; // Default text if empty
-                    $hargaSatuan = !empty($itemInvoice->harga_satuan) ? self::rupiah($itemInvoice->harga_satuan) : ''; // Default to '0' if empty
-                    $totalHarga = !empty($itemInvoice->total_harga) ? self::rupiah($itemInvoice->total_harga) : '0'; // Default to '0' if empty
-
-                    $pdf->writeHTML('
+                foreach ($detailChunks as $chunkIndex => $detailChunk) {
+                    if ($chunkIndex > 0) {
+                        $pdf->writeHTML('
+                                </tbody>
+                            </table>
+                        ');
+                        $pdf->AddPage();
+                        $pdf->writeHTML('
+                            <table style="border-collapse: collapse;">
+                                <thead>
                                 <tr>
-                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan . '</span></td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $titk . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $hargaSatuan . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $totalHarga . '</td>
+                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
                                 </tr>
-                                ');
+                                </thead>
+                                <tbody>
+                        ');
+                    }
+
+                    $pdf->writeHTML(
+                        '<tr style="border: 1px solid; font-size: 9px;">
+                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . (count($detailChunk) + 1) . '">' . ($k + 1) . '</td>
+                                        <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . (count($detailChunk) + 1) . '">
+                                        <span><b>' . $invoice->no_order . '</b></span><br>
+                                        <span><b>' . $invoice->no_document . '</b></span><br>
+                                        <span><b>' . $pr . '</b></span>
+                                        </td>
+                                        </tr>'
+                    );
+
+                    foreach ($detailChunk as $itemInvoice) {
+                        // Handle empty values
+                        $titk = !empty($itemInvoice->titk) ? $itemInvoice->titk : ' ';  // Default to 'N/A' if empty
+                        $keterangan = !empty($itemInvoice->keterangan) ? $itemInvoice->keterangan : 'No Description'; // Default text if empty
+                        $hargaSatuan = !empty($itemInvoice->harga_satuan) ? self::rupiah($itemInvoice->harga_satuan) : ''; // Default to '0' if empty
+                        $totalHarga = !empty($itemInvoice->total_harga) ? self::rupiah($itemInvoice->total_harga) : '0'; // Default to '0' if empty
+
+                        $pdf->writeHTML('
+                                    <tr>
+                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan . '</span></td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $titk . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $hargaSatuan . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $totalHarga . '</td>
+                                    </tr>
+                                    ');
+                    }
                 }
             }
 
@@ -2163,6 +2268,10 @@ class RenderInvoice
             } else {
                 $spk = '';
             }
+
+            $customTotalRows = self::countCustomInvoiceSummaryRows($customInvoice->harga);
+            $customLeftInfoRows = 7 + ($dataHead->keterangan_tambahan ? count($dataHead->keterangan_tambahan) + 2 : 0) + ($spk ? 1 : 0);
+            self::ensureInvoiceSummaryFits($pdf, $customTotalRows, $customLeftInfoRows);
 
             $space = '<p style="font-size:4px;">&nbsp;</p>';
             $spaceSection = '<p style="font-size:8px;">&nbsp;</p>';
@@ -2393,6 +2502,143 @@ class RenderInvoice
     {
         return $forceSignature || (float) $amount > 4999999;
     }
+
+    private static function ensureInvoiceSummaryFits($pdf, $summaryRows, $leftInfoRows = 7)
+    {
+        $pageBreakTrigger = isset($pdf->PageBreakTrigger) ? $pdf->PageBreakTrigger : ($pdf->h - 25);
+        $requiredHeight = max(45 + ((int) $summaryRows * 7), 28 + ((int) $leftInfoRows * 5));
+        $summarySafeStartY = 305;
+        $remainingPageHeight = $pageBreakTrigger - $pdf->y;
+
+        if ($remainingPageHeight < $requiredHeight || $pdf->y > $summarySafeStartY) {
+            $pdf->AddPage();
+        }
+    }
+
+    private static function countInvoiceSummaryRows($diskon, $ppn, $pph, $pajak, $harga, $hasTagihanBerjalan, $sisaTagihan)
+    {
+        $rows = 1;
+
+        if ($diskon != 0 && $diskon != null) {
+            $rows += 2;
+        }
+
+        if ($ppn != 0 && $ppn != null) {
+            $rows++;
+
+            if ($pph != 0 && $pph != null) {
+                $rows++;
+            }
+
+            if ($pajak == 0) {
+                $rows++;
+                $rows += self::countOutsideTaxRows($harga);
+            }
+        }
+
+        $rows += 2;
+
+        if ($hasTagihanBerjalan) {
+            $rows++;
+        }
+
+        if (abs($sisaTagihan) > 10) {
+            $rows++;
+        }
+
+        return $rows;
+    }
+
+    private static function countCustomInvoiceSummaryRows($harga)
+    {
+        $rows = 1;
+
+        if ($harga->total_diskon != 0 && $harga->total_diskon != null) {
+            $rows += 2;
+        }
+
+        if ($harga->total_ppn != 0 && $harga->total_ppn != null) {
+            $rows++;
+        }
+
+        if ($harga->total_pph != 0 && $harga->total_pph != null) {
+            $rows++;
+        }
+
+        $rows += 2;
+
+        if (abs($harga->sisa_tagihan) > 10) {
+            $rows++;
+        }
+
+        return $rows;
+    }
+
+    private static function countOutsideTaxRows($harga)
+    {
+        $rows = 0;
+
+        foreach ($harga as $detailPajak) {
+            $detail = json_decode(json_encode($detailPajak));
+            if (!isset($detail->biaya_di_luar_pajak)) {
+                continue;
+            }
+
+            $biayaDiLuarPajak = json_decode($detail->biaya_di_luar_pajak);
+            if (isset($biayaDiLuarPajak->select) && $biayaDiLuarPajak->select != []) {
+                $rows += count($biayaDiLuarPajak->select);
+            }
+        }
+
+        return $rows;
+    }
+
+    private static function countInvoiceSummaryReserveRows($dataHead, $harga)
+    {
+        $subTotal = 0;
+        $diskon = 0;
+        $ppn = 0;
+        $pph = 0;
+        $nilaiTagihan = 0;
+        $totalTagihan = 0;
+        $pajak = 0;
+
+        foreach ($harga as $detailHargaInvo) {
+            $detail = json_decode(json_encode($detailHargaInvo));
+            if (isset($detail->biaya_di_luar_pajak)) {
+                $biayaDiLuarPajak = json_decode($detail->biaya_di_luar_pajak);
+                if ($biayaDiLuarPajak->select != []) {
+                    $luarPajak = round($detail->total_discount_transport) + round($detail->total_discount_perdiem);
+                    $diskon += $detail->diskon == null ? 0 : round($detail->diskon) - $luarPajak;
+                    $pajak = 0;
+                } else {
+                    $diskon += $detail->diskon == null ? 0 : round($detail->diskon);
+                    $pajak = 1;
+                }
+            } else {
+                $diskon += $detail->diskon == null ? 0 : round($detail->diskon);
+                $pajak = 1;
+            }
+
+            $subTotal += (int) round($detail->sub_total);
+            $ppn += $detail->ppn == null ? 0 : round($detail->ppn);
+            $pph += $detail->pph == null ? 0 : round($detail->pph);
+            $nilaiTagihan += (int) round($detail->nilai_tagihan);
+            $totalTagihan += (int) round($detail->total_tagihan);
+        }
+
+        if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
+            $tagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true)->count() > 0;
+        } else {
+            $tagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true)->count() > 0;
+        }
+
+        $summaryRows = self::countInvoiceSummaryRows($diskon, $ppn, $pph, $pajak, $harga, $tagihanBerjalan, $totalTagihan - $nilaiTagihan);
+        $leftRows = 7 + ($dataHead->keterangan_tambahan ? count($dataHead->keterangan_tambahan) + 2 : 0);
+
+        return max($summaryRows + 4, $leftRows);
+    }
+
     protected static function terbilang($angka)
     {
         $satuan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
@@ -2460,12 +2706,12 @@ class RenderInvoice
 
         foreach ($data as $key => $row) {
             // Estimasi tinggi berdasarkan panjang teks
-            $textLength = strlen($row->keterangan_pengujian ?? '') +
+            $textLength = strlen($row->keterangan_pengujian ?? $row->keterangan ?? '') +
                 strlen(json_encode($row->regulasi ?? ''));
             $rowHeight = 40 + ceil($textLength / 120) * 20;
 
             if ($key == count($data) - 1 && $extra_row != null) {
-                $extraHeight = (40 + 20) * 3;
+                $extraHeight = (40 + 20) * max(3, (int) $extra_row);
                 if ($currentHeight + $rowHeight + $extraHeight > $maxHeight) {
                     $chunks[] = $currentChunk;
                     $currentChunk = [];
