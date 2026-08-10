@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Support\Facades\Schema;
 
 class BankSoalController extends Controller
 {
@@ -24,15 +25,50 @@ class BankSoalController extends Controller
         return DataTables::of($questions)->make(true);
     }
 
-    public function categories()
+    public function categories(Request $request)
     {
+        $query = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('status', '!=', 'retired')])
+            ->where('is_active', true);
+
         return response()->json([
             'success' => true,
-            'data' => QuestionCategory::withCount(['questions as current_question_count' => fn ($query) => $query->where('status', '!=', 'retired')])
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get(),
+            'data'    => $query->orderBy('name')->get(),
         ]);
+    }
+
+    public function updateCategoriesConfig(Request $request)
+    {
+        $categories = $request->input('categories', []);
+        $hasIsShow = Schema::hasColumn('question_categories', 'is_show');
+        $hasDuration = Schema::hasColumn('question_categories', 'duration_minutes');
+
+        if (is_array($categories)) {
+            foreach ($categories as $item) {
+                if (isset($item['id'])) {
+                    $updateData = [
+                        'question_count' => isset($item['question_count']) ? (int) $item['question_count'] : 0,
+                        'updated_at'     => Carbon::now(),
+                    ];
+
+                    if ($hasDuration && isset($item['duration_minutes'])) {
+                        $updateData['duration_minutes'] = (int) $item['duration_minutes'];
+                    }
+
+                    if ($hasIsShow) {
+                        $updateData['is_show'] = isset($item['is_show']) ? (bool) $item['is_show'] : (isset($item['is_active']) ? (bool) $item['is_active'] : false);
+                    } else {
+                        $updateData['is_active'] = isset($item['is_show']) ? (bool) $item['is_show'] : (isset($item['is_active']) ? (bool) $item['is_active'] : false);
+                    }
+
+                    QuestionCategory::where('id', $item['id'])->update($updateData);
+                }
+            }
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Question configuration updated successfully.',
+        ], 200);
     }
 
     public function storeCategory(Request $request)
