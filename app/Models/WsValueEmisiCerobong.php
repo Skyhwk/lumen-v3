@@ -32,7 +32,16 @@ class WsValueEmisiCerobong extends Sector
 
     public function getDataAnalyst()
     {
-        return $this->emisi_cerobong_header ?? $this->emisi_isokinetik ?? $this->subkontrak;
+        if ($this->emisi_cerobong_header()->exists()) {
+            return $this->emisi_cerobong_header;
+        }
+        if ($this->emisi_isokinetik()->exists()) {
+            return $this->emisi_isokinetik;
+        }
+        if ($this->subkontrak()->exists()) {
+            return $this->subkontrak;
+        }
+        return null;
     }
 
      public function getParameterAttribute()
