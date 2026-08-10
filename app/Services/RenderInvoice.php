@@ -1271,12 +1271,15 @@ class RenderInvoice
 
                             $dataPendukungSampling = json_decode($values->data_pendukung_sampling);
                             if ($dataPendukungSampling instanceof \stdClass) {
-                                $dataPendukungSampling = [$dataPendukungSampling];
+                                $dataPendukungSampling = array_values((array) $dataPendukungSampling);
                             }
                             if (!is_array($dataPendukungSampling)) {
                                 $dataPendukungSampling = [];
                             }
                             foreach ($dataPendukungSampling as $keys => $dataSampling) {
+                                if (!is_object($dataSampling) || !isset($dataSampling->data_sampling) || !is_array($dataSampling->data_sampling)) {
+                                    continue;
+                                }
 
                                 $tambah = 0;
 
