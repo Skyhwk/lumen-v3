@@ -13,50 +13,58 @@ class CreateNewRecruitmentTable extends Migration
      */
     public function up()
     {
-        Schema::create('new_recruitment', function (Blueprint $table) {
-            $table->id();
-            $table->string('nama_lengkap', 255);
-            $table->string('tempat_lahir', 255)->nullable();
-            $table->date('tanggal_lahir')->nullable();
-            $table->enum('jenis_kelamin', ['Male', 'Female'])->nullable();
-            $table->text('alamat_ktp')->nullable();
-            $table->text('alamat_domisili')->nullable();
-            $table->string('no_telepon', 50)->nullable();
-            $table->string('email', 150)->nullable();
-            $table->json('pendidikan')->nullable();
-            $table->json('pengalaman_kerja')->nullable();
-            $table->string('shio', 100)->nullable();
-            $table->string('elemen', 100)->nullable();
-            
-            // Foreign key ke tabel personel_request
-            $table->unsignedBigInteger('personal_request_id')->nullable();
-            $table->foreign('personal_request_id')
-                ->references('id')
-                ->on('personnel_requests')
-                ->nullOnDelete();
+        if (!Schema::hasTable('new_recruitment')) {
+            Schema::create('new_recruitment', function (Blueprint $table) {
+                $table->id();
+                $table->string('nama_lengkap', 255);
+                $table->string('tempat_lahir', 255)->nullable();
+                $table->date('tanggal_lahir')->nullable();
+                $table->enum('jenis_kelamin', ['Male', 'Female'])->nullable();
+                $table->text('alamat_ktp')->nullable();
+                $table->text('alamat_domisili')->nullable();
+                $table->string('no_telepon', 50)->nullable();
+                $table->string('email', 150)->nullable();
+                $table->json('pendidikan')->nullable();
+                $table->json('pengalaman_kerja')->nullable();
+                $table->string('shio', 100)->nullable();
+                $table->string('elemen', 100)->nullable();
+                
+                // Foreign key ke tabel personel_request
+                $table->unsignedBigInteger('personal_request_id')->nullable();
+                $table->foreign('personal_request_id')
+                    ->references('id')
+                    ->on('personnel_requests')
+                    ->nullOnDelete();
 
-            // Snapshot nama posisi yang dilamar
-            $table->string('posisi_dilamar', 255)->nullable();
-            $table->double('nilai_kecocokan')->default(0);
+                // Snapshot nama posisi yang dilamar
+                $table->string('posisi_dilamar', 255)->nullable();
+                $table->double('nilai_kecocokan')->default(0);
 
-            $table->decimal('gaji_terakhir', 15, 2)->nullable();
-            $table->decimal('ekspetasi_gaji', 15, 2)->default(0.00);
-            $table->date('tanggal_join_tercepat')->nullable();
-            
-            // Status & Persetujuan
-            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
-            $table->dateTime('tgl_interview')->nullable();
-            $table->string('jenis_interview', 50)->nullable();
-            $table->string('link_gmeet', 255)->nullable();
-            $table->string('ruangan_interview', 255)->nullable();
-            $table->string('approved_by', 255)->nullable();
-            $table->timestamp('approved_at')->nullable();
-            $table->string('rejected_by', 255)->nullable();
-            $table->timestamp('rejected_at')->nullable();
-            $table->text('alasan_reject')->nullable();
+                $table->decimal('gaji_terakhir', 15, 2)->nullable();
+                $table->decimal('ekspetasi_gaji', 15, 2)->default(0.00);
+                $table->date('tanggal_join_tercepat')->nullable();
+                
+                // Status & Persetujuan Assessment
+                $table->string('status', 50)->default('pending');
+                $table->dateTime('tgl_interview')->nullable();
+                $table->string('jenis_interview', 50)->nullable();
+                $table->string('link_gmeet', 255)->nullable();
+                $table->string('ruangan_interview', 255)->nullable();
+                $table->string('approved_by', 255)->nullable();
+                $table->timestamp('approved_at')->nullable();
+                $table->string('rejected_by', 255)->nullable();
+                $table->timestamp('rejected_at')->nullable();
+                $table->text('alasan_reject')->nullable();
 
-            $table->timestamps();
-        });
+                // Status & Persetujuan Interview HRD
+                $table->boolean('is_input_review_hrd')->default(false);
+                $table->boolean('is_approved_interview_hrd')->default(false);
+                $table->string('approved_interview_hrd_by', 255)->nullable();
+                $table->dateTime('approved_interview_hrd_at')->nullable();
+
+                $table->timestamps();
+            });
+        }
     }
 
     /**

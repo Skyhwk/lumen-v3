@@ -176,18 +176,23 @@ class AtsInterviewHrdController extends Controller
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
         $nilaiHrd = $request->input('nilai_interview');
-        $statusResult = $request->input('status_result', 'passed');
-        $catatan = $request->input('catatan');
+        $statusResult = $request->input('status_result', 'evaluated');
+        $catatan = $request->input('catatan') ?: $request->input('catatan_interview');
+
+        $applicant->update([
+            'is_input_review_hrd' => 1,
+        ]);
 
         $interview = RecruitmentInterview::updateOrCreate(
             [
                 'new_recruitment_id' => $applicant->id,
                 'stage' => 'hrd',
+                'is_active' => 1,
             ],
             [
                 'nilai_interview' => $nilaiHrd,
                 'status_result' => $statusResult,
-                'catatan' => $catatan,
+                'catatan_interview' => $catatan,
                 'updated_by' => $user,
             ]
         );
@@ -220,20 +225,27 @@ class AtsInterviewHrdController extends Controller
         $linkGmeet = $request->input('link_gmeet');
         $ruanganInterview = $request->input('ruangan_interview');
 
-        $interview = RecruitmentInterview::updateOrCreate(
-            [
-                'new_recruitment_id' => $applicant->id,
-                'stage' => 'hrd',
-            ],
-            [
-                'tgl_interview' => $tglInterview,
-                'jenis_interview' => $jenisInterview,
-                'link_gmeet' => $jenisInterview === 'Online' ? $linkGmeet : null,
-                'ruangan_interview' => $jenisInterview === 'Offline' ? $ruanganInterview : null,
-                'status_result' => 'reschedule',
-                'updated_by' => $user,
-            ]
-        );
+        // Deactivate previous HRD interview schedules for this candidate
+        RecruitmentInterview::where('new_recruitment_id', $applicant->id)
+            ->where('stage', 'hrd')
+            ->update([
+                'is_active' => 0,
+                'status_result' => 'rescheduled',
+            ]);
+
+        // Create new active schedule record
+        $interview = RecruitmentInterview::create([
+            'new_recruitment_id' => $applicant->id,
+            'stage' => 'hrd',
+            'is_active' => 1,
+            'tgl_interview' => $tglInterview,
+            'jenis_interview' => $jenisInterview,
+            'link_gmeet' => $jenisInterview === 'Online' ? $linkGmeet : null,
+            'ruangan_interview' => $jenisInterview === 'Offline' ? $ruanganInterview : null,
+            'status_result' => 'pending',
+            'created_by' => $user,
+            'updated_by' => $user,
+        ]);
 
         // Send Reschedule Email & WhatsApp notifications
         try {
@@ -297,7 +309,8 @@ class AtsInterviewHrdController extends Controller
     }
 
     /**
-     * Pass candidate from HRD Interview to User Interview stage
+     * Approve candidate HRD Interview result — does NOT change candidate status.
+     * Status will be changed to 'interview_user' only when the department/user schedules the next interview.
      */
     public function passToUser(Request $request, $id)
     {
@@ -312,15 +325,17 @@ class AtsInterviewHrdController extends Controller
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
-        // Update candidate status to 'interview_user'
+        // Record HRD approval audit trail — status is NOT changed here
         $applicant->update([
-            'status' => 'interview_user',
-            'updated_by' => $user,
+            'is_approved_interview_hrd' => 1,
+            'approved_interview_hrd_by' => $user,
+            'approved_interview_hrd_at' => Carbon::now(),
         ]);
 
-        // Update HRD Interview stage result to 'passed'
+        // Mark HRD Interview stage result as 'passed'
         RecruitmentInterview::where('new_recruitment_id', $applicant->id)
             ->where('stage', 'hrd')
+            ->where('is_active', 1)
             ->update([
                 'status_result' => 'passed',
                 'updated_by' => $user,
@@ -328,7 +343,7 @@ class AtsInterviewHrdController extends Controller
 
         return response()->json([
             'status' => 200,
-            'message' => 'Candidate successfully passed HRD Interview and progressed to User Interview stage.',
+            'message' => 'HRD Interview approved. Candidate is ready for User Interview scheduling.',
             'data' => $applicant,
         ], 200);
     }
@@ -359,9 +374,10 @@ class AtsInterviewHrdController extends Controller
 
         RecruitmentInterview::where('new_recruitment_id', $applicant->id)
             ->where('stage', 'hrd')
+            ->where('is_active', 1)
             ->update([
                 'status_result' => 'failed',
-                'catatan' => $reason,
+                'catatan_interview' => $reason,
                 'updated_by' => $user,
             ]);
 
@@ -459,5 +475,29 @@ class AtsInterviewHrdController extends Controller
         }
 
         return $pos ?: 'Applied Position';
+    }
+
+    /**
+     * Get interview history list for candidate
+     */
+    public function getHistory(Request $request, $id)
+    {
+        $applicant = NewRecruitment::with(['hrdInterviewHistories'])->find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Interview history fetched successfully',
+            'data' => [
+                'candidate' => $applicant,
+                'histories' => $applicant->hrdInterviewHistories,
+            ],
+        ], 200);
     }
 }

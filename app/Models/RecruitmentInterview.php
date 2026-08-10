@@ -12,7 +12,15 @@ class RecruitmentInterview extends Model
     protected $casts = [
         'tgl_interview' => 'datetime',
         'nilai_interview' => 'float',
+        'is_active' => 'boolean',
     ];
+
+    protected $appends = ['catatan'];
+
+    public function getCatatanAttribute()
+    {
+        return $this->attributes['catatan_interview'] ?? null;
+    }
 
     public function applicant()
     {

@@ -22,12 +22,13 @@ class CreateRecruitmentInterviewsTable extends Migration
                 $table->string('jenis_interview', 50)->nullable();
                 $table->string('link_gmeet', 255)->nullable();
                 $table->string('ruangan_interview', 255)->nullable();
-                $table->enum('status_result', ['pending', 'passed', 'failed'])->default('pending');
+                $table->string('status_result', 50)->default('pending');
                 $table->text('catatan_interview')->nullable();
                 $table->double('nilai_interview')->nullable();
                 $table->string('interviewer_by', 255)->nullable();
                 $table->string('created_by', 255)->nullable();
                 $table->string('updated_by', 255)->nullable();
+                $table->boolean('is_active')->default(true);
                 $table->timestamps();
 
                 $table->foreign('new_recruitment_id')

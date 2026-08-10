@@ -156,22 +156,23 @@ class DataApplicantsController extends Controller
             'approved_at' => Carbon::now(),
         ]);
 
-        // 2. Create or update HRD Stage Interview record in recruitment_interviews table
-        $interview = RecruitmentInterview::updateOrCreate(
-            [
-                'new_recruitment_id' => $applicant->id,
-                'stage' => 'hrd',
-            ],
-            [
-                'tgl_interview' => $tglInterview,
-                'jenis_interview' => $jenisInterview,
-                'link_gmeet' => $jenisInterview === 'Online' ? $linkGmeet : null,
-                'ruangan_interview' => $jenisInterview === 'Offline' ? $ruanganInterview : null,
-                'status_result' => 'pending',
-                'created_by' => $user,
-                'updated_by' => $user,
-            ]
-        );
+        // 2. Deactivate previous HRD interview schedules & create active record in recruitment_interviews table
+        RecruitmentInterview::where('new_recruitment_id', $applicant->id)
+            ->where('stage', 'hrd')
+            ->update(['is_active' => 0]);
+
+        $interview = RecruitmentInterview::create([
+            'new_recruitment_id' => $applicant->id,
+            'stage' => 'hrd',
+            'is_active' => 1,
+            'tgl_interview' => $tglInterview,
+            'jenis_interview' => $jenisInterview,
+            'link_gmeet' => $jenisInterview === 'Online' ? $linkGmeet : null,
+            'ruangan_interview' => $jenisInterview === 'Offline' ? $ruanganInterview : null,
+            'status_result' => 'pending',
+            'created_by' => $user,
+            'updated_by' => $user,
+        ]);
 
         // 3. Send Corporate Email & WhatsApp Notifications
         try {
