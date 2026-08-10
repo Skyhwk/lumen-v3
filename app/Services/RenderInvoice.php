@@ -750,7 +750,6 @@ class RenderInvoice
                 ');
 
                 $no = 1;
-                $invoiceSummaryReserveRows = self::countInvoiceSummaryReserveRows($dataHead, $harga1);
 
 
                 foreach ($data1 as $k => $valSampling) {
@@ -941,9 +940,6 @@ class RenderInvoice
                                 $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                             }
 
-                            if ($k == count($data1) - 1) {
-                                $tambah += $invoiceSummaryReserveRows;
-                            }
                             // dd($cekArray);
                             $resetData = reset($cekArray);
                             $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
@@ -953,28 +949,6 @@ class RenderInvoice
                             $chunks = self::chunkByContentHeight($usingData, $tambah);
                             // dd($usingData, $tambah, $chunks);
                             for ($i = 0; $i < count($chunks); $i++) {
-                                if ($i > 0) {
-                                    $pdf->writeHTML('
-                                            </tbody>
-                                        </table>
-                                    ');
-                                    $pdf->AddPage();
-                                    $pdf->writeHTML('
-                                        <table style="border-collapse: collapse;">
-                                            <thead>
-                                                <tr>
-                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
-                                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
-                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
-                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
-                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
-                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                    ');
-                                }
-
                                 foreach ($chunks[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
                                         if ($i == count($chunks) - 1) {
@@ -1302,8 +1276,6 @@ class RenderInvoice
                             if (!is_array($dataPendukungSampling)) {
                                 $dataPendukungSampling = [];
                             }
-                            $dataPendukungSamplingCount = count($dataPendukungSampling);
-
                             foreach ($dataPendukungSampling as $keys => $dataSampling) {
 
                                 $tambah = 0;
@@ -1351,10 +1323,6 @@ class RenderInvoice
 
                                 if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
                                     $extra_row++;
-                                }
-
-                                if ($k == count($data1) - 1 && $keys == $dataPendukungSamplingCount - 1) {
-                                    $extra_row += $invoiceSummaryReserveRows;
                                 }
 
                                 $chunks = self::chunkByContentHeight($dataSampling->data_sampling, $extra_row);
@@ -1674,17 +1642,6 @@ class RenderInvoice
                 $spk = '';
             }
 
-            if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
-                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
-            } else {
-                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
-            }
-            $hasTagihanBerjalan = $dataTagihanBerjalan->count() > 0;
-            $sisaPembayaran = $total_tagihan - $nilai_tagihan;
-            $invoiceTotalRows = self::countInvoiceSummaryRows($diskon, $ppn, $pph, $pajak, $harga1, $hasTagihanBerjalan, $sisaPembayaran);
-            $leftInfoRows = 7 + ($dataHead->keterangan_tambahan ? count($dataHead->keterangan_tambahan) + 2 : 0) + ($spk ? 1 : 0);
-            self::ensureInvoiceSummaryFits($pdf, $invoiceTotalRows, $leftInfoRows);
-
             $space = '<p style="font-size:4px;">&nbsp;</p>';
             $spaceSection = '<p style="font-size:8px;">&nbsp;</p>';
 
@@ -1868,7 +1825,12 @@ class RenderInvoice
                 <td style="border: 1px solid; font-size: 9px; width:33%; text-align:center;" class="text-right">' . self::rupiah($total_harga) . '</td></tr>
             ');
 
-            if ($hasTagihanBerjalan) {
+            if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
+                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
+            } else {
+                $dataTagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true);
+            }
+            if ($dataTagihanBerjalan->count() > 0) {
                 $tagihanBerjalan = $dataTagihanBerjalan->sum('nilai_tagihan');
                 $nomorInvoiceBerjalan = $dataTagihanBerjalan->pluck('no_invoice')->implode(', ');
                 $pdf->writeHTML('
@@ -1894,7 +1856,7 @@ class RenderInvoice
             ');
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
-            $sisa_tagihan = $sisaPembayaran;
+            $sisa_tagihan = $total_tagihan - $nilai_tagihan;
             if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr >
@@ -2523,40 +2485,6 @@ class RenderInvoice
         }
     }
 
-    private static function countInvoiceSummaryRows($diskon, $ppn, $pph, $pajak, $harga, $hasTagihanBerjalan, $sisaTagihan)
-    {
-        $rows = 1;
-
-        if ($diskon != 0 && $diskon != null) {
-            $rows += 2;
-        }
-
-        if ($ppn != 0 && $ppn != null) {
-            $rows++;
-
-            if ($pph != 0 && $pph != null) {
-                $rows++;
-            }
-
-            if ($pajak == 0) {
-                $rows++;
-                $rows += self::countOutsideTaxRows($harga);
-            }
-        }
-
-        $rows += 2;
-
-        if ($hasTagihanBerjalan) {
-            $rows++;
-        }
-
-        if (abs($sisaTagihan) > 10) {
-            $rows++;
-        }
-
-        return $rows;
-    }
-
     private static function countCustomInvoiceSummaryRows($harga)
     {
         $rows = 1;
@@ -2580,71 +2508,6 @@ class RenderInvoice
         }
 
         return $rows;
-    }
-
-    private static function countOutsideTaxRows($harga)
-    {
-        $rows = 0;
-
-        foreach ($harga as $detailPajak) {
-            $detail = json_decode(json_encode($detailPajak));
-            if (!isset($detail->biaya_di_luar_pajak)) {
-                continue;
-            }
-
-            $biayaDiLuarPajak = json_decode($detail->biaya_di_luar_pajak);
-            if (isset($biayaDiLuarPajak->select) && $biayaDiLuarPajak->select != []) {
-                $rows += count($biayaDiLuarPajak->select);
-            }
-        }
-
-        return $rows;
-    }
-
-    private static function countInvoiceSummaryReserveRows($dataHead, $harga)
-    {
-        $subTotal = 0;
-        $diskon = 0;
-        $ppn = 0;
-        $pph = 0;
-        $nilaiTagihan = 0;
-        $totalTagihan = 0;
-        $pajak = 0;
-
-        foreach ($harga as $detailHargaInvo) {
-            $detail = json_decode(json_encode($detailHargaInvo));
-            if (isset($detail->biaya_di_luar_pajak)) {
-                $biayaDiLuarPajak = json_decode($detail->biaya_di_luar_pajak);
-                if ($biayaDiLuarPajak->select != []) {
-                    $luarPajak = round($detail->total_discount_transport) + round($detail->total_discount_perdiem);
-                    $diskon += $detail->diskon == null ? 0 : round($detail->diskon) - $luarPajak;
-                    $pajak = 0;
-                } else {
-                    $diskon += $detail->diskon == null ? 0 : round($detail->diskon);
-                    $pajak = 1;
-                }
-            } else {
-                $diskon += $detail->diskon == null ? 0 : round($detail->diskon);
-                $pajak = 1;
-            }
-
-            $subTotal += (int) round($detail->sub_total);
-            $ppn += $detail->ppn == null ? 0 : round($detail->ppn);
-            $pph += $detail->pph == null ? 0 : round($detail->pph);
-            $nilaiTagihan += (int) round($detail->nilai_tagihan);
-            $totalTagihan += (int) round($detail->total_tagihan);
-        }
-
-        if (explode('/', $dataHead->no_quotation)[1] == 'QTC') {
-            $tagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('periode', $dataHead->periode)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true)->count() > 0;
-        } else {
-            $tagihanBerjalan = Invoice::where('no_order', $dataHead->no_order)->where('no_invoice', '!=', $dataHead->no_invoice)->where('is_active', true)->count() > 0;
-        }
-
-        $summaryRows = self::countInvoiceSummaryRows($diskon, $ppn, $pph, $pajak, $harga, $tagihanBerjalan, $totalTagihan - $nilaiTagihan);
-        $leftRows = 7 + ($dataHead->keterangan_tambahan ? count($dataHead->keterangan_tambahan) + 2 : 0);
-
-        return max($summaryRows + 4, $leftRows);
     }
 
     protected static function terbilang($angka)
