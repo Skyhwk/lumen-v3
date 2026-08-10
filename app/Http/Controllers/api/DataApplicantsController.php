@@ -19,11 +19,16 @@ use Mpdf\Output\Destination;
 class DataApplicantsController extends Controller
 {
     /**
-     * Get Datatable list of applicants
+     * Get Datatable list of applicants (Initial Assessment Stage only)
+     * Filters out approved candidates (moved to interview_hrd/interview_user) and rejected candidates
      */
     public function index(Request $request)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
+            ->where(function ($q) {
+                $q->whereNull('status')
+                  ->orWhereIn('status', ['assessment', 'pending', 'new']);
+            })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
@@ -34,7 +39,7 @@ class DataApplicantsController extends Controller
 
         return DataTables::of($query)
             ->addColumn('no_request', function ($row) {
-                return $row->personalRequest->no_request ?? '-';
+                return optional($row->personalRequest)->no_request ?? '-';
             })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
@@ -45,16 +50,7 @@ class DataApplicantsController extends Controller
                 $q->where('nama_lengkap', 'like', "%{$keyword}%");
             })
             ->editColumn('posisi_dilamar', function ($row) {
-                $pr = $row->personalRequest;
-                $pos = $pr->masterJabatan->nama_jabatan 
-                    ?? $pr->posisi_name;
-                if (!$pos && $pr && !is_numeric($pr->posisi)) {
-                    $pos = $pr->posisi;
-                }
-                if (!$pos && !is_numeric($row->posisi_dilamar)) {
-                    $pos = $row->posisi_dilamar;
-                }
-                return $pos ?? '-';
+                return $this->resolvePositionName($row);
             })
             ->filterColumn('posisi_dilamar', function ($q, $keyword) {
                 $q->where(function ($sub) use ($keyword) {
@@ -135,7 +131,7 @@ class DataApplicantsController extends Controller
                 }
             })
             ->editColumn('status', function ($row) {
-                return $row->status ?? 'pending';
+                return $row->status ?: 'assessment';
             })
             ->addColumn('hrd_interview', function ($row) {
                 return $row->hrdInterview;
@@ -173,24 +169,37 @@ class DataApplicantsController extends Controller
     }
 
     /**
-     * Helper to resolve applicant position title cleanly
+     * Helper to resolve applicant position title safely in PHP 7.4
      */
     private function resolvePositionName($applicant)
     {
-        $posisi = null;
-        if ($applicant->personalRequest) {
-            $posisi = $applicant->personalRequest->masterJabatan->nama_jabatan 
-                ?? $applicant->personalRequest->posisi_name
-                ?? (is_numeric($applicant->personalRequest->posisi) ? null : $applicant->personalRequest->posisi);
+        if (!$applicant) {
+            return 'Posisi Dilamar';
         }
-        if (!$posisi && !empty($applicant->posisi_dilamar)) {
-            $posisi = is_numeric($applicant->posisi_dilamar) ? null : $applicant->posisi_dilamar;
+
+        $pos = null;
+        $pr = $applicant->personalRequest ?? null;
+
+        if ($pr) {
+            $masterJabatan = $pr->masterJabatan ?? null;
+            if ($masterJabatan && !empty($masterJabatan->nama_jabatan)) {
+                $pos = $masterJabatan->nama_jabatan;
+            } elseif (!empty($pr->posisi_name)) {
+                $pos = $pr->posisi_name;
+            } elseif (!empty($pr->posisi) && !is_numeric($pr->posisi)) {
+                $pos = $pr->posisi;
+            }
         }
-        return $posisi ?: 'Posisi Dilamar';
+
+        if (!$pos && !empty($applicant->posisi_dilamar) && !is_numeric($applicant->posisi_dilamar)) {
+            $pos = $applicant->posisi_dilamar;
+        }
+
+        return $pos ?: 'Posisi Dilamar';
     }
 
     /**
-     * Approve applicant, schedule HRD interview & send Corporate Email + WhatsApp notifications
+     * Approve applicant, move candidate to 'interview_hrd' stage, schedule HRD interview & send Corporate Email + WhatsApp notifications
      */
     public function approve(Request $request, $id)
     {
@@ -210,9 +219,9 @@ class DataApplicantsController extends Controller
         $linkGmeet = $request->input('link_gmeet');
         $ruanganInterview = $request->input('ruangan_interview');
 
-        // 1. Update applicant status
+        // 1. Update applicant status to 'interview_hrd' (moves out of Data Applicants list into HRD Interview pos)
         $applicant->update([
-            'status' => 'approved',
+            'status' => 'interview_hrd',
             'approved_by' => $user,
             'approved_at' => Carbon::now(),
         ]);
@@ -292,7 +301,7 @@ class DataApplicantsController extends Controller
 
         return response()->json([
             'status' => 200,
-            'message' => 'Applicant approved successfully. HRD interview scheduled and corporate notifications (Email & WhatsApp) sent to candidate.',
+            'message' => 'Applicant approved successfully and moved to Interview HRD stage.',
             'data' => $applicant->load(['hrdInterview', 'userInterview']),
         ], 200);
     }
@@ -314,6 +323,7 @@ class DataApplicantsController extends Controller
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
         $reason = $request->input('alasan_reject') ?? 'Tidak memenuhi kualifikasi';
 
+        // Update status to 'rejected' (removes candidate from active Data Applicants list)
         $applicant->update([
             'status' => 'rejected',
             'rejected_by' => $user,
@@ -336,7 +346,7 @@ class DataApplicantsController extends Controller
             if (!empty($applicant->email)) {
                 $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
                 SendEmail::where('to', $applicant->email)
-                    ->where('subject', 'Pemberitahuan Hasil Seleksi - PT Inti Surya Laboratorium')
+                    ->where('subject', 'Informasi Hasil Seleksi - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
@@ -358,7 +368,7 @@ class DataApplicantsController extends Controller
 
         return response()->json([
             'status' => 200,
-            'message' => 'Applicant has been rejected and respectful notifications sent.',
+            'message' => 'Applicant has been rejected and removed from active applicants list.',
             'data' => $applicant,
         ], 200);
     }

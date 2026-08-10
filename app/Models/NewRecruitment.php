@@ -17,7 +17,7 @@ class NewRecruitment extends Model
 
     public function personalRequest()
     {
-        return $this->belongsTo(PersonalRequest::class, 'personal_request_id');
+        return $this->belongsTo(PersonalRequest::class, 'personnel_request_id');
     }
 
     public function interviews()
