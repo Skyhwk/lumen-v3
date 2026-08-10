@@ -13,13 +13,13 @@ use App\Helpers\HelperSatuan;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class MikrobiologiUdaraController extends Controller
+class WorksheetSwabController extends Controller
 {
     public function index(Request $request){
         $data = MicrobioHeader::with('ws_value', 'order_detail')
             ->where('is_approved', $request->is_approved)
             ->where('is_active', true)
-            ->where('template_stp', 32)
+            ->where('template_stp', 22)
             ->orderByRaw("
                 CASE 
                     WHEN tanggal_terima IS NULL THEN 1
