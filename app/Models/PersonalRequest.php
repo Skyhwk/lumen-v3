@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PersonalRequest extends Model
 {
-    protected $table = 'personal_requests';
+    protected $table = 'personel_request';
 
     protected $fillable = [
         'no_request',
@@ -33,6 +33,20 @@ class PersonalRequest extends Model
         'max_salary',
         'created_by',
         'updated_by',
+        'is_approve',
+        'is_rejected',
+        'is_reject',
+        'approved_at',
+        'approved_by',
+        'rejected_at',
+        'rejected_by',
+        'divisi_alias',
+        'minimum_matching',
+        'is_publish',
+        'publish_by',
+        'publish_at',
+        'published_by',
+        'published_at',
     ];
 
     protected $casts = [
@@ -41,4 +55,19 @@ class PersonalRequest extends Model
         'jumlah_personal' => 'integer',
         'usia_maksimum' => 'integer',
     ];
+
+    public function masterDivisi()
+    {
+        return $this->belongsTo(MasterDivisi::class, 'divisi', 'id');
+    }
+
+    public function masterJabatan()
+    {
+        return $this->belongsTo(MasterJabatan::class, 'posisi', 'id');
+    }
+
+    public function masterCabang()
+    {
+        return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang', 'id');
+    }
 }
