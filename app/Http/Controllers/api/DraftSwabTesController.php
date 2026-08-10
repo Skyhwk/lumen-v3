@@ -57,7 +57,7 @@ class DraftSwabTesController extends Controller
                 'orderHeader',
             ])
             ->where('is_active', true)
-            ->where('kategori_3', '46-Udara Swab Test')
+            ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
             ->where('status', 2)
             ->groupBy('cfr')
             ->get();

@@ -128,6 +128,11 @@ class OrderDetail extends Sector
         return $this->hasMany(WsValueEmisiCerobong::class, 'no_sampel', 'no_sampel')->with(['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'])->where('is_active', true);
     }
 
+    public function wsValueSwab()
+    {
+        return $this->hasMany(WsValueSwab::class, 'no_sampel', 'no_sampel')->with('swab')->where('is_active', true);
+    }
+
     public function dataLapanganAir()
     {
         return $this->belongsTo(DataLapanganAir::class, 'no_sampel', 'no_sampel');
@@ -842,5 +847,37 @@ class OrderDetail extends Sector
     public function fdl_sound_meter()
     {
         return $this->belongsTo(DataLapanganKebisinganBySoundMeter::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function isAir(): bool
+    {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Air') !== false) {
+            return true;
+        }
+        return $this->wsValueAir()->exists();
+    }
+
+    public function isUdara(): bool
+    {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Udara') !== false) {
+            return true;
+        }
+        return $this->wsValueUdara()->exists();
+    }
+
+    public function isEmisi(): bool
+    {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Emisi') !== false) {
+            return true;
+        }
+        return $this->wsValueEmisiCerobong()->exists();
+    }
+
+    public function isSwab(): bool
+    {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Swab') !== false) {
+            return true;
+        }
+        return $this->wsValueSwab()->exists();
     }
 }

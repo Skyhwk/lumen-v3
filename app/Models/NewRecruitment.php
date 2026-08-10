@@ -22,11 +22,41 @@ class NewRecruitment extends Model
 
     public function personalRequest()
     {
-        return $this->belongsTo(PersonnelRequest::class, 'personnel_request_id');
+        return $this->belongsTo(PersonalRequest::class, 'personnel_request_id');
     }
 
-    public function recruitmentInterviews()
+    public function interviews()
     {
         return $this->hasMany(RecruitmentInterview::class, 'new_recruitment_id');
+    }
+
+    public function hrdInterview()
+    {
+        return $this->hasOne(RecruitmentInterview::class, 'new_recruitment_id')
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc');
+    }
+
+    public function hrdInterviewHistories()
+    {
+        return $this->hasMany(RecruitmentInterview::class, 'new_recruitment_id')
+            ->where('stage', 'hrd')
+            ->orderBy('id', 'desc');
+    }
+
+    public function userInterview()
+    {
+        return $this->hasOne(RecruitmentInterview::class, 'new_recruitment_id')
+            ->where('stage', 'user')
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc');
+    }
+
+    public function userInterviewHistories()
+    {
+        return $this->hasMany(RecruitmentInterview::class, 'new_recruitment_id')
+            ->where('stage', 'user')
+            ->orderBy('id', 'desc');
     }
 }

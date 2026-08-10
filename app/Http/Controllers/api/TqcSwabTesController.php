@@ -41,7 +41,7 @@ class TqcSwabTesController extends Controller
                 'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
             ])
             ->where('is_active', true)
-            ->where('kategori_3', '46-Udara Swab Test')
+            ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
             ->where('status', 1)
             ->groupBy('cfr')
             ->orderBy('tanggal_terima_min')
