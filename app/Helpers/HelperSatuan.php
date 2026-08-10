@@ -15,6 +15,19 @@ class HelperSatuan
         } else {
             return null;
         }
+    }
+
+    public static function getSatuanUdaraMap()
+    {
+        $templateSatuan = TemplateSatuan::where('kategori', 'udara')->where('is_active', true)->get();
+        $map = [];
+        foreach ($templateSatuan as $item) {
+            if ($item->column_number) {
+                $map[$item->column_number] = $item->satuan;
+            }
+        }
+        return $map;
+    }
 
         // $satuanIndexMap = [
         //     '/cm2' => 19,
@@ -55,8 +68,6 @@ class HelperSatuan
         // ];
 
         // return $satuanIndexMap[$satuan] ?? null;
-    }
-
     public static function emisi($satuan)
     {
         $templateSatuan = TemplateSatuan::where('kategori', 'emisi')->where('satuan', $satuan)->where('is_active', true)->first();
