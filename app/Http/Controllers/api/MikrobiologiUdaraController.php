@@ -19,7 +19,7 @@ class MikrobiologiUdaraController extends Controller
         $data = MicrobioHeader::with('ws_value', 'order_detail')
             ->where('is_approved', $request->is_approved)
             ->where('is_active', true)
-            ->whereIn('template_stp', [22, 32])
+            ->where('template_stp', 32)
             ->orderByRaw("
                 CASE 
                     WHEN tanggal_terima IS NULL THEN 1
