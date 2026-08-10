@@ -119,6 +119,11 @@ class WsValueUdara extends Sector
         return null;
     }
 
+    public function getParameterAttribute()
+    {
+        return optional($this->getDataAnalyst())->parameter;
+    }
+
     public function detailLingkunganKerja() {
         return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
     }

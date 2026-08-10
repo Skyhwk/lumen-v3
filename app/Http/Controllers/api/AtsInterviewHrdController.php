@@ -16,17 +16,34 @@ use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 use Mpdf\Output\Destination;
 
-class DataApplicantsController extends Controller
+class AtsInterviewHrdController extends Controller
 {
     /**
-     * Get Datatable list of applicants (Initial Assessment Stage)
+     * Get Datatable list of candidates in HRD Interview stage
+     * mode = 'today' for today's interviews, 'upcoming_past' for upcoming/past interviews
      */
     public function index(Request $request)
     {
+        $mode = $request->input('mode', 'today');
+        $todayStr = Carbon::today()->toDateString();
+
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where(function ($q) {
-                $q->whereNull('status')
-                  ->orWhereIn('status', ['assessment', 'pending', 'new']);
+                $q->where('status', 'interview_hrd')
+                  ->orWhereHas('hrdInterview');
+            })
+            ->where(function ($q) use ($mode, $todayStr) {
+                if ($mode === 'today') {
+                    $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
+                        $sub->whereDate('tgl_interview', '=', $todayStr);
+                    });
+                } else {
+                    $q->where(function ($sub) use ($todayStr) {
+                        $sub->whereHas('hrdInterview', function ($sub2) use ($todayStr) {
+                            $sub2->whereDate('tgl_interview', '!=', $todayStr);
+                        })->orWhereDoesntHave('hrdInterview');
+                    });
+                }
             })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
@@ -61,6 +78,26 @@ class DataApplicantsController extends Controller
             })
             ->filterColumn('status', function ($q, $keyword) {
                 $q->where('status', 'like', "%{$keyword}%");
+            })
+            ->addColumn('jadwal_interview', function ($row) {
+                $hrd = $row->hrdInterview;
+                if ($hrd && $hrd->tgl_interview) {
+                    $dt = Carbon::parse($hrd->tgl_interview);
+                    $modeStr = $hrd->jenis_interview === 'Online' ? 'Online (GMeet)' : 'Offline (' . ($hrd->ruangan_interview ?: 'Office Room') . ')';
+                    return $dt->format('d M Y, H:i') . ' WIB - ' . $modeStr;
+                }
+                return '-';
+            })
+            ->filterColumn('jadwal_interview', function ($q, $keyword) {
+                $q->whereHas('hrdInterview', function ($sub) use ($keyword) {
+                    $sub->where('tgl_interview', 'like', "%{$keyword}%")
+                        ->orWhere('jenis_interview', 'like', "%{$keyword}%")
+                        ->orWhere('ruangan_interview', 'like', "%{$keyword}%")
+                        ->orWhere('link_gmeet', 'like', "%{$keyword}%");
+                });
+            })
+            ->addColumn('hrd_interview', function ($row) {
+                return $row->hrdInterview;
             })
             ->addColumn('usia', function ($row) {
                 $ttl = $this->getTtlString($row);
@@ -117,28 +154,67 @@ class DataApplicantsController extends Controller
                 }
             })
             ->editColumn('status', function ($row) {
-                return $row->status ?: 'assessment';
-            })
-            ->addColumn('hrd_interview', function ($row) {
-                return $row->hrdInterview;
-            })
-            ->addColumn('user_interview', function ($row) {
-                return $row->userInterview;
+                return $row->status ?: 'interview_hrd';
             })
             ->make(true);
     }
 
     /**
-     * Approve applicant, move candidate to 'interview_hrd' stage, schedule HRD interview & send Corporate Email + WhatsApp notifications
+     * Input or update HRD Interview score & evaluation results
      */
-    public function approve(Request $request, $id)
+    public function inputHrdResult(Request $request, $id)
+    {
+        $applicant = NewRecruitment::find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+
+        $nilaiHrd = $request->input('nilai_interview');
+        $statusResult = $request->input('status_result', 'evaluated');
+        $catatan = $request->input('catatan') ?: $request->input('catatan_interview');
+
+        $applicant->update([
+            'is_input_review_hrd' => 1,
+        ]);
+
+        $interview = RecruitmentInterview::updateOrCreate(
+            [
+                'new_recruitment_id' => $applicant->id,
+                'stage' => 'hrd',
+                'is_active' => 1,
+            ],
+            [
+                'nilai_interview' => $nilaiHrd,
+                'status_result' => $statusResult,
+                'catatan_interview' => $catatan,
+                'updated_by' => $user,
+            ]
+        );
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'HRD Interview score and evaluation saved successfully.',
+            'data' => $interview,
+        ], 200);
+    }
+
+    /**
+     * Reschedule HRD Interview schedule & notify candidate
+     */
+    public function reschedule(Request $request, $id)
     {
         $applicant = NewRecruitment::with('personalRequest.masterJabatan')->find($id);
 
         if (!$applicant) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Applicant data not found',
+                'message' => 'Candidate data not found',
             ], 404);
         }
 
@@ -149,18 +225,15 @@ class DataApplicantsController extends Controller
         $linkGmeet = $request->input('link_gmeet');
         $ruanganInterview = $request->input('ruangan_interview');
 
-        // 1. Update applicant status to 'interview_hrd'
-        $applicant->update([
-            'status' => 'interview_hrd',
-            'approved_by' => $user,
-            'approved_at' => Carbon::now(),
-        ]);
-
-        // 2. Deactivate previous HRD interview schedules & create active record in recruitment_interviews table
+        // Deactivate previous HRD interview schedules for this candidate
         RecruitmentInterview::where('new_recruitment_id', $applicant->id)
             ->where('stage', 'hrd')
-            ->update(['is_active' => 0]);
+            ->update([
+                'is_active' => 0,
+                'status_result' => 'rescheduled',
+            ]);
 
+        // Create new active schedule record
         $interview = RecruitmentInterview::create([
             'new_recruitment_id' => $applicant->id,
             'stage' => 'hrd',
@@ -174,7 +247,7 @@ class DataApplicantsController extends Controller
             'updated_by' => $user,
         ]);
 
-        // 3. Send Corporate Email & WhatsApp Notifications
+        // Send Reschedule Email & WhatsApp notifications
         try {
             $dt = Carbon::parse($tglInterview);
             $days = [
@@ -209,7 +282,7 @@ class DataApplicantsController extends Controller
             if (!empty($applicant->email)) {
                 $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($dataArray);
                 SendEmail::where('to', $applicant->email)
-                    ->where('subject', 'Undangan Interview HRD - PT Inti Surya Laboratorium')
+                    ->where('subject', 'Reschedule Undangan Interview HRD - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
@@ -230,27 +303,67 @@ class DataApplicantsController extends Controller
 
         return response()->json([
             'status' => 200,
-            'message' => 'Applicant approved successfully and moved to HRD Interview stage.',
-            'data' => $applicant->load(['hrdInterview', 'userInterview']),
+            'message' => 'HRD Interview rescheduled successfully and candidate notified.',
+            'data' => $interview,
         ], 200);
     }
 
     /**
-     * Reject applicant & send dignified rejection notifications
+     * Approve candidate HRD Interview result — does NOT change candidate status.
+     * Status will be changed to 'interview_user' only when the department/user schedules the next interview.
      */
-    public function reject(Request $request, $id)
+    public function passToUser(Request $request, $id)
     {
-        $applicant = NewRecruitment::with('personalRequest.masterJabatan')->find($id);
+        $applicant = NewRecruitment::find($id);
 
         if (!$applicant) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Applicant data not found',
+                'message' => 'Candidate data not found',
             ], 404);
         }
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
-        $reason = $request->input('alasan_reject') ?? 'Did not pass initial qualification evaluation';
+
+        // Record HRD approval audit trail — status is NOT changed here
+        $applicant->update([
+            'is_approved_interview_hrd' => 1,
+            'approved_interview_hrd_by' => $user,
+            'approved_interview_hrd_at' => Carbon::now(),
+        ]);
+
+        // Mark HRD Interview stage result as 'passed'
+        RecruitmentInterview::where('new_recruitment_id', $applicant->id)
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->update([
+                'status_result' => 'passed',
+                'updated_by' => $user,
+            ]);
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'HRD Interview approved. Candidate is ready for User Interview scheduling.',
+            'data' => $applicant,
+        ], 200);
+    }
+
+    /**
+     * Reject candidate during HRD Interview stage
+     */
+    public function reject(Request $request, $id)
+    {
+        $applicant = NewRecruitment::find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+        $reason = $request->input('alasan_reject') ?? 'Did not pass HRD Interview evaluation';
 
         $applicant->update([
             'status' => 'rejected',
@@ -259,6 +372,16 @@ class DataApplicantsController extends Controller
             'alasan_reject' => $reason,
         ]);
 
+        RecruitmentInterview::where('new_recruitment_id', $applicant->id)
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->update([
+                'status_result' => 'failed',
+                'catatan_interview' => $reason,
+                'updated_by' => $user,
+            ]);
+
+        // Send dignified rejection email & WhatsApp
         try {
             $posisiName = $this->resolvePositionName($applicant);
 
@@ -272,7 +395,7 @@ class DataApplicantsController extends Controller
             if (!empty($applicant->email)) {
                 $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
                 SendEmail::where('to', $applicant->email)
-                    ->where('subject', 'Informasi Hasil Seleksi - PT Inti Surya Laboratorium')
+                    ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
@@ -293,227 +416,9 @@ class DataApplicantsController extends Controller
 
         return response()->json([
             'status' => 200,
-            'message' => 'Applicant has been rejected.',
+            'message' => 'Candidate application has been rejected.',
             'data' => $applicant,
         ], 200);
-    }
-
-    /**
-     * Generate ATS CV PDF via MPDF
-     */
-    public function generateCvPdf(Request $request, $id)
-    {
-        $applicant = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])->find($id);
-
-        if (!$applicant) {
-            return response()->json(['message' => 'Applicant data not found'], 404);
-        }
-
-        $posisiName = $this->resolvePositionName($applicant);
-        
-        $ttl = $this->getTtlString($applicant);
-        $birthYear = $this->extractBirthYear($ttl);
-        
-        $birthDate = $applicant->tanggal_lahir ?? $ttl;
-        $shioElemen = ShioElemenHelper::resolve($birthDate, $applicant->shio, $applicant->elemen);
-        $shio = $shioElemen['shio'] ?? '-';
-        $elemen = $shioElemen['elemen'] ?? '-';
-
-        $usia = $birthYear ? (Carbon::now()->year - $birthYear) . ' Years' : '-';
-        $gajiFormatted = ($applicant->ekspetasi_gaji ?: $applicant->gaji_terakhir) 
-            ? 'Rp ' . number_format(($applicant->ekspetasi_gaji ?: $applicant->gaji_terakhir), 0, ',', '.') 
-            : '-';
-        $score = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: 85);
-
-        // Build Education HTML
-        $pendidikanHtml = '';
-        if (is_array($applicant->pendidikan) && count($applicant->pendidikan) > 0) {
-            foreach ($applicant->pendidikan as $edu) {
-                $jenjang = $edu['jenjang'] ?? $edu['degree'] ?? 'Education';
-                $institusi = $edu['institusi'] ?? $edu['school'] ?? '-';
-                $jurusan = $edu['jurusan'] ?? $edu['major'] ?? '';
-                $tahun = $edu['tahun'] ?? $edu['year'] ?? '';
-                $ipk = isset($edu['gpa']) || isset($edu['ipk']) ? ' (GPA: ' . ($edu['gpa'] ?? $edu['ipk']) . ')' : '';
-
-                $pendidikanHtml .= "
-                <div style='margin-bottom: 10px;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang} {$jurusan} - {$institusi}</strong> {$ipk}<br>
-                    <span style='font-size: 11px; color: #64748b;'>Year: {$tahun}</span>
-                </div>";
-            }
-        } else {
-            $pendidikanHtml = "<p style='color: #64748b; font-size: 11px; margin: 0;'>No education record found.</p>";
-        }
-
-        // Build Experience HTML
-        $pengalamanHtml = '';
-        if (is_array($applicant->pengalaman_kerja) && count($applicant->pengalaman_kerja) > 0) {
-            foreach ($applicant->pengalaman_kerja as $exp) {
-                $pos = $exp['posisi'] ?? $exp['position'] ?? 'Position';
-                $perusahaan = $exp['perusahaan'] ?? $exp['company'] ?? 'Company';
-                $periode = $exp['periode'] ?? $exp['period'] ?? '';
-                $deskripsi = $exp['deskripsi'] ?? $exp['description'] ?? '';
-
-                $pengalamanHtml .= "
-                <div style='margin-bottom: 12px;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$pos}</strong> at <span>{$perusahaan}</span><br>
-                    <span style='font-size: 11px; color: #64748b;'>Period: {$periode}</span>";
-                if ($deskripsi) {
-                    $pengalamanHtml .= "<p style='font-size: 11px; color: #334155; margin: 4px 0 0 0;'>{$deskripsi}</p>";
-                }
-                $pengalamanHtml .= "</div>";
-            }
-        } else {
-            $pengalamanHtml = "<p style='color: #64748b; font-size: 11px; margin: 0;'>Fresh Graduate / No work experience recorded.</p>";
-        }
-
-        $html = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='utf-8'>
-            <title>ATS CV - {$applicant->nama_lengkap}</title>
-            <style>
-                body {
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                    color: #334155;
-                    font-size: 12px;
-                    line-height: 1.5;
-                }
-                .header-table {
-                    width: 100%;
-                    border-bottom: 2px solid #2563eb;
-                    padding-bottom: 12px;
-                    margin-bottom: 15px;
-                }
-                .applicant-name {
-                    font-size: 22px;
-                    font-weight: bold;
-                    color: #1e293b;
-                    margin: 0 0 4px 0;
-                    text-transform: uppercase;
-                }
-                .applied-position {
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #2563eb;
-                    margin: 0;
-                }
-                .meta-badge {
-                    background-color: #eff6ff;
-                    color: #1d4ed8;
-                    border: 1px solid #bfdbfe;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: bold;
-                    display: inline-block;
-                }
-                .section-title {
-                    font-size: 13px;
-                    font-weight: bold;
-                    color: #1e293b;
-                    text-transform: uppercase;
-                    border-bottom: 1px solid #cbd5e1;
-                    padding-bottom: 4px;
-                    margin-top: 15px;
-                    margin-bottom: 10px;
-                    letter-spacing: 0.5px;
-                }
-                .info-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 10px;
-                }
-                .info-table td {
-                    padding: 4px 8px;
-                    vertical-align: top;
-                }
-                .info-label {
-                    width: 30%;
-                    font-weight: bold;
-                    color: #475569;
-                }
-                .info-value {
-                    width: 70%;
-                    color: #0f172a;
-                }
-            </style>
-        </head>
-        <body>
-
-            <table class='header-table'>
-                <tr>
-                    <td style='width: 70%;'>
-                        <div class='applicant-name'>{$applicant->nama_lengkap}</div>
-                        <div class='applied-position'>Applied Position: {$posisiName}</div>
-                        <div style='margin-top: 6px; color: #64748b; font-size: 11px;'>
-                            Email: {$applicant->email} | Phone: {$applicant->no_telepon}
-                        </div>
-                    </td>
-                    <td style='width: 30%; text-align: right; vertical-align: top;'>
-                        <div class='meta-badge' style='background: #1e40af; color: #ffffff; padding: 6px 10px; border-radius: 4px; font-size: 12px;'>
-                            Matching Score: {$score}%
-                        </div>
-                    </td>
-                </tr>
-            </table>
-
-            <div class='section-title'>Personal Information & Qualifications</div>
-            <table class='info-table'>
-                <tr>
-                    <td class='info-label'>Place & Date of Birth</td>
-                    <td class='info-value'>{$ttl} ({$usia})</td>
-                </tr>
-                <tr>
-                    <td class='info-label'>Zodiac & Element</td>
-                    <td class='info-value'>{$shio} " . ($elemen ? "({$elemen})" : "") . "</td>
-                </tr>
-                <tr>
-                    <td class='info-label'>ID Address</td>
-                    <td class='info-value'>" . ($applicant->alamat_ktp ?: '-') . "</td>
-                </tr>
-                <tr>
-                    <td class='info-label'>Domicile Address</td>
-                    <td class='info-value'>" . ($applicant->alamat_domisili ?: '-') . "</td>
-                </tr>
-                <tr>
-                    <td class='info-label'>Expected Salary</td>
-                    <td class='info-value'>{$gajiFormatted}</td>
-                </tr>
-                <tr>
-                    <td class='info-label'>Earliest Joining Date</td>
-                    <td class='info-value'>" . ($applicant->tanggal_join_tercepat ? Carbon::parse($applicant->tanggal_join_tercepat)->format('d F Y') : '-') . "</td>
-                </tr>
-            </table>
-
-            <div class='section-title'>Education History</div>
-            {$pendidikanHtml}
-
-            <div class='section-title'>Work Experience</div>
-            {$pengalamanHtml}
-
-        </body>
-        </html>
-        ";
-
-        $mpdf = new MpdfService([
-            'mode' => 'utf-8',
-            'format' => 'A4',
-            'margin_left' => 15,
-            'margin_right' => 15,
-            'margin_top' => 15,
-            'margin_bottom' => 20,
-        ]);
-
-        $mpdf->SetHTMLFooter("
-            <div style='border-top: 1px solid #cbd5e1; padding-top: 6px; text-align: right; color: #94a3b8; font-size: 10px; font-family: Helvetica, Arial, sans-serif;'>
-                Document generated automatically by HRD Applicant Tracking System (ATS).
-            </div>
-        ");
-
-        $mpdf->WriteHTML($html);
-        return $mpdf->Output("CV_ATS_{$applicant->nama_lengkap}.pdf", Destination::INLINE);
     }
 
     /**
@@ -570,5 +475,29 @@ class DataApplicantsController extends Controller
         }
 
         return $pos ?: 'Applied Position';
+    }
+
+    /**
+     * Get interview history list for candidate
+     */
+    public function getHistory(Request $request, $id)
+    {
+        $applicant = NewRecruitment::with(['hrdInterviewHistories'])->find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Interview history fetched successfully',
+            'data' => [
+                'candidate' => $applicant,
+                'histories' => $applicant->hrdInterviewHistories,
+            ],
+        ], 200);
     }
 }

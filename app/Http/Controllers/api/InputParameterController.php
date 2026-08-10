@@ -667,7 +667,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Udara' || $stp->sample->nama_kategori == 'Swab Test')){
+            }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Swab Test')){
                 $swab = MicrobioHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -862,7 +862,6 @@ class InputParameterController extends Controller
 
     public function addValueParamApi(Request $request){
 		$stp = TemplateStp::with('sample')->where('id', $request->id_stp)->select('name','category_id')->first();
-		// dd($request->all());
         $repo_quota = json_decode(
             Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
             true
@@ -1780,7 +1779,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		}else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Udara' || $stp->sample->nama_kategori == 'Swab Test')){
+		}else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Swab Test')){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -4030,7 +4029,8 @@ class InputParameterController extends Controller
 				if(!is_null($swab)){
 					$header->luas = $luas;
 					$header->jumlah_mikroba = $request->jumlah_mikroba;
-					$header->fp = isset($request->fp) ? $request->fp : $request->jumlah_pengencer;
+					$header->fp = $request->fp;
+					$header->jumlah_pengencer = $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
 				$header->data_pershift = $data_pershift;
@@ -4074,7 +4074,7 @@ class InputParameterController extends Controller
 
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
-					'status' => 500,
+					'status' => 401,
 					'line' => $e->getLine(),
 					'file' => $e->getFile()
 				];
@@ -4147,6 +4147,12 @@ class InputParameterController extends Controller
 				$header = new MicrobioHeader();
 				$header->no_sampel = $request->no_sample;
 				$header->parameter = $request->parameter;
+				$header->luas = $luas ?? null;
+				$header->volume = $request->volume;
+				$header->fp = $request->fp;
+				$header->jumlah_pengencer = $request->jumlah_pengencer;
+				$header->jumlah_mikroba = $request->jumlah_mikroba;
+
 				$header->template_stp = $request->id_stp;
 				$header->id_parameter = $data_parameter->id;
 				$header->note = $request->note;
@@ -4155,24 +4161,17 @@ class InputParameterController extends Controller
 				$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				// $data_kalkulasi['id_swab_header'] = $header->id;
-				// $data_kalkulasi['no_sampel'] = $request->no_sample;
-				// $data_kalkulasi['created_by'] = $this->karyawan;
-				// // Simpan hasil ke tabel ws_value_swabtest
-				// WsValueSwab::create($data_kalkulasi);
-
 				$data_swab = array();
-				$data_swab['id_swab_header'] = $header->id;
+				$data_swab['id_microbiologi_header'] = $header->id;
 				$data_swab['no_sampel'] = $request->no_sample;
 				$data_swab['hasil10'] = isset($data_kalkulasi['hasil']) ? $data_kalkulasi['hasil'] : null;
 				$data_swab['hasil11'] = isset($data_kalkulasi['hasil2']) ? $data_kalkulasi['hasil2'] : null;
                 $data_swab['hasil13'] = isset($data_kalkulasi['hasil3']) ? $data_kalkulasi['hasil3'] : null;
                 $data_swab['hasil14'] = isset($data_kalkulasi['hasil4']) ? $data_kalkulasi['hasil4'] : null;
                 $data_swab['hasil19'] = isset($data_kalkulasi['hasil5']) ? $data_kalkulasi['hasil5'] : null;
-                $data_swab['created_by'] = $this->karyawan;
+				$data_swab['satuan']  = isset($data_kalkulasi['satuan']) ? $data_kalkulasi['satuan'] : null;
 				WsValueUdara::create($data_swab);
 
-				// Commit transaksi jika semua berhasil
 				DB::commit();
 
 				return (object)[
@@ -4182,12 +4181,10 @@ class InputParameterController extends Controller
 				];
 
 			} catch (\Exception $e) {
-				// Rollback transaksi jika terjadi kesalahan
 				DB::rollBack();
-
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
-					'status' => 500
+					'status' => 401
 				];
 			}
 		} else {
