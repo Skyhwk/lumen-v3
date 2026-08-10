@@ -93,30 +93,45 @@ class WsValueUdara extends Sector
 
     public function getDataAnalyst()
     {
-        $relations = [
-            'lingkungan',
-            'microbiologi',
-            'medanLm',
-            'sinaruv',
-            'iklim',
-            'getaran',
-            'kebisingan',
-            'direct_lain',
-            'partikulat',
-            'pencahayaan',
-            'swab',
-            'subkontrak',
-            'dustfall',
-            'debuPersonal'
-        ];
+        // $relations = [
+        //     'lingkungan',
+        //     'microbiologi',
+        //     'medanLm',
+        //     'sinaruv',
+        //     'iklim',
+        //     'getaran',
+        //     'kebisingan',
+        //     'direct_lain',
+        //     'partikulat',
+        //     'pencahayaan',
+        //     'swab',
+        //     'subkontrak',
+        //     'dustfall',
+        //     'debuPersonal'
+        // ];
 
-        foreach ($relations as $relation) {
-            if ($this->{$relation}) {
-                return $this->{$relation};
-            }
-        }
+        // foreach ($relations as $relation) {
+        //     if ($this->{$relation}) {
+        //         return $this->{$relation};
+        //     }
+        // }
 
-        return null;
+        // return null;
+
+        return $this->lingkungan 
+            ?? $this->microbiologi 
+            ?? $this->medanLm 
+            ?? $this->sinaruv 
+            ?? $this->iklim 
+            ?? $this->getaran 
+            ?? $this->kebisingan 
+            ?? $this->direct_lain 
+            ?? $this->partikulat 
+            ?? $this->pencahayaan 
+            ?? $this->swab 
+            ?? $this->subkontrak 
+            ?? $this->dustfall 
+            ?? $this->debuPersonal;
     }
 
     public function getParameterAttribute()

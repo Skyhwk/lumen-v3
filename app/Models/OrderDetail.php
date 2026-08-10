@@ -851,21 +851,33 @@ class OrderDetail extends Sector
 
     public function isAir(): bool
     {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Air') !== false) {
+            return true;
+        }
         return $this->wsValueAir()->exists();
     }
 
     public function isUdara(): bool
     {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Udara') !== false) {
+            return true;
+        }
         return $this->wsValueUdara()->exists();
     }
 
     public function isEmisi(): bool
     {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Emisi') !== false) {
+            return true;
+        }
         return $this->wsValueEmisiCerobong()->exists();
     }
 
     public function isSwab(): bool
     {
+        if (isset($this->kategori_2) && strpos($this->kategori_2, 'Swab') !== false) {
+            return true;
+        }
         return $this->wsValueSwab()->exists();
     }
 }

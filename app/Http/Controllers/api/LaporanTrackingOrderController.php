@@ -388,21 +388,35 @@ class LaporanTrackingOrderController extends Controller
             }
 
             if ($type === 'analisa') {
-                // panggil OrderDetail untuk cari no_order nya, karena ga dikirimin dari FE
-                $orderDetail = OrderDetail::withAnyDataLapangan()
-                    ->where('is_active', true)
-                    ->where(function ($q) use ($noSampel, $noLhp) {
-                        if ($noSampel) {
-                            $q->where('no_sampel', $noSampel);
-                        } else if ($noLhp) {
-                            $q->where('cfr', $noLhp);
-                        }
-                    })
-                    ->first();
+                // panggil OrderDetail untuk cari no_order dan daftar sampel yang dicakup
+                $targetSampleKey = $noSampel ?? $noLhp;
 
+                $sampelsQuery = OrderDetail::where('is_active', true);
+                if ($noSampel) {
+                    $sampelsQuery->where('no_sampel', $noSampel);
+                } elseif ($noLhp) {
+                    $sampelsQuery->where(function ($q) use ($noLhp) {
+                        $q->where('cfr', $noLhp)->orWhere('no_order', $noLhp);
+                    });
+                }
+                $orderDetails = $sampelsQuery->get();
+
+                if ($orderDetails->isEmpty() && $targetSampleKey) {
+                    $firstOd = OrderDetail::where('is_active', true)
+                        ->where('no_sampel', $targetSampleKey)
+                        ->first();
+                    if ($firstOd) {
+                        $orderDetails = OrderDetail::where('is_active', true)
+                            ->where('no_order', $firstOd->no_order)
+                            ->get();
+                    }
+                }
+
+                $orderDetail = $orderDetails->first();
                 $noOrder = $orderDetail->no_order ?? null;
+                $noSampels = $orderDetails->pluck('no_sampel')->filter()->unique()->values()->toArray();
 
-                // fallback kalau ga ketemu no_order nya di OrderDetail
+                // fallback kalau ga ketemu no_order nya di OrderDetail (cari di ws_final_approval_header)
                 if (!$noOrder && $noSampel) {
                     $header = DB::table('ws_final_approval_header')
                         ->where('no_sampel', $noSampel)
@@ -417,12 +431,18 @@ class LaporanTrackingOrderController extends Controller
                     ], 404);
                 }
 
-                // cari ws_final_approval_detail nya
-                $analisaDetails = WsFinalApprovalDetail::from('ws_final_approval_detail as d')
-                    ->where('d.no_sampel', $orderDetail->no_sampel ?? $noSampel)
+                // cari ws_final_approval_detail nya (dukung multi sampel untuk satu LHP/Order)
+                $analisaQuery = WsFinalApprovalDetail::from('ws_final_approval_detail as d')
                     ->join('ws_final_approval_header as h', 'h.id', '=', 'd.ws_final_approval_header_id')
-                    ->where('h.no_order', $noOrder)
-                    ->withDataAnalisa($orderDetail)
+                    ->where('h.no_order', $noOrder);
+
+                if ($noSampel) {
+                    $analisaQuery->where('d.no_sampel', $noSampel);
+                } elseif (!empty($noSampels)) {
+                    $analisaQuery->whereIn('d.no_sampel', $noSampels);
+                }
+
+                $analisaDetails = $analisaQuery->withDataAnalisa($orderDetail)
                     ->select([
                         'd.id',
                         'd.no_sampel',
@@ -436,22 +456,87 @@ class LaporanTrackingOrderController extends Controller
                         'h.approved_by',
                         'h.approved_at',
                     ])
+                    ->orderBy('d.no_sampel', 'asc')
                     ->get();
 
                 $dataLap = ($orderDetail && $orderDetail->any_data_lapangan) ? $orderDetail->any_data_lapangan->first() : null;
 
-                // Mencari data Ws Value dari setiap Ws Detail
-                $analisaDetailsFormatted = $analisaDetails->map(function ($item) use ($dataLap) {
+                $findTargetWs = function ($collection, $paramLab) {
+                    if (!$collection || $collection->isEmpty()) return null;
+
+                    // 1. Match langsung berdasar string parameter
+                    $exact = $collection->firstWhere('parameter', $paramLab);
+                    if ($exact) return $exact;
+
+                    // 2. Pencocokan dinamis berbasis Tabel Master Parameter DB (id_parameter & nama_lab)
+                    $masterParam = DB::table('parameter')
+                        ->where('nama_lhp', $paramLab)
+                        ->orWhere('nama_regulasi', $paramLab)
+                        ->first();
+
+                    if ($masterParam) {
+                        $paramId = $masterParam->id;
+                        $namaLab = $masterParam->nama_lab;
+
+                        foreach ($collection as $ws) {
+                            // cocokin dari ID Parameter pada relasi analyst header
+                            $child = $ws->getDataAnalyst();
+                            if ($child && isset($child->id_parameter) && (int)$child->id_parameter === (int)$paramId) {
+                                return $ws;
+                            }
+
+                            // cocokkan via nama_lab pada Master Parameter (misal: "Hidrokarbon Non Metana (NMHC)" -> nama_lab: "HCNM (3 Jam)")
+                            if ($namaLab && $ws->parameter) {
+                                $cleanWs = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $ws->parameter));
+                                $cleanNamaLab = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $namaLab));
+                                if ($cleanWs === $cleanNamaLab || strpos($cleanWs, $cleanNamaLab) === 0 || strpos($cleanNamaLab, $cleanWs) === 0) {
+                                    return $ws;
+                                }
+                            }
+                        }
+                    }
+
+                    // Fallback pencocokan string bersih (normalized)
+                    $cleanLab = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $paramLab));
+                    preg_match('/\(([^)]+)\)/u', (string) $paramLab, $matches);
+                    $codeInParen = $matches[1] ?? null;
+
+                    foreach ($collection as $ws) {
+                        $wsParam = $ws->parameter;
+                        if (!$wsParam) continue;
+
+                        $cleanWs = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $wsParam));
+                        if ($cleanWs === $cleanLab || strpos($cleanWs, $cleanLab) !== false || strpos($cleanLab, $cleanWs) !== false) {
+                            return $ws;
+                        }
+
+                        if ($codeInParen) {
+                            $cleanCode = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $codeInParen));
+                            if ($cleanWs === $cleanCode || strpos($cleanWs, $cleanCode) === 0 || strpos($cleanCode, $cleanWs) === 0) {
+                                return $ws;
+                            }
+                        }
+                    }
+
+                    return null;
+                };
+
+                // cari data Ws Value dari setiap Ws Detail
+                $analisaDetailsFormatted = $analisaDetails->map(function ($item) use ($dataLap, $findTargetWs) {
                     $itemArray = $item->toArray();
 
-                    // Kalo ada ws_value_air, ambil data ws_value_air nya. Kalo ga ada, ambil ws_value_udara nya, dst.
-                    $targetWs = ($item->wsValueAir ? $item->wsValueAir->firstWhere('parameter', $item->parameter_lab) : null)
-                             ?? ($item->wsValueUdara ? $item->wsValueUdara->firstWhere('parameter', $item->parameter_lab) : null)
-                             ?? ($item->wsValueEmisiCerobong ? $item->wsValueEmisiCerobong->firstWhere('parameter', $item->parameter_lab) : null)
-                             ?? ($item->wsValueSwab ? $item->wsValueSwab->firstWhere('parameter', $item->parameter_lab) : null);
+                    $wsCollection = null;
+                    if ($item->relationLoaded('wsValueAir') && $item->wsValueAir) {
+                        $wsCollection = $item->wsValueAir;
+                    } elseif ($item->relationLoaded('wsValueUdara') && $item->wsValueUdara) {
+                        $wsCollection = $item->wsValueUdara;
+                    } elseif ($item->relationLoaded('wsValueEmisiCerobong') && $item->wsValueEmisiCerobong) {
+                        $wsCollection = $item->wsValueEmisiCerobong;
+                    } elseif ($item->relationLoaded('wsValueSwab') && $item->wsValueSwab) {
+                        $wsCollection = $item->wsValueSwab;
+                    }
 
-                    // ambil data analisanya dari tabel yg sesuai
-                    // Contoh: kalau ws_value_air, maka data analisanya ada di tabel titrimetri, gravimetri, colorimetri, atau subkontrak
+                    $targetWs = $findTargetWs($wsCollection, $item->parameter_lab);
                     $child = $targetWs ? $targetWs->getDataAnalyst() : null;
 
                     // ambil created_at dan created_by dari data analisa
@@ -476,7 +561,7 @@ class LaporanTrackingOrderController extends Controller
                     'type' => 'analisa',
                     'data' => [
                         'no_order' => $noOrder,
-                        'no_sampel' => $orderDetail->no_sampel ?? $noSampel,
+                        'no_sampel' => $noSampel ? $noSampel : (count($noSampels) === 1 ? $noSampels[0] : implode(', ', $noSampels)),
                         'no_lhp' => $orderDetail->cfr ?? $noLhp,
                         'kategori' => $orderDetail->kategori_3 ?? null,
                         'titik_lokasi' => $orderDetail->keterangan_1 ?? null,
