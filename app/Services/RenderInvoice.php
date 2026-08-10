@@ -1296,6 +1296,14 @@ class RenderInvoice
                             // dd('bawah');
 
                             $dataPendukungSampling = json_decode($values->data_pendukung_sampling);
+                            if ($dataPendukungSampling instanceof \stdClass) {
+                                $dataPendukungSampling = [$dataPendukungSampling];
+                            }
+                            if (!is_array($dataPendukungSampling)) {
+                                $dataPendukungSampling = [];
+                            }
+                            $dataPendukungSamplingCount = count($dataPendukungSampling);
+
                             foreach ($dataPendukungSampling as $keys => $dataSampling) {
 
                                 $tambah = 0;
@@ -1345,7 +1353,7 @@ class RenderInvoice
                                     $extra_row++;
                                 }
 
-                                if ($k == count($data1) - 1 && $keys == count($dataPendukungSampling) - 1) {
+                                if ($k == count($data1) - 1 && $keys == $dataPendukungSamplingCount - 1) {
                                     $extra_row += $invoiceSummaryReserveRows;
                                 }
 
