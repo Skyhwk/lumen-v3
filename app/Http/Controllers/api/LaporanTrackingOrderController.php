@@ -5,7 +5,9 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\OrderDetail;   
+use App\Models\OrderDetail;
+use App\Models\OrderHeader;
+use App\Models\WsFinalApprovalDetail;
 use Datatables;
 use Exception;
 
@@ -267,6 +269,24 @@ class LaporanTrackingOrderController extends Controller
                     'message' => 'Parameter no_sampel atau no_lhp wajib diisi'
                 ], 400);
             }
+
+            if ($type === 'order'){
+                $no_order = explode('/', $request->no_lhp)[0];
+                $orderHeader = OrderHeader::where('no_order', $no_order)->first();
+
+                return response()->json([
+                        'status' => 'success',
+                        'message' => 'Data order berhasil ditemukan',
+                        'data' => [
+                            'no_order' => $orderHeader->no_order,
+                            'no_quotation' => $orderHeader->no_quotation,
+                            'no_document' => $orderHeader->no_document,
+                            'nama_perusahaan' => $orderHeader->nama_perusahaan,
+                            'created_by' => $orderHeader->created_by,
+                            'created_at' => $orderHeader->created_at,
+                        ]
+                    ], 200);
+            }
      
             if ($type === 'sampling') {
                 $orderDetail = OrderDetail::withAnyDataLapangan()
@@ -287,15 +307,67 @@ class LaporanTrackingOrderController extends Controller
                     ], 404);
                 }
 
+                if ($orderDetail->kategori_1 === 'SD') {
+                    return response()->json([
+                    'status' => 'success',
+                    'message' => 'Detail step sampling berhasil ditemukan',
+                    'type' => 'sampling',
+                    'data' => [
+                        'no_sampel' => $orderDetail->no_sampel,
+                        'no_lhp' => $orderDetail->cfr,
+                        'kategori' => $orderDetail->kategori_3,
+                        'titik_lokasi' => $orderDetail->keterangan_1,
+                        'info' => 'Sampel diantar'
+                    ]
+                ], 200);
+                } else if ($orderDetail->kategori_1 === 'SP') {
+                    return response()->json([
+                    'status' => 'success',
+                    'message' => 'Detail step sampling berhasil ditemukan',
+                    'type' => 'sampling',
+                    'data' => [
+                        'no_sampel' => $orderDetail->no_sampel,
+                        'no_lhp' => $orderDetail->cfr,
+                        'kategori' => $orderDetail->kategori_3,
+                        'titik_lokasi' => $orderDetail->keterangan_1,
+                        'info' => 'Sampel di-Pick Up'
+                    ]
+                ], 200);
+                }
+                
+
                 $dataLapangan = $orderDetail->any_data_lapangan;
-                $firstLap = $dataLapangan ? $dataLapangan->first() : null;
+                
+                $dataLapanganDlh = $dataLapangan ? $dataLapangan->filter(function ($item) {
+                    return $item instanceof \App\Models\DetailLingkunganHidup;
+                })->values() : collect();
+
+                if (count($dataLapanganDlh) > 0) {
+                     return response()->json([
+                    'status' => 'success',
+                    'message' => 'Detail step sampling berhasil ditemukan',
+                    'type' => 'sampling',
+                    'data' => [
+                        'no_sampel' => $orderDetail->no_sampel,
+                        'no_lhp' => $orderDetail->cfr,
+                        'kategori' => $orderDetail->kategori_3,
+                        'titik_lokasi' => $orderDetail->keterangan_1,
+                        'tanggal_sampling' => null,
+                        'data_lapangan' => $dataLapanganDlh,
+                    ]
+                ], 200);
+                }
+
+                $firstLap = $dataLapangan->first();
 
                 $dataLapanganFiltered = [];
                 if ($firstLap) {
-                    $dataLapanganFiltered[] = [
+                    $itemLap = [
                         'created_at' => $firstLap->created_at ? (string) $firstLap->created_at : null,
-                        'approved_by' => $firstLap->approved_by ?? null,
+                        'created_by' => $firstLap->created_by ?? null,
                     ];
+
+                    $dataLapanganFiltered[] = $itemLap;
                 }
                 
                 $tanggalSampling = ($firstLap && $firstLap->created_at) ? (string) $firstLap->created_at : ($orderDetail->tanggal_sampling ?? $orderDetail->tanggal_terima);
@@ -316,7 +388,9 @@ class LaporanTrackingOrderController extends Controller
             }
 
             if ($type === 'analisa') {
-                $orderDetail = OrderDetail::where('is_active', true)
+                // panggil OrderDetail untuk cari no_order nya, karena ga dikirimin dari FE
+                $orderDetail = OrderDetail::withAnyDataLapangan()
+                    ->where('is_active', true)
                     ->where(function ($q) use ($noSampel, $noLhp) {
                         if ($noSampel) {
                             $q->where('no_sampel', $noSampel);
@@ -326,8 +400,9 @@ class LaporanTrackingOrderController extends Controller
                     })
                     ->first();
 
-                $noOrder = $orderDetail->no_order ?? $request->no_order ?? null;
+                $noOrder = $orderDetail->no_order ?? null;
 
+                // fallback kalau ga ketemu no_order nya di OrderDetail
                 if (!$noOrder && $noSampel) {
                     $header = DB::table('ws_final_approval_header')
                         ->where('no_sampel', $noSampel)
@@ -342,10 +417,12 @@ class LaporanTrackingOrderController extends Controller
                     ], 404);
                 }
 
-                $analisaDetails = DB::table('ws_final_approval_detail as d')
-                ->where('d.no_sampel', $orderDetail->no_sampel ?? $noSampel)
+                // cari ws_final_approval_detail nya
+                $analisaDetails = WsFinalApprovalDetail::from('ws_final_approval_detail as d')
+                    ->where('d.no_sampel', $orderDetail->no_sampel ?? $noSampel)
                     ->join('ws_final_approval_header as h', 'h.id', '=', 'd.ws_final_approval_header_id')
-                    // ->where('h.no_order', $noOrder)
+                    ->where('h.no_order', $noOrder)
+                    ->withDataAnalisa($orderDetail)
                     ->select([
                         'd.id',
                         'd.no_sampel',
@@ -357,9 +434,41 @@ class LaporanTrackingOrderController extends Controller
                         'h.nama_titik',
                         'h.is_approved',
                         'h.approved_by',
-                        'h.approved_at'
+                        'h.approved_at',
                     ])
                     ->get();
+
+                $dataLap = ($orderDetail && $orderDetail->any_data_lapangan) ? $orderDetail->any_data_lapangan->first() : null;
+
+                // Mencari data Ws Value dari setiap Ws Detail
+                $analisaDetailsFormatted = $analisaDetails->map(function ($item) use ($dataLap) {
+                    $itemArray = $item->toArray();
+
+                    // Kalo ada ws_value_air, ambil data ws_value_air nya. Kalo ga ada, ambil ws_value_udara nya, dst.
+                    $targetWs = ($item->wsValueAir ? $item->wsValueAir->firstWhere('parameter', $item->parameter_lab) : null)
+                             ?? ($item->wsValueUdara ? $item->wsValueUdara->firstWhere('parameter', $item->parameter_lab) : null)
+                             ?? ($item->wsValueEmisiCerobong ? $item->wsValueEmisiCerobong->firstWhere('parameter', $item->parameter_lab) : null)
+                             ?? ($item->wsValueSwab ? $item->wsValueSwab->firstWhere('parameter', $item->parameter_lab) : null);
+
+                    // ambil data analisanya dari tabel yg sesuai
+                    // Contoh: kalau ws_value_air, maka data analisanya ada di tabel titrimetri, gravimetri, colorimetri, atau subkontrak
+                    $child = $targetWs ? $targetWs->getDataAnalyst() : null;
+
+                    // ambil created_at dan created_by dari data analisa
+                    if ($child) {
+                        $itemArray['ws_created_at'] = $child->created_at ?? null;
+                        $itemArray['ws_created_by'] = $child->created_by ?? null;
+                    } elseif ($dataLap) {
+                        // kalau gaada data analisa, ambil dari data lapangan
+                        $itemArray['ws_created_at'] = $dataLap->created_at ? (string) $dataLap->created_at : null;
+                        $itemArray['ws_created_by'] = $dataLap->created_by ?? null;
+                    } else {
+                        $itemArray['ws_created_at'] = null;
+                        $itemArray['ws_created_by'] = null;
+                    }
+
+                    return $itemArray;
+                });
 
                 return response()->json([
                     'status' => 'success',
@@ -371,7 +480,7 @@ class LaporanTrackingOrderController extends Controller
                         'no_lhp' => $orderDetail->cfr ?? $noLhp,
                         'kategori' => $orderDetail->kategori_3 ?? null,
                         'titik_lokasi' => $orderDetail->keterangan_1 ?? null,
-                        'analisa_detail' => $analisaDetails
+                        'analisa_detail' => $analisaDetailsFormatted
                     ]
                 ], 200);
             }
@@ -459,12 +568,13 @@ class LaporanTrackingOrderController extends Controller
                         'kategori' => $orderDetail->kategori_3,
                         'titik_lokasi' => $orderDetail->keterangan_1,
                         'tanggal_sampling' => $tanggalSampling,
+                        'created_by' => $firstLhp->created_by ?? null,
+                        'created_at' => $firstLhp->created_at ? (string) $firstLhp->created_at : null,
                         'detail' => $details,
                     ]
                 ], 200);
             }
 
-            // lhp
             if ($type === 'lhp_release') {
                 $orderDetail = OrderDetail::withAnyLhps()
                     ->where('is_active', true)

@@ -128,6 +128,11 @@ class OrderDetail extends Sector
         return $this->hasMany(WsValueEmisiCerobong::class, 'no_sampel', 'no_sampel')->with(['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'])->where('is_active', true);
     }
 
+    public function wsValueSwab()
+    {
+        return $this->hasMany(WsValueSwab::class, 'no_sampel', 'no_sampel')->with('swab')->where('is_active', true);
+    }
+
     public function dataLapanganAir()
     {
         return $this->belongsTo(DataLapanganAir::class, 'no_sampel', 'no_sampel');
@@ -842,5 +847,25 @@ class OrderDetail extends Sector
     public function fdl_sound_meter()
     {
         return $this->belongsTo(DataLapanganKebisinganBySoundMeter::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function isAir(): bool
+    {
+        return $this->wsValueAir()->exists();
+    }
+
+    public function isUdara(): bool
+    {
+        return $this->wsValueUdara()->exists();
+    }
+
+    public function isEmisi(): bool
+    {
+        return $this->wsValueEmisiCerobong()->exists();
+    }
+
+    public function isSwab(): bool
+    {
+        return $this->wsValueSwab()->exists();
     }
 }

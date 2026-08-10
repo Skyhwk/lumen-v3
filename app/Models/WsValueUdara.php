@@ -111,12 +111,17 @@ class WsValueUdara extends Sector
         ];
 
         foreach ($relations as $relation) {
-            if ($this->$relation()->exists()) {
-                return $this->$relation;
+            if ($this->{$relation}) {
+                return $this->{$relation};
             }
         }
 
         return null;
+    }
+
+    public function getParameterAttribute()
+    {
+        return optional($this->getDataAnalyst())->parameter;
     }
 
     public function detailLingkunganKerja() {
