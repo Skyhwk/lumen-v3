@@ -19,4 +19,19 @@ class NewRecruitment extends Model
     {
         return $this->belongsTo(PersonalRequest::class, 'personal_request_id');
     }
+
+    public function interviews()
+    {
+        return $this->hasMany(RecruitmentInterview::class, 'new_recruitment_id');
+    }
+
+    public function hrdInterview()
+    {
+        return $this->hasOne(RecruitmentInterview::class, 'new_recruitment_id')->where('stage', 'hrd')->orderBy('id', 'desc');
+    }
+
+    public function userInterview()
+    {
+        return $this->hasOne(RecruitmentInterview::class, 'new_recruitment_id')->where('stage', 'user')->orderBy('id', 'desc');
+    }
 }

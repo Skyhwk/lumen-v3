@@ -32,7 +32,7 @@ class CreateNewRecruitmentTable extends Migration
             $table->unsignedBigInteger('personal_request_id')->nullable();
             $table->foreign('personal_request_id')
                 ->references('id')
-                ->on('personel_request')
+                ->on('personnel_requests')
                 ->nullOnDelete();
 
             // Snapshot nama posisi yang dilamar
@@ -45,6 +45,10 @@ class CreateNewRecruitmentTable extends Migration
             
             // Status & Persetujuan
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->dateTime('tgl_interview')->nullable();
+            $table->string('jenis_interview', 50)->nullable();
+            $table->string('link_gmeet', 255)->nullable();
+            $table->string('ruangan_interview', 255)->nullable();
             $table->string('approved_by', 255)->nullable();
             $table->timestamp('approved_at')->nullable();
             $table->string('rejected_by', 255)->nullable();

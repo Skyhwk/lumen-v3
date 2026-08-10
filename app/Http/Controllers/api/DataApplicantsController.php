@@ -5,7 +5,12 @@ namespace App\Http\Controllers\api;
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\NewRecruitment;
+use App\Models\RecruitmentInterview;
+use App\Services\GenerateMessageAtsEmail;
+use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
+use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
@@ -18,7 +23,7 @@ class DataApplicantsController extends Controller
      */
     public function index(Request $request)
     {
-        $query = NewRecruitment::with(['personalRequest.masterJabatan'])
+        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
@@ -31,16 +36,33 @@ class DataApplicantsController extends Controller
             ->addColumn('no_request', function ($row) {
                 return $row->personalRequest->no_request ?? '-';
             })
+            ->filterColumn('no_request', function ($q, $keyword) {
+                $q->whereHas('personalRequest', function ($sub) use ($keyword) {
+                    $sub->where('no_request', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('nama_lengkap', function ($q, $keyword) {
+                $q->where('nama_lengkap', 'like', "%{$keyword}%");
+            })
             ->editColumn('posisi_dilamar', function ($row) {
-                $pos = $row->personalRequest->masterJabatan->nama_jabatan 
-                    ?? $row->personalRequest->posisi_name;
-                if (!$pos && $row->personalRequest && !is_numeric($row->personalRequest->posisi)) {
-                    $pos = $row->personalRequest->posisi;
+                $pr = $row->personalRequest;
+                $pos = $pr->masterJabatan->nama_jabatan 
+                    ?? $pr->posisi_name;
+                if (!$pos && $pr && !is_numeric($pr->posisi)) {
+                    $pos = $pr->posisi;
                 }
                 if (!$pos && !is_numeric($row->posisi_dilamar)) {
                     $pos = $row->posisi_dilamar;
                 }
                 return $pos ?? '-';
+            })
+            ->filterColumn('posisi_dilamar', function ($q, $keyword) {
+                $q->where(function ($sub) use ($keyword) {
+                    $sub->where('posisi_dilamar', 'like', "%{$keyword}%")
+                        ->orWhereHas('personalRequest.masterJabatan', function ($j) use ($keyword) {
+                            $j->where('nama_jabatan', 'like', "%{$keyword}%");
+                        });
+                });
             })
             ->addColumn('usia', function ($row) {
                 $ttl = $this->getTtlString($row);
@@ -51,10 +73,35 @@ class DataApplicantsController extends Controller
                 }
                 return '-';
             })
+            ->filterColumn('usia', function ($q, $keyword) {
+                $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+                if (!empty($cleanDigits)) {
+                    $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                    $q->where(function ($sub) use ($targetYear, $cleanDigits) {
+                        $sub->whereYear('tanggal_lahir', $targetYear)
+                            ->orWhere('tempat_tanggal_lahir', 'like', "%{$cleanDigits}%");
+                    });
+                } else {
+                    $q->where('tempat_tanggal_lahir', 'like', "%{$keyword}%");
+                }
+            })
             ->editColumn('shio', function ($row) {
                 $birthDate = $row->tanggal_lahir ?? $this->getTtlString($row);
                 $shioElemen = ShioElemenHelper::resolve($birthDate, $row->shio, $row->elemen);
-                return $shioElemen['shio'] ?? '-';
+                $shio = $shioElemen['shio'] ?? null;
+                $elemen = $shioElemen['elemen'] ?? null;
+                if ($shio && $elemen) {
+                    return "{$shio} ({$elemen})";
+                }
+                return $shio ?: ($elemen ?: '-');
+            })
+            ->filterColumn('shio', function ($q, $keyword) {
+                $q->where(function ($sub) use ($keyword) {
+                    $sub->where('shio', 'like', "%{$keyword}%")
+                        ->orWhere('elemen', 'like', "%{$keyword}%")
+                        ->orWhere('tempat_tanggal_lahir', 'like', "%{$keyword}%")
+                        ->orWhere('tanggal_lahir', 'like', "%{$keyword}%");
+                });
             })
             ->editColumn('gaji_terakhir', function ($row) {
                 $gaji = $row->ekspetasi_gaji ?: $row->gaji_terakhir;
@@ -63,14 +110,38 @@ class DataApplicantsController extends Controller
                 }
                 return '-';
             })
+            ->filterColumn('gaji_terakhir', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9]/', '', $keyword);
+                if (!empty($cleanVal)) {
+                    $q->where(function ($sub) use ($cleanVal) {
+                        $sub->where('ekspetasi_gaji', 'like', "%{$cleanVal}%")
+                            ->orWhere('gaji_terakhir', 'like', "%{$cleanVal}%");
+                    });
+                } else {
+                    $q->where('ekspetasi_gaji', 'like', "%{$keyword}%")
+                        ->orWhere('gaji_terakhir', 'like', "%{$keyword}%");
+                }
+            })
             ->editColumn('nilai_kecocokan', function ($row) {
                 $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== '' 
                     ? $row->nilai_kecocokan 
                     : ($row->matching_score ?? rand(70, 95));
                 return $score . '%';
             })
+            ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                if (!empty($cleanVal)) {
+                    $q->where('nilai_kecocokan', 'like', "%{$cleanVal}%");
+                }
+            })
             ->editColumn('status', function ($row) {
                 return $row->status ?? 'pending';
+            })
+            ->addColumn('hrd_interview', function ($row) {
+                return $row->hrdInterview;
+            })
+            ->addColumn('user_interview', function ($row) {
+                return $row->userInterview;
             })
             ->make(true);
     }
@@ -102,11 +173,28 @@ class DataApplicantsController extends Controller
     }
 
     /**
-     * Approve applicant
+     * Helper to resolve applicant position title cleanly
+     */
+    private function resolvePositionName($applicant)
+    {
+        $posisi = null;
+        if ($applicant->personalRequest) {
+            $posisi = $applicant->personalRequest->masterJabatan->nama_jabatan 
+                ?? $applicant->personalRequest->posisi_name
+                ?? (is_numeric($applicant->personalRequest->posisi) ? null : $applicant->personalRequest->posisi);
+        }
+        if (!$posisi && !empty($applicant->posisi_dilamar)) {
+            $posisi = is_numeric($applicant->posisi_dilamar) ? null : $applicant->posisi_dilamar;
+        }
+        return $posisi ?: 'Posisi Dilamar';
+    }
+
+    /**
+     * Approve applicant, schedule HRD interview & send Corporate Email + WhatsApp notifications
      */
     public function approve(Request $request, $id)
     {
-        $applicant = NewRecruitment::find($id);
+        $applicant = NewRecruitment::with('personalRequest.masterJabatan')->find($id);
 
         if (!$applicant) {
             return response()->json([
@@ -117,25 +205,104 @@ class DataApplicantsController extends Controller
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
+        $tglInterview = $request->input('tgl_interview');
+        $jenisInterview = $request->input('jenis_interview', 'Online');
+        $linkGmeet = $request->input('link_gmeet');
+        $ruanganInterview = $request->input('ruangan_interview');
+
+        // 1. Update applicant status
         $applicant->update([
             'status' => 'approved',
             'approved_by' => $user,
             'approved_at' => Carbon::now(),
         ]);
 
+        // 2. Create or update HRD Stage Interview record in recruitment_interviews table
+        $interview = RecruitmentInterview::updateOrCreate(
+            [
+                'new_recruitment_id' => $applicant->id,
+                'stage' => 'hrd',
+            ],
+            [
+                'tgl_interview' => $tglInterview,
+                'jenis_interview' => $jenisInterview,
+                'link_gmeet' => $jenisInterview === 'Online' ? $linkGmeet : null,
+                'ruangan_interview' => $jenisInterview === 'Offline' ? $ruanganInterview : null,
+                'status_result' => 'pending',
+                'created_by' => $user,
+                'updated_by' => $user,
+            ]
+        );
+
+        // 3. Send Corporate Email & WhatsApp Notifications via Dedicated ATS Services
+        try {
+            $dt = Carbon::parse($tglInterview);
+            $days = [
+                'Monday' => 'Senin',
+                'Tuesday' => 'Selasa',
+                'Wednesday' => 'Rabu',
+                'Thursday' => 'Kamis',
+                'Friday' => 'Jumat',
+                'Saturday' => 'Sabtu',
+                'Sunday' => 'Minggu'
+            ];
+            $hariIndonesia = $days[$dt->format('l')] ?? $dt->format('l');
+            $tglInter = $dt->format('d F Y');
+            $jamInterview = $dt->format('H:i');
+
+            $posisiName = $this->resolvePositionName($applicant);
+
+            $dataArray = (object) [
+                'nama_lengkap' => $applicant->nama_lengkap,
+                'posisi_di_lamar' => $posisiName,
+                'nama_jabatan' => $posisiName,
+                'hariIndonesia' => $hariIndonesia,
+                'tglInter' => $tglInter,
+                'jam_interview' => $jamInterview,
+                'jam_interview_hrd' => $jamInterview,
+                'jenis_interview_hrd' => $jenisInterview,
+                'link_gmeet_hrd' => $jenisInterview === 'Online' ? $linkGmeet : null,
+                'alamat_cabang' => $jenisInterview === 'Offline' ? $ruanganInterview : 'Online Meeting',
+                'kode_uniq' => $applicant->id,
+            ];
+
+            // Send Email to candidate using GenerateMessageAtsEmail
+            if (!empty($applicant->email)) {
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($dataArray);
+                SendEmail::where('to', $applicant->email)
+                    ->where('subject', 'Undangan Interview HRD - PT Inti Surya Laboratorium')
+                    ->where('body', $bodyEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+
+            // Send WhatsApp to candidate using GenerateMessageAtsWhatsapp
+            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            if (!empty($phone)) {
+                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+                $waMessage = $waObj->PassedCandidateSelection();
+
+                $sendWa = new SendWhatsapp($phone, $waMessage);
+                $sendWa->send();
+            }
+        } catch (\Exception $e) {
+            // Silence exception so approval database update completes smoothly even if notifications fail
+        }
+
         return response()->json([
             'status' => 200,
-            'message' => 'Applicant has been approved successfully',
-            'data' => $applicant,
+            'message' => 'Applicant approved successfully. HRD interview scheduled and corporate notifications (Email & WhatsApp) sent to candidate.',
+            'data' => $applicant->load(['hrdInterview', 'userInterview']),
         ], 200);
     }
 
     /**
-     * Reject applicant
+     * Reject applicant & send dignified rejection notifications
      */
     public function reject(Request $request, $id)
     {
-        $applicant = NewRecruitment::find($id);
+        $applicant = NewRecruitment::with('personalRequest.masterJabatan')->find($id);
 
         if (!$applicant) {
             return response()->json([
@@ -154,9 +321,44 @@ class DataApplicantsController extends Controller
             'alasan_reject' => $reason,
         ]);
 
+        // Send Dignified Rejection Email & WhatsApp Notifications
+        try {
+            $posisiName = $this->resolvePositionName($applicant);
+
+            $dataArray = (object) [
+                'nama_lengkap' => $applicant->nama_lengkap,
+                'posisi_di_lamar' => $posisiName,
+                'nama_jabatan' => $posisiName,
+                'alasan_reject' => $reason,
+            ];
+
+            // Send Rejection Email
+            if (!empty($applicant->email)) {
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
+                SendEmail::where('to', $applicant->email)
+                    ->where('subject', 'Pemberitahuan Hasil Seleksi - PT Inti Surya Laboratorium')
+                    ->where('body', $bodyEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+
+            // Send Rejection WhatsApp
+            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            if (!empty($phone)) {
+                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+                $waMessage = $waObj->RejectedCandidateSelection();
+
+                $sendWa = new SendWhatsapp($phone, $waMessage);
+                $sendWa->send();
+            }
+        } catch (\Exception $e) {
+            // Silence exception so rejection database update completes smoothly
+        }
+
         return response()->json([
             'status' => 200,
-            'message' => 'Applicant has been rejected',
+            'message' => 'Applicant has been rejected and respectful notifications sent.',
             'data' => $applicant,
         ], 200);
     }
@@ -166,22 +368,13 @@ class DataApplicantsController extends Controller
      */
     public function generateCvPdf(Request $request, $id)
     {
-        $applicant = NewRecruitment::with(['personalRequest.masterJabatan'])->find($id);
+        $applicant = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])->find($id);
 
         if (!$applicant) {
             return response()->json(['message' => 'Applicant data not found'], 404);
         }
 
-        $posisiName = null;
-        if ($applicant->personalRequest) {
-            $posisiName = $applicant->personalRequest->masterJabatan->nama_jabatan 
-                ?? $applicant->personalRequest->posisi_name
-                ?? (is_numeric($applicant->personalRequest->posisi) ? null : $applicant->personalRequest->posisi);
-        }
-        if (!$posisiName && !empty($applicant->posisi_dilamar)) {
-            $posisiName = is_numeric($applicant->posisi_dilamar) ? null : $applicant->posisi_dilamar;
-        }
-        $posisi = $posisiName ?: 'Candidate';
+        $posisiName = $this->resolvePositionName($applicant);
         
         $ttl = $this->getTtlString($applicant);
         $birthYear = $this->extractBirthYear($ttl);
@@ -318,7 +511,7 @@ class DataApplicantsController extends Controller
                 <tr>
                     <td style='width: 70%;'>
                         <div class='applicant-name'>{$applicant->nama_lengkap}</div>
-                        <div class='applied-position'>Posisi Dilamar: {$posisi}</div>
+                        <div class='applied-position'>Posisi Dilamar: {$posisiName}</div>
                         <div style='margin-top: 6px; color: #64748b; font-size: 11px;'>
                             Email: {$applicant->email} | Telp: {$applicant->no_telepon}
                         </div>
@@ -365,10 +558,6 @@ class DataApplicantsController extends Controller
             <div class='section-title'>Pengalaman Kerja</div>
             {$pengalamanHtml}
 
-            <div style='margin-top: 30px; text-align: right; color: #94a3b8; font-size: 10px; border-top: 1px solid #e2e8f0; padding-top: 8px;'>
-                Dokumen ini didokumentasikan secara otomatis oleh Sistem HRD Applicant Tracking System (ATS).
-            </div>
-
         </body>
         </html>
         ";
@@ -379,8 +568,14 @@ class DataApplicantsController extends Controller
             'margin_left' => 15,
             'margin_right' => 15,
             'margin_top' => 15,
-            'margin_bottom' => 15,
+            'margin_bottom' => 20,
         ]);
+
+        $mpdf->SetHTMLFooter("
+            <div style='border-top: 1px solid #cbd5e1; padding-top: 6px; text-align: right; color: #94a3b8; font-size: 10px; font-family: Helvetica, Arial, sans-serif;'>
+                Dokumen ini didokumentasikan secara otomatis oleh Sistem HRD Applicant Tracking System (ATS).
+            </div>
+        ");
 
         $mpdf->WriteHTML($html);
         return $mpdf->Output("CV_ATS_{$applicant->nama_lengkap}.pdf", Destination::INLINE);

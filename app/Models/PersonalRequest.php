@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PersonalRequest extends Model
 {
-    protected $table = 'personel_request';
+    protected $table = 'personnel_requests';
 
     protected $fillable = [
         'no_request',
