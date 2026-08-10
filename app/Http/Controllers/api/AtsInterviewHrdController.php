@@ -76,6 +76,9 @@ class AtsInterviewHrdController extends Controller
                         });
                 });
             })
+            ->filterColumn('status', function ($q, $keyword) {
+                $q->where('status', 'like', "%{$keyword}%");
+            })
             ->addColumn('jadwal_interview', function ($row) {
                 $hrd = $row->hrdInterview;
                 if ($hrd && $hrd->tgl_interview) {
@@ -85,6 +88,17 @@ class AtsInterviewHrdController extends Controller
                 }
                 return '-';
             })
+            ->filterColumn('jadwal_interview', function ($q, $keyword) {
+                $q->whereHas('hrdInterview', function ($sub) use ($keyword) {
+                    $sub->where('tgl_interview', 'like', "%{$keyword}%")
+                        ->orWhere('jenis_interview', 'like', "%{$keyword}%")
+                        ->orWhere('ruangan_interview', 'like', "%{$keyword}%")
+                        ->orWhere('link_gmeet', 'like', "%{$keyword}%");
+                });
+            })
+            ->addColumn('hrd_interview', function ($row) {
+                return $row->hrdInterview;
+            })
             ->addColumn('usia', function ($row) {
                 $ttl = $this->getTtlString($row);
                 $birthYear = $this->extractBirthYear($ttl);
@@ -93,6 +107,18 @@ class AtsInterviewHrdController extends Controller
                     return $age . ' Yrs';
                 }
                 return '-';
+            })
+            ->filterColumn('usia', function ($q, $keyword) {
+                $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+                if (!empty($cleanDigits)) {
+                    $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                    $q->where(function ($sub) use ($targetYear, $cleanDigits) {
+                        $sub->whereYear('tanggal_lahir', $targetYear)
+                            ->orWhere('tempat_tanggal_lahir', 'like', "%{$cleanDigits}%");
+                    });
+                } else {
+                    $q->where('tempat_tanggal_lahir', 'like', "%{$keyword}%");
+                }
             })
             ->editColumn('shio', function ($row) {
                 $birthDate = $row->tanggal_lahir ?? $this->getTtlString($row);
@@ -104,12 +130,13 @@ class AtsInterviewHrdController extends Controller
                 }
                 return $shio ?: ($elemen ?: '-');
             })
-            ->editColumn('gaji_terakhir', function ($row) {
-                $gaji = $row->ekspetasi_gaji ?: $row->gaji_terakhir;
-                if ($gaji) {
-                    return 'Rp ' . number_format($gaji, 0, ',', '.');
-                }
-                return '-';
+            ->filterColumn('shio', function ($q, $keyword) {
+                $q->where(function ($sub) use ($keyword) {
+                    $sub->where('shio', 'like', "%{$keyword}%")
+                        ->orWhere('elemen', 'like', "%{$keyword}%")
+                        ->orWhere('tempat_tanggal_lahir', 'like', "%{$keyword}%")
+                        ->orWhere('tanggal_lahir', 'like', "%{$keyword}%");
+                });
             })
             ->editColumn('nilai_kecocokan', function ($row) {
                 $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== '' 
@@ -117,10 +144,156 @@ class AtsInterviewHrdController extends Controller
                     : ($row->matching_score ?? rand(70, 95));
                 return $score . '%';
             })
+            ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                if (!empty($cleanVal)) {
+                    $q->where(function ($sub) use ($cleanVal) {
+                        $sub->where('nilai_kecocokan', 'like', "%{$cleanVal}%")
+                            ->orWhere('matching_score', 'like', "%{$cleanVal}%");
+                    });
+                }
+            })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'interview_hrd';
             })
             ->make(true);
+    }
+
+    /**
+     * Input or update HRD Interview score & evaluation results
+     */
+    public function inputHrdResult(Request $request, $id)
+    {
+        $applicant = NewRecruitment::find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+
+        $nilaiHrd = $request->input('nilai_interview');
+        $statusResult = $request->input('status_result', 'passed');
+        $catatan = $request->input('catatan');
+
+        $interview = RecruitmentInterview::updateOrCreate(
+            [
+                'new_recruitment_id' => $applicant->id,
+                'stage' => 'hrd',
+            ],
+            [
+                'nilai_interview' => $nilaiHrd,
+                'status_result' => $statusResult,
+                'catatan' => $catatan,
+                'updated_by' => $user,
+            ]
+        );
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'HRD Interview score and evaluation saved successfully.',
+            'data' => $interview,
+        ], 200);
+    }
+
+    /**
+     * Reschedule HRD Interview schedule & notify candidate
+     */
+    public function reschedule(Request $request, $id)
+    {
+        $applicant = NewRecruitment::with('personalRequest.masterJabatan')->find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+
+        $tglInterview = $request->input('tgl_interview');
+        $jenisInterview = $request->input('jenis_interview', 'Online');
+        $linkGmeet = $request->input('link_gmeet');
+        $ruanganInterview = $request->input('ruangan_interview');
+
+        $interview = RecruitmentInterview::updateOrCreate(
+            [
+                'new_recruitment_id' => $applicant->id,
+                'stage' => 'hrd',
+            ],
+            [
+                'tgl_interview' => $tglInterview,
+                'jenis_interview' => $jenisInterview,
+                'link_gmeet' => $jenisInterview === 'Online' ? $linkGmeet : null,
+                'ruangan_interview' => $jenisInterview === 'Offline' ? $ruanganInterview : null,
+                'status_result' => 'reschedule',
+                'updated_by' => $user,
+            ]
+        );
+
+        // Send Reschedule Email & WhatsApp notifications
+        try {
+            $dt = Carbon::parse($tglInterview);
+            $days = [
+                'Monday' => 'Senin',
+                'Tuesday' => 'Selasa',
+                'Wednesday' => 'Rabu',
+                'Thursday' => 'Kamis',
+                'Friday' => 'Jumat',
+                'Saturday' => 'Sabtu',
+                'Sunday' => 'Minggu'
+            ];
+            $hariIndonesia = $days[$dt->format('l')] ?? $dt->format('l');
+            $tglInter = $dt->format('d F Y');
+            $jamInterview = $dt->format('H:i');
+
+            $posisiName = $this->resolvePositionName($applicant);
+
+            $dataArray = (object) [
+                'nama_lengkap' => $applicant->nama_lengkap,
+                'posisi_di_lamar' => $posisiName,
+                'nama_jabatan' => $posisiName,
+                'hariIndonesia' => $hariIndonesia,
+                'tglInter' => $tglInter,
+                'jam_interview' => $jamInterview,
+                'jam_interview_hrd' => $jamInterview,
+                'jenis_interview_hrd' => $jenisInterview,
+                'link_gmeet_hrd' => $jenisInterview === 'Online' ? $linkGmeet : null,
+                'alamat_cabang' => $jenisInterview === 'Offline' ? $ruanganInterview : 'Online Meeting',
+                'kode_uniq' => $applicant->id,
+            ];
+
+            if (!empty($applicant->email)) {
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($dataArray);
+                SendEmail::where('to', $applicant->email)
+                    ->where('subject', 'Reschedule Undangan Interview HRD - PT Inti Surya Laboratorium')
+                    ->where('body', $bodyEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+
+            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            if (!empty($phone)) {
+                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+                $waMessage = $waObj->PassedCandidateSelection();
+
+                $sendWa = new SendWhatsapp($phone, $waMessage);
+                $sendWa->send();
+            }
+        } catch (\Exception $e) {
+            // Silence exception
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'HRD Interview rescheduled successfully and candidate notified.',
+            'data' => $interview,
+        ], 200);
     }
 
     /**

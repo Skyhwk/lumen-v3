@@ -59,6 +59,9 @@ class DataApplicantsController extends Controller
                         });
                 });
             })
+            ->filterColumn('status', function ($q, $keyword) {
+                $q->where('status', 'like', "%{$keyword}%");
+            })
             ->addColumn('usia', function ($row) {
                 $ttl = $this->getTtlString($row);
                 $birthYear = $this->extractBirthYear($ttl);
@@ -98,25 +101,6 @@ class DataApplicantsController extends Controller
                         ->orWhere('tanggal_lahir', 'like', "%{$keyword}%");
                 });
             })
-            ->editColumn('gaji_terakhir', function ($row) {
-                $gaji = $row->ekspetasi_gaji ?: $row->gaji_terakhir;
-                if ($gaji) {
-                    return 'Rp ' . number_format($gaji, 0, ',', '.');
-                }
-                return '-';
-            })
-            ->filterColumn('gaji_terakhir', function ($q, $keyword) {
-                $cleanVal = preg_replace('/[^0-9]/', '', $keyword);
-                if (!empty($cleanVal)) {
-                    $q->where(function ($sub) use ($cleanVal) {
-                        $sub->where('ekspetasi_gaji', 'like', "%{$cleanVal}%")
-                            ->orWhere('gaji_terakhir', 'like', "%{$cleanVal}%");
-                    });
-                } else {
-                    $q->where('ekspetasi_gaji', 'like', "%{$keyword}%")
-                        ->orWhere('gaji_terakhir', 'like', "%{$keyword}%");
-                }
-            })
             ->editColumn('nilai_kecocokan', function ($row) {
                 $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== '' 
                     ? $row->nilai_kecocokan 
@@ -126,7 +110,10 @@ class DataApplicantsController extends Controller
             ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
                 $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
                 if (!empty($cleanVal)) {
-                    $q->where('nilai_kecocokan', 'like', "%{$cleanVal}%");
+                    $q->where(function ($sub) use ($cleanVal) {
+                        $sub->where('nilai_kecocokan', 'like', "%{$cleanVal}%")
+                            ->orWhere('matching_score', 'like', "%{$cleanVal}%");
+                    });
                 }
             })
             ->editColumn('status', function ($row) {
