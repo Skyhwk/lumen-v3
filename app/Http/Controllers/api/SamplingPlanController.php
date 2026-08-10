@@ -725,9 +725,7 @@ class SamplingPlanController extends Controller
                 $jadwal = JadwalServices::on('updateJadwalKategori', $dataObject)->updateJadwalSPKategori();
             }
 
-            // TAMBAHAN UNTUK UPDATE ORDER DETAIL
-            $this->updateOrderDetail($dataObject, $request->tanggal);
-
+            // Update order detail now handled inside JadwalServices
             // ========================================================
             // 2. SNAPSHOT AFTER: Tarik data setelah SP dieksekusi
             // ========================================================
@@ -834,8 +832,7 @@ class SamplingPlanController extends Controller
                 $jadwal = JadwalServices::on('insertParsial', $dataObject)->insertParsial();
             }
 
-            $this->updateOrderDetail($dataObject, $request->tanggal);
-
+            // Update order detail now handled inside JadwalServices
            
             switch ($type) {
                 case 'QT':
@@ -894,26 +891,6 @@ class SamplingPlanController extends Controller
         }
     }
 
-    private function updateOrderDetail($data, $tanggal)
-    {
-        $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
-        if ($cekOrder) {
-            $array_no_samples = [];
-            foreach ($data->kategori as $x => $y) {
-                $pra_no_sample      = explode(" - ", $y)[1];
-                $no_samples         = $cekOrder->no_order . '/' . $pra_no_sample;
-                $array_no_samples[] = $no_samples;
-            }
-
-            $orderDetail = OrderDetail::where('id_order_header', $cekOrder->id)->whereIn('no_sampel', $array_no_samples)->get();
-            foreach ($orderDetail as $od) {
-                $od->tanggal_sampling = $tanggal;
-                $od->save();
-
-                Log::channel('perubahan_tanggal')->info('Order Detail updated: ' . $od->no_sampel . ' -> ' . $tanggal);
-            }
-        }
-    }
 
     public function cancelJadwal(Request $request)
     {

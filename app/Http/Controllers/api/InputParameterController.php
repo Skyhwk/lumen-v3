@@ -668,7 +668,7 @@ class InputParameterController extends Controller
                     );
                 }
             }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Udara' || $stp->sample->nama_kategori == 'Swab Test')){
-                $swab = SwabTestHeader::with('TrackingSatu')
+                $swab = MicrobioHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
 					})
@@ -4090,7 +4090,7 @@ class InputParameterController extends Controller
 	public function HelperSwabTest($request, $stp, $order_detail) {
 		$fdl = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
         $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-		$header = SwabTestHeader::where('no_sampel', $request->no_sample)
+		$header = MicrobioHeader::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
 			->where('is_active', true)
 			->first();
@@ -4144,7 +4144,7 @@ class InputParameterController extends Controller
 				}
 
 				// Simpan data ke tabel SwabTestHeader
-				$header = new SwabTestHeader();
+				$header = new MicrobioHeader();
 				$header->no_sampel = $request->no_sample;
 				$header->parameter = $request->parameter;
 				$header->template_stp = $request->id_stp;
