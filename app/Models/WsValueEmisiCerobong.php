@@ -51,7 +51,7 @@ class WsValueEmisiCerobong extends Sector
 
     public function getParameterAttribute()
     {
-        return optional($this->getHasilAnalyst())->parameter;
+        return optional($this->getDataAnalyst())->parameter;
     }
 
     public function getHasilParameterAttribute()

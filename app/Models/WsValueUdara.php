@@ -139,6 +139,11 @@ class WsValueUdara extends Sector
 
     public function getParameterAttribute()
     {
+        return optional($this->getDataAnalyst())->parameter;
+    }
+
+    public function getHasilParameterAttribute()
+    {
         return optional($this->getHasilAnalyst())->parameter;
     }
 
