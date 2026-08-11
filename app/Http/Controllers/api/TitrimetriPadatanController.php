@@ -22,16 +22,16 @@ class TitrimetriPadatanController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = Titrimetri::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('titrimetri.is_approved', $request->approve)
             ->where('titrimetri.is_active', true)
-            ->where('template_stp', $request->template_stp)
-           ->select('titrimetri.*')
-           ->orderByRaw("
+            ->where('titrimetri.template_stp', $request->template_stp)
+            ->select('titrimetri.*')
+            ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN titrimetri.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                titrimetri.tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
@@ -54,6 +54,18 @@ class TitrimetriPadatanController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -66,11 +78,17 @@ class TitrimetriPadatanController extends Controller
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
 
-                            // HANYA BOLEH FILTER KOLOM colorimetri
+                            // HANYA BOLEH FILTER KOLOM titrimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("titrimetri.$columnName", 'like', "%{$searchValue}%");
                             }
@@ -79,7 +97,7 @@ class TitrimetriPadatanController extends Controller
                     }
                 }
             })
-            ->make(true);
+        ->make(true);
     }
 
     public function approveData(Request $request){

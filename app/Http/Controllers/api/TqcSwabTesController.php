@@ -41,7 +41,7 @@ class TqcSwabTesController extends Controller
                 'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
             ])
             ->where('is_active', true)
-            ->where('kategori_3', '46-Udara Swab Test')
+            ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
             ->where('status', 1)
             ->groupBy('cfr')
             ->orderBy('tanggal_terima_min')
@@ -170,7 +170,7 @@ class TqcSwabTesController extends Controller
 
                     if ($index === null) {
                         // cari f_koreksi_1..17 dulu
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $key = "f_koreksi_$i";
                             if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
@@ -180,7 +180,7 @@ class TqcSwabTesController extends Controller
 
                         // kalau masih kosong, cari hasil1..17
                         if ($nilai === '-' || $nilai === null || $nilai === '') {
-                            for ($i = 1; $i <= 17; $i++) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
                                 if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];

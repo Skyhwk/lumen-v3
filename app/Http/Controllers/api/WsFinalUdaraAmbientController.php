@@ -1167,8 +1167,6 @@ class WsFinalUdaraAmbientController extends Controller
 		}
 	}
 
-
-
 	public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
 	{
 
@@ -1469,6 +1467,11 @@ class WsFinalUdaraAmbientController extends Controller
 						->where('is_active', 1)
 						->first();
 
+					$wsUdara = WsValueUdara::where('no_sampel', $no_sampel)
+						->where('id_lingkungan_header', $lingkungan->id)
+						->where('is_active', 1)
+						->first();
+
 					if ($lingkungan->tipe_koreksi == null) {
 						$nomor = 1;
 					} else {
@@ -1481,22 +1484,32 @@ class WsFinalUdaraAmbientController extends Controller
 					$lingkungan->tipe_koreksi = $nomor;
 					$lingkungan->save();
 
-					if (!str_contains((string) $hasil_c, '<')) {
-						$hasil_c = number_format((float) $hasil_c, 4, '.', '');
-					}
-					if (!str_contains((string) $hasil_c1, '<')) {
-						$hasil_c1 = number_format((float) $hasil_c1, 4, '.', '');
-					}
-					if (!str_contains((string) $hasil_c2, '<')) {
-						$hasil_c2 = number_format((float) $hasil_c2, 4, '.', '');
-					}
-
 					if ($valuews) {
-						$valuews->f_koreksi_c = $hasil_c;
-						$valuews->f_koreksi_c1 = $hasil_c1;
-						$valuews->f_koreksi_c2 = $hasil_c2;
+						for ($i = env('MIN_COLUMN_WS_LINGKUNGAN'); $i <= env('MAX_COLUMN_WS_LINGKUNGAN'); $i++) {
+							$hasil_val = $request->input('hasil_' . $i);
+							if ($hasil_val !== null) {
+								if (!str_contains((string) $hasil_val, '<')) {
+									$hasil_val = number_format((float) $hasil_val, 4, '.', '');
+								}
+								$col_name = 'f_koreksi_c' . $i;
+								$valuews->$col_name = $hasil_val;
+							}
+						}
 						$valuews->input_koreksi = $faktor_koreksi;
 						$valuews->save();
+					} elseif ($wsUdara) {
+						for ($i = env('MIN_COLUMN_WS_UDARA'); $i <= env('MAX_COLUMN_WS_UDARA'); $i++) {
+							$hasil_val = $request->input('hasil' . $i);
+							if ($hasil_val !== null) {
+								if (!str_contains((string) $hasil_val, '<')) {
+									$hasil_val = number_format((float) $hasil_val, 4, '.', '');
+								}
+								$col_name = 'f_koreksi_' . $i;
+								$wsUdara->$col_name = $hasil_val;
+							}
+						}
+						$wsUdara->input_koreksi = $faktor_koreksi;
+						$wsUdara->save();
 					} else {
 						return response()->json(['message' => 'Data Valuews tidak ditemukan.'], 404);
 					}

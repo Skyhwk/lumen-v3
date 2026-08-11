@@ -160,9 +160,10 @@ class TqcUdaraLingkunganHidupController extends Controller
             $parameters = $processedData->map(fn($item) => ['id' => $item->id_parameter ?: Parameter::where(['id_kategori' => 4, 'nama_lab' => $item->parameter, 'is_active' => true])->first()->id, 'parameter' => $item->parameter]);
             $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
             
-            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
-                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
-                    $colToSearch = "hasil" . ($index ?: 1);
+            //penentuan MDL jika ada
+            $getHasilUji = function ($column, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji !== null && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($column ?: 1);
                     $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
                     if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
                         $hasilUji = "<" . $mdlUdara->$colToSearch;
@@ -172,7 +173,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                 return $hasilUji;
             };
 
-            foreach ($processedData as $item) {
+            foreach ($processedData as $item) { // loop setiap parameter
                 $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
                     ->select('durasi_pengambilan')
                     ->where('parameter', $item->parameter)
@@ -196,37 +197,37 @@ class TqcUdaraLingkunganHidupController extends Controller
                     $nilai = null;
 
                     if ($index == null) {
-                        for ($i = 0; $i <= 16; $i++) {
+                        for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                             $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
-                            if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                            if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
                                 break;
                             }
                         }
-                        if (empty($nilai)) {
-                            for ($i = 0; $i <= 16; $i++) {
+                        if ($nilai == null) {
+                            for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
                                 $key = $i === 0 ? 'C' : "C$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }
                             }
                         }
 
-                        if (empty($nilai)) {
-                            for ($i = 1; $i <= 17; $i++) {
+                        if ($nilai == null) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "f_koreksi_$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }
                             }
                         }
 
-                        if (empty($nilai)) {
-                            for ($i = 1; $i <= 17; $i++) {
+                        if ($nilai == null) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }

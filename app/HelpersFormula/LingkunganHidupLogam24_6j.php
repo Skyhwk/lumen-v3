@@ -98,7 +98,7 @@ class LingkunganHidupLogam24_6j
             //     $C = '<0.0128';
             // }
 
-            $C15 = $C / 1000;
+            $C15 = number_format($C / 1000, 4, '.', '');
             $satuan = 'ug/Nm³';
         }
 

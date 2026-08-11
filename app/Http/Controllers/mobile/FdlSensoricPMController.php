@@ -32,6 +32,10 @@ class FdlSensoricPMController extends Controller
 {
     public function getSample(Request $request)
     {
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'sensoric_pm')->where('is_active', 1)->first();
             $listParameter = json_decode($parameter->parameters, true);
@@ -91,6 +95,27 @@ class FdlSensoricPMController extends Controller
                     $id_ket = explode('-', $data->kategori_3)[0];
                     $cek = MasterSubKategori::find($id_ket);
 
+                    $form_mappings = [];
+                    foreach ($param_fin as $p) {
+                        $pLower = strtolower($p);
+                        $kategori = 'Sesaat';
+                        $jam = 0;
+                        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                            $kategori = '24 Jam';
+                            $jam = 24;
+                        } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                            $kategori = '8 Jam';
+                            $jam = 8;
+                        } else if (str_contains($pLower, '6 jam')) {
+                            $kategori = '6 Jam';
+                            $jam = 6;
+                        }
+                        $form_mappings[$p] = [
+                            'kategori' => $kategori,
+                            'jam' => $jam
+                        ];
+                    }
+
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
                         'jenis'      => $cek->nama_sub_kategori ?? null,
@@ -98,6 +123,7 @@ class FdlSensoricPMController extends Controller
                         'id_ket'     => $id_ket,
                         'parameter'  => $param_fin,
                         'listParameter' => $listParameter,
+                        'form_mappings' => $form_mappings
                     ], 200);
 
                 } else {
@@ -106,6 +132,28 @@ class FdlSensoricPMController extends Controller
                     $id_ket = explode('-', $data->kategori_3)[0];
                     $id_ket2 = explode('-', $data->kategori_2)[0];
                     $cek = MasterSubKategori::find($id_ket);
+
+                    $form_mappings = [];
+                    foreach ($parameters as $p) {
+                        $pLower = strtolower($p);
+                        $kategori = 'Sesaat';
+                        $jam = 0;
+                        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                            $kategori = '24 Jam';
+                            $jam = 24;
+                        } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                            $kategori = '8 Jam';
+                            $jam = 8;
+                        } else if (str_contains($pLower, '6 jam')) {
+                            $kategori = '6 Jam';
+                            $jam = 6;
+                        }
+                        $form_mappings[$p] = [
+                            'kategori' => $kategori,
+                            'jam' => $jam
+                        ];
+                    }
+
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
                         'jenis'      => $cek->nama_sub_kategori ?? null,
@@ -114,6 +162,7 @@ class FdlSensoricPMController extends Controller
                         'id_ket2'    => $id_ket2,
                         'parameter'  => $parameters,
                         'listParameter' => $listParameter,
+                        'form_mappings' => $form_mappings
                     ], 200);
                 }
 
@@ -163,7 +212,7 @@ class FdlSensoricPMController extends Controller
 
                             // Jika parameter yang sama dan shift sudah ada, tidak perlu disimpan lagi
                             if (in_array($request->shift_pengambilan[$en], $nilai_array)) {
-                                continue 2;  // Skip jika shift sudah ada
+                                return response()->json(['message' => "Shift {$request->shift_pengambilan[$en]} pada Parameter {$ab} sudah terinput di no sample ini oleh {$value->created_by} .!"], 401);
                             }
                         }
                     }

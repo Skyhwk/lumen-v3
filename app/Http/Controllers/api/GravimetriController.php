@@ -27,17 +27,17 @@ class GravimetriController extends Controller
     public function index(Request $request)
     {
         $data = Gravimetri::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('gravimetri.is_approved', $request->approve)
             ->where('gravimetri.is_active', true)
             ->where('gravimetri.is_total', false)
-            ->where('template_stp', $request->template_stp)
+            ->where('gravimetri.template_stp', $request->template_stp)
             ->select('gravimetri.*')
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN gravimetri.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                gravimetri.tanggal_terima DESC
             ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
@@ -60,6 +60,18 @@ class GravimetriController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -74,9 +86,15 @@ class GravimetriController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("gravimetri.$columnName", 'like', "%{$searchValue}%");
                             }

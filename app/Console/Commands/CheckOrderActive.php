@@ -9,7 +9,6 @@ use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
 use App\Models\Parameter;
 use App\Models\WsFinalApprovalDetail;
-use App\Models\WsFinalApprovalHeader;
 use Schema;
 
 use Carbon\Carbon;
@@ -17,7 +16,7 @@ use DB;
 
 class CheckOrderActive extends Command
 {
-    protected $signature = 'checkorder';
+    protected $signature = 'checkorder {--start_date=} {--end_date=}';
     protected $description = 'Check order active satu tahun terakhir';
     protected $lhpRelations = [
         'lhps_air' => 'LhpsAirHeader',
@@ -43,8 +42,11 @@ class CheckOrderActive extends Command
     public function handle()
     {
         $commandStartedAt = microtime(true);
-        $startDate = Carbon::now()->subMonths(6)->format('Y-m-d');
-        $endDate = Carbon::now()->format('Y-m-d');
+        $startDateOption = $this->option('start_date');
+        $endDateOption = $this->option('end_date');
+
+        $startDate = $startDateOption ? Carbon::parse($startDateOption)->format('Y-m-d') : Carbon::now()->subMonths(6)->format('Y-m-d');
+        $endDate = $endDateOption ? Carbon::parse($endDateOption)->format('Y-m-d') : Carbon::now()->format('Y-m-d');
 
         $this->info("===== Start Command: CheckOrderActive =====");
         $this->info("Waktu mulai  : " . Carbon::now()->toDateTimeString());
@@ -176,7 +178,7 @@ class CheckOrderActive extends Command
                         'status_selesai' => $details->every(fn ($item) => $item['lhp_rilis']),
                         'jumlah_lhp' => $totalLhp,
                         'jumlah_lhp_selesai' => $selesaiLhp,
-                        'persentase_lhp_selesai' => $totalLhp > 0 ? ($selesaiLhp / $totalLhp) * 100 : 0,
+                        'persentase_lhp_selesai' => $totalLhp > 0 ? round(($selesaiLhp / $totalLhp) * 100, 2) : 0,
                         'proses' => $selesaiLhp . '/' . $totalLhp,
                         'tgl_lhp_rilis_terakhir' => $releasedDates->isNotEmpty() ? $releasedDates->max() : null,
                         'detail' => $details->toArray(),
@@ -205,7 +207,7 @@ class CheckOrderActive extends Command
                 'status_selesai'  => $statusSelesai,
             ];
         })->values()->toArray();
-
+        
         $this->info("Finish to build data [".Carbon::now()->toDateTimeString()."]");
         $this->info("Total mapped orders : " . count($orders));
 
@@ -216,9 +218,34 @@ class CheckOrderActive extends Command
         $this->info("Start to sync tracking order [".Carbon::now()->toDateTimeString()."]");
         $trackingRecords = $this->buildTrackingOrderRecords($dataPembayaran, $orders);
         $this->persistTrackingOrder($trackingRecords, $noOrderArray);
+
         $this->info("Finish sync tracking order [".Carbon::now()->toDateTimeString()."]");
         $this->info("Total Tracking Order : " . count($trackingRecords));
         $this->info("Waktu selesai : " . Carbon::now()->toDateTimeString());
+
+        $this->info("Start to delete order non active [".Carbon::now()->toDateTimeString()."]");
+        $orderNonActive = OrderHeader::where('is_active', 0)
+            ->whereDate('created_at', ">=", $startDate)
+            ->whereDate('created_at', "<=", $endDate)
+            ->get()
+            ->pluck('no_order')
+            ->toArray();
+
+        if (!empty($orderNonActive)) {
+            collect($orderNonActive)
+                ->chunk(300)
+                ->each(function ($ordersChunk) {
+                    DB::table('order_berjalan')
+                        ->whereIn('no_order', $ordersChunk->all())
+                        ->delete();
+
+                    DB::table('tracking_order')
+                        ->whereIn('no_order', $ordersChunk->all())
+                        ->delete();
+                });
+        }
+        $this->info("Finish to delete order non active [".Carbon::now()->toDateTimeString()."]");
+
         $this->logCommandDuration($commandStartedAt);
         $this->info("===== Finish Command: CheckOrderActive =====");
     }
@@ -316,10 +343,8 @@ class CheckOrderActive extends Command
 
     private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], array $steps = [], string $cfrNo = ''): array
     {
-        $details = empty($sampelNumbers)
-            ? WsFinalApprovalDetail::where('no_sampel', $cfrNo)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray()
-            : WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray();
-
+        $details = WsFinalApprovalDetail::whereIn('no_sampel', $sampelNumbers)->get(['no_sampel', 'parameter_lab', 'parameter_regulasi', 'hasil'])->toArray();
+        
         $orderDate    = $steps['order']['date'] ?? null;
         $samplingDate = $steps['sampling']['date'] ?? null;
         $analisaDate  = $steps['analisa']['date'] ?? null;
@@ -340,7 +365,7 @@ class CheckOrderActive extends Command
 
         $foundMap = [];
         $result   = [];
-
+        
         foreach ($details as $detail) {
             $regulasi  = $detail['parameter_regulasi'] ?: $detail['parameter_lab'];
             $cleanReg  = strtolower(trim($regulasi));
@@ -429,11 +454,14 @@ class CheckOrderActive extends Command
             $steps['drafting']['date'] = !empty($lhps['created_at'])
                 ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
                 : null;
+            //TODO: perlu di cek fungsinya
+            if ($steps['drafting']['date'] != null && $steps['analisa']['date'] == null) {
+                $steps['analisa']['date'] = $steps['sampling']['date'];
+            }
 
-            if ($steps['drafting']['date'] != null) {
-                $steps['analisa']['date'] = !empty($lhps['created_at'])
-                    ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
-                    : null;
+            if($steps['analisa']['date'] != null && $steps['drafting']['date'] != null && Carbon::parse($steps['analisa']['date']) > Carbon::parse($steps['drafting']['date']))
+            {
+                $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
             $tglLhpRilis = !empty($lhps['approved_at'])
@@ -458,8 +486,8 @@ class CheckOrderActive extends Command
             'kategori_1'    => $d['kategori_1'],
             'kategori_2'    => $kategori_2,
             'kategori_3'    => $d['kategori_3'],
-            'parameter'          => $parameterHasil,
-            'regulasi'           => json_decode($d['regulasi'] ?? '', true),
+            // 'parameter'          => $parameterHasil,
+            // 'regulasi'           => json_decode($d['regulasi'] ?? '', true),
             'lhp_rilis'     => $lhpRilis,
             'tgl_lhp_rilis' => $tglLhpRilis,
             'steps'         => $steps,
@@ -469,7 +497,7 @@ class CheckOrderActive extends Command
         ];
 
         if (!$lhpRilis) {
-            $result['parameter_regulasi'] = $parameterRegulasi;
+            // $result['parameter_regulasi'] = $parameterRegulasi;
             $result['hasil_uji'] = $this->buildHasilUji($sampelNumbers, $parameterRegulasi, $steps, $d['cfr']);
         }
 
@@ -600,23 +628,23 @@ class CheckOrderActive extends Command
         }
 
         try {
-            $validKeys = collect($records)
-                ->map(fn ($row) => $this->trackingOrderKey($row['no_order'], $row['periode'] ?? null))
-                ->flip();
+            // $validKeys = collect($records)
+            //     ->map(fn ($row) => $this->trackingOrderKey($row['no_order'], $row['periode'] ?? null))
+            //     ->flip();
 
             $existingRows = TrackingOrder::whereIn('no_order', $noOrderArray)->get();
             $existingByKey = $existingRows->keyBy(
                 fn ($row) => $this->trackingOrderKey($row->no_order, $row->periode)
             );
 
-            $deleteIds = $existingRows
-                ->filter(fn ($row) => !$validKeys->has($this->trackingOrderKey($row->no_order, $row->periode)))
-                ->pluck('id')
-                ->all();
+            // $deleteIds = $existingRows
+            //     ->filter(fn ($row) => !$validKeys->has($this->trackingOrderKey($row->no_order, $row->periode)))
+            //     ->pluck('id')
+            //     ->all();
 
-            if (!empty($deleteIds)) {
-                TrackingOrder::whereIn('id', $deleteIds)->delete();
-            }
+            // if (!empty($deleteIds)) {
+            //     TrackingOrder::whereIn('id', $deleteIds)->delete();
+            // }
 
             if (empty($records)) {
                 return;

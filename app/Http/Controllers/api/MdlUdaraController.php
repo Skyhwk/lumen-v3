@@ -52,7 +52,7 @@ class MdlUdaraController extends Controller
         }
 
         $mdlUdara->parameter_id = $request->parameter_id;
-        for ($i = 1; $i <= 19; $i++) $mdlUdara->{'hasil' . $i} = $request->{'hasil' . $i};
+        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) $mdlUdara->{'hasil' . $i} = $request->{'hasil' . $i};
 
         $mdlUdara->save();
 

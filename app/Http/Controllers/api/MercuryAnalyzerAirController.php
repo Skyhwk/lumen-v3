@@ -26,11 +26,18 @@ class MercuryAnalyzerAirController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = Colorimetri::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('colorimetri.is_approved', $request->approve)
             ->where('colorimetri.is_active', true)
             ->where('colorimetri.is_total', false)
-            ->where('template_stp', $request->template_stp)
-            ->select('colorimetri.*');
+            ->where('colorimetri.template_stp', $request->template_stp)
+            ->select('colorimetri.*')
+            ->orderByRaw("
+                CASE 
+                    WHEN colorimetri.tanggal_terima IS NULL THEN 1
+                    ELSE 0
+                END,
+                colorimetri.tanggal_terima DESC
+            ");
         return Datatables::of($data)
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
@@ -52,6 +59,18 @@ class MercuryAnalyzerAirController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -66,9 +85,15 @@ class MercuryAnalyzerAirController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
                             }
