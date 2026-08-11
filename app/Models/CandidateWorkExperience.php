@@ -19,4 +19,9 @@ class CandidateWorkExperience extends Model
     {
         return $this->belongsTo(CandidateProfile::class, 'candidate_profile_id');
     }
+
+    public function newRecruitment()
+    {
+        return $this->belongsTo(NewRecruitment::class, 'new_recruitment_id');
+    }
 }

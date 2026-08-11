@@ -64,8 +64,29 @@ class NewRecruitment extends Model
     {
         return $this->hasOne(SalaryOffer::class, 'new_recruitment_id')->orderBy('id', 'desc');
     }
+
+    public function sallaryOffer()
+    {
+        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')->orderBy('id', 'desc');
+    }
+
+    public function masterJabatan()
+    {
+        return $this->belongsTo(MasterJabatan::class, 'bagian_di_lamar', 'id');
+    }
+
     public function candidateProfile()
     {
         return $this->hasOne(CandidateProfile::class, 'new_recruitment_id');
+    }
+
+    public function candidateEducations()
+    {
+        return $this->hasMany(CandidateEducation::class, 'new_recruitment_id');
+    }
+
+    public function candidateWorkExperiences()
+    {
+        return $this->hasMany(CandidateWorkExperience::class, 'new_recruitment_id');
     }
 }
