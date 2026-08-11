@@ -480,7 +480,7 @@ class LaporanTrackingOrderController extends Controller
 
                         foreach ($collection as $ws) {
                             // cocokin dari ID Parameter pada relasi analyst header
-                            $child = $ws->getDataAnalyst();
+                            $child = $ws->getHasilAnalyst();
                             if ($child && isset($child->id_parameter) && (int)$child->id_parameter === (int)$paramId) {
                                 return $ws;
                             }
@@ -537,7 +537,7 @@ class LaporanTrackingOrderController extends Controller
                     }
 
                     $targetWs = $findTargetWs($wsCollection, $item->parameter_lab);
-                    $child = $targetWs ? $targetWs->getDataAnalyst() : null;
+                    $child = $targetWs ? $targetWs->getHasilAnalyst() : null;
 
                     // ambil created_at dan created_by dari data analisa
                     if ($child) {

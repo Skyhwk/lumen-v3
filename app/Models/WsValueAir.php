@@ -156,6 +156,22 @@ class WsValueAir extends Sector
     // Tracking
     public function getDataAnalyst()
     {
+        if ($this->titrimetri()->exists()) {
+            return $this->titrimetri;
+        }
+        if ($this->gravimetri()->exists()) {
+            return $this->gravimetri;
+        }
+        if ($this->colorimetri()->exists()) {
+            return $this->colorimetri;
+        }
+        if ($this->subkontrak()->exists()) {
+            return $this->subkontrak;
+        }
+        return null;
+    }
+
+    public function getHasilAnalyst(){
         return $this->titrimetri 
             ?? $this->gravimetri 
             ?? $this->colorimetri 
