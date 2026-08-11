@@ -27,7 +27,9 @@ class WsFinalPsikologiController extends Controller
 		$query = OrderDetail::with('data_lapangan_psikologi')
 			->where($baseFilter)
 			->whereJsonContains('parameter', ['318;Psikologi'])
-			->whereNotNull('tanggal_terima');
+			->whereNotNull('tanggal_terima')
+			->where('tanggal_sampling', '>=', '2026-01-01')
+			->where('is_active', true);
 
 		if ($request->filled('is_active')) {
 			$query->where('is_active', $request->is_active);
