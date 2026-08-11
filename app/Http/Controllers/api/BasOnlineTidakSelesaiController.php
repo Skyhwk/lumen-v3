@@ -30,6 +30,7 @@ class BasOnlineTidakSelesaiController extends Controller
                     'psh.detail_bas_documents',
                     DB::raw("GROUP_CONCAT(sts.no_sampel SEPARATOR ', ') AS nosampel_tidak_selesai")
                 ])
+                ->where('sts.alasan', '!=', 'Sample di pick up')
                 ->where('psh.is_active', 1);
 
             // Filter berdasarkan range tanggal (dari frontend)
