@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
 
-use App\Models\PersonalRequest;
+use App\Models\PersonnelRequest;
 
 class PersonnelRequesthrdController extends Controller
 {
@@ -19,7 +19,7 @@ class PersonnelRequesthrdController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = PersonalRequest::with(['masterJabatan', 'masterDivisi'])->orderBy('id', 'desc');
+            $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])->orderBy('id', 'desc');
 
             if ($request->has('year') && !empty($request->year)) {
                 $query->whereYear('created_at', $request->year);
