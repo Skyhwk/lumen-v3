@@ -160,13 +160,13 @@ class DraftSwabTesController extends Controller
                 ->first();
 
             $methode_parameter = Parameter::where('is_active', true)
-                ->where('nama_kategori', 'Udara')->select('id', 'method')->limit(10)->get();
+                ->whereIn('nama_kategori', ['Udara','Swab Test'])->select('id', 'method')->limit(10)->get();
 
             // Ambil list no_sampel dari order yang memenuhi syarat
             $orders = OrderDetail::where('cfr', $request->cfr)
                 ->where('is_approve', 0)
                 ->where('is_active', true)
-                ->where('kategori_2', '4-Udara')
+                ->whereIn('kategori_2', ['4-Udara','7-Swab Test'])
                 ->where('kategori_3', $request->kategori_3)
                 ->where('status', 2)
                 ->pluck('no_sampel');
