@@ -8,6 +8,7 @@ class CreateCandidateProfileTables extends Migration
 {
     /**
      * Run the migrations.
+     * Struktur disesuaikan dengan kondisi aktual database (production-ready).
      *
      * @return void
      */
@@ -25,25 +26,18 @@ class CreateCandidateProfileTables extends Migration
                     ->on('new_recruitment')
                     ->nullOnDelete();
 
-                // Data Diri / Identitas
-                $table->string('nama_lengkap', 255);
+                // Identitas
                 $table->string('nama_panggilan', 100)->nullable();
                 $table->string('nik_ktp', 30)->nullable();
                 $table->string('no_kk', 30)->nullable();
                 $table->string('no_npwp', 30)->nullable();
                 $table->string('no_bpjs_ks', 30)->nullable();
                 $table->string('no_bpjs_tk', 30)->nullable();
-                $table->string('tempat_lahir', 150)->nullable();
-                $table->date('tanggal_lahir')->nullable();
-                $table->enum('jenis_kelamin', ['Male', 'Female'])->nullable();
+
+                // Agama & Status
                 $table->string('agama', 50)->nullable();
                 $table->string('status_pernikahan', 50)->nullable();
                 $table->string('golongan_darah', 10)->nullable();
-
-                // Kontak
-                $table->string('no_telepon', 50)->nullable();
-                $table->string('no_whatsapp', 50)->nullable();
-                $table->string('email', 150)->nullable();
 
                 // Alamat KTP
                 $table->text('alamat_ktp')->nullable();
@@ -63,10 +57,7 @@ class CreateCandidateProfileTables extends Migration
                 $table->string('hubungan_kontak_darurat', 100)->nullable();
                 $table->string('no_telepon_darurat', 50)->nullable();
 
-                // Informasi Finansial
-                $table->decimal('gaji_terakhir', 15, 2)->nullable();
-                $table->decimal('ekspetasi_gaji', 15, 2)->nullable();
-
+                // Audit
                 $table->boolean('is_active')->default(true);
                 $table->string('created_by', 255)->nullable();
                 $table->string('updated_by', 255)->nullable();
@@ -91,13 +82,12 @@ class CreateCandidateProfileTables extends Migration
                     ->on('new_recruitment')
                     ->nullOnDelete();
 
-                $table->string('jenjang_pendidikan', 50); // SMA/SMK, D3, S1, S2, S3, dll
+                $table->string('jenjang_pendidikan', 50);   // SMA/SMK, D3, S1, S2, S3, dll
                 $table->string('nama_institusi', 255);
                 $table->string('jurusan', 255)->nullable();
                 $table->decimal('nilai_ipk', 4, 2)->nullable();
                 $table->integer('tahun_masuk')->nullable();
                 $table->integer('tahun_lulus')->nullable();
-                $table->string('kota', 100)->nullable();
 
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();
@@ -122,16 +112,10 @@ class CreateCandidateProfileTables extends Migration
                     ->nullOnDelete();
 
                 $table->string('nama_perusahaan', 255);
-                $table->string('bidang_usaha', 150)->nullable();
                 $table->string('posisi_terakhir', 255);
-                $table->text('deskripsi_pekerjaan')->nullable();
                 $table->date('tanggal_mulai')->nullable();
                 $table->date('tanggal_selesai')->nullable();
-                $table->boolean('is_masih_bekerja')->default(false);
-                $table->decimal('gaji_terakhir', 15, 2)->nullable();
                 $table->text('alasan_resign')->nullable();
-                $table->string('nama_referensi', 150)->nullable();
-                $table->string('kontak_referensi', 100)->nullable();
 
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();
@@ -155,7 +139,8 @@ class CreateCandidateProfileTables extends Migration
                     ->on('new_recruitment')
                     ->nullOnDelete();
 
-                $table->string('jenis_dokumen', 100); // CV, KTP, KK, NPWP, Ijazah, Transkrip, Sertifikat, Foto, Surat Pengalaman, dll
+                // CV, KTP, KK, NPWP, Ijazah, Transkrip, Sertifikat, Foto, dll
+                $table->string('jenis_dokumen', 100);
                 $table->string('nama_file', 255);
                 $table->text('path_file');
                 $table->string('mime_type', 100)->nullable();
