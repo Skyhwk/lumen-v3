@@ -178,4 +178,3 @@ class WsValueAir extends Sector
             ?? $this->subkontrak;
     }
 }
-

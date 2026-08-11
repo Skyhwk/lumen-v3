@@ -26,7 +26,7 @@ class WsValueSwab extends Sector
 
     public function getParameterAttribute()
     {
-        return optional($this->getDataAnalyst())->parameter;
+        return optional($this->getHasilAnalyst())->parameter;
     }
 
     public function getHasilParameterAttribute()
