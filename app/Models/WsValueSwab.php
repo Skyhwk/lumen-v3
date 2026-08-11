@@ -19,9 +19,19 @@ class WsValueSwab extends Sector
         return $this->swab;
     }
 
+    public function getHasilAnalyst()
+    {
+        return $this->swab;
+    }
+
     public function getParameterAttribute()
     {
         return optional($this->getDataAnalyst())->parameter;
+    }
+
+    public function getHasilParameterAttribute()
+    {
+        return optional($this->getHasilAnalyst())->parameter;
     }
 
     protected $guarded = [];
