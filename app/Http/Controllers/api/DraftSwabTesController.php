@@ -139,7 +139,7 @@ class DraftSwabTesController extends Controller
     public function handleMetodeParameter(Request $request)
     {
         $methode_parameter = Parameter::where('is_active', true)
-            ->where('nama_kategori', 'Udara')->pluck('method')->toArray();
+            ->whereIn('nama_kategori', ['Udara', 'Swab Test'])->pluck('method')->toArray();
 
         return response()->json([
             'status'  => true,
