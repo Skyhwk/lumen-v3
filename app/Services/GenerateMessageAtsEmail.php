@@ -284,4 +284,90 @@ class GenerateMessageAtsEmail
         </html>
         ";
     }
+
+    /**
+     * Professional Email Template to Candidate for Completing Personal Profile after passing HRD Interview
+     * 
+     * @param object $data
+     * @return string
+     */
+    public static function bodyEmailCompleteProfileCandidate($data)
+    {
+        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
+        $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $linkProfile = htmlspecialchars($data->link_complete_profile ?? ('https://apps.intilab.com/candidate-profile?id=' . ($data->id ?? '')));
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                <!-- Header -->
+                <tr>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style='padding: 32px;'>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Sehubungan dengan proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami memohon kesediaan Bapak/Ibu untuk <strong>melengkapi data diri</strong> serta mengunggah berkas pendukung yang dibutuhkan melalui tautan di bawah ini:
+                        </p>
+
+                        <!-- Instruction Checklist Box -->
+                        <div style='background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Data Yang Perlu Dilengkapi:
+                            </div>
+                            <ul style='margin: 0; padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;'>
+                                <li><strong>Data Diri Lengkap:</strong> NIK, No. KK, NPWP, BPJS, Alamat KTP &amp; Domisili.</li>
+                                <li><strong>Riwayat Pendidikan:</strong> Jenjang, Nama Sekolah/Universitas, Jurusan, &amp; IPK.</li>
+                                <li><strong>Pengalaman Kerja:</strong> Perusahaan Terakhir, Posisi, Masa Kerja, &amp; Kontak Referensi.</li>
+                                <li><strong>Dokumen Lampiran:</strong> Softcopy KTP, KK, NPWP, Ijazah, Transkrip, &amp; Sertifikat.</li>
+                            </ul>
+                        </div>
+
+                        <!-- CTA Button -->
+                        <div style='text-align: center; margin: 28px 0;'>
+                            <a href='{$linkProfile}' target='_blank' style='background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 6px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);'>
+                                Lengkapi Data Diri
+                            </a>
+                        </div>
+                        <p style='font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px;'>
+                            Atau akses tautan berikut melalui peramban (browser) Anda:<br>
+                            <a href='{$linkProfile}' target='_blank' style='color: #2563eb; word-break: break-all;'>{$linkProfile}</a>
+                        </p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.
+                        </p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
+                            Demikian informasi ini kami sampaikan. Apabila ada pertanyaan, silakan menghubungi tim HRD kami. Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Salam,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment &amp; Talent Acquisition</span><br>
+                        PT Inti Surya Laboratorium
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        ";
+    }
 }

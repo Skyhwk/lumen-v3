@@ -216,7 +216,7 @@ class DataApplicantsController extends Controller
                     ->send();
             }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            $phone = $applicant->no_telepon ?: ($applicant->no_whatsapp ?? ($applicant->no_hp ?? null));
             if (!empty($phone)) {
                 $waObj = new GenerateMessageAtsWhatsapp($dataArray);
                 $waMessage = $waObj->PassedCandidateSelection();
@@ -225,7 +225,7 @@ class DataApplicantsController extends Controller
                 $sendWa->send();
             }
         } catch (\Exception $e) {
-            // Silence exception
+            \Illuminate\Support\Facades\Log::error('ATS HRD Interview Notification Error: ' . $e->getMessage());
         }
 
         return response()->json([

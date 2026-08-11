@@ -369,7 +369,7 @@ class AtsInterviewHrdController extends Controller
                     ]);
                 }
 
-                // 2. Email notification
+                // 2. Email notification to PR creator
                 $creatorEmail = ($mk && !empty($mk->email)) ? $mk->email : null;
                 if ($creatorEmail) {
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdApprovalNotifUser((object)[
@@ -389,8 +389,42 @@ class AtsInterviewHrdController extends Controller
                         ->send();
                 }
             }
+
+            // 3. Email & WhatsApp notification to Candidate to complete data profile
+            $token = $applicant->token ?? '';
+            $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
+            $profileUrl = "{$baseUrl}/new-recruitment/complete-profile/{$token}";
+
+            $candidateDataObj = (object) [
+                'id'                    => $applicant->id,
+                'nama_lengkap'          => $applicant->nama_lengkap,
+                'posisi_di_lamar'       => $posisiName,
+                'nama_jabatan'          => $posisiName,
+                'link_complete_profile' => $profileUrl,
+            ];
+
+            // 3a. Email to candidate
+            if (!empty($applicant->email)) {
+                $bodyCandidateEmail = GenerateMessageAtsEmail::bodyEmailCompleteProfileCandidate($candidateDataObj);
+                SendEmail::where('to', $applicant->email)
+                    ->where('subject', "Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium")
+                    ->where('body', $bodyCandidateEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+
+            // 3b. WhatsApp to candidate
+            $candidatePhone = $applicant->no_telepon ?? $applicant->no_hp ?? $applicant->no_whatsapp ?? null;
+            if (!empty($candidatePhone)) {
+                $genWa = new GenerateMessageAtsWhatsapp($candidateDataObj);
+                $waMessage = $genWa->CompleteProfileCandidate();
+
+                $sendWa = new SendWhatsapp($candidatePhone, $waMessage);
+                $sendWa->send();
+            }
         } catch (\Exception $e) {
-            // Silence — notification/email failure must not block the approval response
+            // Silence — notification/email/wa failure must not block the approval response
         }
 
         return response()->json([
