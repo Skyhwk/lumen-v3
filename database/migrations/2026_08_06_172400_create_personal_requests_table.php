@@ -82,6 +82,6 @@ class CreatePersonalRequestsTable extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('personal_requests');
+        Schema::dropIfExists('personnel_requests');
     }
 }

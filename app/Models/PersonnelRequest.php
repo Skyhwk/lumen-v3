@@ -54,4 +54,9 @@ class PersonnelRequest extends Model
     {
         return $this->belongsTo(MasterJabatan::class, 'posisi', 'id');
     }
+
+    public function newRecruitments()
+    {
+        return $this->hasMany(NewRecruitment::class, 'personnel_request_id', 'id');
+    }
 }

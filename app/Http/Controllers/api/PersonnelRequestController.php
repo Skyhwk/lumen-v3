@@ -5,10 +5,12 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\PersonnelRequest;
+use App\Models\NewRecruitment;
 use App\Models\MasterKaryawan;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterCabang;
+use App\Models\RecruitmentInterview;
 use App\Services\GetBawahanAll;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -34,10 +36,25 @@ class PersonnelRequestController extends Controller
     public function index(Request $request)
     {
         try {
-            //code...
-            $data = PersonnelRequest::query()->orderBy('id', 'desc');
+            // Fetch records with counts for NewRecruitment and eager load relations
+            $data = PersonnelRequest::select('personnel_requests.*')->with([
+                'detailCabang', 
+                'detailDivisi', 
+                'detailPosisi'
+            ])->withCount([
+                'newRecruitments as total_pelamar',
+                'newRecruitments as total_keterima' => function($query) {
+                    $query->whereIn('status', ['completed']); 
+                }
+            ])->orderBy('id', 'desc');
     
             return Datatables::of($data)
+                ->addColumn('total_pelamar', function ($row) {
+                    return $row->total_pelamar ?? 0;
+                })
+                ->addColumn('total_keterima', function ($row) {
+                    return $row->total_keterima ?? 0;
+                })
                 ->filterColumn('no_request', fn($q, $k) => $q->where('no_request', 'like', "%{$k}%"))
                 ->filterColumn('request_type', fn($q, $k) => $q->where('request_type', 'like', "%{$k}%"))
                 ->filterColumn('prioritas', fn($q, $k) => $q->where('prioritas', 'like', "%{$k}%"))
@@ -45,7 +62,7 @@ class PersonnelRequestController extends Controller
                 ->make(true);
         } catch (\Throwable $th) {
             //throw $th;
-            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],200);
+            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
         }
     }
 
@@ -57,8 +74,11 @@ class PersonnelRequestController extends Controller
         try {
             // Fetch all records, Kanban component will handle categorization
             // Eager load relations to display exact names in Kanban board
-            $data = PersonnelRequest::with(['detailCabang', 'detailDivisi', 'detailPosisi'])
-                        ->orderBy('id', 'desc')->get();
+            $data = NewRecruitment::with([
+                'personnelRequest.detailCabang', 
+                'personnelRequest.detailDivisi', 
+                'personnelRequest.detailPosisi'
+            ])->orderBy('id', 'desc')->get();
             return response()->json($data, 200);
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()], 400);
@@ -262,6 +282,46 @@ class PersonnelRequestController extends Controller
             return response()->json($cabang, 200);
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],400);
+        }
+    }
+
+    /**
+     * Schedule Interview - save to recruitment_interviews
+     */
+    public function scheduleInterview(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+
+            // Save to recruitment_interviews
+            $interview = RecruitmentInterview::create([
+                'new_recruitment_id' => $request->new_recruitment_id,
+                'stage'              => 'user',
+                'tgl_interview'      => $request->tgl_interview,
+                'jenis_interview'    => $request->jenis_interview,
+                'link_gmeet'         => $request->link_gmeet,
+                'created_by'      => $request->user()->name ?? 'System',
+                'is_active'          => 1,
+            ]);
+
+            // Update NewRecruitment status
+            $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
+            $recruitment->update([
+                'status' => 'interview_user'
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Berhasil menjadwalkan interview!',
+                'data'    => $interview
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                "message" => $th->getMessage(),
+                "line"    => $th->getLine(),
+                "file"    => $th->getFile()
+            ], 500);
         }
     }
 }

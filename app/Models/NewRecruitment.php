@@ -15,6 +15,11 @@ class NewRecruitment extends Model
         'tanggal_join_tercepat' => 'date',
     ];
 
+    public function personnelRequest()
+    {
+        return $this->belongsTo(PersonnelRequest::class, 'personnel_request_id');
+    }
+
     public function personalRequest()
     {
         return $this->belongsTo(PersonalRequest::class, 'personnel_request_id');
