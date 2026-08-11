@@ -9,27 +9,17 @@ use App\Http\Controllers\Controller;
 use App\Models\MicrobioHeader;
 use App\Services\ApproveAnalystService;
 use App\Models\WsValueUdara;
+use App\Helpers\HelperSatuan;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class MikrobiologiUdaraController extends Controller
 {
-    // public function index(Request $request){
-    //     $data = MicrobioHeader::with('ws_value', 'order_detail')
-    //     ->where('is_approved', $request->approve)
-    //     ->where('is_active', true)
-    //     ->where('template_stp', $request->template_stp)
-    //     ->orderBy('created_at', 'desc');
-    //     return Datatables::of($data)->make(true);
-    // }
-
-    // 20-03-2025
     public function index(Request $request){
         $data = MicrobioHeader::with('ws_value', 'order_detail')
             ->where('is_approved', $request->is_approved)
-            ->where('microbio_header.is_active', true)
-            ->where('template_stp', $request->template_stp)
-            ->select('microbio_header.*')
+            ->where('is_active', true)
+            ->where('template_stp', 32)
             ->orderByRaw("
                 CASE 
                     WHEN tanggal_terima IS NULL THEN 1
@@ -37,6 +27,8 @@ class MikrobiologiUdaraController extends Controller
                 END,
                 tanggal_terima DESC
             ");
+        $satuanUdaraMap = HelperSatuan::getSatuanUdaraMap();
+
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
@@ -50,7 +42,29 @@ class MikrobiologiUdaraController extends Controller
             ->addColumn('tanggal_terima', function ($item) {
                 return $item->order_detail->tanggal_terima ?? '-';
             })
-
+            ->addColumn('hasil_dinamis', function ($data) use ($satuanUdaraMap) {
+                $hasil = [];
+                if ($data->ws_value) {
+                    $wsArray = $data->ws_value->toArray();
+                    foreach ($wsArray as $key => $value) {
+                        if (preg_match('/^hasil(\d+)$/', $key, $matches)) {
+                            if ($value !== null && $value !== '') {
+                                $index = $matches[1];
+                                $hasil[] = [
+                                    'index'  => (int)$index,
+                                    'label'  => 'C' . $index,
+                                    'nilai'  => (string)$value,
+                                    'satuan' => $satuanUdaraMap[$index] ?? ''
+                                ];
+                            }
+                        }
+                    }
+                    usort($hasil, function($a, $b) {
+                        return $a['index'] <=> $b['index'];
+                    });
+                }
+                return $hasil;
+            })
             ->addColumn('kategori_3', function ($item) {
                 return $item->order_detail->kategori_3 ?? '-';
             })
@@ -66,7 +80,6 @@ class MikrobiologiUdaraController extends Controller
                     $query->where('kategori_3', 'like', "%{$keyword}%");
                 });
             })
-
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -81,9 +94,15 @@ class MikrobiologiUdaraController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("microbio_header.$columnName", 'like', "%{$searchValue}%");
                             }

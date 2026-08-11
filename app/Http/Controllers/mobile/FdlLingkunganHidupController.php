@@ -34,6 +34,10 @@ class FdlLingkunganHidupController extends Controller
 {
     public function getSample(Request $request)
     {
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_hidup')->where('is_active', 1)->first();
             $listParameter = json_decode($parameter->parameters, true);
@@ -207,185 +211,440 @@ class FdlLingkunganHidupController extends Controller
     }
 
 
+    // public function getShift(Request $request)
+    // {
+    //     $parameter_tsp = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','parameter_tsp_lh')->first();
+    //     $data = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
+    //     $lh_parameter = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
+    //     if($request->shift == 'L1'){
+    //         $data = $data->where(function ($query) {
+    //             $query->where('shift_pengambilan', 'Sesaat')
+    //                 ->orWhere('shift_pengambilan', 'L1');
+    //         })->first();
+
+    //         $lh_parameter = $lh_parameter->where(function ($query) {
+    //             $query->where('shift_pengambilan', 'Sesaat')
+    //                 ->orWhere('shift_pengambilan', 'L1');
+    //         })->pluck('parameter')->toArray();
+    //     }else{
+    //         $data = $data->where('shift_pengambilan', 'Sesaat')->first();
+
+    //         $lh_parameter = $lh_parameter->where('shift_pengambilan', 'Sesaat')
+    //             ->pluck('parameter')
+    //             ->toArray();
+    //     }
+
+    //     $po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
+    //     \DB::statement("SET SQL_MODE=''");
+    //     $param = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->groupBy('parameter')->get();
+
+    //     $listParameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_hidup')->where('is_active', 1)->first();
+    //     $parNonSes = array();
+    //     foreach ($param as $value) {
+    //         // pengecualian untuk Dustfall
+    //         if (str_contains($value->parameter, 'Dustfall')) {
+    //             $p = DetailLingkunganHidup::where('no_sampel', $request->no_sample)
+    //                 ->where('parameter', $value->parameter)->get();
+
+    //             $shift = 2; // Batas shift untuk Dustfall
+
+    //             if ($shift > count($p)) {
+    //                 $parNonSes[] = $value->parameter;
+    //             }
+    //         // } else if ($value->kategori_pengujian != 'Sesaat') {
+    //         } else {
+    //             $p = DetailLingkunganHidup::where('no_sampel', $request->no_sample)
+    //                 ->where('parameter', $value->parameter)->get();
+    //             $l = $value->kategori_pengujian;
+    //             $li = explode("-", $l);
+    //             $shift = '';
+    //             if (str_contains($value->parameter, 'PM')) {
+    //                 if ($li[0] == '24 Jam') {
+    //                     $shift = 25;
+    //                 } else if ($li[0] == '8 Jam') {
+    //                     $shift = 8;
+    //                 } else if ($li[0] == '6 Jam') {
+    //                     $shift = 6;
+    //                 }
+    //             } else if (str_contains($value->parameter, 'TSP')) {
+    //                 if ($li[0] == '24 Jam') {
+    //                     $shift = 25;
+    //                 } else if ($li[0] == '8 Jam') {
+    //                     $shift = 8;
+    //                 } else if ($li[0] == '6 Jam') {
+    //                     $shift = 6;
+    //                 }
+    //             } else {
+    //                 if ($li[0] == '24 Jam') {
+    //                     $shift = 4;
+    //                 } else if ($li[0] == '8 Jam') {
+    //                     $shift = 3;
+    //                 } else if ($li[0] == '6 Jam') {
+    //                     $shift = 6;
+    //                 }else if ($li[0] == '3 Jam') {
+    //                     $shift = 3;
+    //                 }
+    //             }
+    //             if ($shift > count($p)) {
+    //                 $parNonSes[] = $value->parameter;
+    //             }
+    //         }
+    //     }
+    //     $p = json_decode($po->parameter);
+    //     $nilai_param = array();
+    //     $nilai_param2 = array();
+    //     // Membersihkan array $p agar hanya menyimpan bagian setelah ";"
+    //     $cleaned_p = array_map(function($item) {
+    //         $parts = explode(";", $item);
+    //         return $parts[1] ?? ''; // Ambil bagian setelah ";"
+    //     }, $p);
+
+    //     // Bandingkan dengan array yang sudah bersih
+    //     $param1 = array_diff($cleaned_p, $nilai_param);
+
+    //     foreach ($param1 as $ke => $val) {
+    //         $nilai_param2[] =  $val;
+    //     }
+
+    //     $pp1 = str_replace("[", "", json_encode($nilai_param2));
+    //     $pp2 = str_replace("]", "", $pp1);
+    //     $pp3 = str_replace("[", "", json_encode($parNonSes));
+    //     $pp4 = str_replace("]", "", $pp3);
+
+    //     if ($pp2 == '') {
+    //         $param_fin = json_encode($parNonSes);
+    //     } else if ($pp4 == "") {
+    //         $param_fin = '[' . $pp2 . ']';
+    //     } else if ($pp2 !== "") {
+    //         $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
+    //     }
+        
+    //     // Buang Dustfall dari kedua array sebelum di-diff
+    //     $nilai_param2_filtered = array_filter($nilai_param2, function($v) {
+    //         return strtolower($v) !== 'dustfall';
+    //     });
+
+    //     $lh_parameter_filtered = array_filter($lh_parameter, function($v) {
+    //         return strtolower($v) !== 'dustfall';
+    //     });
+
+    //     // Jalankan array_diff seperti biasa
+    //     $filtered_param = array_values(array_diff($nilai_param2_filtered, $lh_parameter_filtered));
+
+    //     // Tambahkan kembali Dustfall jika ada
+    //     if (in_array('Dustfall', $nilai_param2)) {
+    //         $filtered_param[] = 'Dustfall';
+    //     }
+
+    //     // Buat output JSON yang sesuai
+    //     $param_fin = json_encode($filtered_param, JSON_UNESCAPED_UNICODE);
+    //     $parameterVolatile = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile_lh')->first();
+        
+    //     $volatile_array = json_decode($parameterVolatile->parameters, true) ?? [];
+    //     $volatile_lower = array_map('strtolower', $volatile_array);
+
+    //     $form_mappings = [];
+    //     foreach ($filtered_param as $p) {
+    //         $pLower = strtolower($p);
+    //         $kateg = '';
+    //         if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+    //             $kateg = '24 Jam';
+    //         } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+    //             $kateg = '8 Jam';
+    //         } else if (str_contains($pLower, '6 jam')) {
+    //             $kateg = '6 Jam';
+    //         }
+
+    //         $satuan = '(L/m)';
+    //         if (str_contains($pLower, 'tsp') || str_contains($pLower, 'pm 10') || str_contains($pLower, 'pm 2.5')) {
+    //             $satuan = '(m3/menit)';
+    //         }
+
+    //         $type = 6;
+    //         if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 10 (8 jam)", "pm 2.5 (24 jam)", "pm 2.5 (8 jam)"])) {
+    //             $type = 1;
+    //         } else if (str_starts_with($pLower, "o3") || $pLower === "ox") {
+    //             $type = 2;
+    //         } else if (in_array($pLower, $volatile_lower)) {
+    //             $type = 3;
+    //         } else if (str_contains($pLower, "dustfall")) {
+    //             $type = 4;
+    //         } else if (in_array($pLower, ["passive so2", "passive no2"])) {
+    //             $type = 5;
+    //         }
+
+    //         $form_mappings[$p] = [
+    //             'type' => $type,
+    //             'kateg' => $kateg,
+    //             'satuan' => $satuan
+    //         ];
+    //     }
+
+    //     if ($data) {
+    //         return response()->json([
+    //             'non'      => 1,
+    //             'keterangan'      => $data->keterangan,
+    //             'keterangan_2'    => $data->keterangan_2,
+    //             'titik_koordinat' => $data->titik_koordinat,
+    //             'id_ket' => explode('-', $po->kategori_3)[0],
+    //             'lat'             => $data->latitude,
+    //             'longi'           => $data->longitude,
+    //             'lokasi'          => $data->lokasi,
+    //             'cuaca'           => $data->cuaca,
+    //             'waktu'           => $data->waktu_pengukuran,
+    //             'kecepatan'       => $data->kecepatan_angin,
+    //             'arah_angin'      => $data->arah_angin,
+    //             'jarak'           => $data->jarak_sumber_cemaran,
+    //             'suhu'            => $data->suhu,
+    //             'kelem'           => $data->kelembapan,
+    //             'intensitas'      => $data->intensitas,
+    //             'tekanan_u'       => $data->tekanan_udara,
+    //             'desk_bau'        => $data->deskripsi_bau,
+    //             'metode'          => $data->metode_pengukuran,
+    //             'satuan'          => $data->satuan,
+    //             'catatan'          => $data->catatan_kondisi_lapangan,
+    //             'durasi_pengambilan'          => $data->durasi_pengambilan,
+    //             'foto_lokasi_sample'          => $data->foto_lokasi_sampel,
+    //             'foto_kondisi_sample'          => $data->foto_kondisi_sampel,
+    //             'foto_lain'          => $data->foto_lain,
+    //             'parameterList' => $listParameter ? json_decode($listParameter->parameters, true) : [],
+    //             'param' => json_decode($param_fin, true),
+    //             'is_filled' => true,
+    //             // 'important_keyword' => $importantKeyword,
+    //             'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
+    //             'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
+    //             // 'parameter_no2' => $parameter_no2
+    //             'form_mappings' => $form_mappings
+    //         ], 200);
+    //         $this->resultx = 'get shift sample lingkuhan hidup success';
+    //     } else {
+    //         return response()->json([
+    //             'non'      => 2,
+    //             'no_sample'    => $po->no_sampel,
+    //             'keterangan' => $po->keterangan_1,
+    //             'id_ket' => explode('-', $po->kategori_3)[0],
+    //             'param' => json_decode($param_fin, true),
+    //             'parameterList' => $listParameter ? json_decode($listParameter->parameters, true) : [],
+    //             'is_filled' => false,
+    //             // 'important_keyword' => $importantKeyword,
+    //             'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
+    //             'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
+    //             // 'parameter_no2' => $parameter_no2
+    //             'form_mappings' => $form_mappings
+    //         ], 200);
+    //     }
+    // }
+
     public function getShift(Request $request)
     {
-        $parameter_tsp = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','parameter_tsp_lh')->first();
-        $data = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
-        $lh_parameter = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
-        if($request->shift == 'L1'){
-            $data = $data->where(function ($query) {
-                $query->where('shift_pengambilan', 'Sesaat')
-                    ->orWhere('shift_pengambilan', 'L1');
-            })->first();
-
-            $lh_parameter = $lh_parameter->where(function ($query) {
-                $query->where('shift_pengambilan', 'Sesaat')
-                    ->orWhere('shift_pengambilan', 'L1');
-            })->pluck('parameter')->toArray();
-        }else{
-            $data = $data->where('shift_pengambilan', 'Sesaat')->first();
-
-            $lh_parameter = $lh_parameter->where('shift_pengambilan', 'Sesaat')
-                ->pluck('parameter')
-                ->toArray();
-        }
-
-        $po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
-        \DB::statement("SET SQL_MODE=''");
-        $param = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->groupBy('parameter')->get();
-
-        $listParameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_hidup')->where('is_active', 1)->first();
-        $parNonSes = array();
-        foreach ($param as $value) {
-            // pengecualian untuk Dustfall
-            if (str_contains($value->parameter, 'Dustfall')) {
-                $p = DetailLingkunganHidup::where('no_sampel', $request->no_sample)
-                    ->where('parameter', $value->parameter)->get();
-
-                $shift = 2; // Batas shift untuk Dustfall
-
-                if ($shift > count($p)) {
-                    $parNonSes[] = $value->parameter;
-                }
-            // } else if ($value->kategori_pengujian != 'Sesaat') {
+        try {
+            $parameter_tsp = ParameterFdl::select("parameters")
+                ->where('is_active', 1)
+                ->where('nama_fdl', 'parameter_tsp_lh')
+                ->first();
+    
+            if (!$parameter_tsp) {
+                throw new \Exception("ParameterFdl dengan nama_fdl='parameter_tsp_lh' dan is_active=1 tidak ditemukan.");
+            }
+    
+            $data = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
+            $lh_parameter = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
+    
+            if ($request->shift == 'L1') {
+                $data = $data->where(function ($query) {
+                    $query->where('shift_pengambilan', 'Sesaat')
+                        ->orWhere('shift_pengambilan', 'L1');
+                })->first();
+    
+                $lh_parameter = $lh_parameter->where(function ($query) {
+                    $query->where('shift_pengambilan', 'Sesaat')
+                        ->orWhere('shift_pengambilan', 'L1');
+                })->pluck('parameter')->toArray();
             } else {
+                $data = $data->where('shift_pengambilan', $request->shift)->first();
+    
+                $lh_parameter = $lh_parameter->where('shift_pengambilan', $request->shift)
+                    ->pluck('parameter')
+                    ->toArray();
+            }
+    
+            $po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
+    
+            if (!$po) {
+                throw new \Exception("OrderDetail dengan no_sampel='{$request->no_sample}' dan is_active=1 tidak ditemukan.");
+            }
+    
+            \DB::statement("SET SQL_MODE=''");
+    
+            $param = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->groupBy('parameter')->get();
+    
+            $listParameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_hidup')->where('is_active', 1)->first();
+    
+            // Parameter dengan syarat jumlah data (durasi) yang belum genap threshold-nya
+            $parNonSes = array();
+            foreach ($param as $value) {
                 $p = DetailLingkunganHidup::where('no_sampel', $request->no_sample)
                     ->where('parameter', $value->parameter)->get();
-                $l = $value->kategori_pengujian;
-                $li = explode("-", $l);
-                $shift = '';
-                if (str_contains($value->parameter, 'PM')) {
-                    if ($li[0] == '24 Jam') {
-                        $shift = 25;
-                    } else if ($li[0] == '8 Jam') {
-                        $shift = 8;
-                    } else if ($li[0] == '6 Jam') {
-                        $shift = 6;
-                    }
-                } else if (str_contains($value->parameter, 'TSP')) {
-                    if ($li[0] == '24 Jam') {
-                        $shift = 25;
-                    } else if ($li[0] == '8 Jam') {
-                        $shift = 8;
-                    } else if ($li[0] == '6 Jam') {
-                        $shift = 6;
-                    }
+    
+                if (str_contains($value->parameter, 'Dustfall')) {
+                    // pengecualian untuk Dustfall
+                    $shift = 2; // Batas shift untuk Dustfall
                 } else {
-                    if ($li[0] == '24 Jam') {
-                        $shift = 4;
-                    } else if ($li[0] == '8 Jam') {
-                        $shift = 3;
-                    } else if ($li[0] == '6 Jam') {
-                        $shift = 6;
-                    }else if ($li[0] == '3 Jam') {
-                        $shift = 3;
+                    $l = $value->kategori_pengujian;
+                    $li = explode("-", $l);
+                    $shift = '';
+    
+                    if (str_contains($value->parameter, 'PM') || str_contains($value->parameter, 'TSP')) {
+                        if ($li[0] == '24 Jam') {
+                            $shift = 25;
+                        } else if ($li[0] == '8 Jam') {
+                            $shift = 8;
+                        } else if ($li[0] == '6 Jam') {
+                            $shift = 6;
+                        }
+                    } else {
+                        if ($li[0] == '24 Jam') {
+                            $shift = 4;
+                        } else if ($li[0] == '8 Jam') {
+                            $shift = 3;
+                        } else if ($li[0] == '6 Jam') {
+                            $shift = 6;
+                        } else if ($li[0] == '3 Jam') {
+                            $shift = 3;
+                        }
                     }
                 }
+    
                 if ($shift > count($p)) {
                     $parNonSes[] = $value->parameter;
                 }
             }
-        }
-        $p = json_decode($po->parameter);
-        $nilai_param = array();
-        $nilai_param2 = array();
-        // Membersihkan array $p agar hanya menyimpan bagian setelah ";"
-        $cleaned_p = array_map(function($item) {
-            $parts = explode(";", $item);
-            return $parts[1] ?? ''; // Ambil bagian setelah ";"
-        }, $p);
-
-        // Bandingkan dengan array yang sudah bersih
-        $param1 = array_diff($cleaned_p, $nilai_param);
-
-        foreach ($param1 as $ke => $val) {
-            $nilai_param2[] =  $val;
-        }
-
-        $pp1 = str_replace("[", "", json_encode($nilai_param2));
-        $pp2 = str_replace("]", "", $pp1);
-        $pp3 = str_replace("[", "", json_encode($parNonSes));
-        $pp4 = str_replace("]", "", $pp3);
-
-        if ($pp2 == '') {
-            $param_fin = json_encode($parNonSes);
-        } else if ($pp4 == "") {
-            $param_fin = '[' . $pp2 . ']';
-        } else if ($pp2 !== "") {
-            $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
-        }
-        
-        // Buang Dustfall dari kedua array sebelum di-diff
-        $nilai_param2_filtered = array_filter($nilai_param2, function($v) {
-            return strtolower($v) !== 'dustfall';
-        });
-
-        $lh_parameter_filtered = array_filter($lh_parameter, function($v) {
-            return strtolower($v) !== 'dustfall';
-        });
-
-        // Jalankan array_diff seperti biasa
-        $filtered_param = array_values(array_diff($nilai_param2_filtered, $lh_parameter_filtered));
-
-        // Tambahkan kembali Dustfall jika ada
-        if (in_array('Dustfall', $nilai_param2)) {
-            $filtered_param[] = 'Dustfall';
-        }
-
-        // Buat output JSON yang sesuai
-        $param_fin = json_encode($filtered_param, JSON_UNESCAPED_UNICODE);
-        $parameterVolatile = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile_lh')->first();
-        if ($data) {
+    
+            // Ambil daftar parameter dari order detail, bersihkan format "id;nama_param"
+            $p = json_decode($po->parameter);
+            $nilai_param2 = array();
+            foreach ($p as $item) {
+                $parts = explode(";", $item);
+                $nilai_param2[] = $parts[1] ?? '';
+            }
+    
+            // Parameter yang belum ada record-nya sesuai kriteria shift (Sesaat/L1 utk L1, shift saat ini utk selainnya)
+            $filtered_param = array_values(array_diff($nilai_param2, $lh_parameter));
+    
+            // Gabungkan: parameter durasi yang belum genap + parameter yang belum diinput sama sekali
+            $param_fin_array = array_values(array_unique(array_merge($parNonSes, $filtered_param)));
+            $param_fin = json_encode($param_fin_array, JSON_UNESCAPED_UNICODE);
+    
+            $parameterVolatile = ParameterFdl::select("parameters")
+                ->where('is_active', 1)
+                ->where('nama_fdl', 'senyawa_volatile_lh')
+                ->first();
+    
+            if (!$parameterVolatile) {
+                throw new \Exception("ParameterFdl dengan nama_fdl='senyawa_volatile_lh' dan is_active=1 tidak ditemukan.");
+            }
+    
+            $volatile_array = json_decode($parameterVolatile->parameters, true) ?? [];
+            $volatile_lower = array_map('strtolower', $volatile_array);
+    
+            $form_mappings = [];
+            foreach ($param_fin_array as $pr) {
+                $pLower = strtolower($pr);
+                $kateg = '';
+    
+                if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                    $kateg = '24 Jam';
+                } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                    $kateg = '8 Jam';
+                } else if (str_contains($pLower, '6 jam')) {
+                    $kateg = '6 Jam';
+                }
+    
+                $satuan = '(L/m)';
+                if (str_contains($pLower, 'tsp') || str_contains($pLower, 'pm 10') || str_contains($pLower, 'pm 2.5')) {
+                    $satuan = '(m3/menit)';
+                }
+    
+                $type = 6;
+                if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 10 (8 jam)", "pm 2.5 (24 jam)", "pm 2.5 (8 jam)"])) {
+                    $type = 1;
+                } else if (str_starts_with($pLower, "o3") || $pLower === "ox") {
+                    $type = 2;
+                } else if (in_array($pLower, $volatile_lower)) {
+                    $type = 3;
+                } else if (str_contains($pLower, "dustfall")) {
+                    $type = 4;
+                } else if (in_array($pLower, ["passive so2", "passive no2"])) {
+                    $type = 5;
+                }
+    
+                $form_mappings[$pr] = [
+                    'type' => $type,
+                    'kateg' => $kateg,
+                    'satuan' => $satuan
+                ];
+            }
+    
+            if ($data) {
+                return response()->json([
+                    'non'                  => 1,
+                    'keterangan'           => $data->keterangan,
+                    'keterangan_2'         => $data->keterangan_2,
+                    'titik_koordinat'      => $data->titik_koordinat,
+                    'id_ket'               => explode('-', $po->kategori_3)[0],
+                    'lat'                  => $data->latitude,
+                    'longi'                => $data->longitude,
+                    'lokasi'               => $data->lokasi,
+                    'cuaca'                => $data->cuaca,
+                    'waktu'                => $data->waktu_pengukuran,
+                    'kecepatan'            => $data->kecepatan_angin,
+                    'arah_angin'           => $data->arah_angin,
+                    'jarak'                => $data->jarak_sumber_cemaran,
+                    'suhu'                 => $data->suhu,
+                    'kelem'                => $data->kelembapan,
+                    'intensitas'           => $data->intensitas,
+                    'tekanan_u'            => $data->tekanan_udara,
+                    'desk_bau'             => $data->deskripsi_bau,
+                    'metode'               => $data->metode_pengukuran,
+                    'satuan'               => $data->satuan,
+                    'catatan'              => $data->catatan_kondisi_lapangan,
+                    'durasi_pengambilan'   => $data->durasi_pengambilan,
+                    'foto_lokasi_sample'   => $data->foto_lokasi_sampel,
+                    'foto_kondisi_sample'  => $data->foto_kondisi_sampel,
+                    'foto_lain'            => $data->foto_lain,
+                    'parameterList'        => $listParameter ? json_decode($listParameter->parameters, true) : [],
+                    'param'                => json_decode($param_fin, true),
+                    'is_filled'            => true,
+                    'parameter_tsp'        => json_decode($parameter_tsp->parameters, true),
+                    'parameter_volatile'   => json_decode($parameterVolatile->parameters, true),
+                    'form_mappings'        => $form_mappings
+                ], 200);
+            } else {
+                return response()->json([
+                    'non'                => 2,
+                    'no_sample'          => $po->no_sampel,
+                    'keterangan'         => $po->keterangan_1,
+                    'id_ket'             => explode('-', $po->kategori_3)[0],
+                    'param'              => json_decode($param_fin, true),
+                    'parameterList'      => $listParameter ? json_decode($listParameter->parameters, true) : [],
+                    'is_filled'          => false,
+                    'parameter_tsp'      => json_decode($parameter_tsp->parameters, true),
+                    'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
+                    'form_mappings'      => $form_mappings
+                ], 200);
+            }
+        } catch (\Exception $th) {
+            \Log::error('getShift (Lingkungan Hidup) error: ' . $th->getMessage(), [
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+    
             return response()->json([
-                'non'      => 1,
-                'keterangan'      => $data->keterangan,
-                'keterangan_2'    => $data->keterangan_2,
-                'titik_koordinat' => $data->titik_koordinat,
-                'id_ket' => explode('-', $po->kategori_3)[0],
-                'lat'             => $data->latitude,
-                'longi'           => $data->longitude,
-                'lokasi'          => $data->lokasi,
-                'cuaca'           => $data->cuaca,
-                'waktu'           => $data->waktu_pengukuran,
-                'kecepatan'       => $data->kecepatan_angin,
-                'arah_angin'      => $data->arah_angin,
-                'jarak'           => $data->jarak_sumber_cemaran,
-                'suhu'            => $data->suhu,
-                'kelem'           => $data->kelembapan,
-                'intensitas'      => $data->intensitas,
-                'tekanan_u'       => $data->tekanan_udara,
-                'desk_bau'        => $data->deskripsi_bau,
-                'metode'          => $data->metode_pengukuran,
-                'satuan'          => $data->satuan,
-                'catatan'          => $data->catatan_kondisi_lapangan,
-                'durasi_pengambilan'          => $data->durasi_pengambilan,
-                'foto_lokasi_sample'          => $data->foto_lokasi_sampel,
-                'foto_kondisi_sample'          => $data->foto_kondisi_sampel,
-                'foto_lain'          => $data->foto_lain,
-                'parameterList' => $listParameter ? json_decode($listParameter->parameters, true) : [],
-                'param' => json_decode($param_fin, true),
-                'is_filled' => true,
-                // 'important_keyword' => $importantKeyword,
-                'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
-                'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                // 'parameter_no2' => $parameter_no2
-
-            ], 200);
-            $this->resultx = 'get shift sample lingkuhan hidup success';
-        } else {
-            return response()->json([
-                'non'      => 2,
-                'no_sample'    => $po->no_sampel,
-                'keterangan' => $po->keterangan_1,
-                'id_ket' => explode('-', $po->kategori_3)[0],
-                'param' => json_decode($param_fin, true),
-                'parameterList' => $listParameter ? json_decode($listParameter->parameters, true) : [],
-                'is_filled' => false,
-                // 'important_keyword' => $importantKeyword,
-                'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
-                'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                // 'parameter_no2' => $parameter_no2
-            ], 200);
+                'message' => $th->getMessage(),
+                'file'    => $th->getFile(),
+                'line'    => $th->getLine(),
+            ], 500);
         }
     }
 

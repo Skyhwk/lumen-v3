@@ -5,11 +5,16 @@
 /docker
 /public
 /storage
+app/Cache/
+/node_modules/
 Homestead.json
 Homestead.yaml
 .env
 .phpunit.result.cache
 composer.lock
 docker-compose.yml
-app/Cache/
 .cursorignore
+.prettierignore
+.prettierrc
+package-lock.json
+package.json

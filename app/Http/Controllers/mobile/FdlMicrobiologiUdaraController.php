@@ -18,6 +18,7 @@ use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\ParameterFdl;
+use App\Models\WsValueUdara;
 
 // SERVICE
 use App\Services\SendTelegram;
@@ -38,6 +39,10 @@ class FdlMicrobiologiUdaraController extends Controller
 {
     public function getSample(Request $request)
     {
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'microbiologi')->where('is_active', 1)->first();
             $parameterList = json_decode($parameter->parameters, true);

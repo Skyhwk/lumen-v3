@@ -15,7 +15,7 @@ Carbon::setLocale('id');
 
 use App\Services\BundledTemplateLhps;
 
-use App\Models\{OrderDetail, OrderHeader, PersiapanSampelHeader};
+use App\Models\{OrderDetail, OrderHeader, PersiapanSampelHeader, OrderBerjalan};
 use App\Services\GroupedCfrByLhp;
 use Illuminate\Support\Facades\DB;
 
@@ -113,6 +113,62 @@ class HasilPengujianController extends Controller
         $orderHeader = OrderHeader::find($request->id_order_header);
 
         $groupedData = (new GroupedCfrByLhp($orderHeader, $request->periode))->get();
+
+        return response()->json(['groupedCFRs' => $groupedData], 200);
+    }
+
+    public function detailFromOrderBerjalan(Request $request)
+    {
+        $orderHeader = OrderHeader::find($request->id_order_header);
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        $orderBerjalan = OrderBerjalan::where('no_order', $orderHeader->no_order)->first();
+
+        if (!$orderBerjalan || empty($orderBerjalan->dataOrderDetail)) {
+            return response()->json(['groupedCFRs' => []], 200);
+        }
+
+        $dataOrderDetail = is_string($orderBerjalan->dataOrderDetail)
+            ? json_decode($orderBerjalan->dataOrderDetail, true)
+            : $orderBerjalan->dataOrderDetail;
+
+        if (!is_array($dataOrderDetail)) {
+            return response()->json(['groupedCFRs' => []], 200);
+        }
+
+        $periodeRequested = $request->periode;
+
+        $groupedData = collect($dataOrderDetail)
+            ->when(!empty($periodeRequested), function ($items) use ($periodeRequested) {
+                return collect($items)->where('periode', $periodeRequested);
+            })
+            ->flatMap(function ($periodeGroup) use ($periodeRequested) {
+                $details = $periodeGroup['detail'] ?? [];
+                $groupPeriode = $periodeGroup['periode'] ?? $periodeRequested;
+
+                return collect($details)->map(function ($detail) use ($groupPeriode) {
+                    $sampleNumbers = $detail['sampelNumbers'] ?? [];
+                    $points = $detail['points'] ?? [];
+
+                    return [
+                        'cfr' => $detail['cfr'] ?? null,
+                        'periode' => $groupPeriode,
+                        'keterangan_1' => $points,
+                        'kategori_3' => $detail['categories'] ?? [$detail['kategori_3'] ?? null],
+                        'no_sampel' => $sampleNumbers,
+                        'total_no_sampel' => $detail['jumlah_sampel'] ?? count($sampleNumbers),
+                        'steps' => $detail['steps'] ?? [],
+                        // Karena order_berjalan snapshot tidak menyimpan order_details lengkap, 
+                        // balikin array kosong atau bisa disesuaikan jika frontend butuh data lain.
+                        'order_details' => [] 
+                    ];
+                });
+            })
+            ->filter(fn($item) => !empty($item['cfr']))
+            ->values()
+            ->toArray();
 
         return response()->json(['groupedCFRs' => $groupedData], 200);
     }

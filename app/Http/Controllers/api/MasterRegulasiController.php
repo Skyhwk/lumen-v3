@@ -39,6 +39,9 @@ class MasterRegulasiController extends Controller
     {
         DB::transaction(function () use ($request) {
             $timestamp = DATE('Y-m-d H:i:s');
+            
+            // Membersihkan teks dari spasi berlebih, tab dari excel, dan newline
+            $peraturan_clean = trim(preg_replace('/\s+/u', ' ', $request->peraturan));
 
             if ($request->id != '') {
                 // Update existing regulasi
@@ -48,7 +51,7 @@ class MasterRegulasiController extends Controller
                     return response()->json(['message' => 'Regulasi tidak ditemukan'], 404);
                 }
 
-                $dataregulasi->peraturan = trim($request->peraturan);
+                $dataregulasi->peraturan = $peraturan_clean;
                 $dataregulasi->deskripsi = $request->deskripsi;
                 $dataregulasi->updated_by = $this->karyawan;
                 $dataregulasi->updated_at = $timestamp;
@@ -93,13 +96,13 @@ class MasterRegulasiController extends Controller
                     'id_kategori',
                 ]);
 
-                $existingRegulasi = MasterRegulasi::where('peraturan', $request->peraturan)->where('is_active', true)->first();
+                $existingRegulasi = MasterRegulasi::where('peraturan', $peraturan_clean)->where('is_active', true)->first();
                 if ($existingRegulasi) {
                     return response()->json(['message' => 'Regulasi dengan data yang sama sudah ada'], 401);
                 }
 
                 $cek_kategori = MasterKategori::where('id', $request->id_kategori)->first();
-                $dataregulasi['peraturan'] = trim($request->peraturan);
+                $dataregulasi['peraturan'] = $peraturan_clean;
                 $dataregulasi['nama_kategori'] = trim($cek_kategori->nama_kategori);
                 $dataregulasi['created_by'] = $this->karyawan;
                 $dataregulasi['created_at'] = DATE('Y-m-d H:i:s');

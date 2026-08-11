@@ -113,7 +113,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
 
                 if ($index === null) {
                     // Cari dari f_koreksi_c...f_koreksi_c10
-                    for ($i = 0; $i <= 10; $i++) {
+                    for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                         $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
                         if (! empty($ws[$key])) {
                             $nilai = $ws[$key];
@@ -123,7 +123,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
 
                     // Kalau belum ketemu, cari dari C...C10
                     if (empty($nilai)) {
-                        for ($i = 0; $i <= 10; $i++) {
+                        for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                             $key = $i === 0 ? 'C' : "C$i";
 
                             // Khusus C3, kalau kosong ambil dari C3_persen

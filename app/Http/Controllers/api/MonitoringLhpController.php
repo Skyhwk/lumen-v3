@@ -8,7 +8,7 @@ use App\Models\OrderDetail;
 use Illuminate\Http\Request;
 
 use Datatables;
-use App\Models\{OrderHeader,QuotationKontrakH, QuotationNonKontrak, LiburPerusahaan};
+use App\Models\{OrderHeader, QuotationKontrakH, QuotationNonKontrak, LiburPerusahaan, OrderBerjalan, StatusLhpTerlambat};
 use App\Services\GroupedCfrByLhp;
 use App\Services\GetBawahan;
 use Illuminate\Support\Carbon;
@@ -43,14 +43,26 @@ class MonitoringLhpController extends Controller
                 order_detail.periode,
                 order_detail.kontrak,
                 MAX(order_detail.kategori_1) as status_sampling,
+                GROUP_CONCAT(DISTINCT order_detail.kategori_3 SEPARATOR ", ") as subkategori,
+                MAX(CASE 
+                    WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) 
+                    THEN JSON_LENGTH(order_detail.parameter) 
+                    ELSE 0 
+                END) as total_parameter,
+                COALESCE(MAX(order_header.is_revisi), 0) as is_revisi,
                 MIN(order_detail.tanggal_sampling) as tanggal_sampling,
                 MIN(order_detail.is_approve) as is_approve,
-                MIN(order_detail.status) as status
+                MIN(order_detail.status) as status,
+                MAX(status_lhp_terlambat.status) as status_lhp
             ')
             ->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) {
                 $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
             })
             ->leftJoin('order_header', 'order_detail.no_order', '=', 'order_header.no_order')
+            ->leftJoin('status_lhp_terlambat', function ($join) {
+                $join->on('order_detail.no_order', '=', 'status_lhp_terlambat.no_order')
+                     ->whereRaw('COALESCE(order_detail.cfr, "") = COALESCE(status_lhp_terlambat.no_lhp, "")');
+            })
             ->where('order_detail.tanggal_sampling','<=', $workDayWithLibur)
             ->where('order_detail.is_active', true)
             ->where('order_detail.is_approve', false)
@@ -164,11 +176,27 @@ class MonitoringLhpController extends Controller
                 $isKontrak = $data->kontrak == 'C' ? true : false;
                 if($isKontrak) {
                     $quotation = QuotationKontrakH::with('sales')->where('no_document', $data->no_quotation)->first();
-                    return $quotation->sales->nama_lengkap;
+                    return $quotation->sales->nama_lengkap ?? '-';
                 }else{
                     $quotation = QuotationNonKontrak::with('sales')->where('no_document', $data->no_quotation)->first();
-                    return $quotation->sales->nama_lengkap;
+                    return $quotation->sales->nama_lengkap ?? '-';
                 }
+            })
+
+            ->filterColumn('status_sampling', function ($query, $keyword) {
+                $query->where('order_detail.kategori_1', 'like', '%' . $keyword . '%');
+            })
+
+            ->filterColumn('subkategori', function ($query, $keyword) {
+                $query->where('order_detail.kategori_3', 'like', '%' . $keyword . '%');
+            })
+
+            ->filterColumn('total_parameter', function ($query, $keyword) {
+                $query->havingRaw('MAX(CASE 
+                    WHEN order_detail.parameter IS NOT NULL AND JSON_VALID(order_detail.parameter) 
+                    THEN JSON_LENGTH(order_detail.parameter) 
+                    ELSE 0 
+                END) like ?', ['%' . $keyword . '%']);
             })
 
             ->filterColumn('no_order', function ($query, $keyword) {
@@ -205,7 +233,58 @@ class MonitoringLhpController extends Controller
                 }
             })
 
+            ->filterColumn('status_lhp', function ($query, $keyword) {
+                $query->where('status_lhp_terlambat.status', 'like', '%' . $keyword . '%');
+            })
+
             ->make(true);
+    }
+
+    public function updateStatus(Request $request)
+    {
+        if (empty($request->no_order)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nomor order tidak boleh kosong',
+            ], 422);
+        }
+
+        $noOrder = $request->input('no_order');
+        $noLhp = $request->input('no_lhp');
+        $status = $request->input('status'); // 'Pengujian Dibatalkan', 'Belum Revisi Order', or null
+
+        $record = StatusLhpTerlambat::where('no_order', $noOrder)
+            ->where(function ($q) use ($noLhp) {
+                if (!empty($noLhp)) {
+                    $q->where('no_lhp', $noLhp);
+                } else {
+                    $q->whereNull('no_lhp')->orWhere('no_lhp', '');
+                }
+            })
+            ->first();
+
+        if ($record) {
+            $record->status = $status;
+            $record->updated_by = $this->karyawan ?? $this->user_id;
+            $record->save();
+        } else {
+            StatusLhpTerlambat::create([
+                'no_order' => $noOrder,
+                'no_lhp' => $noLhp,
+                'status' => $status,
+                'created_by' => $this->karyawan ?? $this->user_id,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Status LHP berhasil diperbarui',
+            'data' => [
+                'no_order' => $noOrder,
+                'no_lhp' => $noLhp,
+                'status' => $status,
+            ],
+        ], 200);
     }
 
     public function getGroupedCFR(Request $request)
@@ -230,6 +309,93 @@ class MonitoringLhpController extends Controller
             'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
             'tanggal_order' => $orderHeader->tanggal_order,
             'groupedCFRs' => $groupedCFRs
+        ], 200);
+    }
+
+    public function detailFromOrderBerjalan(Request $request)
+    {
+        $orderHeader = OrderHeader::where('no_order', $request->no_order)->first();
+        if (!$orderHeader && $request->filled('id_order_header')) {
+            $orderHeader = OrderHeader::find($request->id_order_header);
+        }
+
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        $orderBerjalan = OrderBerjalan::where('no_order', $orderHeader->no_order)->first();
+
+        if (!$orderBerjalan || empty($orderBerjalan->dataOrderDetail)) {
+            return response()->json([
+                'no_order' => $orderHeader->no_order,
+                'no_document' => $orderHeader->no_document,
+                'nama_perusahaan' => $orderHeader->nama_perusahaan,
+                'konsultan' => $orderHeader->konsultan,
+                'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
+                'tanggal_order' => $orderHeader->tanggal_order,
+                'groupedCFRs' => []
+            ], 200);
+        }
+
+        $dataOrderDetail = is_string($orderBerjalan->dataOrderDetail)
+            ? json_decode($orderBerjalan->dataOrderDetail, true)
+            : $orderBerjalan->dataOrderDetail;
+
+        if (!is_array($dataOrderDetail)) {
+            return response()->json([
+                'no_order' => $orderHeader->no_order,
+                'no_document' => $orderHeader->no_document,
+                'nama_perusahaan' => $orderHeader->nama_perusahaan,
+                'konsultan' => $orderHeader->konsultan,
+                'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
+                'tanggal_order' => $orderHeader->tanggal_order,
+                'groupedCFRs' => []
+            ], 200);
+        }
+
+        $periodeRequested = $request->periode;
+
+        $groupedData = collect($dataOrderDetail)
+            ->when(!empty($periodeRequested), function ($items) use ($periodeRequested) {
+                return collect($items)->where('periode', $periodeRequested);
+            })
+            ->flatMap(function ($periodeGroup) use ($periodeRequested) {
+                $details = $periodeGroup['detail'] ?? [];
+                $groupPeriode = $periodeGroup['periode'] ?? $periodeRequested;
+
+                return collect($details)->map(function ($detail) use ($groupPeriode) {
+                    $sampleNumbers = $detail['sampelNumbers'] ?? [];
+                    $points = $detail['points'] ?? [];
+
+                    return [
+                        'cfr' => $detail['cfr'] ?? null,
+                        'periode' => $groupPeriode,
+                        'keterangan_1' => $points,
+                        'kategori_3' => $detail['categories'] ?? [$detail['kategori_3'] ?? null],
+                        'no_sampel' => $sampleNumbers,
+                        'total_no_sampel' => $detail['jumlah_sampel'] ?? count($sampleNumbers),
+                        'steps' => $detail['steps'] ?? [],
+                        // Karena order_berjalan snapshot tidak menyimpan order_details lengkap, 
+                        // balikin array kosong atau bisa disesuaikan jika frontend butuh data lain.
+                        'order_details' => []
+                    ];
+                });
+            })
+            ->filter(fn($item) => !empty($item['cfr']))
+            ->when($request->filled('no_lhp'), function ($items) use ($request) {
+                return $items->filter(fn($item) => $item['cfr'] == $request->no_lhp);
+            })
+            ->values()
+            ->toArray();
+
+        return response()->json([
+            'no_order' => $orderHeader->no_order,
+            'no_document' => $orderHeader->no_document,
+            'nama_perusahaan' => $orderHeader->nama_perusahaan,
+            'konsultan' => $orderHeader->konsultan,
+            'tanggal_penawaran' => $orderHeader->tanggal_penawaran,
+            'tanggal_order' => $orderHeader->tanggal_order,
+            'groupedCFRs' => $groupedData
         ], 200);
     }
 }

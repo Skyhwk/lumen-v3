@@ -359,7 +359,21 @@ class RequestSamplingPlanRevisiController extends Controller
             
             $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
 
-            $this->updateOrderDetail($ObjectData, $request->tanggal);
+            if ($ObjectData->kategori != null) {
+                if (is_array($ObjectData->tanggal)) {
+                    for ($i = 0; $i < count($ObjectData->tanggal); $i++) {
+                        $tanggal_baru = $ObjectData->tanggal[$i];
+                        $kategori_array = $ObjectData->kategori[$i];
+                        
+                        if (is_array($kategori_array) && count($kategori_array) > 0) {
+                            JadwalServices::syncTanggalSamplingOrderDetail($ObjectData->no_quotation, $kategori_array, $tanggal_baru);
+                        }
+                    }
+                } else {
+                    // Fallback jika dikirim bukan sebagai array (misal format lama)
+                    JadwalServices::syncTanggalSamplingOrderDetail($ObjectData->no_quotation, $ObjectData->kategori, $ObjectData->tanggal);
+                }
+            }
             
             if ($addJadwal) {
                 $type = explode("/", $request->no_quotation)[1];
@@ -378,7 +392,7 @@ class RequestSamplingPlanRevisiController extends Controller
                 'status'  => $th->getCode(),
             ];
             Log::channel('sampling')->error("=== addJadwal ===", $logData);
-            return response()->json($th);
+            return response()->json(['message' => $th->getMessage(), 'status' => 'error'], 400);
         }
     }
 

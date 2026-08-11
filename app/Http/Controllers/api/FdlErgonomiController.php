@@ -866,6 +866,7 @@ class FdlErgonomiController extends Controller
         $data->catatan_reject_fdl = $catatan;
         $data->rejected_by = $this->karyawan;
         $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
+        $data->is_approve = false;
         $data->save();
 
         return response()->json(['message' => 'Data berhasil direject dengan catatan.']);

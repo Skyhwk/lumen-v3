@@ -29,9 +29,7 @@ use App\Models\QrDocument;
 use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
-// job
 
-use App\Services\SendEmail;
 //iluminate
 
 use Carbon\Carbon;
@@ -43,6 +41,7 @@ use Yajra\Datatables\Datatables;
 use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\MdlEmisi;
 use App\Models\OrderHeader;
+
 
 class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 {
@@ -858,7 +857,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
         if ($index === null) {
             $nilai = null;
-            for ($i = 0; $i <= 10; $i++) {
+            for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                 $key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
                 if (! empty($ws[$key])) {
                     $nilai = $ws[$key];
@@ -867,7 +866,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             }
             
             // Kalau belum ketemu, cari dari C...C10
-            for ($i = 0; $i <= 10; $i++) {
+            for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                 $key = $i === 0 ? 'C' : "C$i";
 
                 // Khusus C3, kalau kosong ambil dari C3_persen
@@ -907,7 +906,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
         if ($index === null) {
             // Cari dari f_koreksi_c...f_koreksi_c10
-            for ($i = 0; $i <= 10; $i++) {
+            for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                 $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
                 if (! empty($ws[$key])) {
                     $nilai = $ws[$key];
@@ -1012,48 +1011,6 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         $users = MasterKaryawan::with(['department', 'jabatan'])->where('id', $request->id ?: $this->user_id)->first();
 
         return response()->json($users);
-    }
-
-    public function sendEmail(Request $request)
-    {
-        try {
-            if ($request->kategori == 32 || $request->kategori == 31) {
-                $data             = LhpsEmisiHeader::where('id', $request->id)->first();
-                $data->is_emailed = true;
-                $data->emailed_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data->emailed_by = $this->karyawan;
-            } else if ($request->kategori == 34) {
-                $data             = LhpsEmisiIsokinetikHeader::where('id', $request->id)->first();
-                $data->is_emailed = true;
-                $data->emailed_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data->emailed_by = $this->karyawan;
-            }
-
-            $email = SendEmail::where('to', $request->to)
-                ->where('subject', $request->subject)
-                ->where('body', $request->content)
-                ->where('cc', $request->cc)
-                ->where('bcc', $request->bcc)
-                ->where('attachments', $request->attachments)
-                ->where('karyawan', $this->karyawan)
-                ->noReply()
-                ->send();
-            if ($email) {
-                DB::commit();
-                return response()->json([
-                    'message' => 'Email berhasil dikirim',
-                ], 200);
-            } else {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Email gagal dikirim',
-                ], 400);
-            }
-        } catch (\Exception $th) {
-            return response()->json([
-                'message' => $th->getMessage(),
-            ], 500);
-        }
     }
 
     public function getTechnicalControl(Request $request)
