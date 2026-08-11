@@ -49,7 +49,12 @@ class WsValueEmisiCerobong extends Sector
         return $this->emisi_cerobong_header ?? $this->emisi_isokinetik ?? $this->subkontrak;
     }
 
-     public function getParameterAttribute()
+    public function getParameterAttribute()
+    {
+        return optional($this->getDataAnalyst())->parameter;
+    }
+
+    public function getHasilParameterAttribute()
     {
         return optional($this->getHasilAnalyst())->parameter;
     }

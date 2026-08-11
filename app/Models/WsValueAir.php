@@ -178,4 +178,10 @@ class WsValueAir extends Sector
             ?? $this->subkontrak;
     }
 
+    public function getHasilParameterAttribute()
+    {
+        return optional($this->getHasilAnalyst())->parameter ?? $this->parameter;
+    }
+
 }
+
