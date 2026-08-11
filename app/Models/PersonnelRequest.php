@@ -33,6 +33,20 @@ class PersonnelRequest extends Model
         'max_salary',
         'created_by',
         'updated_by',
+        'is_approve',
+        'is_rejected',
+        'is_reject',
+        'approved_at',
+        'approved_by',
+        'rejected_at',
+        'rejected_by',
+        'divisi_alias',
+        'minimum_matching',
+        'is_publish',
+        'publish_by',
+        'publish_at',
+        'published_by',
+        'published_at',
     ];
 
     protected $casts = [
@@ -42,21 +56,28 @@ class PersonnelRequest extends Model
         'usia_maksimum' => 'integer',
     ];
 
-    public function detailCabang()
-    {
-        return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang', 'id');
-    }
-    public function detailDivisi()
+    public function masterDivisi()
     {
         return $this->belongsTo(MasterDivisi::class, 'divisi', 'id');
     }
-    public function detailPosisi()
+
+    public function masterJabatan()
     {
         return $this->belongsTo(MasterJabatan::class, 'posisi', 'id');
     }
 
-    public function newRecruitments()
+    public function masterCabang()
     {
-        return $this->hasMany(NewRecruitment::class, 'personnel_request_id', 'id');
+        return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang', 'id');
+    }
+
+    public function divisiName()
+    {
+        return $this->belongsTo(MasterDivisi::class, 'divisi');
+    }
+
+    public function Placement()
+    {
+        return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang');
     }
 }

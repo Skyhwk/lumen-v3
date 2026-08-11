@@ -25,7 +25,6 @@ use PHPMailer\PHPMailer\Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Services\GenerateMessageWhatsapp;
-use Illuminate\Database\QueryException;
 use App\Services\SendWhatsapp;
 use App\Services\SendEmail;
 use App\Helpers\ShioElemenHelper;
