@@ -181,4 +181,107 @@ class GenerateMessageAtsEmail
         </html>
         ";
     }
+
+    /**
+     * Professional email notification to Personnel Request creator when HRD approves a candidate
+     *
+     * @param object $data  { nama_user, nama_kandidat, posisi, no_request, approved_by, approved_at }
+     * @return string
+     */
+    public static function bodyEmailHrdApprovalNotifUser($data)
+    {
+        $namaUser      = htmlspecialchars($data->nama_user      ?? 'User');
+        $namaKandidat  = htmlspecialchars($data->nama_kandidat  ?? 'Candidate');
+        $posisi        = htmlspecialchars($data->posisi         ?? '-');
+        $noRequest     = htmlspecialchars($data->no_request     ?? '-');
+        $approvedBy    = htmlspecialchars($data->approved_by    ?? 'HRD');
+        $approvedAt    = htmlspecialchars($data->approved_at    ?? '-');
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Pemberitahuan Hasil Interview HRD - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                <!-- Header -->
+                <tr>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
+                    </td>
+                </tr>
+
+                <!-- Status Banner -->
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #dcfce7; border-left: 4px solid #16a34a; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px;'>&#10003; Interview HRD Disetujui</span>
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style='padding: 32px;'>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaUser}</strong>,</p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Dengan hormat, kami informasikan bahwa kandidat berikut telah <strong>dinyatakan lulus tahap Interview HRD</strong> untuk permintaan personel yang Bapak/Ibu ajukan. Kandidat tersebut kini siap untuk dijadwalkan pada tahap <strong>Interview User</strong>.
+                        </p>
+
+                        <!-- Candidate Info Box -->
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Informasi Kandidat
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600; width: 160px;'>Nama Kandidat</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Posisi Dilamar</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$posisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>No. Permintaan</td>
+                                    <td style='padding: 5px 0; color: #2563eb; font-weight: 700;'>{$noRequest}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Disetujui Oleh</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$approvedBy}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tanggal Persetujuan</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$approvedAt}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Mohon segera berkoordinasi dengan tim HRD untuk menjadwalkan <strong>Interview User</strong> sesuai waktu yang tersedia.
+                        </p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
+                            Demikian pemberitahuan ini kami sampaikan. Atas perhatian Bapak/Ibu, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Salam,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim HRD &amp; Talent Acquisition</span><br>
+                        PT Inti Surya Laboratorium
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        ";
+    }
 }

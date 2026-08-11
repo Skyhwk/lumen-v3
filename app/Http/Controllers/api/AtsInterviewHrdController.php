@@ -13,6 +13,7 @@ use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
 use Mpdf\Output\Destination;
 
@@ -32,6 +33,7 @@ class AtsInterviewHrdController extends Controller
                 $q->where('status', 'interview_hrd')
                   ->orWhereHas('hrdInterview');
             })
+            ->where('is_approved_interview_hrd', '!=', 1)
             ->where(function ($q) use ($mode, $todayStr) {
                 if ($mode === 'today') {
                     $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
@@ -314,7 +316,7 @@ class AtsInterviewHrdController extends Controller
      */
     public function passToUser(Request $request, $id)
     {
-        $applicant = NewRecruitment::find($id);
+        $applicant = NewRecruitment::with(['personalRequest'])->find($id);
 
         if (!$applicant) {
             return response()->json([
@@ -340,6 +342,56 @@ class AtsInterviewHrdController extends Controller
                 'status_result' => 'passed',
                 'updated_by' => $user,
             ]);
+
+        // Send email + system notification to personnel request creator
+        try {
+            $posisiName  = $this->resolvePositionName($applicant);
+            $noRequest   = $applicant->personalRequest->no_request ?? '-';
+            $prCreatedBy = $applicant->personalRequest->created_by ?? null;
+
+            if ($prCreatedBy) {
+                // Lookup creator from master_karyawan by name
+                $mk = DB::table('master_karyawan')
+                    ->where('nama_lengkap', $prCreatedBy)
+                    ->first();
+
+                // 1. System notification
+                $creatorUserId = $mk->user_id ?? null;
+                if ($creatorUserId) {
+                    DB::table('notification')->insert([
+                        'user_id'    => $creatorUserId,
+                        'title'      => 'HRD Interview Approved',
+                        'message'    => "Candidate {$applicant->nama_lengkap} ({$posisiName}) has passed the HRD Interview stage and is ready for User Interview scheduling. No. Request: {$noRequest}.",
+                        'url'        => '/hrd/applicant-tracking-system/interview-hrd',
+                        'is_read'    => 0,
+                        'is_active'  => 1,
+                        'created_at' => Carbon::now(),
+                    ]);
+                }
+
+                // 2. Email notification
+                $creatorEmail = ($mk && !empty($mk->email)) ? $mk->email : null;
+                if ($creatorEmail) {
+                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdApprovalNotifUser((object)[
+                        'nama_user'     => $prCreatedBy,
+                        'nama_kandidat' => $applicant->nama_lengkap,
+                        'posisi'        => $posisiName,
+                        'no_request'    => $noRequest,
+                        'approved_by'   => $user,
+                        'approved_at'   => Carbon::now()->format('d M Y, H:i') . ' WIB',
+                    ]);
+
+                    SendEmail::where('to', $creatorEmail)
+                        ->where('subject', "HRD Interview Approval — {$applicant->nama_lengkap} ({$posisiName})")
+                        ->where('body', $bodyEmail)
+                        ->where('karyawan', $user)
+                        ->noReply()
+                        ->send();
+                }
+            }
+        } catch (\Exception $e) {
+            // Silence — notification/email failure must not block the approval response
+        }
 
         return response()->json([
             'status' => 200,
