@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class PersonalRequest extends Model
+class PersonnelRequest extends Model
 {
-    protected $table = 'personal_requests';
+    protected $table = 'personnel_requests';
 
     protected $fillable = [
         'no_request',
@@ -41,4 +41,15 @@ class PersonalRequest extends Model
         'jumlah_personal' => 'integer',
         'usia_maksimum' => 'integer',
     ];
+
+    public function divisiName()
+    {
+        return $this->belongsTo(MasterDivisi::class, 'divisi');
+    }
+
+    public function Placement()
+    {
+        return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang');
+    }
+
 }
