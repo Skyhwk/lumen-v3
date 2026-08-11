@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class SalaryOffer extends Model
 {
-    protected $table = 'salary_offer';
+    protected $table = 'sallary_offer';
     protected $guarded = [];
 
     public function newRecruitment()

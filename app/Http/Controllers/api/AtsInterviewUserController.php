@@ -259,6 +259,18 @@ class AtsInterviewUserController extends Controller
             $updateData['tgl_interview'] = $request->input('tgl_interview');
         }
 
+        if ($request->filled('catatan')) {
+            $updateData['catatan'] = trim(strip_tags($request->input('catatan')));
+        } elseif ($request->has('catatan')) {
+            $updateData['catatan'] = null;
+        }
+
+        if ($request->filled('catatan_interview_user')) {
+            $updateData['catatan_interview_user'] = trim(strip_tags($request->input('catatan_interview_user')));
+        } elseif ($request->has('catatan_interview_user')) {
+            $updateData['catatan_interview_user'] = null;
+        }
+
         if ($interview) {
             $interview->update($updateData);
         } else {
