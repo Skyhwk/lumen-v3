@@ -9,6 +9,7 @@ use App\Models\RecruitmentInterview;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
+use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use Carbon\Carbon;
@@ -63,8 +64,7 @@ class DataApplicantsController extends Controller
                 $q->where('status', 'like', "%{$keyword}%");
             })
             ->addColumn('usia', function ($row) {
-                $ttl = $this->getTtlString($row);
-                $birthYear = $this->extractBirthYear($ttl);
+                $birthYear = $this->extractBirthYear($row);
                 if ($birthYear) {
                     $age = Carbon::now()->year - $birthYear;
                     return $age . ' Yrs';
@@ -149,7 +149,9 @@ class DataApplicantsController extends Controller
         $linkGmeet = $request->input('link_gmeet');
         $ruanganInterview = $request->input('ruangan_interview');
 
-        // 1. Update applicant status to 'interview_hrd'
+        // 1. Update applicant status to 'interview_hrd' with RecruitmentStatusService meta_history tracking
+        (new RecruitmentStatusService())->update($applicant->id, 'interview_hrd', Carbon::now());
+
         $applicant->update([
             'status' => 'interview_hrd',
             'approved_by' => $user,
@@ -252,8 +254,11 @@ class DataApplicantsController extends Controller
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
         $reason = $request->input('alasan_reject') ?? 'Did not pass initial qualification evaluation';
 
+        // Update applicant status to 'rejected' with RecruitmentStatusService meta_history tracking
+        (new RecruitmentStatusService())->update($applicant->id, 'rejected', Carbon::now());
+
         $applicant->update([
-            'status' => 'rejected',
+            // 'status' => 'screening',
             'rejected_by' => $user,
             'rejected_at' => Carbon::now(),
             'alasan_reject' => $reason,
@@ -533,12 +538,43 @@ class DataApplicantsController extends Controller
     /**
      * Helper to extract birth year
      */
-    private function extractBirthYear($ttl)
+    private function extractBirthYear($row)
     {
+        $ttl = is_string($row) ? $row : $this->getTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {}
+        }
+
         if (!$ttl) return null;
+
         if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
             return (int) $matches[1];
         }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
         return null;
     }
 

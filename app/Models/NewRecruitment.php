@@ -59,4 +59,9 @@ class NewRecruitment extends Model
             ->where('stage', 'user')
             ->orderBy('id', 'desc');
     }
+
+    public function salaryOffer()
+    {
+        return $this->hasOne(SalaryOffer::class, 'new_recruitment_id')->orderBy('id', 'desc');
+    }
 }
