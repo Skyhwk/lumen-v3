@@ -234,6 +234,7 @@ class OfferingSalaryController extends Controller
                 ->where('subject', $subject)
                 ->where('body', $bodi)
                 ->where('karyawan', $this->karyawan)
+                ->where('bcc', ['dedi@intilab.com'])
                 ->noReply()
                 ->send();
 
