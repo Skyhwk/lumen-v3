@@ -29,12 +29,43 @@ class AtsInterviewUserController extends Controller
         return count($parts) > 0 ? implode(', ', $parts) : null;
     }
 
-    private function extractBirthYear($ttl)
+    private function extractBirthYear($row)
     {
+        $ttl = is_string($row) ? $row : $this->getTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {}
+        }
+
         if (!$ttl) return null;
+
         if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
             return (int) $matches[1];
         }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
         return null;
     }
 
@@ -74,20 +105,19 @@ class AtsInterviewUserController extends Controller
     {
         $mode = $request->input('mode', 'scheduled');
 
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview'])
+        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
+            ->whereIn('status', ['interview_user', 'profile_completion'])
             ->where(function ($q) use ($mode) {
                 if ($mode === 'scheduled') {
-                    $q->where('status', 'interview_user')
-                      ->orWhereHas('userInterview', function ($ui) {
-                          $ui->whereNotNull('tgl_interview')->where('is_active', 1);
-                      });
+                    // Candidates with an active User Interview schedule set
+                    $q->whereHas('userInterview', function ($ui) {
+                        $ui->whereNotNull('tgl_interview')->where('is_active', 1);
+                    });
                 } else {
-                    // mode = 'unscheduled' (Approved by HRD, pending User Interview schedule)
-                    $q->where('is_approved_interview_hrd', 1)
-                      ->where('status', '!=', 'interview_user')
-                      ->whereDoesntHave('userInterview', function ($ui) {
-                          $ui->whereNotNull('tgl_interview')->where('is_active', 1);
-                      });
+                    // mode = 'unscheduled' (pending User Interview schedule creation)
+                    $q->whereDoesntHave('userInterview', function ($ui) {
+                        $ui->whereNotNull('tgl_interview')->where('is_active', 1);
+                    });
                 }
             })
             ->when($request->filled('year'), function ($q) use ($request) {
@@ -125,11 +155,12 @@ class AtsInterviewUserController extends Controller
                 $ui = $row->userInterview;
                 if ($ui && $ui->tgl_interview) {
                     $dt = Carbon::parse($ui->tgl_interview);
-                    $jenis = strtolower($ui->jenis_interview ?? '');
+                    $jenis = strtolower(strip_tags($ui->jenis_interview ?? ''));
                     if ($jenis === 'online') {
                         $detail = 'Online (GMeet)';
                     } else {
-                        $detail = 'Offline (' . ($ui->ruangan_interview ?: 'Office Room') . ')';
+                        $room = trim(strip_tags($ui->ruangan_interview ?: 'Office Room'));
+                        $detail = 'Offline (' . ($room ?: 'Office Room') . ')';
                     }
                     return $dt->format('d M Y, H:i') . ' WIB - ' . $detail;
                 }
@@ -146,9 +177,11 @@ class AtsInterviewUserController extends Controller
             ->addColumn('user_interview', function ($row) {
                 return $row->userInterview;
             })
+            ->addColumn('hrd_interview', function ($row) {
+                return $row->hrdInterview;
+            })
             ->addColumn('usia', function ($row) {
-                $ttl = $this->getTtlString($row);
-                $birthYear = $this->extractBirthYear($ttl);
+                $birthYear = $this->extractBirthYear($row);
                 if ($birthYear) {
                     return (Carbon::now()->year - $birthYear) . ' Yrs';
                 }
@@ -215,19 +248,31 @@ class AtsInterviewUserController extends Controller
         }
 
         if ($request->filled('link_gmeet')) {
-            $updateData['link_gmeet'] = $request->input('link_gmeet');
+            $updateData['link_gmeet'] = trim(strip_tags($request->input('link_gmeet')));
         } elseif ($request->has('link_gmeet')) {
             $updateData['link_gmeet'] = null;
         }
 
         if ($request->filled('ruangan_interview')) {
-            $updateData['ruangan_interview'] = $request->input('ruangan_interview');
+            $updateData['ruangan_interview'] = trim(strip_tags($request->input('ruangan_interview')));
         } elseif ($request->has('ruangan_interview')) {
             $updateData['ruangan_interview'] = null;
         }
 
         if ($request->filled('tgl_interview')) {
             $updateData['tgl_interview'] = $request->input('tgl_interview');
+        }
+
+        if ($request->filled('catatan')) {
+            $updateData['catatan'] = trim(strip_tags($request->input('catatan')));
+        } elseif ($request->has('catatan')) {
+            $updateData['catatan'] = null;
+        }
+
+        if ($request->filled('catatan_interview_user')) {
+            $updateData['catatan_interview_user'] = trim(strip_tags($request->input('catatan_interview_user')));
+        } elseif ($request->has('catatan_interview_user')) {
+            $updateData['catatan_interview_user'] = null;
         }
 
         if ($interview) {

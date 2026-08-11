@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
 
+use App\Models\PersonalRequest;
+
 class PersonnelRequesthrdController extends Controller
 {
     /**
@@ -17,37 +19,62 @@ class PersonnelRequesthrdController extends Controller
     public function index(Request $request)
     {
         try {
-            //code...
-            $query = DB::table('personnel_requests');
-    
+            $query = PersonalRequest::with(['masterJabatan', 'masterDivisi'])->orderBy('id', 'desc');
+
             if ($request->has('year') && !empty($request->year)) {
                 $query->whereYear('created_at', $request->year);
             }
-    
+
             return Datatables::of($query)
+                ->editColumn('posisi', function ($row) {
+                    if ($row->masterJabatan && !empty($row->masterJabatan->nama_jabatan)) {
+                        return $row->masterJabatan->nama_jabatan;
+                    }
+                    return $row->posisi ?: '-';
+                })
+                ->filterColumn('posisi', function ($q, $keyword) {
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('posisi', 'like', "%{$keyword}%")
+                            ->orWhereHas('masterJabatan', function ($j) use ($keyword) {
+                                $j->where('nama_jabatan', 'like', "%{$keyword}%");
+                            });
+                    });
+                })
+                ->editColumn('divisi', function ($row) {
+                    if ($row->masterDivisi && !empty($row->masterDivisi->nama_divisi)) {
+                        return $row->masterDivisi->nama_divisi;
+                    }
+                    return $row->divisi_alias ?: ($row->divisi ?: '-');
+                })
+                ->filterColumn('divisi', function ($q, $keyword) {
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('divisi', 'like', "%{$keyword}%")
+                            ->orWhere('divisi_alias', 'like', "%{$keyword}%")
+                            ->orWhereHas('masterDivisi', function ($d) use ($keyword) {
+                                $d->where('nama_divisi', 'like', "%{$keyword}%");
+                            });
+                    });
+                })
                 ->addColumn('status_label', function ($row) {
+                    if (isset($row->is_publish) && $row->is_publish == 1) {
+                        return 'Published';
+                    }
                     if (isset($row->is_approve) && $row->is_approve == 1) {
                         return 'Approved';
                     }
-                    if (isset($row->is_rejected) && $row->is_rejected == 1) {
+                    if ((isset($row->is_rejected) && $row->is_rejected == 1) || (isset($row->is_reject) && $row->is_reject == 1)) {
                         return 'Rejected';
                     }
                     return 'Pending';
                 })
                 ->addColumn('request_by', function ($row) {
-                    return 'Admin / HRD';
+                    return $row->created_by ?: 'Admin / HRD';
                 })
                 ->filterColumn('no_request', function ($q, $keyword) {
                     $q->where('no_request', 'like', "%{$keyword}%");
                 })
                 ->filterColumn('request_type', function ($q, $keyword) {
                     $q->where('request_type', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('divisi', function ($q, $keyword) {
-                    $q->where('divisi', 'like', "%{$keyword}%");
-                })
-                ->filterColumn('posisi', function ($q, $keyword) {
-                    $q->where('posisi', 'like', "%{$keyword}%");
                 })
                 ->filterColumn('jumlah_personal', function ($q, $keyword) {
                     $q->where('jumlah_personal', 'like', "%{$keyword}%");
@@ -57,23 +84,27 @@ class PersonnelRequesthrdController extends Controller
                 })
                 ->filterColumn('status_label', function ($q, $keyword) {
                     $keyword = strtolower($keyword);
-                    if (strpos('approved', $keyword) !== false) {
+                    if (strpos('published', $keyword) !== false) {
+                        $q->where('is_publish', 1);
+                    } elseif (strpos('approved', $keyword) !== false) {
                         $q->where('is_approve', 1);
                     } elseif (strpos('rejected', $keyword) !== false) {
-                        $q->where('is_rejected', 1);
+                        $q->where(function ($sub) {
+                            $sub->where('is_rejected', 1)->orWhere('is_reject', 1);
+                        });
                     } elseif (strpos('pending', $keyword) !== false) {
                         $q->where('is_approve', 0)->where('is_rejected', 0);
                     }
                 })
                 ->filterColumn('request_by', function ($q, $keyword) {
-                    // Mocked column, no DB filtering needed
+                    $q->where('created_by', 'like', "%{$keyword}%");
                 })
                 ->make(true);
         } catch (\Throwable $th) {
-            //throw $th;
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],501);
         }
     }
+
 
     /**
      * Get detail of a personal request

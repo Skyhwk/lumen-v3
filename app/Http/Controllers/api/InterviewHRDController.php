@@ -444,8 +444,9 @@ class InterviewHRDController extends Controller
             ];
 
             $bodi = GenerateMessageHRD::bodyEmailKeepApproveKandidat($data, $link_btn, 'Ibu Boss');
+            $subject = 'Kandidat Interview User - ' . $data->nama_lengkap;
             $email = SendEmail::where('to', env('EMAIL_DIREKTUR_IBU'))
-                ->where('subject', 'Kandidat Interview User')
+                ->where('subject', $subject)
                 ->where('bcc', ['dedi@intilab.com'])
                 ->where('body', $bodi)
                 ->where('karyawan', $this->karyawan)
