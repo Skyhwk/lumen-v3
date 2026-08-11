@@ -370,4 +370,27 @@ class GenerateMessageAtsEmail
         </html>
         ";
     }
+
+    /**
+     * Professional Email Template for Candidate Salary Offer Approval (Permohonan Persetujuan Offering Salary)
+     * 
+     * @param object $data
+     * @param object|null $btn
+     * @param string|null $mark
+     * @return string
+     */
+    public static function bodyEmailSallaryOffer($data, $btn = null, $mark = 'Offering Salary')
+    {
+        if ($data == null) {
+            return '';
+        }
+
+        return view('TemplateEmail.hrd.permohonan-persetujuan-salary-offer', [
+            'data'    => $data,
+            'btn'     => $btn,
+            'mark'    => $mark,
+            'contact' => HrdEmailViewData::contactLine($data),
+            'cv'      => HrdEmailViewData::prepareCvData($data),
+        ])->render();
+    }
 }
