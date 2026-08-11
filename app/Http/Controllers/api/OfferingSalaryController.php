@@ -228,9 +228,10 @@ class OfferingSalaryController extends Controller
             ];
 
             $bodi = GenerateMessageHRD::bodyEmailKeepApproveKandidat($data, $link_btn, 'Bapak Boss');
+            $subject = 'Kandidat Offering Salary ' . $data->nama_lengkap;
 
             $email = SendEmail::where('to', env('EMAIL_DIREKTUR_BAPAK'))
-                ->where('subject', 'Kandidat Offering Salary')
+                ->where('subject', $subject)
                 ->where('body', $bodi)
                 ->where('karyawan', $this->karyawan)
                 ->noReply()
