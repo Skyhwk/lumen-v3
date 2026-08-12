@@ -22,7 +22,6 @@ use Yajra\Datatables\Datatables;
 use App\Services\Crypto;
 use App\Helpers\Helper;
 use App\Helpers\ShioElemenHelper;
-use App\Services\GenerateToken;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use App\Services\GenerateMessageAtsWhatsapp;
@@ -336,9 +335,7 @@ class RecruitmentController extends Controller{
             $pictureFilename = $pictureService->storeBase64($picture);
 
             $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, null, null);
-            $tokenService = new GenerateToken();
-            $tokenKey = $personnelRequest->id . $namaLengkap . str_replace('.', '', microtime(true));
-            $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(DATE('Y-m-d')));
+            $token = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
 
             DB::beginTransaction();
 

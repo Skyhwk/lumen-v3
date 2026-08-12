@@ -470,103 +470,112 @@ class GenerateMessageAtsEmail
      * Email notifikasi hasil interview user ke HRD
      */
     static function bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $decision)
-    {
-        $profile = \Illuminate\Support\Facades\DB::table('candidate_profiles')
-            ->where('new_recruitment_id', $recruitment->id)->first();
+    {  
+        try {
+            //code...
+           
+            $profile = \Illuminate\Support\Facades\DB::table('candidate_profiles')
+                ->where('new_recruitment_id', $recruitment->id)->first();
+                
+            $educations = \Illuminate\Support\Facades\DB::table('candidate_educations')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('is_active', 1)->get();
+    
+            $photoDoc = \Illuminate\Support\Facades\DB::table('candidate_documents')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('is_active', 1)
+                ->where(function($q) {
+                    $q->where('jenis_dokumen', 'like', '%Foto%')
+                      ->orWhere('jenis_dokumen', 'like', '%Photo%');
+                })->first();
+    
+            $photoUrl = !empty($recruitment->picture) 
+            ? rtrim(env('APP_URL', 'https://apps.intilab.com/v3/public'), '/') . '/recruitment/' . ltrim($recruitment->picture, '/') 
+            : '';
             
-        $educations = \Illuminate\Support\Facades\DB::table('candidate_educations')
-            ->where('new_recruitment_id', $recruitment->id)
-            ->where('is_active', 1)->get();
-
-        $photoDoc = \Illuminate\Support\Facades\DB::table('candidate_documents')
-            ->where('new_recruitment_id', $recruitment->id)
-            ->where('is_active', 1)
-            ->where(function($q) {
-                $q->where('jenis_dokumen', 'like', '%Foto%')
-                  ->orWhere('jenis_dokumen', 'like', '%Photo%');
-            })->first();
-
-        $photoUrl = $photoDoc ? 'https://apps.intilab.com/v3/public/' . ltrim($photoDoc->path_file, '/') : '';
-
-        $formatDateId = function($dateStr) {
-            if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
-            try {
-                return \Carbon\Carbon::parse($dateStr)->locale('id')->isoFormat('D MMMM YYYY');
-            } catch (\Exception $e) {
-                return $dateStr;
+    
+            $formatDateId = function($dateStr) {
+                if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
+                try {
+                    return \Carbon\Carbon::parse($dateStr)->locale('id')->isoFormat('D MMMM YYYY');
+                } catch (\Exception $e) {
+                    return $dateStr;
+                }
+            };
+    
+            $dataCv = (object) array_merge(
+                $recruitment ? $recruitment->toArray() : [],
+                $profile ? (array)$profile : [],
+                [
+                    'nama_cabang' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
+                    'posisi_di_lamar' => $pr->posisi ?? '-',
+                    'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? '-',
+                    'status_nikah' => $profile->status_pernikahan ?? null,
+                    'bpjs_kesehatan' => $profile->no_bpjs_ks ?? null,
+                    'bpjs_ketenagakerjaan' => $profile->no_bpjs_tk ?? null,
+                    'alamat_domisili' => $profile->alamat_domisili ?? null,
+                    'alamat_ktp' => $profile->alamat_ktp ?? null,
+                    'no_hp' => $recruitment->no_telepon ?? null,
+                    'gender' => $recruitment->jenis_kelamin ?? null,
+                    'tgl_nikah' => $formatDateId($recruitment->tgl_nikah ?? null),
+                    'tanggal_lahir' => $formatDateId($recruitment->tanggal_lahir ?? null),
+                    'tgl_exp_identitas' => $formatDateId($recruitment->tgl_exp_identitas ?? null),
+                ]
+            );
+    
+            $pendidikan = $educations->map(function($ed) {
+                return [
+                    'jenjang' => $ed->jenjang_pendidikan,
+                    'institusi' => $ed->nama_institusi,
+                    'jurusan' => $ed->jurusan,
+                    'tahun_masuk' => $ed->tahun_masuk,
+                    'tahun_lulus' => $ed->tahun_lulus,
+                ];
+            })->toArray();
+    
+            $pengalamanKerja = is_string($recruitment->pengalaman_kerja) ? json_decode($recruitment->pengalaman_kerja, true) : ($recruitment->pengalaman_kerja ?? []);
+            if (is_array($pengalamanKerja)) {
+                foreach ($pengalamanKerja as &$pk) {
+                    if (isset($pk['mulai_kerja'])) $pk['mulai_kerja'] = $formatDateId($pk['mulai_kerja']);
+                    if (isset($pk['akhir_kerja'])) $pk['akhir_kerja'] = $formatDateId($pk['akhir_kerja']);
+                }
             }
-        };
-
-        $dataCv = (object) array_merge(
-            $recruitment ? $recruitment->toArray() : [],
-            $profile ? (array)$profile : [],
-            [
-                'nama_cabang' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
-                'posisi_di_lamar' => $pr->posisi ?? '-',
-                'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? '-',
-                'status_nikah' => $profile->status_pernikahan ?? null,
-                'bpjs_kesehatan' => $profile->no_bpjs_ks ?? null,
-                'bpjs_ketenagakerjaan' => $profile->no_bpjs_tk ?? null,
-                'alamat_domisili' => $profile->alamat_domisili ?? null,
-                'alamat_ktp' => $profile->alamat_ktp ?? null,
-                'no_hp' => $recruitment->no_telepon ?? null,
-                'gender' => $recruitment->jenis_kelamin ?? null,
-                'tgl_nikah' => $formatDateId($recruitment->tgl_nikah ?? null),
-                'tanggal_lahir' => $formatDateId($recruitment->tanggal_lahir ?? null),
-                'tgl_exp_identitas' => $formatDateId($recruitment->tgl_exp_identitas ?? null),
-            ]
-        );
-
-        $pendidikan = $educations->map(function($ed) {
-            return [
-                'jenjang' => $ed->jenjang_pendidikan,
-                'institusi' => $ed->nama_institusi,
-                'jurusan' => $ed->jurusan,
-                'tahun_masuk' => $ed->tahun_masuk,
-                'tahun_lulus' => $ed->tahun_lulus,
+            
+            $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
+    
+            $cv = [
+                'data' => $dataCv,
+                'photoUrl' => $photoUrl,
+                'pendidikan' => $pendidikan,
+                'pengalamanKerja' => $pengalamanKerja,
+                'skills' => $skill,
+                'skillBahasa' => [],
+                'minat' => [],
+                'organisasi' => [],
+                'referensi' => [],
+                'sertifikat' => [],
+                'kursus' => [],
+                'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
             ];
-        })->toArray();
-
-        $pengalamanKerja = is_string($recruitment->pengalaman_kerja) ? json_decode($recruitment->pengalaman_kerja, true) : ($recruitment->pengalaman_kerja ?? []);
-        if (is_array($pengalamanKerja)) {
-            foreach ($pengalamanKerja as &$pk) {
-                if (isset($pk['mulai_kerja'])) $pk['mulai_kerja'] = $formatDateId($pk['mulai_kerja']);
-                if (isset($pk['akhir_kerja'])) $pk['akhir_kerja'] = $formatDateId($pk['akhir_kerja']);
-            }
+           
+            $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'hrd')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
+    
+            return view('TemplateEmail.ats.hasil-interview-user', [
+                'recruitment' => $recruitment,
+                'pr' => $pr,
+                'interview' => $interview,
+                'hrdInterview' => $hrdInterview,
+                'decision' => $decision,
+                'cv' => $cv
+            ])->render();
+        } catch (\Throwable $th) {
+            throw $th;
         }
-        
-        $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
-
-        $cv = [
-            'data' => $dataCv,
-            'photoUrl' => $photoUrl,
-            'pendidikan' => $pendidikan,
-            'pengalamanKerja' => $pengalamanKerja,
-            'skills' => $skill,
-            'skillBahasa' => [],
-            'minat' => [],
-            'organisasi' => [],
-            'referensi' => [],
-            'sertifikat' => [],
-            'kursus' => [],
-            'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
-        ];
-       
-        $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
-            ->where('new_recruitment_id', $recruitment->id)
-            ->where('stage', 'hrd')
-            ->where('is_active', 1)
-            ->orderBy('id', 'desc')
-            ->first();
-
-        return view('TemplateEmail.ats.hasil-interview-user', [
-            'recruitment' => $recruitment,
-            'pr' => $pr,
-            'interview' => $interview,
-            'hrdInterview' => $hrdInterview,
-            'decision' => $decision,
-            'cv' => $cv
-        ])->render();
     }
 
     /**
