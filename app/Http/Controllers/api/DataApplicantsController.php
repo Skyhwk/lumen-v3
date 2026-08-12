@@ -16,6 +16,7 @@ use App\Models\CandidateProfile;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Support\Facades\DB;
 use Mpdf\Output\Destination;
 
 class DataApplicantsController extends Controller
@@ -334,28 +335,71 @@ class DataApplicantsController extends Controller
         $noNpwp        = ($cp && $cp->no_npwp)        ? $cp->no_npwp        : '-';
         $noBpjsKs      = ($cp && $cp->no_bpjs_ks)     ? $cp->no_bpjs_ks    : '-';
         $noBpjsTk      = ($cp && $cp->no_bpjs_tk)     ? $cp->no_bpjs_tk    : '-';
-        $jenisKelamin  = ($cp && $cp->jenis_kelamin)  ? $cp->jenis_kelamin  : '-';
-        $agama         = ($cp && $cp->agama)          ? $cp->agama          : '-';
-        $statusNikah   = ($cp && $cp->status_pernikahan) ? $cp->status_pernikahan : '-';
-        $golDarah      = ($cp && $cp->golongan_darah) ? $cp->golongan_darah : '-';
+        $rawGender     = ($cp && !empty($cp->jenis_kelamin)) ? $cp->jenis_kelamin : ($applicant->jenis_kelamin ?? null);
+        if ($rawGender) {
+            $gLower = strtolower(trim($rawGender));
+            if ($gLower === 'male' || $gLower === 'laki-laki' || $gLower === 'l') {
+                $jenisKelamin = 'Laki-laki (Male)';
+            } elseif ($gLower === 'female' || $gLower === 'perempuan' || $gLower === 'p') {
+                $jenisKelamin = 'Perempuan (Female)';
+            } else {
+                $jenisKelamin = ucfirst($rawGender);
+            }
+        } else {
+            $jenisKelamin = '-';
+        }
+        $agama         = ($cp && $cp->agama)          ? $cp->agama          : ($applicant->agama ?? '-');
+        $statusNikah   = ($cp && $cp->status_pernikahan) ? $cp->status_pernikahan : ($applicant->status_nikah ?? '-');
+        $medicalInfo   = DB::table('candidate_medical_informations')
+            ->where(function($q) use ($cp, $applicant) {
+                if ($cp && $cp->id) {
+                    $q->where('candidate_profile_id', $cp->id);
+                }
+                $q->orWhere('new_recruitment_id', $applicant->id);
+            })
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $tinggiBadan       = ($medicalInfo && $medicalInfo->tinggi_badan) ? $medicalInfo->tinggi_badan . ' cm' : '-';
+        $beratBadan        = ($medicalInfo && $medicalInfo->berat_badan) ? $medicalInfo->berat_badan . ' kg' : '-';
+        $kondisiMata       = ($medicalInfo && $medicalInfo->mata) ? $medicalInfo->mata : '-';
+        $golDarah          = ($medicalInfo && $medicalInfo->golongan_darah) ? $medicalInfo->golongan_darah : (($cp && isset($cp->golongan_darah)) ? $cp->golongan_darah : '-');
+        $penyakitBawaan    = ($medicalInfo && $medicalInfo->penyakit_bawaan_lahir) ? $medicalInfo->penyakit_bawaan_lahir : '-';
+        $penyakitKronis    = ($medicalInfo && $medicalInfo->penyakit_kronis) ? $medicalInfo->penyakit_kronis : '-';
+        $riwayatKecelakaan = ($medicalInfo && $medicalInfo->riwayat_kecelakaan) ? $medicalInfo->riwayat_kecelakaan : '-';
 
         // ── Birth date & place ──
         $tempatLahir = ($cp && $cp->tempat_lahir) ? $cp->tempat_lahir : ($applicant->tempat_lahir ?? null);
-        if ($cp && $cp->tanggal_lahir) {
+        $tglLahirRaw = ($cp && $cp->tanggal_lahir) ? $cp->tanggal_lahir : ($applicant->tanggal_lahir ?? null);
+
+        $tglLahirStr = null;
+        $birthYear   = null;
+
+        if (!empty($tglLahirRaw)) {
             try {
-                $tglLahirCarbon = Carbon::parse($cp->tanggal_lahir);
-                $tglLahirStr    = $tglLahirCarbon->format('d F Y');
+                $tglLahirCarbon = Carbon::parse($tglLahirRaw);
+                $tglLahirStr    = $tglLahirCarbon->format('Y-m-d');
                 $birthYear      = (int) $tglLahirCarbon->year;
             } catch (\Exception $e) {
-                $tglLahirStr = $cp->tanggal_lahir;
-                $birthYear   = null;
+                $tglLahirStr = $tglLahirRaw;
+                $birthYear   = $this->extractBirthYear($tglLahirRaw);
+            }
+        } elseif (!empty($applicant->tempat_tanggal_lahir)) {
+            $tglLahirStr = $applicant->tempat_tanggal_lahir;
+            $birthYear   = $this->extractBirthYear($tglLahirStr);
+        }
+
+        if ($tempatLahir && $tglLahirStr) {
+            if (stripos($tglLahirStr, $tempatLahir) === 0) {
+                $ttlDisplay = $tglLahirStr;
+            } else {
+                $ttlDisplay = $tempatLahir . ', ' . $tglLahirStr;
             }
         } else {
-            $ttl       = $this->getTtlString($applicant);
-            $birthYear = $this->extractBirthYear($ttl);
-            $tglLahirStr = $ttl ?? '-';
+            $ttlDisplay = $tempatLahir ?: ($tglLahirStr ?: '-');
         }
-        $ttlDisplay = trim(($tempatLahir ? $tempatLahir . ', ' : '') . ($tglLahirStr ?? '-'));
+
         $usia = $birthYear ? (Carbon::now()->year - $birthYear) . ' Years' : '-';
 
         // ── Shio & Elemen ──
@@ -365,9 +409,49 @@ class DataApplicantsController extends Controller
         $elemen     = $shioElemen['elemen'] ?? '-';
 
         // ── Address ──
+        $buildAddress = function ($mainAddress, $kota, $provinsi, $kodePos) {
+            $mainAddress = trim($mainAddress ?? '');
+            if (empty($mainAddress)) {
+                return implode(', ', array_filter([$kota, $provinsi, $kodePos ? 'Kode Pos: ' . $kodePos : null])) ?: '-';
+            }
+
+            $cleanMain = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $mainAddress));
+            $parts = [];
+
+            if (!empty($kota)) {
+                $cleanKota = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace(['kab.', 'kabupaten', 'kota'], '', strtolower($kota))));
+                if (!empty($cleanKota) && (empty($cleanMain) || strpos($cleanMain, $cleanKota) === false)) {
+                    $parts[] = $kota;
+                }
+            }
+
+            if (!empty($provinsi)) {
+                $cleanProv = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace(['provinsi', 'prov.'], '', strtolower($provinsi))));
+                if (!empty($cleanProv) && (empty($cleanMain) || strpos($cleanMain, $cleanProv) === false)) {
+                    $parts[] = $provinsi;
+                }
+            }
+
+            if (!empty($kodePos)) {
+                $cleanPos = strtolower(preg_replace('/[^0-9]/', '', (string)$kodePos));
+                if (!empty($cleanPos) && (empty($cleanMain) || strpos($cleanMain, $cleanPos) === false)) {
+                    $parts[] = 'Kode Pos: ' . $kodePos;
+                }
+            }
+
+            if (count($parts) > 0) {
+                return $mainAddress . ', ' . implode(', ', $parts);
+            }
+
+            return $mainAddress;
+        };
+
         if ($cp) {
-            $alamatKtp      = implode(', ', array_filter([$cp->alamat_ktp, $cp->kota_ktp, $cp->provinsi_ktp, $cp->kode_pos_ktp ? 'Kode Pos: ' . $cp->kode_pos_ktp : null]));
-            $alamatDomisili = implode(', ', array_filter([$cp->alamat_domisili, $cp->kota_domisili, $cp->provinsi_domisili, $cp->kode_pos_domisili ? 'Kode Pos: ' . $cp->kode_pos_domisili : null]));
+            $rawKtpAddress = $cp->alamat_ktp ?: ($applicant->alamat_ktp ?? null);
+            $rawDomAddress = $cp->alamat_domisili ?: ($applicant->alamat_domisili ?? null);
+
+            $alamatKtp      = $buildAddress($rawKtpAddress, $cp->kota_ktp, $cp->provinsi_ktp, $cp->kode_pos_ktp);
+            $alamatDomisili = $buildAddress($rawDomAddress, $cp->kota_domisili, $cp->provinsi_domisili, $cp->kode_pos_domisili);
             $statusTinggal  = $cp->status_tempat_tinggal ?? '-';
         } else {
             $alamatKtp      = $applicant->alamat_ktp ?? '-';
@@ -642,7 +726,7 @@ class DataApplicantsController extends Controller
                 </tr>
                 <tr>
                     <td class='info-label'>Place &amp; Date of Birth</td>
-                    <td class='info-value'>{$ttlDisplay} ({$usia})</td>
+                    <td class='info-value'>{$ttlDisplay}" . ($usia !== '-' ? " ({$usia})" : '') . "</td>
                 </tr>
                 <tr>
                     <td class='info-label'>Gender</td>
@@ -710,19 +794,31 @@ class DataApplicantsController extends Controller
                 </tr>
             </table>
 
-            <div class='section-title'>Emergency Contact</div>
+            <div class='section-title'>Medical &amp; Physical Information</div>
             <table class='info-table'>
                 <tr>
-                    <td class='info-label'>Name</td>
-                    <td class='info-value'>{$namaKontakDarurat}</td>
+                    <td class='info-label'>Height / Weight</td>
+                    <td class='info-value'>{$tinggiBadan} / {$beratBadan}</td>
                 </tr>
                 <tr>
-                    <td class='info-label'>Relationship</td>
-                    <td class='info-value'>{$hubKontakDarurat}</td>
+                    <td class='info-label'>Eye Condition</td>
+                    <td class='info-value'>{$kondisiMata}</td>
                 </tr>
                 <tr>
-                    <td class='info-label'>Phone</td>
-                    <td class='info-value'>{$noTelpDarurat}</td>
+                    <td class='info-label'>Blood Type</td>
+                    <td class='info-value'>{$golDarah}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Congenital Disease</td>
+                    <td class='info-value'>{$penyakitBawaan}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Chronic Illness</td>
+                    <td class='info-value'>{$penyakitKronis}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Accident / Surgery History</td>
+                    <td class='info-value'>{$riwayatKecelakaan}</td>
                 </tr>
             </table>
 

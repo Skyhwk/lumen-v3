@@ -37,7 +37,6 @@ class CreateCandidateProfileTables extends Migration
                 // Agama & Status
                 $table->string('agama', 50)->nullable();
                 $table->string('status_pernikahan', 50)->nullable();
-                $table->string('golongan_darah', 10)->nullable();
 
                 // Alamat KTP
                 $table->text('alamat_ktp')->nullable();
