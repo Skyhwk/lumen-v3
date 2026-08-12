@@ -147,21 +147,6 @@ class WsValueUdara extends Sector
         return optional($this->getHasilAnalyst())->parameter;
     }
 
-    public function getHasilParameterAttribute()
-    {
-        return optional($this->getHasilAnalyst())->parameter;
-    }
-
-    public function getHasilParameterAttribute()
-    {
-        return optional($this->getHasilAnalyst())->parameter;
-    }
-
-    public function getHasilParameterAttribute()
-    {
-        return optional($this->getHasilAnalyst())->parameter;
-    }
-
     public function detailLingkunganKerja() {
         return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
     }

@@ -24,6 +24,8 @@ use App\Helpers\Helper;
 use App\Helpers\ShioElemenHelper;
 use App\Services\GenerateToken;
 use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
+use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
@@ -381,6 +383,21 @@ class RecruitmentController extends Controller{
                 ->where('karyawan', 'Recruitment System')
                 ->noReply('PT Inti Surya Laboratorium')
                 ->send();
+
+            try {
+                $whatsappData = (object) [
+                    'nama_lengkap' => $namaLengkap,
+                    'posisi_di_lamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
+                    'assessment_url' => $assessmentUrl,
+                ];
+                $whatsappMessage = (new GenerateMessageAtsWhatsapp($whatsappData))->Assessment();
+                (new SendWhatsapp($noTelepon, $whatsappMessage))->send();
+            } catch (\Throwable $whatsappException) {
+                \Log::warning('Recruitment assessment WhatsApp failed', [
+                    'phone' => $noTelepon,
+                    'message' => $whatsappException->getMessage(),
+                ]);
+            }
 
             DB::commit();
 

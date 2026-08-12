@@ -72,13 +72,14 @@ class GenerateMessageAtsWhatsapp
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
 
-        $msg = "Yth. Bapak/Ibu *" . $namaLengkap . "*,\n\n";
-        $msg .= "Terima kasih atas partisipasi Bapak/Ibu dalam proses seleksi untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
-        $msg .= "Setelah melalui proses evaluasi, kami memutuskan untuk melanjutkan proses dengan kandidat lain yang lebih sesuai dengan kebutuhan posisi tersebut. Dengan demikian, proses lamaran Bapak/Ibu belum dapat kami lanjutkan ke tahap berikutnya.\n\n";
-        $msg .= "Data lamaran Bapak/Ibu akan tetap tersimpan dalam sistem kami dan dapat dipertimbangkan untuk kesempatan yang sesuai di kemudian hari.\n\n";
-        $msg .= "Demikian informasi ini kami sampaikan. Terima kasih atas waktu dan partisipasi Bapak/Ibu selama proses seleksi.\n\n";
+        $gender = strtolower((string) ($this->data->jenis_kelamin ?? $this->data->gender ?? ''));
+        $salutation = $gender === 'female' ? 'Saudari' : 'Saudara';
+        $msg = "Yth. " . $salutation . " *" . $namaLengkap . "*,\n\n";
+        $msg .= "Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi *" . $posisi . "*.\n\n";
+        $msg .= "Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.\n\n";
+        $msg .= "Kami menghargai minat Anda untuk bergabung bersama PT Inti Surya Laboratorium dan mendoakan yang terbaik untuk perjalanan karier Anda.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -105,6 +106,25 @@ class GenerateMessageAtsWhatsapp
         $msg .= "4. *Dokumen Lampiran:* Softcopy KTP, KK, NPWP, Ijazah, Transkrip, & Sertifikat\n\n";
         $msg .= "Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.\n";
         $msg .= "*Harap diperhatikan bahwa apabila data diri belum dilengkapi, maka proses rekrutmen tidak dapat dilanjutkan ke tahap selanjutnya.*\n\n";
+        $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*PT Inti Surya Laboratorium*";
+
+        return $msg;
+    }
+
+    public function Assessment()
+    {
+        $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
+        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/new-recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
+
+        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg .= "Terima kasih telah mengirimkan lamaran untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
+        $msg .= "Lamaran Anda telah kami terima. Silakan lanjutkan ke tahap *Career Assessment* melalui tautan resmi berikut:\n\n";
+        $msg .= "*Mulai Career Assessment:*\n" . $assessmentUrl . "\n\n";
+        $msg .= "Link assessment berlaku selama *2 x 24 jam* sejak pendaftaran dibuat. Pastikan koneksi internet stabil dan kerjakan assessment hingga selesai.\n\n";
         $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
         $msg .= "*Tim Recruitment & Talent Acquisition*\n";
