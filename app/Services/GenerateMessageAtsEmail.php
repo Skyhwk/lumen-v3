@@ -284,4 +284,205 @@ class GenerateMessageAtsEmail
         </html>
         ";
     }
+
+
+    public static function bodyEmailHrdSchaduled($data)
+    {
+        $namaUser       = htmlspecialchars($data->nama_user ?? 'User');
+        $namaKandidat   = htmlspecialchars($data->nama_kandidat ?? 'Candidate');
+        $divisi         = htmlspecialchars($data->divisi ?? '-');
+        $posisi         = htmlspecialchars($data->posisi ?? '-');
+        $cabang         = htmlspecialchars($data->cabang ?? '-');
+        $jenisInterview = htmlspecialchars($data->jenis_interview ?? '-');
+        $catatan        = $data->catatan_interview ?? '-'; // TinyMCE content (HTML)
+        $tglInterview   = isset($data->tgl_interview) ? \Carbon\Carbon::parse($data->tgl_interview)->locale('id')->translatedFormat('l, d F Y H:i') : '-';
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Jadwal Interview Kandidat - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                <!-- Header -->
+                <tr>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
+                    </td>
+                </tr>
+
+                <!-- Status Banner -->
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #e0f2fe; border-left: 4px solid #0284c7; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;'>&#9432; Jadwal Interview Telah Dibuat</span>
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style='padding: 32px;'>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. <strong>Tim HRD</strong>,</p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Melalui email ini kami informasikan bahwa User (<strong>Bapak/Ibu {$namaUser}</strong>) telah selesai menjadwalkan <strong>Interview User</strong> untuk kandidat di bawah ini.
+                        </p>
+
+                        <!-- Candidate Info Box -->
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Informasi Kandidat
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600; width: 140px;'>Nama Kandidat</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Divisi</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$divisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Posisi</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$posisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Cabang</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$cabang}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tanggal Interview</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$tglInterview} WIB</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tipe Interview</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600; text-transform: capitalize;'>{$jenisInterview}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div style='margin-top: 20px;'>
+                            <strong style='font-size: 14px; color: #475569;'>Catatan / Pesan Tambahan:</strong>
+                            <div style='font-size: 14px; line-height: 1.6; color: #334155; background-color: #fff; border: 1px solid #e2e8f0; padding: 12px; border-radius: 4px; margin-top: 6px;'>
+                                {$catatan}
+                            </div>
+                        </div>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0; margin-top: 24px;'>
+                            Mohon bantuan Tim HRD untuk menindaklanjuti penyiapan proses selanjutnya, baik berupa pembuatan tautan (link) Google Meet maupun penyiapan ruangan yang akan digunakan untuk proses Interview User. Atas perhatian dan kerja sama yang baik, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Email notifikasi hasil interview user ke HRD
+     */
+    static function bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $decision)
+    {
+        $profile = \Illuminate\Support\Facades\DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $recruitment->id)->first();
+            
+        $educations = \Illuminate\Support\Facades\DB::table('candidate_educations')
+            ->where('new_recruitment_id', $recruitment->id)
+            ->where('is_active', 1)->get();
+
+        $photoDoc = \Illuminate\Support\Facades\DB::table('candidate_documents')
+            ->where('new_recruitment_id', $recruitment->id)
+            ->where('is_active', 1)
+            ->where(function($q) {
+                $q->where('jenis_dokumen', 'like', '%Foto%')
+                  ->orWhere('jenis_dokumen', 'like', '%Photo%');
+            })->first();
+
+        $photoUrl = $photoDoc ? 'https://apps.intilab.com/v3/public/' . ltrim($photoDoc->path_file, '/') : '';
+
+        $formatDateId = function($dateStr) {
+            if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
+            try {
+                return \Carbon\Carbon::parse($dateStr)->locale('id')->isoFormat('D MMMM YYYY');
+            } catch (\Exception $e) {
+                return $dateStr;
+            }
+        };
+
+        $dataCv = (object) array_merge(
+            $recruitment ? $recruitment->toArray() : [],
+            $profile ? (array)$profile : [],
+            [
+                'nama_cabang' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
+                'posisi_di_lamar' => $pr->posisi ?? '-',
+                'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? '-',
+                'status_nikah' => $profile->status_pernikahan ?? null,
+                'bpjs_kesehatan' => $profile->no_bpjs_ks ?? null,
+                'bpjs_ketenagakerjaan' => $profile->no_bpjs_tk ?? null,
+                'alamat_domisili' => $profile->alamat_domisili ?? null,
+                'alamat_ktp' => $profile->alamat_ktp ?? null,
+                'no_hp' => $recruitment->no_telepon ?? null,
+                'gender' => $recruitment->jenis_kelamin ?? null,
+                'tgl_nikah' => $formatDateId($recruitment->tgl_nikah ?? null),
+                'tanggal_lahir' => $formatDateId($recruitment->tanggal_lahir ?? null),
+                'tgl_exp_identitas' => $formatDateId($recruitment->tgl_exp_identitas ?? null),
+            ]
+        );
+
+        $pendidikan = $educations->map(function($ed) {
+            return [
+                'jenjang' => $ed->jenjang_pendidikan,
+                'institusi' => $ed->nama_institusi,
+                'jurusan' => $ed->jurusan,
+                'tahun_masuk' => $ed->tahun_masuk,
+                'tahun_lulus' => $ed->tahun_lulus,
+            ];
+        })->toArray();
+
+        $pengalamanKerja = is_string($recruitment->pengalaman_kerja) ? json_decode($recruitment->pengalaman_kerja, true) : ($recruitment->pengalaman_kerja ?? []);
+        if (is_array($pengalamanKerja)) {
+            foreach ($pengalamanKerja as &$pk) {
+                if (isset($pk['mulai_kerja'])) $pk['mulai_kerja'] = $formatDateId($pk['mulai_kerja']);
+                if (isset($pk['akhir_kerja'])) $pk['akhir_kerja'] = $formatDateId($pk['akhir_kerja']);
+            }
+        }
+        
+        $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
+
+        $cv = [
+            'data' => $dataCv,
+            'photoUrl' => $photoUrl,
+            'pendidikan' => $pendidikan,
+            'pengalamanKerja' => $pengalamanKerja,
+            'skills' => $skill,
+            'skillBahasa' => [],
+            'minat' => [],
+            'organisasi' => [],
+            'referensi' => [],
+            'sertifikat' => [],
+            'kursus' => [],
+            'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
+        ];
+       
+        $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
+            ->where('new_recruitment_id', $recruitment->id)
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        return view('TemplateEmail.ats.hasil-interview-user', [
+            'recruitment' => $recruitment,
+            'pr' => $pr,
+            'interview' => $interview,
+            'hrdInterview' => $hrdInterview,
+            'decision' => $decision,
+            'cv' => $cv
+        ])->render();
+    }
 }

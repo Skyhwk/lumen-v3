@@ -4,14 +4,8 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\PersonnelRequest;
-use App\Models\NewRecruitment;
-use App\Models\MasterKaryawan;
-use App\Models\MasterDivisi;
-use App\Models\MasterJabatan;
-use App\Models\MasterCabang;
-use App\Models\RecruitmentInterview;
-use App\Services\GetBawahanAll;
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken};
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -77,7 +71,9 @@ class PersonnelRequestController extends Controller
             $data = NewRecruitment::with([
                 'personnelRequest.detailCabang', 
                 'personnelRequest.detailDivisi', 
-                'personnelRequest.detailPosisi'
+                'personnelRequest.detailPosisi',
+                'userInterview',
+                'hrdInterview'
             ])->orderBy('id', 'desc')->get();
             return response()->json($data, 200);
         } catch (\Throwable $th) {
@@ -300,15 +296,53 @@ class PersonnelRequestController extends Controller
                 'tgl_interview'      => $request->tgl_interview,
                 'jenis_interview'    => $request->jenis_interview,
                 'link_gmeet'         => $request->link_gmeet,
-                'created_by'      => $request->user()->name ?? 'System',
+                'ruangan_interview'  => $request->ruangan_interview,
+                'catatan_interview'  => $request->catatan_interview,
+                'created_by'         => $this->karyawan ?? 'System',
                 'is_active'          => 1,
             ]);
 
-            // Update NewRecruitment status
-            $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
+            // Dapatkan data recruitment berserta relasi yang dibutuhkan
+            $recruitment = NewRecruitment::with(['personnelRequest.detailDivisi', 'personnelRequest.detailPosisi', 'personnelRequest.detailCabang'])
+                ->findOrFail($request->new_recruitment_id);
+            
             $recruitment->update([
                 'status' => 'interview_user'
             ]);
+
+            // Cari data karyawan berdasarkan nama pembuat request (created_by)
+            $requestorName = $recruitment->personnelRequest->created_by;
+            $karyawan = MasterKaryawan::where('nama_lengkap', $requestorName)->first();
+
+            if ($karyawan) {
+                // Gunakan GetAtasan service untuk mendapatkan karyawan + atasan-atasannya
+                $getAtasan = GetAtasan::where('id', $karyawan->id)->get();
+                
+                // Siapkan data untuk template email
+                $dataArray = (object)[
+                    'nama_kandidat'     => $recruitment->nama_lengkap,
+                    'divisi'            => $recruitment->personnelRequest->detailDivisi->nama_divisi ?? $recruitment->personnelRequest->divisi,
+                    'posisi'            => $recruitment->personnelRequest->detailPosisi->nama_jabatan ?? $recruitment->personnelRequest->posisi,
+                    'cabang'            => $recruitment->personnelRequest->detailCabang->nama_cabang ?? $recruitment->personnelRequest->lokasi_penempatan_cabang,
+                    'tgl_interview'     => $request->tgl_interview,
+                    'jenis_interview'   => $request->jenis_interview,
+                    'catatan_interview' => $request->catatan_interview,
+                ];
+
+                foreach ($getAtasan as $user) {
+                    if (!$user->email) continue; // Skip jika tidak ada email
+
+                    $dataArray->nama_user = $user->nama_lengkap;
+                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdSchaduled($dataArray);
+                    
+                    SendEmail::where('to', 'luthfi@intilab.com')
+                        ->where('subject', 'Jadwal Interview User - PT Inti Surya Laboratorium')
+                        ->where('body', $bodyEmail)
+                        ->where('karyawan', $user->nama_lengkap)
+                        ->noReply()
+                        ->send();
+                }
+            }
 
             DB::commit();
             return response()->json([
@@ -322,6 +356,100 @@ class PersonnelRequestController extends Controller
                 "line"    => $th->getLine(),
                 "file"    => $th->getFile()
             ], 500);
+        }
+    }
+
+    /**
+     * Save user interview notes
+     */
+    public function saveUserNotes(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $interview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if (!$interview) {
+                return response()->json(['message' => 'Data interview user tidak ditemukan'], 404);
+            }
+
+            $interview->update([
+                'catatan_interview' => $request->catatan_interview_user
+            ]);
+
+            DB::commit();
+            return response()->json(['message' => 'Berhasil menyimpan catatan interview user!']);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
+        }
+    }
+
+    /**
+     * Approve or reject the candidate by User
+     */
+    public function submitUserDecision(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+
+            
+            $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
+            
+            $isApproved = $request->decision === 'approve' ? 1 : 2; 
+            
+            // Update interview status_result as well
+            $interview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($interview) {
+                $interview->update([
+                    'status_result' => $request->decision === 'approve' ? 'lulus' : 'gagal'
+                ]);
+            }
+            
+            $pr = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])->find($recruitment->personnel_request_id);
+            
+            if ($request->decision === 'approve') {
+                $tokenService = new GenerateToken();
+                $tokenKey = $pr->id . $recruitment->nama_lengkap. 'approval' . str_replace('.', '', microtime(true));
+                $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(DATE('Y-m-d')));
+                
+                $recruitment->update([
+                    'approved_interview_user' => $this->karyawan,
+                    'approved_interview_user_at' => Carbon::now(),
+                    'is_approve_interview_user' => $isApproved,
+                    'token_approval' => $token
+                ]);
+
+                // kirim email ke HRD (developer akan mengisi email asli nanti)
+                $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
+                $subject = "Kandidat Interview User - " . $recruitment->nama_lengkap;
+                
+                SendEmail::where('to', 'luthfi@intilab.com')
+                            ->where('subject', $subject)
+                            ->where('body', $emailContent)
+                            ->noReply()
+                            ->send();
+            } else {
+                $recruitment->update([
+                    'reject_interview_user_by' => $this->karyawan,
+                    'reject_interview_user_at' => Carbon::now(),
+                    'is_approve_interview_user' => $isApproved
+                ]);
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'Keputusan berhasil disimpan!']);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
         }
     }
 }
