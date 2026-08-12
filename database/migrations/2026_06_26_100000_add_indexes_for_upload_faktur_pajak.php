@@ -13,16 +13,20 @@ class AddIndexesForUploadFakturPajak extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable('invoice')) {
         Schema::table('invoice', function (Blueprint $table) {
             $table->index(['is_active', 'is_emailed', 'created_at'], 'idx_invoice_upload_faktur_filter');
             $table->index('file_faktur', 'idx_invoice_file_faktur');
             $table->index('no_order', 'idx_invoice_no_order');
             $table->index('no_invoice', 'idx_invoice_no_invoice');
         });
+        }
 
+        if (Schema::hasTable('order_header')) {
         Schema::table('order_header', function (Blueprint $table) {
             $table->index(['no_order', 'is_active'], 'idx_order_header_no_order_active');
         });
+        }
     }
 
     /**

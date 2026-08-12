@@ -13,6 +13,7 @@ class CreateMasterCustomerTiersTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('master_customer_tiers')) {
         Schema::create('master_customer_tiers', function (Blueprint $table) {
             $table->id();
             $table->string('name'); // Seed, Root, dll
@@ -21,6 +22,7 @@ class CreateMasterCustomerTiersTable extends Migration
             $table->integer('level')->index(); // urutan (1,2,3,...)
             $table->timestamps();
         });
+        }
     }
 
     /**

@@ -8,6 +8,7 @@ class CreateScaleTypesTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('scale_types')) {
         Schema::create('scale_types', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('code', 50)->unique();
@@ -21,6 +22,7 @@ class CreateScaleTypesTable extends Migration
 
             $table->index(['is_active', 'sort_order'], 'idx_scale_types_active_order');
         });
+        }
     }
 
     public function down()

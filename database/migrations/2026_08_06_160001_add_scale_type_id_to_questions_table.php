@@ -8,14 +8,16 @@ class AddScaleTypeIdToQuestionsTable extends Migration
 {
     public function up()
     {
-        Schema::table('questions', function (Blueprint $table) {
-            $table->unsignedBigInteger('scale_type_id')->nullable()->after('question_type');
-            $table->foreign('scale_type_id', 'questions_scale_type_id_fk')
-                ->references('id')
-                ->on('scale_types')
-                ->nullOnDelete();
-            $table->index('scale_type_id', 'idx_questions_scale_type_id');
-        });
+        if (Schema::hasTable('questions') && !Schema::hasColumn('questions', 'scale_type_id')) {
+            Schema::table('questions', function (Blueprint $table) {
+                $table->unsignedBigInteger('scale_type_id')->nullable()->after('question_type');
+                $table->foreign('scale_type_id', 'questions_scale_type_id_fk')
+                    ->references('id')
+                    ->on('scale_types')
+                    ->nullOnDelete();
+                $table->index('scale_type_id', 'idx_questions_scale_type_id');
+            });
+        }
     }
 
     public function down()

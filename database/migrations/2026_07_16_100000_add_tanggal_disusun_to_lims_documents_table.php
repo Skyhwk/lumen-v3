@@ -8,9 +8,11 @@ class AddTanggalDisusunToLimsDocumentsTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('lims_documents')) {
         Schema::table('lims_documents', function (Blueprint $table) {
             $table->date('tanggal_disusun')->nullable()->after('jabatan_penyusun');
         });
+        }
     }
 
     public function down()

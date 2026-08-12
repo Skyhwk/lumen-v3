@@ -13,6 +13,7 @@ class LogBas extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('log_bas')) {
         Schema::create('log_bas', function (Blueprint $table) {
             $table->id(); 
             $table->string('periode')->nullable();
@@ -39,6 +40,7 @@ class LogBas extends Migration
             $table->json('no_sampel')->nullable();
             $table->timestamps(); 
         });
+        }
     }
 
     /**

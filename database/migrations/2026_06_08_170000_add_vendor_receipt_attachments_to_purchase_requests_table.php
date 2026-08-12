@@ -8,9 +8,11 @@ class AddVendorReceiptAttachmentsToPurchaseRequestsTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('purchase_requests')) {
         Schema::table('purchase_requests', function (Blueprint $table) {
             $table->text('vendor_receipt_attachments')->nullable()->after('vendor_receipt_note');
         });
+        }
     }
 
     public function down()

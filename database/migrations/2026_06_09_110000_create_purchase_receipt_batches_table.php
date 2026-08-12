@@ -9,13 +9,16 @@ class CreatePurchaseReceiptBatchesTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('purchase_requests')) {
         Schema::table('purchase_requests', function (Blueprint $table) {
             $table->decimal('receipt_target_qty', 15, 2)->nullable()->after('handover_number');
             $table->decimal('vendor_received_total', 15, 2)->default(0)->after('receipt_target_qty');
             $table->decimal('user_handed_total', 15, 2)->default(0)->after('vendor_received_total');
             $table->decimal('user_confirmed_total', 15, 2)->default(0)->after('user_handed_total');
         });
+        }
 
+        if (!Schema::hasTable('purchase_receipt_batches')) {
         Schema::create('purchase_receipt_batches', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('purchase_request_id');
@@ -37,6 +40,7 @@ class CreatePurchaseReceiptBatchesTable extends Migration
 
             $table->index(['purchase_request_id', 'batch_no']);
         });
+        }
 
         $legacyRows = DB::table('purchase_requests')
             ->whereNotNull('vendor_receipt_qty')
