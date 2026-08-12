@@ -18,7 +18,10 @@ class BankSoalController extends Controller
 {
     public function index(Request $request)
     {
+        $scope = $this->scope($request);
         $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
+            ->where('question_scope', $scope)
+            ->when($scope === 'manager', fn ($query) => $query->where('owner_user_id', $this->managerUserId()))
             ->when($request->filled('question_category_id'), fn ($query) => $query->where('question_category_id', $request->question_category_id))
             ->when($request->filled('status'), fn ($query) => $query->where('status', 'like', '%' . $request->status . '%'))->orderBy('id','desc');
 
@@ -27,7 +30,7 @@ class BankSoalController extends Controller
 
     public function categories(Request $request)
     {
-        $query = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('status', '!=', 'retired')])
+        $query = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'hr')->where('status', '!=', 'retired')])
             ->where('is_active', true);
 
         return response()->json([
@@ -143,10 +146,17 @@ class BankSoalController extends Controller
     public function store(Request $request)
     {
         return DB::transaction(function () use ($request) {
+            $scope = $this->scope($request);
             $data = $this->validatedQuestion($request);
-            $category = QuestionCategory::where('id', $data['question_category_id'])->where('is_active', true)->firstOrFail();
+            $managerUserId = $scope === 'manager' ? $this->managerUserId() : null;
+            $category = $scope === 'hr'
+                ? QuestionCategory::where('id', $data['question_category_id'])->where('is_active', true)->firstOrFail()
+                : null;
             $question = Question::create(array_merge($data, [
-                'category' => $category->name,
+                'question_scope' => $scope,
+                'owner_user_id' => $managerUserId,
+                'question_category_id' => $category->id ?? null,
+                'category' => $category->name ?? null,
                 'question_image' => [],
                 'is_active' => 1,
                 'created_by' => $request->input('created_by', $this->karyawan ?: 'System'),
@@ -163,9 +173,19 @@ class BankSoalController extends Controller
     {
         return DB::transaction(function () use ($request) {
             $question = Question::with('options')->findOrFail($request->input('id'));
+            $scope = $this->scope($request);
+            $this->ensureQuestionScope($question, $scope, $request);
             $data = $this->validatedQuestion($request);
-            $category = QuestionCategory::where('id', $data['question_category_id'])->where('is_active', true)->firstOrFail();
-            $question->update(array_merge($data, ['category' => $category->name, 'updated_at' => Carbon::now()]));
+            $category = $scope === 'hr'
+                ? QuestionCategory::where('id', $data['question_category_id'])->where('is_active', true)->firstOrFail()
+                : null;
+            $question->update(array_merge($data, [
+                'question_scope' => $scope,
+                'owner_user_id' => $scope === 'manager' ? $this->managerUserId() : null,
+                'question_category_id' => $category->id ?? null,
+                'category' => $category->name ?? null,
+                'updated_at' => Carbon::now(),
+            ]));
             $this->syncQuestionImages($question, $request->input('question_image', []));
             $this->replaceOptions($question, $data['options']);
             return response()->json(['success' => true, 'message' => 'Bank soal berhasil diperbarui.', 'data' => $question->fresh()->load(['options', 'scaleType', 'categoryMaster'])]);
@@ -175,6 +195,7 @@ class BankSoalController extends Controller
     public function updateStatus(Request $request)
     {
         $question = Question::findOrFail($request->input('id'));
+        $this->ensureQuestionScope($question, $this->scope($request), $request);
         $question->update(['status' => $request->status]);
         return response()->json(['success' => true, 'message' => 'Status bank soal berhasil diperbarui.']);
     }
@@ -182,6 +203,7 @@ class BankSoalController extends Controller
     public function delete(Request $request)
     {
         $question = Question::with('options')->findOrFail($request->input('id'));
+        $this->ensureQuestionScope($question, $this->scope($request), $request);
         $imageService = new BankSoalImageService();
         foreach ($question->question_image as $image) $imageService->deleteImg($image);
         foreach ($question->options as $option) $imageService->deleteImg($option->option_image);
@@ -224,12 +246,45 @@ class BankSoalController extends Controller
         $data['status'] = $data['status'] ?? 'draft';
         $data['scoring_type'] = $data['scoring_type'] ?? ($data['question_type'] === 'text' ? 'manual_review' : 'correct_answer');
         $data['options'] = $data['options'] ?? [];
+        if ($this->scope($request) === 'manager') {
+            $data['question_category_id'] = null;
+        }
 
         if ($data['question_type'] === 'scale' && !ScaleType::where('id', $data['scale_type_id'])->where('is_active', true)->exists()) abort(422, 'Scale Type wajib dipilih dan harus aktif.');
         if ($data['question_type'] !== 'scale') $data['scale_type_id'] = null;
         if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) abort(422, 'Answer option wajib diisi.');
         if ($data['question_type'] === 'single_choice' && collect($data['options'])->filter(fn ($option) => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN))->count() > 1) abort(422, 'Single Choice hanya boleh memiliki satu jawaban benar.');
         return $data;
+    }
+
+    private function scope(Request $request)
+    {
+        $scope = strtolower(trim((string) $request->input('question_scope', 'hr')));
+        if (!in_array($scope, ['hr', 'manager'], true)) {
+            abort(422, 'Scope bank soal tidak valid.');
+        }
+
+        return $scope;
+    }
+
+    private function managerUserId()
+    {
+        if (!$this->user_id) {
+            abort(401, 'User tidak terautentikasi.');
+        }
+
+        return $this->user_id;
+    }
+
+    private function ensureQuestionScope(Question $question, $scope, Request $request)
+    {
+        if ($question->question_scope !== $scope) {
+            abort(403, 'Soal tidak dapat diakses dari bank soal ini.');
+        }
+
+        if ($scope === 'manager' && (string) $question->owner_user_id !== (string) $this->managerUserId()) {
+            abort(403, 'Soal tidak dimiliki oleh user yang sedang masuk.');
+        }
     }
 
     private function syncQuestionImages(Question $question, $images)

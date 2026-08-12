@@ -11,7 +11,7 @@ class Question extends Sector
     public $timestamps = false;
     
     protected $fillable = [
-        'question_category_id', 'question_type', 'scale_type_id', 'scoring_type',
+        'question_category_id', 'question_scope', 'owner_user_id', 'question_type', 'scale_type_id', 'scoring_type',
         'question_text', 'question_image', 'explanation', 'difficulty', 'status', 'is_active', 'created_by', 'created_at', 'updated_at',
     ];
 

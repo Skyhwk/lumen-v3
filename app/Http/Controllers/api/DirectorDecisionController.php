@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Services\RecruitmentStatusService;
+use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -88,6 +89,7 @@ class DirectorDecisionController extends Controller
             'posisi_dilamar' => $this->positionLabel($recruitment),
             'email' => $recruitment->email,
             'no_telepon' => $recruitment->no_telepon,
+            'picture_base64' => app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null),
         ];
     }
 
