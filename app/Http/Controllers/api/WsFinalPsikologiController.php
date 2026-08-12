@@ -233,7 +233,7 @@ class WsFinalPsikologiController extends Controller
 			}
 
 			return response()->json($data, 200);
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return response()->json([
 				'message' => $e->getMessage(),
@@ -277,7 +277,7 @@ class WsFinalPsikologiController extends Controller
 				'status' => 200,
 				'success' => true
 			], 200);
-		} catch (Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return response()->json([
 				'message' => $e->getMessage(),
