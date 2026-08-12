@@ -80,4 +80,22 @@ class PersonnelRequest extends Model
     {
         return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang');
     }
+
+    public function detailCabang()
+    {
+        return $this->belongsTo(MasterCabang::class, 'lokasi_penempatan_cabang', 'id');
+    }
+    public function detailDivisi()
+    {
+        return $this->belongsTo(MasterDivisi::class, 'divisi', 'id');
+    }
+    public function detailPosisi()
+    {
+        return $this->belongsTo(MasterJabatan::class, 'posisi', 'id');
+    }
+
+    public function newRecruitments()
+    {
+        return $this->hasMany(NewRecruitment::class, 'personnel_request_id', 'id');
+    }
 }
