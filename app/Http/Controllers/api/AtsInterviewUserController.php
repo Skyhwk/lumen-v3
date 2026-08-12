@@ -7,12 +7,14 @@ use App\Http\Controllers\Controller;
 use App\Models\NewRecruitment;
 use App\Models\RecruitmentInterview;
 use App\Models\SallaryOffer;
-use App\Services\GenerateMessageAtsEmail;
-use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
+use App\Services\GenerateMessageAtsEmail;
+use App\Services\GenerateMessageAtsWhatsapp;
+use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
 
 class AtsInterviewUserController extends Controller
 {
@@ -255,8 +257,8 @@ class AtsInterviewUserController extends Controller
      */
     public function updateSchedule(Request $request, $id = null)
     {
-        $id = $id ?? $request->header('id') ?? $request->input('id');
-        $applicant = NewRecruitment::find($id);
+        $candidateId = $id ?: $request->input('id') ?: $request->header('id');
+        $applicant = NewRecruitment::find($candidateId);
 
         if (!$applicant) {
             return response()->json([
@@ -267,7 +269,7 @@ class AtsInterviewUserController extends Controller
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
-        $interview = RecruitmentInterview::where('new_recruitment_id', $id)
+        $interview = RecruitmentInterview::where('new_recruitment_id', $candidateId)
             ->where('stage', 'user')
             ->where('is_active', 1)
             ->latest()
@@ -283,14 +285,10 @@ class AtsInterviewUserController extends Controller
 
         if ($request->filled('link_gmeet')) {
             $updateData['link_gmeet'] = trim(strip_tags($request->input('link_gmeet')));
-        } elseif ($request->has('link_gmeet')) {
-            $updateData['link_gmeet'] = null;
         }
 
         if ($request->filled('ruangan_interview')) {
             $updateData['ruangan_interview'] = trim(strip_tags($request->input('ruangan_interview')));
-        } elseif ($request->has('ruangan_interview')) {
-            $updateData['ruangan_interview'] = null;
         }
 
         if ($request->filled('tgl_interview')) {
@@ -299,14 +297,6 @@ class AtsInterviewUserController extends Controller
 
         if ($request->filled('catatan')) {
             $updateData['catatan'] = trim(strip_tags($request->input('catatan')));
-        } elseif ($request->has('catatan')) {
-            $updateData['catatan'] = null;
-        }
-
-        if ($request->filled('catatan_interview_user')) {
-            $updateData['catatan_interview_user'] = trim(strip_tags($request->input('catatan_interview_user')));
-        } elseif ($request->has('catatan_interview_user')) {
-            $updateData['catatan_interview_user'] = null;
         }
 
         if ($interview) {
@@ -314,7 +304,7 @@ class AtsInterviewUserController extends Controller
         } else {
             // Create user interview record for the first time
             $interview = RecruitmentInterview::create(array_merge([
-                'new_recruitment_id' => $id,
+                'new_recruitment_id' => $candidateId,
                 'stage'              => 'user',
                 'jenis_interview'    => $request->input('jenis_interview', 'online'),
                 'link_gmeet'         => $request->input('link_gmeet'),
@@ -329,6 +319,93 @@ class AtsInterviewUserController extends Controller
         // Update candidate status to interview_user if not set yet
         if ($applicant->status !== 'interview_user') {
             $applicant->update(['status' => 'interview_user']);
+        }
+
+        // Send Email & WhatsApp Notifications to Candidate and Requesting User
+        try {
+            $pr = $applicant->personalRequest;
+            $posisiName = $this->resolvePositionName($applicant);
+            $noRequest  = optional($pr)->no_request ?? '-';
+
+            $tglFormatted = '-';
+            if (!empty($interview->tgl_interview)) {
+                $tglFormatted = Carbon::parse($interview->tgl_interview)->format('d M Y, H:i') . ' WIB';
+            }
+
+            $jenisInterview = strtolower(strip_tags($interview->jenis_interview ?? 'online'));
+
+            // Extract & clean catatan strictly from recruitment_interviews.catatan column
+            $rawCatatan = $interview->catatan ?? null;
+            $catatanClean = !empty($rawCatatan) ? trim(strip_tags(html_entity_decode($rawCatatan))) : null;
+
+            // 1. Email & WhatsApp to Candidate
+            $candidateDataObj = (object) [
+                'nama_kandidat'     => $applicant->nama_lengkap,
+                'posisi'            => $posisiName,
+                'tgl_interview'     => $tglFormatted,
+                'jenis_interview'   => $jenisInterview,
+                'link_gmeet'        => $interview->link_gmeet,
+                'ruangan_interview' => $interview->ruangan_interview,
+                'catatan'           => $catatanClean,
+            ];
+
+            if (!empty($applicant->email)) {
+                $candidateEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewCandidate($candidateDataObj);
+                SendEmail::where('to', trim($applicant->email))
+                    ->where('subject', "Jadwal User Interview — PT Inti Surya Laboratorium")
+                    ->where('body', $candidateEmailBody)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+
+            $candidatePhone = $applicant->no_telepon ?: ($applicant->no_hp ?: ($applicant->no_whatsapp ?? null));
+            if (!empty($candidatePhone)) {
+                $waCandidateGen = new GenerateMessageAtsWhatsapp($candidateDataObj);
+                $waCandidateMsg = $waCandidateGen->UserInterviewScheduleCandidate();
+                $sendWaCandidate = new SendWhatsapp(trim($candidatePhone), $waCandidateMsg);
+                $sendWaCandidate->send();
+            }
+
+            // 2. Email only to Requesting User (PR Creator)
+            $prCreatedBy = $pr->created_by ?? null;
+            $prUser = null;
+            if ($prCreatedBy) {
+                $prUser = DB::table('master_karyawan')->where('nama_lengkap', $prCreatedBy)->first();
+                if (!$prUser) {
+                    $prUser = DB::table('master_karyawan')->where('id_karyawan', $prCreatedBy)->first();
+                }
+            }
+            if (!$prUser && $pr && !empty($pr->email)) {
+                $prUser = DB::table('master_karyawan')->where('email', $pr->email)->first();
+            }
+
+            $userEmail = $prUser->email ?? ($pr->email ?? null);
+            $userName  = $prUser->nama_lengkap ?? ($prCreatedBy ?: 'User');
+
+            $userDataObj = (object) [
+                'nama_user'         => $userName,
+                'nama_kandidat'     => $applicant->nama_lengkap,
+                'posisi'            => $posisiName,
+                'no_request'        => $noRequest,
+                'tgl_interview'     => $tglFormatted,
+                'jenis_interview'   => $jenisInterview,
+                'link_gmeet'        => $interview->link_gmeet,
+                'ruangan_interview' => $interview->ruangan_interview,
+                'catatan'           => $catatanClean,
+            ];
+
+            if (!empty($userEmail)) {
+                $userEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewUserNotif($userDataObj);
+                SendEmail::where('to', trim($userEmail))
+                    ->where('subject', "Pemberitahuan Sesi User Interview — {$applicant->nama_lengkap} ({$posisiName})")
+                    ->where('body', $userEmailBody)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed sending User Interview notifications: " . $e->getMessage());
         }
 
         return response()->json([
