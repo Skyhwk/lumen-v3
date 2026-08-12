@@ -394,34 +394,56 @@ class DataApplicantsController extends Controller
             : '-';
 
         // ── Education HTML ──
-        $pendidikanHtml = '';
+        $pendidikanList = [];
         if ($cp && $cp->educations && $cp->educations->count() > 0) {
             foreach ($cp->educations as $edu) {
-                $jenjang   = $edu->jenjang_pendidikan ?? '-';
-                $institusi = $edu->nama_institusi ?? '-';
-                $jurusan   = $edu->jurusan ? " — {$edu->jurusan}" : '';
-                $masuk     = $edu->tahun_masuk ?? '';
-                $lulus     = $edu->tahun_lulus ?? '';
-                $periode   = $masuk && $lulus ? "{$masuk} – {$lulus}" : ($lulus ?? '');
-                $ipk       = ($edu->nilai_ipk !== null && $edu->nilai_ipk > 0) ? " <span style='color:#64748b;'>(IPK: {$edu->nilai_ipk})</span>" : '';
+                $pendidikanList[] = [
+                    'jenjang'     => $edu->jenjang_pendidikan ?? '',
+                    'jurusan'     => $edu->jurusan ?? '',
+                    'institusi'   => $edu->nama_institusi ?? '',
+                    'kota'        => '',
+                    'tahun_masuk' => $edu->tahun_masuk ?? '',
+                    'tahun_lulus' => $edu->tahun_lulus ?? '',
+                    'ipk'         => ($edu->nilai_ipk !== null && $edu->nilai_ipk > 0) ? $edu->nilai_ipk : null,
+                ];
+            }
+        } else {
+            $rawPendidikan = $applicant->pendidikan;
+            if (is_string($rawPendidikan)) {
+                $rawPendidikan = json_decode($rawPendidikan, true);
+            }
+            if (is_array($rawPendidikan) && count($rawPendidikan) > 0) {
+                foreach ($rawPendidikan as $edu) {
+                    if (!is_array($edu)) continue;
+                    $pendidikanList[] = [
+                        'jenjang'     => $edu['jenjang'] ?? $edu['degree'] ?? '',
+                        'jurusan'     => $edu['jurusan'] ?? $edu['major'] ?? '',
+                        'institusi'   => $edu['institusi'] ?? $edu['school'] ?? '',
+                        'kota'        => $edu['kota'] ?? '',
+                        'tahun_masuk' => $edu['tahun_masuk'] ?? '',
+                        'tahun_lulus' => $edu['tahun_lulus'] ?? $edu['tahun'] ?? $edu['year'] ?? '',
+                        'ipk'         => $edu['gpa'] ?? $edu['ipk'] ?? null,
+                    ];
+                }
+            }
+        }
+
+        $pendidikanHtml = '';
+        if (count($pendidikanList) > 0) {
+            foreach ($pendidikanList as $edu) {
+                $jenjang   = $edu['jenjang'] ?: 'Education';
+                $institusi = $edu['institusi'] ?: '-';
+                $jurusan   = $edu['jurusan'] ? " — {$edu['jurusan']}" : '';
+                $kota      = $edu['kota'] ? " ({$edu['kota']})" : '';
+                $masuk     = $edu['tahun_masuk'] ?? '';
+                $lulus     = $edu['tahun_lulus'] ?? '';
+                $periode   = ($masuk && $lulus) ? "{$masuk} – {$lulus}" : ($lulus ?: ($masuk ?: '-'));
+                $ipkStr    = !empty($edu['ipk']) ? " <span style='color:#64748b;'>(IPK: {$edu['ipk']})</span>" : '';
+
                 $pendidikanHtml .= "
                 <div style='margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #e2e8f0;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang}{$jurusan}</strong>{$ipk}<br>
-                    <span style='font-size: 12px; color: #334155;'>{$institusi}</span><br>
+                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang}{$jurusan}</strong> - <span>{$institusi}{$kota}</span>{$ipkStr}<br>
                     <span style='font-size: 11px; color: #64748b;'>Periode: {$periode}</span>
-                </div>";
-            }
-        } elseif (is_array($applicant->pendidikan) && count($applicant->pendidikan) > 0) {
-            foreach ($applicant->pendidikan as $edu) {
-                $jenjang   = $edu['jenjang'] ?? $edu['degree'] ?? 'Education';
-                $institusi = $edu['institusi'] ?? $edu['school'] ?? '-';
-                $jurusan   = $edu['jurusan'] ?? $edu['major'] ?? '';
-                $tahun     = $edu['tahun'] ?? $edu['year'] ?? '';
-                $ipk       = isset($edu['gpa']) || isset($edu['ipk']) ? ' (GPA: ' . ($edu['gpa'] ?? $edu['ipk']) . ')' : '';
-                $pendidikanHtml .= "
-                <div style='margin-bottom: 10px;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang}" . ($jurusan ? " — {$jurusan}" : '') . " - {$institusi}</strong>{$ipk}<br>
-                    <span style='font-size: 11px; color: #64748b;'>Year: {$tahun}</span>
                 </div>";
             }
         } else {
@@ -429,33 +451,86 @@ class DataApplicantsController extends Controller
         }
 
         // ── Work Experience HTML ──
-        $pengalamanHtml = '';
+        $pengalamanList = [];
         if ($cp && $cp->workExperiences && $cp->workExperiences->count() > 0) {
             foreach ($cp->workExperiences as $exp) {
-                $pos        = $exp->posisi_terakhir ?? '-';
-                $perusahaan = $exp->nama_perusahaan ?? '-';
-                $mulai      = $exp->tanggal_mulai   ? Carbon::parse($exp->tanggal_mulai)->format('M Y')   : '';
-                $selesai    = $exp->tanggal_selesai ? Carbon::parse($exp->tanggal_selesai)->format('M Y') : 'Present';
-                $periode    = $mulai ? "{$mulai} – {$selesai}" : '-';
-                $alasan     = $exp->alasan_resign ?? '';
+                $pengalamanList[] = [
+                    'posisi_kerja'      => $exp->posisi_terakhir ?? '',
+                    'nama_perusahaan'   => $exp->nama_perusahaan ?? '',
+                    'lokasi_perusahaan' => '',
+                    'mulai_kerja'       => $exp->tanggal_mulai ? Carbon::parse($exp->tanggal_mulai)->format('M Y') : '',
+                    'akhir_kerja'       => $exp->tanggal_selesai ? Carbon::parse($exp->tanggal_selesai)->format('M Y') : 'Present',
+                    'alasan_keluar'     => $exp->alasan_resign ?? '',
+                    'deskripsi'         => '',
+                ];
+            }
+        } else {
+            $rawPengalaman = $applicant->pengalaman_kerja;
+            if (is_string($rawPengalaman)) {
+                $rawPengalaman = json_decode($rawPengalaman, true);
+            }
+            if (is_array($rawPengalaman) && count($rawPengalaman) > 0) {
+                foreach ($rawPengalaman as $exp) {
+                    if (!is_array($exp)) continue;
+
+                    $mulaiRaw = $exp['mulai_kerja'] ?? $exp['mulai'] ?? null;
+                    $akhirRaw = $exp['akhir_kerja'] ?? $exp['akhir'] ?? null;
+
+                    $mulaiFmt = '';
+                    if (!empty($mulaiRaw)) {
+                        try {
+                            $mulaiFmt = Carbon::parse($mulaiRaw)->format('M Y');
+                        } catch (\Exception $e) {
+                            $mulaiFmt = $mulaiRaw;
+                        }
+                    }
+
+                    $akhirFmt = '';
+                    if (!empty($akhirRaw)) {
+                        try {
+                            $akhirFmt = Carbon::parse($akhirRaw)->format('M Y');
+                        } catch (\Exception $e) {
+                            $akhirFmt = $akhirRaw;
+                        }
+                    } else {
+                        $akhirFmt = 'Present';
+                    }
+
+                    $pengalamanList[] = [
+                        'posisi_kerja'      => $exp['posisi_kerja'] ?? $exp['posisi'] ?? $exp['position'] ?? '',
+                        'nama_perusahaan'   => $exp['nama_perusahaan'] ?? $exp['perusahaan'] ?? $exp['company'] ?? '',
+                        'lokasi_perusahaan' => $exp['lokasi_perusahaan'] ?? $exp['lokasi'] ?? $exp['location'] ?? '',
+                        'mulai_kerja'       => $mulaiFmt,
+                        'akhir_kerja'       => $akhirFmt,
+                        'periode_manual'    => $exp['periode'] ?? $exp['period'] ?? '',
+                        'alasan_keluar'     => $exp['alasan_keluar'] ?? $exp['alasan_resign'] ?? $exp['alasan'] ?? '',
+                        'deskripsi'         => $exp['deskripsi'] ?? $exp['description'] ?? '',
+                    ];
+                }
+            }
+        }
+
+        $pengalamanHtml = '';
+        if (count($pengalamanList) > 0) {
+            foreach ($pengalamanList as $exp) {
+                $pos        = $exp['posisi_kerja'] ?: 'Position';
+                $perusahaan = $exp['nama_perusahaan'] ?: 'Company';
+                $lokasi     = $exp['lokasi_perusahaan'] ? " ({$exp['lokasi_perusahaan']})" : '';
+                
+                $mulai   = $exp['mulai_kerja'] ?? '';
+                $akhir   = $exp['akhir_kerja'] ?? '';
+                $periode = !empty($exp['periode_manual']) 
+                    ? $exp['periode_manual'] 
+                    : ($mulai ? "{$mulai} – {$akhir}" : ($akhir ?: '-'));
+
+                $alasan    = $exp['alasan_keluar'] ?? '';
+                $deskripsi = $exp['deskripsi'] ?? '';
 
                 $pengalamanHtml .= "
                 <div style='margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed #e2e8f0;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$pos}</strong> &nbsp;at&nbsp; <span style='color: #2563eb;'>{$perusahaan}</span><br>
+                    <strong style='font-size: 13px; color: #1e293b;'>{$pos}</strong> &nbsp;at&nbsp; <span style='color: #2563eb;'>{$perusahaan}{$lokasi}</span><br>
                     <span style='font-size: 11px; color: #64748b;'>Period: {$periode}</span>";
-                if ($alasan) $pengalamanHtml .= "<p style='font-size: 11px; color: #94a3b8; margin: 3px 0 0 0; font-style: italic;'>Reason leaving: {$alasan}</p>";
-                $pengalamanHtml .= "</div>";
-            }
-        } elseif (is_array($applicant->pengalaman_kerja) && count($applicant->pengalaman_kerja) > 0) {
-            foreach ($applicant->pengalaman_kerja as $exp) {
-                $pos        = $exp['posisi'] ?? $exp['position'] ?? 'Position';
-                $perusahaan = $exp['perusahaan'] ?? $exp['company'] ?? 'Company';
-                $periode    = $exp['periode'] ?? $exp['period'] ?? '';
-                $deskripsi  = $exp['deskripsi'] ?? $exp['description'] ?? '';
-                $pengalamanHtml .= "
-                <div style='margin-bottom: 12px;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$pos}</strong> at <span>{$perusahaan}</span><br>
-                    <span style='font-size: 11px; color: #64748b;'>Period: {$periode}</span>";
+                if ($alasan)    $pengalamanHtml .= "<p style='font-size: 11px; color: #94a3b8; margin: 3px 0 0 0; font-style: italic;'>Reason leaving: {$alasan}</p>";
                 if ($deskripsi) $pengalamanHtml .= "<p style='font-size: 11px; color: #334155; margin: 4px 0 0 0;'>{$deskripsi}</p>";
                 $pengalamanHtml .= "</div>";
             }
