@@ -470,188 +470,113 @@ class GenerateMessageAtsEmail
      * Email notifikasi hasil interview user ke HRD
      */
     static function bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $decision)
-    {
-        $profile = \Illuminate\Support\Facades\DB::table('candidate_profiles')
-            ->where('new_recruitment_id', $recruitment->id)->first();
+    {  
+        try {
+            //code...
+           
+            $profile = \Illuminate\Support\Facades\DB::table('candidate_profiles')
+                ->where('new_recruitment_id', $recruitment->id)->first();
+                
+            $educations = \Illuminate\Support\Facades\DB::table('candidate_educations')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('is_active', 1)->get();
+    
+            $photoDoc = \Illuminate\Support\Facades\DB::table('candidate_documents')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('is_active', 1)
+                ->where(function($q) {
+                    $q->where('jenis_dokumen', 'like', '%Foto%')
+                      ->orWhere('jenis_dokumen', 'like', '%Photo%');
+                })->first();
+    
+            $photoUrl = !empty($recruitment->picture) 
+            ? rtrim(env('APP_URL', 'https://apps.intilab.com/v3/public'), '/') . '/recruitment/' . ltrim($recruitment->picture, '/') 
+            : '';
             
-        $educations = \Illuminate\Support\Facades\DB::table('candidate_educations')
-            ->where('new_recruitment_id', $recruitment->id)
-            ->where('is_active', 1)->get();
-
-        $photoDoc = \Illuminate\Support\Facades\DB::table('candidate_documents')
-            ->where('new_recruitment_id', $recruitment->id)
-            ->where('is_active', 1)
-            ->where(function($q) {
-                $q->where('jenis_dokumen', 'like', '%Foto%')
-                  ->orWhere('jenis_dokumen', 'like', '%Photo%');
-            })->first();
-
-        $photoUrl = $photoDoc ? 'https://apps.intilab.com/v3/public/' . ltrim($photoDoc->path_file, '/') : '';
-
-        $formatDateId = function($dateStr) {
-            if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
-            try {
-                return \Carbon\Carbon::parse($dateStr)->locale('id')->isoFormat('D MMMM YYYY');
-            } catch (\Exception $e) {
-                return $dateStr;
+    
+            $formatDateId = function($dateStr) {
+                if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
+                try {
+                    return \Carbon\Carbon::parse($dateStr)->locale('id')->isoFormat('D MMMM YYYY');
+                } catch (\Exception $e) {
+                    return $dateStr;
+                }
+            };
+    
+            $dataCv = (object) array_merge(
+                $recruitment ? $recruitment->toArray() : [],
+                $profile ? (array)$profile : [],
+                [
+                    'nama_cabang' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
+                    'posisi_di_lamar' => $pr->posisi ?? '-',
+                    'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? '-',
+                    'status_nikah' => $profile->status_pernikahan ?? null,
+                    'bpjs_kesehatan' => $profile->no_bpjs_ks ?? null,
+                    'bpjs_ketenagakerjaan' => $profile->no_bpjs_tk ?? null,
+                    'alamat_domisili' => $profile->alamat_domisili ?? null,
+                    'alamat_ktp' => $profile->alamat_ktp ?? null,
+                    'no_hp' => $recruitment->no_telepon ?? null,
+                    'gender' => $recruitment->jenis_kelamin ?? null,
+                    'tgl_nikah' => $formatDateId($recruitment->tgl_nikah ?? null),
+                    'tanggal_lahir' => $formatDateId($recruitment->tanggal_lahir ?? null),
+                    'tgl_exp_identitas' => $formatDateId($recruitment->tgl_exp_identitas ?? null),
+                ]
+            );
+    
+            $pendidikan = $educations->map(function($ed) {
+                return [
+                    'jenjang' => $ed->jenjang_pendidikan,
+                    'institusi' => $ed->nama_institusi,
+                    'jurusan' => $ed->jurusan,
+                    'tahun_masuk' => $ed->tahun_masuk,
+                    'tahun_lulus' => $ed->tahun_lulus,
+                ];
+            })->toArray();
+    
+            $pengalamanKerja = is_string($recruitment->pengalaman_kerja) ? json_decode($recruitment->pengalaman_kerja, true) : ($recruitment->pengalaman_kerja ?? []);
+            if (is_array($pengalamanKerja)) {
+                foreach ($pengalamanKerja as &$pk) {
+                    if (isset($pk['mulai_kerja'])) $pk['mulai_kerja'] = $formatDateId($pk['mulai_kerja']);
+                    if (isset($pk['akhir_kerja'])) $pk['akhir_kerja'] = $formatDateId($pk['akhir_kerja']);
+                }
             }
-        };
-
-        $dataCv = (object) array_merge(
-            $recruitment ? $recruitment->toArray() : [],
-            $profile ? (array)$profile : [],
-            [
-                'nama_cabang' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
-                'posisi_di_lamar' => $pr->posisi ?? '-',
-                'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? '-',
-                'status_nikah' => $profile->status_pernikahan ?? null,
-                'bpjs_kesehatan' => $profile->no_bpjs_ks ?? null,
-                'bpjs_ketenagakerjaan' => $profile->no_bpjs_tk ?? null,
-                'alamat_domisili' => $profile->alamat_domisili ?? null,
-                'alamat_ktp' => $profile->alamat_ktp ?? null,
-                'no_hp' => $recruitment->no_telepon ?? null,
-                'gender' => $recruitment->jenis_kelamin ?? null,
-                'tgl_nikah' => $formatDateId($recruitment->tgl_nikah ?? null),
-                'tanggal_lahir' => $formatDateId($recruitment->tanggal_lahir ?? null),
-                'tgl_exp_identitas' => $formatDateId($recruitment->tgl_exp_identitas ?? null),
-            ]
-        );
-
-        $pendidikan = $educations->map(function($ed) {
-            return [
-                'jenjang' => $ed->jenjang_pendidikan,
-                'institusi' => $ed->nama_institusi,
-                'jurusan' => $ed->jurusan,
-                'tahun_masuk' => $ed->tahun_masuk,
-                'tahun_lulus' => $ed->tahun_lulus,
+            
+            $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
+    
+            $cv = [
+                'data' => $dataCv,
+                'photoUrl' => $photoUrl,
+                'pendidikan' => $pendidikan,
+                'pengalamanKerja' => $pengalamanKerja,
+                'skills' => $skill,
+                'skillBahasa' => [],
+                'minat' => [],
+                'organisasi' => [],
+                'referensi' => [],
+                'sertifikat' => [],
+                'kursus' => [],
+                'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
             ];
-        })->toArray();
-
-        $pengalamanKerja = is_string($recruitment->pengalaman_kerja) ? json_decode($recruitment->pengalaman_kerja, true) : ($recruitment->pengalaman_kerja ?? []);
-        if (is_array($pengalamanKerja)) {
-            foreach ($pengalamanKerja as &$pk) {
-                if (isset($pk['mulai_kerja'])) $pk['mulai_kerja'] = $formatDateId($pk['mulai_kerja']);
-                if (isset($pk['akhir_kerja'])) $pk['akhir_kerja'] = $formatDateId($pk['akhir_kerja']);
-            }
+           
+            $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'hrd')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
+    
+            return view('TemplateEmail.ats.hasil-interview-user', [
+                'recruitment' => $recruitment,
+                'pr' => $pr,
+                'interview' => $interview,
+                'hrdInterview' => $hrdInterview,
+                'decision' => $decision,
+                'cv' => $cv
+            ])->render();
+        } catch (\Throwable $th) {
+            throw $th;
         }
-        
-        $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
-
-        $cv = [
-            'data' => $dataCv,
-            'photoUrl' => $photoUrl,
-            'pendidikan' => $pendidikan,
-            'pengalamanKerja' => $pengalamanKerja,
-            'skills' => $skill,
-            'skillBahasa' => [],
-            'minat' => [],
-            'organisasi' => [],
-            'referensi' => [],
-            'sertifikat' => [],
-            'kursus' => [],
-            'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
-        ];
-       
-        $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
-            ->where('new_recruitment_id', $recruitment->id)
-            ->where('stage', 'hrd')
-            ->where('is_active', 1)
-            ->orderBy('id', 'desc')
-            ->first();
-
-        return view('TemplateEmail.ats.hasil-interview-user', [
-            'recruitment' => $recruitment,
-            'pr' => $pr,
-            'interview' => $interview,
-            'hrdInterview' => $hrdInterview,
-            'decision' => $decision,
-            'cv' => $cv
-        ])->render();
     }
 
-    /**
-     * Professional Email Template to Candidate for Completing Personal Profile after passing HRD Interview
-     * 
-     * @param object $data
-     * @return string
-     */
-    public static function bodyEmailCompleteProfileCandidate($data)
-    {
-        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
-        $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
-        $linkProfile = htmlspecialchars($data->link_complete_profile ?? ('https://apps.intilab.com/candidate-profile?id=' . ($data->id ?? '')));
 
-        return "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='utf-8'>
-            <title>Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium</title>
-        </head>
-        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
-            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
-                <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
-                    </td>
-                </tr>
-
-                <!-- Content -->
-                <tr>
-                    <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
-
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Sehubungan dengan proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami memohon kesediaan Bapak/Ibu untuk <strong>melengkapi data diri</strong> serta mengunggah berkas pendukung yang dibutuhkan melalui tautan di bawah ini:
-                        </p>
-
-                        <!-- Instruction Checklist Box -->
-                        <div style='background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 18px; margin: 20px 0;'>
-                            <div style='font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;'>
-                                Data Yang Perlu Dilengkapi:
-                            </div>
-                            <ul style='margin: 0; padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;'>
-                                <li><strong>Data Diri Lengkap:</strong> NIK, No. KK, NPWP, BPJS, Alamat KTP &amp; Domisili.</li>
-                                <li><strong>Riwayat Pendidikan:</strong> Jenjang, Nama Sekolah/Universitas, Jurusan, &amp; IPK.</li>
-                                <li><strong>Pengalaman Kerja:</strong> Perusahaan Terakhir, Posisi, Masa Kerja, &amp; Kontak Referensi.</li>
-                                <li><strong>Dokumen Lampiran:</strong> Softcopy KTP, KK, NPWP, Ijazah, Transkrip, &amp; Sertifikat.</li>
-                            </ul>
-                        </div>
-
-                        <!-- CTA Button -->
-                        <div style='text-align: center; margin: 28px 0;'>
-                            <a href='{$linkProfile}' target='_blank' style='background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 6px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);'>
-                                Lengkapi Data Diri
-                            </a>
-                        </div>
-                        <p style='font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px;'>
-                            Atau akses tautan berikut melalui peramban (browser) Anda:<br>
-                            <a href='{$linkProfile}' target='_blank' style='color: #2563eb; word-break: break-all;'>{$linkProfile}</a>
-                        </p>
-
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya. <strong style='color: #dc2626;'>Harap diperhatikan bahwa apabila data diri belum dilengkapi, maka proses rekrutmen tidak dapat dilanjutkan ke tahap selanjutnya.</strong>
-                        </p>
-
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
-                            Demikian informasi ini kami sampaikan. Apabila ada pertanyaan, silakan menghubungi tim HRD kami. Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.
-                        </p>
-                    </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment &amp; Talent Acquisition</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
-        ";
-    }
 }

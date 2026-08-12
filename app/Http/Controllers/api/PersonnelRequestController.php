@@ -317,10 +317,10 @@ class PersonnelRequestController extends Controller
                 'status' => 'interview_user'
             ]);
 
-            // Cari data HRD berdasarkan ID dari environment
-            $hrdIds = explode(',', env('HRD_ID', ''));
-            $hrds = MasterKaryawan::whereIn('id', $hrdIds)->get();
-
+            // Cari data HRD beserta atasannya berdasarkan ID dari environment
+            $hrdId = env('HRD_ID', '');
+            $hrds = !empty($hrdId) ? GetAtasan::where('id', $hrdId)->get() : collect([]);
+            
             if ($hrds->isNotEmpty()) {
                 // Siapkan data untuk template email
                 $dataArray = (object)[
@@ -397,6 +397,7 @@ class PersonnelRequestController extends Controller
      */
     public function submitUserDecision(Request $request)
     {
+        
         DB::beginTransaction();
         try {
 
@@ -419,7 +420,7 @@ class PersonnelRequestController extends Controller
             }
             
             $pr = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])->find($recruitment->personnel_request_id);
-            
+           
             if ($request->decision === 'approve') {
                 $tokenService = new GenerateToken();
                 $tokenKey = $pr->id . $recruitment->nama_lengkap. 'approval' . str_replace('.', '', microtime(true));
@@ -432,8 +433,11 @@ class PersonnelRequestController extends Controller
                     'token_approval' => $token
                 ]);
 
+                
+
                 // kirim email ke HRD (developer akan mengisi email asli nanti)
                 $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
+                 
                 $subject = "Kandidat Interview User - " . $recruitment->nama_lengkap;
                 
                 SendEmail::where('to', env('EMAIL_DIREKTUR_IBU'))
