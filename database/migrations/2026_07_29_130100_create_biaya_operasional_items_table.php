@@ -13,6 +13,7 @@ class CreateBiayaOperasionalItemsTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('biaya_operasional_items')) {
         Schema::create('biaya_operasional_items', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('bo_id');
@@ -28,6 +29,7 @@ class CreateBiayaOperasionalItemsTable extends Migration
             $table->foreign('bo_id')->references('id')->on('biaya_operasional')->onDelete('cascade');
             $table->index('bo_id');
         });
+        }
     }
 
     /**

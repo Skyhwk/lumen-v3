@@ -577,6 +577,4 @@ class GenerateMessageAtsEmail
             throw $th;
         }
     }
-
-
 }

@@ -72,12 +72,14 @@ class GenerateMessageAtsWhatsapp
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
 
-        $msg = "Halo *" . $namaLengkap . "*,\n\n";
-        $msg .= "Terima kasih atas minat Bapak/Ibu terhadap posisi *" . $posisi . "* dan telah meluangkan waktu untuk berpartisipasi dalam proses rekrutmen kami. Kami sangat menghargai kesempatan untuk mengenal lebih jauh mengenai latar belakang dan pengalaman Bapak/Ibu.\n\n";
-        $msg .= "Setelah melalui pertimbangan yang matang, dengan berat hati kami sampaikan bahwa kami memutuskan untuk melanjutkan proses dengan kandidat lain yang kualifikasinya dinilai paling sesuai dengan kebutuhan posisi ini. Keputusan ini bukanlah hal yang mudah, mengingat kami menerima banyak lamaran dengan kualitas yang baik, termasuk dari Bapak/Ibu.\n\n";
-        $msg .= "Kami sangat menghargai waktu dan usaha yang telah Bapak/Ibu berikan, serta mengucapkan doa terbaik untuk langkah karier Bapak/Ibu selanjutnya.\n\n";
-        $msg .= "Hormat kami,\n";
-        $msg .= "*Tim Recruitment HRD*\n";
+        $gender = strtolower((string) ($this->data->jenis_kelamin ?? $this->data->gender ?? ''));
+        $salutation = $gender === 'female' ? 'Saudari' : 'Saudara';
+        $msg = "Yth. " . $salutation . " *" . $namaLengkap . "*,\n\n";
+        $msg .= "Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi *" . $posisi . "*.\n\n";
+        $msg .= "Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.\n\n";
+        $msg .= "Kami menghargai minat Anda untuk bergabung bersama PT Inti Surya Laboratorium dan mendoakan yang terbaik untuk perjalanan karier Anda.\n\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -92,7 +94,7 @@ class GenerateMessageAtsWhatsapp
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
-        $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/new-recruitment/complete-profile/' . ($this->data->token ?? ''));
+        $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/new-recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
 
         $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
         $msg .= "Sehubungan dengan proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*, mohon berkenan untuk *melengkapi Data Diri & Berkas Pendukung* Anda melalui tautan resmi berikut:\n\n";
@@ -104,6 +106,25 @@ class GenerateMessageAtsWhatsapp
         $msg .= "4. *Dokumen Lampiran:* Softcopy KTP, KK, NPWP, Ijazah, Transkrip, & Sertifikat\n\n";
         $msg .= "Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.\n";
         $msg .= "*Harap diperhatikan bahwa apabila data diri belum dilengkapi, maka proses rekrutmen tidak dapat dilanjutkan ke tahap selanjutnya.*\n\n";
+        $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*PT Inti Surya Laboratorium*";
+
+        return $msg;
+    }
+
+    public function Assessment()
+    {
+        $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
+        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/new-recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
+
+        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg .= "Terima kasih telah mengirimkan lamaran untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
+        $msg .= "Lamaran Anda telah kami terima. Silakan lanjutkan ke tahap *Career Assessment* melalui tautan resmi berikut:\n\n";
+        $msg .= "*Mulai Career Assessment:*\n" . $assessmentUrl . "\n\n";
+        $msg .= "Link assessment berlaku selama *2 x 24 jam* sejak pendaftaran dibuat. Pastikan koneksi internet stabil dan kerjakan assessment hingga selesai.\n\n";
         $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
         $msg .= "*Tim Recruitment & Talent Acquisition*\n";

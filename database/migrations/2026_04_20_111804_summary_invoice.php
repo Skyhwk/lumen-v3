@@ -13,6 +13,7 @@ class SummaryInvoice extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('summary_invoice')) {
         Schema::create('summary_invoice', function (Blueprint $table) {
             $table->id();
         
@@ -82,6 +83,7 @@ class SummaryInvoice extends Migration
         
             $table->index('no_invoice');
         });
+        }
     }
 
     /**

@@ -64,7 +64,6 @@ class NewRecruitment extends Model
     {
         return $this->hasOne(SalaryOffer::class, 'new_recruitment_id')->orderBy('id', 'desc');
     }
-
     public function candidateProfile()
     {
         return $this->hasOne(CandidateProfile::class, 'new_recruitment_id');

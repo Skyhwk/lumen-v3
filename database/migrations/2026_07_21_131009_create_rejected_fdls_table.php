@@ -13,6 +13,7 @@ class CreateRejectedFdlsTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('rejected_fdls')) {
         Schema::create('rejected_fdls', function (Blueprint $table) {
             $table->id();
             $table->string('no_sampel')->nullable();
@@ -26,6 +27,7 @@ class CreateRejectedFdlsTable extends Migration
             $table->boolean('is_checked')->default(0);
             $table->timestamps();
         });
+        }
     }
 
     /**
