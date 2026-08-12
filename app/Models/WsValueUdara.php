@@ -119,6 +119,34 @@ class WsValueUdara extends Sector
         return null;
     }
 
+    public function getHasilAnalyst()
+    {
+        return $this->lingkungan 
+            ?? $this->microbiologi 
+            ?? $this->medanLm 
+            ?? $this->sinaruv 
+            ?? $this->iklim 
+            ?? $this->getaran 
+            ?? $this->kebisingan 
+            ?? $this->direct_lain 
+            ?? $this->partikulat 
+            ?? $this->pencahayaan 
+            ?? $this->swab 
+            ?? $this->subkontrak 
+            ?? $this->dustfall 
+            ?? $this->debuPersonal;
+    }
+
+    public function getParameterAttribute()
+    {
+        return optional($this->getDataAnalyst())->parameter;
+    }
+
+    public function getHasilParameterAttribute()
+    {
+        return optional($this->getHasilAnalyst())->parameter;
+    }
+
     public function detailLingkunganKerja() {
         return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
     }

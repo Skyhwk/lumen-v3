@@ -583,7 +583,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     ->pluck('method')->toArray();
 
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
-
                 return response()->json([
                     'status'             => true,
                     'data'               => $mainData,
@@ -608,7 +607,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
     private function formatEntry($val, $regulasiId, &$methodsUsed = [], $getHasilUji)
     {
-        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)->where('parameter', $val->parameter_emisi->nama_lab)->first();
+        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)->where('parameter', $val->parameter_emisi->nama_lab)->where('is_active', true)->first();
         $satuan     = $bakumutu ? $bakumutu->satuan : null;
         $akreditasi = $bakumutu && isset($bakumutu->akreditasi) ? $bakumutu->akreditasi : '';
 
