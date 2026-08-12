@@ -1714,7 +1714,7 @@ class BasOnlineController extends Controller
             }
 
             // ── Ambil data pendukung dari DB ──────────────────────────
-            $infoSampling = json_decode($request->info_sampling, true);
+            $infoSampling = is_array($request->info_sampling) ? $request->info_sampling : json_decode($request->info_sampling, true);
 
             $orderH = OrderHeader::where('no_document', $request->no_document)
                 ->where('no_order', $request->no_order)
