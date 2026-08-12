@@ -13,6 +13,7 @@ class CreateBiayaOperasionalTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('biaya_operasional')) {
         Schema::create('biaya_operasional', function (Blueprint $table) {
             $table->id();
             $table->string('bo_number', 50)->unique();
@@ -46,6 +47,7 @@ class CreateBiayaOperasionalTable extends Migration
             $table->index('travel_date');
             $table->index('created_by');
         });
+        }
     }
 
     /**

@@ -31,9 +31,11 @@ class AddUniqueIndexesToWsFinalApprovalTables extends Migration
             ->whereNull('parameter_regulasi')
             ->update(['parameter_regulasi' => '']);
 
+        if (Schema::hasTable('ws_final_approval_header')) {
         Schema::table('ws_final_approval_header', function (Blueprint $table) {
             $table->unique('no_sampel', 'ws_final_approval_header_no_sampel_unique');
         });
+        }
 
         Schema::table('ws_final_approval_detail', function (Blueprint $table) {
             $table->unique(

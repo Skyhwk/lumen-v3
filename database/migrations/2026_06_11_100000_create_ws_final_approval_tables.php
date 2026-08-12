@@ -8,6 +8,7 @@ class CreateWsFinalApprovalTables extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('ws_final_approval_header')) {
         Schema::create('ws_final_approval_header', function (Blueprint $table) {
             $table->id();
             $table->string('no_order', 50)->nullable();
@@ -25,7 +26,9 @@ class CreateWsFinalApprovalTables extends Migration
             $table->index('no_order');
             $table->index('no_sampel');
         });
+        }
 
+        if (!Schema::hasTable('ws_final_approval_detail')) {
         Schema::create('ws_final_approval_detail', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('ws_final_approval_header_id');
@@ -41,6 +44,7 @@ class CreateWsFinalApprovalTables extends Migration
             $table->index('ws_final_approval_header_id');
             $table->index('no_sampel');
         });
+        }
     }
 
     public function down()

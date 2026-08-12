@@ -8,9 +8,11 @@ class AddApprovalJabatanToPurchaseOrderDocumentsTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('purchase_order_documents')) {
         Schema::table('purchase_order_documents', function (Blueprint $table) {
             $table->string('approval_jabatan', 255)->nullable()->after('approval_name');
         });
+        }
     }
 
     public function down()

@@ -8,6 +8,7 @@ class CreateMailIndexTables extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('mail_folder_meta')) {
         Schema::create('mail_folder_meta', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('id_karyawan');
@@ -24,7 +25,9 @@ class CreateMailIndexTables extends Migration
             $table->unique(['id_karyawan', 'folder']);
             $table->index('id_karyawan');
         });
+        }
 
+        if (!Schema::hasTable('mail_list_index')) {
         Schema::create('mail_list_index', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('id_karyawan');
@@ -43,6 +46,7 @@ class CreateMailIndexTables extends Migration
             $table->index(['id_karyawan', 'folder', 'is_seen']);
             $table->index(['id_karyawan', 'folder', 'seq_num']);
         });
+        }
     }
 
     public function down()

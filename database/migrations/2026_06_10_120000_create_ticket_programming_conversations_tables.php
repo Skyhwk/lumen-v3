@@ -8,6 +8,7 @@ class CreateTicketProgrammingConversationsTables extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('ticket_programming_conversations')) {
         Schema::create('ticket_programming_conversations', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('ticket_programming_id');
@@ -19,7 +20,9 @@ class CreateTicketProgrammingConversationsTables extends Migration
             $table->dateTime('created_at');
             $table->index('ticket_programming_id');
         });
+        }
 
+        if (!Schema::hasTable('ticket_programming_conversation_reads')) {
         Schema::create('ticket_programming_conversation_reads', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('ticket_programming_id');
@@ -28,6 +31,7 @@ class CreateTicketProgrammingConversationsTables extends Migration
             $table->dateTime('updated_at')->nullable();
             $table->unique(['ticket_programming_id', 'user_id'], 'tp_conv_read_unique');
         });
+        }
     }
 
     public function down()
