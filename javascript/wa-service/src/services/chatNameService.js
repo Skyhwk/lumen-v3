@@ -259,24 +259,67 @@ function resolveDisplayName(row, contactName = null, { pushName = null } = {}) {
         return contact;
     }
 
-    if (chatName && !isWeakContactName(chatName)) {
-        return chatName;
-    }
-
     return formatChatFallbackName(jid, row?.phone || null);
 }
 
 const enrichLocks = new Map();
+const enrichMeta = new Map();
 
-async function maybeEnrichChatNames(userId, io = null) {
+const ENRICH_COOLDOWN_MS = 10 * 60 * 1000;
+const ENRICH_LOCK_MS = 5 * 60 * 1000;
+
+async function enrichSingleChatName(userId, jid, io = null) {
+    if (!jid) return false;
+
+    const session = getWaSession(userId);
+    const sock = session?.sock;
+
+    if (jid.endsWith('@g.us')) {
+        const subject = await fetchGroupSubject(sock, jid);
+        if (subject) {
+            return updateChatName(userId, jid, subject);
+        }
+    }
+
+    let resolved = await resolveChatName(userId, jid, { sock });
+    if (!resolved) {
+        resolved = await contactService.findBestContactName(userId, jid);
+    }
+    if (!resolved) {
+        resolved = await contactService.resolveLiveContactName(userId, jid, { persist: true });
+    }
+    if (!resolved) return false;
+
+    const changed = await updateChatName(userId, jid, resolved);
+    if (changed && io) {
+        const messageService = require('./messageService');
+        const { emitChatUpdate } = require('../baileys/qrHandler');
+        const chat = await messageService.getChatByJid(userId, jid);
+        if (chat) emitChatUpdate(io, userId, chat);
+    }
+    return changed;
+}
+
+async function maybeEnrichChatNames(userId, io = null, { force = false } = {}) {
     const key = String(userId);
+    const now = Date.now();
+    const meta = enrichMeta.get(key) || {};
+
+    if (!force && meta.lastAt && (now - meta.lastAt) < ENRICH_COOLDOWN_MS) {
+        return { updated: 0, skipped: true };
+    }
+
     if (enrichLocks.has(key)) {
         return enrichLocks.get(key);
     }
 
-    const promise = enrichAllChatNames(userId, io).finally(() => {
-        setTimeout(() => enrichLocks.delete(key), 45000);
+    const promise = enrichAllChatNames(userId, io).then((result) => {
+        enrichMeta.set(key, { lastAt: Date.now() });
+        return result;
+    }).finally(() => {
+        setTimeout(() => enrichLocks.delete(key), ENRICH_LOCK_MS);
     });
+
     enrichLocks.set(key, promise);
     return promise;
 }
@@ -290,6 +333,7 @@ module.exports = {
     enrichGroupNames,
     enrichPrivateChatNames,
     enrichAllChatNames,
+    enrichSingleChatName,
     maybeEnrichChatNames,
     resolveDisplayName,
 };

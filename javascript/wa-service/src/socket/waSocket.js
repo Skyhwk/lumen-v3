@@ -60,6 +60,17 @@ function initWaSocket(io) {
             socket.emit('wa:pong', { ts: Date.now() });
         });
 
+        socket.on('wa:typing', async (payload) => {
+            try {
+                const jid = payload?.jid;
+                if (!jid) return;
+                const presenceService = require('../services/presenceService');
+                await presenceService.sendTyping(userId, jid, payload?.typing !== false);
+            } catch (error) {
+                console.warn(`[waSocket] wa:typing failed for ${userId}:`, error.message);
+            }
+        });
+
         socket.on('disconnect', () => {
             socket.leave(`user:${userId}`);
         });

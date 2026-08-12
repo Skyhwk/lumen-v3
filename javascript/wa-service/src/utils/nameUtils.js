@@ -101,13 +101,59 @@ function formatChatFallbackName(jid, phone = null) {
     if (jid.endsWith('@g.us')) {
         return `Grup ${stripJid(jid).slice(-6)}`;
     }
-    if (phone && !isBareNumericId(phone)) {
-        return formatPhoneLabel(`${phone}@s.whatsapp.net`);
+
+    const phoneDigits = phone ? String(phone).replace(/\D/g, '') : null;
+    if (phoneDigits && phoneDigits.startsWith('62') && phoneDigits.length >= 10 && phoneDigits.length <= 15) {
+        return formatPhoneLabel(`${phoneDigits}@s.whatsapp.net`);
     }
+
     if (isLidJid(jid)) {
         return 'Kontak';
     }
-    return formatPhoneLabel(jid);
+
+    if (jid.endsWith('@s.whatsapp.net')) {
+        const bare = stripJid(jid);
+        if (bare.startsWith('62') && bare.length >= 10 && bare.length <= 15) {
+            return formatPhoneLabel(jid);
+        }
+    }
+
+    return 'Kontak';
+}
+
+function normalizePhoneDigits(raw) {
+    if (!raw) return null;
+    let digits = String(raw).replace(/\D/g, '');
+    if (!digits) return null;
+
+    if (digits.startsWith('0')) {
+        digits = `62${digits.slice(1)}`;
+    } else if (digits.startsWith('8') && digits.length >= 9 && digits.length <= 13) {
+        digits = `62${digits}`;
+    }
+
+    if (digits.length < 10 || digits.length > 15) {
+        return null;
+    }
+
+    return digits;
+}
+
+function phoneToJid(phone) {
+    const digits = normalizePhoneDigits(phone);
+    if (!digits) return null;
+    return `${digits}@s.whatsapp.net`;
+}
+
+function resolvePhoneOrJid({ phone, jid } = {}) {
+    const trimmedJid = jid?.trim();
+    if (trimmedJid) {
+        if (trimmedJid.includes('@')) return trimmedJid;
+        const fromBare = phoneToJid(trimmedJid);
+        if (fromBare) return fromBare;
+    }
+
+    return phoneToJid(phone);
 }
 
 module.exports = {
@@ -121,4 +167,7 @@ module.exports = {
     pickBetterName,
     formatPhoneLabel,
     formatChatFallbackName,
+    normalizePhoneDigits,
+    phoneToJid,
+    resolvePhoneOrJid,
 };

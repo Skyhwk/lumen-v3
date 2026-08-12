@@ -59,7 +59,8 @@ function createApiRouter(io) {
 
     router.get('/wa/chats', authMiddleware(), async (req, res) => {
         try {
-            await chatNameService.maybeEnrichChatNames(req.waUser.id, io);
+            const forceEnrich = req.query.enrich === '1';
+            await chatNameService.maybeEnrichChatNames(req.waUser.id, io, { force: forceEnrich });
             const { chats, statusChats } = await messageService.getChats(req.waUser.id);
             res.json({ ok: true, chats, statusChats });
         } catch (error) {
@@ -76,9 +77,31 @@ function createApiRouter(io) {
         }
     });
 
+    router.post('/wa/chats/start', authMiddleware(), async (req, res) => {
+        try {
+            const session = getSession(req.waUser.id);
+            if (!session?.sock) {
+                return res.status(400).json({ ok: false, message: 'WhatsApp belum terhubung' });
+            }
+
+            const { phone, jid } = req.body || {};
+            if (!phone && !jid) {
+                return res.status(400).json({ ok: false, message: 'Nomor atau kontak wajib diisi' });
+            }
+
+            const result = await messageService.startChat(req.waUser.id, { phone, jid }, io);
+            res.json({ ok: true, ...result });
+        } catch (error) {
+            const status = String(error.message || '').includes('tidak valid')
+                || String(error.message || '').includes('tidak terdaftar')
+                ? 400
+                : 500;
+            res.status(status).json({ ok: false, message: error.message });
+        }
+    });
+
     router.get('/wa/contacts', authMiddleware(), async (req, res) => {
         try {
-            await chatNameService.maybeEnrichChatNames(req.waUser.id, io);
             const contacts = await contactService.getContacts(req.waUser.id, {
                 search: req.query.search || '',
             });
@@ -169,13 +192,13 @@ function createApiRouter(io) {
                 return res.status(400).json({ ok: false, message: 'WhatsApp belum terhubung' });
             }
 
-            const synced = await contactService.syncContactsFromDevice(
+            const contactSyncCoordinator = require('../services/contactSyncCoordinator');
+            const synced = await contactSyncCoordinator.syncDeviceContactsForced(
                 req.waUser.id,
                 session.sock,
                 session.contactStore,
+                io,
             );
-            await chatNameService.syncContactNamesToChats(req.waUser.id);
-            await messageService.syncAndEmitChats(req.waUser.id, io);
 
             const contacts = await contactService.getContacts(req.waUser.id);
             emitContactsSync(io, req.waUser.id, contacts);
@@ -225,7 +248,7 @@ function createApiRouter(io) {
         try {
             const jid = decodeURIComponent(req.params.jid);
             await messageService.ensureChat(req.waUser.id, jid, {});
-            await chatNameService.enrichAllChatNames(req.waUser.id, io);
+            chatNameService.enrichSingleChatName(req.waUser.id, jid, io).catch(() => {});
             const chat = await messageService.getChatByJid(req.waUser.id, jid);
 
             await messageService.markRead(req.waUser.id, jid, io);
@@ -332,6 +355,25 @@ function createApiRouter(io) {
         }
     });
 
+    router.get('/wa/chats/:jid/messages/search', authMiddleware(), async (req, res) => {
+        try {
+            const jid = decodeURIComponent(req.params.jid);
+            const { q, limit, offset } = req.query;
+            const result = await messageService.searchMessages(
+                req.waUser.id,
+                jid,
+                q,
+                {
+                    limit: limit ? parseInt(limit, 10) : 30,
+                    offset: offset ? parseInt(offset, 10) : 0,
+                },
+            );
+            res.json({ ok: true, ...result });
+        } catch (error) {
+            res.status(500).json({ ok: false, message: error.message });
+        }
+    });
+
     router.post('/wa/chats/:jid/send', authMiddleware(), async (req, res) => {
         try {
             const jid = decodeURIComponent(req.params.jid);
@@ -357,6 +399,7 @@ function createApiRouter(io) {
             }
             const message = await messageService.sendMedia(req.waUser.id, jid, req.file, {
                 caption: req.body?.caption || '',
+                replyTo: req.body?.replyTo || null,
             });
             res.json({ ok: true, message });
         } catch (error) {

@@ -1,4 +1,4 @@
-# Roadmap: Fitur Chat WhatsApp (Baileys + WA Web UI)
+﻿# Roadmap: Fitur Chat WhatsApp (Baileys + WA Web UI)
 
 > **Versi:** 1.0  
 > **Tanggal:** 12 Agustus 2026  
@@ -422,7 +422,7 @@ Kontak tersinkron dari WhatsApp.
 
 #### Frontend
 
-- [x] `MessageInput.jsx` � Tombol attach, file picker, preview sebelum kirim + caption
+- [x] `MessageInput.jsx` � Tombol attach, file picker, preview sebelum kirim + caption
 - [ ] `MessageBubble.jsx` � Render image (thumbnail + lightbox), video player, file download link
 - [ ] `MediaPreview.jsx` � Modal preview gambar fullscreen
 - [x] Upload progress indicator
@@ -466,13 +466,13 @@ Kontak tersinkron dari WhatsApp.
 
 | Fitur | Prioritas | Status |
 |-------|-----------|--------|
-| Notifikasi desktop (Browser Notification API) | **High** | ? |
+| Notifikasi desktop (Browser Notification API) | **High** | ✅ |
 | Disconnect / logout device | **High** | ? |
 | Multi-tab handling (1 session, banyak tab) | **High** | ? |
-| Typing indicator | Medium | ? |
+| Typing indicator | Medium | ✅ |
 | Read receipts (centang biru) | Medium | ? |
-| Reply / quote message | Medium | ? |
-| Search pesan dalam chat | Medium | ? |
+| Reply / quote message | Medium | ✅ |
+| Search pesan dalam chat | Medium | ✅ |
 | Group chat support | Medium | ? |
 | Forward message | Low | ? |
 | Voice note play / send | Low | ? |
@@ -650,8 +650,8 @@ Fase 6  --? Polish & fitur lanjutan
 - [x] Logout device
 - [x] Multi-tab (socket singleton)
 - [x] Sync indicator
-- [ ] Notifikasi desktop
-- [ ] Typing indicator, reply, search pesan
+- [x] Notifikasi desktop
+- [x] Typing indicator, reply, search pesan
 
 ---
 
