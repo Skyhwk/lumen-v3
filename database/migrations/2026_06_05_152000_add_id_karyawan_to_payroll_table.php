@@ -13,9 +13,11 @@ class AddIdKaryawanToPayrollTable extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable('payroll')) {
         Schema::table('payroll', function (Blueprint $table) {
             $table->integer('id_karyawan')->nullable()->after('payroll_header_id');
         });
+        }
     }
 
     /**

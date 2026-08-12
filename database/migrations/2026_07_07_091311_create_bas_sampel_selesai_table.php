@@ -13,6 +13,7 @@ class CreateBasSampelSelesaiTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('bas_sampel_selesai')) {
         Schema::create('bas_sampel_selesai', function (Blueprint $table) {
             $table->id();
             $table->string('no_quotation')->nullable();
@@ -24,6 +25,7 @@ class CreateBasSampelSelesaiTable extends Migration
             $table->string('status')->nullable();
             $table->timestamps();
         });
+        }
     }
 
     /**

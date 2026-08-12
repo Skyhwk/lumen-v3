@@ -8,6 +8,7 @@ class ExtendLimsDocumentsWorkflow extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('lims_documents')) {
         Schema::table('lims_documents', function (Blueprint $table) {
             $table->string('no_dokumen', 100)->nullable()->after('menu_slug');
             $table->string('header_dokumen', 255)->nullable()->after('nama_dokumen');
@@ -19,6 +20,7 @@ class ExtendLimsDocumentsWorkflow extends Migration
             $table->string('status', 30)->default('in_review')->after('jabatan_penyusun');
             $table->date('tanggal_pengesahan')->nullable()->after('disahkan_pada');
         });
+        }
     }
 
     public function down()

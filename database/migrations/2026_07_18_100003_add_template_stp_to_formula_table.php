@@ -8,12 +8,14 @@ class AddTemplateStpToFormulaTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('formula')) {
         Schema::table('formula', function (Blueprint $table) {
             $table->unsignedInteger('id_template_stp')->nullable()->after('id_parameter');
             $table->string('template_stp', 150)->nullable()->after('parameter');
 
             $table->index(['id_parameter', 'id_template_stp', 'is_active'], 'formula_param_template_active_idx');
         });
+        }
     }
 
     public function down()

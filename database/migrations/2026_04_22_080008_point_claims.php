@@ -13,12 +13,14 @@ class PointClaims extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('point_claims')) {
         Schema::create('point_claims', function (Blueprint $table) {
             $table->id();
             $table->string('customer_id')->index();
             $table->bigInteger('total_points');
             $table->timestamps();
         });
+        }
     }
 
     /**

@@ -8,6 +8,7 @@ class CreateWaTables extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('wa_sessions')) {
         Schema::create('wa_sessions', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id_erp')->unique();
@@ -16,7 +17,9 @@ class CreateWaTables extends Migration
             $table->dateTime('last_connected_at')->nullable();
             $table->timestamps();
         });
+        }
 
+        if (!Schema::hasTable('wa_chats')) {
         Schema::create('wa_chats', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id_erp');
@@ -32,7 +35,9 @@ class CreateWaTables extends Migration
             $table->unique(['user_id_erp', 'jid'], 'wa_chats_user_jid_unique');
             $table->index(['user_id_erp', 'last_message_at'], 'wa_chats_user_last_msg_idx');
         });
+        }
 
+        if (!Schema::hasTable('wa_messages')) {
         Schema::create('wa_messages', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('chat_id');
@@ -61,7 +66,9 @@ class CreateWaTables extends Migration
             $table->index(['chat_id', 'timestamp'], 'wa_messages_chat_ts_idx');
             $table->foreign('chat_id')->references('id')->on('wa_chats')->onDelete('cascade');
         });
+        }
 
+        if (!Schema::hasTable('wa_contacts')) {
         Schema::create('wa_contacts', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id_erp');
@@ -74,6 +81,7 @@ class CreateWaTables extends Migration
 
             $table->unique(['user_id_erp', 'jid'], 'wa_contacts_user_jid_unique');
         });
+        }
     }
 
     public function down()

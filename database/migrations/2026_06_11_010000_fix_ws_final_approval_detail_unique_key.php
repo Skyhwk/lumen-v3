@@ -51,16 +51,20 @@ class FixWsFinalApprovalDetailUniqueKey extends Migration
         self::dropIndexIfExists('ws_final_approval_header', 'ws_final_approval_header_no_sampel_unique');
         self::dropIndexIfExists('ws_final_approval_detail', 'ws_final_approval_detail_parameter_unique');
 
+        if (Schema::hasTable('ws_final_approval_header')) {
         Schema::table('ws_final_approval_header', function (Blueprint $table) {
             $table->unique('no_sampel', 'ws_final_approval_header_no_sampel_unique');
         });
+        }
 
+        if (Schema::hasTable('ws_final_approval_detail')) {
         Schema::table('ws_final_approval_detail', function (Blueprint $table) {
             $table->unique(
                 ['ws_final_approval_header_id', 'parameter_lab'],
                 'ws_final_approval_detail_parameter_unique'
             );
         });
+        }
     }
 
     public function down()

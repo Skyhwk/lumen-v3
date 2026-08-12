@@ -8,6 +8,7 @@ class CreateWaChatsDeletedTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('wa_chats_deleted')) {
         Schema::create('wa_chats_deleted', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('original_chat_id')->nullable();
@@ -29,6 +30,7 @@ class CreateWaChatsDeletedTable extends Migration
             $table->index(['user_id_erp', 'jid'], 'wa_chats_deleted_user_jid_idx');
             $table->index('deleted_at', 'wa_chats_deleted_at_idx');
         });
+        }
     }
 
     public function down()

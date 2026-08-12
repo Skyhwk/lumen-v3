@@ -8,6 +8,7 @@ class CreateCiscoPhoneConfigsTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('cisco_phone_configs')) {
         Schema::create('cisco_phone_configs', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('mac_address', 12)->unique();
@@ -29,6 +30,7 @@ class CreateCiscoPhoneConfigsTable extends Migration
 
             $table->index(['is_active', 'extension'], 'idx_cisco_phone_active_ext');
         });
+        }
     }
 
     public function down()

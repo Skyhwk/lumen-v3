@@ -11,12 +11,14 @@ class FixWsFinalApprovalDetailCompositeUniqueKey extends Migration
     {
         self::dropIndexIfExists('ws_final_approval_detail', 'ws_final_approval_detail_parameter_unique');
 
+        if (Schema::hasTable('ws_final_approval_detail')) {
         Schema::table('ws_final_approval_detail', function (Blueprint $table) {
             $table->unique(
                 ['ws_final_approval_header_id', 'no_sampel', 'parameter_lab'],
                 'ws_final_approval_detail_parameter_unique'
             );
         });
+        }
     }
 
     public function down()

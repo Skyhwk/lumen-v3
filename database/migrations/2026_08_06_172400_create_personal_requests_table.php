@@ -13,7 +13,8 @@ class CreatePersonalRequestsTable extends Migration
      */
     public function up()
 {
-    Schema::create('personnel_requests', function (Blueprint $table) {
+    if (!Schema::hasTable('personnel_requests')) {
+        Schema::create('personnel_requests', function (Blueprint $table) {
         $table->id();
         $table->string('no_request')->unique();
         $table->enum('request_type', ['replacement', 'new_headcount']);
@@ -73,6 +74,7 @@ class CreatePersonalRequestsTable extends Migration
         // Otomatis membuat kolom created_at dan updated_at
         $table->timestamps();
     });
+        }
 }
 
     /**

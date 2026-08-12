@@ -8,6 +8,7 @@ class CreateFormulaTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('formula')) {
         Schema::create('formula', function (Blueprint $table) {
             $table->id();
             $table->unsignedInteger('id_kategori')->index();
@@ -28,6 +29,7 @@ class CreateFormulaTable extends Migration
             $table->index(['id_kategori', 'status']);
             $table->index(['id_parameter', 'status', 'is_active']);
         });
+        }
     }
 
     public function down()

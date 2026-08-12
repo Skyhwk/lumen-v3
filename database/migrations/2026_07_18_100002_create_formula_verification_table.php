@@ -8,6 +8,7 @@ class CreateFormulaVerificationTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('formula_verification')) {
         Schema::create('formula_verification', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('formula_id')->index();
@@ -34,6 +35,7 @@ class CreateFormulaVerificationTable extends Migration
             $table->index(['formula_id', 'tanggal_verifikasi']);
             $table->index(['no_sampel', 'is_active']);
         });
+        }
     }
 
     public function down()
