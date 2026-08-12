@@ -125,8 +125,9 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailRejectKandidat($data)
     {
-        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
-        $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? $data->nama_kandidat ?? 'Kandidat');
+        $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? $data->posisi ?? 'Posisi Dilamar');
+        $namaHrd     = htmlspecialchars($data->hrd_name ?? $data->rejected_by ?? $data->created_by ?? 'Tim Recruitment');
 
         return "
         <!DOCTYPE html>
@@ -148,31 +149,27 @@ class GenerateMessageAtsEmail
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Halo <strong>{$namaLengkap}</strong>,</p>
                         
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Terima kasih atas partisipasi Bapak/Ibu dalam proses seleksi untuk posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>.
+                            Terima kasih atas minat Bapak/Ibu terhadap posisi <strong>{$posisi}</strong> dan telah meluangkan waktu untuk berpartisipasi dalam proses rekrutmen kami. Kami sangat menghargai kesempatan untuk mengenal lebih jauh mengenai latar belakang dan pengalaman Bapak/Ibu.
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Setelah melalui proses evaluasi, kami memutuskan untuk melanjutkan proses dengan kandidat lain yang lebih sesuai dengan kebutuhan posisi tersebut. Dengan demikian, proses lamaran Bapak/Ibu belum dapat kami lanjutkan ke tahap berikutnya.
-                        </p>
-
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Data lamaran Bapak/Ibu akan tetap tersimpan dalam sistem kami dan dapat dipertimbangkan untuk kesempatan yang sesuai di kemudian hari.
+                            Setelah melalui pertimbangan yang matang, dengan berat hati kami sampaikan bahwa kami memutuskan untuk melanjutkan proses dengan kandidat lain yang kualifikasinya dinilai paling sesuai dengan kebutuhan posisi ini. Keputusan ini bukanlah hal yang mudah, mengingat kami menerima banyak lamaran dengan kualitas yang baik, termasuk dari Bapak/Ibu.
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
-                            Demikian informasi ini kami sampaikan. Terima kasih atas waktu dan partisipasi Bapak/Ibu selama proses seleksi.
+                            Kami sangat menghargai waktu dan usaha yang telah Bapak/Ibu berikan, serta mengucapkan doa terbaik untuk langkah karier Bapak/Ibu selanjutnya.
                         </p>
                     </td>
                 </tr>
 
                 <!-- Footer -->
                 <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment & Talent Acquisition</span><br>
+                    <td bgcolor='#f8fafc' style='padding: 20px 32px; border-top: 1px solid #e2e8f0; font-size: 13px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Hormat kami,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment HRD</span><br>
                         PT Inti Surya Laboratorium
                     </td>
                 </tr>
