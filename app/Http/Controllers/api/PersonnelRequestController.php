@@ -430,7 +430,8 @@ class PersonnelRequestController extends Controller
                     'approved_interview_user' => $this->karyawan,
                     'approved_interview_user_at' => Carbon::now(),
                     'is_approve_interview_user' => $isApproved,
-                    'token_approval' => $token
+                    'token_approval' => $token,
+                    'status' => 'management_decision'
                 ]);
 
                 
