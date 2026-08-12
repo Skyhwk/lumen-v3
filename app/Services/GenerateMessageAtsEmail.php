@@ -568,7 +568,6 @@ class GenerateMessageAtsEmail
             'cv' => $cv
         ])->render();
     }
-
     /**
      * Professional Email Template to Candidate for Completing Personal Profile after passing HRD Interview
      * 
