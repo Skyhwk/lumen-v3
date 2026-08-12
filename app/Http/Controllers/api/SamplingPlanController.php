@@ -24,6 +24,7 @@ use App\Services\GetAtasan;
 use App\Services\JadwalServices;
 use App\Services\Notification;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
+use App\Services\SamplerTrackingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -766,6 +767,27 @@ class SamplingPlanController extends Controller
             }
 
             if ($jadwal) {
+                try {
+                    $trackingDates = array_unique(array_filter([
+                        $request->tanggal_lama,
+                        $request->tanggal,
+                    ]));
+
+                    foreach ($trackingDates as $trackingDate) {
+                        app(SamplerTrackingService::class)->sync(
+                            Carbon::parse($trackingDate)->toDateString()
+                        );
+                    }
+                } catch (\Throwable $trackingSyncException) {
+                    Log::warning('Gagal sync activity sampler setelah update jadwal. ' . $trackingSyncException->getMessage(), [
+                        'no_quotation' => $request->no_quotation,
+                        'tanggal_lama' => $request->tanggal_lama,
+                        'tanggal_baru' => $request->tanggal,
+                        'line' => $trackingSyncException->getLine(),
+                        'file' => $trackingSyncException->getFile(),
+                    ]);
+                }
+
                 return response()->json([
                     'message' => 'Berhasil melakukan update Jadwal.!',
                     'status'  => '200',

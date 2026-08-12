@@ -465,7 +465,7 @@ class LaporanTrackingOrderController extends Controller
                     if (!$collection || $collection->isEmpty()) return null;
 
                     // 1. Match langsung berdasar string parameter
-                    $exact = $collection->firstWhere('parameter', $paramLab);
+                    $exact = $collection->firstWhere('hasil_parameter', $paramLab);
                     if ($exact) return $exact;
 
                     // 2. Pencocokan dinamis berbasis Tabel Master Parameter DB (id_parameter & nama_lab)
@@ -480,14 +480,14 @@ class LaporanTrackingOrderController extends Controller
 
                         foreach ($collection as $ws) {
                             // cocokin dari ID Parameter pada relasi analyst header
-                            $child = $ws->getDataAnalyst();
+                            $child = $ws->getHasilAnalyst();
                             if ($child && isset($child->id_parameter) && (int)$child->id_parameter === (int)$paramId) {
                                 return $ws;
                             }
 
                             // cocokkan via nama_lab pada Master Parameter (misal: "Hidrokarbon Non Metana (NMHC)" -> nama_lab: "HCNM (3 Jam)")
-                            if ($namaLab && $ws->parameter) {
-                                $cleanWs = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $ws->parameter));
+                            if ($namaLab && $ws->hasil_parameter) {
+                                $cleanWs = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $ws->hasil_parameter));
                                 $cleanNamaLab = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $namaLab));
                                 if ($cleanWs === $cleanNamaLab || strpos($cleanWs, $cleanNamaLab) === 0 || strpos($cleanNamaLab, $cleanWs) === 0) {
                                     return $ws;
@@ -502,7 +502,7 @@ class LaporanTrackingOrderController extends Controller
                     $codeInParen = $matches[1] ?? null;
 
                     foreach ($collection as $ws) {
-                        $wsParam = $ws->parameter;
+                        $wsParam = $ws->hasil_parameter;
                         if (!$wsParam) continue;
 
                         $cleanWs = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $wsParam));
@@ -537,7 +537,7 @@ class LaporanTrackingOrderController extends Controller
                     }
 
                     $targetWs = $findTargetWs($wsCollection, $item->parameter_lab);
-                    $child = $targetWs ? $targetWs->getDataAnalyst() : null;
+                    $child = $targetWs ? $targetWs->getHasilAnalyst() : null;
 
                     // ambil created_at dan created_by dari data analisa
                     if ($child) {

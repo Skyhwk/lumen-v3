@@ -22,7 +22,7 @@ class NewRecruitment extends Model
 
     public function personalRequest()
     {
-        return $this->belongsTo(PersonalRequest::class, 'personnel_request_id');
+        return $this->belongsTo(PersonnelRequest::class, 'personnel_request_id');
     }
 
     public function interviews()
@@ -58,5 +58,15 @@ class NewRecruitment extends Model
         return $this->hasMany(RecruitmentInterview::class, 'new_recruitment_id')
             ->where('stage', 'user')
             ->orderBy('id', 'desc');
+    }
+
+    public function salaryOffer()
+    {
+        return $this->hasOne(SalaryOffer::class, 'new_recruitment_id')->orderBy('id', 'desc');
+    }
+
+    public function candidateProfile()
+    {
+        return $this->hasOne(CandidateProfile::class, 'new_recruitment_id');
     }
 }

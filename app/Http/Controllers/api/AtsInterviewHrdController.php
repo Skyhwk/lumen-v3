@@ -9,6 +9,7 @@ use App\Models\RecruitmentInterview;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
+use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use Carbon\Carbon;
@@ -102,8 +103,7 @@ class AtsInterviewHrdController extends Controller
                 return $row->hrdInterview;
             })
             ->addColumn('usia', function ($row) {
-                $ttl = $this->getTtlString($row);
-                $birthYear = $this->extractBirthYear($ttl);
+                $birthYear = $this->extractBirthYear($row);
                 if ($birthYear) {
                     $age = Carbon::now()->year - $birthYear;
                     return $age . ' Yrs';
@@ -327,8 +327,11 @@ class AtsInterviewHrdController extends Controller
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
-        // Record HRD approval audit trail — status is NOT changed here
+        // Record HRD approval audit trail & update status to 'profile_completion' with RecruitmentStatusService meta_history tracking
+        (new RecruitmentStatusService())->update($applicant->id, 'profile_completion', Carbon::now());
+
         $applicant->update([
+            'status'                    => 'profile_completion',
             'is_approved_interview_hrd' => 1,
             'approved_interview_hrd_by' => $user,
             'approved_interview_hrd_at' => Carbon::now(),
@@ -369,7 +372,7 @@ class AtsInterviewHrdController extends Controller
                     ]);
                 }
 
-                // 2. Email notification
+                // 2. Email notification to PR creator
                 $creatorEmail = ($mk && !empty($mk->email)) ? $mk->email : null;
                 if ($creatorEmail) {
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdApprovalNotifUser((object)[
@@ -389,8 +392,42 @@ class AtsInterviewHrdController extends Controller
                         ->send();
                 }
             }
+
+            // 3. Email & WhatsApp notification to Candidate to complete data profile
+            $token = $applicant->token ?? '';
+            $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
+            $profileUrl = "{$baseUrl}/new-recruitment/complete-profile/{$token}";
+
+            $candidateDataObj = (object) [
+                'id'                    => $applicant->id,
+                'nama_lengkap'          => $applicant->nama_lengkap,
+                'posisi_di_lamar'       => $posisiName,
+                'nama_jabatan'          => $posisiName,
+                'link_complete_profile' => $profileUrl,
+            ];
+
+            // 3a. Email to candidate
+            if (!empty($applicant->email)) {
+                $bodyCandidateEmail = GenerateMessageAtsEmail::bodyEmailCompleteProfileCandidate($candidateDataObj);
+                SendEmail::where('to', $applicant->email)
+                    ->where('subject', "Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium")
+                    ->where('body', $bodyCandidateEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+
+            // 3b. WhatsApp to candidate
+            $candidatePhone = $applicant->no_telepon ?? $applicant->no_hp ?? $applicant->no_whatsapp ?? null;
+            if (!empty($candidatePhone)) {
+                $genWa = new GenerateMessageAtsWhatsapp($candidateDataObj);
+                $waMessage = $genWa->CompleteProfileCandidate();
+
+                $sendWa = new SendWhatsapp($candidatePhone, $waMessage);
+                $sendWa->send();
+            }
         } catch (\Exception $e) {
-            // Silence — notification/email failure must not block the approval response
+            // Silence — notification/email/wa failure must not block the approval response
         }
 
         return response()->json([
@@ -417,8 +454,11 @@ class AtsInterviewHrdController extends Controller
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
         $reason = $request->input('alasan_reject') ?? 'Did not pass HRD Interview evaluation';
 
+        // Update candidate status to 'rejected' with RecruitmentStatusService meta_history tracking
+        (new RecruitmentStatusService())->update($applicant->id, 'rejected', Carbon::now());
+
         $applicant->update([
-            'status' => 'rejected',
+            // 'status' => 'interview_hrd',
             'rejected_by' => $user,
             'rejected_at' => Carbon::now(),
             'alasan_reject' => $reason,
@@ -490,12 +530,43 @@ class AtsInterviewHrdController extends Controller
     /**
      * Helper to extract birth year
      */
-    private function extractBirthYear($ttl)
+    private function extractBirthYear($row)
     {
+        $ttl = is_string($row) ? $row : $this->getTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {}
+        }
+
         if (!$ttl) return null;
+
         if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
             return (int) $matches[1];
         }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
         return null;
     }
 

@@ -9,8 +9,10 @@ use App\Models\RecruitmentInterview;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
+use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Models\CandidateProfile;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
@@ -63,8 +65,7 @@ class DataApplicantsController extends Controller
                 $q->where('status', 'like', "%{$keyword}%");
             })
             ->addColumn('usia', function ($row) {
-                $ttl = $this->getTtlString($row);
-                $birthYear = $this->extractBirthYear($ttl);
+                $birthYear = $this->extractBirthYear($row);
                 if ($birthYear) {
                     $age = Carbon::now()->year - $birthYear;
                     return $age . ' Yrs';
@@ -149,7 +150,9 @@ class DataApplicantsController extends Controller
         $linkGmeet = $request->input('link_gmeet');
         $ruanganInterview = $request->input('ruangan_interview');
 
-        // 1. Update applicant status to 'interview_hrd'
+        // 1. Update applicant status to 'interview_hrd' with RecruitmentStatusService meta_history tracking
+        (new RecruitmentStatusService())->update($applicant->id, 'interview_hrd', Carbon::now());
+
         $applicant->update([
             'status' => 'interview_hrd',
             'approved_by' => $user,
@@ -216,7 +219,7 @@ class DataApplicantsController extends Controller
                     ->send();
             }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            $phone = $applicant->no_telepon ?: ($applicant->no_whatsapp ?? ($applicant->no_hp ?? null));
             if (!empty($phone)) {
                 $waObj = new GenerateMessageAtsWhatsapp($dataArray);
                 $waMessage = $waObj->PassedCandidateSelection();
@@ -225,7 +228,7 @@ class DataApplicantsController extends Controller
                 $sendWa->send();
             }
         } catch (\Exception $e) {
-            // Silence exception
+            \Illuminate\Support\Facades\Log::error('ATS HRD Interview Notification Error: ' . $e->getMessage());
         }
 
         return response()->json([
@@ -252,8 +255,11 @@ class DataApplicantsController extends Controller
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
         $reason = $request->input('alasan_reject') ?? 'Did not pass initial qualification evaluation';
 
+        // Update applicant status to 'rejected' with RecruitmentStatusService meta_history tracking
+        (new RecruitmentStatusService())->update($applicant->id, 'rejected', Carbon::now());
+
         $applicant->update([
-            'status' => 'rejected',
+            // 'status' => 'screening',
             'rejected_by' => $user,
             'rejected_at' => Carbon::now(),
             'alasan_reject' => $reason,
@@ -299,45 +305,122 @@ class DataApplicantsController extends Controller
     }
 
     /**
-     * Generate ATS CV PDF via MPDF
+     * Generate ATS CV PDF via MPDF — enriched with candidate_profile data
      */
     public function generateCvPdf(Request $request, $id)
     {
-        $applicant = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])->find($id);
+        $applicant = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'hrdInterview',
+            'userInterview',
+            'candidateProfile.educations',
+            'candidateProfile.workExperiences',
+        ])->find($id);
 
         if (!$applicant) {
             return response()->json(['message' => 'Applicant data not found'], 404);
         }
 
-        $posisiName = $this->resolvePositionName($applicant);
-        
-        $ttl = $this->getTtlString($applicant);
-        $birthYear = $this->extractBirthYear($ttl);
-        
-        $birthDate = $applicant->tanggal_lahir ?? $ttl;
-        $shioElemen = ShioElemenHelper::resolve($birthDate, $applicant->shio, $applicant->elemen);
-        $shio = $shioElemen['shio'] ?? '-';
-        $elemen = $shioElemen['elemen'] ?? '-';
+        $cp = $applicant->candidateProfile ?? null;
 
+        // ── Core identity — prefer candidate_profile, fallback to new_recruitment ──
+        $namaLengkap   = ($cp && $cp->nama_lengkap)  ? $cp->nama_lengkap   : ($applicant->nama_lengkap ?? '-');
+        $namaPanggilan = ($cp && $cp->nama_panggilan) ? $cp->nama_panggilan : '-';
+        $email         = ($cp && $cp->email)          ? $cp->email          : ($applicant->email ?? '-');
+        $noTelepon     = ($cp && $cp->no_telepon)     ? $cp->no_telepon     : ($applicant->no_telepon ?? '-');
+        $noWhatsapp    = ($cp && $cp->no_whatsapp)    ? $cp->no_whatsapp    : '-';
+        $nikKtp        = ($cp && $cp->nik_ktp)        ? $cp->nik_ktp        : '-';
+        $noKK          = ($cp && $cp->no_kk)          ? $cp->no_kk          : '-';
+        $noNpwp        = ($cp && $cp->no_npwp)        ? $cp->no_npwp        : '-';
+        $noBpjsKs      = ($cp && $cp->no_bpjs_ks)     ? $cp->no_bpjs_ks    : '-';
+        $noBpjsTk      = ($cp && $cp->no_bpjs_tk)     ? $cp->no_bpjs_tk    : '-';
+        $jenisKelamin  = ($cp && $cp->jenis_kelamin)  ? $cp->jenis_kelamin  : '-';
+        $agama         = ($cp && $cp->agama)          ? $cp->agama          : '-';
+        $statusNikah   = ($cp && $cp->status_pernikahan) ? $cp->status_pernikahan : '-';
+        $golDarah      = ($cp && $cp->golongan_darah) ? $cp->golongan_darah : '-';
+
+        // ── Birth date & place ──
+        $tempatLahir = ($cp && $cp->tempat_lahir) ? $cp->tempat_lahir : ($applicant->tempat_lahir ?? null);
+        if ($cp && $cp->tanggal_lahir) {
+            try {
+                $tglLahirCarbon = Carbon::parse($cp->tanggal_lahir);
+                $tglLahirStr    = $tglLahirCarbon->format('d F Y');
+                $birthYear      = (int) $tglLahirCarbon->year;
+            } catch (\Exception $e) {
+                $tglLahirStr = $cp->tanggal_lahir;
+                $birthYear   = null;
+            }
+        } else {
+            $ttl       = $this->getTtlString($applicant);
+            $birthYear = $this->extractBirthYear($ttl);
+            $tglLahirStr = $ttl ?? '-';
+        }
+        $ttlDisplay = trim(($tempatLahir ? $tempatLahir . ', ' : '') . ($tglLahirStr ?? '-'));
         $usia = $birthYear ? (Carbon::now()->year - $birthYear) . ' Years' : '-';
-        $gajiFormatted = ($applicant->ekspetasi_gaji ?: $applicant->gaji_terakhir) 
-            ? 'Rp ' . number_format(($applicant->ekspetasi_gaji ?: $applicant->gaji_terakhir), 0, ',', '.') 
+
+        // ── Shio & Elemen ──
+        $birthDateForShio = ($cp && $cp->tanggal_lahir) ? $cp->tanggal_lahir : ($applicant->tanggal_lahir ?? $this->getTtlString($applicant));
+        $shioElemen = ShioElemenHelper::resolve($birthDateForShio, $applicant->shio, $applicant->elemen);
+        $shio       = $shioElemen['shio']   ?? '-';
+        $elemen     = $shioElemen['elemen'] ?? '-';
+
+        // ── Address ──
+        if ($cp) {
+            $alamatKtp      = implode(', ', array_filter([$cp->alamat_ktp, $cp->kota_ktp, $cp->provinsi_ktp, $cp->kode_pos_ktp ? 'Kode Pos: ' . $cp->kode_pos_ktp : null]));
+            $alamatDomisili = implode(', ', array_filter([$cp->alamat_domisili, $cp->kota_domisili, $cp->provinsi_domisili, $cp->kode_pos_domisili ? 'Kode Pos: ' . $cp->kode_pos_domisili : null]));
+            $statusTinggal  = $cp->status_tempat_tinggal ?? '-';
+        } else {
+            $alamatKtp      = $applicant->alamat_ktp ?? '-';
+            $alamatDomisili = $applicant->alamat_domisili ?? '-';
+            $statusTinggal  = '-';
+        }
+
+        // ── Emergency contact ──
+        $namaKontakDarurat = ($cp && $cp->nama_kontak_darurat)    ? $cp->nama_kontak_darurat    : '-';
+        $hubKontakDarurat  = ($cp && $cp->hubungan_kontak_darurat) ? $cp->hubungan_kontak_darurat : '-';
+        $noTelpDarurat     = ($cp && $cp->no_telepon_darurat)      ? $cp->no_telepon_darurat      : '-';
+
+        // ── Salary (dari new_recruitment, candidate_profiles tidak punya kolom ini) ──
+        $gajiTerakhirFmt  = $applicant->gaji_terakhir  ? 'Rp ' . number_format($applicant->gaji_terakhir,  0, ',', '.') : '-';
+        $ekspetasiGajiFmt = $applicant->ekspetasi_gaji ? 'Rp ' . number_format($applicant->ekspetasi_gaji, 0, ',', '.') : '-';
+
+        // ── Position & score ──
+        $posisiName = $this->resolvePositionName($applicant);
+        $score      = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: 85);
+
+        // ── Earliest Join ──
+        $tanggalJoin = $applicant->tanggal_join_tercepat
+            ? Carbon::parse($applicant->tanggal_join_tercepat)->format('d F Y')
             : '-';
-        $score = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: 85);
 
-        // Build Education HTML
+        // ── Education HTML ──
         $pendidikanHtml = '';
-        if (is_array($applicant->pendidikan) && count($applicant->pendidikan) > 0) {
+        if ($cp && $cp->educations && $cp->educations->count() > 0) {
+            foreach ($cp->educations as $edu) {
+                $jenjang   = $edu->jenjang_pendidikan ?? '-';
+                $institusi = $edu->nama_institusi ?? '-';
+                $jurusan   = $edu->jurusan ? " — {$edu->jurusan}" : '';
+                $masuk     = $edu->tahun_masuk ?? '';
+                $lulus     = $edu->tahun_lulus ?? '';
+                $periode   = $masuk && $lulus ? "{$masuk} – {$lulus}" : ($lulus ?? '');
+                $ipk       = ($edu->nilai_ipk !== null && $edu->nilai_ipk > 0) ? " <span style='color:#64748b;'>(IPK: {$edu->nilai_ipk})</span>" : '';
+                $pendidikanHtml .= "
+                <div style='margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #e2e8f0;'>
+                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang}{$jurusan}</strong>{$ipk}<br>
+                    <span style='font-size: 12px; color: #334155;'>{$institusi}</span><br>
+                    <span style='font-size: 11px; color: #64748b;'>Periode: {$periode}</span>
+                </div>";
+            }
+        } elseif (is_array($applicant->pendidikan) && count($applicant->pendidikan) > 0) {
             foreach ($applicant->pendidikan as $edu) {
-                $jenjang = $edu['jenjang'] ?? $edu['degree'] ?? 'Education';
+                $jenjang   = $edu['jenjang'] ?? $edu['degree'] ?? 'Education';
                 $institusi = $edu['institusi'] ?? $edu['school'] ?? '-';
-                $jurusan = $edu['jurusan'] ?? $edu['major'] ?? '';
-                $tahun = $edu['tahun'] ?? $edu['year'] ?? '';
-                $ipk = isset($edu['gpa']) || isset($edu['ipk']) ? ' (GPA: ' . ($edu['gpa'] ?? $edu['ipk']) . ')' : '';
-
+                $jurusan   = $edu['jurusan'] ?? $edu['major'] ?? '';
+                $tahun     = $edu['tahun'] ?? $edu['year'] ?? '';
+                $ipk       = isset($edu['gpa']) || isset($edu['ipk']) ? ' (GPA: ' . ($edu['gpa'] ?? $edu['ipk']) . ')' : '';
                 $pendidikanHtml .= "
                 <div style='margin-bottom: 10px;'>
-                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang} {$jurusan} - {$institusi}</strong> {$ipk}<br>
+                    <strong style='font-size: 13px; color: #1e293b;'>{$jenjang}" . ($jurusan ? " — {$jurusan}" : '') . " - {$institusi}</strong>{$ipk}<br>
                     <span style='font-size: 11px; color: #64748b;'>Year: {$tahun}</span>
                 </div>";
             }
@@ -345,22 +428,35 @@ class DataApplicantsController extends Controller
             $pendidikanHtml = "<p style='color: #64748b; font-size: 11px; margin: 0;'>No education record found.</p>";
         }
 
-        // Build Experience HTML
+        // ── Work Experience HTML ──
         $pengalamanHtml = '';
-        if (is_array($applicant->pengalaman_kerja) && count($applicant->pengalaman_kerja) > 0) {
-            foreach ($applicant->pengalaman_kerja as $exp) {
-                $pos = $exp['posisi'] ?? $exp['position'] ?? 'Position';
-                $perusahaan = $exp['perusahaan'] ?? $exp['company'] ?? 'Company';
-                $periode = $exp['periode'] ?? $exp['period'] ?? '';
-                $deskripsi = $exp['deskripsi'] ?? $exp['description'] ?? '';
+        if ($cp && $cp->workExperiences && $cp->workExperiences->count() > 0) {
+            foreach ($cp->workExperiences as $exp) {
+                $pos        = $exp->posisi_terakhir ?? '-';
+                $perusahaan = $exp->nama_perusahaan ?? '-';
+                $mulai      = $exp->tanggal_mulai   ? Carbon::parse($exp->tanggal_mulai)->format('M Y')   : '';
+                $selesai    = $exp->tanggal_selesai ? Carbon::parse($exp->tanggal_selesai)->format('M Y') : 'Present';
+                $periode    = $mulai ? "{$mulai} – {$selesai}" : '-';
+                $alasan     = $exp->alasan_resign ?? '';
 
+                $pengalamanHtml .= "
+                <div style='margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed #e2e8f0;'>
+                    <strong style='font-size: 13px; color: #1e293b;'>{$pos}</strong> &nbsp;at&nbsp; <span style='color: #2563eb;'>{$perusahaan}</span><br>
+                    <span style='font-size: 11px; color: #64748b;'>Period: {$periode}</span>";
+                if ($alasan) $pengalamanHtml .= "<p style='font-size: 11px; color: #94a3b8; margin: 3px 0 0 0; font-style: italic;'>Reason leaving: {$alasan}</p>";
+                $pengalamanHtml .= "</div>";
+            }
+        } elseif (is_array($applicant->pengalaman_kerja) && count($applicant->pengalaman_kerja) > 0) {
+            foreach ($applicant->pengalaman_kerja as $exp) {
+                $pos        = $exp['posisi'] ?? $exp['position'] ?? 'Position';
+                $perusahaan = $exp['perusahaan'] ?? $exp['company'] ?? 'Company';
+                $periode    = $exp['periode'] ?? $exp['period'] ?? '';
+                $deskripsi  = $exp['deskripsi'] ?? $exp['description'] ?? '';
                 $pengalamanHtml .= "
                 <div style='margin-bottom: 12px;'>
                     <strong style='font-size: 13px; color: #1e293b;'>{$pos}</strong> at <span>{$perusahaan}</span><br>
                     <span style='font-size: 11px; color: #64748b;'>Period: {$periode}</span>";
-                if ($deskripsi) {
-                    $pengalamanHtml .= "<p style='font-size: 11px; color: #334155; margin: 4px 0 0 0;'>{$deskripsi}</p>";
-                }
+                if ($deskripsi) $pengalamanHtml .= "<p style='font-size: 11px; color: #334155; margin: 4px 0 0 0;'>{$deskripsi}</p>";
                 $pengalamanHtml .= "</div>";
             }
         } else {
@@ -372,7 +468,7 @@ class DataApplicantsController extends Controller
         <html>
         <head>
             <meta charset='utf-8'>
-            <title>ATS CV - {$applicant->nama_lengkap}</title>
+            <title>ATS CV - {$namaLengkap}</title>
             <style>
                 body {
                     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -445,10 +541,10 @@ class DataApplicantsController extends Controller
             <table class='header-table'>
                 <tr>
                     <td style='width: 70%;'>
-                        <div class='applicant-name'>{$applicant->nama_lengkap}</div>
+                        <div class='applicant-name'>{$namaLengkap}" . ($namaPanggilan !== '-' ? " <span style='font-size:14px; color:#64748b; font-weight:400;'>({$namaPanggilan})</span>" : '') . "</div>
                         <div class='applied-position'>Applied Position: {$posisiName}</div>
                         <div style='margin-top: 6px; color: #64748b; font-size: 11px;'>
-                            Email: {$applicant->email} | Phone: {$applicant->no_telepon}
+                            Email: {$email} &nbsp;|&nbsp; Phone: {$noTelepon}" . ($noWhatsapp !== '-' ? " &nbsp;|&nbsp; WA: {$noWhatsapp}" : '') . "
                         </div>
                     </td>
                     <td style='width: 30%; text-align: right; vertical-align: top;'>
@@ -459,31 +555,99 @@ class DataApplicantsController extends Controller
                 </tr>
             </table>
 
-            <div class='section-title'>Personal Information & Qualifications</div>
+            <div class='section-title'>Personal Information &amp; Qualifications</div>
             <table class='info-table'>
                 <tr>
-                    <td class='info-label'>Place & Date of Birth</td>
-                    <td class='info-value'>{$ttl} ({$usia})</td>
+                    <td class='info-label'>Full Name</td>
+                    <td class='info-value'>{$namaLengkap}</td>
                 </tr>
                 <tr>
-                    <td class='info-label'>Zodiac & Element</td>
-                    <td class='info-value'>{$shio} " . ($elemen ? "({$elemen})" : "") . "</td>
+                    <td class='info-label'>Nickname</td>
+                    <td class='info-value'>{$namaPanggilan}</td>
                 </tr>
                 <tr>
-                    <td class='info-label'>ID Address</td>
-                    <td class='info-value'>" . ($applicant->alamat_ktp ?: '-') . "</td>
+                    <td class='info-label'>Place &amp; Date of Birth</td>
+                    <td class='info-value'>{$ttlDisplay} ({$usia})</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Gender</td>
+                    <td class='info-value'>{$jenisKelamin}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Religion</td>
+                    <td class='info-value'>{$agama}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Marital Status</td>
+                    <td class='info-value'>{$statusNikah}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Blood Type</td>
+                    <td class='info-value'>{$golDarah}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Shio &amp; Element</td>
+                    <td class='info-value'>{$shio} " . ($elemen !== '-' ? "({$elemen})" : '') . "</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>NIK KTP</td>
+                    <td class='info-value'>{$nikKtp}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>No. KK</td>
+                    <td class='info-value'>{$noKK}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>No. NPWP</td>
+                    <td class='info-value'>{$noNpwp}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>No. BPJS Kesehatan</td>
+                    <td class='info-value'>{$noBpjsKs}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>No. BPJS Ketenagakerjaan</td>
+                    <td class='info-value'>{$noBpjsTk}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>ID Address (KTP)</td>
+                    <td class='info-value'>" . ($alamatKtp ?: '-') . "</td>
                 </tr>
                 <tr>
                     <td class='info-label'>Domicile Address</td>
-                    <td class='info-value'>" . ($applicant->alamat_domisili ?: '-') . "</td>
+                    <td class='info-value'>" . ($alamatDomisili ?: '-') . "</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Housing Status</td>
+                    <td class='info-value'>{$statusTinggal}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Last Salary</td>
+                    <td class='info-value'>{$gajiTerakhirFmt}</td>
                 </tr>
                 <tr>
                     <td class='info-label'>Expected Salary</td>
-                    <td class='info-value'>{$gajiFormatted}</td>
+                    <td class='info-value'>{$ekspetasiGajiFmt}</td>
                 </tr>
                 <tr>
                     <td class='info-label'>Earliest Joining Date</td>
-                    <td class='info-value'>" . ($applicant->tanggal_join_tercepat ? Carbon::parse($applicant->tanggal_join_tercepat)->format('d F Y') : '-') . "</td>
+                    <td class='info-value'>{$tanggalJoin}</td>
+                </tr>
+            </table>
+
+            <div class='section-title'>Emergency Contact</div>
+            <table class='info-table'>
+                <tr>
+                    <td class='info-label'>Name</td>
+                    <td class='info-value'>{$namaKontakDarurat}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Relationship</td>
+                    <td class='info-value'>{$hubKontakDarurat}</td>
+                </tr>
+                <tr>
+                    <td class='info-label'>Phone</td>
+                    <td class='info-value'>{$noTelpDarurat}</td>
                 </tr>
             </table>
 
@@ -498,11 +662,11 @@ class DataApplicantsController extends Controller
         ";
 
         $mpdf = new MpdfService([
-            'mode' => 'utf-8',
-            'format' => 'A4',
-            'margin_left' => 15,
-            'margin_right' => 15,
-            'margin_top' => 15,
+            'mode'          => 'utf-8',
+            'format'        => 'A4',
+            'margin_left'   => 15,
+            'margin_right'  => 15,
+            'margin_top'    => 15,
             'margin_bottom' => 20,
         ]);
 
@@ -513,7 +677,7 @@ class DataApplicantsController extends Controller
         ");
 
         $mpdf->WriteHTML($html);
-        return $mpdf->Output("CV_ATS_{$applicant->nama_lengkap}.pdf", Destination::INLINE);
+        return $mpdf->Output("CV_ATS_{$namaLengkap}.pdf", Destination::INLINE);
     }
 
     /**
@@ -533,12 +697,43 @@ class DataApplicantsController extends Controller
     /**
      * Helper to extract birth year
      */
-    private function extractBirthYear($ttl)
+    private function extractBirthYear($row)
     {
+        $ttl = is_string($row) ? $row : $this->getTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {}
+        }
+
         if (!$ttl) return null;
+
         if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
             return (int) $matches[1];
         }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
         return null;
     }
 
