@@ -70,7 +70,7 @@ class GenerateMessageAtsWhatsapp
     public function RejectedCandidateSelection()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
 
         $gender = strtolower((string) ($this->data->jenis_kelamin ?? $this->data->gender ?? ''));
         $salutation = $gender === 'female' ? 'Saudari' : 'Saudara';

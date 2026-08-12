@@ -274,6 +274,7 @@ class DataApplicantsController extends Controller
                 'posisi_di_lamar' => $posisiName,
                 'nama_jabatan' => $posisiName,
                 'alasan_reject' => $reason,
+                'hrd_name' => $user,
             ];
 
             if (!empty($applicant->email)) {
