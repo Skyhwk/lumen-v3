@@ -22,7 +22,7 @@ class NewRecruitment extends Model
 
     public function personalRequest()
     {
-        return $this->belongsTo(PersonalRequest::class, 'personnel_request_id');
+        return $this->belongsTo(PersonnelRequest::class, 'personnel_request_id');
     }
 
     public function interviews()
@@ -83,5 +83,10 @@ class NewRecruitment extends Model
     public function candidateWorkExperiences()
     {
         return $this->hasMany(CandidateWorkExperience::class, 'new_recruitment_id');
+    }
+
+    public function candidateMedicalInformation()
+    {
+        return $this->hasOne(CandidateMedicalInformation::class, 'new_recruitment_id');
     }
 }
