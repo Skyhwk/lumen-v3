@@ -15,7 +15,7 @@ class PersonnelRequestController extends Controller
 {
     /**
      * Generate auto-increment no_request
-     * Format: PR-YYYY-XXXX (e.g. PR-2026-0001)
+     * Format: YYYYXXXX (e.g. 20260001)
      */
     private function generateNoRequest(): string
     {
@@ -399,7 +399,7 @@ class PersonnelRequestController extends Controller
             
             $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
             
-            $isApproved = $request->decision === 'approve' ? 1 : 2; 
+            $isApproved = $request->decision === 'approve' ? 1 : 0; 
             
             // Update interview status_result as well
             $interview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
