@@ -94,7 +94,7 @@ class GenerateMessageAtsWhatsapp
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
-        $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/new-recruitment/complete-profile/' . ($this->data->token ?? ''));
+        $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/new-recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
 
         $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
         $msg .= "Sehubungan dengan proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*, mohon berkenan untuk *melengkapi Data Diri & Berkas Pendukung* Anda melalui tautan resmi berikut:\n\n";
