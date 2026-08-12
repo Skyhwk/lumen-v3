@@ -73,7 +73,9 @@ class BankSoalController extends Controller
 
     public function storeCategory(Request $request)
     {
-        $data['is_active'] = true;
+        $columns = Schema::getColumnListing('question_categories');
+        $data = array_intersect_key($request->all(), array_flip($columns));
+        $data['is_active'] = isset($data['is_active']) ? (bool) $data['is_active'] : true;
         $data['created_by'] = $this->karyawan ?: 'System';
         $data['name'] = $request->name;
         $data['question_count'] = $request->question_count;
@@ -84,7 +86,11 @@ class BankSoalController extends Controller
     public function updateCategory(Request $request)
     {
         $category = QuestionCategory::findOrFail($request->input('id'));
-        $data = $request->all();
+
+        $columns = Schema::getColumnListing('question_categories');
+        $allowedCols = array_diff($columns, ['id', 'created_at']);
+        $data = array_intersect_key($request->all(), array_flip($allowedCols));
+
         $category->update($data);
 
         return response()->json(['success' => true, 'message' => 'Kategori berhasil diperbarui.', 'data' => $category->fresh()]);

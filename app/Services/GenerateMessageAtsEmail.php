@@ -348,7 +348,7 @@ class GenerateMessageAtsEmail
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.
+                            Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya. <strong style='color: #dc2626;'>Harap diperhatikan bahwa apabila data diri belum dilengkapi, maka proses rekrutmen tidak dapat dilanjutkan ke tahap selanjutnya.</strong>
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>

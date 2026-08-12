@@ -103,7 +103,8 @@ class GenerateMessageAtsWhatsapp
         $msg .= "2. *Pendidikan:* Jenjang, Nama Sekolah/Universitas, Jurusan, & IPK\n";
         $msg .= "3. *Pengalaman Kerja:* Perusahaan Terakhir, Posisi, Masa Kerja, & Kontak Referensi\n";
         $msg .= "4. *Dokumen Lampiran:* Softcopy KTP, KK, NPWP, Ijazah, Transkrip, & Sertifikat\n\n";
-        $msg .= "Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.\n\n";
+        $msg .= "Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.\n";
+        $msg .= "*Harap diperhatikan bahwa apabila data diri belum dilengkapi, maka proses rekrutmen tidak dapat dilanjutkan ke tahap selanjutnya.*\n\n";
         $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
         $msg .= "*Tim Recruitment & Talent Acquisition*\n";
