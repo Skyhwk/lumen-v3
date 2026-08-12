@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\OfferingSalaryEmail;
+
 class GenerateMessageAtsEmail
 {
     /**
@@ -570,6 +572,7 @@ class GenerateMessageAtsEmail
     }
     public static function bodyEmailSallaryOffer($data, $btn = null, $mark = 'Offering Salary')
     {
+        // $data isinya adalah new_recruitment, dikirim dari controller
         if ($data == null) {
             return '';
         }
@@ -578,8 +581,8 @@ class GenerateMessageAtsEmail
             'data' => $data,
             'btn' => $btn,
             'mark' => $mark,
-            'contact' => HrdEmailViewData::contactLine($data),
-            'cv' => HrdEmailViewData::prepareCvData($data),
+            'contact' => OfferingSalaryEmail::contactLine($data),
+            'cv' => OfferingSalaryEmail::prepareCvData($data),
         ])->render();
     }
 }
