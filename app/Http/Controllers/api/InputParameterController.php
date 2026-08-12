@@ -13,24 +13,30 @@ use App\Models\User;
 use App\Models\Usertoken;
 use App\Models\Requestlog;
 use App\Models\OrderDetail;
+use App\Models\AnalisParameter;
+use App\Models\AnalystFormula as Formula;
+use App\Models\KuotaAnalisaParameter;
+
+// INI HEADER
 use App\Models\Titrimetri;
 use App\Models\Colorimetri;
 use App\Models\Gravimetri;
 use App\Models\LingkunganHeader;
 use App\Models\DebuPersonalHeader;
-use App\Models\WsValueLingkungan;
 use App\Models\EmisiCerobongHeader;
 use App\Models\DustFallHeader;
 use App\Models\MicrobioHeader;
 use App\Models\IsokinetikHeader;
 use App\Models\SwabTestHeader;
 use App\Models\Subkontrak;
-// use App\Models\WsValueEmisiCerobong;
+
+// INI WS VALUE
+use App\Models\WsValueLingkungan;
 use App\Models\WsValueAir;
-use App\Models\WsValueMicrobio;
-use App\Models\WsValueSwab;
 use App\Models\WsValueUdara;
 use App\Models\WsValueEmisiCerobong;
+
+// INI DATA LAPANGAN
 use App\Models\DataLapanganDebuPersonal;
 use App\Models\DataLapanganLingkunganHidup;
 use App\Models\DataLapanganLingkunganKerja;
@@ -42,16 +48,17 @@ use App\Models\DetailLingkunganHidup;
 use App\Models\DetailLingkunganKerja;
 use App\Models\DetailSenyawaVolatile;
 use App\Models\DetailMicrobiologi;
-use App\Models\AnalisParameter;
-use Illuminate\Http\Request;
-use Yajra\Datatables\Datatables;
-use Illuminate\Support\Facades\Hash;
+
+// SERVICES
 use App\Services\FunctionValue;
 use App\Services\AnalystRender;
 use App\Services\AnalystFormula;
 use App\Services\AutomatedFormula;
-use App\Models\AnalystFormula as Formula;
-use App\Models\KuotaAnalisaParameter;
+
+// UTILS
+use Illuminate\Http\Request;
+use Yajra\Datatables\Datatables;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Exception;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -667,8 +674,8 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Swab Test')){
-                $swab = MicrobioHeader::with('TrackingSatu')
+            }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Swab Test')){ // ini untuk kategori SWAB TEST
+                $swab = SwabTestHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
 					})
@@ -4090,7 +4097,7 @@ class InputParameterController extends Controller
 	public function HelperSwabTest($request, $stp, $order_detail) {
 		$fdl = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
         $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-		$header = MicrobioHeader::where('no_sampel', $request->no_sample)
+		$header = SwabTestHeader::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
 			->where('is_active', true)
 			->first();
@@ -4144,7 +4151,7 @@ class InputParameterController extends Controller
 				}
 
 				// Simpan data ke tabel SwabTestHeader
-				$header = new MicrobioHeader();
+				$header = new SwabTestHeader();
 				$header->no_sampel = $request->no_sample;
 				$header->parameter = $request->parameter;
 				$header->luas = $luas ?? null;
@@ -4162,7 +4169,7 @@ class InputParameterController extends Controller
 				$header->save();
 
 				$data_swab = array();
-				$data_swab['id_microbiologi_header'] = $header->id;
+				$data_swab['id_swab_header'] = $header->id;
 				$data_swab['no_sampel'] = $request->no_sample;
 				$data_swab['hasil10'] = isset($data_kalkulasi['hasil']) ? $data_kalkulasi['hasil'] : null;
 				$data_swab['hasil11'] = isset($data_kalkulasi['hasil2']) ? $data_kalkulasi['hasil2'] : null;

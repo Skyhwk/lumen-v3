@@ -427,14 +427,14 @@ class OrderDetail extends Sector
 
     public function swabTesHeader()
     {
-        return $this->belongsTo(SwabTestHeader::class, 'no_sampel', 'no_sampel');
+        return $this->belongsTo(SwabTestHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true);
     }
 
     public function swabOnMicrobio()
     {
-        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where(function ($query) {
-            $query->where('microbio_header.parameter', 'like', "%Swab%")->orWhere('microbio_header.template_stp', 22);
-        })->where('is_active', true);
+        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')
+            ->where('microbio_header.parameter', 'like', "%Swab%")
+            ->where('is_active', true);
     }
 
     public function ergonomiHeader()
