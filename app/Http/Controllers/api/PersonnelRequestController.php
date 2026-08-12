@@ -571,6 +571,8 @@ class PersonnelRequestController extends Controller
                     'status' => 'management_decision'
                 ]);
 
+                
+
                 // kirim email ke HRD (developer akan mengisi email asli nanti)
                 $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
                  
