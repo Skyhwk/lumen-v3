@@ -35,6 +35,7 @@ class CompleteProfileController extends Controller
             'educations' => $profile ? DB::table('candidate_educations')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : $this->educations($recruitment),
             'work_experiences' => $profile ? DB::table('candidate_work_experiences')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : $this->workExperiences($recruitment),
             'documents' => $profile ? DB::table('candidate_documents')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : [],
+            'medical' => $profile ? DB::table('candidate_medical_informations')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->first() : null,
         ]);
     }
 
@@ -75,7 +76,6 @@ class CompleteProfileController extends Controller
                 'no_bpjs_tk' => trim((string) $request->input('no_bpjs_tk')) ?: null,
                 'agama' => trim((string) $request->input('agama')) ?: null,
                 'status_pernikahan' => trim((string) $request->input('status_pernikahan')) ?: null,
-                'golongan_darah' => trim((string) $request->input('golongan_darah')) ?: null,
                 'alamat_ktp' => $base['alamat_ktp'],
                 'kota_ktp' => trim((string) $request->input('kota_ktp')) ?: null,
                 'provinsi_ktp' => trim((string) $request->input('provinsi_ktp')) ?: null,
@@ -93,6 +93,7 @@ class CompleteProfileController extends Controller
                 'updated_at' => $now,
             ]);
 
+            $this->storeMedicalInformation($request, $profileId, $recruitment->id, $now);
             $this->storeEducations($request->input('educations', []), $profileId, $recruitment->id, $now);
             $this->storeWorkExperiences($request->input('work_experiences', []), $profileId, $recruitment->id, $now);
             $this->storeDocuments($request->input('documents', []), $profileId, $recruitment->id, $now);
@@ -167,7 +168,7 @@ class CompleteProfileController extends Controller
 
     private function validateInput(Request $request)
     {
-        $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat'];
+        $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat', 'tinggi_badan', 'berat_badan', 'mata'];
         $errors = [];
         foreach ($required as $field) {
             if (trim((string) $request->input($field)) === '') {
@@ -246,5 +247,24 @@ class CompleteProfileController extends Controller
             file_put_contents($directory . DIRECTORY_SEPARATOR . $fileName, $binary);
             DB::table('candidate_documents')->insert(['candidate_profile_id' => $profileId, 'new_recruitment_id' => $recruitmentId, 'jenis_dokumen' => $item['jenis_dokumen'], 'nama_file' => $item['nama_file'] ?? $fileName, 'path_file' => 'recruitment/candidate-documents/' . $fileName, 'mime_type' => $matches[1], 'ukuran_file' => strlen($binary), 'catatan' => $item['catatan'] ?? null, 'created_at' => $now, 'updated_at' => $now]);
         }
+    }
+
+    private function storeMedicalInformation(Request $request, $profileId, $recruitmentId, $now)
+    {
+        DB::table('candidate_medical_informations')->insert([
+            'new_recruitment_id' => $recruitmentId,
+            'candidate_profile_id' => $profileId,
+            'tinggi_badan' => $request->input('tinggi_badan') !== null && $request->input('tinggi_badan') !== '' ? (float) $request->input('tinggi_badan') : null,
+            'berat_badan' => $request->input('berat_badan') !== null && $request->input('berat_badan') !== '' ? (float) $request->input('berat_badan') : null,
+            'mata' => trim((string) $request->input('mata')) ?: null,
+            'golongan_darah' => trim((string) $request->input('golongan_darah')) ?: null,
+            'penyakit_bawaan_lahir' => trim((string) $request->input('penyakit_bawaan_lahir')) ?: null,
+            'penyakit_kronis' => trim((string) $request->input('penyakit_kronis')) ?: null,
+            'riwayat_kecelakaan' => trim((string) $request->input('riwayat_kecelakaan')) ?: null,
+            'is_active' => 1,
+            'created_by' => 'Candidate Profile Portal',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 }
