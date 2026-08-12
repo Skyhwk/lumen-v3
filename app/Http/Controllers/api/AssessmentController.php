@@ -14,7 +14,10 @@ class AssessmentController extends Controller
     {
         $recruitment = $this->recruitment($request->token);
         $attempt = $this->ensureAttempt($recruitment);
-        $categories = $this->assessmentCategories()->get(['name', 'question_count', 'duration_minutes']);
+        $categories = DB::table('assessment_sessions')
+            ->where('assessment_attempt_id', $attempt->id)
+            ->orderBy('session_order')
+            ->get(['category_name as name', 'question_count', 'duration_minutes']);
         $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
         $status = $hasStartedSession ? $this->stateFor($attempt)['status'] : 'ready';
         return response()->json(['status' => $status, 'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2), 'categories' => $categories, 'preview_questions' => $this->previewQuestions($attempt->id, 3)]);
@@ -114,12 +117,26 @@ class AssessmentController extends Controller
             $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitment->id)->lockForUpdate()->first();
             if ($attempt) {
                 $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
-                $sessionNames = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->pluck('category_name')->all();
-                $hasPsychometricConfig = DB::table('question_categories')->whereIn('name', ['DISC', 'KOSTICK PAPI'])->count() === 2;
-                $missingPsychometricSession = !in_array('DISC', $sessionNames, true) || !in_array('KOSTICK PAPI', $sessionNames, true);
-                if (!$hasStartedSession && $hasPsychometricConfig && $missingPsychometricSession) {
+                $sessionNames = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->orderBy('session_order')->pluck('category_name')->all();
+                $expectedCategories = $this->assessmentCategories()->pluck('name')->all();
+                if (!$hasStartedSession && $sessionNames !== $expectedCategories) {
                     DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->delete();
                     $this->createSessions($attempt->id, Carbon::now());
+                } else {
+                    $pendingSessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->get();
+                    foreach ($pendingSessions as $session) {
+                        $category = DB::table('question_categories')->where('id', $session->question_category_id)->first();
+                        if ($category && ($session->category_name !== $category->name || (int) $session->question_count !== (int) $category->question_count || (int) $session->duration_minutes !== (int) $category->duration_minutes)) {
+                            $items = $this->sessionQuestions($category);
+                            DB::table('assessment_sessions')->where('id', $session->id)->update([
+                                'category_name' => $category->name,
+                                'question_count' => $category->question_count,
+                                'duration_minutes' => $category->duration_minutes,
+                                'questions_json' => json_encode($items),
+                                'updated_at' => Carbon::now()
+                            ]);
+                        }
+                    }
                 }
                 return $attempt;
             }
@@ -173,16 +190,16 @@ class AssessmentController extends Controller
         return DB::table('question_categories')
             ->where('is_active', 1)
             ->where('is_show', 1)
-            ->orderByRaw("CASE name WHEN 'DISC' THEN 1 WHEN 'KOSTICK PAPI' THEN 2 ELSE 3 END")
+            ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
             ->orderBy('id');
     }
 
     private function sessionQuestions($category)
     {
-        if ($category->name === 'DISC') {
+        if (strtoupper($category->name) === 'DISC') {
             return $this->discQuestions();
         }
-        if ($category->name === 'KOSTICK PAPI') {
+        if (in_array(strtoupper($category->name), ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
             return $this->papiQuestions();
         }
 
@@ -220,11 +237,14 @@ class AssessmentController extends Controller
 
     private function papiQuestions()
     {
-        return DB::table('soal_psikotes')->where('kategori_soal', 'KOSTICK PAPI')->orderBy('id')->get()->values()->map(function ($question, $key) {
+        return DB::table('soal_psikotes')->whereIn('kategori_soal', ['KOSTICK PAPI', 'PAPI KOSTICK'])->orderBy('id')->get()->values()->map(function ($question, $key) {
             $prompt = json_decode($question->pertanyaan ?: '{}', true) ?: [];
             $answer = json_decode($question->jawaban ?: '{}', true) ?: [];
             $options = array_values($answer['data'] ?? []);
-            return ['id' => (string) $question->id, 'source' => 'papi_kostick', 'order' => $key + 1, 'type' => 'single_choice', 'text' => '', 'options' => collect($options)->map(function ($text, $optionKey) { return ['id' => (string) $optionKey, 'text' => $text]; })->all(), 'answer_map' => array_values($answer['value'] ?? [])];
+            return ['id' => (string) $question->id, 'source' => 'papi_kostick', 'order' => $key + 1, 'type' => 'single_choice', 'text' => '', 'options' => collect($options)->map(function ($text, $optionKey) {
+                $cleanText = preg_replace('/^[a-zA-Z][\)\.]\s*/', '', $text);
+                return ['id' => (string) $optionKey, 'text' => $cleanText];
+            })->all(), 'answer_map' => array_values($answer['value'] ?? [])];
         })->all();
     }
 
@@ -274,10 +294,10 @@ class AssessmentController extends Controller
     private function scoreSession($session, array $answers)
     {
         $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
-        if ($session->category_name === 'DISC') {
+        if (strtoupper($session->category_name) === 'DISC') {
             return $this->scoreDisc($questions, $answers);
         }
-        if ($session->category_name === 'KOSTICK PAPI') {
+        if (in_array(strtoupper($session->category_name), ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
             return $this->scorePapi($questions, $answers);
         }
 
