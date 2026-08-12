@@ -70,15 +70,14 @@ class GenerateMessageAtsWhatsapp
     public function RejectedCandidateSelection()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
 
-        $msg = "Yth. Bapak/Ibu *" . $namaLengkap . "*,\n\n";
-        $msg .= "Terima kasih atas partisipasi Bapak/Ibu dalam proses seleksi untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
-        $msg .= "Setelah melalui proses evaluasi, kami memutuskan untuk melanjutkan proses dengan kandidat lain yang lebih sesuai dengan kebutuhan posisi tersebut. Dengan demikian, proses lamaran Bapak/Ibu belum dapat kami lanjutkan ke tahap berikutnya.\n\n";
-        $msg .= "Data lamaran Bapak/Ibu akan tetap tersimpan dalam sistem kami dan dapat dipertimbangkan untuk kesempatan yang sesuai di kemudian hari.\n\n";
-        $msg .= "Demikian informasi ini kami sampaikan. Terima kasih atas waktu dan partisipasi Bapak/Ibu selama proses seleksi.\n\n";
-        $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg = "Halo *" . $namaLengkap . "*,\n\n";
+        $msg .= "Terima kasih atas minat Bapak/Ibu terhadap posisi *" . $posisi . "* dan telah meluangkan waktu untuk berpartisipasi dalam proses rekrutmen kami. Kami sangat menghargai kesempatan untuk mengenal lebih jauh mengenai latar belakang dan pengalaman Bapak/Ibu.\n\n";
+        $msg .= "Setelah melalui pertimbangan yang matang, dengan berat hati kami sampaikan bahwa kami memutuskan untuk melanjutkan proses dengan kandidat lain yang kualifikasinya dinilai paling sesuai dengan kebutuhan posisi ini. Keputusan ini bukanlah hal yang mudah, mengingat kami menerima banyak lamaran dengan kualitas yang baik, termasuk dari Bapak/Ibu.\n\n";
+        $msg .= "Kami sangat menghargai waktu dan usaha yang telah Bapak/Ibu berikan, serta mengucapkan doa terbaik untuk langkah karier Bapak/Ibu selanjutnya.\n\n";
+        $msg .= "Hormat kami,\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
