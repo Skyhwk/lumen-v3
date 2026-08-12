@@ -5,7 +5,7 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview};
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp};
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +15,7 @@ class PersonnelRequestController extends Controller
 {
     /**
      * Generate auto-increment no_request
-     * Format: PR-YYYY-XXXX (e.g. PR-2026-0001)
+     * Format: YYYYXXXX (e.g. 20260001)
      */
     private function generateNoRequest(): string
     {
@@ -113,6 +113,7 @@ class PersonnelRequestController extends Controller
                 'tanggal_dibutuhkan'        => $request->tanggal_dibutuhkan,
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $request->max_salary,
+                'use_user_assessment'       => $request->use_user_assessment ? 1 : 0,
                 'created_by'                => $this->karyawan ?? null,
             ]);
 
@@ -289,6 +290,12 @@ class PersonnelRequestController extends Controller
         DB::beginTransaction();
         try {
 
+            // Nonaktifkan jadwal interview user sebelumnya (jika ada reschedule)
+            RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->update(['is_active' => 0]);
+
             // Save to recruitment_interviews
             $interview = RecruitmentInterview::create([
                 'new_recruitment_id' => $request->new_recruitment_id,
@@ -297,7 +304,7 @@ class PersonnelRequestController extends Controller
                 'jenis_interview'    => $request->jenis_interview,
                 'link_gmeet'         => $request->link_gmeet,
                 'ruangan_interview'  => $request->ruangan_interview,
-                'catatan_interview'  => $request->catatan_interview,
+                'catatan'  => $request->catatan_interview,
                 'created_by'         => $this->karyawan ?? 'System',
                 'is_active'          => 1,
             ]);
@@ -310,14 +317,11 @@ class PersonnelRequestController extends Controller
                 'status' => 'interview_user'
             ]);
 
-            // Cari data karyawan berdasarkan nama pembuat request (created_by)
-            $requestorName = $recruitment->personnelRequest->created_by;
-            $karyawan = MasterKaryawan::where('nama_lengkap', $requestorName)->first();
+            // Cari data HRD berdasarkan ID dari environment
+            $hrdIds = explode(',', env('HRD_ID', ''));
+            $hrds = MasterKaryawan::whereIn('id', $hrdIds)->get();
 
-            if ($karyawan) {
-                // Gunakan GetAtasan service untuk mendapatkan karyawan + atasan-atasannya
-                $getAtasan = GetAtasan::where('id', $karyawan->id)->get();
-                
+            if ($hrds->isNotEmpty()) {
                 // Siapkan data untuk template email
                 $dataArray = (object)[
                     'nama_kandidat'     => $recruitment->nama_lengkap,
@@ -329,13 +333,13 @@ class PersonnelRequestController extends Controller
                     'catatan_interview' => $request->catatan_interview,
                 ];
 
-                foreach ($getAtasan as $user) {
+                foreach ($hrds as $user) {
                     if (!$user->email) continue; // Skip jika tidak ada email
 
                     $dataArray->nama_user = $user->nama_lengkap;
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdSchaduled($dataArray);
                     
-                    SendEmail::where('to', 'luthfi@intilab.com')
+                    SendEmail::where('to', $user->email)
                         ->where('subject', 'Jadwal Interview User - PT Inti Surya Laboratorium')
                         ->where('body', $bodyEmail)
                         ->where('karyawan', $user->nama_lengkap)
@@ -399,7 +403,7 @@ class PersonnelRequestController extends Controller
             
             $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
             
-            $isApproved = $request->decision === 'approve' ? 1 : 2; 
+            $isApproved = $request->decision === 'approve' ? 1 : 0; 
             
             // Update interview status_result as well
             $interview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
@@ -432,7 +436,7 @@ class PersonnelRequestController extends Controller
                 $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
                 $subject = "Kandidat Interview User - " . $recruitment->nama_lengkap;
                 
-                SendEmail::where('to', 'luthfi@intilab.com')
+                SendEmail::where('to', env('EMAIL_DIREKTUR_IBU'))
                             ->where('subject', $subject)
                             ->where('body', $emailContent)
                             ->noReply()
@@ -443,6 +447,32 @@ class PersonnelRequestController extends Controller
                     'reject_interview_user_at' => Carbon::now(),
                     'is_approve_interview_user' => $isApproved
                 ]);
+
+                try {
+                    // Set posisi untuk template
+                    $recruitment->posisi_di_lamar = $pr->detailPosisi->nama_jabatan ?? $pr->posisi;
+
+                    if (!empty($recruitment->email)) {
+                        $emailContent = GenerateMessageAtsEmail::bodyEmailRejectKandidat($recruitment);
+                        $subject = "Informasi Hasil Seleksi - PT Inti Surya Laboratorium";
+                        
+                        SendEmail::where('to', $recruitment->email)
+                                    ->where('subject', $subject)
+                                    ->where('body', $emailContent)
+                                    ->noReply()
+                                    ->send();
+                    }
+
+                    $phone = $recruitment->no_telepon ?: ($recruitment->no_hp ?? null);
+                    if (!empty($phone)) {
+                        $waGen = new GenerateMessageAtsWhatsapp($recruitment);
+                        $waMessage = $waGen->RejectedCandidateSelection();
+                        $sendWa = new SendWhatsapp($phone, $waMessage);
+                        $sendWa->send();
+                    }
+                } catch (\Throwable $th) {
+                    Log::error('Gagal mengirim notifikasi reject kandidat: ' . $th->getMessage());
+                }
             }
 
             DB::commit();

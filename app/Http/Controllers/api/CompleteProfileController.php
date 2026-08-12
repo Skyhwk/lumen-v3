@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\RecruitmentStatusService;
+use App\Services\RecruitmentPictureService;
 
 class CompleteProfileController extends Controller
 {
@@ -127,6 +128,7 @@ class CompleteProfileController extends Controller
             'posisi_dilamar' => $this->positionLabel($recruitment),
             'gaji_terakhir' => $recruitment->gaji_terakhir,
             'ekspetasi_gaji' => $recruitment->ekspetasi_gaji,
+            'picture_base64' => app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null),
         ];
     }
 
