@@ -89,4 +89,9 @@ class NewRecruitment extends Model
     {
         return $this->hasMany(CandidateWorkExperience::class, 'new_recruitment_id');
     }
+
+    public function candidateMedicalInformation()
+    {
+        return $this->hasOne(CandidateMedicalInformation::class, 'new_recruitment_id');
+    }
 }
