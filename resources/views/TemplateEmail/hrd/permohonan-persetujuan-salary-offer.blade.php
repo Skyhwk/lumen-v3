@@ -52,7 +52,7 @@
 @include('TemplateEmail.hrd.partials.cv-detail-salary-offer', $cv)
 
 @if(!empty($btn))
-    @include('TemplateEmail.hrd.partials.action-buttons', ['btn' => $btn, 'mark' => $mark])
+    @include('TemplateEmail.hrd.partials.action-buttons-salary-offer', ['btn' => $btn, 'mark' => $mark])
 @endif
 
 @include('TemplateEmail.hrd.partials.shell-close')

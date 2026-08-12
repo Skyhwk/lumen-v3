@@ -42,21 +42,37 @@
 </table>
 
 @php
-    $catatanRaw = $data->hrdInterview->catatan_interview
-        ?? $data->catatan_interview
+    // $data itu isinya NewRecruitment
+    $catatanHrdRaw = $data->hrdInterview->catatan_interview
+        ?? $data->hrdInterview->catatan
         ?? $data->hrd_interview->catatan_interview
-        ?? $data->catatan
+        ?? $data->hrd_interview->catatan
         ?? '-';
-    $catatanClean = (!empty($catatanRaw) && $catatanRaw !== '-')
-        ? trim(strip_tags(html_entity_decode($catatanRaw)))
+    $catatanHrdClean = (!empty($catatanHrdRaw) && $catatanHrdRaw !== '-')
+        ? trim(strip_tags(html_entity_decode($catatanHrdRaw)))
         : '-';
-    $reviewRows = [
-        'Catatan' => !empty($catatanClean) ? $catatanClean : '-',
+    $reviewHrdRows = [
+        'Catatan' => !empty($catatanHrdClean) ? $catatanHrdClean : '-',
+    ];
+
+    $catatanUserRaw = $data->userInterview->catatan_interview
+        ?? $data->userInterview->catatan
+        ?? $data->user_interview->catatan_interview
+        ?? $data->user_interview->catatan
+        ?? '-';
+    $catatanUserClean = (!empty($catatanUserRaw) && $catatanUserRaw !== '-')
+        ? trim(strip_tags(html_entity_decode($catatanUserRaw)))
+        : '-';
+    $reviewUserRows = [
+        'Catatan' => !empty($catatanUserClean) ? $catatanUserClean : '-',
     ];
 @endphp
 
-<p style="{{ $sectionTitle }}">Review HRD</p>
-@include('TemplateEmail.hrd.partials.info-table', ['rows' => $reviewRows])
+<p style="{{ $sectionTitle }}">Hasil Interview HRD</p>
+@include('TemplateEmail.hrd.partials.info-table', ['rows' => $reviewHrdRows])
+
+<p style="{{ $sectionTitle }}">Hasil Interview User</p>
+@include('TemplateEmail.hrd.partials.info-table', ['rows' => $reviewUserRows])
 
 @php
     $profile = $profile ?? $data->candidateProfile ?? null;
@@ -85,8 +101,16 @@
 @include('TemplateEmail.hrd.partials.info-table', ['rows' => $personalRows])
 
 @php
+    $medical = $medical ?? $data->candidateMedicalInformation ?? null;
+
     $medicalRows = [
-        'Golongan Darah' => $profile->golongan_darah ?? $data->golongan_darah ?? '-',
+        'Tinggi Badan' => !empty($medical->tinggi_badan) ? (is_numeric($medical->tinggi_badan) ? $medical->tinggi_badan . ' cm' : $medical->tinggi_badan) : ($data->tinggi_badan ?? '-'),
+        'Berat Badan' => !empty($medical->berat_badan) ? (is_numeric($medical->berat_badan) ? $medical->berat_badan . ' kg' : $medical->berat_badan) : ($data->berat_badan ?? '-'),
+        'Mata' => $medical->mata ?? $data->mata ?? '-',
+        'Golongan Darah' => $medical->golongan_darah ?? $profile->golongan_darah ?? $data->golongan_darah ?? '-',
+        'Penyakit Bawaan Lahir' => $medical->penyakit_bawaan_lahir ?? $data->penyakit_bawaan_lahir ?? '-',
+        'Penyakit Kronis' => $medical->penyakit_kronis ?? $data->penyakit_kronis ?? '-',
+        'Riwayat Kecelakaan' => $medical->riwayat_kecelakaan ?? $data->riwayat_kecelakaan ?? '-',
     ];
 @endphp
 
