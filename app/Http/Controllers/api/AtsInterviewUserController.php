@@ -172,7 +172,24 @@ class AtsInterviewUserController extends Controller
                 });
             })
             ->addColumn('user_interview', function ($row) {
-                return $row->userInterview ? $row->userInterview->toArray() : null;
+                $ui = $row->userInterview;
+                if (!$ui) {
+                    $uiRaw = DB::table('recruitment_interviews')
+                        ->where('new_recruitment_id', $row->id)
+                        ->where('stage', 'user')
+                        ->where('is_active', 1)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if (!$uiRaw) {
+                        $uiRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'user')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
+                    return $uiRaw ? (array) $uiRaw : null;
+                }
+                return $ui ? $ui->toArray() : null;
             })
             ->addColumn('hrd_interview', function ($row) {
                 $hrd = $row->hrdInterview;
@@ -180,8 +197,16 @@ class AtsInterviewUserController extends Controller
                     $hrdRaw = DB::table('recruitment_interviews')
                         ->where('new_recruitment_id', $row->id)
                         ->where('stage', 'hrd')
+                        ->where('is_active', 1)
                         ->orderBy('id', 'desc')
                         ->first();
+                    if (!$hrdRaw) {
+                        $hrdRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'hrd')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
                     return $hrdRaw ? (array) $hrdRaw : null;
                 }
                 return $hrd ? $hrd->toArray() : null;

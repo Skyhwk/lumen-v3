@@ -105,8 +105,16 @@ class AtsInterviewHrdController extends Controller
                     $hrdRaw = DB::table('recruitment_interviews')
                         ->where('new_recruitment_id', $row->id)
                         ->where('stage', 'hrd')
+                        ->where('is_active', 1)
                         ->orderBy('id', 'desc')
                         ->first();
+                    if (!$hrdRaw) {
+                        $hrdRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'hrd')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
                     return $hrdRaw ? (array) $hrdRaw : null;
                 }
                 return $hrd ? $hrd->toArray() : null;
