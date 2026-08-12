@@ -132,4 +132,77 @@ class GenerateMessageAtsWhatsapp
 
         return $msg;
     }
+
+    public function UserInterviewScheduleCandidate()
+    {
+        $namaLengkap = \ucwords($this->data->nama_kandidat ?? $this->data->nama_lengkap ?? 'Kandidat');
+        $posisi      = $this->data->posisi ?? 'Posisi Dilamar';
+        $tgl         = $this->data->tgl_interview ?? '-';
+        $jenis       = strtolower(strip_tags($this->data->jenis_interview ?? 'online'));
+        $linkGmeet   = $this->data->link_gmeet ?? '';
+        $ruangan     = $this->data->ruangan_interview ?? 'Office Room';
+        $catatan     = $this->data->catatan ?? '';
+
+        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg .= "Berikut kami sampaikan informasi jadwal *User Interview* Anda untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*:\n\n";
+        $msg .= "*Waktu Interview*: " . $tgl . "\n";
+        if ($jenis === 'online') {
+            $msg .= "*Tipe Interview*: Online (Google Meet)\n";
+            if (!empty($linkGmeet)) {
+                $msg .= "*Link Google Meet*:\n" . $linkGmeet . "\n";
+            }
+        } else {
+            $msg .= "*Tipe Interview*: Offline (Tatap Muka)\n";
+            $msg .= "*Ruangan / Lokasi*: " . $ruangan . "\n";
+        }
+        $msg .= "\n";
+        if ($jenis === 'online') {
+            $msg .= "Mohon bergabung ke Google Meet 10 menit sebelum jadwal dimulai dan pastikan koneksi internet Anda stabil.\n\n";
+        } else {
+            $msg .= "Mohon dapat hadir 15 menit sebelum jadwal di lokasi yang telah ditentukan.\n\n";
+        }
+        $msg .= "Atas perhatian dan konfirmasi Anda, kami ucapkan terima kasih.\n\n";
+        $msg .= "Hormat kami,\n";
+        $msg .= "*Tim Recruitment HRD*\n";
+        $msg .= "*PT Inti Surya Laboratorium*";
+
+        return $msg;
+    }
+
+    public function UserInterviewScheduleUser()
+    {
+        $namaUser     = \ucwords($this->data->nama_user ?? 'Bapak/Ibu');
+        $namaKandidat = \ucwords($this->data->nama_kandidat ?? 'Kandidat');
+        $posisi       = $this->data->posisi ?? 'Posisi Requested';
+        $noRequest    = $this->data->no_request ?? '-';
+        $tgl          = $this->data->tgl_interview ?? '-';
+        $jenis        = strtolower(strip_tags($this->data->jenis_interview ?? 'online'));
+        $linkGmeet    = $this->data->link_gmeet ?? '';
+        $ruangan      = $this->data->ruangan_interview ?? 'Office Room';
+        $catatan      = $this->data->catatan ?? '';
+
+        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaUser . "*\n\n";
+        $msg .= "Menginformasikan bahwa jadwal dan sarana sesi *User Interview* untuk kandidat pada Personnel Request Anda (No. Request: *" . $noRequest . "*) telah disiapkan:\n\n";
+        $msg .= "👤 *Kandidat*: " . $namaKandidat . "\n";
+        $msg .= "💼 *Posisi*: " . $posisi . "\n";
+        $msg .= "📅 *Waktu Interview*: " . $tgl . "\n";
+        if ($jenis === 'online') {
+            $msg .= "💻 *Tipe Interview*: Online (Google Meet)\n";
+            if (!empty($linkGmeet)) {
+                $msg .= "🔗 *Link Google Meet*:\n" . $linkGmeet . "\n";
+            }
+        } else {
+            $msg .= "🏢 *Tipe Interview*: Offline (Tatap Muka)\n";
+            $msg .= "📍 *Ruangan Interview*: " . $ruangan . "\n";
+        }
+        if (!empty($catatan)) {
+            $msg .= "📝 *Catatan*: " . $catatan . "\n";
+        }
+        $msg .= "\nTerima kasih atas perhatian dan kerjasamanya.\n\n";
+        $msg .= "Hormat kami,\n";
+        $msg .= "*Tim Recruitment HRD*\n";
+        $msg .= "PT Inti Surya Laboratorium";
+
+        return $msg;
+    }
 }
