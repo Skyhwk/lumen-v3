@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Schema;
 class CreateCandidateProfileTables extends Migration
 {
     /**
-     * Run the migrations.
-     * Struktur disesuaikan dengan kondisi aktual database (production-ready).
+     * Run the migrations for candidate profile family of tables.
+     * Includes candidate_profiles, candidate_educations, candidate_work_experiences, candidate_documents.
      *
      * @return void
      */
@@ -19,7 +19,6 @@ class CreateCandidateProfileTables extends Migration
             Schema::create('candidate_profiles', function (Blueprint $table) {
                 $table->id();
 
-                // Foreign key ke tabel new_recruitment
                 $table->unsignedBigInteger('new_recruitment_id')->nullable();
                 $table->foreign('new_recruitment_id')
                     ->references('id')
@@ -81,7 +80,7 @@ class CreateCandidateProfileTables extends Migration
                     ->on('new_recruitment')
                     ->nullOnDelete();
 
-                $table->string('jenjang_pendidikan', 50);   // SMA/SMK, D3, S1, S2, S3, dll
+                $table->string('jenjang_pendidikan', 50);
                 $table->string('nama_institusi', 255);
                 $table->string('jurusan', 255)->nullable();
                 $table->decimal('nilai_ipk', 4, 2)->nullable();
@@ -138,7 +137,6 @@ class CreateCandidateProfileTables extends Migration
                     ->on('new_recruitment')
                     ->nullOnDelete();
 
-                // CV, KTP, KK, NPWP, Ijazah, Transkrip, Sertifikat, Foto, dll
                 $table->string('jenis_dokumen', 100);
                 $table->string('nama_file', 255);
                 $table->text('path_file');
