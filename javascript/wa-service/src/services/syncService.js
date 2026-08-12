@@ -6,27 +6,21 @@ const { emitStatus } = require('../baileys/qrHandler');
 const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
 
 async function finalizeConnectSync(userId, io) {
+    const contactSyncCoordinator = require('./contactSyncCoordinator');
     const session = require('../baileys/sessionManager').getSession(userId);
-    if (session?.sock) {
-        await chatNameService.enrichGroupNames(userId, session.sock);
-        await chatNameService.syncContactNamesToChats(userId);
-    }
 
-    const syncedContacts = await contactService.syncContactsFromDevice(
+    await chatNameService.maybeEnrichChatNames(userId, io);
+    await contactSyncCoordinator.syncDeviceContactsIfDue(
         userId,
         session?.sock,
         session?.contactStore,
+        io,
     );
-    if (syncedContacts) {
-        await chatNameService.syncContactNamesToChats(userId);
-    }
 
     const { chats, statusChats } = await messageService.syncAndEmitChats(userId, io);
-    const { emitContactsSync } = require('../baileys/qrHandler');
-    const contacts = await contactService.getContacts(userId);
-    emitContactsSync(io, userId, contacts);
+    contactSyncCoordinator.scheduleContactsEmit(userId, io);
     emitStatus(io, userId, 'connected', { syncing: false, syncProgress: null });
-    console.log(`[sync] user ${userId} connect ready — ${chats.length} chats, ${statusChats.length} status, ${contacts.length} contacts`);
+    console.log(`[sync] user ${userId} connect ready — ${chats.length} chats, ${statusChats.length} status`);
 
     if (session?.sock) {
         avatarService.syncAvatarsInBackground(userId, session.sock, [], io, { limit: 50 })
@@ -58,7 +52,8 @@ async function processHistorySync(userId, { chats = [], contacts = [], messages 
 
     if (contacts.length) {
         await contactService.upsertContacts(userId, contacts, { allowPushName: false, fromPhonebook: false });
-        await chatNameService.syncContactNamesToChats(userId);
+        const contactSyncCoordinator = require('./contactSyncCoordinator');
+        contactSyncCoordinator.scheduleContactNamesSync(userId, io);
     }
 
     if (chats.length) {
