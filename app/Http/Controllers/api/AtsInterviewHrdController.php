@@ -100,7 +100,16 @@ class AtsInterviewHrdController extends Controller
                 });
             })
             ->addColumn('hrd_interview', function ($row) {
-                return $row->hrdInterview;
+                $hrd = $row->hrdInterview;
+                if (!$hrd) {
+                    $hrdRaw = DB::table('recruitment_interviews')
+                        ->where('new_recruitment_id', $row->id)
+                        ->where('stage', 'hrd')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    return $hrdRaw ? (array) $hrdRaw : null;
+                }
+                return $hrd ? $hrd->toArray() : null;
             })
             ->addColumn('usia', function ($row) {
                 $birthYear = $this->extractBirthYear($row);
