@@ -491,16 +491,25 @@ class AtsSalaryOfferController extends Controller
             ], 404);
         }
 
+        if (empty($applicant->token_approval)) {
+            $tokenService = new \App\Services\GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $applicant->token_approval = $token;
+            $applicant->save();
+        } else {
+            $token = $applicant->token_approval;
+        }
+
         $portalUrl = rtrim(env('PORTALV4', 'http://127.0.0.1:8000'), '/');
-        $token = $applicant->token_approval;
 
         $btn = (object) [
-            'approve'   => "{$portalUrl}/new-recruitment/decision/{$token}?decision=approve",
-            'reject'    => "{$portalUrl}/new-recruitment/decision/{$token}?decision=reject",
-            'negotiate' => "{$portalUrl}/new-recruitment/salary-decision/{$token}?decision=negotiate",
+            'approve'   => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=approve",
+            'reject'    => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=reject",
+            'negotiate' => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=negotiate",
         ];
 
-        $targetEmail = 'alawi@intilab.com';
+        $targetEmail = 'harold@intilab.com';
         $user = $this->karyawan;
 
         try {
@@ -512,6 +521,14 @@ class AtsSalaryOfferController extends Controller
                 ->where('karyawan', $user)
                 ->noReply()
                 ->send();
+
+            SallaryOffer::updateOrCreate(
+                ['new_recruitment_id' => $applicant->id],
+                [
+                    'email_sent_at' => Carbon::now(),
+                    'updated_by'    => $user ?? 'System',
+                ]
+            );
 
             return response()->json([
                 'status'  => 200,
