@@ -444,12 +444,15 @@ async function getChatContactMeta(userId, row) {
 
     const detail = await getContactDetail(userId, row.jid);
     const phone = detail?.phone?.replace(/\D/g, '') || null;
+    const contactName = detail?.name && isGoodContactName(detail.name, row.jid)
+        ? detail.name
+        : null;
 
     return {
         phone: detail?.phone || null,
-        has_saved_name: Boolean(detail?.has_saved_name),
+        has_saved_name: Boolean(detail?.has_saved_name && contactName),
         is_manual: Boolean(detail?.is_manual),
-        contact_name: detail?.has_saved_name ? detail.name : null,
+        contact_name: contactName,
         avatar_url: detail?.avatar_url || null,
     };
 }

@@ -18,6 +18,7 @@ docker-compose.yml
 .prettierrc
 package-lock.json
 package.json
+!javascript/wa-service/package.json
 
 # wa-service (Node.js Baileys)
 javascript/wa-service/node_modules/
