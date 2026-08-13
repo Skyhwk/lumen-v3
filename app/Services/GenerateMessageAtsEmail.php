@@ -182,7 +182,7 @@ class GenerateMessageAtsEmail
                 <tr>
                     <td style='padding-top: 10px; font-size: 14px; line-height: 1.8;'>
                         <div style='margin-bottom: 12px;'>
-                            <strong>Status Karyawan:</strong> Karyawan Kontrak dengan Masa Percobaan 3 Bulan
+                            <strong>Status Karyawan:</strong> Training
                         </div>
 
                         <strong>Gaji dan Tunjangan:</strong>
@@ -193,6 +193,7 @@ class GenerateMessageAtsEmail
                             <li><strong>Pot. BPJS Ketenagakerjaan:</strong> Rp. {$potBpjsTk}</li>
                             <li><strong>Pencadangan Upah:</strong> Rp. {$pencadanganUpah}</li>
                         </ul>
+                        " . ((float)($data->pencadangan_upah ?? 0) > 0 ? "<div style='font-size: 12px; font-style: italic; color: #475569; margin-top: -10px; margin-bottom: 15px;'>*Pencadangan upah akan dikembalikan ketika masa pelatihan telah selesai</div>" : "") . "
 
                         <div style='margin-bottom: 8px;'>
                             <strong>Tanggal Mulai Bekerja:</strong> {$tglMulaiKerja}

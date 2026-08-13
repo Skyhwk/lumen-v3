@@ -602,7 +602,7 @@ class AtsInterviewUserController extends Controller
             ], 404);
         }
 
-        $targetEmail = 'alawi@intilab.com';
+        $targetEmail = 'abdulpatah@intilab.com';
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
         try {
