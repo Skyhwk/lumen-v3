@@ -277,10 +277,10 @@ class AppsBasService
 
             $finalResult = array_values($finalResult);
 
-            // Deteksi jika ada jadwal parsial pada tanggal yang sama dengan sampler yang sama
+            // Deteksi jika ada jadwal parsial pada tanggal yang sama dengan sampler yang sama dan periode yang sama
             $samplerCounts = [];
             foreach ($finalResult as $res) {
-                $samplerKey = $res['nomor_quotation'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
+                $samplerKey = $res['nomor_quotation'] . '|' . $res['periode'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
                 if (!isset($samplerCounts[$samplerKey])) {
                     $samplerCounts[$samplerKey] = 0;
                 }
@@ -288,7 +288,7 @@ class AppsBasService
             }
 
             foreach ($finalResult as &$res) {
-                $samplerKey = $res['nomor_quotation'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
+                $samplerKey = $res['nomor_quotation'] . '|' . $res['periode'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
                 $res['is_sampler_duplicate'] = $samplerCounts[$samplerKey] > 1;
             }
             unset($res);
