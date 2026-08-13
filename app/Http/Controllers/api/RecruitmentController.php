@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use App\Models\{
     MasterKaryawan,
     Recruitment,
@@ -12,7 +11,7 @@ use App\Models\{
     SoalPsikotes,
     PapiRole,
     PapiRule,
-    RecruitmantExamp,KodeUniqRecruitment};
+    RecruitmantExamp,KodeUniqRecruitment, PersonnelRequest};
 
 
 
@@ -23,6 +22,11 @@ use Yajra\Datatables\Datatables;
 use App\Services\Crypto;
 use App\Helpers\Helper;
 use App\Helpers\ShioElemenHelper;
+use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
+use App\Services\GenerateMessageAtsWhatsapp;
+use App\Services\RecruitmentStatusService;
+use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
 
 
@@ -225,6 +229,273 @@ class RecruitmentController extends Controller{
                 'data'=> NULL,
             ], 401);
         }
+    }
+
+    public function newSubmit(Request $request)
+    {
+        $pictureFilename = null;
+        $pictureService = app(RecruitmentPictureService::class);
+
+        try {
+            $namaLengkap = trim((string) $request->input('nama_lengkap'));
+            $email = strtolower(trim((string) $request->input('email')));
+            $noTelepon = trim((string) $request->input('no_telepon'));
+            $noTeleponNormalized = preg_replace('/\D+/', '', $noTelepon);
+
+            if ($namaLengkap === '' || $email === '' || $noTeleponNormalized === '') {
+                return response()->json([
+                    'message' => 'Nama lengkap, email, dan nomor telepon wajib diisi.',
+                    'status' => false,
+                ], 422);
+            }
+
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return response()->json([
+                    'message' => 'Format email tidak valid.',
+                    'status' => false,
+                ], 422);
+            }
+
+            $money = function ($value) {
+                if ($value === null || $value === '') {
+                    return null;
+                }
+
+                $clean = preg_replace('/[^\d,.-]/', '', (string) $value);
+                if (strpos($clean, ',') !== false && strpos($clean, '.') !== false) {
+                    $clean = str_replace('.', '', $clean);
+                    $clean = str_replace(',', '.', $clean);
+                } else {
+                    $clean = str_replace(',', '', $clean);
+                }
+
+                return is_numeric($clean) ? $clean : null;
+            };
+
+            $json = function ($value) {
+                if (is_array($value)) {
+                    return json_encode($value);
+                }
+
+                if ($value === null || $value === '') {
+                    return null;
+                }
+
+                json_decode($value);
+                return json_last_error() === JSON_ERROR_NONE ? $value : json_encode([]);
+            };
+
+            $requestKey = $request->input('personnel_request_id', $request->input('personal_request_id'));
+            $personnelRequest = null;
+
+            if ($requestKey !== null && $requestKey !== '') {
+                $personnelRequestQuery = PersonnelRequest::query()
+                    ->where('is_active', true);
+
+                if (is_numeric($requestKey)) {
+                    $personnelRequestQuery->where(function ($query) use ($requestKey) {
+                        $query->where('id', $requestKey)
+                            ->orWhere('no_request', $requestKey);
+                    });
+                } else {
+                    $personnelRequestQuery->where('no_request', $requestKey);
+                }
+
+                $personnelRequest = $personnelRequestQuery->first();
+            }
+
+            if (!$personnelRequest) {
+                return response()->json([
+                    'message' => 'Personnel request tidak ditemukan atau sudah tidak aktif.',
+                    'status' => false,
+                ], 404);
+            }
+
+            $duplicate = DB::table('new_recruitment')
+                ->where('personnel_request_id', $personnelRequest->id)
+                ->whereRaw('LOWER(TRIM(nama_lengkap)) = ?', [strtolower($namaLengkap)])
+                ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
+                ->exists();
+
+            if ($duplicate) {
+                return response()->json([
+                    'message' => 'Anda sudah pernah mendaftar pada lamaran ini.',
+                    'status' => false,
+                ], 409);
+            }
+
+            $picture = $request->input('picture', $request->input('foto_selfie'));
+            if (!$picture) {
+                return response()->json([
+                    'message' => 'Foto selfie wajib diunggah.',
+                    'status' => false,
+                ], 422);
+            }
+            $pictureFilename = $pictureService->storeBase64($picture);
+
+            $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, null, null);
+            $token = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
+
+            DB::beginTransaction();
+
+            $id = DB::table('new_recruitment')->insertGetId([
+                'nama_lengkap' => $namaLengkap,
+                'tempat_lahir' => $request->tempat_lahir,
+                'tanggal_lahir' => $request->tanggal_lahir,
+                'jenis_kelamin' => $request->jenis_kelamin,
+                'alamat_ktp' => $request->alamat_ktp,
+                'alamat_domisili' => $request->alamat_domisili,
+                'no_telepon' => $noTelepon,
+                'email' => $email,
+                'pendidikan' => $json($request->pendidikan),
+                'pengalaman_kerja' => $json($request->pengalaman_kerja),
+                'shio' => $shioElemen['shio'] ?? null,
+                'elemen' => $shioElemen['elemen'] ?? null,
+                'personnel_request_id' => $personnelRequest->id,
+                'posisi_dilamar' => $personnelRequest->posisi ?? null,
+                'gaji_terakhir' => $money($request->gaji_terakhir),
+                'ekspetasi_gaji' => $money($request->ekspektasi_gaji) ?? 0,
+                'tanggal_join_tercepat' => $request->tanggal_join_tercepat,
+                'picture' => $pictureFilename,
+                'token' => $token,
+                'created_at' => DATE('Y-m-d H:i:s'),
+                'updated_at' => DATE('Y-m-d H:i:s'),
+            ]);
+            (new RecruitmentStatusService())->update($id, 'assessment');
+
+            $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
+                . '/new-recruitment/assessment/' . rawurlencode($token);
+            $emailBody = $this->assessmentInvitationEmail([
+                'nama_lengkap' => $namaLengkap,
+                'posisi_dilamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
+                'assessment_url' => $assessmentUrl,
+            ]);
+
+            SendEmail::where('to', $email)
+                ->where('subject', 'Undangan Career Assessment - PT Inti Surya Laboratorium')
+                ->where('body', $emailBody)
+                ->where('cc', [])
+                ->where('bcc', [])
+                ->where('karyawan', 'Recruitment System')
+                ->noReply('PT Inti Surya Laboratorium')
+                ->send();
+
+            try {
+                $whatsappData = (object) [
+                    'nama_lengkap' => $namaLengkap,
+                    'posisi_di_lamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
+                    'assessment_url' => $assessmentUrl,
+                ];
+                $whatsappMessage = (new GenerateMessageAtsWhatsapp($whatsappData))->Assessment();
+                (new SendWhatsapp($noTelepon, $whatsappMessage))->send();
+            } catch (\Throwable $whatsappException) {
+                \Log::warning('Recruitment assessment WhatsApp failed', [
+                    'phone' => $noTelepon,
+                    'message' => $whatsappException->getMessage(),
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message'=> 'Berhasil mendaftar',
+                'status'=> true,
+                'data' => [
+                    'id' => $id,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            $pictureService->delete($pictureFilename);
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+
+            return response()->json([
+                'message'=> $th->getMessage(),
+                'line'=> $th->getLine(),
+                'status'=> false,
+            ], 500);
+        }
+    }
+
+    public function assessmentEmailPreview()
+    {
+        $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
+            . '/new-recruitment/assessment/contoh-token-assessment';
+
+        return response($this->assessmentInvitationEmail([
+            'nama_lengkap' => 'Harold Leonardo Panjaitan',
+            'posisi_dilamar' => 'Programmer',
+            'assessment_url' => $assessmentUrl,
+        ]));
+    }
+
+    private function assessmentInvitationEmail(array $data)
+    {
+        return view('Email.recruitment-assessment-invitation', $data)->render();
+    }
+
+    public function approveInterviewHrd(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+            $recruitment = DB::table('new_recruitment')->where('id', $request->id)->lockForUpdate()->first();
+            if (!$recruitment) {
+                DB::rollBack();
+                return response()->json(['message' => 'Data kandidat tidak ditemukan.'], 404);
+            }
+            if (trim((string) $recruitment->token) === '') {
+                DB::rollBack();
+                return response()->json(['message' => 'Token kandidat belum tersedia.'], 422);
+            }
+
+            $now = Carbon::now();
+            DB::table('new_recruitment')->where('id', $recruitment->id)->update([
+                'is_approved_interview_hrd' => 1,
+                'approved_interview_hrd_by' => trim((string) $request->input('approved_by')) ?: 'Recruitment HRD',
+                'approved_interview_hrd_at' => $now,
+                'updated_at' => $now,
+            ]);
+            (new RecruitmentStatusService())->update($recruitment->id, 'profile_completion', $now);
+
+            $completeProfileUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
+                . '/new-recruitment/complete-profile/' . rawurlencode($recruitment->token);
+            SendEmail::where('to', $recruitment->email)
+                ->where('subject', 'Kelengkapan Profil Kandidat - PT Inti Surya Laboratorium')
+                ->where('body', $this->completeProfileInvitationEmail([
+                    'nama_lengkap' => $recruitment->nama_lengkap,
+                    'posisi_dilamar' => $this->positionLabel($recruitment),
+                    'complete_profile_url' => $completeProfileUrl,
+                ]))
+                ->where('cc', [])
+                ->where('bcc', [])
+                ->where('karyawan', trim((string) $request->input('approved_by')) ?: 'Recruitment HRD')
+                ->noReply('PT Inti Surya Laboratorium')
+                ->send();
+
+            DB::commit();
+            return response()->json(['status' => true, 'message' => 'Kandidat disetujui dan email kelengkapan profil berhasil dikirim.']);
+        } catch (\Throwable $th) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            return response()->json(['message' => $th->getMessage(), 'status' => false], 500);
+        }
+    }
+
+    private function completeProfileInvitationEmail(array $data)
+    {
+        return view('Email.complete-profile-invitation', $data)->render();
+    }
+
+    private function positionLabel($recruitment)
+    {
+        $alias = DB::table('personnel_requests')
+            ->where('id', $recruitment->personnel_request_id)
+            ->value('divisi_alias');
+
+        return $alias ?: ($recruitment->posisi_dilamar ?: 'Posisi yang dilamar');
     }
 
     public function updatekAndidatApi(Request $request) {
@@ -1060,5 +1331,72 @@ class RecruitmentController extends Controller{
         ->whereMonth('kehadiran', $month)
         ->get();
         return Datatables::of($data)->make(true);
+    }
+
+    public function jobList()
+    {
+        try {
+            $data = PersonnelRequest::query()
+                ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
+                ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
+                ->where('personnel_requests.is_active', true)
+                ->where('personnel_requests.is_reject', false)
+                ->where('personnel_requests.is_publish', true)
+                ->select([
+                    'no_request',
+                    'divisi',
+                    'jumlah_personal',
+                    'lokasi_penempatan_cabang',
+                    'pengalaman_kerja',
+                    'gender',
+                    'prioritas',
+                    'divisi_alias',
+                    'divisi_alias',
+                    'md.nama_divisi as divisi_name',
+                    'mc.nama_cabang as placement',
+                ])
+                ->get()
+                ->makeHidden(['divisi', 'lokasi_penempatan_cabang']);
+
+            return response()->json($data, 200);
+        } catch (\Exception $th) {
+            return response()->json([
+                'message' => 'Gagal mengambil data job list.',
+            ], 500);
+        }
+    }
+
+    public function getJob(Request $request)
+    {
+        try {
+            $data = PersonnelRequest::query()
+                ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
+                ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
+                ->where('personnel_requests.is_active', true)
+                ->where('personnel_requests.is_reject', false)
+                ->where('personnel_requests.is_publish', true)
+                ->where('no_request', $request->no_request)
+                ->select([
+                    'personnel_requests.id',
+                    'no_request',
+                    'divisi',
+                    'jumlah_personal',
+                    'lokasi_penempatan_cabang',
+                    'pengalaman_kerja',
+                    'gender',
+                    'prioritas',
+                    'divisi_alias',
+                    'md.nama_divisi as divisi_name',
+                    'mc.nama_cabang as placement',
+                ])
+                ->first()
+                ->makeHidden(['divisi', 'lokasi_penempatan_cabang']);
+
+            return response()->json($data, 200);
+        } catch (\Exception $th) {
+            return response()->json([
+                'message' => 'Gagal mengambil data job list.',
+            ], 500);
+        }
     }
 }

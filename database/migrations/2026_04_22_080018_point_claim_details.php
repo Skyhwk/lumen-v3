@@ -13,6 +13,7 @@ class PointClaimDetails extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('point_claim_details')) {
         Schema::create('point_claim_details', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('claim_id')->index();
@@ -26,6 +27,7 @@ class PointClaimDetails extends Migration
         
             $table->index(['earning_id', 'claim_id']);
         });
+        }
     }
 
     /**

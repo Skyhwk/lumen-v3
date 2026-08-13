@@ -22,6 +22,7 @@ class AddGoodsReceiptFlowToPurchaseRequestsTable extends Migration
             'Distributed'
         ) NULL");
 
+        if (Schema::hasTable('purchase_requests')) {
         Schema::table('purchase_requests', function (Blueprint $table) {
             $table->string('po_approved_by', 255)->nullable()->after('po_created_at');
             $table->dateTime('po_approved_at')->nullable()->after('po_approved_by');
@@ -34,6 +35,7 @@ class AddGoodsReceiptFlowToPurchaseRequestsTable extends Migration
             $table->string('user_receipt_by', 255)->nullable()->after('user_receipt_at');
             $table->text('user_receipt_note')->nullable()->after('user_receipt_by');
         });
+        }
     }
 
     public function down()
