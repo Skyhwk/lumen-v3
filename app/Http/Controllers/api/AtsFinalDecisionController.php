@@ -154,14 +154,6 @@ class AtsFinalDecisionController extends Controller
                     }
                 }
 
-                if (!$emailSentAt) {
-                    return [
-                        'code' => 'not_sent',
-                        'label' => 'Belum Dikirim',
-                        'email_sent_at' => null,
-                    ];
-                }
-
                 if ($decision === 'approved') {
                     return [
                         'code' => 'approved',
@@ -185,6 +177,14 @@ class AtsFinalDecisionController extends Controller
                         'label' => 'Dinegosiasikan',
                         'negotiated_amount' => $amount,
                         'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
+                if (!$emailSentAt) {
+                    return [
+                        'code' => 'not_sent',
+                        'label' => 'Belum Dikirim',
+                        'email_sent_at' => null,
                     ];
                 }
 
@@ -343,7 +343,7 @@ class AtsFinalDecisionController extends Controller
             (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'internal_sallary_offer_approved');
 
             try {
-                $targetEmail = 'alawi@intilab.com';
+                $targetEmail = $applicant->email;
                 $posisiName = $this->resolvePositionName($applicant);
                 $dataObj = (object) [
                     'nama_lengkap'        => $applicant->nama_lengkap,
@@ -415,7 +415,7 @@ class AtsFinalDecisionController extends Controller
                     ];
 
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataObj);
-                    SendEmail::where('to', 'alawi@intilab.com')
+                    SendEmail::where('to', $applicant->email)
                         ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                         ->where('body', $bodyEmail)
                         ->where('karyawan', $user)
@@ -518,7 +518,7 @@ class AtsFinalDecisionController extends Controller
             'negotiate' => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=negotiate",
         ];
 
-        $targetEmail = 'alawi@intilab.com';
+        $targetEmail = env('EMAIL_DIREKTUR_BAPAK');
         $user = $this->karyawan;
 
         try {
@@ -608,6 +608,14 @@ class AtsFinalDecisionController extends Controller
             ]
         );
 
+        SallaryOffer::updateOrCreate(
+            ['new_recruitment_id' => $id],
+            [
+                'final_sallary' => $gajiPokok,
+                'updated_by'    => $user ?? 'HRD',
+            ]
+        );
+
         $applicant->approved_by = $user ?? 'HRD';
         $applicant->approved_at = $now;
         $applicant->save();
@@ -615,7 +623,7 @@ class AtsFinalDecisionController extends Controller
         (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'candidate_approved');
 
         try {
-            $targetEmail = 'alawi@intilab.com';
+            $targetEmail = $applicant->email;
             $posisiName = $this->resolvePositionName($applicant);
             $dataObj = (object) [
                 'nama_lengkap'        => $applicant->nama_lengkap,

@@ -2,7 +2,7 @@
     $sectionTitle = 'margin:0 0 12px 0;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;';
     $cardStyle = 'width:100%;border-collapse:separate;border-spacing:0;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin:0 0 20px 0;';
     $labelStyle = 'padding:10px 16px;width:38%;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;vertical-align:top;';
-    $valueStyle = 'padding:10px 16px;font-size:13px;color:#0f172a;font-weight:600;border-top:1px solid #e2e8f0;vertical-align:top;';
+    $valueStyle = 'padding:10px 16px;font-size:13px;color:#0f172a;font-weight:400;border-top:1px solid #e2e8f0;vertical-align:top;';
 @endphp
 
 <p style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;">Detail Kandidat & Offering Salary</p>
@@ -31,7 +31,7 @@
                         <td class="info-label"
                             style="padding:4px 0;width:42%;font-size:13px;color:#64748b;vertical-align:top;">{{ $label }}
                         </td>
-                        <td style="padding:4px 0 4px 8px;font-size:13px;color:#0f172a;font-weight:600;vertical-align:top;">:
+                        <td style="padding:4px 0 4px 8px;font-size:13px;color:#0f172a;font-weight:400;vertical-align:top;">:
                             {{ $value }}
                         </td>
                     </tr>
@@ -69,10 +69,10 @@
 @endphp
 
 <p style="{{ $sectionTitle }}">Hasil Interview HRD</p>
-@include('TemplateEmail.hrd.partials.info-table', ['rows' => $reviewHrdRows])
+@include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $reviewHrdRows])
 
 <p style="{{ $sectionTitle }}">Hasil Interview User</p>
-@include('TemplateEmail.hrd.partials.info-table', ['rows' => $reviewUserRows])
+@include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $reviewUserRows])
 
 @php
     $profile = $profile ?? $data->candidateProfile ?? null;
@@ -98,7 +98,7 @@
 @endphp
 
 <p style="{{ $sectionTitle }}">Personal Information</p>
-@include('TemplateEmail.hrd.partials.info-table', ['rows' => $personalRows])
+@include('TemplateEmail.hrd.partials.info-table-salary-offer    ', ['rows' => $personalRows])
 
 @php
     $medical = $medical ?? $data->candidateMedicalInformation ?? null;
@@ -115,7 +115,7 @@
 @endphp
 
 <p style="{{ $sectionTitle }}">Medical Information</p>
-@include('TemplateEmail.hrd.partials.info-table', ['rows' => $medicalRows])
+@include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $medicalRows])
 
 @php
     $addressRows = [
@@ -130,7 +130,7 @@
 @endphp
 
 <p style="{{ $sectionTitle }}">Address & Phone</p>
-@include('TemplateEmail.hrd.partials.info-table', ['rows' => $addressRows])
+@include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $addressRows])
 
 @if(!empty($pendidikan))
     <p style="{{ $sectionTitle }}">Education</p>

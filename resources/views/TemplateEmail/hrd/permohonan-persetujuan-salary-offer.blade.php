@@ -31,7 +31,7 @@
             <tr>
                         <td
                 style="padding:12px 18px;width:38%;font-size:13px;color:#64748b;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $label }}</td>
-            <td style="padding:12px 18px;font-size:14px;color:#0f172a;font-weight:600;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $value }}</td>
+            <td style="padding:12px 18px;font-size:14px;color:#0f172a;font-weight:400;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $value }}</td>
             </tr>
     @endforeach
 </table>
@@ -44,7 +44,7 @@
 <p style="margin:0 0 28px 0;font-size:14px;line-height:1.8;color:#475569;">
     Terima kasih atas perhatian dan kerja samanya.<br><br>
     Hormat kami,<br>
-    <strong style="color:#1e40af;">HRD Recruitment Team</strong>
+    <strong style="color:#1e40af;">HRD & Talent Acquisition Division</strong>
 </p>
 
 <div style="height:1px;background-color:#e2e8f0;margin:0 0 28px 0;"></div>
