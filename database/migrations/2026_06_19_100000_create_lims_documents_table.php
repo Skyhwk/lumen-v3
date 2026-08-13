@@ -8,6 +8,7 @@ class CreateLimsDocumentsTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('lims_documents')) {
         Schema::create('lims_documents', function (Blueprint $table) {
             $table->id();
             $table->string('menu_slug', 255);
@@ -28,6 +29,7 @@ class CreateLimsDocumentsTable extends Migration
 
             $table->index(['menu_slug', 'is_active']);
         });
+        }
     }
 
     public function down()
