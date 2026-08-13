@@ -209,7 +209,18 @@ class CompleteProfileController extends Controller
             if (empty($item['jenjang_pendidikan']) || empty($item['nama_institusi'])) {
                 continue;
             }
-            DB::table('candidate_educations')->insert(['candidate_profile_id' => $profileId, 'new_recruitment_id' => $recruitmentId, 'jenjang_pendidikan' => $item['jenjang_pendidikan'], 'nama_institusi' => $item['nama_institusi'], 'jurusan' => $item['jurusan'] ?? null, 'nilai_ipk' => $item['nilai_ipk'] ?: null, 'tahun_masuk' => $item['tahun_masuk'] ?: null, 'tahun_lulus' => $item['tahun_lulus'] ?: null, 'created_at' => $now, 'updated_at' => $now]);
+            DB::table('candidate_educations')->insert([
+                'candidate_profile_id' => $profileId,
+                'new_recruitment_id' => $recruitmentId,
+                'jenjang_pendidikan' => $item['jenjang_pendidikan'] ?? null,
+                'nama_institusi' => $item['nama_institusi'] ?? null,
+                'jurusan' => $item['jurusan'] ?? null,
+                'nilai_ipk' => !empty($item['nilai_ipk']) ? $item['nilai_ipk'] : null,
+                'tahun_masuk' => !empty($item['tahun_masuk']) ? $item['tahun_masuk'] : null,
+                'tahun_lulus' => !empty($item['tahun_lulus']) ? $item['tahun_lulus'] : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
     }
 
