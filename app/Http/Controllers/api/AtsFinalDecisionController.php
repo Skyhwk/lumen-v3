@@ -106,11 +106,13 @@ class AtsFinalDecisionController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer'])
             ->where(function ($q) {
-                $q->whereIn('status', ['management_decision', 'final_decision', 'internal_sallary_offer', 'salary_offer', 'sallary_offer'])
+                $q->whereIn('status', ['management_decision', 'final_decision', 'internal_sallary_offer', 'salary_offer', 'sallary_offer', 'hired', 'rejected'])
                   ->orWhere('status', 'like', '%management%')
                   ->orWhere('status', 'like', '%final%')
                   ->orWhere('status', 'like', '%salary%')
-                  ->orWhere('status', 'like', '%sallary%');
+                  ->orWhere('status', 'like', '%sallary%')
+                  ->orWhere('status', 'like', '%hired%')
+                  ->orWhere('status', 'like', '%reject%');
             })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
@@ -340,7 +342,7 @@ class AtsFinalDecisionController extends Controller
             $applicant->approved_at = $now;
             $applicant->save();
 
-            (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'internal_sallary_offer_approved');
+            (new \App\Services\RecruitmentStatusService())->update($id, 'hired', $now, 'internal_sallary_offer_approved');
 
             try {
                 $targetEmail = $applicant->email;
@@ -402,7 +404,7 @@ class AtsFinalDecisionController extends Controller
         }
 
         if ($decision === 'reject') {
-            (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'internal_sallary_offer_rejected');
+            (new \App\Services\RecruitmentStatusService())->update($id, 'rejected', $now, 'internal_sallary_offer_rejected');
 
             try {
                 if (!empty($applicant->email)) {
@@ -436,9 +438,6 @@ class AtsFinalDecisionController extends Controller
         if ($expectedSalary !== null) {
             $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $expectedSalary)));
             $valueToSave = $cleanSalary !== '' ? $cleanSalary : $expectedSalary;
-
-            $applicant->ekspetasi_gaji = $valueToSave;
-            $applicant->save();
 
             $user = $this->karyawan;
 
@@ -620,7 +619,7 @@ class AtsFinalDecisionController extends Controller
         $applicant->approved_at = $now;
         $applicant->save();
 
-        (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'candidate_approved');
+        (new \App\Services\RecruitmentStatusService())->update($id, 'hired', $now, 'candidate_approved');
 
         try {
             $targetEmail = $applicant->email;
