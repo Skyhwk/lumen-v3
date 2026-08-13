@@ -16,111 +16,103 @@ class GenerateMessageAtsEmail
     {
         $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
         $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
-        $alamat = nl2br(htmlspecialchars($data->alamat ?? 'Jakarta'));
-        $noTelepon = htmlspecialchars($data->no_telepon ?? '-');
+        $hari = htmlspecialchars($data->hariIndonesia ?? '');
+        $tanggal = htmlspecialchars($data->tglInter ?? '');
+        $jam = htmlspecialchars($data->jam_interview ?? $data->jam_interview_hrd ?? '');
+        $jenisMode = htmlspecialchars($data->jenis_interview_hrd ?? 'Online');
 
-        $gajiPokok = number_format((float)($data->gaji_pokok ?? 0), 0, ',', '.');
-        $potBpjsKes = number_format((float)($data->potongan_bpjs_kes ?? 0), 0, ',', '.');
-        $potBpjsTk = number_format((float)($data->potongan_bpjs_tk ?? 0), 0, ',', '.');
-        $potPph21 = number_format((float)($data->pot_pph21 ?? 0), 0, ',', '.');
-        $pencadanganUpah = number_format((float)($data->pencadangan_upah ?? 0), 0, ',', '.');
-
-        $tglMulaiKerja = htmlspecialchars($data->tanggal_mulai_kerja ?? '-');
-        $jamKerja = htmlspecialchars($data->jam_mulai_kerja ?? '08:00 - 17:00');
-        $hariKerja = htmlspecialchars($data->hari_kerja ?? 'Senin s.d Jumat');
+        $locationDetail = '';
+        if ($jenisMode === 'Online') {
+            $linkGmeet = htmlspecialchars($data->link_gmeet_hrd ?? '-');
+            $locationDetail = "
+                <tr>
+                    <td style='padding: 6px 0; color: #475569; font-weight: 600; width: 140px;'>Meeting Link</td>
+                    <td style='padding: 6px 0; color: #1e293b;'><a href='{$linkGmeet}' target='_blank' style='color: #2563eb; text-decoration: underline; font-weight: 600;'>{$linkGmeet}</a></td>
+                </tr>";
+        } else {
+            $alamat = nl2br(htmlspecialchars($data->alamat_cabang ?? 'Ruang HRD PT Inti Surya Laboratorium'));
+            $locationDetail = "
+                <tr>
+                    <td style='padding: 6px 0; color: #475569; font-weight: 600; width: 140px; vertical-align: top;'>Lokasi Ruangan</td>
+                    <td style='padding: 6px 0; color: #1e293b; font-weight: 500;'>{$alamat}</td>
+                </tr>
+                <tr>
+                    <td colspan='2' style='padding: 6px 0; color: #64748b; font-size: 13px;'>
+                        * Harap hadir 10 menit sebelum jadwal dan membawa berkas pendukung (CV Terbaru, FC KTP & KK).
+                    </td>
+                </tr>";
+        }
 
         return "
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset='utf-8'>
-            <title>Offering Letter - PT Inti Surya Laboratorium</title>
+            <title>Undangan Interview HRD - PT Inti Surya Laboratorium</title>
         </head>
-        <body style='font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px 0; color: #1e293b;'>
-            <table align='center' border='0' cellpadding='0' cellspacing='0' width='650' style='background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
-                
-                <!-- Title Header -->
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                <!-- Header -->
                 <tr>
-                    <td style='border-bottom: 2px solid #2563eb; padding-bottom: 15px; text-align: center;'>
-                        <h2 style='margin: 0; color: #1e293b; letter-spacing: 1px; font-size: 22px; text-transform: uppercase;'>OFFERING LETTER</h2>
-                        <div style='color: #64748b; font-size: 13px; margin-top: 4px;'>PT INTI SURYA LABORATORIUM</div>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD & Talent Acquisition Division</div>
                     </td>
                 </tr>
 
-                <!-- Candidate Header Info -->
+                <!-- Content -->
                 <tr>
-                    <td style='padding-top: 25px; font-size: 14px; line-height: 1.6;'>
-                        <strong>Kepada :</strong><br>
-                        Sdr/Sdri. <strong>{$namaLengkap}</strong><br>
-                        {$alamat}<br>
-                        {$noTelepon}
-                    </td>
-                </tr>
+                    <td style='padding: 32px;'>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
 
-                <!-- Greeting & Intro -->
-                <tr>
-                    <td style='padding-top: 20px; font-size: 14px; line-height: 1.6;'>
-                        <p style='margin-top: 0;'>Salam sejahtera,</p>
-                        <p>Berdasarkan hasil seleksi dan wawancara yang telah dilakukan, dengan ini <strong>PT. Inti Surya Laboratorium</strong> mengucapkan selamat bahwa Anda telah terpilih untuk bergabung dengan tim kami sebagai <strong>{$posisi}</strong>. Kami berharap Anda dapat menjadi bagian dari perkembangan perusahaan kami dan memberikan kontribusi terbaik.</p>
-                    </td>
-                </tr>
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Sehubungan dengan proses seleksi posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami mengundang Anda untuk mengikuti tahapan <strong>Interview HRD</strong> dengan rincian sebagai berikut:
+                        </p>
 
-                <!-- Breakdown Section -->
-                <tr>
-                    <td style='padding-top: 10px; font-size: 14px; line-height: 1.8;'>
-                        <div style='margin-bottom: 12px;'>
-                            <strong>Status Karyawan:</strong> Karyawan Kontrak dengan Masa Percobaan 3 Bulan
+                        <!-- Schedule Box -->
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Jadwal Wawancara
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600; width: 140px;'>Posisi</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$posisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Hari & Tanggal</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 600;'>{$hari}, {$tanggal}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Waktu</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 600;'>{$jam} WIB</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Metode</td>
+                                    <td style='padding: 4px 0; color: #2563eb; font-weight: 700;'>{$jenisMode}</td>
+                                </tr>
+                                {$locationDetail}
+                            </table>
                         </div>
 
-                        <strong>Gaji dan Tunjangan:</strong>
-                        <ul style='margin-top: 6px; margin-bottom: 15px; padding-left: 20px;'>
-                            <li><strong>Gaji Pokok:</strong> Rp. {$gajiPokok} per bulan (sebelum pajak)</li>
-                            <li><strong>Pot. PPH 21:</strong> Rp. {$potPph21}</li>
-                            <li><strong>Pot. BPJS Kesehatan:</strong> Rp. {$potBpjsKes}</li>
-                            <li><strong>Pot. BPJS Ketenagakerjaan:</strong> Rp. {$potBpjsTk}</li>
-                            <li><strong>Pencadangan Upah:</strong> Rp. {$pencadanganUpah}</li>
-                            <li><strong>BPJS Kesehatan dan BPJS Ketenagakerjaan:</strong> Sesuai dengan peraturan yang berlaku.</li>
-                        </ul>
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Mohon konfirmasi balasan ketersediaan Anda paling lambat <strong>24 jam</strong> setelah pesan ini diterima.
+                        </p>
 
-                        <div style='margin-bottom: 8px;'>
-                            <strong>Tanggal Mulai Bekerja:</strong> {$tglMulaiKerja}
-                        </div>
-                        <div style='margin-bottom: 12px;'>
-                            <strong>Hari dan Jam Kerja:</strong> {$hariKerja} & {$jamKerja} WIB
-                        </div>
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
+                            Demikian pemberitahuan ini kami sampaikan. Atas perhatian Anda, kami ucapkan terima kasih.
+                        </p>
                     </td>
                 </tr>
 
-                <!-- Closing Text -->
+                <!-- Footer -->
                 <tr>
-                    <td style='padding-top: 10px; font-size: 14px; line-height: 1.6;'>
-                        <p>Kami berharap Anda dapat menerima penawaran ini dan memberikan konfirmasi penerimaan maksimal dalam 7 hari kerjasejak tanggal surat ini diterima. Jika ada pertanyaan lebih lanjut, jangan ragu untuk menghubungi kami.</p>
-                        <p>Terima kasih atas perhatian dan kerja samanya.</p>
+                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Salam,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment & Talent Acquisition</span><br>
+                        PT Inti Surya Laboratorium
                     </td>
                 </tr>
-
-                <!-- Signature Footer Table -->
-                <tr>
-                    <td style='padding-top: 40px;'>
-                        <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
-                            <tr>
-                                <td width='50%' style='vertical-align: top;'>
-                                    Hormat Kami,<br>
-                                    <strong>Mengetahui,</strong><br><br><br><br>
-                                    <strong>Tim HRD & Management</strong><br>
-                                    <span style='color: #64748b; font-size: 13px;'>PT Inti Surya Laboratorium</span>
-                                </td>
-                                <td width='50%' style='vertical-align: top; text-align: right;'>
-                                    <br>
-                                    <strong>Menyetujui,</strong><br><br><br><br>
-                                    <strong>{$namaLengkap}</strong><br>
-                                    <span style='color: #64748b; font-size: 13px;'>Karyawan</span>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-
             </table>
         </body>
         </html>
