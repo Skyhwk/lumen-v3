@@ -134,9 +134,6 @@ class SendEmail
             case 'attachment':
                 self::$instance->attachments = $value;
                 break;
-            case 'attachments':
-                self::$instance->attachments = is_array($value) ? $value : [$value];
-                break;
             case 'karyawan':
                 if (empty($value)) {
                     throw new \Exception('Karyawan is required');

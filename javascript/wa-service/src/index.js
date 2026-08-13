@@ -13,6 +13,7 @@ async function bootstrap() {
     const config = loadEnv();
     const app = express();
 
+    app.set('trust proxy', 1);
     app.use(cors({ origin: config.corsOrigin, credentials: true }));
     app.use(express.json({ limit: '2mb' }));
     app.use('/media', express.static(path.resolve(config.mediaDir)));
@@ -42,6 +43,10 @@ async function bootstrap() {
             origin: config.corsOrigin,
             credentials: true,
         },
+        // Default /socket.io — Apache strip prefix /wa-service sebelum forward
+        path: '/socket.io',
+        transports: ['polling', 'websocket'],
+        allowEIO3: true,
     });
 
     initWaSocket(io);
