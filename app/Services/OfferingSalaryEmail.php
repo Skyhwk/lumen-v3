@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-class HrdEmailViewData
+class OfferingSalaryEmail
 {
     public static function contactLine($data): string
     {
@@ -22,11 +22,16 @@ class HrdEmailViewData
 
     public static function photoUrl($data): string
     {
-        if (empty($data->foto_selfie)) {
+        $foto = $data->foto_selfie ?? $data->picture ?? null;
+        if (empty($foto)) {
             return '';
         }
 
-        return 'https://apps.intilab.com/v3/public/recruitment/foto/' . $data->foto_selfie;
+        if (env('APP_ENV') === 'production') {
+            return 'https://apps.intilab.com/v3/public/recruitment/foto/' . $foto;
+        }
+
+        return url('recruitment/foto/' . $foto);
     }
 
     public static function decodeJsonField($value): array
@@ -185,9 +190,13 @@ class HrdEmailViewData
             $pengalamanList = self::decodeJsonField($data->pengalaman_kerja ?? null);
         }
 
+        $medical = $data->candidateMedicalInformation 
+            ?? \App\Models\CandidateMedicalInformation::where('new_recruitment_id', $data->id ?? 0)->first();
+
         return [
             'data'                 => $data,
             'profile'              => $profile,
+            'medical'              => $medical,
             'photoUrl'             => self::photoUrl($data),
             'pendidikan'           => $pendidikanList,
             'pengalamanKerja'      => $pengalamanList,

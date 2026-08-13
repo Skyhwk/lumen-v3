@@ -9,14 +9,13 @@ class CandidateWorkExperience extends Model
     protected $table = 'candidate_work_experiences';
     protected $guarded = [];
 
-    protected $casts = [
-        'tanggal_mulai'   => 'date',
-        'tanggal_selesai' => 'date',
-        'is_active'       => 'boolean',
-    ];
-
     public function candidateProfile()
     {
         return $this->belongsTo(CandidateProfile::class, 'candidate_profile_id');
+    }
+
+    public function newRecruitment()
+    {
+        return $this->belongsTo(NewRecruitment::class, 'new_recruitment_id');
     }
 }

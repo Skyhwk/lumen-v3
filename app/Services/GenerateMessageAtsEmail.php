@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\OfferingSalaryEmail;
+
 class GenerateMessageAtsEmail
 {
     /**
@@ -18,7 +20,7 @@ class GenerateMessageAtsEmail
         $tanggal = htmlspecialchars($data->tglInter ?? '');
         $jam = htmlspecialchars($data->jam_interview ?? $data->jam_interview_hrd ?? '');
         $jenisMode = htmlspecialchars($data->jenis_interview_hrd ?? 'Online');
-        
+
         $locationDetail = '';
         if ($jenisMode === 'Online') {
             $linkGmeet = htmlspecialchars($data->link_gmeet_hrd ?? '-');
@@ -62,7 +64,7 @@ class GenerateMessageAtsEmail
                 <tr>
                     <td style='padding: 32px;'>
                         <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
-                        
+
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Sehubungan dengan proses seleksi posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami mengundang Anda untuk mengikuti tahapan <strong>Interview HRD</strong> dengan rincian sebagai berikut:
                         </p>
@@ -111,6 +113,121 @@ class GenerateMessageAtsEmail
                         PT Inti Surya Laboratorium
                     </td>
                 </tr>
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Official Offering Letter Email Template
+     * 
+     * @param object $data
+     * @return string
+     */
+    public static function bodyEmailOfferingLetter($data)
+    {
+        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
+        $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $alamat = nl2br(htmlspecialchars($data->alamat ?? 'Jakarta'));
+        $noTelepon = htmlspecialchars($data->no_telepon ?? '-');
+
+        $gajiPokok = number_format((float)($data->gaji_pokok ?? 0), 0, ',', '.');
+        $potBpjsKes = number_format((float)($data->potongan_bpjs_kes ?? 0), 0, ',', '.');
+        $potBpjsTk = number_format((float)($data->potongan_bpjs_tk ?? 0), 0, ',', '.');
+        $potPph21 = number_format((float)($data->pot_pph21 ?? 0), 0, ',', '.');
+        $pencadanganUpah = number_format((float)($data->pencadangan_upah ?? 0), 0, ',', '.');
+
+        $tglMulaiKerja = htmlspecialchars($data->tanggal_mulai_kerja ?? '-');
+        $jamKerja = htmlspecialchars($data->jam_mulai_kerja ?? '08:00 - 17:00');
+        $hariKerja = htmlspecialchars($data->hari_kerja ?? 'Senin s.d Jumat');
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Offering Letter - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px 0; color: #1e293b;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='650' style='background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
+                
+                <!-- Title Header -->
+                <tr>
+                    <td style='padding-bottom: 15px; text-align: center;'>
+                        <h2 style='margin: 0; color: #1e293b; letter-spacing: 1px; font-size: 22px; text-transform: uppercase;'>OFFERING LETTER</h2>
+                        <div style='color: #64748b; font-size: 13px; margin-top: 4px;'>PT INTI SURYA LABORATORIUM</div>
+                    </td>
+                </tr>
+
+                <!-- Candidate Header Info -->
+                <tr>
+                    <td style='padding-top: 25px; font-size: 14px; line-height: 1.6;'>
+                        Kepada :<br>
+                        Sdr/Sdri. {$namaLengkap}<br>
+                        {$alamat}<br>
+                        {$noTelepon}
+                    </td>
+                </tr>
+
+                <!-- Greeting & Intro -->
+                <tr>
+                    <td style='padding-top: 20px; font-size: 14px; line-height: 1.6;'>
+                        <p style='margin-top: 0;'>Salam sejahtera,</p>
+                        <p>Berdasarkan hasil seleksi dan wawancara yang telah dilakukan, dengan ini <strong>PT. Inti Surya Laboratorium</strong> mengucapkan selamat bahwa Anda telah terpilih untuk bergabung dengan tim kami sebagai <strong>{$posisi}</strong>. Kami berharap Anda dapat menjadi bagian dari perkembangan perusahaan kami dan memberikan kontribusi terbaik.</p>
+                    </td>
+                </tr>
+
+                <!-- Breakdown Section -->
+                <tr>
+                    <td style='padding-top: 10px; font-size: 14px; line-height: 1.8;'>
+                        <div style='margin-bottom: 12px;'>
+                            <strong>Status Karyawan:</strong> Training
+                        </div>
+
+                        <strong>Gaji dan Tunjangan:</strong>
+                        <ul style='margin-top: 6px; margin-bottom: 15px; padding-left: 20px;'>
+                            <li><strong>Gaji Pokok:</strong> Rp. {$gajiPokok} per bulan (sebelum pajak)</li>
+                            <li><strong>Pot. PPH 21:</strong> Rp. {$potPph21}</li>
+                            <li><strong>Pot. BPJS Kesehatan:</strong> Rp. {$potBpjsKes}</li>
+                            <li><strong>Pot. BPJS Ketenagakerjaan:</strong> Rp. {$potBpjsTk}</li>
+                            <li><strong>Pencadangan Upah:</strong> Rp. {$pencadanganUpah}</li>
+                        </ul>
+                        " . ((float)($data->pencadangan_upah ?? 0) > 0 ? "<div style='font-size: 12px; font-style: italic; color: #475569; margin-top: -10px; margin-bottom: 15px;'>*Pencadangan upah akan dikembalikan ketika masa pelatihan telah selesai</div>" : "") . "
+
+                        <div style='margin-bottom: 8px;'>
+                            <strong>Tanggal Mulai Bekerja:</strong> {$tglMulaiKerja}
+                        </div>
+                        <div style='margin-bottom: 12px;'>
+                            <strong>Hari dan Jam Kerja:</strong> {$hariKerja} & 08.00 - 17.00 WIB
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Closing Text -->
+                <tr>
+                    <td style='padding-top: 10px; font-size: 14px; line-height: 1.6;'>
+                        <p>Kami berharap Anda dapat menerima penawaran ini dan memberikan konfirmasi penerimaan maksimal dalam 7 hari kerja sejak tanggal surat ini diterima. Jika ada pertanyaan lebih lanjut, jangan ragu untuk menghubungi kami.</p>
+                        <p>Terima kasih atas perhatian dan kerja samanya.</p>
+                    </td>
+                </tr>
+
+                <!-- Signature Footer Table -->
+                <tr>
+                    <td style='padding-top: 40px;'>
+                        <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                            <tr>
+                                <td width='50%' style='vertical-align: top;'>
+                                    Hormat Kami,<br>
+                                    Mengetahui<br><br>
+                                    Tim HRD Recruitment & Talent Acquisition<br>
+                                    <span>PT Inti Surya Laboratorium</span>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
             </table>
         </body>
         </html>
@@ -576,5 +693,289 @@ class GenerateMessageAtsEmail
         } catch (\Throwable $th) {
             throw $th;
         }
+    }
+
+    /**
+     * Email Template to Candidate for User Interview Schedule & Location / Link
+     *
+     * @param object $data
+     * @return string
+     */
+    public static function bodyEmailUserInterviewCandidate($data)
+    {
+        $namaKandidat   = htmlspecialchars($data->nama_kandidat ?? 'Candidate');
+        $posisi         = htmlspecialchars($data->posisi ?? '-');
+        $jenisInterview = htmlspecialchars($data->jenis_interview ?? '-');
+        $linkGmeet      = htmlspecialchars($data->link_gmeet ?? '');
+        $ruangan        = htmlspecialchars($data->ruangan_interview ?? 'Office Room');
+        $catatan        = $data->catatan ?? '';
+        $tglInterview   = $data->tgl_interview ?? '-';
+
+        $jenisTypeStr = strtolower(strip_tags($data->jenis_interview ?? 'online'));
+
+        $detailLocationHtml = "";
+        if ($jenisTypeStr === 'online') {
+            $detailLocationHtml = "
+            <tr>
+                <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Link Google Meet</td>
+                <td style='padding: 5px 0; color: #0284c7; font-weight: 600;'><a href='{$linkGmeet}' target='_blank' style='color: #2563eb;'>{$linkGmeet}</a></td>
+            </tr>";
+        } else {
+            $detailLocationHtml = "
+            <tr>
+                <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Ruangan Interview</td>
+                <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$ruangan}</td>
+            </tr>";
+        }
+
+        $catatanHtml = "";
+        if (!empty($catatan)) {
+            $catatanHtml = "
+            <div style='margin-top: 20px;'>
+                <strong style='font-size: 14px; color: #475569;'>Catatan / Pesan Tambahan:</strong>
+                <div style='font-size: 14px; line-height: 1.6; color: #334155; background-color: #fff; border: 1px solid #e2e8f0; padding: 12px; border-radius: 4px; margin-top: 6px;'>
+                    {$catatan}
+                </div>
+            </div>";
+        }
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Undangan User Interview - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                <!-- Header -->
+                <tr>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
+                    </td>
+                </tr>
+
+                <!-- Status Banner -->
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #e0f2fe; border-left: 4px solid #0284c7; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;'>&#9432; Undangan User Interview</span>
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style='padding: 32px;'>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaKandidat}</strong>,</p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Sehubungan dengan proses seleksi penerimaan karyawan untuk posisi <strong>{$posisi}</strong> di PT Inti Surya Laboratorium, kami mengundang Anda untuk mengikuti sesi <strong>User Interview</strong> yang telah dijadwalkan sebagai berikut:
+                        </p>
+
+                        <!-- Candidate Info Box -->
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Detail Jadwal Interview
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600; width: 150px;'>Nama Kandidat</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Posisi</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$posisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tanggal Interview</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$tglInterview}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tipe Interview</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600; text-transform: capitalize;'>{$jenisInterview}</td>
+                                </tr>
+                                {$detailLocationHtml}
+                            </table>
+                        </div>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0; margin-top: 24px;'>
+                            Mohon konfirmasi kehadiran Anda dan harap mempersiapkan diri dengan baik sebelum waktu interview dimulai. Atas perhatian dan kerja samanya, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Hormat kami,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment HRD</span><br>
+                        PT Inti Surya Laboratorium
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Email Template to Requesting User for User Interview Schedule & Location / Link
+     *
+     * @param object $data
+     * @return string
+     */
+    public static function bodyEmailUserInterviewUserNotif($data)
+    {
+        $namaUser       = htmlspecialchars($data->nama_user ?? 'User');
+        $namaKandidat   = htmlspecialchars($data->nama_kandidat ?? 'Candidate');
+        $noRequest      = htmlspecialchars($data->no_request ?? '-');
+        $posisi         = htmlspecialchars($data->posisi ?? '-');
+        $jenisInterview = htmlspecialchars($data->jenis_interview ?? '-');
+        $linkGmeet      = htmlspecialchars($data->link_gmeet ?? '');
+        $ruangan        = htmlspecialchars($data->ruangan_interview ?? 'Office Room');
+        $catatan        = $data->catatan ?? '';
+        $tglInterview   = $data->tgl_interview ?? '-';
+
+        $jenisTypeStr = strtolower(strip_tags($data->jenis_interview ?? 'online'));
+
+        $detailLocationHtml = "";
+        if ($jenisTypeStr === 'online') {
+            $detailLocationHtml = "
+            <tr>
+                <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Link Google Meet</td>
+                <td style='padding: 5px 0; color: #0284c7; font-weight: 600;'><a href='{$linkGmeet}' target='_blank' style='color: #2563eb;'>{$linkGmeet}</a></td>
+            </tr>";
+        } else {
+            $detailLocationHtml = "
+            <tr>
+                <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Ruangan Interview</td>
+                <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$ruangan}</td>
+            </tr>";
+        }
+
+        $catatanHtml = "";
+        if (!empty($catatan)) {
+            $catatanHtml = "
+            <div style='margin-top: 20px;'>
+                <strong style='font-size: 14px; color: #475569;'>Catatan / Pesan Tambahan:</strong>
+                <div style='font-size: 14px; line-height: 1.6; color: #334155; background-color: #fff; border: 1px solid #e2e8f0; padding: 12px; border-radius: 4px; margin-top: 6px;'>
+                    {$catatan}
+                </div>
+            </div>";
+        }
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Pemberitahuan User Interview - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                <!-- Header -->
+                <tr>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
+                    </td>
+                </tr>
+
+                <!-- Status Banner -->
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #e0f2fe; border-left: 4px solid #0284c7; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;'>&#9432; Sarana User Interview Telah Disediakan</span>
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style='padding: 32px;'>
+                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaUser}</strong>,</p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Melalui email ini kami informasikan bahwa sarana/ruangan untuk sesi <strong>User Interview</strong> kandidat pada Personnel Request Anda (No. Request: <strong>{$noRequest}</strong>) telah disiapkan:
+                        </p>
+
+                        <!-- Candidate Info Box -->
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Informasi Sesi Interview
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600; width: 150px;'>No. Request</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$noRequest}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Nama Kandidat</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Posisi</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$posisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tanggal Interview</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$tglInterview}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tipe Interview</td>
+                                    <td style='padding: 5px 0; color: #0f172a; font-weight: 600; text-transform: capitalize;'>{$jenisInterview}</td>
+                                </tr>
+                                {$detailLocationHtml}
+                            </table>
+                        </div>
+
+                        {$catatanHtml}
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0; margin-top: 24px;'>
+                            Demikian pemberitahuan ini disampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Hormat kami,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment HRD</span><br>
+                        PT Inti Surya Laboratorium
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Professional Email Template for Candidate Salary Offer Approval (Permohonan Persetujuan Offering Salary)
+     * 
+     * @param object $data
+     * @param object|null $btn
+     * @param string|null $mark
+     * @return string
+     */
+    public static function bodyEmailSallaryOffer($data, $btn = null, $mark = 'Offering Salary')
+    {
+        // $data isinya adalah new_recruitment, dikirim dari controller
+        if ($data == null) {
+            return '';
+        }
+
+        return view('TemplateEmail.hrd.permohonan-persetujuan-salary-offer', [
+            'data'    => $data,
+            'btn'     => $btn,
+            'mark'    => $mark,
+            'contact' => OfferingSalaryEmail::contactLine($data),
+
+            // cv diambil dari data CandidateProfile dan relasi2 tabel candidate lain
+            'cv'      => OfferingSalaryEmail::prepareCvData($data),
+        ])->render();
     }
 }

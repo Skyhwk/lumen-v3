@@ -175,6 +175,13 @@ class AtsInterviewHrdController extends Controller
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'interview_hrd';
             })
+            ->addColumn('has_reschedule_history', function ($row) {
+                $count = DB::table('recruitment_interviews')
+                    ->where('new_recruitment_id', $row->id)
+                    ->where('stage', 'hrd')
+                    ->count();
+                return $count > 1;
+            })
             ->make(true);
     }
 

@@ -4,8 +4,12 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
+use App\Models\CandidateDataOffers;
 use App\Models\NewRecruitment;
 use App\Models\RecruitmentInterview;
+use App\Models\SallaryOffer;
+use App\Services\GenerateMessageAtsEmail;
+use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -100,11 +104,13 @@ class AtsFinalDecisionController extends Controller
      */
     public function index(Request $request)
     {
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
+        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer'])
             ->where(function ($q) {
-                $q->whereIn('status', ['management_decision', 'final_decision'])
+                $q->whereIn('status', ['management_decision', 'final_decision', 'internal_sallary_offer', 'salary_offer', 'sallary_offer'])
                   ->orWhere('status', 'like', '%management%')
-                  ->orWhere('status', 'like', '%final%');
+                  ->orWhere('status', 'like', '%final%')
+                  ->orWhere('status', 'like', '%salary%')
+                  ->orWhere('status', 'like', '%sallary%');
             })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
@@ -117,6 +123,76 @@ class AtsFinalDecisionController extends Controller
         return DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
+            })
+            ->addColumn('sallary_offer', function ($row) {
+                return $row->sallaryOffer;
+            })
+            ->addColumn('candidate_data_offer', function ($row) {
+                return $row->candidateDataOffer;
+            })
+            ->addColumn('expected_salary', function ($row) {
+                return optional($row->sallaryOffer)->sallary_offer_hrd ?? $row->ekspetasi_gaji ?? 0;
+            })
+            ->addColumn('sallary_offer_direktur', function ($row) {
+                return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
+            })
+            ->addColumn('offering_status', function ($row) {
+                $offer = $row->sallaryOffer;
+                $emailSentAt = $offer->email_sent_at ?? null;
+
+                $history = json_decode($row->meta_history ?: '[]', true);
+                $history = is_array($history) ? $history : [];
+
+                $decision = null;
+                if (!empty($history)) {
+                    for ($i = count($history) - 1; $i >= 0; $i--) {
+                        $hStatus = (string) ($history[$i]['status'] ?? '');
+                        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
+                            $decision = $m[1];
+                            break;
+                        }
+                    }
+                }
+
+                if ($decision === 'approved') {
+                    return [
+                        'code' => 'approved',
+                        'label' => 'Disetujui',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
+                if ($decision === 'rejected') {
+                    return [
+                        'code' => 'rejected',
+                        'label' => 'Ditolak',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
+                if ($decision === 'negotiated') {
+                    $amount = $offer->sallary_offer_direktur ?? null;
+                    return [
+                        'code' => 'negotiated',
+                        'label' => 'Dinegosiasikan',
+                        'negotiated_amount' => $amount,
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
+                if (!$emailSentAt) {
+                    return [
+                        'code' => 'not_sent',
+                        'label' => 'Belum Dikirim',
+                        'email_sent_at' => null,
+                    ];
+                }
+
+                return [
+                    'code' => 'email_sent',
+                    'label' => 'Email Terkirim',
+                    'email_sent_at' => $emailSentAt,
+                ];
             })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
@@ -165,5 +241,443 @@ class AtsFinalDecisionController extends Controller
             })
             ->rawColumns([])
             ->make(true);
+    }
+
+    private function isOfferingRejected($applicant)
+    {
+        $history = json_decode($applicant->meta_history ?: '[]', true);
+        $history = is_array($history) ? $history : [];
+        if (!empty($history)) {
+            for ($i = count($history) - 1; $i >= 0; $i--) {
+                $hStatus = (string) ($history[$i]['status'] ?? '');
+                if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
+                    return $m[1] === 'rejected';
+                }
+            }
+        }
+        return false;
+    }
+
+    public function updateExpectedSalary(Request $request, $id = null)
+    {
+        $id = $id ?? $request->header('id') ?? $request->input('id');
+
+        $applicant = NewRecruitment::find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status'  => 404,
+                'message' => 'Candidate data not found.',
+            ], 404);
+        }
+
+        if ($this->isOfferingRejected($applicant)) {
+            return response()->json([
+                'status'  => 400,
+                'message' => 'Salary offer for this candidate has been rejected. Actions are disabled.',
+            ], 400);
+        }
+
+        $decision = $request->input('decision');
+        $user = $this->karyawan;
+        $now = Carbon::now();
+
+        if ($decision === 'approve') {
+            $reqFinalSalary = $request->input('final_salary') ?? $request->input('final_sallary');
+            $offer = SallaryOffer::where('new_recruitment_id', $id)->first();
+
+            if ($reqFinalSalary !== null && $reqFinalSalary !== '') {
+                $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $reqFinalSalary)));
+                $finalSalary = $cleanSalary !== '' ? $cleanSalary : $reqFinalSalary;
+            } else {
+                $finalSalary = optional($offer)->sallary_offer_direktur ?? optional($offer)->sallary_offer_hrd ?? $applicant->ekspetasi_gaji;
+            }
+
+            SallaryOffer::updateOrCreate(
+                ['new_recruitment_id' => $id],
+                [
+                    'final_sallary' => $finalSalary,
+                    'updated_by'    => $user ?? 'HRD',
+                ]
+            );
+
+            $cleanNumber = function ($val) {
+                if ($val === null || $val === '') return 0;
+                $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
+                return $clean !== '' ? (float) $clean : 0;
+            };
+
+            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$finalSalary;
+            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
+            $potPph21        = $cleanNumber($request->input('pot_pph21'));
+            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+
+            $startDate = $request->input('start_date');
+            if (!empty($startDate)) {
+                try {
+                    $startDateTime = Carbon::parse($startDate)->startOfDay()->toDateTimeString();
+                } catch (\Exception $e) {
+                    $startDateTime = $startDate . ' 00:00:00';
+                }
+
+                CandidateDataOffers::updateOrCreate(
+                    ['new_recruitment_id' => $id],
+                    [
+                        'gaji_pokok'          => $gajiPokok,
+                        'potongan_bpjs_kes'   => $potBpjsKes,
+                        'potongan_bpjs_tk'    => $potBpjsTk,
+                        'pot_pph21'           => $potPph21,
+                        'tanggal_mulai_kerja' => $startDateTime,
+                        'pencadangan_upah'    => $pencadanganUpah,
+                        'created_by'          => $user ?? 'HRD',
+                        'updated_by'          => $user ?? 'HRD',
+                    ]
+                );
+            }
+
+            $applicant->approved_by = $user ?? 'HRD';
+            $applicant->approved_at = $now;
+            $applicant->save();
+
+            (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'internal_sallary_offer_approved');
+
+            try {
+                $targetEmail = $applicant->email;
+                $posisiName = $this->resolvePositionName($applicant);
+                $dataObj = (object) [
+                    'nama_lengkap'        => $applicant->nama_lengkap,
+                    'alamat'              => $applicant->alamat_domisili ?: ($applicant->alamat_ktp ?: '-'),
+                    'no_telepon'          => $applicant->no_telepon ?: ($applicant->no_hp ?: '-'),
+                    'nama_jabatan'        => $posisiName,
+                    'posisi_di_lamar'     => $posisiName,
+                    'gaji_pokok'          => $gajiPokok,
+                    'potongan_bpjs_kes'   => $potBpjsKes,
+                    'potongan_bpjs_tk'    => $potBpjsTk,
+                    'pot_pph21'           => $potPph21,
+                    'pencadangan_upah'    => $pencadanganUpah,
+                    'tanggal_mulai_kerja' => !empty($startDate) ? Carbon::parse($startDate)->translatedFormat('d F Y') : '-',
+                    'hari_kerja'          => 'Senin s.d Jumat',
+                ];
+
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailOfferingLetter($dataObj);
+
+                $pdfPath = sys_get_temp_dir() . '/Offering_Letter_' . preg_replace('/[^A-Za-z0-9_]/', '_', $applicant->nama_lengkap) . '.pdf';
+                try {
+                    $mpdf = new \Mpdf\Mpdf([
+                        'mode' => 'utf-8',
+                        'format' => 'A4',
+                        'margin_top' => 15,
+                        'margin_bottom' => 15,
+                        'margin_left' => 15,
+                        'margin_right' => 15,
+                    ]);
+                    $mpdf->WriteHTML($bodyEmail);
+                    $mpdf->Output($pdfPath, \Mpdf\Output\Destination::FILE);
+                } catch (\Exception $pdfEx) {
+                    $pdfPath = null;
+                }
+
+                $emailQuery = SendEmail::where('to', $targetEmail)
+                    ->where('subject', 'Offering Letter - PT Inti Surya Laboratorium')
+                    ->where('body', $bodyEmail)
+                    ->where('karyawan', $user);
+
+                if (!empty($pdfPath) && file_exists($pdfPath)) {
+                    $emailQuery->where('attachment', [$pdfPath]);
+                }
+
+                $emailQuery->noReply()->send();
+
+                if (!empty($pdfPath) && file_exists($pdfPath)) {
+                    @unlink($pdfPath);
+                }
+            } catch (\Exception $e) {}
+
+            return response()->json([
+                'status'  => 200,
+                'message' => 'Negotiated salary offer approved successfully with candidate data offer.',
+                'data'    => $applicant->fresh(['candidateDataOffer']),
+            ], 200);
+        }
+
+        if ($decision === 'reject') {
+            (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'internal_sallary_offer_rejected');
+
+            try {
+                if (!empty($applicant->email)) {
+                    $posisiName = $this->resolvePositionName($applicant);
+                    $dataObj = (object) [
+                        'nama_lengkap'    => $applicant->nama_lengkap,
+                        'nama_jabatan'    => $posisiName,
+                        'posisi_di_lamar' => $posisiName,
+                        'alasan_reject'   => 'Negotiated salary offer rejected',
+                    ];
+
+                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataObj);
+                    SendEmail::where('to', $applicant->email)
+                        ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
+                        ->where('body', $bodyEmail)
+                        ->where('karyawan', $user)
+                        ->noReply()
+                        ->send();
+                }
+            } catch (\Exception $e) {}
+
+            return response()->json([
+                'status'  => 200,
+                'message' => 'Negotiated salary offer rejected.',
+                'data'    => $applicant->fresh(),
+            ], 200);
+        }
+
+        $expectedSalary = $request->input('expected_salary') ?? $request->input('ekspetasi_gaji');
+
+        if ($expectedSalary !== null) {
+            $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $expectedSalary)));
+            $valueToSave = $cleanSalary !== '' ? $cleanSalary : $expectedSalary;
+
+            $applicant->ekspetasi_gaji = $valueToSave;
+            $applicant->save();
+
+            $user = $this->karyawan;
+
+            $offerData = [
+                'sallary_offer_hrd' => $valueToSave,
+                'updated_by'        => $user,
+            ];
+
+            if ($request->has('sallary_offer_direktur')) {
+                $offerData['sallary_offer_direktur'] = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_direktur'))));
+            }
+
+            if ($request->has('final_sallary')) {
+                $offerData['final_sallary'] = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('final_sallary'))));
+            }
+
+            SallaryOffer::updateOrCreate(
+                ['new_recruitment_id' => $id],
+                array_merge($offerData, [
+                    'created_by' => $user,
+                ])
+            );
+        }
+
+        return response()->json([
+            'status'  => 200,
+            'message' => 'Expected salary updated successfully.',
+            'data'    => $applicant->fresh(),
+        ], 200);
+    }
+
+    public function sendOfferingSalaryEmail(Request $request, $id = null)
+    {
+        $id = $id ?? $request->header('id') ?? $request->input('id');
+
+        $applicant = NewRecruitment::with([
+            'personnelRequest.masterJabatan', 
+            'masterJabatan', 
+            'sallaryOffer', 
+            'hrdInterview', 
+            'userInterview',
+            'candidateProfile', 
+            'candidateEducations', 
+            'candidateWorkExperiences',
+            'candidateMedicalInformation'
+        ])->find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status'  => 404,
+                'message' => 'Candidate data not found.',
+            ], 404);
+        }
+
+        if ($this->isOfferingRejected($applicant)) {
+            return response()->json([
+                'status'  => 400,
+                'message' => 'Salary offer for this candidate has been rejected. Sending email is disabled.',
+            ], 400);
+        }
+
+        if (empty($applicant->token_approval)) {
+            $tokenService = new \App\Services\GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $applicant->token_approval = $token;
+            $applicant->save();
+        } else {
+            $token = $applicant->token_approval;
+        }
+
+        $portalUrl = rtrim(env('PORTALV4', 'http://127.0.0.1:8000'), '/');
+
+        $btn = (object) [
+            'approve'   => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=approve",
+            'reject'    => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=reject",
+            'negotiate' => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=negotiate",
+        ];
+
+        $targetEmail = env('EMAIL_DIREKTUR_BAPAK');
+        $user = $this->karyawan;
+
+        try {
+            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $btn);
+
+            SendEmail::where('to', $targetEmail)
+                ->where('subject', 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat'))
+                ->where('body', $bodyEmail)
+                ->where('karyawan', $user)
+                ->noReply()
+                ->send();
+
+            SallaryOffer::updateOrCreate(
+                ['new_recruitment_id' => $applicant->id],
+                [
+                    'email_sent_at' => Carbon::now(),
+                    'updated_by'    => $user ?? 'System',
+                ]
+            );
+
+            return response()->json([
+                'status'  => 200,
+                'message' => 'Offering salary approval email sent successfully to ' . $targetEmail,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 500,
+                'message' => 'Failed to send email: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function approveCandidate(Request $request, $id = null)
+    {
+        $id = $id ?? $request->header('id') ?? $request->input('id');
+
+        $applicant = NewRecruitment::find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status'  => 404,
+                'message' => 'Candidate data not found.',
+            ], 404);
+        }
+
+        $startDate = $request->input('start_date');
+
+        if (empty($startDate)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Tanggal mulai kerja wajib diisi.',
+            ], 422);
+        }
+
+        $cleanNumber = function ($val) {
+            if ($val === null || $val === '') return 0;
+            $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
+            return $clean !== '' ? (float) $clean : 0;
+        };
+
+        $gajiPokok       = $cleanNumber($request->input('gaji_pokok'));
+        $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
+        $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
+        $potPph21        = $cleanNumber($request->input('pot_pph21'));
+        $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+
+        $user = $this->karyawan;
+        $now = Carbon::now();
+
+        try {
+            $startDateTime = Carbon::parse($startDate)->startOfDay()->toDateTimeString();
+        } catch (\Exception $e) {
+            $startDateTime = $startDate . ' 00:00:00';
+        }
+
+        CandidateDataOffers::updateOrCreate(
+            ['new_recruitment_id' => $id],
+            [
+                'gaji_pokok'          => $gajiPokok,
+                'potongan_bpjs_kes'   => $potBpjsKes,
+                'potongan_bpjs_tk'    => $potBpjsTk,
+                'pot_pph21'           => $potPph21,
+                'tanggal_mulai_kerja' => $startDateTime,
+                'pencadangan_upah'    => $pencadanganUpah,
+                'created_by'          => $user ?? 'HRD',
+                'updated_by'          => $user ?? 'HRD',
+            ]
+        );
+
+        SallaryOffer::updateOrCreate(
+            ['new_recruitment_id' => $id],
+            [
+                'final_sallary' => $gajiPokok,
+                'updated_by'    => $user ?? 'HRD',
+            ]
+        );
+
+        $applicant->approved_by = $user ?? 'HRD';
+        $applicant->approved_at = $now;
+        $applicant->save();
+
+        (new \App\Services\RecruitmentStatusService())->update($id, $applicant->status, $now, 'candidate_approved');
+
+        try {
+            $targetEmail = $applicant->email;
+            $posisiName = $this->resolvePositionName($applicant);
+            $dataObj = (object) [
+                'nama_lengkap'        => $applicant->nama_lengkap,
+                'alamat'              => $applicant->alamat_domisili ?: ($applicant->alamat_ktp ?: '-'),
+                'no_telepon'          => $applicant->no_telepon ?: ($applicant->no_hp ?: '-'),
+                'nama_jabatan'        => $posisiName,
+                'posisi_di_lamar'     => $posisiName,
+                'gaji_pokok'          => $gajiPokok,
+                'potongan_bpjs_kes'   => $potBpjsKes,
+                'potongan_bpjs_tk'    => $potBpjsTk,
+                'pot_pph21'           => $potPph21,
+                'pencadangan_upah'    => $pencadanganUpah,
+                'tanggal_mulai_kerja' => Carbon::parse($startDate)->translatedFormat('d F Y'),
+                'hari_kerja'          => 'Senin s.d Jumat',
+            ];
+
+            $bodyEmail = GenerateMessageAtsEmail::bodyEmailOfferingLetter($dataObj);
+
+            $pdfPath = sys_get_temp_dir() . '/Offering_Letter_' . preg_replace('/[^A-Za-z0-9_]/', '_', $applicant->nama_lengkap) . '.pdf';
+            try {
+                $mpdf = new \Mpdf\Mpdf([
+                    'mode' => 'utf-8',
+                    'format' => 'A4',
+                    'margin_top' => 15,
+                    'margin_bottom' => 15,
+                    'margin_left' => 15,
+                    'margin_right' => 15,
+                ]);
+                $mpdf->WriteHTML($bodyEmail);
+                $mpdf->Output($pdfPath, \Mpdf\Output\Destination::FILE);
+            } catch (\Exception $pdfEx) {
+                $pdfPath = null;
+            }
+
+            $emailQuery = SendEmail::where('to', $targetEmail)
+                ->where('subject', 'Offering Letter - PT Inti Surya Laboratorium')
+                ->where('body', $bodyEmail)
+                ->where('karyawan', $user);
+
+            if (!empty($pdfPath) && file_exists($pdfPath)) {
+                $emailQuery->where('attachment', [$pdfPath]);
+            }
+
+            $emailQuery->noReply()->send();
+
+            if (!empty($pdfPath) && file_exists($pdfPath)) {
+                @unlink($pdfPath);
+            }
+        } catch (\Exception $e) {}
+
+        return response()->json([
+            'status'  => 200,
+            'message' => 'Candidate approved successfully with candidate data offer.',
+            'data'    => $applicant->fresh(['candidateDataOffer']),
+        ], 200);
     }
 }
