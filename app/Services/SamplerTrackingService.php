@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Jadwal;
+use App\Models\SamplingPlan;
 use App\Models\OrderHeader;
 use App\Models\PersiapanSampelHeader;
 use App\Models\SamplerTrackingEvent;
@@ -151,6 +152,7 @@ class SamplerTrackingService
                 $orderHeader = OrderHeader::where('no_document', $first->no_quotation)
                     ->where('is_active', true)
                     ->first();
+                $samplingPlan = SamplingPlan::find($first->id_sampling);
 
                 $session = $this->findSession($teamKey);
                 $session->fill($this->onlyExistingColumns($session->getTable(), [
@@ -166,6 +168,7 @@ class SamplerTrackingService
                     'driver' => $first->driver,
                     'nama_perusahaan' => $first->nama_perusahaan,
                     'alamat_sampling' => $first->alamat ?? ($orderHeader->alamat_sampling ?? null),
+                    'google_maps_url' => $samplingPlan->google_maps_url ?? null,
                     'kategori' => $this->normalizeJson($first->kategori),
                     'status' => $session->status ?: 'scheduled',
                     'is_active' => true,
