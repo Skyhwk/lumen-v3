@@ -10,7 +10,13 @@ function isMessageHistorySyncEnabled() {
     return enableMessageHistorySync;
 }
 
+function isAutoDownloadMediaEnabled() {
+    const { autoDownloadMedia } = loadEnv();
+    return autoDownloadMedia;
+}
+
 module.exports = {
     parseEnvFlag,
     isMessageHistorySyncEnabled,
+    isAutoDownloadMediaEnabled,
 };

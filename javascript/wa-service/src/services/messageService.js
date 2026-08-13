@@ -17,7 +17,7 @@ const { pickStatus } = require('../utils/messageStatus');
 const { isPhoneLikeName, isWeakContactName, isGoodContactName, stripJid, isLidJid, isBareNumericId, resolvePhoneOrJid } = require('../utils/nameUtils');
 const { isGroupJid, isGroupMessageRetained } = require('../utils/groupRetentionUtils');
 const { getChatAnchor, setChatAnchorFromMessage } = require('./chatAnchorService');
-const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
+const { isMessageHistorySyncEnabled, isAutoDownloadMediaEnabled } = require('../utils/syncConfig');
 const { toMysqlDatetime, toTimestampMs, toApiIsoFromMs } = require('../utils/timestampUtils');
 const { sendWhatsAppAlbum } = require('../utils/albumSender');
 
@@ -493,7 +493,7 @@ async function saveMessage(userId, parsedMessage, { incrementUnread = false } = 
 
 async function processMessages(userId, messages = [], io, {
     emit = true,
-    downloadMedia = true,
+    downloadMedia = isAutoDownloadMediaEnabled(),
     applyGroupRetention = false,
 } = {}) {
     let saved = 0;
@@ -596,6 +596,17 @@ function formatMessageRow(row) {
         : null;
     const timestampMs = Number(row.timestamp_ms) || toTimestampMs(row.timestamp);
 
+    let media_status = null;
+    if (row.type && row.type !== 'text') {
+        if (hasMedia) {
+            media_status = 'ready';
+        } else if (mediaService.isMediaUnavailable(row.media_path)) {
+            media_status = 'unavailable';
+        } else {
+            media_status = 'pending';
+        }
+    }
+
     return {
         id: row.id,
         wa_message_id: row.wa_message_id,
@@ -620,6 +631,7 @@ function formatMessageRow(row) {
         media_mime: hasMedia ? row.media_mime || null : null,
         media_filename: hasMedia ? row.media_filename || null : null,
         media_url: mediaUrl,
+        media_status,
         timestamp: toApiIsoFromMs(timestampMs),
         timestamp_ms: timestampMs,
         status: row.status,
@@ -826,6 +838,72 @@ async function syncChatMedia(userId, jid, io = null, { limit = 25 } = {}) {
     }
 
     return { synced: updated.length, updated, requested };
+}
+
+async function downloadMessageMedia(userId, jid, waMessageId, io = null) {
+    const session = getWaSession(userId);
+    const sock = session?.sock;
+    if (!sock) {
+        throw new Error('WhatsApp belum terhubung');
+    }
+
+    const [rows] = await getPool().execute(
+        `SELECT m.*, c.jid
+         FROM wa_messages m
+         JOIN wa_chats c ON c.id = m.chat_id
+         WHERE c.user_id_erp = ? AND c.jid = ? AND m.wa_message_id = ?
+         LIMIT 1`,
+        [userId, jid, waMessageId],
+    );
+    const row = rows[0];
+    if (!row) {
+        throw new Error('Pesan tidak ditemukan');
+    }
+    if (row.type === 'text') {
+        throw new Error('Pesan ini bukan media');
+    }
+
+    const alreadyReady = row.media_path && !mediaService.isMediaUnavailable(row.media_path);
+    if (alreadyReady) {
+        const formatted = formatMessageRow(row);
+        const [enriched] = await enrichMessagesWithSenders(userId, [formatted]);
+        return { message: enriched || formatted, alreadyDownloaded: true };
+    }
+
+    if (!row.raw_message) {
+        throw new Error('Media tidak tersedia untuk diunduh. Coba sinkronkan pesan terlebih dahulu.');
+    }
+
+    let raw;
+    try {
+        raw = JSON.parse(row.raw_message);
+    } catch {
+        throw new Error('Data media pesan rusak');
+    }
+
+    const mediaPatch = await mediaService.downloadIncoming(sock, raw, userId, jid)
+        || mediaService.unavailableMediaPatch();
+
+    await getPool().execute(
+        `UPDATE wa_messages
+         SET media_path = ?, media_mime = ?, media_filename = ?
+         WHERE id = ?`,
+        [mediaPatch.media_path, mediaPatch.media_mime, mediaPatch.media_filename, row.id],
+    );
+
+    const formatted = formatMessageRow({ ...row, ...mediaPatch });
+    const [enriched] = await enrichMessagesWithSenders(userId, [formatted]);
+    const message = enriched || formatted;
+
+    if (io && !mediaService.isMediaUnavailable(mediaPatch.media_path)) {
+        emitMessageMedia(io, userId, { jid, message });
+    }
+
+    return {
+        message,
+        alreadyDownloaded: false,
+        unavailable: mediaService.isMediaUnavailable(mediaPatch.media_path),
+    };
 }
 
 async function findMessageAnchor(userId, jid) {
@@ -2085,6 +2163,7 @@ module.exports = {
     getMessages,
     searchMessages,
     syncChatMedia,
+    downloadMessageMedia,
     syncChatMessages,
     bootstrapGroupHistory,
     backupAndDeleteMessage,
