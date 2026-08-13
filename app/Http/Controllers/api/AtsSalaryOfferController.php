@@ -13,12 +13,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
-use App\Services\GenerateMessageAtsEmail;
-use App\Services\GenerateMessageAtsWhatsapp;
-use App\Services\SendEmail;
-use App\Services\SendWhatsapp;
 
-class AtsInterviewUserController extends Controller
+class AtsSalaryOfferController extends Controller
 {
     // ─── Helpers (same pattern as AtsInterviewHrdController) ─────────────────
 
@@ -80,7 +76,7 @@ class AtsInterviewUserController extends Controller
         }
 
         $pos = null;
-        $pr  = $applicant->personalRequest ?? null;
+        $pr  = $applicant->personnelRequest ?? null;
 
         if ($pr) {
             $masterJabatan = $pr->masterJabatan ?? null;
@@ -109,7 +105,7 @@ class AtsInterviewUserController extends Controller
     {
         $mode = $request->input('mode', 'scheduled');
 
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
+        $query = NewRecruitment::with(['personnelRequest.masterJabatan', 'userInterview', 'hrdInterview'])
             ->whereIn('status', ['interview_user', 'profile_completion'])
             ->where(function ($q) use ($mode) {
                 if ($mode === 'scheduled') {
@@ -134,10 +130,10 @@ class AtsInterviewUserController extends Controller
 
         return DataTables::of($query)
             ->addColumn('no_request', function ($row) {
-                return optional($row->personalRequest)->no_request ?? '-';
+                return optional($row->personnelRequest)->no_request ?? '-';
             })
             ->filterColumn('no_request', function ($q, $keyword) {
-                $q->whereHas('personalRequest', function ($sub) use ($keyword) {
+                $q->whereHas('personnelRequest', function ($sub) use ($keyword) {
                     $sub->where('no_request', 'like', "%{$keyword}%");
                 });
             })
@@ -150,7 +146,7 @@ class AtsInterviewUserController extends Controller
             ->filterColumn('posisi_dilamar', function ($q, $keyword) {
                 $q->where(function ($sub) use ($keyword) {
                     $sub->where('posisi_dilamar', 'like', "%{$keyword}%")
-                        ->orWhereHas('personalRequest.masterJabatan', function ($j) use ($keyword) {
+                        ->orWhereHas('personnelRequest.masterJabatan', function ($j) use ($keyword) {
                             $j->where('nama_jabatan', 'like', "%{$keyword}%");
                         });
                 });
@@ -179,44 +175,10 @@ class AtsInterviewUserController extends Controller
                 });
             })
             ->addColumn('user_interview', function ($row) {
-                $ui = $row->userInterview;
-                if (!$ui) {
-                    $uiRaw = DB::table('recruitment_interviews')
-                        ->where('new_recruitment_id', $row->id)
-                        ->where('stage', 'user')
-                        ->where('is_active', 1)
-                        ->orderBy('id', 'desc')
-                        ->first();
-                    if (!$uiRaw) {
-                        $uiRaw = DB::table('recruitment_interviews')
-                            ->where('new_recruitment_id', $row->id)
-                            ->where('stage', 'user')
-                            ->orderBy('id', 'desc')
-                            ->first();
-                    }
-                    return $uiRaw ? (array) $uiRaw : null;
-                }
-                return $ui ? $ui->toArray() : null;
+                return $row->userInterview;
             })
             ->addColumn('hrd_interview', function ($row) {
-                $hrd = $row->hrdInterview;
-                if (!$hrd) {
-                    $hrdRaw = DB::table('recruitment_interviews')
-                        ->where('new_recruitment_id', $row->id)
-                        ->where('stage', 'hrd')
-                        ->where('is_active', 1)
-                        ->orderBy('id', 'desc')
-                        ->first();
-                    if (!$hrdRaw) {
-                        $hrdRaw = DB::table('recruitment_interviews')
-                            ->where('new_recruitment_id', $row->id)
-                            ->where('stage', 'hrd')
-                            ->orderBy('id', 'desc')
-                            ->first();
-                    }
-                    return $hrdRaw ? (array) $hrdRaw : null;
-                }
-                return $hrd ? $hrd->toArray() : null;
+                return $row->hrdInterview;
             })
             ->addColumn('usia', function ($row) {
                 $birthYear = $this->extractBirthYear($row);
@@ -259,8 +221,8 @@ class AtsInterviewUserController extends Controller
      */
     public function updateSchedule(Request $request, $id = null)
     {
-        $candidateId = $id ?: $request->input('id') ?: $request->header('id');
-        $applicant = NewRecruitment::find($candidateId);
+        $id = $id ?? $request->header('id') ?? $request->input('id');
+        $applicant = NewRecruitment::find($id);
 
         if (!$applicant) {
             return response()->json([
@@ -271,7 +233,7 @@ class AtsInterviewUserController extends Controller
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
 
-        $interview = RecruitmentInterview::where('new_recruitment_id', $candidateId)
+        $interview = RecruitmentInterview::where('new_recruitment_id', $id)
             ->where('stage', 'user')
             ->where('is_active', 1)
             ->latest()
@@ -287,10 +249,14 @@ class AtsInterviewUserController extends Controller
 
         if ($request->filled('link_gmeet')) {
             $updateData['link_gmeet'] = trim(strip_tags($request->input('link_gmeet')));
+        } elseif ($request->has('link_gmeet')) {
+            $updateData['link_gmeet'] = null;
         }
 
         if ($request->filled('ruangan_interview')) {
             $updateData['ruangan_interview'] = trim(strip_tags($request->input('ruangan_interview')));
+        } elseif ($request->has('ruangan_interview')) {
+            $updateData['ruangan_interview'] = null;
         }
 
         if ($request->filled('tgl_interview')) {
@@ -299,6 +265,14 @@ class AtsInterviewUserController extends Controller
 
         if ($request->filled('catatan')) {
             $updateData['catatan'] = trim(strip_tags($request->input('catatan')));
+        } elseif ($request->has('catatan')) {
+            $updateData['catatan'] = null;
+        }
+
+        if ($request->filled('catatan_interview_user')) {
+            $updateData['catatan_interview_user'] = trim(strip_tags($request->input('catatan_interview_user')));
+        } elseif ($request->has('catatan_interview_user')) {
+            $updateData['catatan_interview_user'] = null;
         }
 
         if ($interview) {
@@ -323,93 +297,6 @@ class AtsInterviewUserController extends Controller
             $applicant->update(['status' => 'interview_user']);
         }
 
-        // Send Email & WhatsApp Notifications to Candidate and Requesting User
-        try {
-            $pr = $applicant->personalRequest;
-            $posisiName = $this->resolvePositionName($applicant);
-            $noRequest  = optional($pr)->no_request ?? '-';
-
-            $tglFormatted = '-';
-            if (!empty($interview->tgl_interview)) {
-                $tglFormatted = Carbon::parse($interview->tgl_interview)->format('d M Y, H:i') . ' WIB';
-            }
-
-            $jenisInterview = strtolower(strip_tags($interview->jenis_interview ?? 'online'));
-
-            // Extract & clean catatan strictly from recruitment_interviews.catatan column
-            $rawCatatan = $interview->catatan ?? null;
-            $catatanClean = !empty($rawCatatan) ? trim(strip_tags(html_entity_decode($rawCatatan))) : null;
-
-            // 1. Email & WhatsApp to Candidate
-            $candidateDataObj = (object) [
-                'nama_kandidat'     => $applicant->nama_lengkap,
-                'posisi'            => $posisiName,
-                'tgl_interview'     => $tglFormatted,
-                'jenis_interview'   => $jenisInterview,
-                'link_gmeet'        => $interview->link_gmeet,
-                'ruangan_interview' => $interview->ruangan_interview,
-                'catatan'           => $catatanClean,
-            ];
-
-            if (!empty($applicant->email)) {
-                $candidateEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewCandidate($candidateDataObj);
-                SendEmail::where('to', trim($applicant->email))
-                    ->where('subject', "Jadwal User Interview — PT Inti Surya Laboratorium")
-                    ->where('body', $candidateEmailBody)
-                    ->where('karyawan', $user)
-                    ->noReply()
-                    ->send();
-            }
-
-            $candidatePhone = $applicant->no_telepon ?: ($applicant->no_hp ?: ($applicant->no_whatsapp ?? null));
-            if (!empty($candidatePhone)) {
-                $waCandidateGen = new GenerateMessageAtsWhatsapp($candidateDataObj);
-                $waCandidateMsg = $waCandidateGen->UserInterviewScheduleCandidate();
-                $sendWaCandidate = new SendWhatsapp(trim($candidatePhone), $waCandidateMsg);
-                $sendWaCandidate->send();
-            }
-
-            // 2. Email only to Requesting User (PR Creator)
-            $prCreatedBy = $pr->created_by ?? null;
-            $prUser = null;
-            if ($prCreatedBy) {
-                $prUser = DB::table('master_karyawan')->where('nama_lengkap', $prCreatedBy)->first();
-                if (!$prUser) {
-                    $prUser = DB::table('master_karyawan')->where('id_karyawan', $prCreatedBy)->first();
-                }
-            }
-            if (!$prUser && $pr && !empty($pr->email)) {
-                $prUser = DB::table('master_karyawan')->where('email', $pr->email)->first();
-            }
-
-            $userEmail = $prUser->email ?? ($pr->email ?? null);
-            $userName  = $prUser->nama_lengkap ?? ($prCreatedBy ?: 'User');
-
-            $userDataObj = (object) [
-                'nama_user'         => $userName,
-                'nama_kandidat'     => $applicant->nama_lengkap,
-                'posisi'            => $posisiName,
-                'no_request'        => $noRequest,
-                'tgl_interview'     => $tglFormatted,
-                'jenis_interview'   => $jenisInterview,
-                'link_gmeet'        => $interview->link_gmeet,
-                'ruangan_interview' => $interview->ruangan_interview,
-                'catatan'           => $catatanClean,
-            ];
-
-            if (!empty($userEmail)) {
-                $userEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewUserNotif($userDataObj);
-                SendEmail::where('to', trim($userEmail))
-                    ->where('subject', "Pemberitahuan Sesi User Interview — {$applicant->nama_lengkap} ({$posisiName})")
-                    ->where('body', $userEmailBody)
-                    ->where('karyawan', $user)
-                    ->noReply()
-                    ->send();
-            }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("Failed sending User Interview notifications: " . $e->getMessage());
-        }
-
         return response()->json([
             'status'  => 200,
             'message' => 'User interview schedule saved successfully.',
@@ -419,7 +306,7 @@ class AtsInterviewUserController extends Controller
 
     public function salaryOffer(Request $request)
     {
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'sallaryOffer'])
+        $query = NewRecruitment::with(['personnelRequest.masterJabatan', 'userInterview', 'sallaryOffer'])
             ->where('status', 'internal_sallary_offer')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
@@ -431,10 +318,10 @@ class AtsInterviewUserController extends Controller
 
         return DataTables::of($query)
             ->addColumn('no_request', function ($row) {
-                return optional($row->personalRequest)->no_request ?? '-';
+                return optional($row->personnelRequest)->no_request ?? '-';
             })
             ->filterColumn('no_request', function ($q, $keyword) {
-                $q->whereHas('personalRequest', function ($sub) use ($keyword) {
+                $q->whereHas('personnelRequest', function ($sub) use ($keyword) {
                     $sub->where('no_request', 'like', "%{$keyword}%");
                 });
             })
@@ -447,7 +334,7 @@ class AtsInterviewUserController extends Controller
             ->filterColumn('posisi_dilamar', function ($q, $keyword) {
                 $q->where(function ($sub) use ($keyword) {
                     $sub->where('posisi_dilamar', 'like', "%{$keyword}%")
-                        ->orWhereHas('personalRequest.masterJabatan', function ($j) use ($keyword) {
+                        ->orWhereHas('personnelRequest.masterJabatan', function ($j) use ($keyword) {
                             $j->where('nama_jabatan', 'like', "%{$keyword}%");
                         });
                 });
@@ -529,7 +416,7 @@ class AtsInterviewUserController extends Controller
             ->make(true);
     }
 
-    public function updateExpectedSalary(Request $request, $id = null)
+       public function updateExpectedSalary(Request $request, $id = null)
     {
         $id = $id ?? $request->header('id') ?? $request->input('id');
 
@@ -586,13 +473,15 @@ class AtsInterviewUserController extends Controller
         $id = $id ?? $request->header('id') ?? $request->input('id');
 
         $applicant = NewRecruitment::with([
-            'personalRequest.masterJabatan', 
+            'personnelRequest.masterJabatan', 
             'masterJabatan', 
             'sallaryOffer', 
             'hrdInterview', 
+            'userInterview',
             'candidateProfile', 
             'candidateEducations', 
-            'candidateWorkExperiences'
+            'candidateWorkExperiences',
+            'candidateMedicalInformation'
         ])->find($id);
 
         if (!$applicant) {
@@ -602,11 +491,29 @@ class AtsInterviewUserController extends Controller
             ], 404);
         }
 
-        $targetEmail = 'alawi@intilab.com';
-        $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+        if (empty($applicant->token_approval)) {
+            $tokenService = new \App\Services\GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $applicant->token_approval = $token;
+            $applicant->save();
+        } else {
+            $token = $applicant->token_approval;
+        }
+
+        $portalUrl = rtrim(env('PORTALV4', 'http://127.0.0.1:8000'), '/');
+
+        $btn = (object) [
+            'approve'   => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=approve",
+            'reject'    => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=reject",
+            'negotiate' => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=negotiate",
+        ];
+
+        $targetEmail = 'harold@intilab.com';
+        $user = $this->karyawan;
 
         try {
-            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant);
+            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $btn);
 
             SendEmail::where('to', $targetEmail)
                 ->where('subject', 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat'))
@@ -614,6 +521,14 @@ class AtsInterviewUserController extends Controller
                 ->where('karyawan', $user)
                 ->noReply()
                 ->send();
+
+            SallaryOffer::updateOrCreate(
+                ['new_recruitment_id' => $applicant->id],
+                [
+                    'email_sent_at' => Carbon::now(),
+                    'updated_by'    => $user ?? 'System',
+                ]
+            );
 
             return response()->json([
                 'status'  => 200,

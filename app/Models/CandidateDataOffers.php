@@ -4,15 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class CandidateEducation extends Model
+class CandidateDataOffers extends Model
 {
-    protected $table = 'candidate_educations';
+    protected $table = 'candidate_data_offers';
     protected $guarded = [];
-
-    public function candidateProfile()
-    {
-        return $this->belongsTo(CandidateProfile::class, 'candidate_profile_id');
-    }
 
     public function newRecruitment()
     {

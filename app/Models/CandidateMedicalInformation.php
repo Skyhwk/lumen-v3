@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class CandidateEducation extends Model
+class CandidateMedicalInformation extends Model
 {
-    protected $table = 'candidate_educations';
+    protected $table = 'candidate_medical_informations';
     protected $guarded = [];
 
     public function candidateProfile()

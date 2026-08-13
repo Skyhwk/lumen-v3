@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-class HrdEmailViewData
+class OfferingSalaryEmail
 {
     public static function contactLine($data): string
     {
@@ -185,9 +185,13 @@ class HrdEmailViewData
             $pengalamanList = self::decodeJsonField($data->pengalaman_kerja ?? null);
         }
 
+        $medical = $data->candidateMedicalInformation 
+            ?? \App\Models\CandidateMedicalInformation::where('new_recruitment_id', $data->id ?? 0)->first();
+
         return [
             'data'                 => $data,
             'profile'              => $profile,
+            'medical'              => $medical,
             'photoUrl'             => self::photoUrl($data),
             'pendidikan'           => $pendidikanList,
             'pengalamanKerja'      => $pengalamanList,
