@@ -25,6 +25,21 @@ class GenerateMessageAtsWhatsapp
         }
     }
 
+    private function candidateSalutationLine($name)
+    {
+        $salutation = GenerateMessageAtsEmail::resolveSalutation($this->data);
+        $namaLengkap = \ucwords($name);
+
+        return "Yth. " . $salutation . " *" . $namaLengkap . "*";
+    }
+
+    private function internalSalutationLine($name)
+    {
+        $nama = \ucwords($name);
+
+        return "Yth. Bapak/Ibu *" . $nama . "*";
+    }
+
     /**
      * Concise, Neutral & Professional WhatsApp Message for Approved Candidate (HRD Interview)
      * 
@@ -39,7 +54,7 @@ class GenerateMessageAtsWhatsapp
         $jam = $this->data->jam_interview ?? $this->data->jam_interview_hrd ?? '-';
         $jenisMode = $this->data->jenis_interview_hrd ?? 'Online';
 
-        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Sehubungan dengan proses seleksi posisi *" . $posisi . "* di PT Inti Surya Laboratorium, kami mengundang Anda untuk mengikuti tahapan *Interview HRD* pada:\n\n";
         $msg .= "*Hari / Tanggal:* " . $hari . ", " . $tanggal . "\n";
         $msg .= "*Waktu:* " . $jam . " WIB\n";
@@ -72,14 +87,12 @@ class GenerateMessageAtsWhatsapp
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
 
-        $gender = strtolower((string) ($this->data->jenis_kelamin ?? $this->data->gender ?? ''));
-        $salutation = $gender === 'female' ? 'Saudari' : 'Saudara';
-        $msg = "Yth. " . $salutation . " *" . $namaLengkap . "*,\n\n";
+        $msg = $this->candidateSalutationLine($namaLengkap) . ",\n\n";
         $msg .= "Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi *" . $posisi . "*.\n\n";
         $msg .= "Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.\n\n";
         $msg .= "Kami menghargai minat Anda untuk bergabung bersama PT Inti Surya Laboratorium dan mendoakan yang terbaik untuk perjalanan karier Anda.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment*\n";
+        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -96,7 +109,7 @@ class GenerateMessageAtsWhatsapp
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
         $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/new-recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
 
-        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Sehubungan dengan proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*, mohon berkenan untuk *melengkapi Data Diri & Berkas Pendukung* Anda melalui tautan resmi berikut:\n\n";
         $msg .= "*Tautan Pengisian Data Diri:*\n" . $linkProfile . "\n\n";
         $msg .= "Data yang perlu dilengkapi meliputi:\n";
@@ -120,7 +133,7 @@ class GenerateMessageAtsWhatsapp
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
         $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/new-recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
 
-        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Terima kasih telah mengirimkan lamaran untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
         $msg .= "Lamaran Anda telah kami terima. Silakan lanjutkan ke tahap *Career Assessment* melalui tautan resmi berikut:\n\n";
         $msg .= "*Mulai Career Assessment:*\n" . $assessmentUrl . "\n\n";
@@ -143,7 +156,7 @@ class GenerateMessageAtsWhatsapp
         $ruangan     = $this->data->ruangan_interview ?? 'Office Room';
         $catatan     = $this->data->catatan ?? '';
 
-        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaLengkap . "*\n\n";
+        $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Berikut kami sampaikan informasi jadwal *User Interview* Anda untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*:\n\n";
         $msg .= "*Waktu Interview*: " . $tgl . "\n";
         if ($jenis === 'online') {
@@ -162,8 +175,8 @@ class GenerateMessageAtsWhatsapp
             $msg .= "Mohon dapat hadir 15 menit sebelum jadwal di lokasi yang telah ditentukan.\n\n";
         }
         $msg .= "Atas perhatian dan konfirmasi Anda, kami ucapkan terima kasih.\n\n";
-        $msg .= "Hormat kami,\n";
-        $msg .= "*Tim Recruitment HRD*\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -181,7 +194,7 @@ class GenerateMessageAtsWhatsapp
         $ruangan      = $this->data->ruangan_interview ?? 'Office Room';
         $catatan      = $this->data->catatan ?? '';
 
-        $msg = $this->sapaan() . ", Yth. Bapak/Ibu *" . $namaUser . "*\n\n";
+        $msg = $this->sapaan() . ", " . $this->internalSalutationLine($namaUser) . "\n\n";
         $msg .= "Menginformasikan bahwa jadwal dan sarana sesi *User Interview* untuk kandidat pada Personnel Request Anda (No. Request: *" . $noRequest . "*) telah disiapkan:\n\n";
         $msg .= "👤 *Kandidat*: " . $namaKandidat . "\n";
         $msg .= "💼 *Posisi*: " . $posisi . "\n";
@@ -199,8 +212,8 @@ class GenerateMessageAtsWhatsapp
             $msg .= "📝 *Catatan*: " . $catatan . "\n";
         }
         $msg .= "\nTerima kasih atas perhatian dan kerjasamanya.\n\n";
-        $msg .= "Hormat kami,\n";
-        $msg .= "*Tim Recruitment HRD*\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
         $msg .= "PT Inti Surya Laboratorium";
 
         return $msg;

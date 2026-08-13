@@ -10,16 +10,150 @@ use Carbon\Carbon;
 use Exception;
 
 use App\Models\PersonnelRequest;
+use App\Models\NewRecruitment;
+use App\Services\RecruitmentPictureService;
 
 class PersonnelRequesthrdController extends Controller
 {
+    private function recruitmentStatusLabel($status)
+    {
+        $labels = [
+            'assessment' => 'Assessment',
+            'screening' => 'Screening HRD',
+            'interview_hrd' => 'Interview HRD',
+            'profile_completion' => 'Lengkapi Profil',
+            'interview_user' => 'Interview User',
+            'management_decision' => 'Keputusan Manajemen',
+            'internal_sallary_offer' => 'Penawaran Gaji Internal',
+            'salary_offer' => 'Penawaran Gaji',
+            'sallary_offer' => 'Penawaran Gaji',
+            'approved' => 'Disetujui',
+            'hired' => 'Hired',
+            'rejected' => 'Ditolak',
+        ];
+
+        return $labels[strtolower((string) $status)] ?? ucfirst(str_replace('_', ' ', (string) $status));
+    }
+
+    private function countAnsweredQuestions($answersJson)
+    {
+        $answers = json_decode($answersJson ?: '{}', true) ?: [];
+
+        return count(array_filter($answers, function ($value) {
+            return $value !== null && $value !== '';
+        }));
+    }
+
+    private function assessmentInProgressSummary($sessions)
+    {
+        foreach ($sessions as $session) {
+            if ($session->status === 'in_progress') {
+                $answered = $this->countAnsweredQuestions($session->answers_json);
+                $total = (int) $session->question_count;
+
+                return 'Sedang mengerjakan ' . $session->category_name . ' (' . $answered . '/' . $total . ' soal)';
+            }
+
+            if ($session->status === 'pending') {
+                return 'Menunggu sesi ' . $session->category_name;
+            }
+        }
+
+        return 'Assessment sedang berlangsung';
+    }
+
+    private function buildAssessmentProgress($recruitmentId)
+    {
+        $attempt = DB::table('assessment_attempts')
+            ->where('recruitment_id', $recruitmentId)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$attempt) {
+            return [
+                'has_attempt' => false,
+                'attempt_status' => null,
+                'overall_progress' => 0,
+                'total_answered' => 0,
+                'total_questions' => 0,
+                'sessions' => [],
+                'summary' => 'Belum memulai assessment',
+            ];
+        }
+
+        $sessions = DB::table('assessment_sessions')
+            ->where('assessment_attempt_id', $attempt->id)
+            ->orderBy('session_order')
+            ->get();
+
+        $sessionData = [];
+        $totalAnswered = 0;
+        $totalQuestions = 0;
+
+        foreach ($sessions as $session) {
+            $answered = $this->countAnsweredQuestions($session->answers_json);
+            $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+            $questionCount = count($questions) ?: (int) $session->question_count;
+
+            $totalAnswered += $answered;
+            $totalQuestions += $questionCount;
+
+            $sessionData[] = [
+                'order' => (int) $session->session_order,
+                'name' => $session->category_name,
+                'status' => $session->status,
+                'answered' => $answered,
+                'total' => $questionCount,
+                'progress_percent' => $questionCount > 0 ? round(($answered / $questionCount) * 100) : 0,
+                'started_at' => $session->started_at,
+                'completed_at' => $session->completed_at,
+            ];
+        }
+
+        $summary = 'Assessment belum dimulai';
+        if ($attempt->status === 'completed') {
+            $summary = 'Assessment selesai';
+        } elseif ($attempt->status === 'expired') {
+            $summary = 'Assessment kedaluwarsa';
+        } elseif ($attempt->status === 'in_progress') {
+            $summary = $this->assessmentInProgressSummary($sessions);
+        }
+
+        return [
+            'has_attempt' => true,
+            'attempt_status' => $attempt->status,
+            'started_at' => $attempt->started_at,
+            'completed_at' => $attempt->completed_at,
+            'overall_progress' => $totalQuestions > 0 ? round(($totalAnswered / $totalQuestions) * 100) : 0,
+            'total_answered' => $totalAnswered,
+            'total_questions' => $totalQuestions,
+            'sessions' => $sessionData,
+            'summary' => $summary,
+        ];
+    }
+
+    private function decodeMetaHistory($metaHistory)
+    {
+        if (is_array($metaHistory)) {
+            return $metaHistory;
+        }
+
+        if (is_string($metaHistory) && $metaHistory !== '') {
+            $decoded = json_decode($metaHistory, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
     /**
      * Get list of personal requests for DataTables
      */
     public function index(Request $request)
     {
         try {
-            $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])->orderBy('id', 'desc');
+            $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
+                ->withCount('newRecruitments as total_pelamar')
+                ->orderBy('id', 'desc');
 
             if ($request->has('year') && !empty($request->year)) {
                 $query->whereYear('created_at', $request->year);
@@ -69,6 +203,13 @@ class PersonnelRequesthrdController extends Controller
                 })
                 ->addColumn('request_by', function ($row) {
                     return $row->created_by ?: 'Admin / HRD';
+                })
+                ->filterColumn('total_pelamar', function ($q, $keyword) {
+                    if ($keyword === '' || !is_numeric($keyword)) {
+                        return;
+                    }
+
+                    $q->has('newRecruitments', '=', (int) $keyword);
                 })
                 ->filterColumn('no_request', function ($q, $keyword) {
                     $q->where('no_request', 'like', "%{$keyword}%");
@@ -232,15 +373,107 @@ class PersonnelRequesthrdController extends Controller
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
 
-            return response()->json([
-                'status' => 'success',
-                'message' => "Personnel request {$data->no_request} berhasil dipublikasikan.",
-            ], 200);
+        return response()->json([
+            'status' => 'success',
+            'message' => "Personnel request {$data->no_request} berhasil dipublikasikan.",
+        ], 200);
         } catch (Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Gagal mempublikasikan request: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Preview candidates and process progress for published request
+     */
+    public function candidatePreview(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID request tidak ditemukan'], 400);
+        }
+
+        $personnelRequest = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
+            ->withCount('newRecruitments as total_pelamar')
+            ->find($id);
+
+        if (!$personnelRequest) {
+            return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
+        }
+
+        if ((int) ($personnelRequest->is_publish ?? 0) !== 1) {
+            return response()->json(['message' => 'Preview kandidat hanya tersedia untuk request yang sudah dipublish'], 422);
+        }
+
+        $candidates = NewRecruitment::where('personnel_request_id', $id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $statusCounts = $candidates
+            ->groupBy(function ($candidate) {
+                return strtolower((string) $candidate->status);
+            })
+            ->map(function ($group) {
+                return $group->count();
+            })
+            ->toArray();
+
+        $pictureService = app(RecruitmentPictureService::class);
+
+        $candidateItems = $candidates->map(function ($candidate) use ($pictureService) {
+            $status = strtolower((string) $candidate->status);
+            $metaHistory = $this->decodeMetaHistory($candidate->meta_history);
+            $assessment = $this->buildAssessmentProgress($candidate->id);
+            $pictureUrl = $pictureService->toDataUri($candidate->picture);
+
+            return [
+                'id' => $candidate->id,
+                'nama_lengkap' => $candidate->nama_lengkap,
+                'email' => $candidate->email,
+                'no_telepon' => $candidate->no_telepon,
+                'picture' => $candidate->picture,
+                'picture_url' => $pictureUrl,
+                'status' => $status,
+                'status_label' => $this->recruitmentStatusLabel($status),
+                'nilai_kecocokan' => $candidate->nilai_kecocokan,
+                'applied_at' => $candidate->created_at,
+                'updated_at' => $candidate->updated_at,
+                'meta_history' => $metaHistory,
+                'assessment' => $assessment,
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'request' => [
+                    'id' => $personnelRequest->id,
+                    'no_request' => $personnelRequest->no_request,
+                    'posisi' => optional($personnelRequest->masterJabatan)->nama_jabatan ?: $personnelRequest->posisi,
+                    'divisi' => optional($personnelRequest->masterDivisi)->nama_divisi ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
+                    'jumlah_personal' => (int) $personnelRequest->jumlah_personal,
+                    'divisi_alias' => $personnelRequest->divisi_alias,
+                    'minimum_matching' => $personnelRequest->minimum_matching,
+                    'published_at' => $personnelRequest->published_at,
+                    'published_by' => $personnelRequest->published_by,
+                    'total_pelamar' => (int) ($personnelRequest->total_pelamar ?? $candidates->count()),
+                ],
+                'summary' => [
+                    'total_pelamar' => $candidates->count(),
+                    'assessment' => (int) ($statusCounts['assessment'] ?? 0),
+                    'screening' => (int) ($statusCounts['screening'] ?? 0),
+                    'interview_hrd' => (int) ($statusCounts['interview_hrd'] ?? 0),
+                    'profile_completion' => (int) ($statusCounts['profile_completion'] ?? 0),
+                    'interview_user' => (int) ($statusCounts['interview_user'] ?? 0),
+                    'management_decision' => (int) ($statusCounts['management_decision'] ?? 0),
+                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
+                    'hired' => (int) ($statusCounts['hired'] ?? 0),
+                    'rejected' => (int) ($statusCounts['rejected'] ?? 0),
+                ],
+                'candidates' => $candidateItems,
+            ],
+        ], 200);
     }
 }

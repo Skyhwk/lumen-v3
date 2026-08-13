@@ -14,9 +14,11 @@ class AddIdKaryawanToPayrollTable extends Migration
     public function up()
     {
         if (Schema::hasTable('payroll')) {
-        Schema::table('payroll', function (Blueprint $table) {
-            $table->integer('id_karyawan')->nullable()->after('payroll_header_id');
-        });
+            Schema::table('payroll', function (Blueprint $table) {
+                if (!Schema::hasColumn('payroll', 'id_karyawan')) {
+                    $table->integer('id_karyawan')->nullable()->after('payroll_header_id');
+                }
+            });
         }
     }
 
@@ -27,8 +29,12 @@ class AddIdKaryawanToPayrollTable extends Migration
      */
     public function down()
     {
-        Schema::table('payroll', function (Blueprint $table) {
-            $table->dropColumn(['id_karyawan']);
-        });
+        if (Schema::hasTable('payroll')) {
+            Schema::table('payroll', function (Blueprint $table) {
+                if (Schema::hasColumn('payroll', 'id_karyawan')) {
+                    $table->dropColumn('id_karyawan');
+                }
+            });
+        }
     }
 }

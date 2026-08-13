@@ -195,6 +195,7 @@ class DataApplicantsController extends Controller
 
             $dataArray = (object) [
                 'nama_lengkap' => $applicant->nama_lengkap,
+                'jenis_kelamin' => $applicant->jenis_kelamin,
                 'posisi_di_lamar' => $posisiName,
                 'nama_jabatan' => $posisiName,
                 'hariIndonesia' => $hariIndonesia,
@@ -268,6 +269,7 @@ class DataApplicantsController extends Controller
 
             $dataArray = (object) [
                 'nama_lengkap' => $applicant->nama_lengkap,
+                'jenis_kelamin' => $applicant->jenis_kelamin,
                 'posisi_di_lamar' => $posisiName,
                 'nama_jabatan' => $posisiName,
                 'alasan_reject' => $reason,
