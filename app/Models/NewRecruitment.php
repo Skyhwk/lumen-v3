@@ -80,6 +80,11 @@ class NewRecruitment extends Model
         return $this->hasOne(CandidateDataOffers::class, 'new_recruitment_id');
     }
 
+    public function salaryOffer()
+    {
+        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id');
+    }
+
     public function candidateDataOffer()
     {
         return $this->hasOne(CandidateDataOffers::class, 'new_recruitment_id');
