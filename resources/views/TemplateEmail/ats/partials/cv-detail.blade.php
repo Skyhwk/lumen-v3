@@ -59,14 +59,15 @@
 @include('TemplateEmail.ats.partials.info-table', ['rows' => $personalRows])
 
 @php
+    $med = $medicalInfo ?? null;
     $medicalRows = [
-        'Height' => $data->tinggi_badan ?? '-',
-        'Weight' => $data->berat_badan ?? '-',
-        'Vision' => $data->mata ?? '-',
-        'Blood Type' => $data->golongan_darah ?? '-',
-        'Congenital Disease' => $data->penyakit_bawaan_lahir ?? '-',
-        'Chronic Disease' => $data->penyakit_kronis ?? '-',
-        'Accident History' => $data->riwayat_kecelakaan ?? '-',
+        'Height' => $med->tinggi_badan ?? '-',
+        'Weight' => $med->berat_badan ?? '-',
+        'Vision' => $med->mata ?? '-',
+        'Blood Type' => $med->golongan_darah ?? '-',
+        'Congenital Disease' => $med->penyakit_bawaan_lahir ?? '-',
+        'Chronic Disease' => $med->penyakit_kronis ?? '-',
+        'Accident History' => $med->riwayat_kecelakaan ?? '-',
     ];
 @endphp
 

@@ -18,9 +18,9 @@ function emitStatus(io, userId, status, extra = {}) {
     io.to(`user:${userId}`).emit('wa:status', { status, ...extra });
 }
 
-function emitConnected(io, userId, phone) {
+function emitConnected(io, userId, phone, extra = {}) {
     if (!io) return;
-    io.to(`user:${userId}`).emit('wa:connected', { phone });
+    io.to(`user:${userId}`).emit('wa:connected', { phone, ...extra });
 }
 
 function emitDisconnected(io, userId, reason) {
