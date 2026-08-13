@@ -240,7 +240,7 @@ class SamplerTrackingService
     }
     public function listByDate($date = null, $samplerId = null, $samplerName = null)
     {
-        $date = $date ? Carbon::parse($date)->toDateString() : $this->today();
+        $date = $this->today();
         $hasSamplerFilter = !empty($samplerId) || !empty($samplerName);
         $memberFilter = function ($query) use ($samplerId, $samplerName) {
             if ($samplerId) {
@@ -288,7 +288,7 @@ class SamplerTrackingService
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
-        $date = $request->tanggal ?: $this->today();
+        $date = $this->today();
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
         $recordsTotal = $rows->count();
 
