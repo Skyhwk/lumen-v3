@@ -22,9 +22,11 @@ use Yajra\Datatables\Datatables;
 use App\Services\Crypto;
 use App\Helpers\Helper;
 use App\Helpers\ShioElemenHelper;
-use App\Services\GenerateToken;
 use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
+use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
+use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
 
 
@@ -231,6 +233,9 @@ class RecruitmentController extends Controller{
 
     public function newSubmit(Request $request)
     {
+        $pictureFilename = null;
+        $pictureService = app(RecruitmentPictureService::class);
+
         try {
             $namaLengkap = trim((string) $request->input('nama_lengkap'));
             $email = strtolower(trim((string) $request->input('email')));
@@ -320,10 +325,17 @@ class RecruitmentController extends Controller{
                 ], 409);
             }
 
+            $picture = $request->input('picture', $request->input('foto_selfie'));
+            if (!$picture) {
+                return response()->json([
+                    'message' => 'Foto selfie wajib diunggah.',
+                    'status' => false,
+                ], 422);
+            }
+            $pictureFilename = $pictureService->storeBase64($picture);
+
             $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, null, null);
-            $tokenService = new GenerateToken();
-            $tokenKey = $personnelRequest->id . $namaLengkap . str_replace('.', '', microtime(true));
-            $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(DATE('Y-m-d')));
+            $token = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
 
             DB::beginTransaction();
 
@@ -345,6 +357,7 @@ class RecruitmentController extends Controller{
                 'gaji_terakhir' => $money($request->gaji_terakhir),
                 'ekspetasi_gaji' => $money($request->ekspektasi_gaji) ?? 0,
                 'tanggal_join_tercepat' => $request->tanggal_join_tercepat,
+                'picture' => $pictureFilename,
                 'token' => $token,
                 'created_at' => DATE('Y-m-d H:i:s'),
                 'updated_at' => DATE('Y-m-d H:i:s'),
@@ -368,6 +381,21 @@ class RecruitmentController extends Controller{
                 ->noReply('PT Inti Surya Laboratorium')
                 ->send();
 
+            try {
+                $whatsappData = (object) [
+                    'nama_lengkap' => $namaLengkap,
+                    'posisi_di_lamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
+                    'assessment_url' => $assessmentUrl,
+                ];
+                $whatsappMessage = (new GenerateMessageAtsWhatsapp($whatsappData))->Assessment();
+                (new SendWhatsapp($noTelepon, $whatsappMessage))->send();
+            } catch (\Throwable $whatsappException) {
+                \Log::warning('Recruitment assessment WhatsApp failed', [
+                    'phone' => $noTelepon,
+                    'message' => $whatsappException->getMessage(),
+                ]);
+            }
+
             DB::commit();
 
             return response()->json([
@@ -378,6 +406,7 @@ class RecruitmentController extends Controller{
                 ],
             ], 200);
         } catch (\Throwable $th) {
+            $pictureService->delete($pictureFilename);
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();
             }

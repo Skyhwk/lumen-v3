@@ -13,6 +13,7 @@ class CreateDashboardComponentTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('dashboard_component')) {
         Schema::create('dashboard_component', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
@@ -26,6 +27,7 @@ class CreateDashboardComponentTable extends Migration
             $table->dateTime('deleted_at')->nullable();
             $table->string('deleted_by')->nullable();
         });
+        }
     }
 
     /**

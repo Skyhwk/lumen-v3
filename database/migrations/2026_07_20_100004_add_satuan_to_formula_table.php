@@ -8,6 +8,7 @@ class AddSatuanToFormulaTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('formula')) {
         Schema::table('formula', function (Blueprint $table) {
             $table->string('satuan', 150)->nullable()->after('template_stp');
 
@@ -16,6 +17,7 @@ class AddSatuanToFormulaTable extends Migration
                 'formula_param_template_satuan_active_idx'
             );
         });
+        }
     }
 
     public function down()

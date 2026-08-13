@@ -23,9 +23,11 @@ class AddHandoverDocumentToPurchaseRequestsTable extends Migration
             'Distributed'
         ) NULL");
 
+        if (Schema::hasTable('purchase_requests')) {
         Schema::table('purchase_requests', function (Blueprint $table) {
             $table->string('handover_number', 50)->nullable()->after('vendor_receipt_attachments');
         });
+        }
     }
 
     public function down()

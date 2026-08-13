@@ -13,6 +13,7 @@ class CreateSetAksesDashboardTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('set_akses_dashboard')) {
         Schema::create('set_akses_dashboard', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
@@ -23,6 +24,7 @@ class CreateSetAksesDashboardTable extends Migration
             $table->string('created_by');
             $table->string('updated_by');
         });
+        }
     }
 
     /**

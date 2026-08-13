@@ -13,10 +13,12 @@ class AddJabatanToPayrollTable extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable('payroll')) {
         Schema::table('payroll', function (Blueprint $table) {
             $table->integer('id_jabatan')->nullable()->after('status_karyawan');
             $table->string('nama_jabatan', 150)->nullable()->after('id_jabatan');
         });
+        }
     }
 
     /**

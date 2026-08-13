@@ -117,11 +117,14 @@ class AssessmentController extends Controller
             $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitment->id)->lockForUpdate()->first();
             if ($attempt) {
                 $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
-                $sessionNames = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->orderBy('session_order')->pluck('category_name')->all();
-                $expectedCategories = $this->assessmentCategories()->pluck('name')->all();
-                if (!$hasStartedSession && $sessionNames !== $expectedCategories) {
+                $sessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->orderBy('session_order')->get();
+                $expectedSessions = $this->sessionDefinitions($recruitment);
+                $sessionDefinitions = $sessions->map(function ($session) {
+                    return [$session->category_name, (int) $session->question_count, (int) $session->duration_minutes];
+                })->all();
+                if (!$hasStartedSession && $sessionDefinitions !== $expectedSessions) {
                     DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->delete();
-                    $this->createSessions($attempt->id, Carbon::now());
+                    $this->createSessions($attempt->id, Carbon::now(), $recruitment);
                 } else {
                     $pendingSessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->get();
                     foreach ($pendingSessions as $session) {
@@ -153,13 +156,13 @@ class AssessmentController extends Controller
                 'updated_at' => $now,
             ]);
 
-            $this->createSessions($attemptId, $now);
+            $this->createSessions($attemptId, $now, $recruitment);
 
             return DB::table('assessment_attempts')->where('id', $attemptId)->first();
         });
     }
 
-    private function createSessions($attemptId, $now)
+    private function createSessions($attemptId, $now, $recruitment)
     {
         $categories = $this->assessmentCategories()->get();
         foreach ($categories as $index => $category) {
@@ -169,6 +172,83 @@ class AssessmentController extends Controller
             }
             DB::table('assessment_sessions')->insert(['assessment_attempt_id' => $attemptId, 'question_category_id' => $category->id, 'session_order' => $index + 1, 'category_name' => $category->name, 'question_count' => $category->question_count, 'duration_minutes' => $category->duration_minutes, 'questions_json' => json_encode($items), 'answers_json' => json_encode(new \stdClass()), 'result_json' => null, 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now]);
         }
+
+        $userConfig = $this->userAssessmentConfig($recruitment);
+        if (!$userConfig) {
+            return;
+        }
+
+        $items = $this->userSessionQuestions($userConfig);
+        if (count($items) !== (int) $userConfig->question_count) {
+            throw new \RuntimeException('Soal assessment user untuk ' . $userConfig->owner_karyawan . ' belum mencukupi.');
+        }
+
+        DB::table('assessment_sessions')->insert([
+            'assessment_attempt_id' => $attemptId,
+            'question_category_id' => null,
+            'session_order' => $categories->count() + 1,
+            'category_name' => 'Assessment User',
+            'question_count' => $userConfig->question_count,
+            'duration_minutes' => $userConfig->duration_minutes,
+            'questions_json' => json_encode($items),
+            'answers_json' => json_encode(new \stdClass()),
+            'result_json' => null,
+            'status' => 'pending',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    private function sessionDefinitions($recruitment)
+    {
+        $definitions = $this->assessmentCategories()->get()->map(function ($category) {
+            return [$category->name, (int) $category->question_count, (int) $category->duration_minutes];
+        })->all();
+
+        $userConfig = $this->userAssessmentConfig($recruitment);
+        if ($userConfig) {
+            $definitions[] = ['Assessment User', (int) $userConfig->question_count, (int) $userConfig->duration_minutes];
+        }
+
+        return $definitions;
+    }
+
+    private function userAssessmentConfig($recruitment)
+    {
+        $personnelRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
+        if (!$personnelRequest || (int) ($personnelRequest->use_user_assessment ?? 0) !== 1 || empty($personnelRequest->created_by)) {
+            return null;
+        }
+
+        $config = DB::table('user_assessment_configs')
+            ->where('owner_karyawan', $personnelRequest->created_by)
+            ->where('is_active', 1)
+            ->first();
+
+        if (!$config) {
+            throw new \RuntimeException('Konfigurasi assessment user untuk ' . $personnelRequest->created_by . ' belum tersedia atau belum aktif.');
+        }
+
+        return $config;
+    }
+
+    private function userSessionQuestions($config)
+    {
+        return DB::table('questions')
+            ->where('owner_karyawan', $config->owner_karyawan)
+            ->where('is_active', 1)
+            ->where('question_type', 'single_choice')
+            ->inRandomOrder()
+            ->limit($config->question_count)
+            ->get()
+            ->values()
+            ->map(function ($question, $key) {
+                $options = DB::table('question_options')->where('question_id', $question->id)->orderBy('option_order')->get()->map(function ($option) {
+                    return ['id' => (string) $option->id, 'text' => $option->option_text, 'is_correct' => (bool) $option->is_correct];
+                })->all();
+
+                return ['id' => (string) $question->id, 'source' => 'user_question_bank', 'order' => $key + 1, 'type' => $question->question_type, 'text' => $question->question_text, 'image' => json_decode($question->question_image ?: '[]', true), 'options' => $options, 'answer_key' => collect($options)->where('is_correct', true)->pluck('id')->values()->all(), 'scoring_type' => $question->scoring_type];
+            })->all();
     }
 
     private function previewQuestions($attemptId, $limit)

@@ -4,6 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Services\RecruitmentStatusService;
+use App\Services\RecruitmentPictureService;
+use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
+use App\Services\GenerateMessageAtsWhatsapp;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -87,6 +91,10 @@ class SalaryApprovalController extends Controller
                 : $recruitment->status;
             (new RecruitmentStatusService())->update($recruitment->id, $nextStatus, $now, $recruitment->status . '_' . $historyAction);
 
+            if ($decision === 'reject') {
+                $this->notifyRejectedCandidate($recruitment);
+            }
+
             return response()->json([
                 'result' => $decision,
                 'already_processed' => false,
@@ -132,6 +140,7 @@ class SalaryApprovalController extends Controller
             'sallary_offer_hrd' => $salaryOffer->sallary_offer_hrd ?? null,
             'sallary_offer_direktur' => $salaryOffer->sallary_offer_direktur ?? null,
             'final_sallary' => $salaryOffer->final_sallary ?? null,
+            'picture_base64' => app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null),
         ];
     }
 
@@ -164,6 +173,55 @@ class SalaryApprovalController extends Controller
     {
         $column = DB::selectOne("SHOW COLUMNS FROM new_recruitment WHERE Field = 'status'");
         return strpos((string) ($column->Type ?? ''), "'salary_offer'") !== false ? 'salary_offer' : ' salary_offer';
+    }
+
+    private function notifyRejectedCandidate($recruitment)
+    {
+        if (!empty($recruitment->email)) {
+            try {
+                SendEmail::where('to', $recruitment->email)
+                    ->where('subject', 'Informasi Proses Rekrutmen - PT Inti Surya Laboratorium')
+                    ->where('body', $this->rejectionEmail($recruitment))
+                    ->where('cc', [])
+                    ->where('bcc', [])
+                    ->where('karyawan', 'Recruitment System')
+                    ->noReply('PT Inti Surya Laboratorium')
+                    ->send();
+            } catch (\Throwable $exception) {
+                \Log::warning('Salary offer rejection email failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);
+            }
+        }
+
+        if (!empty($recruitment->no_telepon)) {
+            try {
+                $message = (new GenerateMessageAtsWhatsapp((object) [
+                    'nama_lengkap' => $recruitment->nama_lengkap,
+                    'posisi_di_lamar' => $this->positionLabel($recruitment),
+                    'jenis_kelamin' => $recruitment->jenis_kelamin,
+                ]))->RejectedCandidateSelection();
+                (new SendWhatsapp($recruitment->no_telepon, $message))->send();
+            } catch (\Throwable $exception) {
+                \Log::warning('Salary offer rejection WhatsApp failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);
+            }
+        }
+    }
+
+    private function rejectionEmail($recruitment)
+    {
+        $name = htmlspecialchars($recruitment->nama_lengkap ?: 'Kandidat', ENT_QUOTES, 'UTF-8');
+        $position = htmlspecialchars($this->positionLabel($recruitment) ?: 'posisi yang dilamar', ENT_QUOTES, 'UTF-8');
+        $salutation = strtolower((string) ($recruitment->jenis_kelamin ?? $recruitment->gender ?? '')) === 'female' ? 'Saudari' : 'Saudara';
+
+        return '<!doctype html><html><body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;color:#344256">'
+            . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f9"><tr><td align="center" style="padding:24px 16px">'
+            . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff;border:1px solid #dfe5ec;border-radius:6px;overflow:hidden">'
+            . '<tr><td style="padding:18px 20px;background:#1f2b3d;color:#fff"><div style="font-size:15px;font-weight:700">PT INTI SURYA LABORATORIUM</div><div style="margin-top:3px;font-size:11px;color:#b9c7d8">HRD &amp; Talent Acquisition Division</div></td></tr>'
+            . '<tr><td style="padding:28px 22px 26px"><p style="margin:0 0 16px;font-size:13px;line-height:20px">Yth. ' . $salutation . ' <strong>' . $name . '</strong>,</p>'
+            . '<p style="margin:0 0 16px;font-size:13px;line-height:21px">Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi <strong>' . $position . '</strong>.</p>'
+            . '<p style="margin:0 0 16px;font-size:13px;line-height:21px">Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.</p>'
+            . '<p style="margin:0;font-size:13px;line-height:21px">Kami menghargai minat Anda untuk bergabung bersama PT Inti Surya Laboratorium dan mendoakan yang terbaik untuk perjalanan karier Anda.</p></td></tr>'
+            . '<tr><td style="padding:17px 22px;background:#f8fafc;border-top:1px solid #e2e8ef"><p style="margin:0 0 4px;font-size:12px;line-height:18px">Salam,</p><p style="margin:0;font-size:12px;font-weight:700;line-height:18px">Tim Recruitment<br><span style="font-weight:400">PT Inti Surya Laboratorium</span></p></td></tr>'
+            . '</table></td></tr></table></body></html>';
     }
 
 }
