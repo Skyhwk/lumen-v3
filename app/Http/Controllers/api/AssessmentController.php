@@ -343,6 +343,10 @@ class AssessmentController extends Controller
             $completedAt = Carbon::now();
             DB::table('assessment_attempts')->where('id', $attempt->id)->update(['status' => 'completed', 'completed_at' => $completedAt]);
             (new RecruitmentStatusService())->update($attempt->recruitment_id, 'screening', $completedAt);
+            
+            // Auto trigger AI evaluation on assessment completion
+            $this->processAiMatching($attempt->id, $attempt->recruitment_id);
+
             return ['status' => 'completed', 'message' => 'Assessment selesai.'];
         }
         if ($session->status === 'pending') {
@@ -484,5 +488,344 @@ class AssessmentController extends Controller
         ]);
 
         return $session->id;
+    }
+
+    /**
+     * Public API endpoint to fetch or re-trigger AI Matching calculation
+     */
+    public function getAiPayload(Request $request)
+    {
+        $recruitmentId = $request->input('recruitment_id') ?? $request->input('id');
+        if (!$recruitmentId) {
+            return response()->json(['message' => 'ID recruitment tidak ditemukan'], 400);
+        }
+
+        $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitmentId)->orderBy('id', 'desc')->first();
+        if (!$attempt) {
+            return response()->json(['message' => 'Assessment attempt tidak ditemukan untuk kandidat ini'], 404);
+        }
+
+        $payloadData = $this->processAiMatching($attempt->id, $recruitmentId);
+        if (!$payloadData) {
+            return response()->json(['message' => 'Gagal memproses data AI payload'], 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $payloadData
+        ], 200);
+    }
+
+    /**
+     * Build AI Assessment Payload & Send to Ollama AI Server
+     */
+    public function processAiMatching($attemptId, $recruitmentId)
+    {
+        try {
+            $recruitment = DB::table('new_recruitment')->where('id', $recruitmentId)->first();
+            if (!$recruitment) {
+                return null;
+            }
+
+            // 1. Data Personal Request (Posisi Target & Kebutuhan)
+            $personnelRequest = DB::table('personnel_requests')
+                ->leftJoin('master_jabatan', 'master_jabatan.id', '=', 'personnel_requests.posisi')
+                ->leftJoin('master_divisi', 'master_divisi.id', '=', 'personnel_requests.divisi')
+                ->leftJoin('master_cabang', 'master_cabang.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
+                ->where('personnel_requests.id', $recruitment->personnel_request_id)
+                ->select(
+                    'personnel_requests.*',
+                    'master_jabatan.nama_jabatan as nama_posisi',
+                    'master_divisi.nama_divisi as nama_divisi',
+                    'master_cabang.nama_cabang as nama_cabang'
+                )
+                ->first();
+
+            // 2. Data Diri Pelamar / Candidate
+            $candidateEducations = DB::table('candidate_educations')
+                ->where('new_recruitment_id', $recruitmentId)
+                ->get();
+            
+            $candidateWorkExps = DB::table('candidate_work_experiences')
+                ->where('new_recruitment_id', $recruitmentId)
+                ->get();
+
+            // 3. Hasil Assessment (Seluruh Test)
+            $sessions = DB::table('assessment_sessions')
+                ->where('assessment_attempt_id', $attemptId)
+                ->get();
+
+            // Format Riwayat Pendidikan Kandidat
+            $eduList = [];
+            if ($candidateEducations->isNotEmpty()) {
+                foreach ($candidateEducations as $edu) {
+                    $eduList[] = implode(' ', array_filter([$edu->jenjang_pendidikan, $edu->jurusan, $edu->nama_institusi]));
+                }
+            } elseif (!empty($recruitment->pendidikan)) {
+                $rawEdu = json_decode($recruitment->pendidikan, true) ?: [];
+                foreach ($rawEdu as $e) {
+                    if (is_array($e)) {
+                        $eduList[] = implode(' ', array_filter([$e['jenjang'] ?? '', $e['jurusan'] ?? '', $e['institusi'] ?? '']));
+                    }
+                }
+            }
+            $candidateEduStr = implode('; ', array_filter($eduList)) ?: ($recruitment->pendidikan_terakhir ?? 'Pendidikan tidak diisi');
+
+            // Format Pengalaman Kerja Kandidat
+            $expList = [];
+            if ($candidateWorkExps->isNotEmpty()) {
+                foreach ($candidateWorkExps as $exp) {
+                    $expList[] = implode(' ', array_filter([$exp->posisi_terakhir, 'di', $exp->nama_perusahaan]));
+                }
+            } elseif (!empty($recruitment->pengalaman_kerja)) {
+                $rawExp = json_decode($recruitment->pengalaman_kerja, true) ?: [];
+                foreach ($rawExp as $x) {
+                    if (is_array($x)) {
+                        $expList[] = implode(' ', array_filter([$x['posisi_kerja'] ?? '', 'di', $x['nama_perusahaan'] ?? '']));
+                    }
+                }
+            }
+            $candidateExpStr = implode('; ', array_filter($expList)) ?: 'Belum ada pengalaman kerja';
+
+            // Format Skill & Keahlian Kandidat
+            $skillsList = [];
+            if (!empty($recruitment->keahlian)) {
+                $rawSkills = json_decode($recruitment->keahlian, true) ?: [];
+                foreach ($rawSkills as $s) {
+                    if (is_array($s) && isset($s['keahlianSkill'])) {
+                        $skillsList[] = $s['keahlianSkill'];
+                    }
+                }
+            }
+            $candidateSkillsStr = implode(', ', $skillsList) ?: ($recruitment->skill_wajib ?? 'Skill tidak spesifik');
+
+            // Format Hasil Seluruh Test Assessment (Original JSON untuk DISC & PAPI Kostick)
+            $structuredSessions = [];
+            $assessmentSummary = [];
+            foreach ($sessions as $session) {
+                $res = json_decode($session->result_json, true) ?: [];
+                $answers = json_decode($session->answers_json, true) ?: [];
+
+                $structuredSessions[] = [
+                    'session_id' => $session->id,
+                    'category_name' => $session->category_name,
+                    'session_order' => $session->session_order,
+                    'status' => $session->status,
+                    'answers' => $answers,
+                    'result_json' => $res, // Original JSON result
+                ];
+
+                if (isset($res['engine']) && $res['engine'] === 'disc') {
+                    $assessmentSummary[] = 'Hasil DISC (Original JSON): ' . json_encode($res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                } elseif (isset($res['engine']) && $res['engine'] === 'papi_kostick') {
+                    $assessmentSummary[] = 'Hasil PAPI Kostick (Original JSON): ' . json_encode($res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                } elseif (isset($res['score'])) {
+                    $assessmentSummary[] = $session->category_name . ': ' . $res['score'] . '/100';
+                }
+            }
+            $testSummaryStr = implode(' | ', $assessmentSummary) ?: 'Assessment Selesai';
+
+            // Clean HTML tags from requirement fields for plain text prompt
+            $cleanEduReq = trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($personnelRequest->pendidikan ?? '')))) ?: 'Kualifikasi pendidikan tidak ditentukan';
+            $cleanExpReq = trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($personnelRequest->pengalaman_kerja ?? '')))) ?: 'Pengalaman tidak ditentukan';
+            $cleanSkillsReq = trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($personnelRequest->skill_wajib ?? '')))) ?: 'Skill wajib tidak ditentukan';
+            $posisiReq = $personnelRequest->nama_posisi ?? ($personnelRequest->posisi ?? 'Jabatan tidak ditentukan');
+            $minScoreReq = $personnelRequest->minimum_matching ?? 75;
+
+            // Formulate Prompt String for AI Ollama Server
+            $promptText = sprintf(
+                "Kandidat: %s, %s, %s, %s. Posisi: %s, %s, %s, %s, technical test minimal %s. Berikan skor kecocokan.",
+                $candidateEduStr,
+                $candidateExpStr,
+                $candidateSkillsStr,
+                $testSummaryStr,
+                $posisiReq,
+                $cleanEduReq,
+                $cleanExpReq,
+                $cleanSkillsReq,
+                $minScoreReq
+            );
+
+            // Construct exact cURL Payload for Ollama AI
+            $aiPayload = [
+                'model' => 'intilab-ats',
+                'prompt' => $promptText,
+                'stream' => false,
+                'think' => false,
+            ];
+
+            // Full Structured Data Object with Original JSON
+            $structuredData = [
+                'personnel_request' => $personnelRequest,
+                'candidate_profile' => [
+                    'id' => $recruitment->id,
+                    'nama_lengkap' => $recruitment->nama_lengkap,
+                    'email' => $recruitment->email,
+                    'no_telepon' => $recruitment->no_telepon,
+                    'pendidikan' => $candidateEduStr,
+                    'pengalaman_kerja' => $candidateExpStr,
+                    'skill' => $candidateSkillsStr,
+                ],
+                'assessment_results' => $structuredSessions,
+                'ai_payload' => $aiPayload,
+            ];
+
+            // Log AI Prompt & Payload
+            \Illuminate\Support\Facades\Log::info("=== AI MATCHING GENERATE PROMPT ===", [
+                'recruitment_id' => $recruitmentId,
+                'kandidat' => $recruitment->nama_lengkap ?? '',
+                'prompt' => $promptText,
+                'payload' => $aiPayload,
+            ]);
+
+            // Send to Ollama AI Server via HTTP POST cURL
+            $aiResult = $this->sendToOllamaAi($aiPayload);
+
+            // Log AI Response
+            \Illuminate\Support\Facades\Log::info("=== AI MATCHING GENERATE RESPONSE ===", [
+                'recruitment_id' => $recruitmentId,
+                'kandidat' => $recruitment->nama_lengkap ?? '',
+                'ai_response' => $aiResult,
+            ]);
+
+            if ($aiResult && !empty($aiResult['response'])) {
+                $responseStr = $aiResult['response'];
+                
+                // Extract score integer if present
+                $matchingScore = null;
+                if (preg_match('/(\d{1,3})\s*%?/', $responseStr, $matches)) {
+                    $scoreVal = (int) $matches[1];
+                    if ($scoreVal <= 100) {
+                        $matchingScore = $scoreVal;
+                    }
+                }
+
+                $updateData = [
+                    'updated_at' => Carbon::now(),
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_response')) {
+                    $updateData['ai_matching_response'] = $responseStr;
+                }
+                if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_data')) {
+                    $updateData['ai_matching_data'] = json_encode($structuredData);
+                }
+                if ($matchingScore !== null) {
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'matching_score')) {
+                        $updateData['matching_score'] = $matchingScore;
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'nilai_kecocokan')) {
+                        $updateData['nilai_kecocokan'] = $matchingScore;
+                    }
+
+                    // Automatic rejection if matching score is below minimum requirement
+                    if ($minScoreReq !== null && $matchingScore < $minScoreReq) {
+                        $rejectReason = "Matching score AI ({$matchingScore}%) di bawah minimum requirement ({$minScoreReq}%).";
+
+                        (new \App\Services\RecruitmentStatusService())->update($recruitmentId, 'rejected', Carbon::now());
+
+                        $updateData['status'] = 'rejected';
+                        $updateData['rejected_by'] = 'System AI';
+                        $updateData['rejected_at'] = Carbon::now();
+                        $updateData['alasan_reject'] = $rejectReason;
+
+                        $this->triggerAutoRejectNotifications($recruitmentId, $rejectReason);
+
+                        \Illuminate\Support\Facades\Log::info("=== AI AUTO REJECT CANDIDATE ===", [
+                            'recruitment_id' => $recruitmentId,
+                            'matching_score' => $matchingScore,
+                            'minimum_matching' => $minScoreReq,
+                            'reason' => $rejectReason
+                        ]);
+                    }
+                }
+
+                DB::table('new_recruitment')->where('id', $recruitmentId)->update($updateData);
+                $structuredData['ai_response'] = $aiResult;
+            }
+
+            return $structuredData;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('processAiMatching Error: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Send rejection notifications (Email & WhatsApp) when candidate is auto-rejected
+     */
+    private function triggerAutoRejectNotifications($recruitmentId, $reason)
+    {
+        try {
+            $applicant = \App\Models\NewRecruitment::with('personalRequest.masterJabatan')->find($recruitmentId);
+            if (!$applicant) return;
+
+            $posisiName = optional($applicant->personalRequest)->masterJabatan->nama_jabatan 
+                ?? ($applicant->posisi_di_lamar ?? 'Positions');
+
+            $dataArray = (object) [
+                'nama_lengkap' => $applicant->nama_lengkap,
+                'posisi_di_lamar' => $posisiName,
+                'nama_jabatan' => $posisiName,
+                'alasan_reject' => $reason,
+                'hrd_name' => 'System AI',
+            ];
+
+            if (!empty($applicant->email)) {
+                $bodyEmail = \App\Services\GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
+                \App\Services\SendEmail::where('to', $applicant->email)
+                    ->where('subject', 'Informasi Hasil Seleksi - PT Inti Surya Laboratorium')
+                    ->where('body', $bodyEmail)
+                    ->where('karyawan', 'System AI')
+                    ->noReply()
+                    ->send();
+            }
+
+            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            if (!empty($phone)) {
+                $waObj = new \App\Services\GenerateMessageAtsWhatsapp($dataArray);
+                $waMessage = $waObj->RejectedCandidateSelection();
+
+                $sendWa = new \App\Services\SendWhatsapp($phone, $waMessage);
+                $sendWa->send();
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('triggerAutoRejectNotifications Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send HTTP POST request to Ollama AI Server (http://10.88.209.240:11434/api/generate)
+     */
+    private function sendToOllamaAi(array $payload)
+    {
+        try {
+            $ch = curl_init('http://10.88.209.240:11434/api/generate');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlError) {
+                \Illuminate\Support\Facades\Log::error('sendToOllamaAi cURL Error: ' . $curlError);
+            }
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                return json_decode($response, true);
+            }
+            
+            \Illuminate\Support\Facades\Log::warning("sendToOllamaAi HTTP Status {$httpCode}: " . $response);
+            return null;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('sendToOllamaAi Exception: ' . $e->getMessage());
+            return null;
+        }
     }
 }

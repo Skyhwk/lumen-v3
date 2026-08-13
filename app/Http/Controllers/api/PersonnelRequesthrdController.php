@@ -145,7 +145,7 @@ class PersonnelRequesthrdController extends Controller
         try {
             DB::table('personnel_requests')->where('id', $id)->update([
                 'is_approve' => 1,
-                'is_rejected' => 0,
+                // 'is_rejected' => 0,
                 'updated_at' => Carbon::now(),
             ]);
 
@@ -180,7 +180,7 @@ class PersonnelRequesthrdController extends Controller
         try {
             DB::table('personnel_requests')->where('id', $id)->update([
                 'is_approve' => 0,
-                'is_rejected' => 1,
+                'is_reject' => 1,
                 'updated_at' => Carbon::now(),
             ]);
 
@@ -192,6 +192,54 @@ class PersonnelRequesthrdController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Gagal menolak request: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Publish personal request
+     */
+    public function publish(Request $request)
+    {
+        $id = $request->input('id');
+        $divisiAlias = $request->input('divisi_alias');
+        $minimumMatching = $request->input('minimum_matching');
+
+        if (!$id) {
+            return response()->json(['message' => 'ID request tidak ditemukan'], 400);
+        }
+
+        $data = DB::table('personnel_requests')->where('id', $id)->first();
+        if (!$data) {
+            return response()->json(['message' => 'Data tidak ditemukan'], 404);
+        }
+
+        try {
+            $updateData = [
+                'is_publish' => 1,
+                'published_at' => Carbon::now(),
+                'published_by' => $this->karyawan,
+                'updated_at' => Carbon::now(),
+            ];
+
+            if ($divisiAlias !== null) {
+                $updateData['divisi_alias'] = $divisiAlias;
+            }
+
+            if ($minimumMatching !== null) {
+                $updateData['minimum_matching'] = $minimumMatching;
+            }
+
+            DB::table('personnel_requests')->where('id', $id)->update($updateData);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Personnel request {$data->no_request} berhasil dipublikasikan.",
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mempublikasikan request: ' . $e->getMessage(),
             ], 500);
         }
     }

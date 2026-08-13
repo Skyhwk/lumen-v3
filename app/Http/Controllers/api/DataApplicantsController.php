@@ -27,10 +27,7 @@ class DataApplicantsController extends Controller
     public function index(Request $request)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
-            ->where(function ($q) {
-                $q->whereNull('status')
-                  ->orWhereIn('status', ['assessment', 'pending', 'new']);
-            })
+            ->where('status', 'screening')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
