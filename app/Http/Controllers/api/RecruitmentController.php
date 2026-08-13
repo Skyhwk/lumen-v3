@@ -311,16 +311,28 @@ class RecruitmentController extends Controller{
                 ], 404);
             }
 
-            $duplicate = DB::table('new_recruitment')
-                ->where('personnel_request_id', $personnelRequest->id)
-                ->whereRaw('LOWER(TRIM(nama_lengkap)) = ?', [strtolower($namaLengkap)])
+            $threeMonthsAgo = Carbon::now()->subMonths(3);
+
+            $emailRecentlyUsed = DB::table('new_recruitment')
                 ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
-                ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
+                ->where('created_at', '>=', $threeMonthsAgo)
                 ->exists();
 
-            if ($duplicate) {
+            if ($emailRecentlyUsed) {
                 return response()->json([
-                    'message' => 'Anda sudah pernah mendaftar pada lamaran ini.',
+                    'message' => 'Email ini sudah digunakan untuk pendaftaran dalam 3 bulan terakhir. Anda dapat mendaftar kembali dengan email yang sama setelah 3 bulan sejak pendaftaran sebelumnya.',
+                    'status' => false,
+                ], 409);
+            }
+
+            $phoneRecentlyUsed = DB::table('new_recruitment')
+                ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
+                ->where('created_at', '>=', $threeMonthsAgo)
+                ->exists();
+
+            if ($phoneRecentlyUsed) {
+                return response()->json([
+                    'message' => 'Nomor telepon ini sudah digunakan untuk pendaftaran dalam 3 bulan terakhir. Anda dapat mendaftar kembali dengan nomor yang sama setelah 3 bulan sejak pendaftaran sebelumnya.',
                     'status' => false,
                 ], 409);
             }
@@ -384,6 +396,7 @@ class RecruitmentController extends Controller{
             try {
                 $whatsappData = (object) [
                     'nama_lengkap' => $namaLengkap,
+                    'jenis_kelamin' => $request->jenis_kelamin,
                     'posisi_di_lamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
                     'assessment_url' => $assessmentUrl,
                 ];

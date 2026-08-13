@@ -14,10 +14,14 @@ class AddJabatanToPayrollTable extends Migration
     public function up()
     {
         if (Schema::hasTable('payroll')) {
-        Schema::table('payroll', function (Blueprint $table) {
-            $table->integer('id_jabatan')->nullable()->after('status_karyawan');
-            $table->string('nama_jabatan', 150)->nullable()->after('id_jabatan');
-        });
+            Schema::table('payroll', function (Blueprint $table) {
+                if (!Schema::hasColumn('payroll', 'id_jabatan')) {
+                    $table->integer('id_jabatan')->nullable()->after('status_karyawan');
+                }
+                if (!Schema::hasColumn('payroll', 'nama_jabatan')) {
+                    $table->string('nama_jabatan', 150)->nullable()->after('id_jabatan');
+                }
+            });
         }
     }
 
@@ -28,8 +32,15 @@ class AddJabatanToPayrollTable extends Migration
      */
     public function down()
     {
-        Schema::table('payroll', function (Blueprint $table) {
-            $table->dropColumn(['id_jabatan', 'nama_jabatan']);
-        });
+        if (Schema::hasTable('payroll')) {
+            Schema::table('payroll', function (Blueprint $table) {
+                if (Schema::hasColumn('payroll', 'id_jabatan')) {
+                    $table->dropColumn('id_jabatan');
+                }
+                if (Schema::hasColumn('payroll', 'nama_jabatan')) {
+                    $table->dropColumn('nama_jabatan');
+                }
+            });
+        }
     }
 }

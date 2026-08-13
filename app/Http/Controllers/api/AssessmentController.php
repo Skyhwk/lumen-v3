@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\RecruitmentStatusService;
+use App\Services\ScaleScoringService;
 
 class AssessmentController extends Controller
 {
@@ -17,7 +18,16 @@ class AssessmentController extends Controller
         $categories = DB::table('assessment_sessions')
             ->where('assessment_attempt_id', $attempt->id)
             ->orderBy('session_order')
-            ->get(['category_name as name', 'question_count', 'duration_minutes']);
+            ->get(['category_name as name', 'question_count', 'duration_minutes', 'question_category_id', 'expires_at'])
+            ->map(function ($session) {
+                return [
+                    'name' => $session->name,
+                    'question_count' => (int) $session->question_count,
+                    'duration_minutes' => (int) $session->duration_minutes,
+                    'has_time_limit' => $this->sessionHasTimeLimit($session),
+                ];
+            })
+            ->values();
         $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
         $status = $hasStartedSession ? $this->stateFor($attempt)['status'] : 'ready';
         return response()->json(['status' => $status, 'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2), 'categories' => $categories, 'preview_questions' => $this->previewQuestions($attempt->id, 3)]);
@@ -49,7 +59,7 @@ class AssessmentController extends Controller
 
     public function state(Request $request)
     {
-        $attempt = DB::table('assessment_attempts')->where('token', $request->token)->first();
+        $attempt = $this->attemptByToken($request->token);
         if (!$attempt) {
             abort(404, 'Assessment tidak ditemukan.');
         }
@@ -59,7 +69,7 @@ class AssessmentController extends Controller
     public function answer(Request $request)
     {
         return DB::transaction(function () use ($request) {
-            $attempt = DB::table('assessment_attempts')->where('token', $request->token)->lockForUpdate()->first();
+            $attempt = $this->attemptByToken($request->token, true);
             if (!$attempt) {
                 abort(404, 'Assessment tidak ditemukan.');
             }
@@ -85,7 +95,7 @@ class AssessmentController extends Controller
     {
         $allowed = ['camera_granted', 'camera_denied', 'camera_stopped', 'tab_hidden', 'tab_visible', 'window_blur', 'window_focus', 'data_processing_consent'];
         if (!in_array($request->event, $allowed, true)) return response()->json(['message' => 'Event tidak valid.'], 422);
-        $attempt = DB::table('assessment_attempts')->where('token', $request->token)->first();
+        $attempt = $this->attemptByToken($request->token);
         if (!$attempt) {
             abort(404, 'Assessment tidak ditemukan.');
         }
@@ -97,7 +107,7 @@ class AssessmentController extends Controller
 
     public function proctoringStatus(Request $request)
     {
-        $attempt = DB::table('assessment_attempts')->where('token', $request->token)->first();
+        $attempt = $this->attemptByToken($request->token);
         if (!$attempt) {
             abort(404, 'Assessment tidak ditemukan.');
         }
@@ -120,7 +130,7 @@ class AssessmentController extends Controller
                 $sessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->orderBy('session_order')->get();
                 $expectedSessions = $this->sessionDefinitions($recruitment);
                 $sessionDefinitions = $sessions->map(function ($session) {
-                    return [$session->category_name, (int) $session->question_count, (int) $session->duration_minutes];
+                    return $this->sessionDefinitionFromSession($session);
                 })->all();
                 if (!$hasStartedSession && $sessionDefinitions !== $expectedSessions) {
                     DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->delete();
@@ -129,7 +139,7 @@ class AssessmentController extends Controller
                     $pendingSessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->get();
                     foreach ($pendingSessions as $session) {
                         $category = DB::table('question_categories')->where('id', $session->question_category_id)->first();
-                        if ($category && ($session->category_name !== $category->name || (int) $session->question_count !== (int) $category->question_count || (int) $session->duration_minutes !== (int) $category->duration_minutes)) {
+                        if ($category && $this->sessionDefinitionFromSession($session) !== $this->sessionDefinitionFromCategory($category)) {
                             $items = $this->sessionQuestions($category);
                             DB::table('assessment_sessions')->where('id', $session->id)->update([
                                 'category_name' => $category->name,
@@ -202,12 +212,17 @@ class AssessmentController extends Controller
     private function sessionDefinitions($recruitment)
     {
         $definitions = $this->assessmentCategories()->get()->map(function ($category) {
-            return [$category->name, (int) $category->question_count, (int) $category->duration_minutes];
+            return $this->sessionDefinitionFromCategory($category);
         })->all();
 
         $userConfig = $this->userAssessmentConfig($recruitment);
         if ($userConfig) {
-            $definitions[] = ['Assessment User', (int) $userConfig->question_count, (int) $userConfig->duration_minutes];
+            $definitions[] = [
+                'Assessment User',
+                (int) $userConfig->question_count,
+                (int) $userConfig->duration_minutes,
+                (bool) $userConfig->has_time_limit,
+            ];
         }
 
         return $definitions;
@@ -220,16 +235,24 @@ class AssessmentController extends Controller
             return null;
         }
 
-        $config = DB::table('user_assessment_configs')
-            ->where('owner_karyawan', $personnelRequest->created_by)
-            ->where('is_active', 1)
-            ->first();
-
-        if (!$config) {
-            throw new \RuntimeException('Konfigurasi assessment user untuk ' . $personnelRequest->created_by . ' belum tersedia atau belum aktif.');
+        $questionCount = (int) ($personnelRequest->user_assessment_question_count ?? 0);
+        if ($questionCount < 1) {
+            throw new \RuntimeException('Konfigurasi jumlah soal test user pada personnel request belum diisi.');
         }
 
-        return $config;
+        $hasTimeLimit = (int) ($personnelRequest->user_assessment_has_time_limit ?? 0) === 1;
+        $durationMinutes = $hasTimeLimit ? (int) ($personnelRequest->user_assessment_duration_minutes ?? 0) : 0;
+
+        if ($hasTimeLimit && $durationMinutes < 1) {
+            throw new \RuntimeException('Konfigurasi durasi test user pada personnel request belum diisi.');
+        }
+
+        return (object) [
+            'owner_karyawan' => $personnelRequest->created_by,
+            'question_count' => $questionCount,
+            'duration_minutes' => $durationMinutes,
+            'has_time_limit' => $hasTimeLimit,
+        ];
     }
 
     private function userSessionQuestions($config)
@@ -270,6 +293,9 @@ class AssessmentController extends Controller
         return DB::table('question_categories')
             ->where('is_active', 1)
             ->where('is_show', 1)
+            ->where(function ($query) {
+                $query->where('category_scope', 'hr')->orWhereNull('category_scope');
+            })
             ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
             ->orderBy('id');
     }
@@ -297,11 +323,31 @@ class AssessmentController extends Controller
             })->all();
             if ($question->question_type === 'scale') {
                 $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
-                $options = collect(json_decode($scale->options ?? '[]', true) ?: [])->map(function ($option, $optionKey) {
-                    return ['id' => 'scale-' . ($option['value'] ?? $optionKey), 'text' => $option['label'] ?? $option['value'], 'is_correct' => false];
-                })->all();
+                $options = $scale ? ScaleScoringService::buildScaleOptions($scale) : [];
+                $values = collect($options)->pluck('value');
+                $scaleMin = $values->isNotEmpty() ? (float) $values->min() : 0;
+                $scaleMax = $values->isNotEmpty() ? (float) $values->max() : 0;
             }
-            return ['id' => (string) $question->id, 'source' => 'question_bank', 'order' => $key + 1, 'type' => $question->question_type, 'text' => $question->question_text, 'image' => json_decode($question->question_image ?: '[]', true), 'options' => $options, 'answer_key' => collect($options)->where('is_correct', true)->pluck('id')->values()->all(), 'scoring_type' => $question->scoring_type];
+
+            $payload = [
+                'id' => (string) $question->id,
+                'source' => 'question_bank',
+                'order' => $key + 1,
+                'type' => $question->question_type,
+                'text' => $question->question_text,
+                'image' => json_decode($question->question_image ?: '[]', true),
+                'options' => $options,
+                'answer_key' => collect($options)->where('is_correct', true)->pluck('id')->values()->all(),
+                'scoring_type' => $question->scoring_type,
+            ];
+
+            if ($question->question_type === 'scale') {
+                $payload['scale_type_id'] = $question->scale_type_id;
+                $payload['scale_min'] = $scaleMin ?? 0;
+                $payload['scale_max'] = $scaleMax ?? 0;
+            }
+
+            return $payload;
         })->all();
     }
 
@@ -330,9 +376,81 @@ class AssessmentController extends Controller
 
     private function recruitment($token, $lock = false)
     {
-        $query = DB::table('new_recruitment')->where('token', $token); if ($lock) $query->lockForUpdate(); $row = $query->first();
-        if (!$row || Carbon::now()->greaterThanOrEqualTo(Carbon::parse($row->created_at)->addDays(2))) abort(410, 'Link assessment tidak valid atau sudah kedaluwarsa.');
+        $row = $this->findRecruitmentByToken($token, $lock);
+        if (!$row || Carbon::now()->greaterThanOrEqualTo(Carbon::parse($row->created_at)->addDays(2))) {
+            abort(410, 'Link assessment tidak valid atau sudah kedaluwarsa.');
+        }
         return $row;
+    }
+
+    private function attemptByToken($token, $lock = false)
+    {
+        $query = DB::table('assessment_attempts')->where('token', $this->normalizeAssessmentToken($token));
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $attempt = $query->first();
+        if ($attempt) {
+            return $attempt;
+        }
+
+        $recruitment = $this->findRecruitmentByToken($token, $lock);
+        if (!$recruitment) {
+            return null;
+        }
+
+        $fallbackQuery = DB::table('assessment_attempts')->where('recruitment_id', $recruitment->id);
+        if ($lock) {
+            $fallbackQuery->lockForUpdate();
+        }
+
+        return $fallbackQuery->first();
+    }
+
+    private function findRecruitmentByToken($token, $lock = false)
+    {
+        foreach ($this->assessmentTokenCandidates($token) as $candidate) {
+            $query = DB::table('new_recruitment')->where('token', $candidate);
+            if ($lock) {
+                $query->lockForUpdate();
+            }
+            $row = $query->first();
+            if ($row) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    private function assessmentTokenCandidates($token)
+    {
+        $token = trim((string) $token);
+        $candidates = [$token];
+
+        $decoded = $token;
+        while (($next = rawurldecode($decoded)) !== $decoded) {
+            $decoded = trim($next);
+            $candidates[] = $decoded;
+        }
+
+        $decoded = urldecode($token);
+        if ($decoded !== $token) {
+            $candidates[] = trim($decoded);
+        }
+
+        if (strpos($token, ' ') !== false) {
+            $candidates[] = str_replace(' ', '+', $token);
+        }
+
+        return array_values(array_unique(array_filter($candidates)));
+    }
+
+    private function normalizeAssessmentToken($token)
+    {
+        $candidates = $this->assessmentTokenCandidates($token);
+
+        return $candidates[0] ?? '';
     }
 
     private function stateFor($attempt)
@@ -350,14 +468,14 @@ class AssessmentController extends Controller
             return ['status' => 'completed', 'message' => 'Assessment selesai.'];
         }
         if ($session->status === 'pending') {
-            return ['status' => 'waiting', 'message' => 'Sesi berikutnya siap dimulai saat Anda sudah siap.', 'session' => ['id' => $session->id, 'name' => $session->category_name, 'order' => $session->session_order, 'duration_minutes' => $session->duration_minutes, 'question_count' => $session->question_count]];
+            return ['status' => 'waiting', 'message' => 'Sesi berikutnya siap dimulai saat Anda sudah siap.', 'session' => ['id' => $session->id, 'name' => $session->category_name, 'order' => $session->session_order, 'duration_minutes' => $session->duration_minutes, 'has_time_limit' => $this->sessionHasTimeLimit($session), 'question_count' => $session->question_count]];
         }
         $questions = json_decode($session->questions_json ?: '[]', true) ?: []; $answers = json_decode($session->answers_json ?: '{}', true) ?: [];
-        if (Carbon::now()->greaterThanOrEqualTo(Carbon::parse($session->expires_at))) { foreach ($questions as $question) if (!array_key_exists($question['id'], $answers)) $answers[$question['id']] = null; $this->finishSession($session, $answers, 'expired'); return $this->stateFor($attempt); }
+        if ($session->expires_at && Carbon::now()->greaterThanOrEqualTo(Carbon::parse($session->expires_at))) { foreach ($questions as $question) if (!array_key_exists($question['id'], $answers)) $answers[$question['id']] = null; $this->finishSession($session, $answers, 'expired'); return $this->stateFor($attempt); }
         $question = collect($questions)->first(function ($item) use ($answers) { return !array_key_exists($item['id'], $answers); });
         if (!$question) { $this->finishSession($session, $answers, 'completed'); return $this->stateFor($attempt); }
         unset($question['answer_key'], $question['answer_map']); foreach ($question['options'] as &$option) unset($option['is_correct']);
-        return ['status' => 'in_progress', 'session' => ['id' => $session->id, 'name' => $session->category_name, 'order' => $session->session_order, 'duration_minutes' => $session->duration_minutes, 'expires_at' => $session->expires_at], 'question' => array_merge($question, ['total' => $session->question_count])];
+        return ['status' => 'in_progress', 'session' => ['id' => $session->id, 'name' => $session->category_name, 'order' => $session->session_order, 'duration_minutes' => $session->duration_minutes, 'has_time_limit' => $this->sessionHasTimeLimit($session), 'expires_at' => $session->expires_at], 'question' => array_merge($question, ['total' => $session->question_count])];
     }
 
     private function finishSession($session, array $answers, $status)
@@ -385,9 +503,20 @@ class AssessmentController extends Controller
             return $this->scorePapi($questions, $answers);
         }
 
+        $scaleQuestions = collect($questions)->filter(function ($question) {
+            return ($question['type'] ?? '') === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
+        });
+        $choiceQuestions = collect($questions)->reject(function ($question) {
+            return ($question['type'] ?? '') === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
+        });
+
+        if ($scaleQuestions->isNotEmpty() && $choiceQuestions->isEmpty()) {
+            return ScaleScoringService::scoreQuestions($questions, $answers);
+        }
+
         $answered = 0;
         $correct = 0;
-        foreach ($questions as $question) {
+        foreach ($choiceQuestions as $question) {
             $answer = $answers[$question['id']] ?? null;
             if ($answer === null) {
                 continue;
@@ -400,6 +529,34 @@ class AssessmentController extends Controller
             if ($key && $given === $key) {
                 $correct++;
             }
+        }
+
+        $choiceTotal = $choiceQuestions->count();
+        $choiceScore = $choiceTotal ? round(($correct / $choiceTotal) * 100, 2) : null;
+        $scaleResult = $scaleQuestions->isNotEmpty()
+            ? ScaleScoringService::scoreQuestions($scaleQuestions->values()->all(), $answers)
+            : null;
+
+        if ($scaleResult && $choiceTotal > 0) {
+            $combinedTotal = $choiceTotal + ($scaleResult['total_questions'] ?? 0);
+            $combinedScore = $combinedTotal > 0
+                ? round((($choiceScore * $choiceTotal) + (($scaleResult['score'] ?? 0) * ($scaleResult['total_questions'] ?? 0))) / $combinedTotal, 2)
+                : 0;
+
+            return [
+                'engine' => 'mixed',
+                'answered' => $answered + ($scaleResult['answered'] ?? 0),
+                'total_questions' => count($questions),
+                'correct_answers' => $correct,
+                'choice_score' => $choiceScore,
+                'scale_score' => $scaleResult['score'] ?? 0,
+                'scale_details' => $scaleResult['details'] ?? [],
+                'score' => min(100, max(0, $combinedScore)),
+            ];
+        }
+
+        if ($scaleResult) {
+            return $scaleResult;
         }
 
         $totalQuestions = count($questions);
@@ -483,11 +640,59 @@ class AssessmentController extends Controller
         DB::table('assessment_sessions')->where('id', $session->id)->update([
             'status' => 'in_progress',
             'started_at' => $start,
-            'expires_at' => $start->copy()->addMinutes($session->duration_minutes),
+            'expires_at' => $this->sessionHasTimeLimit($session)
+                ? $start->copy()->addMinutes(max(1, (int) $session->duration_minutes))
+                : null,
             'updated_at' => $start,
         ]);
 
         return $session->id;
+    }
+
+    private function sessionDefinitionFromCategory($category)
+    {
+        return [
+            $category->name,
+            (int) $category->question_count,
+            (int) $category->duration_minutes,
+            $this->categoryHasTimeLimit($category),
+        ];
+    }
+
+    private function sessionDefinitionFromSession($session)
+    {
+        return [
+            $session->category_name,
+            (int) $session->question_count,
+            (int) $session->duration_minutes,
+            $this->sessionHasTimeLimit($session),
+        ];
+    }
+
+    private function categoryHasTimeLimit($category)
+    {
+        if (isset($category->has_time_limit)) {
+            return (bool) $category->has_time_limit;
+        }
+
+        return (int) ($category->duration_minutes ?? 0) > 0;
+    }
+
+    private function sessionHasTimeLimit($session)
+    {
+        $category = $session->question_category_id
+            ? DB::table('question_categories')->where('id', $session->question_category_id)->first()
+            : null;
+
+        if ($category) {
+            return $this->categoryHasTimeLimit($category);
+        }
+
+        if (($session->category_name ?? '') === 'Assessment User') {
+            return (int) ($session->duration_minutes ?? 0) > 0;
+        }
+
+        return (int) ($session->duration_minutes ?? 0) > 0;
     }
 
     /**
@@ -717,27 +922,6 @@ class AssessmentController extends Controller
                     if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'nilai_kecocokan')) {
                         $updateData['nilai_kecocokan'] = $matchingScore;
                     }
-
-                    // Automatic rejection if matching score is below minimum requirement
-                    if ($minScoreReq !== null && $matchingScore < $minScoreReq) {
-                        $rejectReason = "Matching score AI ({$matchingScore}%) di bawah minimum requirement ({$minScoreReq}%).";
-
-                        (new \App\Services\RecruitmentStatusService())->update($recruitmentId, 'rejected', Carbon::now());
-
-                        $updateData['status'] = 'rejected';
-                        $updateData['rejected_by'] = 'System AI';
-                        $updateData['rejected_at'] = Carbon::now();
-                        $updateData['alasan_reject'] = $rejectReason;
-
-                        $this->triggerAutoRejectNotifications($recruitmentId, $rejectReason);
-
-                        \Illuminate\Support\Facades\Log::info("=== AI AUTO REJECT CANDIDATE ===", [
-                            'recruitment_id' => $recruitmentId,
-                            'matching_score' => $matchingScore,
-                            'minimum_matching' => $minScoreReq,
-                            'reason' => $rejectReason
-                        ]);
-                    }
                 }
 
                 DB::table('new_recruitment')->where('id', $recruitmentId)->update($updateData);
@@ -748,49 +932,6 @@ class AssessmentController extends Controller
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('processAiMatching Error: ' . $e->getMessage());
             return null;
-        }
-    }
-
-    /**
-     * Send rejection notifications (Email & WhatsApp) when candidate is auto-rejected
-     */
-    private function triggerAutoRejectNotifications($recruitmentId, $reason)
-    {
-        try {
-            $applicant = \App\Models\NewRecruitment::with('personalRequest.masterJabatan')->find($recruitmentId);
-            if (!$applicant) return;
-
-            $posisiName = optional($applicant->personalRequest)->masterJabatan->nama_jabatan 
-                ?? ($applicant->posisi_di_lamar ?? 'Positions');
-
-            $dataArray = (object) [
-                'nama_lengkap' => $applicant->nama_lengkap,
-                'posisi_di_lamar' => $posisiName,
-                'nama_jabatan' => $posisiName,
-                'alasan_reject' => $reason,
-                'hrd_name' => 'System AI',
-            ];
-
-            if (!empty($applicant->email)) {
-                $bodyEmail = \App\Services\GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
-                \App\Services\SendEmail::where('to', $applicant->email)
-                    ->where('subject', 'Informasi Hasil Seleksi - PT Inti Surya Laboratorium')
-                    ->where('body', $bodyEmail)
-                    ->where('karyawan', 'System AI')
-                    ->noReply()
-                    ->send();
-            }
-
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
-            if (!empty($phone)) {
-                $waObj = new \App\Services\GenerateMessageAtsWhatsapp($dataArray);
-                $waMessage = $waObj->RejectedCandidateSelection();
-
-                $sendWa = new \App\Services\SendWhatsapp($phone, $waMessage);
-                $sendWa->send();
-            }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('triggerAutoRejectNotifications Error: ' . $e->getMessage());
         }
     }
 

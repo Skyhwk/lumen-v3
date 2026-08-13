@@ -293,6 +293,7 @@ class AtsInterviewHrdController extends Controller
 
             $dataArray = (object) [
                 'nama_lengkap' => $applicant->nama_lengkap,
+                'jenis_kelamin' => $applicant->jenis_kelamin,
                 'posisi_di_lamar' => $posisiName,
                 'nama_jabatan' => $posisiName,
                 'hariIndonesia' => $hariIndonesia,
@@ -425,6 +426,7 @@ class AtsInterviewHrdController extends Controller
             $candidateDataObj = (object) [
                 'id'                    => $applicant->id,
                 'nama_lengkap'          => $applicant->nama_lengkap,
+                'jenis_kelamin'         => $applicant->jenis_kelamin,
                 'posisi_di_lamar'       => $posisiName,
                 'nama_jabatan'          => $posisiName,
                 'link_complete_profile' => $profileUrl,
@@ -503,6 +505,7 @@ class AtsInterviewHrdController extends Controller
 
             $dataArray = (object) [
                 'nama_lengkap' => $applicant->nama_lengkap,
+                'jenis_kelamin' => $applicant->jenis_kelamin,
                 'posisi_di_lamar' => $posisiName,
                 'nama_jabatan' => $posisiName,
                 'alasan_reject' => $reason,

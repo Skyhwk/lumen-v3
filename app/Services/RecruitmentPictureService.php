@@ -42,9 +42,17 @@ class RecruitmentPictureService
             return null;
         }
 
-        $path = public_path('recruitment' . DIRECTORY_SEPARATOR . basename((string) $filename));
+        if (str_starts_with($filename, 'data:image') || filter_var($filename, FILTER_VALIDATE_URL)) {
+            return $filename;
+        }
+
+        $base = basename((string) $filename);
+        $path = public_path('recruitment' . DIRECTORY_SEPARATOR . $base);
         if (!is_file($path) || !is_readable($path)) {
-            return null;
+            $path = public_path('recruitment' . DIRECTORY_SEPARATOR . 'foto' . DIRECTORY_SEPARATOR . $base);
+            if (!is_file($path) || !is_readable($path)) {
+                return null;
+            }
         }
 
         $mime = function_exists('mime_content_type') ? mime_content_type($path) : null;

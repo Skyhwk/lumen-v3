@@ -6,6 +6,59 @@ use App\Services\OfferingSalaryEmail;
 
 class GenerateMessageAtsEmail
 {
+    public static function resolveSalutation($data)
+    {
+        $gender = strtolower(trim((string) ($data->jenis_kelamin ?? $data->gender ?? '')));
+
+        if (in_array($gender, ['female', 'perempuan', 'f', 'wanita'], true)) {
+            return 'Saudari';
+        }
+
+        if (in_array($gender, ['male', 'laki-laki', 'laki laki', 'm', 'pria'], true)) {
+            return 'Saudara';
+        }
+
+        return 'Saudara/i';
+    }
+
+    private static function candidateGreetingHtml($data, $name)
+    {
+        $salutation = self::resolveSalutation($data);
+        $namaLengkap = htmlspecialchars($name);
+
+        return "<p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. {$salutation} <strong>{$namaLengkap}</strong>,</p>";
+    }
+
+    private static function internalGreetingHtml($name)
+    {
+        $nama = htmlspecialchars($name);
+
+        return "<p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$nama}</strong>,</p>";
+    }
+
+    private static function emailHeaderHtml()
+    {
+        return "
+                <tr>
+                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
+                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD & Talent Acquisition Division</div>
+                    </td>
+                </tr>";
+    }
+
+    private static function emailFooterHtml()
+    {
+        return "
+                <tr>
+                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <strong style='color: #334155;'>Salam,</strong><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment & Talent Acquisition</span><br>
+                        PT Inti Surya Laboratorium
+                    </td>
+                </tr>";
+    }
+
     /**
      * Concise, Neutral & Professional Email Template for Approved Candidate (HRD Interview)
      * 
@@ -14,7 +67,6 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailApproveKandidat($data)
     {
-        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
         $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
         $hari = htmlspecialchars($data->hariIndonesia ?? '');
         $tanggal = htmlspecialchars($data->tglInter ?? '');
@@ -43,6 +95,8 @@ class GenerateMessageAtsEmail
                 </tr>";
         }
 
+        $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
+
         return "
         <!DOCTYPE html>
         <html>
@@ -53,17 +107,12 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD & Talent Acquisition Division</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
+                        {$greeting}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Sehubungan dengan proses seleksi posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami mengundang Anda untuk mengikuti tahapan <strong>Interview HRD</strong> dengan rincian sebagai berikut:
@@ -106,13 +155,7 @@ class GenerateMessageAtsEmail
                 </tr>
 
                 <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment & Talent Acquisition</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>
@@ -242,9 +285,8 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailRejectKandidat($data)
     {
-        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? $data->nama_kandidat ?? 'Kandidat');
-        $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? $data->posisi ?? 'Posisi Dilamar');
-        $namaHrd     = htmlspecialchars($data->hrd_name ?? $data->rejected_by ?? $data->created_by ?? 'Tim Recruitment');
+        $posisi   = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? $data->posisi ?? 'Posisi Dilamar');
+        $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? $data->nama_kandidat ?? 'Kandidat');
 
         return "
         <!DOCTYPE html>
@@ -256,40 +298,29 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD & Talent Acquisition Division</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Halo <strong>{$namaLengkap}</strong>,</p>
-                        
+                        {$greeting}
+
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Terima kasih atas minat Bapak/Ibu terhadap posisi <strong>{$posisi}</strong> dan telah meluangkan waktu untuk berpartisipasi dalam proses rekrutmen kami. Kami sangat menghargai kesempatan untuk mengenal lebih jauh mengenai latar belakang dan pengalaman Bapak/Ibu.
+                            Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi <strong>{$posisi}</strong>.
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Setelah melalui pertimbangan yang matang, dengan berat hati kami sampaikan bahwa kami memutuskan untuk melanjutkan proses dengan kandidat lain yang kualifikasinya dinilai paling sesuai dengan kebutuhan posisi ini. Keputusan ini bukanlah hal yang mudah, mengingat kami menerima banyak lamaran dengan kualitas yang baik, termasuk dari Bapak/Ibu.
+                            Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
-                            Kami sangat menghargai waktu dan usaha yang telah Bapak/Ibu berikan, serta mengucapkan doa terbaik untuk langkah karier Bapak/Ibu selanjutnya.
+                            Kami menghargai minat Anda untuk bergabung bersama PT Inti Surya Laboratorium dan mendoakan yang terbaik untuk perjalanan karier Anda.
                         </p>
                     </td>
                 </tr>
 
                 <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 20px 32px; border-top: 1px solid #e2e8f0; font-size: 13px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Hormat kami,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment HRD</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>
@@ -310,6 +341,7 @@ class GenerateMessageAtsEmail
         $noRequest     = htmlspecialchars($data->no_request     ?? '-');
         $approvedBy    = htmlspecialchars($data->approved_by    ?? 'HRD');
         $approvedAt    = htmlspecialchars($data->approved_at    ?? '-');
+        $greeting      = self::internalGreetingHtml($data->nama_user ?? 'User');
 
         return "
         <!DOCTYPE html>
@@ -321,12 +353,7 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Status Banner -->
                 <tr>
@@ -340,7 +367,7 @@ class GenerateMessageAtsEmail
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaUser}</strong>,</p>
+                        {$greeting}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Dengan hormat, kami informasikan bahwa kandidat berikut telah <strong>dinyatakan lulus tahap Interview HRD</strong> untuk permintaan personel yang Bapak/Ibu ajukan. Kandidat tersebut kini siap untuk dijadwalkan pada tahap <strong>Interview User</strong>.
@@ -386,13 +413,7 @@ class GenerateMessageAtsEmail
                 </tr>
 
                 <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim HRD &amp; Talent Acquisition</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>
@@ -407,9 +428,9 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailCompleteProfileCandidate($data)
     {
-        $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
         $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
         $linkProfile = htmlspecialchars($data->link_complete_profile ?? ('https://apps.intilab.com/candidate-profile?id=' . ($data->id ?? '')));
+        $greeting    = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
 
         return "
         <!DOCTYPE html>
@@ -421,20 +442,15 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaLengkap}</strong>,</p>
+                        {$greeting}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Sehubungan dengan proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami memohon kesediaan Bapak/Ibu untuk <strong>melengkapi data diri</strong> serta mengunggah berkas pendukung yang dibutuhkan melalui tautan di bawah ini:
+                            Sehubungan dengan proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami memohon kesediaan Anda untuk <strong>melengkapi data diri</strong> serta mengunggah berkas pendukung yang dibutuhkan melalui tautan di bawah ini:
                         </p>
 
                         <!-- Instruction Checklist Box -->
@@ -472,13 +488,7 @@ class GenerateMessageAtsEmail
                 </tr>
 
                 <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment &amp; Talent Acquisition</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>
@@ -507,12 +517,7 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Status Banner -->
                 <tr>
@@ -577,6 +582,9 @@ class GenerateMessageAtsEmail
                         </p>
                     </td>
                 </tr>
+
+                <!-- Footer -->
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>
@@ -744,6 +752,8 @@ class GenerateMessageAtsEmail
             </div>";
         }
 
+        $greeting = self::candidateGreetingHtml($data, $data->nama_kandidat ?? $data->nama_lengkap ?? 'Candidate');
+
         return "
         <!DOCTYPE html>
         <html>
@@ -754,12 +764,7 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Status Banner -->
                 <tr>
@@ -773,7 +778,7 @@ class GenerateMessageAtsEmail
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaKandidat}</strong>,</p>
+                        {$greeting}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Sehubungan dengan proses seleksi penerimaan karyawan untuk posisi <strong>{$posisi}</strong> di PT Inti Surya Laboratorium, kami mengundang Anda untuk mengikuti sesi <strong>User Interview</strong> yang telah dijadwalkan sebagai berikut:
@@ -812,13 +817,7 @@ class GenerateMessageAtsEmail
                 </tr>
 
                 <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Hormat kami,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment HRD</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>
@@ -871,6 +870,8 @@ class GenerateMessageAtsEmail
             </div>";
         }
 
+        $greeting = self::internalGreetingHtml($data->nama_user ?? 'User');
+
         return "
         <!DOCTYPE html>
         <html>
@@ -881,12 +882,7 @@ class GenerateMessageAtsEmail
         <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
             <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
                 <!-- Header -->
-                <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>Divisi HRD &amp; Talent Acquisition</div>
-                    </td>
-                </tr>
+                " . self::emailHeaderHtml() . "
 
                 <!-- Status Banner -->
                 <tr>
@@ -900,7 +896,7 @@ class GenerateMessageAtsEmail
                 <!-- Content -->
                 <tr>
                     <td style='padding: 32px;'>
-                        <p style='font-size: 14px; margin-top: 0; color: #0f172a;'>Yth. Bapak/Ibu <strong>{$namaUser}</strong>,</p>
+                        {$greeting}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Melalui email ini kami informasikan bahwa sarana/ruangan untuk sesi <strong>User Interview</strong> kandidat pada Personnel Request Anda (No. Request: <strong>{$noRequest}</strong>) telah disiapkan:
@@ -945,13 +941,7 @@ class GenerateMessageAtsEmail
                 </tr>
 
                 <!-- Footer -->
-                <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Hormat kami,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment HRD</span><br>
-                        PT Inti Surya Laboratorium
-                    </td>
-                </tr>
+                " . self::emailFooterHtml() . "
             </table>
         </body>
         </html>

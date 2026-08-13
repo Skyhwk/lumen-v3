@@ -341,6 +341,8 @@ class AtsInterviewUserController extends Controller
             // 1. Email & WhatsApp to Candidate
             $candidateDataObj = (object) [
                 'nama_kandidat'     => $applicant->nama_lengkap,
+                'nama_lengkap'      => $applicant->nama_lengkap,
+                'jenis_kelamin'     => $applicant->jenis_kelamin,
                 'posisi'            => $posisiName,
                 'tgl_interview'     => $tglFormatted,
                 'jenis_interview'   => $jenisInterview,

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview};
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp};
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +22,67 @@ class PersonnelRequestController extends Controller
         $microtime = str_replace('.', '', (string) microtime(true));
 
         return $microtime;
+    }
+
+    private function nullableValue($value)
+    {
+        return ($value === '' || $value === null) ? null : $value;
+    }
+
+    private function nullableInt($value)
+    {
+        if ($value === '' || $value === null) {
+            return null;
+        }
+
+        return (int) $value;
+    }
+
+    private function validatedUserAssessmentConfig(Request $request): array
+    {
+        $useAssessment = filter_var($request->input('use_user_assessment'), FILTER_VALIDATE_BOOLEAN);
+
+        if (!$useAssessment) {
+            return [
+                'use_user_assessment' => 0,
+                'user_assessment_question_count' => null,
+                'user_assessment_has_time_limit' => 0,
+                'user_assessment_duration_minutes' => null,
+            ];
+        }
+
+        $questionCount = (int) $request->input('user_assessment_question_count');
+        $hasTimeLimit = filter_var($request->input('user_assessment_has_time_limit'), FILTER_VALIDATE_BOOLEAN);
+        $durationMinutes = $hasTimeLimit ? (int) $request->input('user_assessment_duration_minutes') : null;
+
+        if ($questionCount < 1) {
+            abort(422, 'Jumlah soal test user wajib diisi minimal 1.');
+        }
+
+        $availableQuestions = Question::query()
+            ->where('owner_karyawan', $this->karyawan)
+            ->where('is_active', 1)
+            ->where('question_type', 'single_choice')
+            ->count();
+
+        if ($availableQuestions < 1) {
+            abort(422, 'Bank Soal User Anda belum memiliki soal aktif. Silakan tambahkan soal terlebih dahulu.');
+        }
+
+        if ($questionCount > $availableQuestions) {
+            abort(422, 'Jumlah soal test user tidak boleh melebihi total soal tersedia (' . $availableQuestions . ' soal).');
+        }
+
+        if ($hasTimeLimit && $durationMinutes < 1) {
+            abort(422, 'Durasi test user wajib diisi minimal 1 menit apabila batas waktu aktif.');
+        }
+
+        return [
+            'use_user_assessment' => 1,
+            'user_assessment_question_count' => $questionCount,
+            'user_assessment_has_time_limit' => $hasTimeLimit ? 1 : 0,
+            'user_assessment_duration_minutes' => $durationMinutes,
+        ];
     }
 
     /**
@@ -90,30 +151,35 @@ class PersonnelRequestController extends Controller
         try {
             $noRequest = $this->generateNoRequest();
 
+            $assessmentConfig = $this->validatedUserAssessmentConfig($request);
+
             $data = PersonnelRequest::create([
                 'no_request'                => $noRequest,
                 'request_type'              => $request->request_type,
-                'karyawan_lama_nama'        => $request->karyawan_lama_nama,
-                'karyawan_lama_nik'         => $request->karyawan_lama_nik,
-                'alasan_replacement'        => $request->alasan_replacement,
-                'alasan_replacement_lainnya'=> $request->alasan_replacement_lainnya,
+                'karyawan_lama_nama'        => $this->nullableValue($request->karyawan_lama_nama),
+                'karyawan_lama_nik'         => $this->nullableValue($request->karyawan_lama_nik),
+                'alasan_replacement'        => $this->nullableValue($request->alasan_replacement),
+                'alasan_replacement_lainnya'=> $this->nullableValue($request->alasan_replacement_lainnya),
                 'divisi'                    => $request->divisi,
                 'posisi'                    => $request->posisi,
                 'jumlah_personal'           => $request->jumlah_personal,
-                'lokasi_penempatan_cabang'  => $request->lokasi_penempatan_cabang,
-                'grade_master_karyawan'     => $request->grade_master_karyawan,
-                'alasan_kebutuhan'          => $request->alasan_kebutuhan,
-                'job_description'           => $request->job_description,
-                'pendidikan'                => $request->pendidikan,
-                'pengalaman_kerja'          => $request->pengalaman_kerja,
-                'usia_maksimum'             => $request->usia_maksimum,
+                'lokasi_penempatan_cabang'  => $this->nullableInt($request->lokasi_penempatan_cabang),
+                'grade_master_karyawan'     => $this->nullableValue($request->grade_master_karyawan),
+                'alasan_kebutuhan'          => $this->nullableValue($request->alasan_kebutuhan),
+                'job_description'           => $this->nullableValue($request->job_description),
+                'pendidikan'                => $this->nullableValue($request->pendidikan),
+                'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
+                'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'gender'                    => $request->gender,
-                'skill_wajib'               => $request->skill_wajib,
-                'sertifikasi'               => $request->sertifikasi,
-                'tanggal_dibutuhkan'        => $request->tanggal_dibutuhkan,
+                'skill_wajib'               => $this->nullableValue($request->skill_wajib),
+                'sertifikasi'               => $this->nullableValue($request->sertifikasi),
+                'tanggal_dibutuhkan'        => $this->nullableValue($request->tanggal_dibutuhkan),
                 'prioritas'                 => $request->prioritas,
-                'max_salary'                => $request->max_salary,
-                'use_user_assessment'       => $request->use_user_assessment ? 1 : 0,
+                'max_salary'                => $this->nullableValue($request->max_salary),
+                'use_user_assessment'       => $assessmentConfig['use_user_assessment'],
+                'user_assessment_question_count' => $assessmentConfig['user_assessment_question_count'],
+                'user_assessment_has_time_limit' => $assessmentConfig['user_assessment_has_time_limit'],
+                'user_assessment_duration_minutes' => $assessmentConfig['user_assessment_duration_minutes'],
                 'created_by'                => $this->karyawan ?? null,
             ]);
 
@@ -262,16 +328,12 @@ class PersonnelRequestController extends Controller
     }
 
     /**
-     * Get list of cabang (for Select2)
+     * Get list of all active cabang (for Select2)
      */
     public function getCabang()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
-            $allowedCabangIds = MasterKaryawan::whereIn('user_id', $allowedIds)->whereNotNull('id_cabang')->pluck('id_cabang')->unique()->toArray();
-
             $cabang = MasterCabang::where('is_active', 1)
-                ->whereIn('id', $allowedCabangIds)
                 ->orderBy('nama_cabang')
                 ->get()
                 ->map(fn($c) => ['id' => $c->id, 'text' => $c->nama_cabang]);

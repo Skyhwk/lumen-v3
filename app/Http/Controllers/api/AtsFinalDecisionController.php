@@ -411,6 +411,7 @@ class AtsFinalDecisionController extends Controller
                     $posisiName = $this->resolvePositionName($applicant);
                     $dataObj = (object) [
                         'nama_lengkap'    => $applicant->nama_lengkap,
+                        'jenis_kelamin'   => $applicant->jenis_kelamin,
                         'nama_jabatan'    => $posisiName,
                         'posisi_di_lamar' => $posisiName,
                         'alasan_reject'   => 'Negotiated salary offer rejected',
