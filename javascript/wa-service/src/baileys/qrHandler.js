@@ -52,6 +52,11 @@ function emitChatDeleted(io, userId, payload) {
     io.to(`user:${userId}`).emit('wa:chat:deleted', payload || {});
 }
 
+function emitPresenceUpdate(io, userId, payload) {
+    if (!io) return;
+    io.to(`user:${userId}`).emit('wa:presence:update', payload);
+}
+
 function emitMessageNew(io, userId, payload) {
     if (!io) return;
     io.to(`user:${userId}`).emit('wa:message:new', payload);
@@ -96,6 +101,7 @@ module.exports = {
     emitChatsSync,
     emitChatUpdate,
     emitChatDeleted,
+    emitPresenceUpdate,
     emitMessageNew,
     emitMessageUpdate,
     emitMessageMedia,

@@ -14,7 +14,7 @@ const { emitChatsSync, emitMessageNew, emitChatUpdate, emitChatDeleted, emitMess
 const { isStatusJid, splitChats, formatStatusLabel } = require('../utils/chatUtils');
 const { sortChatsByUnread, dedupeChatsByPhone } = require('../utils/chatSortUtils');
 const { pickStatus } = require('../utils/messageStatus');
-const { isPhoneLikeName, isWeakContactName, isGoodContactName, stripJid, isLidJid, isBareNumericId } = require('../utils/nameUtils');
+const { isPhoneLikeName, isWeakContactName, isGoodContactName, stripJid, isLidJid, isBareNumericId, resolvePhoneOrJid } = require('../utils/nameUtils');
 const { isGroupJid, isGroupMessageRetained } = require('../utils/groupRetentionUtils');
 const { getChatAnchor, setChatAnchorFromMessage } = require('./chatAnchorService');
 const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
@@ -95,8 +95,12 @@ async function buildLastMessagePreview(userId, parsed) {
 }
 
 function resolveQuotedSenderDisplayName(msg, index, { chatJid, chatName } = {}) {
-    if (msg.quoted_sender_name) {
-        return msg.quoted_sender_name;
+    if (msg.quoted_from_me) {
+        return 'Anda';
+    }
+
+    if (msg.quoted_sender_name === 'Anda') {
+        return 'Anda';
     }
 
     const jid = chatJid || msg.jid;
@@ -139,11 +143,61 @@ function resolveQuotedSenderDisplayName(msg, index, { chatJid, chatName } = {}) 
     return chatName || bare || 'Kontak';
 }
 
+async function buildQuotedFromMeMap(userId, jid, waMessageIds = []) {
+    const ids = [...new Set(waMessageIds.filter(Boolean))];
+    if (!ids.length || !jid) return new Map();
+
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await getPool().execute(
+        `SELECT m.wa_message_id, m.from_me
+         FROM wa_messages m
+         JOIN wa_chats c ON c.id = m.chat_id
+         WHERE c.user_id_erp = ? AND c.jid = ? AND m.wa_message_id IN (${placeholders})`,
+        [userId, jid, ...ids],
+    );
+
+    const map = new Map();
+    for (const row of rows) {
+        if (row.from_me) {
+            map.set(row.wa_message_id, true);
+        }
+    }
+    return map;
+}
+
+function isQuotedSenderMe(msg, userPhone) {
+    if (!msg?.quoted_sender_jid || !userPhone) return false;
+    const bare = stripJid(msg.quoted_sender_jid);
+    const phoneDigits = String(userPhone).replace(/\D/g, '');
+    return Boolean(phoneDigits && bare === phoneDigits);
+}
+
+async function applyQuotedReplyMeta(userId, parsed, userPhone) {
+    if (!parsed?.reply_to_wa_message_id) return;
+
+    const quotedRow = await getMessageRow(userId, parsed.jid, parsed.reply_to_wa_message_id);
+    if (quotedRow?.from_me) {
+        parsed.quoted_sender_jid = null;
+        parsed.quoted_sender_name = 'Anda';
+        return;
+    }
+
+    if (isQuotedSenderMe(parsed, userPhone)) {
+        parsed.quoted_sender_jid = null;
+        parsed.quoted_sender_name = 'Anda';
+    }
+}
+
 async function enrichMessagesWithSenders(userId, messages = [], chatMeta = {}) {
     if (!messages.length) return messages;
 
     const index = await contactService.buildContactNameIndex(userId);
     const isGroup = messages.some((msg) => msg.jid?.endsWith('@g.us'));
+    const chatJid = chatMeta.jid || messages[0]?.jid || null;
+    const replyIds = messages.map((msg) => msg.reply_to_wa_message_id).filter(Boolean);
+    const quotedFromMeMap = await buildQuotedFromMeMap(userId, chatJid, replyIds);
+    const session = getWaSession(userId);
+    const userPhone = session?.phone || null;
 
     return messages.map((msg) => {
         let next = { ...msg };
@@ -154,12 +208,21 @@ async function enrichMessagesWithSenders(userId, messages = [], chatMeta = {}) {
         }
 
         if (msg.quoted_text || msg.reply_to_wa_message_id) {
-            const quotedName = resolveQuotedSenderDisplayName(msg, index, {
-                chatJid: msg.jid,
-                chatName: chatMeta.name || msg.chat_name,
-            });
-            if (quotedName) {
-                next.quoted_sender_name = quotedName;
+            const quotedFromMe = quotedFromMeMap.get(msg.reply_to_wa_message_id)
+                || isQuotedSenderMe(msg, userPhone);
+
+            if (quotedFromMe) {
+                next.quoted_sender_name = 'Anda';
+                next.quoted_from_me = true;
+                next.quoted_sender_jid = null;
+            } else {
+                const quotedName = resolveQuotedSenderDisplayName(msg, index, {
+                    chatJid: msg.jid,
+                    chatName: chatMeta.name || msg.chat_name,
+                });
+                if (quotedName) {
+                    next.quoted_sender_name = quotedName;
+                }
             }
         }
 
@@ -477,6 +540,10 @@ async function processMessages(userId, messages = [], io, {
             }
         } catch {
             rawMessage = null;
+        }
+
+        if (parsed.reply_to_wa_message_id) {
+            await applyQuotedReplyMeta(userId, parsed, session?.phone);
         }
 
         const savedMsg = await saveMessage(userId, {
@@ -1226,6 +1293,57 @@ async function getMessages(userId, jid, cursor, limit = 50) {
     };
 }
 
+function escapeLikePattern(value) {
+    return String(value).replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+async function searchMessages(userId, jid, query, { limit = 30, offset = 0 } = {}) {
+    const term = String(query || '').trim();
+    if (!term || term.length < 2) {
+        return { messages: [], total: 0, query: term };
+    }
+
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+    const like = `%${escapeLikePattern(term)}%`;
+    const tsExpr = 'COALESCE(m.timestamp_ms, UNIX_TIMESTAMP(m.timestamp) * 1000)';
+
+    const [countRows] = await getPool().execute(
+        `SELECT COUNT(*) AS total
+         FROM wa_messages m
+         JOIN wa_chats c ON c.id = m.chat_id
+         WHERE c.user_id_erp = ? AND c.jid = ?
+           AND m.content IS NOT NULL
+           AND m.content LIKE ? ESCAPE '\\\\'`,
+        [userId, jid, like],
+    );
+
+    const [rows] = await getPool().execute(
+        `SELECT m.*, c.jid, c.name AS chat_name
+         FROM wa_messages m
+         JOIN wa_chats c ON c.id = m.chat_id
+         WHERE c.user_id_erp = ? AND c.jid = ?
+           AND m.content IS NOT NULL
+           AND m.content LIKE ? ESCAPE '\\\\'
+         ORDER BY ${tsExpr} DESC, m.id DESC
+         LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+        [userId, jid, like],
+    );
+
+    const reparsed = await enrichEmptyContentFromRaw(rows);
+    const enriched = await enrichMessagesWithSenders(userId, reparsed, {
+        name: reparsed[0]?.chat_name || null,
+    });
+
+    return {
+        messages: enriched.map(formatMessageRow),
+        total: countRows[0]?.total || 0,
+        query: term,
+        limit: safeLimit,
+        offset: safeOffset,
+    };
+}
+
 async function computeMessagesHasMore(userId, jid, rows, safeLimit) {
     if (rows.length === safeLimit) return true;
     if (!rows.length) return false;
@@ -1428,7 +1546,7 @@ async function sendMediaAlbum(userId, jid, files = [], { caption = '' } = {}) {
     return formatted;
 }
 
-async function sendMedia(userId, jid, file, { caption = '' } = {}) {
+async function sendMedia(userId, jid, file, { caption = '', replyTo = null } = {}) {
     const session = await requireWaSession(userId);
     await ensureChat(userId, jid, {});
 
@@ -1450,7 +1568,15 @@ async function sendMedia(userId, jid, file, { caption = '' } = {}) {
         payload = { document: file.buffer, mimetype: mime, fileName: filename, caption };
     }
 
-    const sent = await session.sock.sendMessage(jid, payload);
+    const sendOptions = {};
+    if (replyTo) {
+        const quotedRow = await getMessageRow(userId, jid, replyTo);
+        if (quotedRow) {
+            sendOptions.quoted = buildQuotedFromRow(quotedRow);
+        }
+    }
+
+    const sent = await session.sock.sendMessage(jid, payload, sendOptions);
     let parsed = parseBaileysMessage(sent);
     if (!parsed && sent?.key?.id) {
         const now = new Date();
@@ -1469,6 +1595,27 @@ async function sendMedia(userId, jid, file, { caption = '' } = {}) {
     const stored = mediaService.saveOutgoingBuffer(userId, jid, file.buffer, { mime, filename });
 
     if (parsed) {
+        if (replyTo) {
+            const quotedRow = await getMessageRow(userId, jid, replyTo);
+            if (quotedRow) {
+                parsed.reply_to_wa_message_id = replyTo;
+                parsed.quoted_text = quotedRow.content || `[${quotedRow.type}]`;
+                if (quotedRow.from_me) {
+                    parsed.quoted_sender_jid = null;
+                    parsed.quoted_sender_name = 'Anda';
+                } else {
+                    parsed.quoted_sender_jid = quotedRow.sender_jid || jid;
+                    const index = await contactService.buildContactNameIndex(userId);
+                    const chatName = await contactService.getContactName(userId, jid);
+                    parsed.quoted_sender_name = resolveQuotedSenderDisplayName(
+                        parsed,
+                        index,
+                        { chatJid: jid, chatName },
+                    );
+                }
+            }
+        }
+
         const saved = await saveMessage(userId, {
             ...parsed,
             ...stored,
@@ -1754,6 +1901,9 @@ async function markRead(userId, jid, io = null) {
     const { patchSession } = require('../baileys/sessionManager');
     patchSession(userId, { openJid: jid });
 
+    const presenceService = require('./presenceService');
+    presenceService.subscribePresence(userId, jid).catch(() => {});
+
     await getPool().execute(
         'UPDATE wa_chats SET unread_count = 0, updated_at = NOW() WHERE user_id_erp = ? AND jid = ?',
         [userId, jid],
@@ -1884,6 +2034,48 @@ async function syncAndEmitChats(userId, io) {
     return { chats, statusChats };
 }
 
+async function startChat(userId, { phone, jid } = {}, io = null) {
+    const session = await requireWaSession(userId);
+
+    let targetJid = resolvePhoneOrJid({ phone, jid });
+    if (!targetJid) {
+        throw new Error('Nomor telepon tidak valid');
+    }
+
+    if (targetJid.endsWith('@g.us') || targetJid.endsWith('@broadcast')) {
+        throw new Error('Gunakan daftar chat untuk membuka grup atau status');
+    }
+
+    if (targetJid.endsWith('@s.whatsapp.net') && typeof session.sock.onWhatsApp === 'function') {
+        const bare = stripJid(targetJid);
+        try {
+            const results = await session.sock.onWhatsApp([bare]);
+            const match = Array.isArray(results) ? results[0] : null;
+            if (match && match.exists === false) {
+                throw new Error('Nomor tidak terdaftar di WhatsApp');
+            }
+            if (match?.jid) {
+                targetJid = match.jid;
+            }
+        } catch (error) {
+            if (String(error.message || '').includes('tidak terdaftar')) {
+                throw error;
+            }
+            console.warn('[messageService] onWhatsApp check skipped:', error.message);
+        }
+    }
+
+    await ensureChat(userId, targetJid, {});
+    chatNameService.enrichSingleChatName(userId, targetJid, io).catch(() => {});
+    const chat = await getChatByJid(userId, targetJid);
+
+    if (chat && io) {
+        emitChatUpdate(io, userId, chat);
+    }
+
+    return { jid: targetJid, chat };
+}
+
 module.exports = {
     ensureChat,
     saveMessage,
@@ -1891,6 +2083,7 @@ module.exports = {
     processChats,
     getChats,
     getMessages,
+    searchMessages,
     syncChatMedia,
     syncChatMessages,
     bootstrapGroupHistory,
@@ -1918,4 +2111,5 @@ module.exports = {
     formatMessageRow,
     formatChatRow,
     formatSavedMessage,
+    startChat,
 };
