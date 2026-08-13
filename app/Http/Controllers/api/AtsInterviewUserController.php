@@ -8,15 +8,13 @@ use App\Models\NewRecruitment;
 use App\Models\RecruitmentInterview;
 use App\Models\SallaryOffer;
 use App\Services\GenerateMessageAtsEmail;
+use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\SendEmail;
+use App\Services\SendWhatsapp;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
-use App\Services\GenerateMessageAtsEmail;
-use App\Services\GenerateMessageAtsWhatsapp;
-use App\Services\SendEmail;
-use App\Services\SendWhatsapp;
 
 class AtsInterviewUserController extends Controller
 {
