@@ -1,0 +1,35 @@
+{
+  "name": "wa-service",
+  "version": "0.1.0",
+  "description": "WhatsApp Web service for Lumen-V3 ERP (Baileys)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop wa-service",
+    "pm2:restart": "pm2 restart wa-service",
+    "pm2:logs": "pm2 logs wa-service"
+  },
+  "keywords": [
+    "whatsapp",
+    "baileys",
+    "socket.io"
+  ],
+  "author": "Dedi Wibowo",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^2.2.0",
+    "mysql2": "^3.12.0",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
