@@ -8,7 +8,6 @@ class AddMessageActionsToWaMessages extends Migration
 {
     public function up()
     {
-        if (Schema::hasTable('wa_messages')) {
         Schema::table('wa_messages', function (Blueprint $table) {
             $table->string('reply_to_wa_message_id', 100)->nullable()->after('content');
             $table->text('quoted_text')->nullable()->after('reply_to_wa_message_id');
@@ -19,7 +18,6 @@ class AddMessageActionsToWaMessages extends Migration
             $table->boolean('is_edited')->default(false)->after('is_forwarded');
             $table->dateTime('edited_at')->nullable()->after('is_edited');
         });
-        }
     }
 
     public function down()

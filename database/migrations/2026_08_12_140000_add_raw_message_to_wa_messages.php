@@ -8,11 +8,9 @@ class AddRawMessageToWaMessages extends Migration
 {
     public function up()
     {
-        if (Schema::hasTable('wa_messages')) {
         Schema::table('wa_messages', function (Blueprint $table) {
             $table->longText('raw_message')->nullable()->after('media_filename');
         });
-        }
     }
 
     public function down()
