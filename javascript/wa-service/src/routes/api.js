@@ -263,11 +263,6 @@ function createApiRouter(io) {
                 });
             }
 
-            messageService.syncChatMedia(req.waUser.id, jid, io, { limit: 30 })
-                .catch((error) => {
-                    console.warn(`[api] background media sync failed for ${jid}:`, error.message);
-                });
-
             const session = getSession(req.waUser.id);
             if (session?.sock) {
                 avatarService.syncAvatarForJid(req.waUser.id, session.sock, jid)
@@ -327,6 +322,22 @@ function createApiRouter(io) {
                 requested: result.requested,
                 messages: result.updated,
             });
+        } catch (error) {
+            res.status(500).json({ ok: false, message: error.message });
+        }
+    });
+
+    router.post('/wa/chats/:jid/messages/:msgId/download-media', authMiddleware(), async (req, res) => {
+        try {
+            const jid = decodeURIComponent(req.params.jid);
+            const waMessageId = decodeURIComponent(req.params.msgId);
+            const result = await messageService.downloadMessageMedia(
+                req.waUser.id,
+                jid,
+                waMessageId,
+                io,
+            );
+            res.json({ ok: true, ...result });
         } catch (error) {
             res.status(500).json({ ok: false, message: error.message });
         }

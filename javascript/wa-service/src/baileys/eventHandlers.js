@@ -11,7 +11,7 @@ const sessionService = require('../services/sessionService');
 const messageService = require('../services/messageService');
 const contactService = require('../services/contactService');
 const avatarService = require('../services/avatarService');
-const { processHistorySync } = require('../services/syncService');
+const { processHistorySync, runInitialConnectSync, buildSyncProgress } = require('../services/syncService');
 const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
 
 function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect, patchSession, getSession }) {
@@ -164,6 +164,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const shouldEmit = type === 'notify' || type === 'append';
             await messageService.processMessages(userId, messages, io, {
                 emit: shouldEmit,
+                downloadMedia: false,
             });
             if (shouldEmit) {
                 await messageService.syncAndEmitChats(userId, io);
@@ -271,10 +272,12 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const phone = rawId.split(':')[0]?.split('@')[0] || null;
 
             patchSession(userId, { status: 'connected', phone, qr: null });
-            emitConnected(io, userId, phone);
+            const initialProgress = buildSyncProgress(0, { phase: 'init' });
+            emitConnected(io, userId, phone, { syncing: true, syncProgress: initialProgress });
             emitStatus(io, userId, 'connected', {
                 phone,
-                syncing: isMessageHistorySyncEnabled(),
+                syncing: true,
+                syncProgress: initialProgress,
             });
             await sessionService.upsertSession(userId, {
                 status: 'connected',
@@ -284,28 +287,13 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
             console.log(`[baileys] user ${userId} connected as ${phone || rawId}`);
 
-            setTimeout(async () => {
-                try {
-                    const contactSyncCoordinator = require('../services/contactSyncCoordinator');
-                    const chatNameService = require('../services/chatNameService');
-                    await messageService.syncAndEmitChats(userId, io);
-                    await chatNameService.maybeEnrichChatNames(userId, io);
-
-                    const session = getSession();
-                    await contactSyncCoordinator.syncDeviceContactsIfDue(
-                        userId,
-                        session?.sock,
-                        session?.contactStore,
-                        io,
-                    );
-
-                    if (!isMessageHistorySyncEnabled()) {
-                        emitStatus(io, userId, 'connected', { syncing: false, syncProgress: null });
-                    }
-                } catch (error) {
-                    console.error(`[baileys] initial chat sync failed:`, error.message);
-                }
-            }, 2000);
+            if (!isMessageHistorySyncEnabled()) {
+                setTimeout(() => {
+                    runInitialConnectSync(userId, io).catch((error) => {
+                        console.error(`[baileys] initial connect sync failed:`, error.message);
+                    });
+                }, 500);
+            }
         }
 
         if (connection === 'close') {
