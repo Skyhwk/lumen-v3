@@ -605,6 +605,10 @@ class GenerateMessageAtsEmail
                     $q->where('jenis_dokumen', 'like', '%Foto%')
                       ->orWhere('jenis_dokumen', 'like', '%Photo%');
                 })->first();
+            
+            $medicalInfo = \Illuminate\Support\Facades\DB::table('candidate_medical_informations')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->first();
     
             $photoUrl = !empty($recruitment->picture) 
             ? rtrim(env('APP_URL', 'https://apps.intilab.com/v3/public'), '/') . '/recruitment/' . ltrim($recruitment->picture, '/') 
@@ -662,6 +666,7 @@ class GenerateMessageAtsEmail
     
             $cv = [
                 'data' => $dataCv,
+                'medicalInfo' => $medicalInfo,
                 'photoUrl' => $photoUrl,
                 'pendidikan' => $pendidikan,
                 'pengalamanKerja' => $pengalamanKerja,
