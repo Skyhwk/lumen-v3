@@ -11,7 +11,7 @@ const sessionService = require('../services/sessionService');
 const messageService = require('../services/messageService');
 const contactService = require('../services/contactService');
 const avatarService = require('../services/avatarService');
-const { processHistorySync } = require('../services/syncService');
+const { processHistorySync, runInitialConnectSync, buildSyncProgress } = require('../services/syncService');
 const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
 
 function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect, patchSession, getSession }) {
@@ -31,15 +31,11 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
     sock.ev.on('contacts.upsert', async (contacts) => {
         try {
-            const chatNameService = require('../services/chatNameService');
-            const { emitContactsSync } = require('./qrHandler');
+            const contactSyncCoordinator = require('../services/contactSyncCoordinator');
             const named = contacts.filter((c) => c?.name?.trim()).length;
             console.log(`[baileys] contacts.upsert user ${userId}: ${contacts.length} total, ${named} with phonebook name`);
             await contactService.upsertContacts(userId, contacts, { fromPhonebook: true, allowPushName: false });
-            await chatNameService.syncContactNamesToChats(userId);
-            await messageService.syncAndEmitChats(userId, io);
-            const list = await contactService.getContacts(userId);
-            emitContactsSync(io, userId, list);
+            contactSyncCoordinator.afterContactsMutation(userId, io);
 
             const jids = contacts.map((c) => c.id || c.jid).filter(Boolean);
             if (jids.length) {
@@ -55,24 +51,15 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
     sock.ev.on('contacts.update', async (contacts) => {
         try {
-            const chatNameService = require('../services/chatNameService');
-            const { emitContactsSync } = require('./qrHandler');
+            const contactSyncCoordinator = require('../services/contactSyncCoordinator');
             await contactService.upsertContacts(userId, contacts, { fromPhonebook: false, allowPushName: true });
-            await chatNameService.syncContactNamesToChats(userId);
-            await messageService.syncAndEmitChats(userId, io);
-            const list = await contactService.getContacts(userId);
-            emitContactsSync(io, userId, list);
+            contactSyncCoordinator.afterContactsMutation(userId, io, { refreshChats: false });
 
             const avatarJids = contacts
                 .filter((c) => c?.id && (c.imgUrl !== undefined || c.notify))
                 .map((c) => c.id);
             if (avatarJids.length) {
-                avatarService.syncAvatarsForJids(userId, sock, avatarJids, { force: true, concurrency: 2 })
-                    .then(async () => {
-                        await messageService.syncAndEmitChats(userId, io);
-                        const refreshed = await contactService.getContacts(userId);
-                        emitContactsSync(io, userId, refreshed);
-                    })
+                avatarService.syncAvatarsInBackground(userId, sock, avatarJids.slice(0, 15), io)
                     .catch((error) => {
                         console.warn(`[baileys] avatar sync after contacts.update failed:`, error.message);
                     });
@@ -113,6 +100,19 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
         }
     });
 
+    sock.ev.on('presence.update', (update) => {
+        try {
+            const presenceService = require('../services/presenceService');
+            const { emitPresenceUpdate } = require('./qrHandler');
+            const parsed = presenceService.parsePresenceUpdate(update);
+            if (parsed) {
+                emitPresenceUpdate(io, userId, parsed);
+            }
+        } catch (error) {
+            console.error(`[baileys] presence.update failed:`, error.message);
+        }
+    });
+
     sock.ev.on('groups.upsert', async (groups) => {
         try {
             const chatNameService = require('../services/chatNameService');
@@ -148,14 +148,11 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
     sock.ev.on('chats.phoneNumberShare', async ({ lid, jid: phoneJid }) => {
         try {
-            const contactService = require('../services/contactService');
-            const chatNameService = require('../services/chatNameService');
+            const contactSyncCoordinator = require('../services/contactSyncCoordinator');
             if (!lid || !phoneJid) return;
 
             await contactService.linkJidPair(userId, lid, phoneJid);
-            await chatNameService.syncContactNamesToChats(userId);
-            await chatNameService.enrichPrivateChatNames(userId, sock);
-            await messageService.syncAndEmitChats(userId, io);
+            contactSyncCoordinator.afterContactsMutation(userId, io);
         } catch (error) {
             console.error(`[baileys] chats.phoneNumberShare failed:`, error.message);
         }
@@ -167,6 +164,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const shouldEmit = type === 'notify' || type === 'append';
             await messageService.processMessages(userId, messages, io, {
                 emit: shouldEmit,
+                downloadMedia: false,
             });
             if (shouldEmit) {
                 await messageService.syncAndEmitChats(userId, io);
@@ -274,10 +272,12 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const phone = rawId.split(':')[0]?.split('@')[0] || null;
 
             patchSession(userId, { status: 'connected', phone, qr: null });
-            emitConnected(io, userId, phone);
+            const initialProgress = buildSyncProgress(0, { phase: 'init' });
+            emitConnected(io, userId, phone, { syncing: true, syncProgress: initialProgress });
             emitStatus(io, userId, 'connected', {
                 phone,
-                syncing: isMessageHistorySyncEnabled(),
+                syncing: true,
+                syncProgress: initialProgress,
             });
             await sessionService.upsertSession(userId, {
                 status: 'connected',
@@ -287,33 +287,13 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
             console.log(`[baileys] user ${userId} connected as ${phone || rawId}`);
 
-            setTimeout(async () => {
-                try {
-                    await messageService.syncAndEmitChats(userId, io);
-                    const chatNameService = require('../services/chatNameService');
-                    await chatNameService.enrichAllChatNames(userId, io);
-
-                    const session = getSession();
-                    const synced = await contactService.syncContactsFromDevice(
-                        userId,
-                        session?.sock,
-                        session?.contactStore,
-                    );
-                    if (synced) {
-                        await chatNameService.syncContactNamesToChats(userId);
-                        const { emitContactsSync } = require('./qrHandler');
-                        const contacts = await contactService.getContacts(userId);
-                        emitContactsSync(io, userId, contacts);
-                        console.log(`[baileys] user ${userId} contacts synced from store (${synced})`);
-                    }
-
-                    if (!isMessageHistorySyncEnabled()) {
-                        emitStatus(io, userId, 'connected', { syncing: false, syncProgress: null });
-                    }
-                } catch (error) {
-                    console.error(`[baileys] initial chat sync failed:`, error.message);
-                }
-            }, 2000);
+            if (!isMessageHistorySyncEnabled()) {
+                setTimeout(() => {
+                    runInitialConnectSync(userId, io).catch((error) => {
+                        console.error(`[baileys] initial connect sync failed:`, error.message);
+                    });
+                }, 500);
+            }
         }
 
         if (connection === 'close') {

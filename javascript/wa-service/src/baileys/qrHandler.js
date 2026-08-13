@@ -18,9 +18,9 @@ function emitStatus(io, userId, status, extra = {}) {
     io.to(`user:${userId}`).emit('wa:status', { status, ...extra });
 }
 
-function emitConnected(io, userId, phone) {
+function emitConnected(io, userId, phone, extra = {}) {
     if (!io) return;
-    io.to(`user:${userId}`).emit('wa:connected', { phone });
+    io.to(`user:${userId}`).emit('wa:connected', { phone, ...extra });
 }
 
 function emitDisconnected(io, userId, reason) {
@@ -50,6 +50,11 @@ function emitChatUpdate(io, userId, chat) {
 function emitChatDeleted(io, userId, payload) {
     if (!io) return;
     io.to(`user:${userId}`).emit('wa:chat:deleted', payload || {});
+}
+
+function emitPresenceUpdate(io, userId, payload) {
+    if (!io) return;
+    io.to(`user:${userId}`).emit('wa:presence:update', payload);
 }
 
 function emitMessageNew(io, userId, payload) {
@@ -96,6 +101,7 @@ module.exports = {
     emitChatsSync,
     emitChatUpdate,
     emitChatDeleted,
+    emitPresenceUpdate,
     emitMessageNew,
     emitMessageUpdate,
     emitMessageMedia,

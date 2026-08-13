@@ -23,6 +23,8 @@ function loadEnv() {
         avatarTtlHours: parseInt(process.env.WA_AVATAR_TTL_HOURS || '24', 10),
         enableMessageHistorySync: ['1', 'true', 'yes', 'on']
             .includes(String(process.env.WA_ENABLE_MESSAGE_HISTORY_SYNC || '').trim().toLowerCase()),
+        autoDownloadMedia: ['1', 'true', 'yes', 'on']
+            .includes(String(process.env.WA_AUTO_DOWNLOAD_MEDIA || '').trim().toLowerCase()),
     };
 
     if (config.nodeEnv === 'production') {
