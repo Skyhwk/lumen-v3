@@ -105,6 +105,21 @@ class SamplingPlanServices
         }
     }
 
+    private function googleMapsUrl($value)
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (!preg_match('/^https?:\/\//i', $value)) {
+            $value = 'https://' . $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_URL) ? $value : null;
+    }
+
     // cleared
     public function insertSPKontrak()
     {
@@ -168,6 +183,7 @@ class SamplingPlanServices
                     'quotation_id' => $dataInsert->quotation_id,
                     'tambahan' => json_encode($tambahan),
                     'keterangan_lain' => json_encode($keterangan_lain),
+                    'google_maps_url' => $this->googleMapsUrl($dataInsert->google_maps_url[$keys] ?? null),
                     'periode_kontrak' => $singlePeriode,
                     'is_sabtu' => $enumValues[$isSabtu],
                     'is_minggu' => $enumValues[$isMinggu],
@@ -347,6 +363,7 @@ class SamplingPlanServices
                 'is_malam' => $enumValues[$isMalam],
                 'tambahan' => json_encode($tambahan),
                 'keterangan_lain' => json_encode($keterangan_lain),
+                'google_maps_url' => $this->googleMapsUrl($dataInsert->google_maps_url ?? null),
                 'periode_kontrak' => null,
                 'opsi_3' => null,
                 'created_by' => $dataInsert->karyawan,
@@ -508,6 +525,7 @@ class SamplingPlanServices
                 'quotation_id' => $dataInsertSingle->quotation_id,
                 'tambahan' => json_encode($tambahan),
                 'keterangan_lain' => json_encode($keterangan_lain),
+                'google_maps_url' => $this->googleMapsUrl($dataInsertSingle->google_maps_url ?? null),
                 'periode_kontrak' => $dataInsertSingle->periode,
                 'is_sabtu' => $enumValues[$isSabtu],
                 'is_minggu' => $enumValues[$isMinggu],
@@ -648,6 +666,7 @@ class SamplingPlanServices
                 'is_malam' => $enumValues[$isMalam],
                 'tambahan' => json_encode($tambahan),
                 'keterangan_lain' => json_encode($keterangan_lain),
+                'google_maps_url' => $this->googleMapsUrl($dataInsertSingle->google_maps_url ?? null),
                 'periode_kontrak' => null,
                 'opsi_3' => null,
                 'created_by' => $dataInsertSingle->karyawan,
