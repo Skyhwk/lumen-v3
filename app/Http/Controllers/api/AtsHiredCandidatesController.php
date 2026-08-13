@@ -98,7 +98,7 @@ class AtsHiredCandidatesController extends Controller
      */
     public function index(Request $request)
     {
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'salaryOffer'])
+        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'salaryOffer', 'candidateDataOffer'])
             ->where(function ($q) {
                 $q->where('status', 'hired')
                   ->orWhere('status', 'HIRED');
@@ -160,7 +160,145 @@ class AtsHiredCandidatesController extends Controller
             ->editColumn('status', function ($row) {
                 return 'hired';
             })
+            ->addColumn('onboarding_checklist', function ($row) {
+                if (!empty($row->onboarding_checklist)) {
+                    return is_string($row->onboarding_checklist)
+                        ? json_decode($row->onboarding_checklist, true)
+                        : $row->onboarding_checklist;
+                }
+                return null;
+            })
+            ->addColumn('candidate_data_offer', function ($row) {
+                if (!empty($row->candidateDataOffer)) {
+                    $tglMulai = $row->candidateDataOffer->tanggal_mulai_kerja;
+                    if ($tglMulai) {
+                        // If it's already a string, use it; if it's a Carbon instance, format it
+                        $tglMulai = is_string($tglMulai)
+                            ? substr($tglMulai, 0, 10)
+                            : $tglMulai->format('Y-m-d');
+                    }
+                    
+                    return [
+                        'id' => $row->candidateDataOffer->id ?? null,
+                        'gaji_pokok' => $row->candidateDataOffer->gaji_pokok ?? null,
+                        'tunjangan_kerja' => $row->candidateDataOffer->tunjangan_kerja ?? null,
+                        'tanggal_mulai_kerja' => $tglMulai,
+                        'potongan_bpjs_kes' => $row->candidateDataOffer->potongan_bpjs_kes ?? null,
+                        'potongan_bpjs_tk' => $row->candidateDataOffer->potongan_bpjs_tk ?? null,
+                        'pot_pph21' => $row->candidateDataOffer->pot_pph21 ?? null,
+                        'pencadangan_upah' => $row->candidateDataOffer->pencadangan_upah ?? null,
+                    ];
+                }
+                return null;
+            })
             ->rawColumns([])
             ->make(true);
+    }
+
+    /**
+     * Store Onboarding Checklist & Auto Create Employee + Salary
+     */
+    public function storeEmployee(Request $request)
+    {
+        $this->validate($request, [
+            'id' => 'required',
+            'nik' => 'required',
+        ]);
+
+        $recruitment = NewRecruitment::find($request->id);
+        if (!$recruitment) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Candidate recruitment data not found'
+            ], 404);
+        }
+
+        // Save Onboarding Checklist status on NewRecruitment
+        $checklistData = [
+            'has_id_card' => filter_var($request->has_id_card, FILTER_VALIDATE_BOOLEAN),
+            'has_email' => filter_var($request->has_email, FILTER_VALIDATE_BOOLEAN),
+            'has_server_account' => filter_var($request->has_server_account, FILTER_VALIDATE_BOOLEAN),
+            'has_all_documents' => filter_var($request->has_all_documents, FILTER_VALIDATE_BOOLEAN),
+            'nik' => $request->nik,
+            'tanggal_masuk' => $request->tanggal_masuk ?? date('Y-m-d'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        $recruitment->onboarding_checklist = json_encode($checklistData);
+        $recruitment->save();
+
+        // 1. Create or Update master_karyawan
+        $pr = $recruitment->personalRequest;
+        $idJabatan = $request->id_jabatan ?: ($pr->posisi ?? $recruitment->bagian_di_lamar);
+        $idDept = $request->id_department ?: ($pr->divisi ?? null);
+        $idCabang = $request->id_cabang ?: ($pr->lokasi_penempatan_cabang ?? null);
+
+        $karyawanData = [
+            'nik' => trim($request->nik),
+            'nama_lengkap' => $recruitment->nama_lengkap,
+            'email' => $request->email ?: ($recruitment->email ?? null),
+            'nomor_hp' => $recruitment->no_hp ?? $recruitment->telepon ?? null,
+            'alamat' => $recruitment->alamat_domisili ?? $recruitment->alamat_ktp ?? null,
+            'id_jabatan' => is_numeric($idJabatan) ? $idJabatan : null,
+            'id_department' => is_numeric($idDept) ? $idDept : null,
+            'id_cabang' => is_numeric($idCabang) ? $idCabang : null,
+            'tanggal_masuk' => $request->tanggal_masuk ?: date('Y-m-d'),
+            'status_karyawan' => $request->status_karyawan ?: 'Kontrak',
+            'is_active' => 1,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+
+        // Match existing employee by NIK or name
+        $karyawan = \App\Models\MasterKaryawan::where('nik', trim($request->nik))
+            ->orWhere('nama_lengkap', $recruitment->nama_lengkap)
+            ->first();
+
+        if ($karyawan) {
+            $karyawan->update(array_filter($karyawanData, function ($val) {
+                return !is_null($val);
+            }));
+        } else {
+            $karyawan = \App\Models\MasterKaryawan::create($karyawanData);
+        }
+
+        // 2. Create or Update master_sallary
+        $salaryOffer = $recruitment->salaryOffer;
+        $gajiPokok = $request->gaji_pokok !== null && $request->gaji_pokok !== '' 
+            ? (float) $request->gaji_pokok 
+            : ($salaryOffer ? (float) ($salaryOffer->final_sallary ?? $salaryOffer->sallary_offer_direktur ?? $salaryOffer->sallary_offer_hrd ?? 0) : 0);
+
+        $tunjangan = $request->tunjangan_kerja !== null && $request->tunjangan_kerja !== '' 
+            ? (float) $request->tunjangan_kerja 
+            : 0;
+
+        $salaryData = [
+            'karyawan' => $recruitment->nama_lengkap,
+            'nik_karyawan' => trim($request->nik),
+            'gaji_pokok' => $gajiPokok,
+            'tunjangan_kerja' => $tunjangan,
+            'bulan_efektif' => $request->bulan_efektif ?: date('Y-m-01'),
+            'is_active' => 1,
+            'created_at' => date('Y-m-d H:i:s'),
+            'created_by' => 'HRD ATS System',
+        ];
+
+        $masterSalary = \App\Models\MasterSallary::where('nik_karyawan', trim($request->nik))
+            ->orWhere('karyawan', $recruitment->nama_lengkap)
+            ->first();
+
+        if ($masterSalary) {
+            $masterSalary->update($salaryData);
+        } else {
+            \App\Models\MasterSallary::create($salaryData);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'HRD Onboarding checklist berhasil disimpan & Data Karyawan serta Master Gaji berhasil dibuat!',
+            'data' => [
+                'checklist' => $checklistData,
+                'karyawan' => $karyawan,
+            ]
+        ]);
     }
 }
