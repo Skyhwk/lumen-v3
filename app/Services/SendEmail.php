@@ -132,7 +132,8 @@ class SendEmail
                 self::$instance->body = $value;
                 break;
             case 'attachment':
-                self::$instance->attachments = $value;
+            case 'attachments':
+                self::$instance->attachments = is_array($value) ? $value : [$value];
                 break;
             case 'karyawan':
                 if (empty($value)) {

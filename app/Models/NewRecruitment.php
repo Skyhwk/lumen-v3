@@ -70,6 +70,11 @@ class NewRecruitment extends Model
         return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')->orderBy('id', 'desc');
     }
 
+    public function candidateDataOffer()
+    {
+        return $this->hasOne(CandidateDataOffers::class, 'new_recruitment_id');
+    }
+
     public function masterJabatan()
     {
         return $this->belongsTo(MasterJabatan::class, 'bagian_di_lamar', 'id');
