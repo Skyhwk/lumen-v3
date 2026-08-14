@@ -458,12 +458,18 @@ class AssessmentController extends Controller
         if (!$attempt || Carbon::now()->greaterThanOrEqualTo(Carbon::parse($attempt->token_expires_at))) { if ($attempt) DB::table('assessment_attempts')->where('id', $attempt->id)->update(['status' => 'expired']); return ['status' => 'expired', 'message' => 'Waktu akses assessment sudah habis.']; }
         $session = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereIn('status', ['pending', 'in_progress'])->orderBy('session_order')->first();
         if (!$session) {
-            $completedAt = Carbon::now();
-            DB::table('assessment_attempts')->where('id', $attempt->id)->update(['status' => 'completed', 'completed_at' => $completedAt]);
-            (new RecruitmentStatusService())->update($attempt->recruitment_id, 'screening', $completedAt);
-            
-            // Auto trigger AI evaluation on assessment completion
-            $this->processAiMatching($attempt->id, $attempt->recruitment_id);
+            if (($attempt->status ?? null) !== 'completed') {
+                $completedAt = Carbon::now();
+                DB::table('assessment_attempts')->where('id', $attempt->id)->update([
+                    'status' => 'completed',
+                    'completed_at' => $completedAt,
+                    'updated_at' => $completedAt,
+                ]);
+                (new RecruitmentStatusService())->update($attempt->recruitment_id, 'screening', $completedAt);
+
+                // Auto trigger AI evaluation once on first completion
+                $this->processAiMatching($attempt->id, $attempt->recruitment_id);
+            }
 
             return ['status' => 'completed', 'message' => 'Assessment selesai.'];
         }
@@ -729,6 +735,20 @@ class AssessmentController extends Controller
         try {
             $recruitment = DB::table('new_recruitment')->where('id', $recruitmentId)->first();
             if (!$recruitment) {
+                return null;
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_response')
+                && !empty($recruitment->ai_matching_response)) {
+                \Illuminate\Support\Facades\Log::info('=== AI MATCHING SKIPPED (already processed) ===', [
+                    'recruitment_id' => $recruitmentId,
+                ]);
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_data')
+                    && !empty($recruitment->ai_matching_data)) {
+                    return json_decode($recruitment->ai_matching_data, true);
+                }
+
                 return null;
             }
 

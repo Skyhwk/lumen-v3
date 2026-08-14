@@ -24,8 +24,7 @@
                         'Shio' => $data->shio ?? '-',
                         'Elemen' => $data->elemen ?? '-',
                         'Gaji Terakhir' => !empty($data->gaji_terakhir) ? 'Rp ' . number_format($data->gaji_terakhir, 0, ',', '.') : '-',
-                        'Ekspektasi Gaji' => !empty($data->ekspetasi_gaji) ? 'Rp ' . number_format($data->ekspetasi_gaji, 0, ',', '.') : '-',
-                        // 'Penawaran Gaji HRD' => !empty($data->sallary_offer_hrd) ? 'Rp ' . number_format($data->sallary_offer_hrd, 0, ',', '.') : (!empty($data->sallary_offer->sallary_offer_hrd) ? 'Rp ' . number_format($data->sallary_offer->sallary_offer_hrd, 0, ',', '.') : '-'),
+                        'Ekspektasi Gaji' => $expectedSalaryFormatted ?? \App\Services\OfferingSalaryEmail::formatRupiah(\App\Services\OfferingSalaryEmail::getSalaryOfferHrd($data)),
                     ] as $label => $value)
                     <tr>
                         <td class="info-label"

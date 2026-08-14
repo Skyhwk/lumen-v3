@@ -27,11 +27,9 @@ class OfferingSalaryEmail
             return '';
         }
 
-        if (env('APP_ENV') === 'production') {
-            return 'https://apps.intilab.com/v3/public/recruitment/foto/' . $foto;
-        }
+        $photoUrl = app(RecruitmentPictureService::class)->toDataUri($foto);
 
-        return url('recruitment/foto/' . $foto);
+        return $photoUrl ?: '';
     }
 
     public static function decodeJsonField($value): array
@@ -64,6 +62,26 @@ class OfferingSalaryEmail
         }
 
         return 'Rp ' . number_format((float) $value, 0, ',', '.');
+    }
+
+    public static function getSalaryOfferHrd($data): ?float
+    {
+        if (empty($data)) {
+            return null;
+        }
+
+        $offer = $data->sallaryOffer
+            ?? $data->salaryOffer
+            ?? $data->sallary_offer
+            ?? null;
+
+        $amount = $offer->sallary_offer_hrd ?? $data->sallary_offer_hrd ?? null;
+
+        if ($amount === null || $amount === '') {
+            return null;
+        }
+
+        return (float) $amount;
     }
 
     public static function getNamaJabatan($data): string
@@ -208,6 +226,7 @@ class OfferingSalaryEmail
             'sertifikat'           => self::decodeJsonField($data->sertifikat ?? null),
             'kursus'               => self::decodeJsonField($data->kursus ?? null),
             'salaryFormatted'      => self::formatRupiah($data->salary_user ?? null),
+            'expectedSalaryFormatted' => self::formatRupiah(self::getSalaryOfferHrd($data)),
             'namaJabatanFormatted' => self::getNamaJabatan($data),
             'usiaFormatted'        => self::getUsia($data),
             'tanggalLahirFormatted' => self::formatTanggalLahir($data),

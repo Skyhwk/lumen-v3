@@ -22,11 +22,14 @@ class HrdEmailViewData
 
     public static function photoUrl($data): string
     {
-        if (empty($data->foto_selfie)) {
+        $foto = $data->foto_selfie ?? $data->picture ?? null;
+        if (empty($foto)) {
             return '';
         }
 
-        return 'https://apps.intilab.com/v3/public/recruitment/foto/' . $data->foto_selfie;
+        $photoUrl = app(RecruitmentPictureService::class)->toDataUri($foto);
+
+        return $photoUrl ?: '';
     }
 
     public static function decodeJsonField($value): array

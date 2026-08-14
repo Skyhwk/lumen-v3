@@ -22,7 +22,7 @@
         'Applied Position' => $pr->detailPosisi->nama_jabatan ?? $pr->posisi ?? '-',
         'Branch' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
         'Interview Type' => ucfirst($interview->jenis_interview ?? '-'),
-        'Interview Date' => !empty($interview->tanggal_interview) ? \Carbon\Carbon::parse($interview->tanggal_interview)->locale('id')->isoFormat('D MMMM YYYY') : '-',
+        'Interview Date' => !empty($interview->tgl_interview) ? \Carbon\Carbon::parse($interview->tgl_interview)->locale('id')->isoFormat('D MMMM YYYY') : '-',
     ] as $label => $value)
         <tr>
             <td class="info-label" style="padding:10px 16px;width:40%;font-size:13px;color:#64748b;{{ $loop->first ? '' : 'border-top:1px solid #e2e8f0;' }}vertical-align:top;">{{ $label }}</td>
@@ -63,16 +63,7 @@
 
 <div style="height:1px;background-color:#e2e8f0;margin:0 0 28px 0;"></div>
 
-@php
-    $portalUrl = rtrim(env('PORTALV4', 'http://portal.intilab.com'), '/');
-    $encodedToken = rawurlencode($recruitment->token_approval ?? '');
-    $btn = (object)[
-        'approve' => "{$portalUrl}/new-recruitment/decision/{$encodedToken}?decision=approve",
-        'reject' => "{$portalUrl}/new-recruitment/decision/{$encodedToken}?decision=reject"
-    ];
-@endphp
-
-@include('TemplateEmail.ats.partials.action-buttons', ['btn' => $btn])
+@include('TemplateEmail.ats.partials.action-buttons', ['btn' => $btn ?? (object) []])
 
 @include('TemplateEmail.ats.partials.cv-detail', $cv)
 

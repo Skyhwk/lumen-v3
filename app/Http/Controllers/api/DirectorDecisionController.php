@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
@@ -124,9 +125,24 @@ class DirectorDecisionController extends Controller
 
     private function candidate($recruitment)
     {
+        $birthDate = $recruitment->tanggal_lahir ?? $recruitment->tempat_tanggal_lahir ?? null;
+        $shioElemen = ShioElemenHelper::resolve($birthDate, $recruitment->shio ?? null, $recruitment->elemen ?? null);
+
+        $salaryOffer = DB::table('sallary_offer')
+            ->where('new_recruitment_id', $recruitment->id)
+            ->orderByDesc('id')
+            ->first();
+
+        $expectedSalary = $salaryOffer->sallary_offer_hrd ?? $recruitment->ekspetasi_gaji ?? null;
+
         return [
             'nama_lengkap' => $recruitment->nama_lengkap,
             'posisi_dilamar' => $this->positionLabel($recruitment),
+            'shio' => $shioElemen['shio'] ?? $recruitment->shio ?? '-',
+            'elemen' => $shioElemen['elemen'] ?? $recruitment->elemen ?? '-',
+            'gaji_terakhir' => $recruitment->gaji_terakhir,
+            'ekspetasi_gaji' => $expectedSalary,
+            'sallary_offer_hrd' => $salaryOffer->sallary_offer_hrd ?? null,
             'email' => $recruitment->email,
             'no_telepon' => $recruitment->no_telepon,
             'picture_base64' => app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null),

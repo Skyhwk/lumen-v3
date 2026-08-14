@@ -12,139 +12,12 @@ use Exception;
 use App\Models\PersonnelRequest;
 use App\Models\NewRecruitment;
 use App\Services\RecruitmentPictureService;
+use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 
 class PersonnelRequesthrdController extends Controller
 {
-    private function recruitmentStatusLabel($status)
-    {
-        $labels = [
-            'assessment' => 'Assessment',
-            'screening' => 'Screening HRD',
-            'interview_hrd' => 'Interview HRD',
-            'profile_completion' => 'Lengkapi Profil',
-            'interview_user' => 'Interview User',
-            'management_decision' => 'Keputusan Manajemen',
-            'internal_sallary_offer' => 'Penawaran Gaji Internal',
-            'salary_offer' => 'Penawaran Gaji',
-            'sallary_offer' => 'Penawaran Gaji',
-            'approved' => 'Disetujui',
-            'hired' => 'Hired',
-            'rejected' => 'Ditolak',
-        ];
+    use BuildsCandidateAssessmentPreview;
 
-        return $labels[strtolower((string) $status)] ?? ucfirst(str_replace('_', ' ', (string) $status));
-    }
-
-    private function countAnsweredQuestions($answersJson)
-    {
-        $answers = json_decode($answersJson ?: '{}', true) ?: [];
-
-        return count(array_filter($answers, function ($value) {
-            return $value !== null && $value !== '';
-        }));
-    }
-
-    private function assessmentInProgressSummary($sessions)
-    {
-        foreach ($sessions as $session) {
-            if ($session->status === 'in_progress') {
-                $answered = $this->countAnsweredQuestions($session->answers_json);
-                $total = (int) $session->question_count;
-
-                return 'Sedang mengerjakan ' . $session->category_name . ' (' . $answered . '/' . $total . ' soal)';
-            }
-
-            if ($session->status === 'pending') {
-                return 'Menunggu sesi ' . $session->category_name;
-            }
-        }
-
-        return 'Assessment sedang berlangsung';
-    }
-
-    private function buildAssessmentProgress($recruitmentId)
-    {
-        $attempt = DB::table('assessment_attempts')
-            ->where('recruitment_id', $recruitmentId)
-            ->orderByDesc('id')
-            ->first();
-
-        if (!$attempt) {
-            return [
-                'has_attempt' => false,
-                'attempt_status' => null,
-                'overall_progress' => 0,
-                'total_answered' => 0,
-                'total_questions' => 0,
-                'sessions' => [],
-                'summary' => 'Belum memulai assessment',
-            ];
-        }
-
-        $sessions = DB::table('assessment_sessions')
-            ->where('assessment_attempt_id', $attempt->id)
-            ->orderBy('session_order')
-            ->get();
-
-        $sessionData = [];
-        $totalAnswered = 0;
-        $totalQuestions = 0;
-
-        foreach ($sessions as $session) {
-            $answered = $this->countAnsweredQuestions($session->answers_json);
-            $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
-            $questionCount = count($questions) ?: (int) $session->question_count;
-
-            $totalAnswered += $answered;
-            $totalQuestions += $questionCount;
-
-            $sessionData[] = [
-                'order' => (int) $session->session_order,
-                'name' => $session->category_name,
-                'status' => $session->status,
-                'answered' => $answered,
-                'total' => $questionCount,
-                'progress_percent' => $questionCount > 0 ? round(($answered / $questionCount) * 100) : 0,
-                'started_at' => $session->started_at,
-                'completed_at' => $session->completed_at,
-            ];
-        }
-
-        $summary = 'Assessment belum dimulai';
-        if ($attempt->status === 'completed') {
-            $summary = 'Assessment selesai';
-        } elseif ($attempt->status === 'expired') {
-            $summary = 'Assessment kedaluwarsa';
-        } elseif ($attempt->status === 'in_progress') {
-            $summary = $this->assessmentInProgressSummary($sessions);
-        }
-
-        return [
-            'has_attempt' => true,
-            'attempt_status' => $attempt->status,
-            'started_at' => $attempt->started_at,
-            'completed_at' => $attempt->completed_at,
-            'overall_progress' => $totalQuestions > 0 ? round(($totalAnswered / $totalQuestions) * 100) : 0,
-            'total_answered' => $totalAnswered,
-            'total_questions' => $totalQuestions,
-            'sessions' => $sessionData,
-            'summary' => $summary,
-        ];
-    }
-
-    private function decodeMetaHistory($metaHistory)
-    {
-        if (is_array($metaHistory)) {
-            return $metaHistory;
-        }
-
-        if (is_string($metaHistory) && $metaHistory !== '') {
-            $decoded = json_decode($metaHistory, true);
-            return is_array($decoded) ? $decoded : [];
-        }
-
-        return [];
-    }
     /**
      * Get list of personal requests for DataTables
      */
@@ -407,7 +280,8 @@ class PersonnelRequesthrdController extends Controller
             return response()->json(['message' => 'Preview kandidat hanya tersedia untuk request yang sudah dipublish'], 422);
         }
 
-        $candidates = NewRecruitment::where('personnel_request_id', $id)
+        $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
+            ->where('personnel_request_id', $id)
             ->orderByDesc('created_at')
             ->get();
 
@@ -423,26 +297,7 @@ class PersonnelRequesthrdController extends Controller
         $pictureService = app(RecruitmentPictureService::class);
 
         $candidateItems = $candidates->map(function ($candidate) use ($pictureService) {
-            $status = strtolower((string) $candidate->status);
-            $metaHistory = $this->decodeMetaHistory($candidate->meta_history);
-            $assessment = $this->buildAssessmentProgress($candidate->id);
-            $pictureUrl = $pictureService->toDataUri($candidate->picture);
-
-            return [
-                'id' => $candidate->id,
-                'nama_lengkap' => $candidate->nama_lengkap,
-                'email' => $candidate->email,
-                'no_telepon' => $candidate->no_telepon,
-                'picture' => $candidate->picture,
-                'picture_url' => $pictureUrl,
-                'status' => $status,
-                'status_label' => $this->recruitmentStatusLabel($status),
-                'nilai_kecocokan' => $candidate->nilai_kecocokan,
-                'applied_at' => $candidate->created_at,
-                'updated_at' => $candidate->updated_at,
-                'meta_history' => $metaHistory,
-                'assessment' => $assessment,
-            ];
+            return $this->formatCandidatePreviewItem($candidate, $pictureService);
         })->values();
 
         return response()->json([
