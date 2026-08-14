@@ -106,6 +106,32 @@ class FixingController extends Controller
         }
     }
 
+    public function generateQrLink(Request $request)
+    {
+        try {
+            $link = $request->input('link');
+            if (empty($link)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Link tidak boleh kosong.',
+                ], 400);
+            }
+
+            // Generate QR Code as base64 string (default format is SVG)
+            $qrCode = base64_encode(QrCode::size(300)->generate($link));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'QR Code berhasil di-generate.',
+                'data' => 'data:image/svg+xml;base64,' . $qrCode,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat generate QR Code: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
 
     public function exportFdlBasTiming(Request $request)
     {
