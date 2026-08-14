@@ -107,7 +107,7 @@ class GenerateMessageAtsWhatsapp
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
-        $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/new-recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
+        $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/public/recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Sehubungan dengan proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*, mohon berkenan untuk *melengkapi Data Diri & Berkas Pendukung* Anda melalui tautan resmi berikut:\n\n";
@@ -131,7 +131,7 @@ class GenerateMessageAtsWhatsapp
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
-        $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/new-recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
+        $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/public/recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Terima kasih telah mengirimkan lamaran untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
