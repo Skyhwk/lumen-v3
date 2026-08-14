@@ -49,6 +49,8 @@ class JadwalTimController extends Controller
             }
         ])
             ->select(
+                'no_quotation',
+                'kendaraan',
                 'parsial',
                 'nama_perusahaan',
                 'periode',
@@ -64,6 +66,8 @@ class JadwalTimController extends Controller
                 )
             )
             ->groupBy(
+                'no_quotation',
+                'kendaraan',
                 'parsial',
                 'periode',
                 'nama_perusahaan',
