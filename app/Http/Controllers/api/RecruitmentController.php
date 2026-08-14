@@ -311,30 +311,54 @@ class RecruitmentController extends Controller{
                 ], 404);
             }
 
-            $threeMonthsAgo = Carbon::now()->subMonths(3);
-
-            $emailRecentlyUsed = DB::table('new_recruitment')
+            // Satu kandidat hanya dapat mengikuti satu proses rekrutmen pada satu waktu,
+            // walaupun lowongan yang dipilih berbeda.
+            $existingApplications = DB::table('new_recruitment')
+                ->select(['id', 'status', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
                 ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
-                ->where('created_at', '>=', $threeMonthsAgo)
-                ->exists();
-
-            if ($emailRecentlyUsed) {
-                return response()->json([
-                    'message' => 'Email ini sudah digunakan untuk pendaftaran dalam 3 bulan terakhir. Anda dapat mendaftar kembali dengan email yang sama setelah 3 bulan sejak pendaftaran sebelumnya.',
-                    'status' => false,
-                ], 409);
-            }
-
-            $phoneRecentlyUsed = DB::table('new_recruitment')
                 ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
-                ->where('created_at', '>=', $threeMonthsAgo)
-                ->exists();
+                ->orderByDesc('id')
+                ->get();
 
-            if ($phoneRecentlyUsed) {
-                return response()->json([
-                    'message' => 'Nomor telepon ini sudah digunakan untuk pendaftaran dalam 3 bulan terakhir. Anda dapat mendaftar kembali dengan nomor yang sama setelah 3 bulan sejak pendaftaran sebelumnya.',
-                    'status' => false,
-                ], 409);
+            $activeRecruitmentStatuses = [
+                'assessment',
+                'screening',
+                'approved',
+                'interview_hrd',
+                'profile_completion',
+                'interview_user',
+                'management_decision',
+                'internal_sallary_offer',
+                'salary_offer',
+            ];
+
+            foreach ($existingApplications as $existingApplication) {
+                $history = json_decode($existingApplication->meta_history ?: '[]', true);
+                $history = is_array($history) ? $history : [];
+                $lastHistory = !empty($history) ? end($history) : [];
+                $lastHistoryStatus = strtolower((string) ($lastHistory['status'] ?? ''));
+                $isRejected = $lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false;
+
+                if (!$isRejected && in_array(strtolower((string) $existingApplication->status), $activeRecruitmentStatuses, true)) {
+                    return response()->json([
+                        'message' => 'Anda masih mengikuti proses rekrutmen pada pendaftaran sebelumnya. Anda belum dapat mendaftar untuk posisi lain sampai proses tersebut selesai.',
+                        'status' => false,
+                    ], 409);
+                }
+
+                if (!$isRejected) {
+                    continue;
+                }
+
+                $rejectedAt = $lastHistory['at'] ?? $existingApplication->rejected_at ?? $existingApplication->updated_at ?? $existingApplication->created_at;
+                $reapplyAt = Carbon::parse($rejectedAt)->addMonths(3);
+
+                if (Carbon::now()->lt($reapplyAt)) {
+                    return response()->json([
+                        'message' => 'Pendaftaran sebelumnya belum dapat diajukan kembali. Anda dapat mendaftar lagi setelah ' . $reapplyAt->format('d/m/Y') . '.',
+                        'status' => false,
+                    ], 409);
+                }
             }
 
             $picture = $request->input('picture', $request->input('foto_selfie'));
@@ -377,7 +401,7 @@ class RecruitmentController extends Controller{
             (new RecruitmentStatusService())->update($id, 'assessment');
 
             $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                . '/new-recruitment/assessment/' . rawurlencode($token);
+                . '/public/recruitment/assessment/' . rawurlencode($token);
             $emailBody = $this->assessmentInvitationEmail([
                 'nama_lengkap' => $namaLengkap,
                 'posisi_dilamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
@@ -435,7 +459,7 @@ class RecruitmentController extends Controller{
     public function assessmentEmailPreview()
     {
         $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-            . '/new-recruitment/assessment/contoh-token-assessment';
+            . '/public/recruitment/assessment/contoh-token-assessment';
 
         return response($this->assessmentInvitationEmail([
             'nama_lengkap' => 'Harold Leonardo Panjaitan',
@@ -473,7 +497,7 @@ class RecruitmentController extends Controller{
             (new RecruitmentStatusService())->update($recruitment->id, 'profile_completion', $now);
 
             $completeProfileUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                . '/new-recruitment/complete-profile/' . rawurlencode($recruitment->token);
+                . '/public/recruitment/complete-profile/' . rawurlencode($recruitment->token);
             SendEmail::where('to', $recruitment->email)
                 ->where('subject', 'Kelengkapan Profil Kandidat - PT Inti Surya Laboratorium')
                 ->where('body', $this->completeProfileInvitationEmail([
