@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question,SallaryOffer};
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
@@ -69,6 +69,9 @@ class PersonnelRequestController extends Controller
                     'minimum_matching' => $personnelRequest->minimum_matching,
                     'published_at' => $personnelRequest->published_at,
                     'published_by' => $personnelRequest->published_by,
+                    'is_approve' => (int) $personnelRequest->is_approve,
+                    'is_reject' => (int) $personnelRequest->is_reject,
+                    'is_publish' => (int) $personnelRequest->is_publish,
                     'total_pelamar' => (int) ($personnelRequest->total_pelamar ?? $candidates->count()),
                 ],
                 'summary' => [
@@ -170,11 +173,14 @@ class PersonnelRequestController extends Controller
             $data = PersonnelRequest::select('personnel_requests.*')->with([
                 'detailCabang', 
                 'detailDivisi', 
-                'detailPosisi'
+                'detailPosisi',
+                'newRecruitments' => function($q) {
+                    $q->select('id', 'personnel_request_id', 'status');
+                }
             ])->withCount([
                 'newRecruitments as total_pelamar',
                 'newRecruitments as total_keterima' => function($query) {
-                    $query->whereIn('status', ['completed']); 
+                    $query->whereIn('status', ['completed', 'hired']); 
                 }
             ])->orderBy('id', 'desc');
     
@@ -184,6 +190,18 @@ class PersonnelRequestController extends Controller
                 })
                 ->addColumn('total_keterima', function ($row) {
                     return $row->total_keterima ?? 0;
+                })
+                ->addColumn('highest_status', function ($row) {
+                    if ($row->is_reject == 1) {
+                        return 'pr_rejected';
+                    }
+                    if ($row->is_approve == 0) {
+                        return 'pr_pending_approval';
+                    }
+                    if ($row->is_approve == 1 && $row->is_publish == 0) {
+                        return 'pr_pending_publish';
+                    }
+                    return 'pr_published';
                 })
                 ->filterColumn('no_request', fn($q, $k) => $q->where('no_request', 'like', "%{$k}%"))
                 ->filterColumn('request_type', fn($q, $k) => $q->where('request_type', 'like', "%{$k}%"))
@@ -245,6 +263,7 @@ class PersonnelRequestController extends Controller
                 'pendidikan'                => $this->nullableValue($request->pendidikan),
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
+                'minimum_matching'          => $this->nullableInt($request->minimum_matching),
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
@@ -570,6 +589,19 @@ class PersonnelRequestController extends Controller
                     'token_approval' => $token,
                     'status' => 'management_decision'
                 ]);
+
+                // Simpan salary offer user jika diisi
+                if ($request->filled('sallary_offer_user')) {
+                    $salaryValue = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_user'))));
+                    SallaryOffer::updateOrCreate(
+                        ['new_recruitment_id' => $recruitment->id],
+                        [
+                            'sallary_offer_user' => $salaryValue ?: null,
+                            'created_by'         => $this->karyawan,
+                            'updated_by'         => $this->karyawan,
+                        ]
+                    );
+                }
 
                 // kirim email ke HRD (developer akan mengisi email asli nanti)
                 $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
