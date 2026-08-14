@@ -405,7 +405,7 @@ trait BuildsCandidateAssessmentPreview
             return null;
         }
 
-        $catatan = $user->catatan_interview ?? $user->catatan_interview_user ?? $user->catatan ?? null;
+        $catatan = $user->catatan_interview ?? null;
         $catatanText = trim(strip_tags((string) $catatan));
         $statusResult = strtolower((string) ($user->status_result ?? ''));
 

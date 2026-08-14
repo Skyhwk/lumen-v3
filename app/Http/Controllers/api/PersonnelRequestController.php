@@ -441,7 +441,7 @@ class PersonnelRequestController extends Controller
                 'jenis_interview'    => $request->jenis_interview,
                 'link_gmeet'         => $request->link_gmeet,
                 'ruangan_interview'  => $request->ruangan_interview,
-                'catatan'  => $request->catatan_interview,
+                'catatan'            => $request->catatan,
                 'created_by'         => $this->karyawan ?? 'System',
                 'is_active'          => 1,
             ]);
@@ -467,7 +467,7 @@ class PersonnelRequestController extends Controller
                     'cabang'            => $recruitment->personnelRequest->detailCabang->nama_cabang ?? $recruitment->personnelRequest->lokasi_penempatan_cabang,
                     'tgl_interview'     => $request->tgl_interview,
                     'jenis_interview'   => $request->jenis_interview,
-                    'catatan_interview' => $request->catatan_interview,
+                    'catatan_interview' => $request->input('catatan'),
                 ];
 
                 foreach ($hrds as $user) {
