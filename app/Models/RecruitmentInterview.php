@@ -15,16 +15,6 @@ class RecruitmentInterview extends Model
         'is_active' => 'boolean',
     ];
 
-    protected $appends = ['catatan'];
-
-    public function getCatatanAttribute()
-    {
-        if (array_key_exists('catatan', $this->attributes) && $this->attributes['catatan'] !== null && $this->attributes['catatan'] !== '') {
-            return $this->attributes['catatan'];
-        }
-        return $this->attributes['catatan_interview'] ?? null;
-    }
-
     public function applicant()
     {
         return $this->belongsTo(NewRecruitment::class, 'new_recruitment_id');

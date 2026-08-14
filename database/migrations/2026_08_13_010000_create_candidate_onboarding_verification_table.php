@@ -18,6 +18,8 @@ class CreateCandidateOnboardingVerificationTable extends Migration
                 $table->boolean('has_all_documents')->default(false);
                 $table->string('verified_by', 255)->nullable();
                 $table->timestamp('verified_at')->nullable();
+                $table->timestamp('employee_migrated_at')->nullable();
+                $table->string('employee_migrated_by', 255)->nullable();
                 $table->timestamps();
 
                 $table->foreign('new_recruitment_id')
