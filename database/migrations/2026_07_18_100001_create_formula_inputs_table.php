@@ -8,6 +8,7 @@ class CreateFormulaInputsTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('formula_inputs')) {
         Schema::create('formula_inputs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('formula_id')->index();
@@ -23,6 +24,7 @@ class CreateFormulaInputsTable extends Migration
             $table->unique(['formula_id', 'variable'], 'uq_formula_input_variable');
             $table->index(['formula_id', 'urutan']);
         });
+        }
     }
 
     public function down()

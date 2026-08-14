@@ -13,6 +13,7 @@ class CreateOrderHeaderTable extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('order_header')) {
         Schema::create('order_header', function (Blueprint $table) {
             $table->id();
             $table->string('id_pelanggan', 30)->nullable();
@@ -76,6 +77,7 @@ class CreateOrderHeaderTable extends Migration
             $table->index('is_active', 'idx_order_header_is_active');
             $table->index(['no_order', 'is_active'], 'idx_order_header_no_order_active');
         });
+        }
     }
 
     public function down(): void

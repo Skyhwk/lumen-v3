@@ -8,6 +8,7 @@ class CreateDashboardUserOrdersTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('dashboard_user_orders')) {
         Schema::create('dashboard_user_orders', function (Blueprint $table) {
             $table->id();
             $table->integer('user_id');
@@ -19,6 +20,7 @@ class CreateDashboardUserOrdersTable extends Migration
 
             $table->unique('user_id');
         });
+        }
     }
 
     public function down()

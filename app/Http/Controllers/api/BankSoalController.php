@@ -1,0 +1,788 @@
+<?php
+
+namespace App\Http\Controllers\api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Question;
+use App\Models\QuestionCategory;
+use App\Models\QuestionOption;
+use App\Models\ScaleType;
+use App\Services\BankSoalImageService;
+use App\Services\GetBawahan;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
+use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Support\Facades\Schema;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+
+class BankSoalController extends Controller
+{
+    public function index(Request $request)
+    {
+        $scope = $this->scope($request);
+        $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
+            ->where('question_scope', $scope)
+            ->when($scope === 'manager', function ($query) {
+                $query->whereIn('question_category_id', $this->accessibleManagerCategoryIds());
+            })
+            ->when($request->filled('question_category_id'), fn ($query) => $query->where('question_category_id', $request->question_category_id))
+            ->when($request->filled('status'), fn ($query) => $query->where('status', 'like', '%' . $request->status . '%'))->orderBy('id','desc');
+
+        return DataTables::of($questions)->make(true);
+    }
+
+    public function categories(Request $request)
+    {
+        $query = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'hr')->where('status', '!=', 'retired')])
+            ->where('is_active', true)
+            ->where(function ($builder) {
+                $builder->where('category_scope', 'hr')->orWhereNull('category_scope');
+            });
+
+        return response()->json([
+            'success' => true,
+            'data'    => $query
+                ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
+                ->orderBy('name')
+                ->get(),
+        ]);
+    }
+
+    public function managerCategories(Request $request)
+    {
+        $categories = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'manager')->where('status', '!=', 'retired')])
+            ->where('category_scope', 'manager')
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('owner_karyawan', $this->karyawan)
+                    ->orWhere('assigned_manager', $this->karyawan);
+            })
+            ->orderBy('name')
+            ->get()
+            ->map(function ($category) {
+                $category->can_manage = (string) $category->owner_karyawan === (string) $this->karyawan;
+
+                return $category;
+            });
+
+        return response()->json(['success' => true, 'data' => $categories]);
+    }
+
+    public function managerAvailableQuestionCount()
+    {
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total' => $this->countManagerAvailableQuestions(),
+            ],
+        ]);
+    }
+
+    public function managerCategoryManagers()
+    {
+        $managers = GetBawahan::where('id', $this->user_id)->get()
+            ->filter(function ($employee) {
+                return strtoupper((string) ($employee->grade ?? '')) === 'MANAGER'
+                    && (string) $employee->nama_lengkap !== (string) $this->karyawan;
+            })
+            ->map(function ($employee) {
+                return [
+                    'id' => $employee->nama_lengkap,
+                    'text' => $employee->nama_lengkap . ($employee->nik_karyawan ? ' (' . $employee->nik_karyawan . ')' : ''),
+                ];
+            })
+            ->values();
+
+        return response()->json(['success' => true, 'data' => $managers]);
+    }
+
+    public function updateCategoriesConfig(Request $request)
+    {
+        $categories = $request->input('categories', []);
+        $hasIsShow = Schema::hasColumn('question_categories', 'is_show');
+        $hasDuration = Schema::hasColumn('question_categories', 'duration_minutes');
+        $hasTimeLimit = Schema::hasColumn('question_categories', 'has_time_limit');
+
+        if (is_array($categories)) {
+            foreach ($categories as $item) {
+                if (isset($item['id'])) {
+                    $updateData = [
+                        'question_count' => isset($item['question_count']) ? (int) $item['question_count'] : 0,
+                        'updated_at'     => Carbon::now(),
+                    ];
+
+                    if ($hasTimeLimit) {
+                        $updateData['has_time_limit'] = isset($item['has_time_limit']) ? (bool) $item['has_time_limit'] : true;
+                    }
+
+                    if ($hasDuration && isset($item['duration_minutes'])) {
+                        $updateData['duration_minutes'] = (int) $item['duration_minutes'];
+                    }
+
+                    if ($hasIsShow) {
+                        $updateData['is_show'] = isset($item['is_show']) ? (bool) $item['is_show'] : (isset($item['is_active']) ? (bool) $item['is_active'] : false);
+                    } else {
+                        $updateData['is_active'] = isset($item['is_show']) ? (bool) $item['is_show'] : (isset($item['is_active']) ? (bool) $item['is_active'] : false);
+                    }
+
+                    QuestionCategory::where('id', $item['id'])->update($updateData);
+                }
+            }
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Question configuration updated successfully.',
+        ], 200);
+    }
+
+    public function storeCategory(Request $request)
+    {
+        $categoryScope = strtolower(trim((string) $request->input('category_scope', 'hr')));
+        $columns = Schema::getColumnListing('question_categories');
+        $data = array_intersect_key($request->all(), array_flip($columns));
+        $data['is_active'] = isset($data['is_active']) ? (bool) $data['is_active'] : true;
+        $data['created_by'] = $this->karyawan ?: 'System';
+        $data['name'] = trim((string) $request->name);
+        $data['question_count'] = $request->question_count;
+
+        if ($categoryScope === 'manager') {
+            $assignedManager = trim((string) $request->input('assigned_manager', ''));
+            $hasSubordinateManagers = $this->hasSubordinateManagers();
+            if ($hasSubordinateManagers && $assignedManager === '') {
+                abort(422, 'Manager terkait wajib dipilih.');
+            }
+            if (!$hasSubordinateManagers) {
+                $assignedManager = '';
+            }
+            if ($data['name'] === '') {
+                abort(422, 'Nama kategori wajib diisi.');
+            }
+            if ($assignedManager !== '' && QuestionCategory::where('category_scope', 'manager')
+                ->where('owner_karyawan', $this->karyawan)
+                ->where('assigned_manager', $assignedManager)
+                ->where('is_active', true)
+                ->exists()) {
+                abort(422, 'Kategori untuk manager ini sudah ada.');
+            }
+
+            $data['category_scope'] = 'manager';
+            $data['owner_karyawan'] = $this->karyawan;
+            $data['assigned_manager'] = $assignedManager !== '' ? $assignedManager : null;
+        } else {
+            $data['category_scope'] = 'hr';
+        }
+
+        return response()->json(['success' => true, 'message' => 'Kategori berhasil disimpan.', 'data' => QuestionCategory::create($data)], 201);
+    }
+
+    public function updateCategory(Request $request)
+    {
+        $category = QuestionCategory::findOrFail($request->input('id'));
+        if ($this->isManagerCategory($category)) {
+            $this->resolveManagerCategory((int) $category->id, 'write');
+        }
+
+        $columns = Schema::getColumnListing('question_categories');
+        $allowedCols = array_diff($columns, ['id', 'created_at', 'category_scope', 'owner_karyawan']);
+        $data = array_intersect_key($request->all(), array_flip($allowedCols));
+        if ($this->isManagerCategory($category) && $request->filled('assigned_manager')) {
+            if (!$this->hasSubordinateManagers()) {
+                unset($data['assigned_manager']);
+            } else {
+                $assignedManager = trim((string) $request->input('assigned_manager'));
+                if ($assignedManager === '') {
+                    abort(422, 'Manager terkait wajib dipilih.');
+                }
+                if (QuestionCategory::where('category_scope', 'manager')
+                    ->where('owner_karyawan', $category->owner_karyawan)
+                    ->where('assigned_manager', $assignedManager)
+                    ->where('is_active', true)
+                    ->where('id', '!=', $category->id)
+                    ->exists()) {
+                    abort(422, 'Kategori untuk manager ini sudah ada.');
+                }
+                $data['assigned_manager'] = $assignedManager;
+            }
+        }
+
+        $category->update($data);
+
+        return response()->json(['success' => true, 'message' => 'Kategori berhasil diperbarui.', 'data' => $category->fresh()]);
+    }
+
+    public function deleteCategory(Request $request)
+    {
+        $category = QuestionCategory::findOrFail($request->input('id'));
+        if ($this->isManagerCategory($category)) {
+            $this->resolveManagerCategory((int) $category->id, 'write');
+        }
+        if ($category->questions()->exists()) {
+            return response()->json(['message' => 'Kategori yang sudah memiliki soal tidak dapat dinonaktifkan.'], 422);
+        }
+        $category->update(['is_active' => false]);
+        return response()->json(['success' => true, 'message' => 'Kategori berhasil dinonaktifkan.']);
+    }
+
+    public function scaleTypes(Request $request)
+    {
+        $query = ScaleType::where('is_active', true)->orderBy('name');
+        if ($request->filled('id')) $query->where('id', $request->id);
+        return response()->json(['success' => true, 'data' => $query->get()]);
+    }
+
+    public function indexScaleTypes()
+    {
+        return response()->json(['success' => true, 'data' => ScaleType::withCount('questions')->orderBy('name')->get()]);
+    }
+
+    public function storeScaleType(Request $request)
+    {
+        $data = $this->validatedScaleType($request);
+        $data['code'] = $this->generateScaleTypeCode($data['name']);
+        $data['is_active'] = 1;
+        $data['created_by'] = $this->karyawan ?: 'System';
+        return response()->json(['success' => true, 'message' => 'Scale Type berhasil disimpan.', 'data' => ScaleType::create($data)], 201);
+    }
+
+    public function updateScaleType(Request $request)
+    {
+        $scaleType = ScaleType::findOrFail($request->input('id'));
+        $scaleType->update($this->validatedScaleType($request));
+        return response()->json(['success' => true, 'message' => 'Scale Type berhasil diperbarui.', 'data' => $scaleType->fresh()]);
+    }
+
+    public function deleteScaleType(Request $request)
+    {
+        $scaleType = ScaleType::findOrFail($request->input('id'));
+        $scaleType->update(['is_active' => 0]);
+        return response()->json(['success' => true, 'message' => 'Scale Type berhasil dinonaktifkan.']);
+    }
+
+    public function userAssessmentConfig()
+    {
+        return response()->json([
+            'success' => true,
+            'data' => DB::table('user_assessment_configs')
+                ->where('owner_karyawan', $this->managerOwnerName())
+                ->first(),
+        ]);
+    }
+
+    public function saveUserAssessmentConfig(Request $request)
+    {
+        $questionCount = (int) $request->input('question_count');
+        $durationMinutes = (int) $request->input('duration_minutes');
+        if ($questionCount < 1 || $durationMinutes < 1) {
+            abort(422, 'Jumlah soal dan durasi wajib lebih dari 0.');
+        }
+
+        $owner = $this->managerOwnerName();
+        $existing = DB::table('user_assessment_configs')->where('owner_karyawan', $owner)->first();
+        $data = [
+            'question_count' => $questionCount,
+            'duration_minutes' => $durationMinutes,
+            'is_active' => 1,
+            'updated_by' => $owner,
+            'updated_at' => Carbon::now(),
+        ];
+
+        if ($existing) {
+            DB::table('user_assessment_configs')->where('id', $existing->id)->update($data);
+        } else {
+            $data += [
+                'owner_karyawan' => $owner,
+                'created_by' => $owner,
+                'created_at' => Carbon::now(),
+            ];
+            DB::table('user_assessment_configs')->insert($data);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Konfigurasi assessment berhasil disimpan.']);
+    }
+
+    public function downloadImportTemplate()
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Bank Soal');
+        $headers = ['Question', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Option', 'Difficulty', 'Status', 'Explanation'];
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->fromArray([
+            'Contoh: Manakah jawaban yang benar?',
+            'Pilihan A',
+            'Pilihan B',
+            'Pilihan C',
+            'Pilihan D',
+            'A',
+            'easy',
+            'draft',
+            'Contoh penjelasan atau konteks tambahan untuk soal ini',
+        ], null, 'A2');
+        $sheet->getStyle('A1:I1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E78']],
+        ]);
+        $sheet->freezePane('A2');
+        $sheet->getColumnDimension('A')->setWidth(45);
+        foreach (['B', 'C', 'D', 'E'] as $column) $sheet->getColumnDimension($column)->setWidth(28);
+        $sheet->getColumnDimension('F')->setWidth(16);
+        $sheet->getColumnDimension('G')->setWidth(14);
+        $sheet->getColumnDimension('H')->setWidth(14);
+        $sheet->getColumnDimension('I')->setWidth(45);
+
+        $guide = $spreadsheet->createSheet();
+        $guide->setTitle('Petunjuk');
+        $guide->fromArray([
+            ['Petunjuk Upload Bank Soal'],
+            ['PENTING: Hapus baris contoh pada sheet Bank Soal sebelum upload. Jika tidak dihapus, contoh tersebut akan ikut dibuat menjadi soal.'],
+            ['1. Isi satu soal per baris pada sheet Bank Soal'],
+            ['2. Minimal isi Question, Option A, Option B, Correct Option, Difficulty, dan Status'],
+            ['3. Correct Option hanya A, B, C, atau D dan harus sesuai pilihan yang terisi'],
+            ['4. Difficulty: easy, medium, atau hard'],
+            ['5. Status: draft atau active'],
+            ['6. Explanation bersifat opsional dan boleh dikosongkan. Kolom ini untuk penjelasan atau konteks soal, bukan penjelasan jawaban tertentu'],
+            ['7. Jangan mengubah nama dan urutan header pada sheet Bank Soal'],
+        ], null, 'A1');
+        $guide->getStyle('A1')->getFont()->setBold(true);
+        $guide->getStyle('A2')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => '9C0006']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFC7CE']],
+        ]);
+        $guide->getColumnDimension('A')->setWidth(110);
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $directory = public_path('bank-soal');
+        if (!File::exists($directory)) {
+            File::makeDirectory($directory, 0755, true);
+        }
+
+        $fileName = 'template-bank-soal.xlsx';
+        (new Xlsx($spreadsheet))->save($directory . DIRECTORY_SEPARATOR . $fileName);
+
+        return response()->json([
+            'success' => true,
+            'data' => $fileName,
+        ]);
+    }
+
+    public function importQuestions(Request $request)
+    {
+        if (!$request->hasFile('file') || !$request->file('file')->isValid()) {
+            abort(422, 'File template wajib diunggah.');
+        }
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['xlsx', 'csv'], true)) {
+            abort(422, 'Format file harus .xlsx atau .csv.');
+        }
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            abort(422, 'Ukuran file maksimal 5 MB.');
+        }
+
+        try {
+            $rows = IOFactory::load($file->getRealPath())->getActiveSheet()->toArray('', true, true, false);
+        } catch (\Throwable $exception) {
+            abort(422, 'Template tidak dapat dibaca. Gunakan file .xlsx atau .csv dari template yang disediakan.');
+        }
+
+        if (count($rows) < 2) {
+            abort(422, 'Template belum memiliki data soal.');
+        }
+
+        $headers = array_map(fn ($value) => strtolower(trim(ltrim((string) $value, "\xEF\xBB\xBF"))), array_shift($rows));
+        while ($headers && end($headers) === '') {
+            array_pop($headers);
+        }
+        $requiredHeaders = ['question', 'option a', 'option b', 'option c', 'option d', 'correct option', 'difficulty', 'status', 'explanation'];
+        if ($headers !== $requiredHeaders) {
+            abort(422, 'Format kolom template tidak sesuai. Unduh template terbaru lalu isi tanpa mengubah header.');
+        }
+
+        $scope = $this->scope($request);
+        $category = $scope === 'manager'
+            ? $this->resolveManagerCategory((int) $request->input('question_category_id'), 'write')
+            : QuestionCategory::where('id', $request->input('question_category_id'))->where('is_active', true)->first();
+        if ($scope === 'hr' && !$category) {
+            abort(422, 'Pilih kategori aktif sebelum mengunggah soal.');
+        }
+        if ($scope === 'manager' && !$category) {
+            abort(422, 'Pilih kategori aktif sebelum mengunggah soal.');
+        }
+
+        $questions = [];
+        $errors = [];
+        foreach ($rows as $rowIndex => $row) {
+            if (!array_filter($row, fn ($value) => trim((string) $value) !== '')) continue;
+
+            $row = array_pad($row, count($headers), '');
+            $data = array_combine($headers, array_slice($row, 0, count($headers)));
+            $questionText = trim((string) $data['question']);
+            $correctOption = strtoupper(trim((string) $data['correct option']));
+            $difficulty = strtolower(trim((string) $data['difficulty'] ?: 'easy'));
+            $status = strtolower(trim((string) $data['status'] ?: 'draft'));
+            $options = [];
+
+            foreach (['A', 'B', 'C', 'D'] as $letter) {
+                $optionText = trim((string) $data['option ' . strtolower($letter)]);
+                if ($optionText !== '') {
+                    $options[] = [
+                        'option_text' => $optionText,
+                        'is_correct' => $correctOption === $letter,
+                        'option_order' => count($options) + 1,
+                    ];
+                }
+            }
+
+            $line = $rowIndex + 2;
+            if ($questionText === '') $errors[] = "Baris {$line}: Question wajib diisi.";
+            if (count($options) < 2) $errors[] = "Baris {$line}: minimal isi Option A dan Option B.";
+            if (!in_array($correctOption, ['A', 'B', 'C', 'D'], true) || !collect($options)->contains('is_correct', true)) $errors[] = "Baris {$line}: Correct Option harus A, B, C, atau D dan pilihannya wajib terisi.";
+            if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) $errors[] = "Baris {$line}: Difficulty harus easy, medium, atau hard.";
+            if (!in_array($status, ['draft', 'active'], true)) $errors[] = "Baris {$line}: Status harus draft atau active.";
+
+            $questions[] = [
+                'question_text' => $questionText,
+                'explanation' => trim((string) $data['explanation']) ?: null,
+                'difficulty' => $difficulty,
+                'status' => $status,
+                'options' => $options,
+            ];
+        }
+
+        if (!$questions) abort(422, 'Template belum memiliki baris soal yang dapat diimpor.');
+        if (count($questions) > 500) abort(422, 'Maksimal 500 soal untuk satu kali unggah.');
+        if ($errors) return response()->json(['message' => 'Ada data template yang perlu diperbaiki.', 'errors' => $errors], 422);
+
+        DB::transaction(function () use ($questions, $scope, $category) {
+            foreach ($questions as $data) {
+                $question = Question::create([
+                    'question_scope' => $scope,
+                    'owner_karyawan' => $scope === 'manager' ? $category->owner_karyawan : null,
+                    'question_category_id' => $category->id ?? null,
+                    'category' => $category->name ?? null,
+                    'question_type' => 'single_choice',
+                    'scale_type_id' => null,
+                    'scoring_type' => 'correct_answer',
+                    'question_text' => $data['question_text'],
+                    'question_image' => [],
+                    'explanation' => $data['explanation'],
+                    'difficulty' => $data['difficulty'],
+                    'status' => $data['status'],
+                    'is_active' => 1,
+                    'created_by' => $this->karyawan ?: 'System',
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
+                $this->replaceOptions($question, $data['options']);
+            }
+        });
+
+        return response()->json(['success' => true, 'message' => count($questions) . ' soal berhasil diimpor.']);
+    }
+
+    public function store(Request $request)
+    {
+        return DB::transaction(function () use ($request) {
+            $scope = $this->scope($request);
+            $data = $this->validatedQuestion($request);
+            $category = $scope === 'manager'
+                ? $this->resolveManagerCategory((int) $data['question_category_id'], 'write')
+                : QuestionCategory::where('id', $data['question_category_id'])->where('is_active', true)->firstOrFail();
+            $managerOwner = $scope === 'manager' ? $category->owner_karyawan : null;
+            $question = Question::create(array_merge($data, [
+                'question_scope' => $scope,
+                'owner_karyawan' => $managerOwner,
+                'question_category_id' => $category->id,
+                'category' => $category->name,
+                'question_image' => [],
+                'is_active' => 1,
+                'created_by' => $request->input('created_by', $this->karyawan ?: 'System'),
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]));
+            $this->syncQuestionImages($question, $request->input('question_image', []));
+            if ($data['question_type'] === 'scale') {
+                $this->replaceOptions($question, []);
+            } else {
+                $this->replaceOptions($question, $data['options']);
+            }
+            return response()->json(['message' => 'Bank soal berhasil disimpan.', 'data' => $question->fresh()->load(['options', 'scaleType', 'categoryMaster'])], 201);
+        });
+    }
+
+    public function update(Request $request)
+    {
+        return DB::transaction(function () use ($request) {
+            $question = Question::with('options')->findOrFail($request->input('id'));
+            $scope = $this->scope($request);
+            $this->ensureQuestionScope($question, $scope, $request, 'write');
+            $data = $this->validatedQuestion($request);
+            $category = $scope === 'manager'
+                ? $this->resolveManagerCategory((int) $data['question_category_id'], 'write')
+                : QuestionCategory::where('id', $data['question_category_id'])->where('is_active', true)->firstOrFail();
+            $question->update(array_merge($data, [
+                'question_scope' => $scope,
+                'owner_karyawan' => $scope === 'manager' ? $category->owner_karyawan : null,
+                'question_category_id' => $category->id,
+                'category' => $category->name,
+                'updated_at' => Carbon::now(),
+            ]));
+            $this->syncQuestionImages($question, $request->input('question_image', []));
+            if ($data['question_type'] === 'scale') {
+                $this->replaceOptions($question, []);
+            } else {
+                $this->replaceOptions($question, $data['options']);
+            }
+            return response()->json(['success' => true, 'message' => 'Bank soal berhasil diperbarui.', 'data' => $question->fresh()->load(['options', 'scaleType', 'categoryMaster'])]);
+        });
+    }
+
+    public function updateStatus(Request $request)
+    {
+        $question = Question::findOrFail($request->input('id'));
+        $this->ensureQuestionScope($question, $this->scope($request), $request, 'write');
+        $question->update(['status' => $request->status]);
+        return response()->json(['success' => true, 'message' => 'Status bank soal berhasil diperbarui.']);
+    }
+
+    public function delete(Request $request)
+    {
+        $question = Question::with('options')->findOrFail($request->input('id'));
+        $this->ensureQuestionScope($question, $this->scope($request), $request, 'write');
+        $imageService = new BankSoalImageService();
+        foreach ($question->question_image as $image) $imageService->deleteImg($image);
+        foreach ($question->options as $option) $imageService->deleteImg($option->option_image);
+        $question->options()->delete();
+        $question->delete();
+        return response()->json(['success' => true, 'message' => 'Bank soal berhasil dihapus.']);
+    }
+
+    private function validatedScaleType(Request $request)
+    {
+        $data = $request->all();
+        $data['name'] = trim((string) ($data['name'] ?? ''));
+        $data['description'] = trim((string) ($data['description'] ?? '')) ?: null;
+        unset($data['code']);
+        unset($data['sort_order']);
+
+        if ($data['name'] === '') abort(422, 'Nama Scale Type wajib diisi.');
+
+        $options = is_string($request->input('options')) ? json_decode($request->input('options'), true) : $request->input('options', []);
+        if (!is_array($options) || count($options) < 2) abort(422, 'Scale Type minimal memiliki dua pilihan.');
+
+        $data['options'] = collect($options)->map(function ($option) {
+            $value = trim((string) ($option['value'] ?? ''));
+            $label = trim((string) ($option['label'] ?? ''));
+            if ($value === '' || $label === '') {
+                abort(422, 'Nilai dan label setiap pilihan wajib diisi.');
+            }
+            if (!is_numeric($value)) {
+                abort(422, 'Nilai pilihan Scale Type harus berupa angka.');
+            }
+
+            return [
+                'value' => strpos($value, '.') !== false ? (float) $value : (int) $value,
+                'label' => $label,
+            ];
+        })->sortByDesc('value')->values()->all();
+
+        if (collect($data['options'])->pluck('value')->unique()->count() !== count($data['options'])) {
+            abort(422, 'Nilai pilihan Scale Type tidak boleh duplikat.');
+        }
+
+        return $data;
+    }
+
+    private function generateScaleTypeCode(string $name): string
+    {
+        $base = strtoupper(Str::slug($name, '_'));
+        if ($base === '') {
+            $base = 'SCALE';
+        }
+        $base = substr($base, 0, 45);
+        $code = $base;
+        $counter = 1;
+        while (ScaleType::where('code', $code)->exists()) {
+            $code = substr($base, 0, 40) . '_' . $counter;
+            $counter++;
+        }
+
+        return $code;
+    }
+
+    private function validatedQuestion(Request $request)
+    {
+        $data = $request->all();
+        $data['question_text'] = trim($data['question_text']);
+        $data['difficulty'] = $data['difficulty'] ?? 'easy';
+        $data['status'] = $data['status'] ?? 'draft';
+        $data['question_type'] = in_array($request->input('question_type'), ['single_choice', 'multiple_choice', 'scale'], true)
+            ? $request->input('question_type')
+            : 'single_choice';
+        $data['options'] = $data['options'] ?? [];
+        if ($this->scope($request) === 'manager') {
+            if (empty($data['question_category_id'])) {
+                abort(422, 'Pilih kategori soal terlebih dahulu.');
+            }
+            $this->resolveManagerCategory((int) $data['question_category_id'], 'write');
+            $data['question_type'] = 'single_choice';
+            $data['scoring_type'] = 'correct_answer';
+            $data['scale_type_id'] = null;
+        }
+
+        if ($data['question_type'] === 'scale') {
+            $scaleTypeId = (int) $request->input('scale_type_id');
+            if (!$scaleTypeId) {
+                abort(422, 'Scale Type wajib dipilih untuk soal bertipe scale.');
+            }
+            ScaleType::where('id', $scaleTypeId)->where('is_active', true)->firstOrFail();
+            $data['scale_type_id'] = $scaleTypeId;
+            $data['scoring_type'] = 'scale_average';
+            $data['options'] = [];
+            return $data;
+        }
+
+        $data['scale_type_id'] = null;
+        $data['scoring_type'] = 'correct_answer';
+
+        if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) abort(422, 'Answer option wajib diisi.');
+        if ($data['question_type'] === 'single_choice' && collect($data['options'])->filter(fn ($option) => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN))->count() > 1) abort(422, 'Single Choice hanya boleh memiliki satu jawaban benar.');
+        return $data;
+    }
+
+    private function scope(Request $request)
+    {
+        $scope = strtolower(trim((string) $request->input('question_scope', 'hr')));
+        if (!in_array($scope, ['hr', 'manager'], true)) {
+            abort(422, 'Scope bank soal tidak valid.');
+        }
+
+        return $scope;
+    }
+
+    private function hasSubordinateManagers(): bool
+    {
+        return GetBawahan::where('id', $this->user_id)->get()
+            ->contains(function ($employee) {
+                return strtoupper((string) ($employee->grade ?? '')) === 'MANAGER'
+                    && (string) $employee->nama_lengkap !== (string) $this->karyawan;
+            });
+    }
+
+    private function managerOwnerName()
+    {
+        if (!$this->karyawan) {
+            abort(401, 'User tidak terautentikasi.');
+        }
+
+        return $this->karyawan;
+    }
+
+    private function isManagerCategory($category): bool
+    {
+        return strtolower((string) ($category->category_scope ?? 'hr')) === 'manager';
+    }
+
+    private function countManagerAvailableQuestions(): int
+    {
+        return Question::query()
+            ->where('owner_karyawan', $this->karyawan)
+            ->where('is_active', 1)
+            ->where('question_type', 'single_choice')
+            ->count();
+    }
+
+    private function accessibleManagerCategoryIds(): array
+    {
+        return QuestionCategory::query()
+            ->where('category_scope', 'manager')
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('owner_karyawan', $this->karyawan)
+                    ->orWhere('assigned_manager', $this->karyawan);
+            })
+            ->pluck('id')
+            ->all();
+    }
+
+    private function resolveManagerCategory(int $categoryId, string $accessLevel = 'view'): QuestionCategory
+    {
+        $category = QuestionCategory::where('id', $categoryId)
+            ->where('category_scope', 'manager')
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        $isOwner = (string) $category->owner_karyawan === (string) $this->karyawan;
+        $isAssignedManager = (string) $category->assigned_manager === (string) $this->karyawan;
+
+        if ($accessLevel === 'write') {
+            if (!$isOwner) {
+                abort(403, 'Hanya pemilik kategori yang dapat mengubah data.');
+            }
+
+            return $category;
+        }
+
+        if (!$isOwner && !$isAssignedManager) {
+            abort(403, 'Kategori tidak dapat diakses.');
+        }
+
+        return $category;
+    }
+
+    private function ensureQuestionScope(Question $question, $scope, Request $request, string $accessLevel = 'view')
+    {
+        if ($question->question_scope !== $scope) {
+            abort(403, 'Soal tidak dapat diakses dari bank soal ini.');
+        }
+
+        if ($scope === 'manager') {
+            $this->resolveManagerCategory((int) $question->question_category_id, $accessLevel);
+        }
+    }
+
+    private function syncQuestionImages(Question $question, $images)
+    {
+        $images = is_array($images) ? $images : ($images ? [$images] : []);
+        $service = new BankSoalImageService();
+        $previous = $question->question_image ?: [];
+        $stored = collect($images)->map(function ($image, $index) use ($service, $question) {
+            if (is_string($image) && strpos($image, 'data:image/') === 0) return $service->convertImg($image, $question->id, 'question-' . ($index + 1));
+            return basename(parse_url((string) $image, PHP_URL_PATH) ?: (string) $image);
+        })->filter()->values()->all();
+        foreach ($previous as $image) {
+            if (!in_array(basename(parse_url($image, PHP_URL_PATH) ?: $image), $stored, true)) $service->deleteImg($image);
+        }
+        $question->question_image = $stored;
+        $question->save();
+    }
+
+    private function replaceOptions(Question $question, array $options)
+    {
+        $service = new BankSoalImageService();
+        $keptImages = collect($options)->pluck('option_image')->filter()->map(function ($image) {
+            return basename(parse_url((string) $image, PHP_URL_PATH) ?: (string) $image);
+        })->all();
+        foreach ($question->options as $option) {
+            $fileName = basename(parse_url((string) $option->option_image, PHP_URL_PATH) ?: (string) $option->option_image);
+            if ($fileName && !in_array($fileName, $keptImages, true)) $service->deleteImg($option->option_image);
+        }
+        $question->options()->delete();
+        foreach ($options as $index => $option) {
+            $model = QuestionOption::create(['question_id' => $question->id, 'option_text' => $option['option_text'] ?? null, 'option_image' => null, 'is_correct' => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN), 'option_order' => $option['option_order'] ?? ($index + 1), 'created_at' => Carbon::now(), 'updated_at' => Carbon::now()]);
+            if (!empty($option['option_image'])) {
+                $image = $option['option_image'];
+                $model->option_image = strpos((string) $image, 'data:image/') === 0 ? $service->convertImg($image, $question->id, $model->id) : basename(parse_url((string) $image, PHP_URL_PATH) ?: (string) $image);
+                $model->save();
+            }
+        }
+    }
+}

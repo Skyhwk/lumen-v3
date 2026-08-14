@@ -8,6 +8,7 @@ class CreateMasterSuppliersAndPurchaseOrderDocumentsTables extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('master_suppliers')) {
         Schema::create('master_suppliers', function (Blueprint $table) {
             $table->id();
             $table->string('name', 255);
@@ -18,7 +19,9 @@ class CreateMasterSuppliersAndPurchaseOrderDocumentsTables extends Migration
             $table->dateTime('created_at')->nullable();
             $table->dateTime('updated_at')->nullable();
         });
+        }
 
+        if (!Schema::hasTable('purchase_order_documents')) {
         Schema::create('purchase_order_documents', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('purchase_request_id');
@@ -54,6 +57,7 @@ class CreateMasterSuppliersAndPurchaseOrderDocumentsTables extends Migration
             $table->string('created_by', 255)->nullable();
             $table->dateTime('created_at')->nullable();
         });
+        }
     }
 
     public function down()

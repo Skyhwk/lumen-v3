@@ -288,7 +288,7 @@ class SamplerTrackingService
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
-        $date = $request->tanggal ?: $this->today();
+        $date = $this->today();
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
         $recordsTotal = $rows->count();
 
