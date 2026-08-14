@@ -217,7 +217,6 @@ class PersonnelRequesthrdController extends Controller
     {
         $id = $request->input('id');
         $divisiAlias = $request->input('divisi_alias');
-        $minimumMatching = $request->input('minimum_matching');
 
         if (!$id) {
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
@@ -238,10 +237,6 @@ class PersonnelRequesthrdController extends Controller
 
             if ($divisiAlias !== null) {
                 $updateData['divisi_alias'] = $divisiAlias;
-            }
-
-            if ($minimumMatching !== null) {
-                $updateData['minimum_matching'] = $minimumMatching;
             }
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
