@@ -349,6 +349,7 @@ class RenderInvoice
                 $no = 1;
 
                 foreach ($data1 as $k => $valSampling) {
+                    $data1Index = $k;
 
                     $values = json_decode(json_encode($valSampling));
                     $cekArray = json_decode($values->data_pendukung_sampling);
@@ -754,6 +755,7 @@ class RenderInvoice
 
 
                 foreach ($data1 as $k => $valSampling) {
+                    $data1Index = $k;
 
                     $values = json_decode(json_encode($valSampling));
                     $cekArray = json_decode($values->data_pendukung_sampling);
@@ -941,7 +943,7 @@ class RenderInvoice
                                 $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                             }
 
-                            if ($k == count($data1) - 1) {
+                            if ($data1Index == count($data1) - 1) {
                                 $tambah += $invoiceSummaryReserveRows;
                             }
                             // dd($cekArray);
@@ -1296,6 +1298,11 @@ class RenderInvoice
                             // dd('bawah');
 
                             $dataPendukungSampling = json_decode($values->data_pendukung_sampling);
+                            if (is_object($dataPendukungSampling)) {
+                                $dataPendukungSampling = array_values((array) $dataPendukungSampling);
+                            } elseif (!is_array($dataPendukungSampling)) {
+                                $dataPendukungSampling = [];
+                            }
                             foreach ($dataPendukungSampling as $keys => $dataSampling) {
 
                                 $tambah = 0;
@@ -1345,7 +1352,7 @@ class RenderInvoice
                                     $extra_row++;
                                 }
 
-                                if ($k == count($data1) - 1 && $keys == count($dataPendukungSampling) - 1) {
+                                if ($data1Index == count($data1) - 1 && $keys == count($dataPendukungSampling) - 1) {
                                     $extra_row += $invoiceSummaryReserveRows;
                                 }
 
