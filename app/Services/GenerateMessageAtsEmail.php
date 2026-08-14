@@ -78,7 +78,7 @@ class GenerateMessageAtsEmail
                 <tr>
                     <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
                         <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD & Talent Acquisition Division</div>
+                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD Division</div>
                     </td>
                 </tr>";
     }
@@ -89,7 +89,7 @@ class GenerateMessageAtsEmail
                 <tr>
                     <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
                         <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment & Talent Acquisition</span><br>
+                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment</span><br>
                         PT Inti Surya Laboratorium
                     </td>
                 </tr>";

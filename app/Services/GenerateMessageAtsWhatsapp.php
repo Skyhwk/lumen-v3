@@ -71,7 +71,7 @@ class GenerateMessageAtsWhatsapp
         $msg .= "\nMohon mengonfirmasi ketersediaan Anda dengan membalas pesan ini.\n\n";
         $msg .= "Atas perhatian Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -92,7 +92,7 @@ class GenerateMessageAtsWhatsapp
         $msg .= "Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.\n\n";
         $msg .= "Kami menghargai minat Anda untuk bergabung bersama PT Inti Surya Laboratorium dan mendoakan yang terbaik untuk perjalanan karier Anda.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -121,7 +121,7 @@ class GenerateMessageAtsWhatsapp
         $msg .= "*Harap diperhatikan bahwa apabila data diri belum dilengkapi, maka proses rekrutmen tidak dapat dilanjutkan ke tahap selanjutnya.*\n\n";
         $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -140,7 +140,7 @@ class GenerateMessageAtsWhatsapp
         $msg .= "Link assessment berlaku selama *2 x 24 jam* sejak pendaftaran dibuat. Pastikan koneksi internet stabil dan kerjakan assessment hingga selesai.\n\n";
         $msg .= "Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -176,7 +176,7 @@ class GenerateMessageAtsWhatsapp
         }
         $msg .= "Atas perhatian dan konfirmasi Anda, kami ucapkan terima kasih.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "*PT Inti Surya Laboratorium*";
 
         return $msg;
@@ -213,7 +213,7 @@ class GenerateMessageAtsWhatsapp
         }
         $msg .= "\nTerima kasih atas perhatian dan kerjasamanya.\n\n";
         $msg .= "Salam,\n";
-        $msg .= "*Tim Recruitment & Talent Acquisition*\n";
+        $msg .= "*Tim Recruitment HRD*\n";
         $msg .= "PT Inti Surya Laboratorium";
 
         return $msg;
