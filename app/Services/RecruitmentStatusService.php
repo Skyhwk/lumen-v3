@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class RecruitmentStatusService
 {
-    public function update($recruitmentId, $status, $at = null, $historyStatus = null)
+    public function update($recruitmentId, $status, $at = null, $historyStatus = null, array $extraData = [])
     {
         $recruitment = DB::table('new_recruitment')->where('id', $recruitmentId)->lockForUpdate()->first();
         if (!$recruitment) {
@@ -21,16 +21,16 @@ class RecruitmentStatusService
         $last = end($history);
 
         if (($last['status'] ?? null) !== $historyStatus) {
-            $history[] = [
+            $history[] = array_merge([
                 'status' => $historyStatus,
-                'at' => Carbon::parse($at)->toDateTimeString(),
-            ];
+                'at'     => Carbon::parse($at)->toDateTimeString(),
+            ], $extraData);
         }
 
         DB::table('new_recruitment')->where('id', $recruitmentId)->update([
-            'status' => $status,
+            'status'       => $status,
             'meta_history' => json_encode(array_values($history)),
-            'updated_at' => $at,
+            'updated_at'   => $at,
         ]);
     }
 }
