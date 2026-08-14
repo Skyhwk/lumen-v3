@@ -79,6 +79,7 @@ class NewRecruitment extends Model
     {
         return $this->belongsTo(MasterJabatan::class, 'bagian_di_lamar', 'id');
     }
+
     public function candidateProfile()
     {
         return $this->hasOne(CandidateProfile::class, 'new_recruitment_id');
