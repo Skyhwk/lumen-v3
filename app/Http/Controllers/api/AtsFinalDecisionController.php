@@ -105,6 +105,7 @@ class AtsFinalDecisionController extends Controller
                 'internal_sallary_offer',
                 'salary_offer',
                 'sallary_offer',
+                'finance_review',
             ])
             ->orWhere(function ($sub) {
                 $sub->where('status', 'rejected')
@@ -112,6 +113,8 @@ class AtsFinalDecisionController extends Controller
                         $meta->where('meta_history', 'like', '%management_decision%')
                             ->orWhere('meta_history', 'like', '%internal_sallary_offer%')
                             ->orWhere('meta_history', 'like', '%interview_user%')
+                            ->orWhere('meta_history', 'like', '%finance_review%')
+                            ->orWhere('meta_history', 'like', '%finance_rejected%')
                             ->orWhere('is_approve_interview_user', 1);
                     });
             });
@@ -151,6 +154,9 @@ class AtsFinalDecisionController extends Controller
             })
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
+            })
+            ->addColumn('sallary_offer_user', function ($row) {
+                return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
             })
             ->addColumn('offering_status', function ($row) {
                 $offer = $row->sallaryOffer;
@@ -449,16 +455,20 @@ class AtsFinalDecisionController extends Controller
         }
 
         $expectedSalary = $request->input('expected_salary') ?? $request->input('ekspetasi_gaji');
+        $userExpectedSalary = $request->input('user_expected_salary') ?? $request->input('ekspetasi_gaji_user');
 
-        if ($expectedSalary !== null) {
+        if ($expectedSalary !== null || $userExpectedSalary !== null) {
             $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $expectedSalary)));
             $valueToSave = $cleanSalary !== '' ? $cleanSalary : $expectedSalary;
+            $cleanUserSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $userExpectedSalary)));
+            $userValueToSave = $cleanUserSalary !== '' ? $cleanUserSalary : $userExpectedSalary;
 
             $user = $this->karyawan;
 
             $offerData = [
                 'sallary_offer_hrd' => $valueToSave,
                 'updated_by'        => $user,
+                'sallary_offer_user' => $userValueToSave,
             ];
 
             if ($request->has('sallary_offer_direktur')) {
@@ -467,6 +477,16 @@ class AtsFinalDecisionController extends Controller
 
             if ($request->has('final_sallary')) {
                 $offerData['final_sallary'] = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('final_sallary'))));
+            }
+
+            if ($request->has('user_expected_salary') || $request->has('expected_salary')) {
+                (new \App\Services\RecruitmentStatusService())->update(
+                    $applicant->id,
+                    'finance_review',
+                    Carbon::now(),
+                    'waiting_approve_finance', 
+                    ['by' => $user]
+                );
             }
 
             SallaryOffer::updateOrCreate(
@@ -511,6 +531,14 @@ class AtsFinalDecisionController extends Controller
             return response()->json([
                 'status'  => 400,
                 'message' => 'Salary offer for this candidate has been rejected. Sending email is disabled.',
+            ], 400);
+        }
+
+        $applicantStatus = strtolower((string) $applicant->status);
+        if ($applicantStatus === 'finance_review' || $applicantStatus === 'finance review') {
+            return response()->json([
+                'status'  => 400,
+                'message' => 'Status kandidat saat ini sedang dalam Finance Review. Pengiriman email ke Direktur dinonaktifkan.',
             ], 400);
         }
 
