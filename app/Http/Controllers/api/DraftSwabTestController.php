@@ -14,7 +14,6 @@ use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpsSwabTesHeaderHistory;
 use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
-use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\Parameter;
@@ -29,7 +28,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
-class DraftSwabTesController extends Controller
+class DraftSwabTestController extends Controller
 {
 
     public function index(Request $request)
@@ -57,7 +56,7 @@ class DraftSwabTesController extends Controller
                 'orderHeader',
             ])
             ->where('is_active', true)
-            ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
+            ->where('kategori_2', '7-Swab Test')
             ->where('status', 2)
             ->groupBy('cfr')
             ->get();
@@ -166,19 +165,19 @@ class DraftSwabTesController extends Controller
             $orders = OrderDetail::where('cfr', $request->cfr)
                 ->where('is_approve', 0)
                 ->where('is_active', true)
-                ->whereIn('kategori_2', ['4-Udara','7-Swab Test'])
+                ->where('kategori_2', '7-Swab Test')
                 ->where('kategori_3', $request->kategori_3)
                 ->where('status', 2)
                 ->pluck('no_sampel');
 
-            $swabData = MicrobioHeader::with('ws_udara')
+            $swabData = SwabTestHeader::with('ws_udara')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approved', 1)
                 ->where('is_active', 1)
                 ->where('lhps', 1)
                 ->get();
 
-            $swabData2 = Subkontrak::with('ws_udara', 'ws_value_linkungan')
+            $swabData2 = Subkontrak::with('ws_udara')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approve', 1)
                 ->where('is_active', 1)
@@ -220,7 +219,7 @@ class DraftSwabTesController extends Controller
                     $parameterRegulasi = Parameter::where('nama_lab', $val->parameter)->first()->nama_regulasi ?? null;
                     $parameterLhp      = Parameter::where('nama_lab', $val->parameter)->first()->nama_lhp ?? null;
 
-                    $ws       = $val->ws_udara ?? $val->ws_value_linkungan ?? null;
+                    $ws       = $val->ws_udara ?? null;
                     $hasil    = $ws->toArray();
                     $orderRow = OrderDetail::where('no_sampel', $val->no_sampel)
                         ->where('is_active', 1)

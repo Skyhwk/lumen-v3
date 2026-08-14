@@ -6,7 +6,7 @@ use App\Models\OrderDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-use App\Models\MicrobioHeader;
+use App\Models\SwabTestHeader;
 use App\Services\ApproveAnalystService;
 use App\Models\WsValueUdara;
 use App\Helpers\HelperSatuan;
@@ -16,7 +16,7 @@ use Yajra\Datatables\Datatables;
 class WorksheetSwabController extends Controller
 {
     public function index(Request $request){
-        $data = MicrobioHeader::with('ws_value', 'order_detail')
+        $data = SwabTestHeader::with('ws_udara', 'order_detail')
             ->where('is_approved', $request->is_approved)
             ->where('is_active', true)
             ->where('template_stp', 22)
@@ -44,8 +44,8 @@ class WorksheetSwabController extends Controller
             })
             ->addColumn('hasil_dinamis', function ($data) use ($satuanUdaraMap) {
                 $hasil = [];
-                if ($data->ws_value) {
-                    $wsArray = $data->ws_value->toArray();
+                if ($data->ws_udara) {
+                    $wsArray = $data->ws_udara->toArray();
                     foreach ($wsArray as $key => $value) {
                         if (preg_match('/^hasil(\d+)$/', $key, $matches)) {
                             if ($value !== null && $value !== '') {
@@ -104,7 +104,7 @@ class WorksheetSwabController extends Controller
                                 'note',
                                 'notes_reject'
                             ])) {
-                                $query->where("microbio_header.$columnName", 'like', "%{$searchValue}%");
+                                $query->where("swabtest_header.$columnName", 'like', "%{$searchValue}%");
                             }
 
                         }
@@ -118,11 +118,11 @@ class WorksheetSwabController extends Controller
 
         DB::beginTransaction();
         try {
-            $data = MicrobioHeader::where('id', $request->id)->where('is_active', true)->first();
+            $data = SwabTestHeader::where('id', $request->id)->where('is_active', true)->first();
             if($data->is_approved == 1){
                 return response()->json([
                     'status' => false,
-                    'message' => 'Data Lingkungan no sample ' . $data->no_sampel . ' sudah di approve'
+                    'message' => 'Data Swab no sample ' . $data->no_sampel . ' sudah di approve'
                 ],401);
             }
             $data->is_approved = 1;
@@ -138,7 +138,7 @@ class WorksheetSwabController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Data Lingkungan no sample ' . $data->no_sampel . ' berhasil di approve'
+                'message' => 'Data Swab no sample ' . $data->no_sampel . ' berhasil di approve'
             ],200);
 
         } catch (\Throwable $th) {
@@ -154,23 +154,23 @@ class WorksheetSwabController extends Controller
     public function deleteData(Request $request){
         DB::beginTransaction();
         try {
-            $data = MicrobioHeader::where('id', $request->id)->first();
+            $data = SwabTestHeader::where('id', $request->id)->first();
             $data->is_active = false;
             $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->deleted_by = $this->karyawan;
             $data->save();
 
-            $ws_value = WsValueUdara::where('id_microbiologi_header', $request->id)->where('is_active', true)->first();
-            if($ws_value){
-                $ws_value->is_active = false;
-                $ws_value->save();
+            $ws_udara = WsValueUdara::where('id_swab_header', $request->id)->where('is_active', true)->first();
+            if($ws_udara){
+                $ws_udara->is_active = false;
+                $ws_udara->save();
             }
 
             DB::commit();
 
             return response()->json([
                 'status' => true,
-                'message' => 'Data Lingkungan no sample ' . $data->no_sampel . ' berhasil dihapus .!'
+                'message' => 'Data Swab no sample ' . $data->no_sampel . ' berhasil dihapus .!'
             ],200);
 
         } catch (\Throwable $th) {

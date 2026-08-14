@@ -140,13 +140,13 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
             $parameters = json_decode(html_entity_decode($request->parameter), true);
             $parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
             if (in_array($request->kategori, $this->categoryMicrobio)) {
-                $microbio = MicrobioHeader::with(['ws_value'])
+                $microbio = MicrobioHeader::with(['ws_value', 'createdByKaryawan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', 1)
                     ->where('is_active', 1)
                     ->where('status', 0)
                     ->get();
-                $subkontrak = Subkontrak::with(['ws_udara'])
+                $subkontrak = Subkontrak::with(['ws_udara', 'createdByKaryawan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approve', 1)
                     ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
