@@ -377,7 +377,7 @@ class RecruitmentController extends Controller{
             (new RecruitmentStatusService())->update($id, 'assessment');
 
             $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                . '/new-recruitment/assessment/' . rawurlencode($token);
+                . '/public/recruitment/assessment/' . rawurlencode($token);
             $emailBody = $this->assessmentInvitationEmail([
                 'nama_lengkap' => $namaLengkap,
                 'posisi_dilamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
@@ -435,7 +435,7 @@ class RecruitmentController extends Controller{
     public function assessmentEmailPreview()
     {
         $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-            . '/new-recruitment/assessment/contoh-token-assessment';
+            . '/public/recruitment/assessment/contoh-token-assessment';
 
         return response($this->assessmentInvitationEmail([
             'nama_lengkap' => 'Harold Leonardo Panjaitan',
@@ -473,7 +473,7 @@ class RecruitmentController extends Controller{
             (new RecruitmentStatusService())->update($recruitment->id, 'profile_completion', $now);
 
             $completeProfileUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                . '/new-recruitment/complete-profile/' . rawurlencode($recruitment->token);
+                . '/public/recruitment/complete-profile/' . rawurlencode($recruitment->token);
             SendEmail::where('to', $recruitment->email)
                 ->where('subject', 'Kelengkapan Profil Kandidat - PT Inti Surya Laboratorium')
                 ->where('body', $this->completeProfileInvitationEmail([

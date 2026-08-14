@@ -421,7 +421,7 @@ class AtsInterviewHrdController extends Controller
             // 3. Email & WhatsApp notification to Candidate to complete data profile
             $token = $applicant->token ?? '';
             $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
-            $profileUrl = "{$baseUrl}/new-recruitment/complete-profile/" . rawurlencode($token);
+            $profileUrl = "{$baseUrl}/public/recruitment/complete-profile/" . rawurlencode($token);
 
             $candidateDataObj = (object) [
                 'id'                    => $applicant->id,

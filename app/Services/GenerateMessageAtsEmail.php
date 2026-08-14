@@ -18,8 +18,8 @@ class GenerateMessageAtsEmail
         $encodedToken = rawurlencode($recruitment->token_approval ?? '');
 
         return (object) [
-            'approve' => $portalUrl ? "{$portalUrl}/new-recruitment/decision/{$encodedToken}?decision=approve" : '',
-            'reject'  => $portalUrl ? "{$portalUrl}/new-recruitment/decision/{$encodedToken}?decision=reject" : '',
+            'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/decision/{$encodedToken}?decision=approve" : '',
+            'reject'  => $portalUrl ? "{$portalUrl}/public/recruitment/decision/{$encodedToken}?decision=reject" : '',
         ];
     }
 
@@ -29,9 +29,9 @@ class GenerateMessageAtsEmail
         $encodedToken = rawurlencode($token ?? $recruitment->token_approval ?? '');
 
         return (object) [
-            'approve'   => $portalUrl ? "{$portalUrl}/new-recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
-            'reject'    => $portalUrl ? "{$portalUrl}/new-recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
-            'negotiate' => $portalUrl ? "{$portalUrl}/new-recruitment/salary-decision/{$encodedToken}?decision=negotiate" : '',
+            'approve'   => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
+            'reject'    => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
+            'negotiate' => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=negotiate" : '',
         ];
     }
 
