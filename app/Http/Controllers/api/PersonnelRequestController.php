@@ -5,7 +5,8 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService};
+use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +14,80 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 class PersonnelRequestController extends Controller
 {
+    use BuildsCandidateAssessmentPreview;
+
+    public function candidatePreview(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID request tidak ditemukan'], 400);
+        }
+
+        $personnelRequest = PersonnelRequest::with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
+            ->withCount('newRecruitments as total_pelamar')
+            ->find($id);
+
+        if (!$personnelRequest) {
+            return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
+        }
+
+        $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
+            ->where('personnel_request_id', $id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $statusCounts = $candidates
+            ->groupBy(function ($candidate) {
+                return strtolower((string) $candidate->status);
+            })
+            ->map(function ($group) {
+                return $group->count();
+            })
+            ->toArray();
+
+        $pictureService = app(RecruitmentPictureService::class);
+
+        $candidateItems = $candidates->map(function ($candidate) use ($pictureService) {
+            return $this->formatCandidatePreviewItem($candidate, $pictureService);
+        })->values();
+
+        $posisiName = optional($personnelRequest->detailPosisi)->nama_jabatan 
+            ?: (optional($personnelRequest->masterJabatan)->nama_jabatan ?: $personnelRequest->posisi);
+        $divisiName = optional($personnelRequest->detailDivisi)->nama_divisi 
+            ?: (optional($personnelRequest->masterDivisi)->nama_divisi ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi));
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'request' => [
+                    'id' => $personnelRequest->id,
+                    'no_request' => $personnelRequest->no_request,
+                    'posisi' => $posisiName,
+                    'divisi' => $divisiName,
+                    'jumlah_personal' => (int) $personnelRequest->jumlah_personal,
+                    'divisi_alias' => $personnelRequest->divisi_alias,
+                    'minimum_matching' => $personnelRequest->minimum_matching,
+                    'published_at' => $personnelRequest->published_at,
+                    'published_by' => $personnelRequest->published_by,
+                    'total_pelamar' => (int) ($personnelRequest->total_pelamar ?? $candidates->count()),
+                ],
+                'summary' => [
+                    'total_pelamar' => $candidates->count(),
+                    'assessment' => (int) ($statusCounts['assessment'] ?? 0),
+                    'screening' => (int) ($statusCounts['screening'] ?? 0),
+                    'interview_hrd' => (int) ($statusCounts['interview_hrd'] ?? 0),
+                    'profile_completion' => (int) ($statusCounts['profile_completion'] ?? 0),
+                    'interview_user' => (int) ($statusCounts['interview_user'] ?? 0),
+                    'management_decision' => (int) ($statusCounts['management_decision'] ?? 0),
+                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
+                    'hired' => (int) ($statusCounts['hired'] ?? 0),
+                    'rejected' => (int) ($statusCounts['rejected'] ?? 0),
+                ],
+                'candidates' => $candidateItems,
+            ],
+        ], 200);
+    }
+
     /**
      * Generate auto-increment no_request
      * Format: YYYYXXXX (e.g. 20260001)

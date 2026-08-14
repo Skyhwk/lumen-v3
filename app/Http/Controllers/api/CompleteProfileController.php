@@ -227,10 +227,31 @@ class CompleteProfileController extends Controller
     private function storeWorkExperiences($items, $profileId, $recruitmentId, $now)
     {
         foreach ((array) $items as $item) {
-            if (empty($item['nama_perusahaan']) || empty($item['posisi_terakhir'])) {
+            if (!is_array($item)) {
                 continue;
             }
-            DB::table('candidate_work_experiences')->insert(['candidate_profile_id' => $profileId, 'new_recruitment_id' => $recruitmentId, 'nama_perusahaan' => $item['nama_perusahaan'], 'posisi_terakhir' => $item['posisi_terakhir'], 'tanggal_mulai' => $item['tanggal_mulai'] ?: null, 'tanggal_selesai' => $item['tanggal_selesai'] ?: null, 'alasan_resign' => $item['alasan_resign'] ?? null, 'created_at' => $now, 'updated_at' => $now]);
+
+            $namaPerusahaan = trim((string) ($item['nama_perusahaan'] ?? ''));
+            $posisi = trim((string) ($item['posisi_terakhir'] ?? $item['posisi_kerja'] ?? ''));
+            if ($namaPerusahaan === '' || $posisi === '') {
+                continue;
+            }
+
+            $mulai = $item['tanggal_mulai'] ?? $item['mulai_kerja'] ?? $item['tgl_mulai_kerja'] ?? null;
+            $selesai = $item['tanggal_selesai'] ?? $item['akhir_kerja'] ?? $item['tgl_berakhir_kerja'] ?? null;
+
+            DB::table('candidate_work_experiences')->insert([
+                'candidate_profile_id' => $profileId,
+                'new_recruitment_id' => $recruitmentId,
+                'nama_perusahaan' => $namaPerusahaan,
+                'posisi_terakhir' => $posisi,
+                'tanggal_mulai' => !empty($mulai) ? $mulai : null,
+                'tanggal_selesai' => !empty($selesai) ? $selesai : null,
+                'alasan_resign' => $item['alasan_resign'] ?? $item['alasan_keluar'] ?? null,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
     }
 

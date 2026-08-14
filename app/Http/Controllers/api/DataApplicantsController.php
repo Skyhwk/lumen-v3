@@ -10,6 +10,8 @@ use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
 use App\Services\RecruitmentStatusService;
+use App\Services\RecruitmentPictureService;
+use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use App\Models\CandidateProfile;
@@ -21,6 +23,8 @@ use Mpdf\Output\Destination;
 
 class DataApplicantsController extends Controller
 {
+    use BuildsCandidateAssessmentPreview;
+
     /**
      * Get Datatable list of applicants (Initial Assessment Stage)
      */
@@ -125,6 +129,41 @@ class DataApplicantsController extends Controller
                 return $row->userInterview;
             })
             ->make(true);
+    }
+
+    /**
+     * Get single candidate detail for applicant detail modal
+     */
+    public function candidateDetail(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID kandidat tidak ditemukan'], 400);
+        }
+
+        $candidate = NewRecruitment::with(['personalRequest.masterJabatan', 'personalRequest.masterDivisi', 'hrdInterview', 'userInterview'])
+            ->find($id);
+
+        if (!$candidate) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        $pictureService = app(RecruitmentPictureService::class);
+        $personnelRequest = $candidate->personalRequest;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'candidate' => $this->formatCandidatePreviewItem($candidate, $pictureService),
+                'request' => $personnelRequest ? [
+                    'id' => $personnelRequest->id,
+                    'no_request' => $personnelRequest->no_request,
+                    'posisi' => optional($personnelRequest->masterJabatan)->nama_jabatan ?: $personnelRequest->posisi,
+                    'divisi' => optional($personnelRequest->masterDivisi)->nama_divisi ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
+                    'minimum_matching' => $personnelRequest->minimum_matching,
+                ] : null,
+            ],
+        ], 200);
     }
 
     /**

@@ -3,9 +3,45 @@
 namespace App\Services;
 
 use App\Services\OfferingSalaryEmail;
+use App\Services\RecruitmentPictureService;
 
 class GenerateMessageAtsEmail
 {
+    private static function portalBaseUrl(): string
+    {
+        return rtrim((string) env('PORTALV4', ''), '/');
+    }
+
+    private static function directorDecisionButtons($recruitment): object
+    {
+        $portalUrl = self::portalBaseUrl();
+        $encodedToken = rawurlencode($recruitment->token_approval ?? '');
+
+        return (object) [
+            'approve' => $portalUrl ? "{$portalUrl}/new-recruitment/decision/{$encodedToken}?decision=approve" : '',
+            'reject'  => $portalUrl ? "{$portalUrl}/new-recruitment/decision/{$encodedToken}?decision=reject" : '',
+        ];
+    }
+
+    public static function buildSalaryDecisionButtons($recruitment, $token = null): object
+    {
+        $portalUrl = self::portalBaseUrl();
+        $encodedToken = rawurlencode($token ?? $recruitment->token_approval ?? '');
+
+        return (object) [
+            'approve'   => $portalUrl ? "{$portalUrl}/new-recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
+            'reject'    => $portalUrl ? "{$portalUrl}/new-recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
+            'negotiate' => $portalUrl ? "{$portalUrl}/new-recruitment/salary-decision/{$encodedToken}?decision=negotiate" : '',
+        ];
+    }
+
+    private static function recruitmentPhotoForEmail($recruitment): string
+    {
+        $photoUrl = app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null);
+
+        return $photoUrl ?: '';
+    }
+
     public static function resolveSalutation($data)
     {
         $gender = strtolower(trim((string) ($data->jenis_kelamin ?? $data->gender ?? '')));
@@ -618,11 +654,8 @@ class GenerateMessageAtsEmail
                 ->where('new_recruitment_id', $recruitment->id)
                 ->first();
     
-            $photoUrl = !empty($recruitment->picture) 
-            ? rtrim(env('APP_URL', 'https://apps.intilab.com/v3/public'), '/') . '/recruitment/' . ltrim($recruitment->picture, '/') 
-            : '';
-            
-    
+            $photoUrl = self::recruitmentPhotoForEmail($recruitment);
+
             $formatDateId = function($dateStr) {
                 if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
                 try {
@@ -701,7 +734,8 @@ class GenerateMessageAtsEmail
                 'interview' => $interview,
                 'hrdInterview' => $hrdInterview,
                 'decision' => $decision,
-                'cv' => $cv
+                'cv' => $cv,
+                'btn' => self::directorDecisionButtons($recruitment),
             ])->render();
         } catch (\Throwable $th) {
             throw $th;
@@ -961,6 +995,10 @@ class GenerateMessageAtsEmail
         // $data isinya adalah new_recruitment, dikirim dari controller
         if ($data == null) {
             return '';
+        }
+
+        if ($btn === null && !empty($data->token_approval)) {
+            $btn = self::buildSalaryDecisionButtons($data);
         }
 
         return view('TemplateEmail.hrd.permohonan-persetujuan-salary-offer', [

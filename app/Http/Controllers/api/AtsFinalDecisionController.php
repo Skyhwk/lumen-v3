@@ -97,6 +97,27 @@ class AtsFinalDecisionController extends Controller
         return $pos ?: '-';
     }
 
+    private function scopeFinalDecisionCandidates($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereIn('status', [
+                'management_decision',
+                'internal_sallary_offer',
+                'salary_offer',
+                'sallary_offer',
+            ])
+            ->orWhere(function ($sub) {
+                $sub->where('status', 'rejected')
+                    ->where(function ($meta) {
+                        $meta->where('meta_history', 'like', '%management_decision%')
+                            ->orWhere('meta_history', 'like', '%internal_sallary_offer%')
+                            ->orWhere('meta_history', 'like', '%interview_user%')
+                            ->orWhere('is_approve_interview_user', 1);
+                    });
+            });
+        });
+    }
+
     // ─── Index — DataTables list of management_decision candidates ───────────
 
     /**
@@ -104,16 +125,9 @@ class AtsFinalDecisionController extends Controller
      */
     public function index(Request $request)
     {
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer'])
-            ->where(function ($q) {
-                $q->whereIn('status', ['management_decision', 'final_decision', 'internal_sallary_offer', 'salary_offer', 'sallary_offer', 'hired', 'rejected'])
-                  ->orWhere('status', 'like', '%management%')
-                  ->orWhere('status', 'like', '%final%')
-                  ->orWhere('status', 'like', '%salary%')
-                  ->orWhere('status', 'like', '%sallary%')
-                  ->orWhere('status', 'like', '%hired%')
-                  ->orWhere('status', 'like', '%reject%');
-            })
+        $query = $this->scopeFinalDecisionCandidates(
+            NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile'])
+        )
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
@@ -510,13 +524,7 @@ class AtsFinalDecisionController extends Controller
             $token = $applicant->token_approval;
         }
 
-        $portalUrl = rtrim(env('PORTALV4', 'http://127.0.0.1:8000'), '/');
-
-        $btn = (object) [
-            'approve'   => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=approve",
-            'reject'    => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=reject",
-            'negotiate' => "{$portalUrl}/new-recruitment/salary-decision/" . rawurlencode($token) . "?decision=negotiate",
-        ];
+        $btn = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $token);
 
         $targetEmail = env('EMAIL_DIREKTUR_BAPAK');
         $user = $this->karyawan;

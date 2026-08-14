@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
@@ -132,11 +133,18 @@ class SalaryApprovalController extends Controller
             ->orderByDesc('id')
             ->first();
 
+        $birthDate = $recruitment->tanggal_lahir ?? $recruitment->tempat_tanggal_lahir ?? null;
+        $shioElemen = ShioElemenHelper::resolve($birthDate, $recruitment->shio ?? null, $recruitment->elemen ?? null);
+
+        $expectedSalary = $salaryOffer->sallary_offer_hrd ?? $recruitment->ekspetasi_gaji ?? null;
+
         return [
             'nama_lengkap' => $recruitment->nama_lengkap,
             'posisi_dilamar' => $this->positionLabel($recruitment),
+            'shio' => $shioElemen['shio'] ?? $recruitment->shio ?? '-',
+            'elemen' => $shioElemen['elemen'] ?? $recruitment->elemen ?? '-',
             'gaji_terakhir' => $recruitment->gaji_terakhir,
-            'ekspetasi_gaji' => $recruitment->ekspetasi_gaji,
+            'ekspetasi_gaji' => $expectedSalary,
             'sallary_offer_hrd' => $salaryOffer->sallary_offer_hrd ?? null,
             'sallary_offer_direktur' => $salaryOffer->sallary_offer_direktur ?? null,
             'final_sallary' => $salaryOffer->final_sallary ?? null,
