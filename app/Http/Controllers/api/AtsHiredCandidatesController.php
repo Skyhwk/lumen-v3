@@ -13,6 +13,7 @@ use App\Models\PendidikanKaryawan;
 use App\Models\PengalamanKerjaKaryawan;
 use App\Models\SertifikatKaryawan;
 use App\Models\User;
+use App\Services\KaryawanArsipDokumenService;
 use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
 use Exception;
@@ -292,11 +293,12 @@ class AtsHiredCandidatesController extends Controller
                     return response()->json(['status' => false, 'message' => 'Username sudah digunakan akun sistem lain.'], 400);
                 }
 
-                $this->performEmployeeMigrationFromForm($recruitment, $request);
+                $result = $this->performEmployeeMigrationFromForm($recruitment, $request);
 
                 return response()->json([
                     'status' => true,
-                    'message' => 'Data kandidat berhasil dimigrasikan ke Master Karyawan, payroll, dan akun sistem.',
+                    'message' => 'Data kandidat berhasil dimigrasikan ke Master Karyawan, payroll, arsip dokumen, dan akun sistem.',
+                    'data' => $result,
                 ]);
             });
         } catch (Exception $e) {
@@ -348,7 +350,7 @@ class AtsHiredCandidatesController extends Controller
     private function findRecruitmentForMigration($id, $lock = false)
     {
         $query = NewRecruitment::with([
-            'personalRequest',
+            'personalRequest.divisiName',
             'candidateProfile.workExperiences',
             'candidateDataOffer',
             'salaryOffer',
@@ -375,9 +377,22 @@ class AtsHiredCandidatesController extends Controller
             return false;
         }
 
+        if (Schema::hasTable('candidate_onboarding_verification')) {
+            $migratedAt = DB::table('candidate_onboarding_verification')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->value('employee_migrated_at');
+
+            if (!empty($migratedAt)) {
+                return true;
+            }
+        }
+
         return DB::table('master_karyawan')
-            ->where('nik_karyawan', $nikKaryawan)
             ->where('is_active', 1)
+            ->where(function ($query) use ($nikKaryawan) {
+                $query->where('nik_ktp', $nikKaryawan)
+                    ->orWhere('nik_karyawan', $nikKaryawan);
+            })
             ->exists();
     }
 
@@ -433,20 +448,28 @@ class AtsHiredCandidatesController extends Controller
             'postal_code' => optional($profile)->kode_pos_domisili ?: optional($profile)->kode_pos_ktp,
         ];
 
+        $grade = strtoupper(trim((string) optional($pr)->grade_master_karyawan));
+        if (!in_array($grade, ['STAFF', 'SUPERVISOR', 'MANAGER'], true)) {
+            $grade = 'STAFF';
+        }
+
+        $endContractDate = $this->resolveContractEndDate($startDate);
+        $costCenter = $this->resolveDepartmentCostCenter($pr);
+
         $employee = [
             'nik' => $nikKtp,
-            'email' => $recruitment->email,
+            'email' => '',
             'email_pribadi' => $recruitment->email,
-            'estatus' => 'Contract',
+            'estatus' => 'Training',
             'sdate' => $startDate,
-            'ecdate' => '',
-            'branch' => is_numeric(optional($pr)->lokasi_penempatan_cabang) ? $pr->lokasi_penempatan_cabang : '',
-            'departement' => is_numeric(optional($pr)->divisi) ? $pr->divisi : '',
-            'position' => is_numeric(optional($pr)->posisi) ? $pr->posisi : '',
-            'grade' => 'STAFF',
-            'gradec' => 'STAFF',
+            'ecdate' => $endContractDate,
+            'branch' => $this->normalizeMasterId(optional($pr)->lokasi_penempatan_cabang),
+            'departement' => $this->normalizeMasterId(optional($pr)->divisi),
+            'position' => $this->normalizeMasterId(optional($pr)->posisi),
+            'grade' => $grade,
+            'gradec' => $grade,
             'jstatus' => 'Full Time',
-            'ccenter' => optional($offer)->gaji_pokok ?? optional($recruitment->salaryOffer)->final_sallary ?? '',
+            'ccenter' => $costCenter,
             'dsupervisor' => [],
             'ppdate' => '',
             'pdate' => '',
@@ -499,7 +522,7 @@ class AtsHiredCandidatesController extends Controller
             'no_telepon' => $recruitment->no_telepon,
             'tgl_kerja' => $startDate,
             'posisi_di_lamar' => $this->resolvePositionName($recruitment),
-            'status_karyawan' => 'Contract',
+            'status_karyawan' => 'Training',
             'salary_user' => optional($offer)->gaji_pokok ?? optional($recruitment->salaryOffer)->final_sallary ?? '',
             'tinggi_badan' => optional($medical)->tinggi_badan,
             'berat_badan' => optional($medical)->berat_badan,
@@ -536,178 +559,162 @@ class AtsHiredCandidatesController extends Controller
         $now = Carbon::now();
         $timestamp = $now->format('Y-m-d H:i:s');
         $profile = $recruitment->candidateProfile;
-        $imageName = $recruitment->picture;
-
-        if ($request->hasFile('personal.image')) {
-            $profilePicture = $request->file('personal.image');
-            $imageName = ($request->personal['nik_ktp'] ?? 'karyawan') . '_' . str_replace(' ', '_', $request->personal['nama_lengkap'] ?? 'karyawan') . '.' . $profilePicture->getClientOriginalExtension();
-            $destinationPath = public_path('/Foto_Karyawan');
-            $profilePicture->move($destinationPath, $imageName);
-        } elseif ($request->hasFile('image')) {
-            $profilePicture = $request->file('image');
-            $imageName = ($request->personal['nik_ktp'] ?? 'karyawan') . '_' . str_replace(' ', '_', $request->personal['nama_lengkap'] ?? 'karyawan') . '.' . $profilePicture->getClientOriginalExtension();
-            $destinationPath = public_path('/Foto_Karyawan');
-            $profilePicture->move($destinationPath, $imageName);
-        }
+        $imageName = $this->resolveEmployeeProfileImage($recruitment, $request, $profile);
 
         $shioElemen = ShioElemenHelper::resolve(
-            $request->personal['date_birth'] ?? null,
-            $request->personal['shio'] ?? null,
-            $request->personal['elemen'] ?? null
+            data_get($request, 'personal.date_birth'),
+            data_get($request, 'personal.shio'),
+            data_get($request, 'personal.elemen')
         );
+
+        $supervisors = $this->normalizeStringArray(data_get($request, 'employee.dsupervisor', []));
+        $privBranches = $this->normalizeStringArray(data_get($request, 'access.priv_branch', []));
 
         $karyawan = new MasterKaryawan();
         $karyawan->created_by = $this->karyawan;
         $karyawan->created_at = $timestamp;
-        $karyawan->nama_lengkap = trim($request->personal['nama_lengkap'] ?? $recruitment->nama_lengkap);
-        $karyawan->nik_ktp = $request->personal['nik_ktp'] ?? optional($profile)->nik_ktp;
-        $karyawan->nama_panggilan = $request->personal['salutation'] ?? optional($profile)->nama_panggilan;
-        $karyawan->kebangsaan = $request->personal['nationality'] ?? 'Indonesia';
-        $karyawan->tempat_lahir = $request->personal['birth_place'] ?? $recruitment->tempat_lahir;
-        $karyawan->tanggal_lahir = $request->personal['date_birth'] ?? $recruitment->tanggal_lahir;
-        $karyawan->jenis_kelamin = $request->personal['gender'] ?? $recruitment->jenis_kelamin;
-        $karyawan->agama = $request->personal['religion'] ?? optional($profile)->agama;
-        $karyawan->status_pernikahan = $request->personal['marital_status'] ?? optional($profile)->status_pernikahan;
-        $karyawan->tempat_nikah = $request->personal['marital_place'] ?? null;
-        $karyawan->tgl_nikah = $request->personal['marital_date'] ?: null;
+        $karyawan->nama_lengkap = trim((string) (data_get($request, 'personal.nama_lengkap') ?: $recruitment->nama_lengkap));
+        $karyawan->nik_ktp = data_get($request, 'personal.nik_ktp') ?: optional($profile)->nik_ktp;
+        $karyawan->nama_panggilan = data_get($request, 'personal.salutation') ?: optional($profile)->nama_panggilan;
+        $karyawan->kebangsaan = data_get($request, 'personal.nationality', 'Indonesia');
+        $karyawan->tempat_lahir = data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir;
+        $karyawan->tanggal_lahir = data_get($request, 'personal.date_birth') ?: $recruitment->tanggal_lahir;
+        $karyawan->jenis_kelamin = data_get($request, 'personal.gender') ?: $recruitment->jenis_kelamin;
+        $karyawan->agama = data_get($request, 'personal.religion') ?: optional($profile)->agama;
+        $karyawan->status_pernikahan = data_get($request, 'personal.marital_status') ?: optional($profile)->status_pernikahan;
+        $karyawan->tempat_nikah = data_get($request, 'personal.marital_place') ?: null;
+        $karyawan->tgl_nikah = data_get($request, 'personal.marital_date') ?: null;
         $karyawan->shio = $shioElemen['shio'] ?? null;
         $karyawan->elemen = $shioElemen['elemen'] ?? null;
-        $karyawan->nik_karyawan = $request->employee['nik'];
-        $karyawan->email = $request->employee['email'];
-        $karyawan->email_pribadi = $request->employee['email_pribadi'] ?? $request->employee['email'];
-        $karyawan->id_cabang = $request->employee['branch'] ?: null;
-        $karyawan->status_karyawan = $request->employee['estatus'] ?? 'Contract';
-        $karyawan->tgl_mulai_kerja = $request->employee['sdate'] ?: null;
-        $karyawan->tgl_berakhir_kontrak = $request->employee['ecdate'] ?: null;
-        $karyawan->id_jabatan = $request->employee['position'] ?: null;
-        $karyawan->kategori_grade = $request->employee['gradec'] ?? null;
-        $karyawan->grade = $request->employee['grade'] ?? null;
-        $karyawan->status_pekerjaan = $request->employee['jstatus'] ?? null;
-        $karyawan->id_department = $request->employee['departement'] ?: null;
-        $karyawan->atasan_langsung = json_encode($request->employee['dsupervisor'] ?? []);
-        $karyawan->cost_center = $request->employee['ccenter'] ?? null;
-        $karyawan->tgl_pra_pensiun = $request->employee['ppdate'] ?: null;
-        $karyawan->tgl_pensiun = $request->employee['pdate'] ?: null;
-        $karyawan->alamat = $request->contact['address'] ?? null;
-        $karyawan->negara = $request->contact['country'] ?? 'Indonesia';
-        $karyawan->provinsi = $request->contact['province'] ?? null;
-        $karyawan->kota = $request->contact['city'] ?? null;
-        $karyawan->no_telpon = $request->contact['phone'] ?? $recruitment->no_telepon;
-        $karyawan->kode_pos = $request->contact['postal_code'] ?? null;
+        $karyawan->nik_karyawan = data_get($request, 'employee.nik');
+        $karyawan->email = data_get($request, 'employee.email');
+        $karyawan->email_pribadi = data_get($request, 'employee.email_pribadi') ?: data_get($request, 'employee.email');
+        $karyawan->id_cabang = data_get($request, 'employee.branch') ?: null;
+        $karyawan->status_karyawan = data_get($request, 'employee.estatus', 'Training');
+        $karyawan->tgl_mulai_kerja = data_get($request, 'employee.sdate') ?: null;
+        $karyawan->tgl_berakhir_kontrak = data_get($request, 'employee.ecdate') ?: null;
+        $karyawan->id_jabatan = data_get($request, 'employee.position') ?: null;
+        $karyawan->kategori_grade = data_get($request, 'employee.gradec');
+        $karyawan->grade = data_get($request, 'employee.grade');
+        $karyawan->status_pekerjaan = data_get($request, 'employee.jstatus');
+        $karyawan->id_department = data_get($request, 'employee.departement') ?: null;
+        $karyawan->atasan_langsung = json_encode($supervisors);
+        $karyawan->cost_center = data_get($request, 'employee.ccenter');
+        $karyawan->tgl_pra_pensiun = data_get($request, 'employee.ppdate') ?: null;
+        $karyawan->tgl_pensiun = data_get($request, 'employee.pdate') ?: null;
+        $karyawan->alamat = data_get($request, 'contact.address');
+        $karyawan->negara = data_get($request, 'contact.country', 'Indonesia');
+        $karyawan->provinsi = data_get($request, 'contact.province');
+        $karyawan->kota = data_get($request, 'contact.city');
+        $karyawan->no_telpon = data_get($request, 'contact.phone') ?: $recruitment->no_telepon;
+        $karyawan->kode_pos = data_get($request, 'contact.postal_code');
         $karyawan->no_bpjs_kes = data_get($request, 'payroll.no_bpjs_ks') ?: optional($profile)->no_bpjs_ks;
         $karyawan->no_bpjs_tk = data_get($request, 'payroll.no_bpjs_tk') ?: optional($profile)->no_bpjs_tk;
         $karyawan->no_npwp = optional($profile)->no_npwp;
         $karyawan->npwp = optional($profile)->no_npwp;
         $karyawan->no_kk = optional($profile)->no_kk;
-        $karyawan->privilage_cabang = json_encode($request->access['priv_branch'] ?? []);
+        $karyawan->privilage_cabang = json_encode($privBranches);
         $karyawan->image = $imageName;
         $karyawan->is_active = 1;
         $karyawan->save();
 
-        $medis = new MedicalCheckup();
-        $medis->karyawan_id = $karyawan->id;
-        $medis->tinggi_badan = data_get($request, 'medical.tinggi_badan');
-        $medis->berat_badan = data_get($request, 'medical.berat_badan');
-        $medis->rate_mata = data_get($request, 'medical.keterangan_mata');
-        $medis->golongan_darah = data_get($request, 'medical.golongan_darah');
-        $medis->penyakit_bawaan_lahir = data_get($request, 'medical.penyakit_bawaan_lahir');
-        $medis->penyakit_kronis = data_get($request, 'medical.penyakit_kronis');
-        $medis->riwayat_kecelakaan = data_get($request, 'medical.riwayat_kecelakaan');
-        $medis->keterangan_mata = data_get($request, 'medical.keterangan_mata');
-        $medis->save();
+        $savedCounts = [
+            'medical' => 0,
+            'education' => 0,
+            'certificate' => 0,
+            'experience' => 0,
+            'skill' => 0,
+            'languages' => 0,
+        ];
 
-        if ($request->has('education') && is_array($request->education)) {
-            foreach ($request->education as $education) {
-                if (!is_array($education)) {
-                    continue;
-                }
-                $pendidikan = new PendidikanKaryawan();
-                $pendidikan->karyawan_id = $karyawan->id;
-                $pendidikan->institusi = $education['institusi'] ?? null;
-                $pendidikan->jenjang = $education['jenjang'] ?? null;
-                $pendidikan->jurusan = $education['jurusan'] ?? null;
-                $pendidikan->tahun_masuk = $education['tahun_masuk'] ?? null;
-                $pendidikan->tahun_lulus = $education['tahun_lulus'] ?? null;
-                $pendidikan->kota = $education['kota'] ?? null;
-                $pendidikan->created_by = $this->karyawan;
-                $pendidikan->created_at = $timestamp;
-                $pendidikan->save();
-            }
+        if ($this->hasMedicalPayload($request)) {
+            $medis = new MedicalCheckup();
+            $medis->karyawan_id = $karyawan->id;
+            $medis->tinggi_badan = data_get($request, 'medical.tinggi_badan');
+            $medis->berat_badan = data_get($request, 'medical.berat_badan');
+            $medis->rate_mata = data_get($request, 'medical.rate_mata');
+            $medis->golongan_darah = data_get($request, 'medical.golongan_darah');
+            $medis->penyakit_bawaan_lahir = data_get($request, 'medical.penyakit_bawaan_lahir');
+            $medis->penyakit_kronis = data_get($request, 'medical.penyakit_kronis');
+            $medis->riwayat_kecelakaan = data_get($request, 'medical.riwayat_kecelakaan');
+            $medis->keterangan_mata = data_get($request, 'medical.keterangan_mata');
+            $medis->save();
+            $savedCounts['medical'] = 1;
         }
 
-        if ($request->has('certificate') && is_array($request->certificate)) {
-            foreach ($request->certificate as $certificate) {
-                if (!is_array($certificate)) {
-                    continue;
-                }
-                $sertifikat = new SertifikatKaryawan();
-                $sertifikat->karyawan_id = $karyawan->id;
-                $sertifikat->nama_sertifikat = $certificate['nama_sertifikat'] ?? $certificate['nama'] ?? null;
-                $sertifikat->tipe_sertifikat = $certificate['tipe_sertifikat'] ?? $certificate['tipe'] ?? null;
-                $sertifikat->nomor_sertifikat = $certificate['nomor_sertifikat'] ?? $certificate['nomor'] ?? null;
-                $sertifikat->deskripsi_sertifikat = $certificate['deskripsi_sertifikat'] ?? $certificate['deskripsi'] ?? null;
-                $sertifikat->tgl_sertifikat = $certificate['tgl_sertifikat'] ?? $certificate['tanggal_sertifikasi'] ?? null;
-                $sertifikat->tgl_exp_sertifikat = $certificate['tgl_exp_sertifikat'] ?? $certificate['tanggal_expired'] ?? null;
-                $sertifikat->created_by = $this->karyawan;
-                $sertifikat->created_at = $timestamp;
-                $sertifikat->save();
-            }
+        foreach ($this->normalizeRequestArray(data_get($request, 'education')) as $education) {
+            $pendidikan = new PendidikanKaryawan();
+            $pendidikan->karyawan_id = $karyawan->id;
+            $pendidikan->institusi = $education['institusi'] ?? null;
+            $pendidikan->jenjang = $education['jenjang'] ?? null;
+            $pendidikan->jurusan = $education['jurusan'] ?? null;
+            $pendidikan->tahun_masuk = $education['tahun_masuk'] ?? null;
+            $pendidikan->tahun_lulus = $education['tahun_lulus'] ?? null;
+            $pendidikan->kota = $education['kota'] ?? null;
+            $pendidikan->created_by = $this->karyawan;
+            $pendidikan->created_at = $timestamp;
+            $pendidikan->save();
+            $savedCounts['education']++;
         }
 
-        if ($request->has('experience') && is_array($request->experience)) {
-            foreach ($request->experience as $experience) {
-                if (!is_array($experience)) {
-                    continue;
-                }
-                $pengalaman = new PengalamanKerjaKaryawan();
-                $pengalaman->karyawan_id = $karyawan->id;
-                $pengalaman->nama_perusahaan = $experience['nama_perusahaan'] ?? null;
-                $pengalaman->lokasi_perusahaan = $experience['lokasi_perusahaan'] ?? null;
-                $pengalaman->posisi_kerja = $experience['posisi_kerja'] ?? null;
-                $pengalaman->tgl_mulai_kerja = $experience['tgl_mulai_kerja'] ?? null;
-                $pengalaman->tgl_berakhir_kerja = $experience['tgl_berakhir_kerja'] ?? null;
-                $pengalaman->alasan_keluar = $experience['alasan_keluar'] ?? null;
-                $pengalaman->created_by = $this->karyawan;
-                $pengalaman->created_at = $timestamp;
-                $pengalaman->save();
-            }
+        foreach ($this->normalizeRequestArray(data_get($request, 'certificate')) as $certificate) {
+            $sertifikat = new SertifikatKaryawan();
+            $sertifikat->karyawan_id = $karyawan->id;
+            $sertifikat->nama_sertifikat = $certificate['nama_sertifikat'] ?? $certificate['nama'] ?? null;
+            $sertifikat->tipe_sertifikat = $certificate['tipe_sertifikat'] ?? $certificate['tipe'] ?? null;
+            $sertifikat->nomor_sertifikat = $certificate['nomor_sertifikat'] ?? $certificate['nomor'] ?? null;
+            $sertifikat->deskripsi_sertifikat = $certificate['deskripsi_sertifikat'] ?? $certificate['deskripsi'] ?? null;
+            $sertifikat->tgl_sertifikat = $this->nullableDate($certificate['tgl_sertifikat'] ?? $certificate['tanggal_sertifikasi'] ?? null);
+            $sertifikat->tgl_exp_sertifikat = $this->nullableDate($certificate['tgl_exp_sertifikat'] ?? $certificate['tanggal_expired'] ?? null);
+            $sertifikat->created_by = $this->karyawan;
+            $sertifikat->created_at = $timestamp;
+            $sertifikat->save();
+            $savedCounts['certificate']++;
         }
 
-        if ($request->has('skill') && is_array($request->skill)) {
-            foreach ($request->skill as $skill) {
-                if (!is_array($skill)) {
-                    continue;
-                }
-                $keahlian = new KeahlianKaryawan();
-                $keahlian->karyawan_id = $karyawan->id;
-                $keahlian->keahlian = $skill['keahlian'] ?? null;
-                $keahlian->rate = $skill['rate'] ?? null;
-                $keahlian->save();
-            }
+        foreach ($this->normalizeRequestArray(data_get($request, 'experience')) as $experience) {
+            $pengalaman = new PengalamanKerjaKaryawan();
+            $pengalaman->karyawan_id = $karyawan->id;
+            $pengalaman->nama_perusahaan = $experience['nama_perusahaan'] ?? null;
+            $pengalaman->lokasi_perusahaan = $experience['lokasi_perusahaan'] ?? null;
+            $pengalaman->posisi_kerja = $experience['posisi_kerja'] ?? null;
+            $pengalaman->tgl_mulai_kerja = $this->nullableDate($experience['tgl_mulai_kerja'] ?? null);
+            $pengalaman->tgl_berakhir_kerja = $this->nullableDate($experience['tgl_berakhir_kerja'] ?? null);
+            $pengalaman->alasan_keluar = $experience['alasan_keluar'] ?? null;
+            $pengalaman->created_by = $this->karyawan;
+            $pengalaman->created_at = $timestamp;
+            $pengalaman->save();
+            $savedCounts['experience']++;
         }
 
-        if ($request->has('languages') && is_array($request->languages)) {
-            foreach ($request->languages as $language) {
-                if (!is_array($language)) {
-                    continue;
-                }
-                $bahasa = new KeahlianBahasaKaryawan();
-                $bahasa->karyawan_id = $karyawan->id;
-                $bahasa->bahasa = $language['bahasa'] ?? null;
-                $bahasa->baca = $language['baca'] ?? null;
-                $bahasa->tulis = $language['tulis'] ?? null;
-                $bahasa->dengar = $language['dengar'] ?? null;
-                $bahasa->bicara = $language['bicara'] ?? null;
-                $bahasa->save();
-            }
+        foreach ($this->normalizeRequestArray(data_get($request, 'skill')) as $skill) {
+            $keahlian = new KeahlianKaryawan();
+            $keahlian->karyawan_id = $karyawan->id;
+            $keahlian->keahlian = $skill['keahlian'] ?? null;
+            $keahlian->rate = $skill['rate'] ?? null;
+            $keahlian->save();
+            $savedCounts['skill']++;
+        }
+
+        foreach ($this->normalizeRequestArray(data_get($request, 'languages')) as $language) {
+            $bahasa = new KeahlianBahasaKaryawan();
+            $bahasa->karyawan_id = $karyawan->id;
+            $bahasa->bahasa = $language['bahasa'] ?? null;
+            $bahasa->baca = $language['baca'] ?? null;
+            $bahasa->tulis = $language['tulis'] ?? null;
+            $bahasa->dengar = $language['dengar'] ?? null;
+            $bahasa->bicara = $language['bicara'] ?? null;
+            $bahasa->save();
+            $savedCounts['languages']++;
         }
 
         $user = new User();
         $user->created_by = $this->karyawan;
         $user->created_at = $timestamp;
-        $user->username = $request->access['username'];
-        $user->email = $request->employee['email'];
-        $user->password = Hash::make($request->access['password']);
+        $user->username = data_get($request, 'access.username');
+        $user->email = data_get($request, 'employee.email');
+        $user->password = Hash::make((string) data_get($request, 'access.password'));
+        $user->is_active = 1;
         $user->save();
 
         $karyawan->user_id = $user->id;
@@ -717,8 +724,12 @@ class AtsHiredCandidatesController extends Controller
 
         $nikKaryawan = $karyawan->nik_karyawan;
         $namaKaryawan = $karyawan->nama_lengkap;
-        $startDate = $request->employee['sdate'] ?: $now->toDateString();
-        $effectiveMonth = Carbon::parse($startDate)->startOfMonth()->toDateString();
+        $startDate = data_get($request, 'employee.sdate') ?: $now->toDateString();
+        $effectiveMonth = $this->resolveEffectiveMonth(
+            data_get($request, 'payroll.bulan_efektif'),
+            $startDate,
+            $now
+        );
 
         $gajiPokok = $this->parseNumeric(data_get($request, 'payroll.gaji_pokok'));
         $tunjangan = $this->parseNumeric(data_get($request, 'payroll.tunjangan_kerja'));
@@ -726,8 +737,17 @@ class AtsHiredCandidatesController extends Controller
         $bpjsTk = $this->parseNumeric(data_get($request, 'payroll.potongan_bpjs_tk'));
         $pph21 = $this->parseNumeric(data_get($request, 'payroll.pot_pph21'));
         $pencadangan = $this->parseNumeric(data_get($request, 'payroll.pencadangan_upah'));
+        $tenor = max(1, (int) data_get($request, 'payroll.tenor', 1));
         $noBpjsKs = data_get($request, 'payroll.no_bpjs_ks') ?: optional($profile)->no_bpjs_ks;
         $noBpjsTk = data_get($request, 'payroll.no_bpjs_tk') ?: optional($profile)->no_bpjs_tk;
+
+        $payrollCounts = [
+            'master_sallary' => 0,
+            'bpjs_kesehatan' => 0,
+            'bpjs_tk' => 0,
+            'pph_21' => 0,
+            'pencadangan_upah' => 0,
+        ];
 
         if ($gajiPokok > 0) {
             $this->upsertPayroll('master_sallary', $nikKaryawan, $namaKaryawan, [
@@ -735,6 +755,7 @@ class AtsHiredCandidatesController extends Controller
                 'tunjangan_kerja' => $tunjangan,
                 'bulan_efektif' => $effectiveMonth,
             ], $now);
+            $payrollCounts['master_sallary'] = 1;
         }
 
         if ($bpjsKes > 0) {
@@ -747,6 +768,7 @@ class AtsHiredCandidatesController extends Controller
                 'nominal_potongan_kantor' => $gajiPokok * 0.02,
                 'bulan_efektif' => $effectiveMonth,
             ], $now);
+            $payrollCounts['bpjs_kesehatan'] = 1;
         }
 
         if ($bpjsTk > 0) {
@@ -759,6 +781,7 @@ class AtsHiredCandidatesController extends Controller
                 'nominal_potongan_kantor' => $gajiPokok * 0.01,
                 'bulan_efektif' => $effectiveMonth,
             ], $now);
+            $payrollCounts['bpjs_tk'] = 1;
         }
 
         if ($pph21 > 0) {
@@ -767,29 +790,47 @@ class AtsHiredCandidatesController extends Controller
                 'pajak_tahunan' => $pph21 * 12,
                 'bulan_mulai_pemotongan' => $effectiveMonth,
             ], $now);
+            $payrollCounts['pph_21'] = 1;
         }
 
         if ($pencadangan > 0) {
             $this->upsertPayroll('pencadangan_upah', $nikKaryawan, $namaKaryawan, [
                 'nominal' => $pencadangan,
                 'nominal_berjalan' => -$pencadangan,
-                'tenor' => 1,
-                'tenor_berjalan' => -1,
+                'tenor' => $tenor,
+                'tenor_berjalan' => -$tenor,
                 'bulan_efektif' => $effectiveMonth,
                 'status' => 'ONGOING',
             ], $now);
+            $payrollCounts['pencadangan_upah'] = 1;
         }
+
+        $arsipService = new KaryawanArsipDokumenService();
+        $archivedDocuments = $arsipService->migrateFromCandidateDocuments($recruitment->id, $karyawan->id, $this->karyawan);
 
         if (Schema::hasTable('candidate_onboarding_verification')) {
             DB::table('candidate_onboarding_verification')->updateOrInsert(
                 ['new_recruitment_id' => $recruitment->id],
                 $this->existingColumns('candidate_onboarding_verification', [
-                    'employee_migrated_at' => $now,
+                    'employee_migrated_at' => $timestamp,
                     'employee_migrated_by' => $this->karyawan,
-                    'updated_at' => $now,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
                 ])
             );
         }
+
+        $personnelRequestSync = $this->syncPersonnelRequestAfterMigration($recruitment, $timestamp);
+
+        return [
+            'karyawan_id' => $karyawan->id,
+            'nik_karyawan' => $karyawan->nik_karyawan,
+            'user_id' => $user->id,
+            'saved' => $savedCounts,
+            'payroll' => $payrollCounts,
+            'archived_documents' => $archivedDocuments,
+            'personnel_request' => $personnelRequestSync,
+        ];
     }
 
     private function mapCandidateEducations($recruitment)
@@ -930,6 +971,56 @@ class AtsHiredCandidatesController extends Controller
         return substr($name, 0, 30);
     }
 
+    private function resolveContractEndDate($startDate)
+    {
+        if (empty($startDate)) {
+            return '';
+        }
+
+        try {
+            return Carbon::parse($startDate)->addYear()->format('Y-m-d');
+        } catch (\Exception $e) {
+            return '';
+        }
+    }
+
+    private function resolveDepartmentCostCenter($personnelRequest)
+    {
+        if (!$personnelRequest) {
+            return '';
+        }
+
+        $alias = trim((string) ($personnelRequest->divisi_alias ?? ''));
+        if ($alias !== '') {
+            return $alias;
+        }
+
+        $divisionName = trim((string) optional($personnelRequest->divisiName)->nama_divisi);
+        if ($divisionName !== '') {
+            return $divisionName;
+        }
+
+        if (!empty($personnelRequest->divisi) && Schema::hasTable('master_divisi')) {
+            $name = DB::table('master_divisi')->where('id', $personnelRequest->divisi)->value('nama_divisi');
+            return trim((string) ($name ?? ''));
+        }
+
+        return '';
+    }
+
+    private function normalizeMasterId($value)
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        if (is_numeric($value)) {
+            return (string) (int) $value;
+        }
+
+        return trim((string) $value);
+    }
+
     private function formatDateInput($value)
     {
         if (empty($value)) {
@@ -957,6 +1048,243 @@ class AtsHiredCandidatesController extends Controller
         return (float) preg_replace('/[^\d.-]/', '', (string) $value);
     }
 
+    private function normalizeRequestArray($value)
+    {
+        if (is_array($value)) {
+            return array_values(array_filter($value, function ($item) {
+                return is_array($item);
+            }));
+        }
+
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                return $this->normalizeRequestArray($decoded);
+            }
+        }
+
+        return [];
+    }
+
+    private function normalizeStringArray($value)
+    {
+        if (!is_array($value)) {
+            $stringValue = trim((string) $value);
+            return $stringValue !== '' ? [$stringValue] : [];
+        }
+
+        return array_values(array_filter(array_map(function ($item) {
+            return trim((string) $item);
+        }, $value), function ($item) {
+            return $item !== '';
+        }));
+    }
+
+    private function resolveEmployeeProfileImage($recruitment, Request $request, $profile)
+    {
+        $nik = data_get($request, 'personal.nik_ktp') ?: optional($profile)->nik_ktp ?: 'karyawan';
+        $nama = str_replace(' ', '_', (string) (data_get($request, 'personal.nama_lengkap') ?: $recruitment->nama_lengkap ?: 'karyawan'));
+
+        if ($request->hasFile('personal.image')) {
+            $profilePicture = $request->file('personal.image');
+            $imageName = $nik . '_' . $nama . '.' . $profilePicture->getClientOriginalExtension();
+            $destinationPath = public_path('Foto_Karyawan');
+            if (!is_dir($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            $profilePicture->move($destinationPath, $imageName);
+            return $imageName;
+        }
+
+        if ($request->hasFile('image')) {
+            $profilePicture = $request->file('image');
+            $imageName = $nik . '_' . $nama . '.' . $profilePicture->getClientOriginalExtension();
+            $destinationPath = public_path('Foto_Karyawan');
+            if (!is_dir($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            $profilePicture->move($destinationPath, $imageName);
+            return $imageName;
+        }
+
+        $picture = $recruitment->picture;
+        if (empty($picture)) {
+            return null;
+        }
+
+        $fotoKaryawanPath = public_path('Foto_Karyawan/' . $picture);
+        if (is_file($fotoKaryawanPath)) {
+            return $picture;
+        }
+
+        $recruitmentPath = public_path('recruitment/' . $picture);
+        if (!is_file($recruitmentPath)) {
+            return $picture;
+        }
+
+        $extension = pathinfo($picture, PATHINFO_EXTENSION) ?: 'jpg';
+        $imageName = $nik . '_' . $nama . '.' . $extension;
+        $destinationPath = public_path('Foto_Karyawan');
+        if (!is_dir($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+
+        if (@copy($recruitmentPath, $destinationPath . DIRECTORY_SEPARATOR . $imageName)) {
+            return $imageName;
+        }
+
+        return $picture;
+    }
+
+    private function hasMedicalPayload(Request $request)
+    {
+        $fields = [
+            'medical.tinggi_badan',
+            'medical.berat_badan',
+            'medical.rate_mata',
+            'medical.golongan_darah',
+            'medical.penyakit_bawaan_lahir',
+            'medical.penyakit_kronis',
+            'medical.riwayat_kecelakaan',
+            'medical.keterangan_mata',
+        ];
+
+        foreach ($fields as $field) {
+            if (trim((string) data_get($request, $field, '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function nullableDate($value)
+    {
+        $formatted = $this->formatDateInput($value);
+        return $formatted !== '' ? $formatted : null;
+    }
+
+    private function resolveEffectiveMonth($payrollMonth, $startDate, Carbon $fallback)
+    {
+        $source = $payrollMonth ?: $startDate;
+
+        try {
+            if (preg_match('/^\d{4}-\d{2}$/', trim((string) $source))) {
+                return Carbon::parse($source . '-01')->startOfMonth()->toDateString();
+            }
+
+            return Carbon::parse($source)->startOfMonth()->toDateString();
+        } catch (\Exception $e) {
+            return $fallback->copy()->startOfMonth()->toDateString();
+        }
+    }
+
+    private function resolvePersonnelRequestId($recruitment)
+    {
+        if (!$recruitment) {
+            return null;
+        }
+
+        return $recruitment->personnel_request_id
+            ?? $recruitment->personal_request_id
+            ?? null;
+    }
+
+    private function countMigratedEmployeesByPersonnelRequest($personnelRequestId)
+    {
+        if (!$personnelRequestId || !Schema::hasTable('new_recruitment')) {
+            return 0;
+        }
+
+        $foreignKey = Schema::hasColumn('new_recruitment', 'personnel_request_id')
+            ? 'personnel_request_id'
+            : (Schema::hasColumn('new_recruitment', 'personal_request_id') ? 'personal_request_id' : null);
+
+        if (!$foreignKey) {
+            return 0;
+        }
+
+        $query = DB::table('new_recruitment as nr')
+            ->where('nr.' . $foreignKey, $personnelRequestId);
+
+        if (Schema::hasTable('candidate_onboarding_verification')) {
+            return (int) $query
+                ->join('candidate_onboarding_verification as cov', 'cov.new_recruitment_id', '=', 'nr.id')
+                ->whereNotNull('cov.employee_migrated_at')
+                ->distinct()
+                ->count('nr.id');
+        }
+
+        return (int) $query
+            ->whereRaw('LOWER(nr.status) = ?', ['hired'])
+            ->count();
+    }
+
+    private function syncPersonnelRequestAfterMigration($recruitment, $timestamp)
+    {
+        $personnelRequestId = $this->resolvePersonnelRequestId($recruitment);
+
+        if (!$personnelRequestId || !Schema::hasTable('personnel_requests')) {
+            return [
+                'updated' => false,
+                'request_closed' => false,
+                'reason' => 'personnel_request_not_linked',
+            ];
+        }
+
+        $personnelRequest = DB::table('personnel_requests')->where('id', $personnelRequestId)->first();
+        if (!$personnelRequest) {
+            return [
+                'updated' => false,
+                'request_closed' => false,
+                'personnel_request_id' => $personnelRequestId,
+                'reason' => 'personnel_request_not_found',
+            ];
+        }
+
+        $requiredHeadcount = (int) ($personnelRequest->jumlah_personal ?? 0);
+        $migratedCount = $this->countMigratedEmployeesByPersonnelRequest($personnelRequestId);
+
+        $result = [
+            'updated' => false,
+            'request_closed' => false,
+            'personnel_request_id' => (int) $personnelRequestId,
+            'no_request' => $personnelRequest->no_request,
+            'jumlah_dibutuhkan' => $requiredHeadcount,
+            'jumlah_karyawan_migrasi' => $migratedCount,
+            'sisa_kebutuhan' => max(0, $requiredHeadcount - $migratedCount),
+        ];
+
+        if ($requiredHeadcount <= 0) {
+            $result['reason'] = 'jumlah_personal_not_set';
+            $result['message'] = 'Personnel request tidak ditutup karena jumlah personal belum diisi.';
+            return $result;
+        }
+
+        if ($migratedCount < $requiredHeadcount) {
+            $result['message'] = "Progress migrasi karyawan {$migratedCount}/{$requiredHeadcount}. Lamaran masih dibuka.";
+            return $result;
+        }
+
+        $updatePayload = [
+            'is_publish' => 0,
+            'is_active' => 0,
+            'updated_by' => $this->karyawan,
+            'updated_at' => $timestamp,
+        ];
+
+        DB::table('personnel_requests')
+            ->where('id', $personnelRequestId)
+            ->update($this->existingColumns('personnel_requests', $updatePayload));
+
+        $result['updated'] = true;
+        $result['request_closed'] = true;
+        $result['sisa_kebutuhan'] = 0;
+        $result['message'] = "Personnel request {$personnelRequest->no_request} ditutup karena kebutuhan {$requiredHeadcount} karyawan sudah terpenuhi.";
+
+        return $result;
+    }
+
     private function existingColumns($table, array $data)
     {
         if (!Schema::hasTable($table)) {
@@ -975,11 +1303,13 @@ class AtsHiredCandidatesController extends Controller
             return;
         }
 
+        $timestamp = $now->format('Y-m-d H:i:s');
+
         $payload = $this->existingColumns($table, array_merge($data, [
             'nik_karyawan' => $nikKaryawan,
             'karyawan' => $namaKaryawan,
             'is_active' => 1,
-            'updated_at' => $now,
+            'updated_at' => $timestamp,
             'updated_by' => $this->karyawan,
         ]));
         $existing = DB::table($table)->where('nik_karyawan', $nikKaryawan)->where('is_active', 1)->first();
@@ -989,7 +1319,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         DB::table($table)->insert(array_merge($payload, $this->existingColumns($table, [
-            'created_at' => $now,
+            'created_at' => $timestamp,
             'created_by' => $this->karyawan,
         ])));
     }
