@@ -216,6 +216,9 @@ class AtsFinalDecisionController extends Controller
                     'email_sent_at' => $emailSentAt,
                 ];
             })
+            ->addColumn('finance_reject_reason', function ($row) {
+                return \App\Services\RecruitmentStatusService::getFinanceRejectReason($row);
+            })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
                     $sub->where('no_request', 'like', "%{$keyword}%");
@@ -539,6 +542,13 @@ class AtsFinalDecisionController extends Controller
             return response()->json([
                 'status'  => 400,
                 'message' => 'Status kandidat saat ini sedang dalam Finance Review. Pengiriman email ke Direktur dinonaktifkan.',
+            ], 400);
+        }
+
+        if (!\App\Services\RecruitmentStatusService::hasFinanceApproved($applicant)) {
+            return response()->json([
+                'status'  => 400,
+                'message' => 'Email ke Direktur hanya dapat dikirim setelah Finance menyetujui gaji yang diajukan HRD.',
             ], 400);
         }
 

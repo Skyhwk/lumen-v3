@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
 
-class FinanceDecisionController extends Controller
+class FinanceOfferingSallaryController extends Controller
 {
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -138,6 +138,9 @@ class FinanceDecisionController extends Controller
                     : ($row->matching_score ?? rand(75, 98));
                 return $score . '%';
             })
+            ->addColumn('finance_reject_reason', function ($row) {
+                return RecruitmentStatusService::getFinanceRejectReason($row);
+            })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'finance_review';
             })
@@ -205,12 +208,26 @@ class FinanceDecisionController extends Controller
             }
 
             if ($decision === 'reject') {
+                $rejectReason = trim((string) $request->input('reject_reason', ''));
+
+                if ($rejectReason === '') {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => 422,
+                        'message' => 'Alasan penolakan wajib diisi.',
+                    ], 422);
+                }
+
                 (new RecruitmentStatusService())->update(
-                    $id, 
-                    'rejected', 
-                    $now, 
-                    'finance_rejected', 
-                    ['by' => $user ?? 'Finance']
+                    $id,
+                    'rejected',
+                    $now,
+                    'finance_rejected',
+                    [
+                        'by'            => $user ?? 'Finance',
+                        'reject_reason' => $rejectReason,
+                        'alasan_reject' => $rejectReason,
+                    ]
                 );
 
                 DB::commit();
