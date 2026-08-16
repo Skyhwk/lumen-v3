@@ -31,7 +31,22 @@ class AssessmentController extends Controller
             ->values();
         $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
         $status = $hasStartedSession ? $this->stateFor($attempt)['status'] : 'ready';
-        return response()->json(['status' => $status, 'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2), 'categories' => $categories, 'preview_questions' => $this->previewQuestions($attempt->id, 3)]);
+        $userConfig = $this->userAssessmentConfig($recruitment);
+        $personnelRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
+
+        return response()->json([
+            'status' => $status,
+            'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2),
+            'categories' => $categories,
+            'preview_questions' => $this->previewQuestions($attempt->id, 3),
+            'has_user_assessment' => $userConfig !== null,
+            'personnel_request_no' => $personnelRequest->no_request ?? null,
+            'user_assessment' => $userConfig ? [
+                'question_count' => (int) $userConfig->question_count,
+                'duration_minutes' => (int) $userConfig->duration_minutes,
+                'has_time_limit' => (bool) $userConfig->has_time_limit,
+            ] : null,
+        ]);
     }
 
     public function start(Request $request)
@@ -138,7 +153,32 @@ class AssessmentController extends Controller
                     $this->createSessions($attempt->id, Carbon::now(), $recruitment);
                 } else {
                     $pendingSessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->get();
+                    $userConfig = $this->userAssessmentConfig($recruitment);
+
                     foreach ($pendingSessions as $session) {
+                        if (($session->category_name ?? '') === 'Assessment User') {
+                            if (!$userConfig) {
+                                DB::table('assessment_sessions')->where('id', $session->id)->delete();
+                                continue;
+                            }
+
+                            if ($this->sessionDefinitionFromSession($session) !== $this->userSessionDefinition($userConfig)) {
+                                $items = $this->userSessionQuestions($userConfig);
+                                if (count($items) !== (int) $userConfig->question_count) {
+                                    throw new \RuntimeException('Soal assessment user untuk ' . $userConfig->owner_karyawan . ' belum mencukupi.');
+                                }
+
+                                DB::table('assessment_sessions')->where('id', $session->id)->update([
+                                    'question_count' => $userConfig->question_count,
+                                    'duration_minutes' => $userConfig->duration_minutes,
+                                    'questions_json' => json_encode($items),
+                                    'updated_at' => Carbon::now(),
+                                ]);
+                            }
+
+                            continue;
+                        }
+
                         $category = DB::table('question_categories')->where('id', $session->question_category_id)->first();
                         if ($category && $this->sessionDefinitionFromSession($session) !== $this->sessionDefinitionFromCategory($category)) {
                             $items = $this->sessionQuestions($category);
@@ -148,6 +188,39 @@ class AssessmentController extends Controller
                                 'duration_minutes' => $category->duration_minutes,
                                 'questions_json' => json_encode($items),
                                 'updated_at' => Carbon::now()
+                            ]);
+                        }
+                    }
+
+                    if ($userConfig && !$hasStartedSession) {
+                        $hasUserSession = DB::table('assessment_sessions')
+                            ->where('assessment_attempt_id', $attempt->id)
+                            ->where('category_name', 'Assessment User')
+                            ->exists();
+
+                        if (!$hasUserSession) {
+                            $items = $this->userSessionQuestions($userConfig);
+                            if (count($items) !== (int) $userConfig->question_count) {
+                                throw new \RuntimeException('Soal assessment user untuk ' . $userConfig->owner_karyawan . ' belum mencukupi.');
+                            }
+
+                            $nextOrder = (int) DB::table('assessment_sessions')
+                                ->where('assessment_attempt_id', $attempt->id)
+                                ->max('session_order');
+
+                            DB::table('assessment_sessions')->insert([
+                                'assessment_attempt_id' => $attempt->id,
+                                'question_category_id' => null,
+                                'session_order' => $nextOrder + 1,
+                                'category_name' => 'Assessment User',
+                                'question_count' => $userConfig->question_count,
+                                'duration_minutes' => $userConfig->duration_minutes,
+                                'questions_json' => json_encode($items),
+                                'answers_json' => json_encode(new \stdClass()),
+                                'result_json' => null,
+                                'status' => 'pending',
+                                'created_at' => Carbon::now(),
+                                'updated_at' => Carbon::now(),
                             ]);
                         }
                     }
@@ -218,15 +291,20 @@ class AssessmentController extends Controller
 
         $userConfig = $this->userAssessmentConfig($recruitment);
         if ($userConfig) {
-            $definitions[] = [
-                'Assessment User',
-                (int) $userConfig->question_count,
-                (int) $userConfig->duration_minutes,
-                (bool) $userConfig->has_time_limit,
-            ];
+            $definitions[] = $this->userSessionDefinition($userConfig);
         }
 
         return $definitions;
+    }
+
+    private function userSessionDefinition($userConfig)
+    {
+        return [
+            'Assessment User',
+            (int) $userConfig->question_count,
+            (int) $userConfig->duration_minutes,
+            (bool) $userConfig->has_time_limit,
+        ];
     }
 
     private function userAssessmentConfig($recruitment)
@@ -260,6 +338,8 @@ class AssessmentController extends Controller
     {
         return DB::table('questions')
             ->where('owner_karyawan', $config->owner_karyawan)
+            ->where('question_scope', 'manager')
+            ->where('status', 'active')
             ->where('is_active', 1)
             ->where('question_type', 'single_choice')
             ->inRandomOrder()
