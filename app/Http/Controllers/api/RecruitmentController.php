@@ -415,6 +415,7 @@ class RecruitmentController extends Controller{
                 ->where('bcc', [])
                 ->where('karyawan', 'Recruitment System')
                 ->noReply('PT Inti Surya Laboratorium')
+                ->replyToAtsHrd()
                 ->send();
 
             try {
@@ -509,6 +510,7 @@ class RecruitmentController extends Controller{
                 ->where('bcc', [])
                 ->where('karyawan', trim((string) $request->input('approved_by')) ?: 'Recruitment HRD')
                 ->noReply('PT Inti Surya Laboratorium')
+                ->replyToAtsHrd()
                 ->send();
 
             DB::commit();

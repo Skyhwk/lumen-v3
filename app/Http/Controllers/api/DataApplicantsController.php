@@ -254,6 +254,7 @@ class DataApplicantsController extends Controller
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
+                    ->replyToAtsHrd()
                     ->send();
             }
 
@@ -322,6 +323,7 @@ class DataApplicantsController extends Controller
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
+                    ->replyToAtsHrd()
                     ->send();
             }
 

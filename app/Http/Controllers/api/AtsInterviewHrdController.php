@@ -313,6 +313,7 @@ class AtsInterviewHrdController extends Controller
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
+                    ->replyToAtsHrd()
                     ->send();
             }
 
@@ -440,6 +441,7 @@ class AtsInterviewHrdController extends Controller
                     ->where('body', $bodyCandidateEmail)
                     ->where('karyawan', $user)
                     ->noReply()
+                    ->replyToAtsHrd()
                     ->send();
             }
 
@@ -519,6 +521,7 @@ class AtsInterviewHrdController extends Controller
                     ->where('body', $bodyEmail)
                     ->where('karyawan', $user)
                     ->noReply()
+                    ->replyToAtsHrd()
                     ->send();
             }
 

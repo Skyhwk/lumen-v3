@@ -159,7 +159,9 @@ class PersonnelRequesthrdController extends Controller
         try {
             DB::table('personnel_requests')->where('id', $id)->update([
                 'is_approve' => 1,
-                // 'is_rejected' => 0,
+                'approved_by' => $this->karyawan,
+                'approved_at' => Carbon::now(),
+                'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
             ]);
 
@@ -195,6 +197,9 @@ class PersonnelRequesthrdController extends Controller
             DB::table('personnel_requests')->where('id', $id)->update([
                 'is_approve' => 0,
                 'is_reject' => 1,
+                'rejected_by' => $this->karyawan,
+                'rejected_at' => Carbon::now(),
+                'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
             ]);
 

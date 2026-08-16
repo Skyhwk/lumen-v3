@@ -4,7 +4,8 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question,SallaryOffer};
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
+use App\Services\SallaryOfferService;
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
@@ -593,13 +594,10 @@ class PersonnelRequestController extends Controller
                 // Simpan salary offer user jika diisi
                 if ($request->filled('sallary_offer_user')) {
                     $salaryValue = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_user'))));
-                    SallaryOffer::updateOrCreate(
-                        ['new_recruitment_id' => $recruitment->id],
-                        [
-                            'sallary_offer_user' => $salaryValue ?: null,
-                            'created_by'         => $this->karyawan,
-                            'updated_by'         => $this->karyawan,
-                        ]
+                    SallaryOfferService::upsertActive(
+                        (int) $recruitment->id,
+                        ['sallary_offer_user' => $salaryValue ?: null],
+                        $this->karyawan
                     );
                 }
 
@@ -632,6 +630,7 @@ class PersonnelRequestController extends Controller
                                     ->where('subject', $subject)
                                     ->where('body', $emailContent)
                                     ->noReply()
+                                    ->replyToAtsHrd()
                                     ->send();
                     }
 

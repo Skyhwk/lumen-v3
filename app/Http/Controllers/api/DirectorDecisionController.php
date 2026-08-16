@@ -79,6 +79,7 @@ class DirectorDecisionController extends Controller
                         ->where('bcc', [])
                         ->where('karyawan', 'Recruitment System')
                         ->noReply('PT Inti Surya Laboratorium')
+                        ->replyToAtsHrd()
                         ->send();
                 } catch (\Throwable $exception) {
                     \Log::warning('Recruitment rejection email failed', [
@@ -130,8 +131,16 @@ class DirectorDecisionController extends Controller
 
         $salaryOffer = DB::table('sallary_offer')
             ->where('new_recruitment_id', $recruitment->id)
+            ->where('is_active', true)
             ->orderByDesc('id')
             ->first();
+
+        if (!$salaryOffer) {
+            $salaryOffer = DB::table('sallary_offer')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->orderByDesc('id')
+                ->first();
+        }
 
         $expectedSalary = $salaryOffer->sallary_offer_hrd ?? $recruitment->ekspetasi_gaji ?? null;
 

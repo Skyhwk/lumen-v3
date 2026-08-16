@@ -62,12 +62,22 @@ class NewRecruitment extends Model
 
     public function sallaryOffer()
     {
-        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id');
+        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')
+            ->where('is_active', true)
+            ->latest('id');
+    }
+
+    public function sallaryOffers()
+    {
+        return $this->hasMany(SallaryOffer::class, 'new_recruitment_id')
+            ->orderByDesc('id');
     }
 
     public function salaryOffer()
     {
-        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id');
+        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')
+            ->where('is_active', true)
+            ->latest('id');
     }
 
     public function candidateDataOffer()

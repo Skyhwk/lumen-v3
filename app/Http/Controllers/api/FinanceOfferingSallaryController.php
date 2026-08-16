@@ -6,8 +6,11 @@ use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\CandidateDataOffers;
 use App\Models\NewRecruitment;
-use App\Models\SallaryOffer;
+use App\Services\GenerateMessageAtsEmail;
+use App\Services\GenerateToken;
 use App\Services\RecruitmentStatusService;
+use App\Services\SallaryOfferService;
+use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -173,21 +176,26 @@ class FinanceOfferingSallaryController extends Controller
         DB::beginTransaction();
         try {
             if ($decision === 'approve') {
-                $approvedSalary = $request->input('approved_salary') ?? $request->input('sallary_offer_user') ?? $request->input('final_salary');
+                $activeOffer = SallaryOfferService::getActive((int) $id);
+                $approvedSalary = $request->input('approved_salary')
+                    ?? optional($activeOffer)->sallary_offer_hrd
+                    ?? $request->input('final_salary');
 
                 if ($approvedSalary !== null && $approvedSalary !== '') {
                     $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$approvedSalary)));
                     $finalSalary = $cleanSalary !== '' ? $cleanSalary : $approvedSalary;
 
-                    SallaryOffer::updateOrCreate(
-                        ['new_recruitment_id' => $id],
+                    SallaryOfferService::upsertActive(
+                        (int) $id,
                         [
                             'sallary_offer_hrd' => $finalSalary,
                             'final_sallary'     => $finalSalary,
-                            'updated_by'        => $user ?? 'Finance',
-                        ]
+                        ],
+                        $user ?? 'Finance'
                     );
                 }
+
+                $shouldEmailCandidate = RecruitmentStatusService::shouldSendCandidateEmailOnFinanceApprove($applicant);
 
                 // Advance candidate status to internal_sallary_offer so HRD can request Director approval
                 (new RecruitmentStatusService())->update(
@@ -198,12 +206,20 @@ class FinanceOfferingSallaryController extends Controller
                     ['by' => $user ?? 'Finance']
                 );
 
+                $applicant = $applicant->fresh(['sallaryOffer', 'personalRequest.masterJabatan']);
+
+                if ($shouldEmailCandidate) {
+                    $this->sendCandidateOfferingEmail($applicant, $user ?? 'Finance');
+                }
+
                 DB::commit();
 
                 return response()->json([
                     'status'  => 200,
-                    'message' => 'Persetujuan Finance berhasil diproses. Kandidat siap diajukan ke Direktur.',
-                    'data'    => $applicant->fresh(['sallaryOffer']),
+                    'message' => $shouldEmailCandidate
+                        ? 'Persetujuan Finance berhasil diproses. Email penawaran gaji telah dikirim ke kandidat.'
+                        : 'Persetujuan Finance berhasil diproses. HRD dapat melanjutkan pengajuan ke Direktur.',
+                    'data'    => $applicant,
                 ], 200);
             }
 
@@ -217,6 +233,12 @@ class FinanceOfferingSallaryController extends Controller
                         'message' => 'Alasan penolakan wajib diisi.',
                     ], 422);
                 }
+
+                SallaryOfferService::markFinanceRejected(
+                    (int) $id,
+                    $rejectReason,
+                    $user ?? 'Finance'
+                );
 
                 (new RecruitmentStatusService())->update(
                     $id,
@@ -251,6 +273,66 @@ class FinanceOfferingSallaryController extends Controller
                 'status'  => 500,
                 'message' => 'Gagal memproses keputusan Finance: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function sendCandidateOfferingEmail(NewRecruitment $applicant, string $sender = 'Finance'): void
+    {
+        if (empty($applicant->email)) {
+            return;
+        }
+
+        if (empty($applicant->token_approval)) {
+            $tokenService = new GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'candidate_salary_offer' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $applicant->token_approval = $token;
+            $applicant->save();
+        }
+
+        $subject = 'Penawaran Gaji - PT Inti Surya Laboratorium';
+
+        try {
+            $applicant->loadMissing([
+                'sallaryOffer',
+                'candidateDataOffer',
+                'personalRequest.masterJabatan',
+                'personnelRequest.masterJabatan',
+            ]);
+
+            $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+            $bodyEmail = GenerateMessageAtsEmail::bodyEmailCandidateOfferingSalary($applicant);
+            $pdfPath = GenerateMessageAtsEmail::generateSalaryOfferingLetterPdfPath($dataObj);
+
+            $emailQuery = SendEmail::where('to', $applicant->email)
+                ->where('subject', $subject)
+                ->where('body', $bodyEmail)
+                ->where('karyawan', $sender);
+
+            if (!empty($pdfPath) && file_exists($pdfPath)) {
+                $emailQuery->where('attachment', [$pdfPath]);
+            }
+
+            $emailQuery->noReply()
+                ->replyToAtsHrd()
+                ->send();
+
+            (new RecruitmentStatusService())->update(
+                (int) $applicant->id,
+                $applicant->status,
+                Carbon::now(),
+                'candidate_offering_email_sent',
+                ['by' => $sender]
+            );
+
+            if (!empty($pdfPath) && file_exists($pdfPath)) {
+                @unlink($pdfPath);
+            }
+        } catch (\Throwable $exception) {
+            \Log::warning('Candidate offering salary email failed', [
+                'recruitment_id' => $applicant->id,
+                'message' => $exception->getMessage(),
+            ]);
         }
     }
 }
