@@ -24,7 +24,8 @@ class PersonnelRequestController extends Controller
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
         }
 
-        $personnelRequest = PersonnelRequest::with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
+        $personnelRequest = $this->ownedPersonnelRequestQuery()
+            ->with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
             ->withCount('newRecruitments as total_pelamar')
             ->find($id);
 
@@ -117,6 +118,26 @@ class PersonnelRequestController extends Controller
         return (int) $value;
     }
 
+    private function ownedPersonnelRequestQuery()
+    {
+        return PersonnelRequest::query()->where('created_by', $this->karyawan);
+    }
+
+    private function findOwnedPersonnelRequest($id)
+    {
+        return $this->ownedPersonnelRequestQuery()->find($id);
+    }
+
+    private function findOwnedRecruitment($newRecruitmentId)
+    {
+        return NewRecruitment::query()
+            ->where('id', $newRecruitmentId)
+            ->whereHas('personnelRequest', function ($query) {
+                $query->where('created_by', $this->karyawan);
+            })
+            ->first();
+    }
+
     private function validatedUserAssessmentConfig(Request $request): array
     {
         $useAssessment = filter_var($request->input('use_user_assessment'), FILTER_VALIDATE_BOOLEAN);
@@ -171,7 +192,7 @@ class PersonnelRequestController extends Controller
     {
         try {
             // Fetch records with counts for NewRecruitment and eager load relations
-            $data = PersonnelRequest::select('personnel_requests.*')->with([
+            $data = $this->ownedPersonnelRequestQuery()->select('personnel_requests.*')->with([
                 'detailCabang', 
                 'detailDivisi', 
                 'detailPosisi',
@@ -221,15 +242,16 @@ class PersonnelRequestController extends Controller
     public function kanban()
     {
         try {
-            // Fetch all records, Kanban component will handle categorization
-            // Eager load relations to display exact names in Kanban board
+            // Fetch records milik user login; Kanban component will handle categorization
             $data = NewRecruitment::with([
                 'personnelRequest.detailCabang', 
                 'personnelRequest.detailDivisi', 
                 'personnelRequest.detailPosisi',
                 'userInterview',
                 'hrdInterview'
-            ])->orderBy('id', 'desc')->get();
+            ])->whereHas('personnelRequest', function ($query) {
+                $query->where('created_by', $this->karyawan);
+            })->orderBy('id', 'desc')->get();
             return response()->json($data, 200);
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()], 400);
@@ -299,7 +321,11 @@ class PersonnelRequestController extends Controller
      */
     public function show(Request $request)
     {
-        $data = PersonnelRequest::findOrFail($request->id);
+        $data = $this->findOwnedPersonnelRequest($request->id);
+        if (!$data) {
+            return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
+        }
+
         return response()->json($data, 200);
     }
 
@@ -446,6 +472,10 @@ class PersonnelRequestController extends Controller
     {
         DB::beginTransaction();
         try {
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
 
             // Nonaktifkan jadwal interview user sebelumnya (jika ada reschedule)
             RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
@@ -466,9 +496,7 @@ class PersonnelRequestController extends Controller
                 'is_active'          => 1,
             ]);
 
-            // Dapatkan data recruitment berserta relasi yang dibutuhkan
-            $recruitment = NewRecruitment::with(['personnelRequest.detailDivisi', 'personnelRequest.detailPosisi', 'personnelRequest.detailCabang'])
-                ->findOrFail($request->new_recruitment_id);
+            $recruitment->load(['personnelRequest.detailDivisi', 'personnelRequest.detailPosisi', 'personnelRequest.detailCabang']);
             
             $recruitment->update([
                 'status' => 'interview_user'
@@ -527,6 +555,11 @@ class PersonnelRequestController extends Controller
     {
         DB::beginTransaction();
         try {
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
             $interview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
                 ->where('stage', 'user')
                 ->where('is_active', 1)
@@ -559,7 +592,10 @@ class PersonnelRequestController extends Controller
         try {
 
             
-            $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
             
             $isApproved = $request->decision === 'approve' ? 1 : 0; 
             
