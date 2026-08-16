@@ -118,17 +118,25 @@ class BankSoalController extends Controller
                     ];
 
                     if ($hasTimeLimit) {
-                        $updateData['has_time_limit'] = isset($item['has_time_limit']) ? (bool) $item['has_time_limit'] : true;
+                        $updateData['has_time_limit'] = $this->parseFormBoolean(
+                            $item['has_time_limit'] ?? null,
+                            true
+                        );
                     }
 
                     if ($hasDuration && isset($item['duration_minutes'])) {
                         $updateData['duration_minutes'] = (int) $item['duration_minutes'];
                     }
 
+                    $isVisible = $this->parseFormBoolean(
+                        $item['is_show'] ?? ($item['is_active'] ?? null),
+                        false
+                    );
+
                     if ($hasIsShow) {
-                        $updateData['is_show'] = isset($item['is_show']) ? (bool) $item['is_show'] : (isset($item['is_active']) ? (bool) $item['is_active'] : false);
+                        $updateData['is_show'] = $isVisible;
                     } else {
-                        $updateData['is_active'] = isset($item['is_show']) ? (bool) $item['is_show'] : (isset($item['is_active']) ? (bool) $item['is_active'] : false);
+                        $updateData['is_active'] = $isVisible;
                     }
 
                     QuestionCategory::where('id', $item['id'])->update($updateData);
@@ -763,6 +771,33 @@ class BankSoalController extends Controller
         }
         $question->question_image = $stored;
         $question->save();
+    }
+
+    private function parseFormBoolean($value, bool $default = false): bool
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+            return true;
+        }
+
+        if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+            return false;
+        }
+
+        return filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
     }
 
     private function replaceOptions(Question $question, array $options)
