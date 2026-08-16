@@ -16,21 +16,26 @@ class AssessmentController extends Controller
     {
         $recruitment = $this->recruitment($request->token);
         $attempt = $this->ensureAttempt($recruitment);
-        $categories = DB::table('assessment_sessions')
+        $sessions = DB::table('assessment_sessions')
             ->where('assessment_attempt_id', $attempt->id)
             ->orderBy('session_order')
-            ->get(['category_name as name', 'question_count', 'duration_minutes', 'question_category_id', 'expires_at'])
-            ->map(function ($session) {
-                return [
-                    'name' => $session->name,
-                    'question_count' => (int) $session->question_count,
-                    'duration_minutes' => (int) $session->duration_minutes,
-                    'has_time_limit' => $this->sessionHasTimeLimit($session),
-                ];
-            })
-            ->values();
+            ->get(['category_name', 'question_count', 'duration_minutes', 'question_category_id', 'expires_at', 'questions_json', 'status', 'session_order']);
+        $categories = $sessions->map(function ($session) {
+            $availableCount = count($this->sessionQuestionItems($session));
+
+            return [
+                'name' => $session->category_name,
+                'question_count' => (int) $session->question_count,
+                'available_question_count' => $availableCount,
+                'can_start' => $this->sessionIsReady($session),
+                'duration_minutes' => (int) $session->duration_minutes,
+                'has_time_limit' => $this->sessionHasTimeLimit($session),
+            ];
+        })->values();
         $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
         $status = $hasStartedSession ? $this->stateFor($attempt)['status'] : 'ready';
+        $nextPendingSession = $sessions->firstWhere('status', 'pending');
+        $canStart = $nextPendingSession ? $this->sessionIsReady($nextPendingSession) : false;
         $userConfig = $this->userAssessmentConfig($recruitment);
         $personnelRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
 
@@ -38,6 +43,8 @@ class AssessmentController extends Controller
             'status' => $status,
             'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2),
             'categories' => $categories,
+            'can_start' => $canStart,
+            'start_blocked_reason' => $canStart ? null : $this->sessionStartBlockReason($nextPendingSession),
             'preview_questions' => $this->previewQuestions($attempt->id, 3),
             'has_user_assessment' => $userConfig !== null,
             'personnel_request_no' => $personnelRequest->no_request ?? null,
@@ -60,6 +67,22 @@ class AssessmentController extends Controller
             }
             $activeSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'in_progress')->first();
             if (!$activeSession) {
+                $pendingSession = DB::table('assessment_sessions')
+                    ->where('assessment_attempt_id', $attempt->id)
+                    ->where('status', 'pending')
+                    ->orderBy('session_order')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($pendingSession && !$this->sessionIsReady($pendingSession)) {
+                    return response()->json([
+                        'status' => 'blocked',
+                        'can_start' => false,
+                        'message' => $this->sessionStartBlockReason($pendingSession),
+                        'session' => $this->sessionPayload($pendingSession),
+                    ]);
+                }
+
                 $this->startNextSession($attempt->id);
             }
 
@@ -164,9 +187,6 @@ class AssessmentController extends Controller
 
                             if ($this->sessionDefinitionFromSession($session) !== $this->userSessionDefinition($userConfig)) {
                                 $items = $this->userSessionQuestions($userConfig);
-                                if (count($items) !== (int) $userConfig->question_count) {
-                                    throw new \RuntimeException('Soal assessment user untuk ' . $userConfig->owner_karyawan . ' belum mencukupi.');
-                                }
 
                                 DB::table('assessment_sessions')->where('id', $session->id)->update([
                                     'question_count' => $userConfig->question_count,
@@ -200,9 +220,6 @@ class AssessmentController extends Controller
 
                         if (!$hasUserSession) {
                             $items = $this->userSessionQuestions($userConfig);
-                            if (count($items) !== (int) $userConfig->question_count) {
-                                throw new \RuntimeException('Soal assessment user untuk ' . $userConfig->owner_karyawan . ' belum mencukupi.');
-                            }
 
                             $nextOrder = (int) DB::table('assessment_sessions')
                                 ->where('assessment_attempt_id', $attempt->id)
@@ -251,9 +268,6 @@ class AssessmentController extends Controller
         $categories = $this->assessmentCategories()->get();
         foreach ($categories as $index => $category) {
             $items = $this->sessionQuestions($category);
-            if (count($items) !== (int) $category->question_count) {
-                throw new \RuntimeException('Soal untuk sesi ' . $category->name . ' belum mencukupi.');
-            }
             DB::table('assessment_sessions')->insert(['assessment_attempt_id' => $attemptId, 'question_category_id' => $category->id, 'session_order' => $index + 1, 'category_name' => $category->name, 'question_count' => $category->question_count, 'duration_minutes' => $category->duration_minutes, 'questions_json' => json_encode($items), 'answers_json' => json_encode(new \stdClass()), 'result_json' => null, 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now]);
         }
 
@@ -263,9 +277,6 @@ class AssessmentController extends Controller
         }
 
         $items = $this->userSessionQuestions($userConfig);
-        if (count($items) !== (int) $userConfig->question_count) {
-            throw new \RuntimeException('Soal assessment user untuk ' . $userConfig->owner_karyawan . ' belum mencukupi.');
-        }
 
         DB::table('assessment_sessions')->insert([
             'assessment_attempt_id' => $attemptId,
@@ -557,7 +568,16 @@ class AssessmentController extends Controller
             return ['status' => 'completed', 'message' => 'Assessment selesai.'];
         }
         if ($session->status === 'pending') {
-            return ['status' => 'waiting', 'message' => 'Sesi berikutnya siap dimulai saat Anda sudah siap.', 'session' => ['id' => $session->id, 'name' => $session->category_name, 'order' => $session->session_order, 'duration_minutes' => $session->duration_minutes, 'has_time_limit' => $this->sessionHasTimeLimit($session), 'question_count' => $session->question_count]];
+            $sessionPayload = $this->sessionPayload($session);
+
+            return [
+                'status' => 'waiting',
+                'can_start' => $this->sessionIsReady($session),
+                'message' => $this->sessionIsReady($session)
+                    ? 'Sesi berikutnya siap dimulai saat Anda sudah siap.'
+                    : $this->sessionStartBlockReason($session),
+                'session' => $sessionPayload,
+            ];
         }
         $questions = json_decode($session->questions_json ?: '[]', true) ?: []; $answers = json_decode($session->answers_json ?: '{}', true) ?: [];
         if ($session->expires_at && Carbon::now()->greaterThanOrEqualTo(Carbon::parse($session->expires_at))) { foreach ($questions as $question) if (!array_key_exists($question['id'], $answers)) $answers[$question['id']] = null; $this->finishSession($session, $answers, 'expired'); return $this->stateFor($attempt); }
@@ -721,7 +741,7 @@ class AssessmentController extends Controller
     private function startNextSession($attemptId)
     {
         $session = DB::table('assessment_sessions')->where('assessment_attempt_id', $attemptId)->where('status', 'pending')->orderBy('session_order')->lockForUpdate()->first();
-        if (!$session) {
+        if (!$session || !$this->sessionIsReady($session)) {
             return null;
         }
 
@@ -736,6 +756,67 @@ class AssessmentController extends Controller
         ]);
 
         return $session->id;
+    }
+
+    private function sessionQuestionItems($session)
+    {
+        return json_decode($session->questions_json ?? '[]', true) ?: [];
+    }
+
+    private function sessionIsReady($session)
+    {
+        if (!$session) {
+            return false;
+        }
+
+        $required = (int) ($session->question_count ?? 0);
+        if ($required < 1) {
+            return false;
+        }
+
+        return count($this->sessionQuestionItems($session)) >= $required;
+    }
+
+    private function sessionStartBlockReason($session)
+    {
+        if (!$session) {
+            return 'Sesi assessment belum tersedia.';
+        }
+
+        $required = (int) ($session->question_count ?? 0);
+        $available = count($this->sessionQuestionItems($session));
+        $sessionName = $session->category_name ?? 'Assessment';
+
+        if ($required < 1) {
+            return 'Konfigurasi jumlah soal sesi ' . $sessionName . ' belum diatur.';
+        }
+
+        if ($available === 0) {
+            return 'Soal untuk sesi ' . $sessionName . ' belum tersedia. Sesi belum dapat dimulai.';
+        }
+
+        if ($available < $required) {
+            return 'Soal untuk sesi ' . $sessionName . ' belum mencukupi (' . $available . ' dari ' . $required . '). Sesi belum dapat dimulai.';
+        }
+
+        return null;
+    }
+
+    private function sessionPayload($session)
+    {
+        $availableCount = count($this->sessionQuestionItems($session));
+
+        return [
+            'id' => $session->id,
+            'name' => $session->category_name,
+            'order' => (int) $session->session_order,
+            'duration_minutes' => (int) $session->duration_minutes,
+            'has_time_limit' => $this->sessionHasTimeLimit($session),
+            'question_count' => (int) $session->question_count,
+            'available_question_count' => $availableCount,
+            'can_start' => $this->sessionIsReady($session),
+            'block_reason' => $this->sessionStartBlockReason($session),
+        ];
     }
 
     private function sessionDefinitionFromCategory($category)
