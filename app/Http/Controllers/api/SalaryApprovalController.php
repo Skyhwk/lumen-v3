@@ -63,6 +63,7 @@ class SalaryApprovalController extends Controller
             if ($decision !== 'reject') {
                 $salaryOffer = DB::table('sallary_offer')
                     ->where('new_recruitment_id', $recruitment->id)
+                    ->where('is_active', true)
                     ->orderByDesc('id')
                     ->lockForUpdate()
                     ->first();
@@ -79,6 +80,7 @@ class SalaryApprovalController extends Controller
                 ];
                 if ($decision === 'negotiate') {
                     $update['sallary_offer_direktur'] = $amount;
+                    $update['email_sent_at'] = null;
                 }
                 DB::table('sallary_offer')->where('id', $salaryOffer->id)->update($update);
             }
@@ -87,10 +89,25 @@ class SalaryApprovalController extends Controller
             if ($decision === 'negotiate') {
                 $historyAction = 'negotiated';
             }
-            $nextStatus = in_array($decision, ['approve', 'negotiate'], true)
-                ? $this->salaryOfferStatus()
-                : $recruitment->status;
-            (new RecruitmentStatusService())->update($recruitment->id, $nextStatus, $now, $recruitment->status . '_' . $historyAction);
+
+            if ($decision === 'negotiate') {
+                $nextStatus = 'management_decision';
+            } else {
+                $nextStatus = $decision === 'approve'
+                    ? $this->salaryOfferStatus()
+                    : $recruitment->status;
+            }
+
+            $historyStatus = $recruitment->status . '_' . $historyAction;
+            $extraData = $decision === 'negotiate' ? ['negotiated_amount' => $amount] : [];
+
+            (new RecruitmentStatusService())->update(
+                $recruitment->id,
+                $nextStatus,
+                $now,
+                $historyStatus,
+                $extraData
+            );
 
             if ($decision === 'reject') {
                 $this->notifyRejectedCandidate($recruitment);
@@ -130,8 +147,16 @@ class SalaryApprovalController extends Controller
     {
         $salaryOffer = $salaryOffer ?: DB::table('sallary_offer')
             ->where('new_recruitment_id', $recruitment->id)
+            ->where('is_active', true)
             ->orderByDesc('id')
             ->first();
+
+        if (!$salaryOffer) {
+            $salaryOffer = DB::table('sallary_offer')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->orderByDesc('id')
+                ->first();
+        }
 
         $birthDate = $recruitment->tanggal_lahir ?? $recruitment->tempat_tanggal_lahir ?? null;
         $shioElemen = ShioElemenHelper::resolve($birthDate, $recruitment->shio ?? null, $recruitment->elemen ?? null);
@@ -194,6 +219,7 @@ class SalaryApprovalController extends Controller
                     ->where('bcc', [])
                     ->where('karyawan', 'Recruitment System')
                     ->noReply('PT Inti Surya Laboratorium')
+                    ->replyToAtsHrd()
                     ->send();
             } catch (\Throwable $exception) {
                 \Log::warning('Salary offer rejection email failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);

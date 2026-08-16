@@ -45,8 +45,90 @@ class RecruitmentStatusService
         return strtolower((string) ($entry['status'] ?? '')) === 'finance_rejected';
     }
 
+    public static function getLatestDirectorNegotiationIndex(array $history): ?int
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if (preg_match('/_(negotiated)$/', $status) || $status === 'internal_sallary_offer_negotiated') {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingHrdResubmitAfterDirectorNegotiation($recruitment): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $negotiatedIndex = self::getLatestDirectorNegotiationIndex($history);
+
+        if ($negotiatedIndex === null) {
+            return false;
+        }
+
+        for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
+            $status = strtolower((string) ($history[$i]['status'] ?? ''));
+            if (in_array($status, ['waiting_approve_finance', 'finance_approved'], true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function isFinanceSalaryLocked($recruitment): bool
+    {
+        if (!self::hasFinanceApproved($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingHrdResubmitAfterDirectorNegotiation($recruitment)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static function hasCandidateOfferingEmailSent($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'candidate_offering_email_sent') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function hasPriorFinanceApproval($recruitment): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+
+        foreach ($history as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'finance_approved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function shouldSendCandidateEmailOnFinanceApprove($recruitment): bool
+    {
+        return !self::hasCandidateOfferingEmailSent($recruitment);
+    }
+
     public static function getFinanceRejectReason($recruitment): ?string
     {
+        $recruitmentId = is_object($recruitment) ? ($recruitment->id ?? null) : (is_array($recruitment) ? ($recruitment['id'] ?? null) : null);
+
+        if ($recruitmentId) {
+            $offerReason = SallaryOfferService::getLatestRejectReason((int) $recruitmentId);
+            if ($offerReason) {
+                return $offerReason;
+            }
+        }
+
         $history = self::parseMetaHistory($recruitment);
 
         for ($i = count($history) - 1; $i >= 0; $i--) {

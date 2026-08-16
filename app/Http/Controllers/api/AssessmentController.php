@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
 
@@ -466,8 +467,10 @@ class AssessmentController extends Controller
                     'updated_at' => $completedAt,
                 ]);
                 (new RecruitmentStatusService())->update($attempt->recruitment_id, 'screening', $completedAt);
+            }
 
-                // Auto trigger AI evaluation once on first completion
+            $recruitment = DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->first();
+            if ($recruitment && !$this->hasSuccessfulAiMatching($recruitment)) {
                 $this->processAiMatching($attempt->id, $attempt->recruitment_id);
             }
 
@@ -738,10 +741,10 @@ class AssessmentController extends Controller
                 return null;
             }
 
-            if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_response')
-                && !empty($recruitment->ai_matching_response)) {
-                \Illuminate\Support\Facades\Log::info('=== AI MATCHING SKIPPED (already processed) ===', [
+            if ($this->hasSuccessfulAiMatching($recruitment)) {
+                $this->logAiMatching('info', 'AI matching skipped (already processed)', [
                     'recruitment_id' => $recruitmentId,
+                    'attempt_id' => $attemptId,
                 ]);
 
                 if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_data')
@@ -859,7 +862,7 @@ class AssessmentController extends Controller
 
             // Formulate Prompt String for AI Ollama Server
             $promptText = sprintf(
-                "Kandidat: %s, %s, %s, %s. Posisi: %s, %s, %s, %s, technical test minimal %s. Berikan skor kecocokan.",
+                "Analisis kecocokan kandidat terhadap posisi yang dilamar.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\nSkor minimum technical test: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia.",
                 $candidateEduStr,
                 $candidateExpStr,
                 $candidateSkillsStr,
@@ -871,12 +874,27 @@ class AssessmentController extends Controller
                 $minScoreReq
             );
 
-            // Construct exact cURL Payload for Ollama AI
+            // Construct payload for Ollama structured JSON response
             $aiPayload = [
                 'model' => 'intilab-ats',
                 'prompt' => $promptText,
                 'stream' => false,
-                'think' => false,
+                'format' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'score' => [
+                            'type' => 'integer',
+                        ],
+                        'reason' => [
+                            'type' => 'string',
+                        ],
+                    ],
+                    'required' => [
+                        'score',
+                        'reason',
+                    ],
+                    'additionalProperties' => false,
+                ],
             ];
 
             // Full Structured Data Object with Original JSON
@@ -896,8 +914,9 @@ class AssessmentController extends Controller
             ];
 
             // Log AI Prompt & Payload
-            \Illuminate\Support\Facades\Log::info("=== AI MATCHING GENERATE PROMPT ===", [
+            $this->logAiMatching('info', 'AI matching generate prompt', [
                 'recruitment_id' => $recruitmentId,
+                'attempt_id' => $attemptId,
                 'kandidat' => $recruitment->nama_lengkap ?? '',
                 'prompt' => $promptText,
                 'payload' => $aiPayload,
@@ -907,18 +926,25 @@ class AssessmentController extends Controller
             $aiResult = $this->sendToOllamaAi($aiPayload);
 
             // Log AI Response
-            \Illuminate\Support\Facades\Log::info("=== AI MATCHING GENERATE RESPONSE ===", [
+            $this->logAiMatching('info', 'AI matching generate response', [
                 'recruitment_id' => $recruitmentId,
+                'attempt_id' => $attemptId,
                 'kandidat' => $recruitment->nama_lengkap ?? '',
                 'ai_response' => $aiResult,
             ]);
 
             if ($aiResult && !empty($aiResult['response'])) {
-                $responseStr = $aiResult['response'];
-                
-                // Extract score integer if present
+                $parsedResponse = json_decode($aiResult['response'], true);
                 $matchingScore = null;
-                if (preg_match('/(\d{1,3})\s*%?/', $responseStr, $matches)) {
+                $responseStr = $aiResult['response'];
+
+                if (is_array($parsedResponse) && isset($parsedResponse['score'])) {
+                    $matchingScore = max(0, min(100, (int) $parsedResponse['score']));
+                    $responseStr = json_encode([
+                        'score' => $matchingScore,
+                        'reason' => trim((string) ($parsedResponse['reason'] ?? '')),
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                } elseif (preg_match('/(\d{1,3})\s*%?/', $aiResult['response'], $matches)) {
                     $scoreVal = (int) $matches[1];
                     if ($scoreVal <= 100) {
                         $matchingScore = $scoreVal;
@@ -950,18 +976,50 @@ class AssessmentController extends Controller
 
             return $structuredData;
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('processAiMatching Error: ' . $e->getMessage());
+            $this->logAiMatching('error', 'processAiMatching error', [
+                'recruitment_id' => $recruitmentId,
+                'attempt_id' => $attemptId,
+                'message' => $e->getMessage(),
+            ]);
             return null;
         }
     }
 
+    private function logAiMatching(string $level, string $message, array $context = []): void
+    {
+        Log::channel('ats_ai_matching')->{$level}($message, $context);
+    }
+
+    private function hasSuccessfulAiMatching($recruitment): bool
+    {
+        if (!$recruitment) {
+            return false;
+        }
+
+        if (!empty($recruitment->ai_matching_response)) {
+            $parsed = json_decode($recruitment->ai_matching_response, true);
+            if (is_array($parsed) && array_key_exists('score', $parsed)) {
+                return true;
+            }
+        }
+
+        $score = $recruitment->matching_score ?? $recruitment->nilai_kecocokan ?? null;
+        if ($score === null || $score === '') {
+            return false;
+        }
+
+        return (float) $score > 0;
+    }
+
     /**
-     * Send HTTP POST request to Ollama AI Server (http://10.88.209.240:11434/api/generate)
+     * Send HTTP POST request to Ollama AI Server (ATS_AI_GENERATE_URL).
      */
     private function sendToOllamaAi(array $payload)
     {
+        $endpoint = rtrim((string) env('ATS_AI_GENERATE_URL', 'http://10.88.209.240:11434/api/generate'), '/');
+
         try {
-            $ch = curl_init('http://10.88.209.240:11434/api/generate');
+            $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
@@ -975,17 +1033,30 @@ class AssessmentController extends Controller
             curl_close($ch);
 
             if ($curlError) {
-                \Illuminate\Support\Facades\Log::error('sendToOllamaAi cURL Error: ' . $curlError);
+                $this->logAiMatching('error', 'sendToOllamaAi cURL error', [
+                    'endpoint' => $endpoint,
+                    'error' => $curlError,
+                    'payload' => $payload,
+                ]);
             }
 
             if ($httpCode >= 200 && $httpCode < 300) {
                 return json_decode($response, true);
             }
-            
-            \Illuminate\Support\Facades\Log::warning("sendToOllamaAi HTTP Status {$httpCode}: " . $response);
+
+            $this->logAiMatching('warning', 'sendToOllamaAi HTTP error', [
+                'endpoint' => $endpoint,
+                'http_code' => $httpCode,
+                'response' => $response,
+                'payload' => $payload,
+            ]);
             return null;
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('sendToOllamaAi Exception: ' . $e->getMessage());
+            $this->logAiMatching('error', 'sendToOllamaAi exception', [
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+                'payload' => $payload,
+            ]);
             return null;
         }
     }

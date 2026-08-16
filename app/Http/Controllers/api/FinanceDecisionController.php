@@ -6,8 +6,8 @@ use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\CandidateDataOffers;
 use App\Models\NewRecruitment;
-use App\Models\SallaryOffer;
 use App\Services\RecruitmentStatusService;
+use App\Services\SallaryOfferService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -170,19 +170,22 @@ class FinanceDecisionController extends Controller
         DB::beginTransaction();
         try {
             if ($decision === 'approve') {
-                $approvedSalary = $request->input('approved_salary') ?? $request->input('sallary_offer_user') ?? $request->input('final_salary');
+                $activeOffer = SallaryOfferService::getActive((int) $id);
+                $approvedSalary = $request->input('approved_salary')
+                    ?? optional($activeOffer)->sallary_offer_hrd
+                    ?? $request->input('final_salary');
 
                 if ($approvedSalary !== null && $approvedSalary !== '') {
                     $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$approvedSalary)));
                     $finalSalary = $cleanSalary !== '' ? $cleanSalary : $approvedSalary;
 
-                    SallaryOffer::updateOrCreate(
-                        ['new_recruitment_id' => $id],
+                    SallaryOfferService::upsertActive(
+                        (int) $id,
                         [
                             'sallary_offer_hrd' => $finalSalary,
                             'final_sallary'     => $finalSalary,
-                            'updated_by'        => $user ?? 'Finance',
-                        ]
+                        ],
+                        $user ?? 'Finance'
                     );
                 }
 
@@ -205,12 +208,32 @@ class FinanceDecisionController extends Controller
             }
 
             if ($decision === 'reject') {
+                $rejectReason = trim((string) $request->input('reject_reason', ''));
+
+                if ($rejectReason === '') {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => 422,
+                        'message' => 'Alasan penolakan wajib diisi.',
+                    ], 422);
+                }
+
+                SallaryOfferService::markFinanceRejected(
+                    (int) $id,
+                    $rejectReason,
+                    $user ?? 'Finance'
+                );
+
                 (new RecruitmentStatusService())->update(
                     $id, 
                     'rejected', 
                     $now, 
                     'finance_rejected', 
-                    ['by' => $user ?? 'Finance']
+                    [
+                        'by'            => $user ?? 'Finance',
+                        'reject_reason' => $rejectReason,
+                        'alasan_reject' => $rejectReason,
+                    ]
                 );
 
                 DB::commit();
