@@ -138,9 +138,36 @@ class PersonnelRequestController extends Controller
             ->first();
     }
 
+    private function parseFormBoolean($value, bool $default = false): bool
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+            return true;
+        }
+
+        if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+            return false;
+        }
+
+        return filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
+    }
+
     private function validatedUserAssessmentConfig(Request $request): array
     {
-        $useAssessment = filter_var($request->input('use_user_assessment'), FILTER_VALIDATE_BOOLEAN);
+        $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
 
         if (!$useAssessment) {
             return [
@@ -152,7 +179,7 @@ class PersonnelRequestController extends Controller
         }
 
         $questionCount = (int) $request->input('user_assessment_question_count');
-        $hasTimeLimit = filter_var($request->input('user_assessment_has_time_limit'), FILTER_VALIDATE_BOOLEAN);
+        $hasTimeLimit = $this->parseFormBoolean($request->input('user_assessment_has_time_limit'), false);
         $durationMinutes = $hasTimeLimit ? (int) $request->input('user_assessment_duration_minutes') : null;
 
         if ($questionCount < 1) {
@@ -161,6 +188,8 @@ class PersonnelRequestController extends Controller
 
         $availableQuestions = Question::query()
             ->where('owner_karyawan', $this->karyawan)
+            ->where('question_scope', 'manager')
+            ->where('status', 'active')
             ->where('is_active', 1)
             ->where('question_type', 'single_choice')
             ->count();

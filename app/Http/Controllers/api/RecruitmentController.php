@@ -1425,6 +1425,10 @@ class RecruitmentController extends Controller{
                     'gender',
                     'prioritas',
                     'divisi_alias',
+                    'use_user_assessment',
+                    'user_assessment_question_count',
+                    'user_assessment_has_time_limit',
+                    'user_assessment_duration_minutes',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
