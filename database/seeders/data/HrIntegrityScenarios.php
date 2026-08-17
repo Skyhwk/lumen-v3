@@ -1,7 +1,8 @@
 <?php
 
 /**
- * 100 soal situational judgment INTEGRITAS untuk rekrutmen HR.
+ * 100 soal Situational Judgment Test (SJT) INTEGRITAS untuk rekrutmen HR.
+ * Konstruk: judgment & ethical decision-making di tempat kerja (McDaniel et al., SJT literature).
  * Return: array of ['text','options','answer','explanation']
  */
 
