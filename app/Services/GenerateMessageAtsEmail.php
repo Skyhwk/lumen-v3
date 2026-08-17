@@ -191,6 +191,7 @@ class GenerateMessageAtsEmail
     public static function sendCandidateHiringLetterEmail($applicant, object $dataObj, string $sender = 'HRD'): bool
     {
         if (empty($applicant->email)) {
+            self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
             return false;
         }
 
@@ -210,6 +211,8 @@ class GenerateMessageAtsEmail
 
             $emailQuery->noReply()->replyToAtsHrd()->send();
 
+            self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
+
             return true;
         } catch (\Throwable $e) {
             \Log::warning('Candidate hiring letter email failed', [
@@ -217,11 +220,89 @@ class GenerateMessageAtsEmail
                 'message'        => $e->getMessage(),
             ]);
 
+            self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
+
             return false;
         } finally {
             if (!empty($pdfPath) && file_exists($pdfPath)) {
                 @unlink($pdfPath);
             }
+        }
+    }
+
+    public static function sendCandidateOfferingSalaryWhatsapp($applicant, object $dataObj): bool
+    {
+        $whatsappData = (object) array_merge((array) $dataObj, [
+            'nama_lengkap'    => $applicant->nama_lengkap ?? ($dataObj->nama_lengkap ?? 'Kandidat'),
+            'email'           => $applicant->email ?? null,
+            'jenis_kelamin'   => $applicant->jenis_kelamin ?? ($dataObj->jenis_kelamin ?? null),
+            'posisi_di_lamar' => $dataObj->posisi_di_lamar ?? HrdEmailViewData::getNamaJabatan($applicant),
+            'nama_jabatan'    => $dataObj->nama_jabatan ?? HrdEmailViewData::getNamaJabatan($applicant),
+        ]);
+
+        $message = (new GenerateMessageAtsWhatsapp($whatsappData))->SalaryOfferingLetter();
+
+        return self::sendCandidateWhatsappMessage($applicant, $message, 'salary offering letter');
+    }
+
+    public static function sendCandidateHiringLetterWhatsapp($applicant, object $dataObj): bool
+    {
+        $whatsappData = (object) array_merge((array) $dataObj, [
+            'nama_lengkap'    => $applicant->nama_lengkap ?? ($dataObj->nama_lengkap ?? 'Kandidat'),
+            'email'           => $applicant->email ?? null,
+            'jenis_kelamin'   => $applicant->jenis_kelamin ?? ($dataObj->jenis_kelamin ?? null),
+            'posisi_di_lamar' => $dataObj->posisi_di_lamar ?? HrdEmailViewData::getNamaJabatan($applicant),
+            'nama_jabatan'    => $dataObj->nama_jabatan ?? HrdEmailViewData::getNamaJabatan($applicant),
+        ]);
+
+        $message = (new GenerateMessageAtsWhatsapp($whatsappData))->HiringLetter();
+
+        return self::sendCandidateWhatsappMessage($applicant, $message, 'hiring letter');
+    }
+
+    private static function resolveCandidatePhone($applicant): ?string
+    {
+        if (is_object($applicant) && method_exists($applicant, 'loadMissing')) {
+            $applicant->loadMissing('candidateProfile');
+        }
+
+        $profile = is_object($applicant) ? ($applicant->candidateProfile ?? null) : null;
+        $candidates = [
+            is_object($applicant) ? ($applicant->no_telepon ?? null) : null,
+            is_object($applicant) ? ($applicant->no_hp ?? null) : null,
+            is_object($applicant) ? ($applicant->no_whatsapp ?? null) : null,
+            is_object($profile) ? ($profile->no_whatsapp ?? null) : null,
+            is_object($profile) ? ($profile->no_telepon ?? null) : null,
+        ];
+
+        foreach ($candidates as $phone) {
+            $phone = trim((string) $phone);
+            if ($phone !== '') {
+                return $phone;
+            }
+        }
+
+        return null;
+    }
+
+    private static function sendCandidateWhatsappMessage($applicant, string $message, string $context): bool
+    {
+        $phone = self::resolveCandidatePhone($applicant);
+        if (!$phone) {
+            return false;
+        }
+
+        try {
+            (new SendWhatsapp(trim($phone), $message))->send();
+            return true;
+        } catch (\Throwable $e) {
+            \Log::warning('Candidate WhatsApp failed (' . $context . ')', [
+                'recruitment_id' => is_object($applicant) ? ($applicant->id ?? null) : null,
+                'phone'          => $phone,
+                'message'        => $e->getMessage(),
+            ]);
+
+            return false;
         }
     }
 

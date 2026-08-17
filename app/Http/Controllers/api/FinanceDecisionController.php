@@ -8,6 +8,7 @@ use App\Models\CandidateDataOffers;
 use App\Models\NewRecruitment;
 use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -200,6 +201,8 @@ class FinanceDecisionController extends Controller
 
                 DB::commit();
 
+                app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
+
                 return response()->json([
                     'status'  => 200,
                     'message' => 'Persetujuan Finance berhasil diproses. Kandidat siap diajukan ke Direktur.',
@@ -237,6 +240,8 @@ class FinanceDecisionController extends Controller
                 );
 
                 DB::commit();
+
+                app(AtsNotificationService::class)->financeDecisionMade($applicant, 'reject');
 
                 return response()->json([
                     'status'  => 200,

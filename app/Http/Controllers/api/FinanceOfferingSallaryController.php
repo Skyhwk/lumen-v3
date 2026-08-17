@@ -11,6 +11,7 @@ use App\Services\GenerateToken;
 use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -214,6 +215,8 @@ class FinanceOfferingSallaryController extends Controller
 
                 DB::commit();
 
+                app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
+
                 return response()->json([
                     'status'  => 200,
                     'message' => $shouldEmailCandidate
@@ -254,6 +257,8 @@ class FinanceOfferingSallaryController extends Controller
 
                 DB::commit();
 
+                app(AtsNotificationService::class)->financeDecisionMade($applicant, 'reject');
+
                 return response()->json([
                     'status'  => 200,
                     'message' => 'Penawaran gaji kandidat ditolak oleh Finance.',
@@ -278,10 +283,6 @@ class FinanceOfferingSallaryController extends Controller
 
     private function sendCandidateOfferingEmail(NewRecruitment $applicant, string $sender = 'Finance'): void
     {
-        if (empty($applicant->email)) {
-            return;
-        }
-
         if (empty($applicant->token_approval)) {
             $tokenService = new GenerateToken();
             $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'candidate_salary_offer' . str_replace('.', '', microtime(true));
@@ -301,6 +302,12 @@ class FinanceOfferingSallaryController extends Controller
             ]);
 
             $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+
+            if (empty($applicant->email)) {
+                GenerateMessageAtsEmail::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
+                return;
+            }
+
             $bodyEmail = GenerateMessageAtsEmail::bodyEmailCandidateOfferingSalary($applicant);
             $pdfPath = GenerateMessageAtsEmail::generateSalaryOfferingLetterPdfPath($dataObj);
 
@@ -316,6 +323,8 @@ class FinanceOfferingSallaryController extends Controller
             $emailQuery->noReply()
                 ->replyToAtsHrd()
                 ->send();
+
+            GenerateMessageAtsEmail::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
 
             (new RecruitmentStatusService())->update(
                 (int) $applicant->id,
@@ -333,6 +342,16 @@ class FinanceOfferingSallaryController extends Controller
                 'recruitment_id' => $applicant->id,
                 'message' => $exception->getMessage(),
             ]);
+
+            try {
+                $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+                GenerateMessageAtsEmail::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
+            } catch (\Throwable $waException) {
+                \Log::warning('Candidate offering salary WhatsApp failed', [
+                    'recruitment_id' => $applicant->id,
+                    'message' => $waException->getMessage(),
+                ]);
+            }
         }
     }
 }
