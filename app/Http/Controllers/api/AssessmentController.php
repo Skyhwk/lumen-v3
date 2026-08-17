@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
+use App\Services\AtsNotificationService;
 
 class AssessmentController extends Controller
 {
@@ -558,6 +559,10 @@ class AssessmentController extends Controller
                     'updated_at' => $completedAt,
                 ]);
                 (new RecruitmentStatusService())->update($attempt->recruitment_id, 'screening', $completedAt);
+                $recruitment = DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->first();
+                if ($recruitment) {
+                    app(AtsNotificationService::class)->assessmentCompleted($recruitment);
+                }
             }
 
             $recruitment = DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->first();
@@ -1074,37 +1079,46 @@ class AssessmentController extends Controller
                 'ai_payload' => $aiPayload,
             ];
 
-            // Log AI Prompt & Payload
-            $this->logAiMatching('info', 'AI matching generate prompt', [
+            // Log AI request (prompt once, metadata only in payload summary)
+            $this->logAiMatching('info', 'AI matching request', [
                 'recruitment_id' => $recruitmentId,
                 'attempt_id' => $attemptId,
                 'kandidat' => $recruitment->nama_lengkap ?? '',
+                'model' => $aiPayload['model'] ?? null,
+                'prompt_length' => strlen($promptText),
                 'prompt' => $promptText,
-                'payload' => $aiPayload,
             ]);
 
             // Send to Ollama AI Server via HTTP POST cURL
             $aiResult = $this->sendToOllamaAi($aiPayload);
 
-            // Log AI Response
-            $this->logAiMatching('info', 'AI matching generate response', [
+            // Log AI response (strip verbose token context from Ollama)
+            $this->logAiMatching('info', 'AI matching response', [
                 'recruitment_id' => $recruitmentId,
                 'attempt_id' => $attemptId,
                 'kandidat' => $recruitment->nama_lengkap ?? '',
-                'ai_response' => $aiResult,
+                'ai_response' => $this->summarizeAiMatchingResponse($aiResult),
             ]);
 
             if ($aiResult && !empty($aiResult['response'])) {
                 $parsedResponse = json_decode($aiResult['response'], true);
                 $matchingScore = null;
+                $matchingReason = null;
                 $responseStr = $aiResult['response'];
 
-                if (is_array($parsedResponse) && isset($parsedResponse['score'])) {
-                    $matchingScore = max(0, min(100, (int) $parsedResponse['score']));
-                    $responseStr = json_encode([
-                        'score' => $matchingScore,
-                        'reason' => trim((string) ($parsedResponse['reason'] ?? '')),
-                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if (is_array($parsedResponse)) {
+                    if (isset($parsedResponse['score'])) {
+                        $matchingScore = max(0, min(100, (int) $parsedResponse['score']));
+                    }
+                    if (isset($parsedResponse['reason'])) {
+                        $matchingReason = trim((string) $parsedResponse['reason']);
+                    }
+                    if ($matchingScore !== null || $matchingReason !== null) {
+                        $responseStr = json_encode([
+                            'score' => $matchingScore,
+                            'reason' => $matchingReason ?? '',
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
                 } elseif (preg_match('/(\d{1,3})\s*%?/', $aiResult['response'], $matches)) {
                     $scoreVal = (int) $matches[1];
                     if ($scoreVal <= 100) {
@@ -1121,6 +1135,10 @@ class AssessmentController extends Controller
                 }
                 if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_data')) {
                     $updateData['ai_matching_data'] = json_encode($structuredData);
+                }
+                if ($matchingReason !== null && $matchingReason !== ''
+                    && \Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_reason')) {
+                    $updateData['ai_matching_reason'] = $matchingReason;
                 }
                 if ($matchingScore !== null) {
                     if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'matching_score')) {
@@ -1149,6 +1167,42 @@ class AssessmentController extends Controller
     private function logAiMatching(string $level, string $message, array $context = []): void
     {
         Log::channel('ats_ai_matching')->{$level}($message, $context);
+    }
+
+    private function summarizeAiMatchingResponse(?array $aiResult): ?array
+    {
+        if (!$aiResult) {
+            return null;
+        }
+
+        $parsedResponse = null;
+        if (!empty($aiResult['response'])) {
+            $decoded = json_decode($aiResult['response'], true);
+            $parsedResponse = is_array($decoded) ? $decoded : $aiResult['response'];
+        }
+
+        return [
+            'model' => $aiResult['model'] ?? null,
+            'created_at' => $aiResult['created_at'] ?? null,
+            'done' => $aiResult['done'] ?? null,
+            'done_reason' => $aiResult['done_reason'] ?? null,
+            'response' => $parsedResponse,
+            'prompt_eval_count' => $aiResult['prompt_eval_count'] ?? null,
+            'eval_count' => $aiResult['eval_count'] ?? null,
+            'total_duration' => $aiResult['total_duration'] ?? null,
+        ];
+    }
+
+    private function summarizeAiMatchingPayload(array $payload): array
+    {
+        $prompt = (string) ($payload['prompt'] ?? '');
+
+        return [
+            'model' => $payload['model'] ?? null,
+            'stream' => $payload['stream'] ?? null,
+            'format' => $payload['format'] ?? null,
+            'prompt_length' => strlen($prompt),
+        ];
     }
 
     private function hasSuccessfulAiMatching($recruitment): bool
@@ -1197,7 +1251,7 @@ class AssessmentController extends Controller
                 $this->logAiMatching('error', 'sendToOllamaAi cURL error', [
                     'endpoint' => $endpoint,
                     'error' => $curlError,
-                    'payload' => $payload,
+                    'payload' => $this->summarizeAiMatchingPayload($payload),
                 ]);
             }
 
@@ -1209,14 +1263,14 @@ class AssessmentController extends Controller
                 'endpoint' => $endpoint,
                 'http_code' => $httpCode,
                 'response' => $response,
-                'payload' => $payload,
+                'payload' => $this->summarizeAiMatchingPayload($payload),
             ]);
             return null;
         } catch (\Throwable $e) {
             $this->logAiMatching('error', 'sendToOllamaAi exception', [
                 'endpoint' => $endpoint,
                 'message' => $e->getMessage(),
-                'payload' => $payload,
+                'payload' => $this->summarizeAiMatchingPayload($payload),
             ]);
             return null;
         }

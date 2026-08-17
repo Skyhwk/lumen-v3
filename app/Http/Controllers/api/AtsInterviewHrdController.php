@@ -12,6 +12,7 @@ use App\Services\MpdfService;
 use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -329,6 +330,8 @@ class AtsInterviewHrdController extends Controller
             // Silence exception
         }
 
+        app(AtsNotificationService::class)->hrdInterviewRescheduled($applicant);
+
         return response()->json([
             'status' => 200,
             'message' => 'HRD Interview rescheduled successfully and candidate notified.',
@@ -384,19 +387,10 @@ class AtsInterviewHrdController extends Controller
                     ->where('nama_lengkap', $prCreatedBy)
                     ->first();
 
-                // 1. System notification
-                $creatorUserId = $mk->user_id ?? null;
-                if ($creatorUserId) {
-                    DB::table('notification')->insert([
-                        'user_id'    => $creatorUserId,
-                        'title'      => 'HRD Interview Approved',
-                        'message'    => "Candidate {$applicant->nama_lengkap} ({$posisiName}) has passed the HRD Interview stage and is ready for User Interview scheduling. No. Request: {$noRequest}.",
-                        'url'        => '/hrd/applicant-tracking-system/interview-hrd',
-                        'is_read'    => 0,
-                        'is_active'  => 1,
-                        'created_at' => Carbon::now(),
-                    ]);
-                }
+                app(AtsNotificationService::class)->hrdInterviewPassed(
+                    $applicant,
+                    $applicant->personalRequest
+                );
 
                 // 2. Email notification to PR creator
                 $creatorEmail = ($mk && !empty($mk->email)) ? $mk->email : null;
@@ -536,6 +530,12 @@ class AtsInterviewHrdController extends Controller
         } catch (\Exception $e) {
             // Silence exception
         }
+
+        $applicant->loadMissing('personalRequest');
+        app(AtsNotificationService::class)->hrdInterviewRejected(
+            $applicant,
+            $applicant->personalRequest
+        );
 
         return response()->json([
             'status' => 200,

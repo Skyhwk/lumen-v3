@@ -27,6 +27,7 @@ use App\Services\SendWhatsapp;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 
 
@@ -435,6 +436,11 @@ class RecruitmentController extends Controller{
             }
 
             DB::commit();
+
+            app(AtsNotificationService::class)->newApplicantSubmitted(
+                (object) ['nama_lengkap' => $namaLengkap],
+                $personnelRequest
+            );
 
             return response()->json([
                 'message'=> 'Berhasil mendaftar',

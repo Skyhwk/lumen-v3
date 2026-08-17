@@ -11,6 +11,7 @@ use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -407,6 +408,11 @@ class AtsInterviewUserController extends Controller
                     ->noReply()
                     ->send();
             }
+
+            app(AtsNotificationService::class)->userInterviewSchedulePrepared(
+                $applicant,
+                $pr
+            );
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Failed sending User Interview notifications: " . $e->getMessage());
         }

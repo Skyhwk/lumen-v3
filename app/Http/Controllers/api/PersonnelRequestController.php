@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -271,16 +271,30 @@ class PersonnelRequestController extends Controller
     public function kanban()
     {
         try {
+            $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+            if ($ownedRequestIds->isEmpty()) {
+                return response()->json([], 200);
+            }
+
             // Fetch records milik user login; Kanban component will handle categorization
             $data = NewRecruitment::with([
-                'personnelRequest.detailCabang', 
-                'personnelRequest.detailDivisi', 
+                'personnelRequest.detailCabang',
+                'personnelRequest.detailDivisi',
                 'personnelRequest.detailPosisi',
                 'userInterview',
-                'hrdInterview'
-            ])->whereHas('personnelRequest', function ($query) {
-                $query->where('created_by', $this->karyawan);
-            })->orderBy('id', 'desc')->get();
+                'hrdInterview',
+                'candidateProfile',
+            ])
+                ->whereIn('personnel_request_id', $ownedRequestIds)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($item) {
+                    $item->has_completed_profile = $item->candidateProfile !== null;
+
+                    return $item;
+                })
+                ->values();
+
             return response()->json($data, 200);
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()], 400);
@@ -330,6 +344,8 @@ class PersonnelRequestController extends Controller
             ]);
 
             DB::commit();
+            app(AtsNotificationService::class)->personnelRequestSubmitted($data);
+
             return response()->json([
                 'status'     => 'success',
                 'message'    => 'Personal Request berhasil dibuat.',
@@ -562,6 +578,11 @@ class PersonnelRequestController extends Controller
                 }
             }
 
+            app(AtsNotificationService::class)->userInterviewScheduledByRequester(
+                $recruitment,
+                $recruitment->personnelRequest
+            );
+
             DB::commit();
             return response()->json([
                 'message' => 'Berhasil menjadwalkan interview!',
@@ -676,12 +697,16 @@ class PersonnelRequestController extends Controller
                             ->where('body', $emailContent)
                             ->noReply()
                             ->send();
+
+                app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
             } else {
                 $recruitment->update([
                     'reject_interview_user_by' => $this->karyawan,
                     'reject_interview_user_at' => Carbon::now(),
                     'is_approve_interview_user' => $isApproved
                 ]);
+
+                app(AtsNotificationService::class)->userInterviewRejected($recruitment, $pr);
 
                 try {
                     // Set posisi untuk template

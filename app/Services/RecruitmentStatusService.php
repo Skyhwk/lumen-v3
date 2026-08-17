@@ -33,6 +33,54 @@ class RecruitmentStatusService
         return null;
     }
 
+    public static function isAwaitingIbuDirekturApproval($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment) ? ($recruitment->status ?? '') : ($recruitment['status'] ?? ''))));
+        return $status === 'management_decision';
+    }
+
+    public static function getLatestDirectorSalaryDecision(array $history): ?string
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $status, $matches)) {
+                return $matches[1];
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingDirectorSalaryApproval($recruitment): bool
+    {
+        if (self::isAwaitingIbuDirekturApproval($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingHrdResubmitAfterDirectorNegotiation($recruitment)) {
+            return false;
+        }
+
+        $recruitmentId = is_object($recruitment) ? ($recruitment->id ?? null) : ($recruitment['id'] ?? null);
+        if (!$recruitmentId) {
+            return false;
+        }
+
+        $offer = SallaryOfferService::getActive((int) $recruitmentId);
+        if (!$offer || empty($offer->email_sent_at)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        return self::getLatestDirectorSalaryDecision($history) === null;
+    }
+
+    /** @deprecated use isAwaitingDirectorSalaryApproval */
+    public static function isAwaitingDirector1SalaryApproval($recruitment): bool
+    {
+        return self::isAwaitingDirectorSalaryApproval($recruitment);
+    }
+
     public static function hasFinanceApproved($recruitment): bool
     {
         $entry = self::getLatestFinanceHistoryEntry(self::parseMetaHistory($recruitment));

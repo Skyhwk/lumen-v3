@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsNotificationService;
 
 class CompleteProfileController extends Controller
 {
@@ -100,6 +101,11 @@ class CompleteProfileController extends Controller
             $this->storeDocuments($request->input('documents', []), $profileId, $recruitment->id, $now);
             (new RecruitmentStatusService())->update($recruitment->id, 'interview_user', $now);
 
+            $personnelRequest = DB::table('personnel_requests')
+                ->where('id', $recruitment->personnel_request_id)
+                ->first();
+            app(AtsNotificationService::class)->profileCompleted($recruitment, $personnelRequest);
+
             return response()->json(['status' => true, 'message' => 'Kelengkapan profil berhasil dikirim.']);
         });
     }
@@ -186,6 +192,39 @@ class CompleteProfileController extends Controller
         if (empty($request->input('educations', []))) {
             $errors['educations'] = ['Minimal satu riwayat pendidikan wajib diisi.'];
         }
+
+        $documentErrors = $this->validateRequiredDocuments($request->input('documents', []));
+        if (!empty($documentErrors)) {
+            $errors = array_merge($errors, $documentErrors);
+        }
+
+        return $errors;
+    }
+
+    private function validateRequiredDocuments(array $documents): array
+    {
+        $requiredTypes = [
+            'KTP' => 'Dokumen KTP wajib diunggah.',
+            'KARTU KELUARGA' => 'Dokumen Kartu Keluarga wajib diunggah.',
+        ];
+        $uploadedTypes = [];
+
+        foreach ($documents as $document) {
+            if (!is_array($document) || empty($document['jenis_dokumen']) || empty($document['data'])) {
+                continue;
+            }
+
+            $normalizedType = strtoupper(trim((string) $document['jenis_dokumen']));
+            $uploadedTypes[$normalizedType] = true;
+        }
+
+        $errors = [];
+        foreach ($requiredTypes as $type => $message) {
+            if (empty($uploadedTypes[$type])) {
+                $errors['documents.' . strtolower(str_replace(' ', '_', $type))] = [$message];
+            }
+        }
+
         return $errors;
     }
 

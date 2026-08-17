@@ -14,6 +14,7 @@ use App\Services\RecruitmentPictureService;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Services\AtsNotificationService;
 use App\Models\CandidateProfile;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -105,10 +106,19 @@ class DataApplicantsController extends Controller
                 });
             })
             ->editColumn('nilai_kecocokan', function ($row) {
-                $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== '' 
-                    ? $row->nilai_kecocokan 
-                    : ($row->matching_score ?? rand(70, 95));
-                return $score . '%';
+                if ($row->nilai_kecocokan !== null && $row->nilai_kecocokan !== '') {
+                    return (float) $row->nilai_kecocokan;
+                }
+
+                if ($row->matching_score !== null && $row->matching_score !== '') {
+                    return (float) $row->matching_score;
+                }
+
+                return null;
+            })
+            ->addColumn('minimum_matching', function ($row) {
+                $minimum = optional($row->personalRequest)->minimum_matching;
+                return $minimum !== null && $minimum !== '' ? (float) $minimum : null;
             })
             ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
                 $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
@@ -270,6 +280,11 @@ class DataApplicantsController extends Controller
             \Illuminate\Support\Facades\Log::error('ATS HRD Interview Notification Error: ' . $e->getMessage());
         }
 
+        app(AtsNotificationService::class)->applicantApprovedForHrdInterview(
+            $applicant,
+            $applicant->personalRequest
+        );
+
         return response()->json([
             'status' => 200,
             'message' => 'Applicant approved successfully and moved to HRD Interview stage.',
@@ -338,6 +353,13 @@ class DataApplicantsController extends Controller
         } catch (\Exception $e) {
             // Silence exception
         }
+
+        app(AtsNotificationService::class)->notifyPersonnelRequestCreator(
+            $applicant->personalRequest,
+            'Kandidat Ditolak Screening',
+            "Kandidat {$applicant->nama_lengkap} ditolak pada tahap screening.",
+            AtsNotificationService::URL_DATA_APPLICANTS
+        );
 
         return response()->json([
             'status' => 200,

@@ -9,6 +9,7 @@ use App\Services\RecruitmentPictureService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use App\Services\GenerateMessageAtsWhatsapp;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -112,6 +113,8 @@ class SalaryApprovalController extends Controller
             if ($decision === 'reject') {
                 $this->notifyRejectedCandidate($recruitment);
             }
+
+            app(AtsNotificationService::class)->directorSalaryDecision($recruitment, $decision);
 
             return response()->json([
                 'result' => $decision,

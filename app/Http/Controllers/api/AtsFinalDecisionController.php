@@ -11,6 +11,7 @@ use App\Services\GenerateMessageAtsEmail;
 use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -163,6 +164,14 @@ class AtsFinalDecisionController extends Controller
                 $offer = $row->sallaryOffer;
                 $emailSentAt = $offer->email_sent_at ?? null;
 
+                if (RecruitmentStatusService::isAwaitingDirectorSalaryApproval($row)) {
+                    return [
+                        'code' => 'awaiting_direktur',
+                        'label' => 'Menunggu Direktur (Salary)',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
                 $history = json_decode($row->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
 
@@ -305,6 +314,20 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
+        if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($applicant)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data tidak dapat diedit karena masih menunggu keputusan manajemen.',
+            ], 422);
+        }
+
+        if (RecruitmentStatusService::isAwaitingDirectorSalaryApproval($applicant)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data tidak dapat diedit karena masih menunggu persetujuan Direktur atas Offering Salary.',
+            ], 422);
+        }
+
         $decision = $request->input('decision');
 
         if (!$decision && RecruitmentStatusService::isFinanceSalaryLocked($applicant)) {
@@ -411,6 +434,12 @@ class AtsFinalDecisionController extends Controller
                 ]);
             }
 
+            $applicant->loadMissing('personalRequest', 'personnelRequest');
+            app(AtsNotificationService::class)->candidateHired(
+                $applicant,
+                $applicant->personalRequest ?? $applicant->personnelRequest
+            );
+
             return response()->json([
                 'status'  => 200,
                 'message' => 'Negotiated salary offer approved successfully with candidate data offer.',
@@ -495,6 +524,8 @@ class AtsFinalDecisionController extends Controller
                 $user,
                 $forceNewOffer
             );
+
+            app(AtsNotificationService::class)->salarySubmittedToFinance($applicant);
         }
 
         return response()->json([
@@ -685,6 +716,12 @@ class AtsFinalDecisionController extends Controller
                 $user ?? 'HRD'
             );
         }
+
+        $applicant->loadMissing('personalRequest', 'personnelRequest');
+        app(AtsNotificationService::class)->candidateHired(
+            $applicant,
+            $applicant->personalRequest ?? $applicant->personnelRequest
+        );
 
         return response()->json([
             'status'  => 200,
