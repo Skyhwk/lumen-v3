@@ -22,21 +22,21 @@ npm run dev
 | GET | `/api/wa/qr` | QR data URL terakhir (polling fallback) |
 | POST | `/api/wa/logout` | Logout & hapus session files |
 
-## Socket.io Events
+## Realtime (MQTT)
 
-| Event | Direction | Keterangan |
-|-------|-----------|------------|
-| `wa:connect` | Client → Server | Trigger connect Baileys |
-| `wa:qr` | Server → Client | `{ qr: dataUrl }` |
-| `wa:status` | Server → Client | `{ status, phone? }` |
-| `wa:connected` | Server → Client | `{ phone }` |
-| `wa:disconnected` | Server → Client | `{ reason }` |
-| `wa:logout` | Client → Server | Hapus session |
+Push events via broker MQTT (`/intilab/wa/{userId}/#`). Client commands via REST.
 
-Connect dengan auth:
+| Method | Path | Keterangan |
+|--------|------|------------|
+| POST | `/api/wa/connect` | Mulai session + sync chat jika connected |
+| POST | `/api/wa/logout` | Logout session |
+| POST | `/api/wa/typing` | `{ jid, typing? }` — kirim indikator mengetik |
 
-```js
-io(url, { auth: { token: localStorage.token } })
+Verifikasi broker:
+
+```bash
+npm run verify:mqtt
+npm run verify:mqtt:publish
 ```
 
 ## Environment
@@ -48,6 +48,12 @@ io(url, { auth: { token: localStorage.token } })
 | `WA_ENABLE_MESSAGE_HISTORY_SYNC` | *(kosong = off)* | `true`/`1`/`yes`/`on` untuk sync history pesan dari HP. Default **mati** — hanya pesan realtime sejak connect. |
 | `GROUP_MESSAGE_RETENTION_DAYS` | `3` | Retensi pesan grup saat history sync **aktif** |
 | `WA_AVATAR_TTL_HOURS` | `24` | Cache foto profil WA (jam) sebelum di-refresh ulang |
+| `MQTT_HOST` | `apps.intilab.com` | Broker MQTT (native TCP, sama Lumen) |
+| `MQTT_PORT` | `1883` | Port native MQTT publisher |
+| `MQTT_USERNAME` | — | Credential sama notifikasi |
+| `MQTT_PASSWORD` | — | Credential sama notifikasi |
+| `WA_MQTT_TOPIC_PREFIX` | `/intilab/wa` | Prefix topic realtime WA |
+| `WA_MQTT_CLIENT_ID` | `wa-service-publisher` | Client ID publisher wa-service |
 
 ## PM2
 

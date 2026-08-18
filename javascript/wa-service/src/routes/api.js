@@ -3,6 +3,7 @@ const multer = require('multer');
 const { authMiddleware } = require('../auth/lumenAuth');
 const {
     ensureSession,
+    waitForSessionProgress,
     getSessionStatus,
     logoutSession,
     getSession,
@@ -15,7 +16,7 @@ const avatarService = require('../services/avatarService');
 const { loadEnv } = require('../config/env');
 const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
 
-function createApiRouter(io) {
+function createApiRouter() {
     const router = express.Router();
     const upload = multer({
         storage: multer.memoryStorage(),
@@ -36,7 +37,12 @@ function createApiRouter(io) {
     router.post('/wa/connect', authMiddleware(), async (req, res) => {
         try {
             await ensureSession(req.waUser.id);
-            const status = getSessionStatus(req.waUser.id);
+            const status = await waitForSessionProgress(req.waUser.id, { timeoutMs: 20000 });
+            if (status.status === 'connected') {
+                messageService.syncAndEmitChats(req.waUser.id).catch((error) => {
+                    console.warn(`[api] chat sync on connect failed for ${req.waUser.id}:`, error.message);
+                });
+            }
             res.json({ ok: true, ...status });
         } catch (error) {
             res.status(500).json({ ok: false, message: error.message });
@@ -57,10 +63,25 @@ function createApiRouter(io) {
         res.json({ ok: true, message: 'Session cleared' });
     });
 
+    router.post('/wa/typing', authMiddleware(), async (req, res) => {
+        try {
+            const { jid, typing = true } = req.body || {};
+            if (!jid?.trim()) {
+                return res.status(400).json({ ok: false, message: 'JID wajib diisi' });
+            }
+
+            const presenceService = require('../services/presenceService');
+            await presenceService.sendTyping(req.waUser.id, jid.trim(), typing !== false);
+            res.json({ ok: true });
+        } catch (error) {
+            res.status(500).json({ ok: false, message: error.message });
+        }
+    });
+
     router.get('/wa/chats', authMiddleware(), async (req, res) => {
         try {
             const forceEnrich = req.query.enrich === '1';
-            await chatNameService.maybeEnrichChatNames(req.waUser.id, io, { force: forceEnrich });
+            await chatNameService.maybeEnrichChatNames(req.waUser.id, { force: forceEnrich });
             const { chats, statusChats } = await messageService.getChats(req.waUser.id);
             res.json({ ok: true, chats, statusChats });
         } catch (error) {
@@ -89,7 +110,7 @@ function createApiRouter(io) {
                 return res.status(400).json({ ok: false, message: 'Nomor atau kontak wajib diisi' });
             }
 
-            const result = await messageService.startChat(req.waUser.id, { phone, jid }, io);
+            const result = await messageService.startChat(req.waUser.id, { phone, jid });
             res.json({ ok: true, ...result });
         } catch (error) {
             const status = String(error.message || '').includes('tidak valid')
@@ -142,11 +163,11 @@ function createApiRouter(io) {
             const chat = await messageService.getChatByJid(req.waUser.id, jid.trim());
             if (chat) {
                 const { emitChatUpdate } = require('../baileys/qrHandler');
-                emitChatUpdate(io, req.waUser.id, chat);
+                emitChatUpdate(req.waUser.id, chat);
             }
 
             const contacts = await contactService.getContacts(req.waUser.id);
-            emitContactsSync(io, req.waUser.id, contacts);
+            emitContactsSync(req.waUser.id, contacts);
 
             res.json({ ok: true, contact, chat });
         } catch (error) {
@@ -173,11 +194,11 @@ function createApiRouter(io) {
             const chat = await messageService.getChatByJid(req.waUser.id, jid);
             if (chat) {
                 const { emitChatUpdate } = require('../baileys/qrHandler');
-                emitChatUpdate(io, req.waUser.id, chat);
+                emitChatUpdate(req.waUser.id, chat);
             }
 
             const contacts = await contactService.getContacts(req.waUser.id);
-            emitContactsSync(io, req.waUser.id, contacts);
+            emitContactsSync(req.waUser.id, contacts);
 
             res.json({ ok: true, contact, chat });
         } catch (error) {
@@ -193,17 +214,12 @@ function createApiRouter(io) {
             }
 
             const contactSyncCoordinator = require('../services/contactSyncCoordinator');
-            const synced = await contactSyncCoordinator.syncDeviceContactsForced(
-                req.waUser.id,
-                session.sock,
-                session.contactStore,
-                io,
-            );
+            const synced = await contactSyncCoordinator.syncDeviceContactsForced(req.waUser.id, session.sock, session.contactStore);
 
             const contacts = await contactService.getContacts(req.waUser.id);
-            emitContactsSync(io, req.waUser.id, contacts);
+            emitContactsSync(req.waUser.id, contacts);
 
-            avatarService.syncAvatarsInBackground(req.waUser.id, session.sock, [], io, { limit: 50 })
+            avatarService.syncAvatarsInBackground(req.waUser.id, session.sock, [], { limit: 50 })
                 .catch((error) => {
                     console.warn(`[api] avatar sync after contacts/sync failed:`, error.message);
                 });
@@ -230,9 +246,9 @@ function createApiRouter(io) {
                 ? await avatarService.syncAvatarsForJids(req.waUser.id, session.sock, jids, { concurrency: 3 })
                 : await avatarService.syncRecentChatAvatars(req.waUser.id, session.sock, { limit });
 
-            await messageService.syncAndEmitChats(req.waUser.id, io);
+            await messageService.syncAndEmitChats(req.waUser.id);
             const contacts = await contactService.getContacts(req.waUser.id);
-            emitContactsSync(io, req.waUser.id, contacts);
+            emitContactsSync(req.waUser.id, contacts);
 
             res.json({
                 ok: true,
@@ -248,10 +264,10 @@ function createApiRouter(io) {
         try {
             const jid = decodeURIComponent(req.params.jid);
             await messageService.ensureChat(req.waUser.id, jid, {});
-            chatNameService.enrichSingleChatName(req.waUser.id, jid, io).catch(() => {});
+            chatNameService.enrichSingleChatName(req.waUser.id, jid).catch(() => {});
             const chat = await messageService.getChatByJid(req.waUser.id, jid);
 
-            await messageService.markRead(req.waUser.id, jid, io);
+            await messageService.markRead(req.waUser.id, jid);
 
             if (isMessageHistorySyncEnabled()) {
                 const syncTask = jid.endsWith('@g.us')
@@ -270,7 +286,7 @@ function createApiRouter(io) {
                         if (!avatarUrl) return;
                         const { emitChatUpdate } = require('../baileys/qrHandler');
                         const refreshed = await messageService.getChatByJid(req.waUser.id, jid);
-                        if (refreshed) emitChatUpdate(io, req.waUser.id, refreshed);
+                        if (refreshed) emitChatUpdate(req.waUser.id, refreshed);
                     })
                     .catch((error) => {
                         console.warn(`[api] background avatar sync failed for ${jid}:`, error.message);
@@ -315,7 +331,7 @@ function createApiRouter(io) {
             }
 
             const limit = req.body?.limit ? parseInt(req.body.limit, 10) : 25;
-            const result = await messageService.syncChatMedia(req.waUser.id, jid, io, { limit });
+            const result = await messageService.syncChatMedia(req.waUser.id, jid, { limit });
             res.json({
                 ok: true,
                 synced: result.synced,
@@ -334,8 +350,7 @@ function createApiRouter(io) {
             const result = await messageService.downloadMessageMedia(
                 req.waUser.id,
                 jid,
-                waMessageId,
-                io,
+                waMessageId
             );
             res.json({ ok: true, ...result });
         } catch (error) {
@@ -437,7 +452,7 @@ function createApiRouter(io) {
     router.post('/wa/chats/:jid/read', authMiddleware(), async (req, res) => {
         try {
             const jid = decodeURIComponent(req.params.jid);
-            await messageService.markRead(req.waUser.id, jid, io);
+            await messageService.markRead(req.waUser.id, jid);
             res.json({ ok: true });
         } catch (error) {
             res.status(500).json({ ok: false, message: error.message });
@@ -448,7 +463,7 @@ function createApiRouter(io) {
         try {
             const jid = decodeURIComponent(req.params.jid);
             const pinned = req.body?.pinned !== false;
-            const chat = await messageService.setChatPinned(req.waUser.id, jid, pinned, io);
+            const chat = await messageService.setChatPinned(req.waUser.id, jid, pinned);
             res.json({ ok: true, chat });
         } catch (error) {
             res.status(500).json({ ok: false, message: error.message });
@@ -458,7 +473,7 @@ function createApiRouter(io) {
     router.delete('/wa/chats/:jid', authMiddleware(), async (req, res) => {
         try {
             const jid = decodeURIComponent(req.params.jid);
-            const result = await messageService.deleteChat(req.waUser.id, jid, io);
+            const result = await messageService.deleteChat(req.waUser.id, jid);
             res.json({ ok: true, ...result });
         } catch (error) {
             res.status(500).json({ ok: false, message: error.message });
@@ -487,8 +502,7 @@ function createApiRouter(io) {
                 req.waUser.id,
                 jid,
                 msgId,
-                text.trim(),
-                io,
+                text.trim()
             );
             res.json({ ok: true, message });
         } catch (error) {
@@ -505,8 +519,7 @@ function createApiRouter(io) {
                 req.waUser.id,
                 jid,
                 msgId,
-                { forEveryone },
-                io,
+                { forEveryone }
             );
             res.json({ ok: true, ...result });
         } catch (error) {
@@ -527,8 +540,7 @@ function createApiRouter(io) {
                 req.waUser.id,
                 fromJid,
                 waMessageId,
-                toJid,
-                io,
+                toJid
             );
             res.json({ ok: true, message });
         } catch (error) {

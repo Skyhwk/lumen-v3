@@ -428,7 +428,7 @@ class PersonnelRequestController extends Controller
 
             $list = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
                 ->where('is_active', true)
-                ->whereIn('user_id', $allowedIds)
+                ->whereIn('id', $allowedIds)
                 ->orderBy('nama_lengkap')
                 ->get()
                 ->map(function ($k) {
