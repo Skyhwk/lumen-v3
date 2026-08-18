@@ -699,10 +699,24 @@ class BankSoalController extends Controller
         return strtolower((string) ($category->category_scope ?? 'hr')) === 'manager';
     }
 
+    private function getEffectiveKaryawanName()
+    {
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID');
+        
+        if ($isDevMode && $devUserId) {
+            $devKaryawan = \App\Models\MasterKaryawan::where('user_id', $devUserId)->first();
+            if ($devKaryawan) {
+                return $devKaryawan->nama_lengkap;
+            }
+        }
+        return $this->karyawan;
+    }
+
     private function countManagerAvailableQuestions(): int
     {
         return Question::query()
-            ->where('owner_karyawan', $this->karyawan)
+            ->where('owner_karyawan', $this->getEffectiveKaryawanName())
             ->where('is_active', 1)
             ->where('question_type', 'single_choice')
             ->count();

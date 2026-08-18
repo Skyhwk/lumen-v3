@@ -120,7 +120,15 @@ class PersonnelRequestController extends Controller
 
     private function ownedPersonnelRequestQuery()
     {
-        return PersonnelRequest::query()->where('created_by', $this->karyawan);
+        // Dapatkan semua ID bawahan (termasuk diri sendiri)
+        $allowedIds = $this->getAllowedEmployeeIds();
+
+        // Cari nama_lengkap dari semua ID tersebut karena field created_by menggunakan nama_lengkap
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('user_id', $allowedIds)
+            ->pluck('nama_lengkap')
+            ->toArray();
+
+        return PersonnelRequest::query()->whereIn('created_by', $allowedNames);
     }
 
     private function findOwnedPersonnelRequest($id)
@@ -165,6 +173,20 @@ class PersonnelRequestController extends Controller
         return filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
     }
 
+    private function getEffectiveKaryawanName()
+    {
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID');
+        
+        if ($isDevMode && $devUserId) {
+            $devKaryawan = \App\Models\MasterKaryawan::where('user_id', $devUserId)->first();
+            if ($devKaryawan) {
+                return $devKaryawan->nama_lengkap;
+            }
+        }
+        return $this->karyawan;
+    }
+
     private function validatedUserAssessmentConfig(Request $request): array
     {
         $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
@@ -187,7 +209,7 @@ class PersonnelRequestController extends Controller
         }
 
         $availableQuestions = Question::query()
-            ->where('owner_karyawan', $this->karyawan)
+            ->where('owner_karyawan', $this->getEffectiveKaryawanName())
             ->where('question_scope', 'manager')
             ->where('status', 'active')
             ->where('is_active', 1)
@@ -312,6 +334,10 @@ class PersonnelRequestController extends Controller
 
             $assessmentConfig = $this->validatedUserAssessmentConfig($request);
 
+            // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
+            // Menggunakan helper agar logic impersonasi lebih tersentralisasi
+            $createdBy = $this->getEffectiveKaryawanName();
+
             $data = PersonnelRequest::create([
                 'no_request'                => $noRequest,
                 'request_type'              => $request->request_type,
@@ -340,7 +366,7 @@ class PersonnelRequestController extends Controller
                 'user_assessment_question_count' => $assessmentConfig['user_assessment_question_count'],
                 'user_assessment_has_time_limit' => $assessmentConfig['user_assessment_has_time_limit'],
                 'user_assessment_duration_minutes' => $assessmentConfig['user_assessment_duration_minutes'],
-                'created_by'                => $this->karyawan ?? null,
+                'created_by'                => $createdBy,
             ]);
 
             DB::commit();
@@ -391,7 +417,16 @@ class PersonnelRequestController extends Controller
      */
     private function getAllowedEmployeeIds()
     {
+        // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
+        // Fitur ini otomatis MATI jika APP_ENV='production' di .env
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID'); // Ambil dari .env
+        
         $userId = auth()->user()->id ?? $this->user_id;
+
+        if ($isDevMode && $devUserId) {
+            $userId = $devUserId;
+        }
 
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
         $bawahanAll = GetBawahanAll::where('id', $userId)->get();
