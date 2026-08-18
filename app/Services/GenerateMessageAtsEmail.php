@@ -40,8 +40,9 @@ class GenerateMessageAtsEmail
             return '';
         }
 
-        return view('TemplateEmail.hrd.partials.action-buttons-candidate-offering', [
+        return view('TemplateEmail.hrd.partials.action-buttons-salary-offer', [
             'btn' => $btn,
+            'mark' => 'Candidate Offering',
         ])->render();
     }
 
@@ -51,7 +52,7 @@ class GenerateMessageAtsEmail
             return '';
         }
 
-        if ($btn === null && !empty($data->token_approval)) {
+        if ($btn === null && !empty($data->token)) {
             $btn = self::buildCandidateOfferingButtons($data);
         }
 
@@ -310,7 +311,7 @@ class GenerateMessageAtsEmail
                 $emailQuery->where('attachment', [$pdfPath]);
             }
 
-            $emailQuery->noReply()->replyToAtsHrd()->send();
+            $emailQuery->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
 
             self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
 
@@ -324,6 +325,54 @@ class GenerateMessageAtsEmail
             self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
 
             return false;
+        } finally {
+            if (!empty($pdfPath) && file_exists($pdfPath)) {
+                @unlink($pdfPath);
+            }
+        }
+    }
+
+    /**
+     * Kirim email Salary Offering Letter ke kandidat (body ATS + lampiran PDF + tombol keputusan).
+     *
+     * @param \App\Models\NewRecruitment|object $applicant
+     */
+    public static function sendCandidateOfferingSalaryEmail($applicant, object $dataObj, string $sender = 'HRD', $btn = null): bool
+    {
+        if (empty($applicant->email)) {
+            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
+            return false;
+        }
+
+        $subject = 'Penawaran Gaji - PT Inti Surya Laboratorium';
+        $btn = $btn ?? self::buildCandidateOfferingButtons($applicant);
+        $bodyEmail = self::bodyEmailCandidateOfferingSalary($applicant, $btn);
+        $pdfPath = self::generateSalaryOfferingLetterPdfPath($dataObj);
+
+        try {
+            $emailQuery = SendEmail::where('to', $applicant->email)
+                ->where('subject', $subject)
+                ->where('body', $bodyEmail)
+                ->where('karyawan', $sender);
+
+            if (!empty($pdfPath) && file_exists($pdfPath)) {
+                $emailQuery->where('attachment', [$pdfPath]);
+            }
+
+            $emailQuery->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
+
+            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
+
+            return true;
+        } catch (\Throwable $e) {
+            \Log::warning('Candidate salary offering email failed', [
+                'recruitment_id' => $applicant->id ?? null,
+                'message'        => $e->getMessage(),
+            ]);
+
+            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
+
+            throw $e;
         } finally {
             if (!empty($pdfPath) && file_exists($pdfPath)) {
                 @unlink($pdfPath);

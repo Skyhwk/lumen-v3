@@ -28,6 +28,7 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\PublicRecruitmentJobListService;
 use App\Services\UserAssessmentCategoryService;
 use Carbon\Carbon;
 
@@ -1390,6 +1391,8 @@ class RecruitmentController extends Controller{
                 ->where('personnel_requests.is_reject', false)
                 ->where('personnel_requests.is_publish', true)
                 ->select([
+                    'personnel_requests.id',
+                    'personnel_requests.created_at',
                     'no_request',
                     'divisi',
                     'jumlah_personal',
@@ -1398,14 +1401,17 @@ class RecruitmentController extends Controller{
                     'gender',
                     'prioritas',
                     'divisi_alias',
-                    'divisi_alias',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
-                ->get()
-                ->makeHidden(['divisi', 'lokasi_penempatan_cabang']);
+                ->get();
 
-            return response()->json($data, 200);
+            $data = app(PublicRecruitmentJobListService::class)
+                ->filterDuplicatePositions($data);
+
+            $data->each->makeHidden(['id', 'created_at', 'divisi', 'lokasi_penempatan_cabang']);
+
+            return response()->json($data->values(), 200);
         } catch (\Exception $th) {
             return response()->json([
                 'message' => 'Gagal mengambil data job list.',
