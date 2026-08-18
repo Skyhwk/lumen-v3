@@ -13,14 +13,11 @@ const { createContactStore } = require('./contactStore');
 const { emitStatus } = require('./qrHandler');
 const sessionService = require('../services/sessionService');
 
+const { closeSocket } = require('./socketUtils');
+
 const runtimeSessions = new Map();
 const connectLocks = new Map();
-
-let ioInstance = null;
-
-function setIo(io) {
-    ioInstance = io;
-}
+const reconnectTimers = new Map();
 
 function getSessionDir(userId) {
     const { sessionsDir } = loadEnv();
@@ -49,6 +46,31 @@ function getSession(userId) {
     return runtimeSessions.get(String(userId)) || null;
 }
 
+function clearReconnectTimer(userId) {
+    const key = String(userId);
+    const timer = reconnectTimers.get(key);
+    if (timer) {
+        clearTimeout(timer);
+        reconnectTimers.delete(key);
+    }
+}
+
+function scheduleReconnect(userId, fn, delayMs = 3000) {
+    const key = String(userId);
+    clearReconnectTimer(key);
+    const timer = setTimeout(() => {
+        reconnectTimers.delete(key);
+        fn().catch((err) => {
+            console.error(`[baileys] reconnect failed for user ${key}:`, err.message);
+        });
+    }, delayMs);
+    reconnectTimers.set(key, timer);
+}
+
+function isSessionRestarting(userId) {
+    return connectLocks.has(String(userId));
+}
+
 function getSessionStatus(userId) {
     const session = getSession(userId);
     if (!session) {
@@ -68,19 +90,24 @@ function getSessionStatus(userId) {
     };
 }
 
-async function closeSocket(sock) {
-    if (!sock) return;
-    try {
-        sock.ev.removeAllListeners('connection.update');
-        sock.ev.removeAllListeners('creds.update');
-    } catch {
-        // ignore
+async function waitForSessionProgress(userId, { timeoutMs = 20000, intervalMs = 300 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        const status = getSessionStatus(userId);
+
+        if (status.status === 'connected' || status.status === 'qr' || status.qr) {
+            return status;
+        }
+
+        if (status.status === 'disconnected' && status.hasStoredSession) {
+            return status;
+        }
+
+        await new Promise((resolve) => { setTimeout(resolve, intervalMs); });
     }
-    try {
-        sock.end(undefined);
-    } catch {
-        // ignore
-    }
+
+    return getSessionStatus(userId);
 }
 
 async function ensureSession(userId) {
@@ -105,19 +132,27 @@ async function startSession(userId) {
     const sessionDir = getSessionDir(key);
     fs.mkdirSync(sessionDir, { recursive: true });
 
+    clearReconnectTimer(key);
+
     const previous = getSession(key);
     if (previous?.sock) {
+        patchSession(key, { sock: null });
         await closeSocket(previous.sock);
     }
 
     patchSession(key, { status: 'connecting', qr: null });
-    emitStatus(ioInstance, key, 'connecting');
+    emitStatus(key, 'connecting');
     await sessionService.upsertSession(key, { status: 'connecting' });
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
     const { deviceName, devicePlatform, enableMessageHistorySync } = loadEnv();
     const browser = resolveWaBrowser(deviceName, devicePlatform);
+    const sessionRecord = await sessionService.getSessionRecord(key);
+    // History sync native Baileys hanya setelah pernah connect sukses — pairing (515) + syncFullHistory = 428
+    const syncFullHistory = enableMessageHistorySync
+        && Boolean(state.creds?.registered)
+        && Boolean(sessionRecord?.last_connected_at);
 
     const contactStore = createContactStore();
 
@@ -127,7 +162,7 @@ async function startSession(userId) {
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
         browser,
-        syncFullHistory: enableMessageHistorySync,
+        syncFullHistory,
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
     });
@@ -136,13 +171,15 @@ async function startSession(userId) {
     sock.contactStore = contactStore;
     sock.store = { contacts: contactStore.contacts };
 
-    patchSession(key, { sock, saveCreds, status: 'connecting', contactStore });
+    patchSession(key, { sock, saveCreds, status: 'connecting', contactStore, nativeHistorySync: syncFullHistory });
 
-    registerBaileysEventHandlers(sock, key, ioInstance, {
+    registerBaileysEventHandlers(sock, key, {
         saveCreds,
         onReconnect: () => ensureSession(key),
         patchSession,
         getSession: () => getSession(key),
+        scheduleReconnect: (fn, delayMs) => scheduleReconnect(key, fn, delayMs),
+        isSessionRestarting: () => isSessionRestarting(key),
     });
 
     return getSession(key);
@@ -152,6 +189,7 @@ async function logoutSession(userId) {
     const key = String(userId);
     const session = getSession(key);
 
+    clearReconnectTimer(key);
     connectLocks.delete(key);
 
     if (session?.sock) {
@@ -175,7 +213,7 @@ async function logoutSession(userId) {
         phone_number: null,
     });
 
-    emitStatus(ioInstance, key, 'disconnected', { phone: null });
+    emitStatus(key, 'disconnected', { phone: null });
     console.log(`[baileys] user ${key} session cleared`);
 }
 
@@ -207,8 +245,8 @@ async function requireConnectedSession(userId, { waitMs = 10000 } = {}) {
 }
 
 module.exports = {
-    setIo,
     ensureSession,
+    waitForSessionProgress,
     requireConnectedSession,
     logoutSession,
     getSession,
