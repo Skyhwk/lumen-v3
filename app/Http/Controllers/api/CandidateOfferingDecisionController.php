@@ -6,6 +6,8 @@ use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Services\RecruitmentPictureService;
 use App\Services\RecruitmentStatusService;
+use App\Services\GenerateMessageAtsEmail;
+use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -71,6 +73,10 @@ class CandidateOfferingDecisionController extends Controller
                 ], fn ($value) => $value !== null)
             );
 
+            if ($decision === 'approve') {
+                $this->notifyFinance($recruitment, $now);
+            }
+
             return response()->json([
                 'result' => $decision === 'approve' ? 'approved' : 'rejected',
                 'message' => $decision === 'approve'
@@ -80,6 +86,45 @@ class CandidateOfferingDecisionController extends Controller
                 'candidate' => $this->candidate($recruitment),
             ]);
         });
+    }
+
+    private function notifyFinance($recruitment, Carbon $approvedAt)
+    {
+        $targetEmail = trim((string) env('EMAIL_SALARY_OFFER_FINANCE', ''));
+        if ($targetEmail === '') {
+            return;
+        }
+
+        try {
+            $salaryOffer = DB::table('sallary_offer')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('is_active', true)
+                ->orderByDesc('id')
+                ->first();
+            $noRequest = DB::table('personnel_requests')
+                ->where('id', $recruitment->personnel_request_id)
+                ->value('no_request');
+            $amount = $salaryOffer->sallary_offer_hrd ?? $recruitment->ekspetasi_gaji ?? null;
+            $emailData = (object) [
+                'nama_kandidat' => $recruitment->nama_lengkap,
+                'posisi' => $this->positionLabel($recruitment),
+                'no_request' => $noRequest ?: '-',
+                'penawaran_gaji' => $amount === null ? '-' : 'Rp ' . number_format((float) $amount, 0, ',', '.'),
+                'approved_at' => $approvedAt->format('d-m-Y H:i') . ' WIB',
+            ];
+
+            SendEmail::where('to', $targetEmail)
+                ->where('subject', 'Kandidat Menyetujui Penawaran Gaji - ' . ($recruitment->nama_lengkap ?: 'Kandidat'))
+                ->where('body', GenerateMessageAtsEmail::bodyEmailFinanceCandidateSalaryApproved($emailData))
+                ->where('karyawan', 'Recruitment System')
+                ->noReply()
+                ->send();
+        } catch (\Throwable $exception) {
+            \Log::warning('Finance salary offer notification failed', [
+                'recruitment_id' => $recruitment->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function candidate($recruitment)

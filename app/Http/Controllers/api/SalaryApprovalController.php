@@ -95,12 +95,10 @@ class SalaryApprovalController extends Controller
                 $historyAction = 'negotiated';
             }
 
-            if ($decision === 'negotiate') {
+            if ($decision === 'negotiate' || $decision === 'reject') {
                 $nextStatus = 'management_decision';
             } else {
-                $nextStatus = $decision === 'approve'
-                    ? $this->salaryOfferStatus()
-                    : $recruitment->status;
+                $nextStatus = 'hired';
             }
 
             $historyStatus = $recruitment->status . '_' . $historyAction;
@@ -116,8 +114,8 @@ class SalaryApprovalController extends Controller
                 $extraData
             );
 
-            if ($decision === 'reject') {
-                $this->notifyRejectedCandidate($recruitment);
+            if ($decision === 'approve') {
+                $this->sendHiringLetter($recruitment);
             }
 
             app(AtsNotificationService::class)->directorSalaryDecision($recruitment, $decision);
@@ -131,6 +129,29 @@ class SalaryApprovalController extends Controller
                 'candidate' => $this->candidate($recruitment, $salaryOffer),
             ]);
         });
+    }
+
+    private function sendHiringLetter($recruitment)
+    {
+        try {
+            $applicant = \App\Models\NewRecruitment::with([
+                'sallaryOffer',
+                'candidateDataOffer',
+                'personalRequest.masterJabatan',
+                'personnelRequest.masterJabatan',
+            ])->find($recruitment->id);
+            if (!$applicant) {
+                return;
+            }
+
+            $dataObj = \App\Services\GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+            \App\Services\GenerateMessageAtsEmail::sendCandidateHiringLetterEmail($applicant, $dataObj, 'Direktur');
+        } catch (\Throwable $exception) {
+            \Log::warning('Candidate hiring letter failed after director approval', [
+                'recruitment_id' => $recruitment->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function state($recruitment)

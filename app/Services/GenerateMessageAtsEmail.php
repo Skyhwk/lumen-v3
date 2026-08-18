@@ -26,7 +26,7 @@ class GenerateMessageAtsEmail
     public static function buildCandidateOfferingButtons($recruitment, $token = null): object
     {
         $portalUrl = self::portalBaseUrl();
-        $encodedToken = rawurlencode($token ?? $recruitment->token_approval ?? '');
+        $encodedToken = rawurlencode($token ?? $recruitment->token ?? '');
 
         return (object) [
             'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=approve" : '',
