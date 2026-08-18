@@ -43,29 +43,47 @@ class AuthTokenService
      */
     public function resolveTokenTtlDays(UserToken $userToken)
     {
+        $maxTtl = $this->getRememberTokenTtlDays();
+
         if (!empty($userToken->create_date) && !empty($userToken->expired)) {
-            $days = Carbon::parse($userToken->create_date)
+            $days = (int) Carbon::parse($userToken->create_date)
                 ->diffInDays(Carbon::parse($userToken->expired));
 
             if ($days > 0) {
-                return (int) $days;
+                return min($days, $maxTtl);
             }
         }
 
         return $this->getSessionTokenTtlDays();
     }
 
-    public function getMaxActiveSessions()
+    /**
+     * Batas aman kolom TIMESTAMP MySQL untuk field expired.
+     */
+    public function getMaxExpiredAt()
     {
-        return (int) config('auth.max_active_sessions', 3);
+        return Carbon::parse(config('auth.token_expired_max_datetime', '2038-01-18 23:59:59'));
     }
 
     public function calculateExpiryDate($from = null, $ttlDays = null)
     {
         $base = $from ? Carbon::parse($from) : Carbon::now();
-        $days = $ttlDays ?? $this->getSessionTokenTtlDays();
+        $days = (int) ($ttlDays ?? $this->getSessionTokenTtlDays());
+        $days = max(1, min($days, $this->getRememberTokenTtlDays()));
 
-        return $base->copy()->addDays($days)->toDateTimeString();
+        $expiry = $base->copy()->addDays($days);
+        $maxExpiry = $this->getMaxExpiredAt();
+
+        if ($expiry->greaterThan($maxExpiry)) {
+            return $maxExpiry->toDateTimeString();
+        }
+
+        return $expiry->toDateTimeString();
+    }
+
+    public function getMaxActiveSessions()
+    {
+        return (int) config('auth.max_active_sessions', 3);
     }
 
     /**
@@ -235,13 +253,23 @@ class AuthTokenService
         $ttlDays = $this->resolveTokenTtlDays($userToken);
         $newExpiry = $this->calculateExpiryDate($nowStr, $ttlDays);
 
-        UserToken::where('id', $userToken->id)->update([
-            'last_active_at' => $nowStr,
-            'expired' => $newExpiry,
-        ]);
+        $updateData = ['last_active_at' => $nowStr];
+
+        $currentExpired = !empty($userToken->expired)
+            ? Carbon::parse($userToken->expired)
+            : null;
+        $parsedNewExpiry = Carbon::parse($newExpiry);
+
+        if (!$currentExpired || $parsedNewExpiry->greaterThan($currentExpired)) {
+            $updateData['expired'] = $newExpiry;
+        }
+
+        UserToken::where('id', $userToken->id)->update($updateData);
 
         $userToken->last_active_at = $nowStr;
-        $userToken->expired = $newExpiry;
+        if (isset($updateData['expired'])) {
+            $userToken->expired = $newExpiry;
+        }
 
         $this->tokenCache->invalidateTokenCache($userToken->token);
     }
