@@ -101,13 +101,13 @@ class SalaryApprovalController extends Controller
 
             if ($decision === 'negotiate' || $decision === 'reject') {
                 $nextStatus = 'management_decision';
+            } elseif ($decision === 'approve') {
+                $nextStatus = 'hired';
             } else {
-                $nextStatus = $decision === 'approve'
-                    ? $this->salaryOfferStatus()
-                    : $recruitment->status;
+                $nextStatus = 'rejected';
             }
 
-            $historyStatus = $recruitment->status . '_' . $historyAction;
+            $historyStatus = 'internal_sallary_offer_' . $historyAction;
             $extraData = $decision === 'negotiate' ? ['negotiated_amount' => $amount] : [];
 
             (new RecruitmentStatusService())->update(
@@ -165,13 +165,18 @@ class SalaryApprovalController extends Controller
         $last = !empty($history) ? $history[count($history) - 1] : [];
         $lastStatus = (string) ($last['status'] ?? '');
         $result = null;
-        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $lastStatus, $matches)) {
-            $result = $matches[1] === 'negotiated' ? 'negotiate' : ($matches[1] === 'approved' ? 'approve' : 'reject');
-        }
-        if ($result) {
+
+        if (in_array($lastStatus, ['candidate_approved', 'candidate_rejected'], true)) {
+            $result = $lastStatus === 'candidate_approved' ? 'approve' : 'reject';
             return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
         }
-        if ($recruitment->status !== 'internal_sallary_offer') {
+
+        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $lastStatus, $matches)) {
+            $result = $matches[1] === 'negotiated' ? 'negotiate' : ($matches[1] === 'approved' ? 'approve' : 'reject');
+            return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
+        }
+
+        if (!in_array($recruitment->status, ['internal_sallary_offer', 'waiting_candidate_approval'], true)) {
             return ['result' => 'unavailable', 'message' => 'Kandidat tidak berada pada tahap persetujuan penawaran.', 'candidate' => $this->candidate($recruitment)];
         }
         return ['result' => 'ready', 'candidate' => $this->candidate($recruitment)];
