@@ -70,7 +70,9 @@ class AuthController extends BaseController
             }
 
             $confirmDisplace = filter_var($request->input('confirm_displace', false), FILTER_VALIDATE_BOOLEAN);
+            $rememberMe = filter_var($request->input('remember_me', false), FILTER_VALIDATE_BOOLEAN);
             $sessionMeta = $this->authTokenService->buildSessionMetaFromRequest($request);
+            $sessionMeta['token_ttl_days'] = $this->authTokenService->resolveLoginTokenTtlDays($rememberMe);
             $sessionResult = $this->authTokenService->attemptCreateSession(
                 $user->id,
                 $sessionMeta,

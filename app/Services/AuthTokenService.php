@@ -18,7 +18,41 @@ class AuthTokenService
 
     public function getTokenTtlDays()
     {
-        return (int) config('auth.token_ttl_days', 365);
+        return $this->getRememberTokenTtlDays();
+    }
+
+    public function getRememberTokenTtlDays()
+    {
+        return (int) config('auth.token_ttl_remember_days', 365);
+    }
+
+    public function getSessionTokenTtlDays()
+    {
+        return (int) config('auth.token_ttl_session_days', 90);
+    }
+
+    public function resolveLoginTokenTtlDays($rememberMe)
+    {
+        return $rememberMe
+            ? $this->getRememberTokenTtlDays()
+            : $this->getSessionTokenTtlDays();
+    }
+
+    /**
+     * Ambil TTL asli token dari selisih create_date ↔ expired.
+     */
+    public function resolveTokenTtlDays(UserToken $userToken)
+    {
+        if (!empty($userToken->create_date) && !empty($userToken->expired)) {
+            $days = Carbon::parse($userToken->create_date)
+                ->diffInDays(Carbon::parse($userToken->expired));
+
+            if ($days > 0) {
+                return (int) $days;
+            }
+        }
+
+        return $this->getSessionTokenTtlDays();
     }
 
     public function getMaxActiveSessions()
@@ -26,11 +60,12 @@ class AuthTokenService
         return (int) config('auth.max_active_sessions', 3);
     }
 
-    public function calculateExpiryDate($from = null)
+    public function calculateExpiryDate($from = null, $ttlDays = null)
     {
         $base = $from ? Carbon::parse($from) : Carbon::now();
+        $days = $ttlDays ?? $this->getSessionTokenTtlDays();
 
-        return $base->copy()->addDays($this->getTokenTtlDays())->toDateTimeString();
+        return $base->copy()->addDays($days)->toDateTimeString();
     }
 
     /**
@@ -111,7 +146,8 @@ class AuthTokenService
         $userToken->user_id = $userId;
         $userToken->token = bin2hex(random_bytes(40)) . strtotime($now);
         $userToken->create_date = $now;
-        $userToken->expired = $this->calculateExpiryDate($now);
+        $ttlDays = (int) ($sessionMeta['token_ttl_days'] ?? $this->getSessionTokenTtlDays());
+        $userToken->expired = $this->calculateExpiryDate($now, $ttlDays);
         $userToken->is_logged_in = true;
         $userToken->is_expired = false;
         $userToken->type = 'private';
@@ -196,7 +232,8 @@ class AuthTokenService
         }
 
         $nowStr = $now->toDateTimeString();
-        $newExpiry = $this->calculateExpiryDate($nowStr);
+        $ttlDays = $this->resolveTokenTtlDays($userToken);
+        $newExpiry = $this->calculateExpiryDate($nowStr, $ttlDays);
 
         UserToken::where('id', $userToken->id)->update([
             'last_active_at' => $nowStr,

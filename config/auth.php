@@ -3,9 +3,20 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | Token TTL (hari)
+    | Token TTL — Remember Me (hari)
     |--------------------------------------------------------------------------
-    | Masa aktif token login jika user tidak logout.
+    */
+    'token_ttl_remember_days' => (int) env('AUTH_TOKEN_REMEMBER_DAYS', 365),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Token TTL — tanpa Remember Me (hari, ~3 bulan)
+    |--------------------------------------------------------------------------
+    */
+    'token_ttl_session_days' => (int) env('AUTH_TOKEN_SESSION_DAYS', 90),
+
+    /*
+    | Legacy alias (migration / fallback)
     */
     'token_ttl_days' => (int) env('AUTH_TOKEN_TTL_DAYS', 365),
 
