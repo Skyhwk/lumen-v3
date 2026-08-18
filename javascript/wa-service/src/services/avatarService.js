@@ -213,21 +213,21 @@ async function syncRecentChatAvatars(userId, sock, { limit = 40 } = {}) {
     return syncAvatarsForJids(userId, sock, jids, { concurrency: 3 });
 }
 
-async function syncAvatarsInBackground(userId, sock, jids = [], io = null, { limit = 40 } = {}) {
+async function syncAvatarsInBackground(userId, sock, jids = [], { limit = 40 } = {}) {
     if (!sock) return new Map();
 
     const synced = jids.length
         ? await syncAvatarsForJids(userId, sock, jids, { concurrency: 3 })
         : await syncRecentChatAvatars(userId, sock, { limit });
 
-    if (synced.size && io) {
+    if (synced.size) {
         const messageService = require('./messageService');
-        await messageService.syncAndEmitChats(userId, io);
+        await messageService.syncAndEmitChats(userId);
 
         const { emitContactsSync } = require('../baileys/qrHandler');
         const contactService = require('./contactService');
         const contacts = await contactService.getContacts(userId);
-        emitContactsSync(io, userId, contacts);
+        emitContactsSync(userId, contacts);
     }
 
     return synced;

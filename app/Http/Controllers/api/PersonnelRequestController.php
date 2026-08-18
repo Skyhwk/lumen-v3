@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
+use App\Services\{GetBawahan,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -414,10 +414,10 @@ class PersonnelRequestController extends Controller
      */
     private function getAllowedEmployeeIds()
     {
-        $userId = auth()->user()->id ?? $this->user_id;
+        $userId = $this->user_id;
 
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
-        $bawahanAll = GetBawahanAll::where('id', $userId)->get();
+        $bawahanAll = GetBawahan::where('id', $userId)->get();
         return $bawahanAll->pluck('id')->toArray();
     }
 
@@ -428,7 +428,7 @@ class PersonnelRequestController extends Controller
 
             $list = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
                 ->where('is_active', true)
-                ->whereIn('user_id', $allowedIds)
+                ->whereIn('id', $allowedIds)
                 ->orderBy('nama_lengkap')
                 ->get()
                 ->map(function ($k) {

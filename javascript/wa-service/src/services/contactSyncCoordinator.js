@@ -17,9 +17,7 @@ function clearTimer(map, userId) {
     }
 }
 
-function scheduleContactsEmit(userId, io) {
-    if (!io) return;
-
+function scheduleContactsEmit(userId) {
     const key = String(userId);
     clearTimer(emitTimers, key);
 
@@ -29,16 +27,14 @@ function scheduleContactsEmit(userId, io) {
             const contactService = require('./contactService');
             const { emitContactsSync } = require('../baileys/qrHandler');
             const contacts = await contactService.getContacts(userId);
-            emitContactsSync(io, userId, contacts);
+            emitContactsSync(userId, contacts);
         } catch (error) {
             console.warn(`[contactSync] emit contacts failed for ${userId}:`, error.message);
         }
     }, EMIT_DEBOUNCE_MS));
 }
 
-function scheduleChatListRefresh(userId, io) {
-    if (!io) return;
-
+function scheduleChatListRefresh(userId) {
     const key = String(userId);
     clearTimer(chatRefreshTimers, key);
 
@@ -46,14 +42,14 @@ function scheduleChatListRefresh(userId, io) {
         chatRefreshTimers.delete(key);
         try {
             const messageService = require('./messageService');
-            await messageService.syncAndEmitChats(userId, io);
+            await messageService.syncAndEmitChats(userId);
         } catch (error) {
             console.warn(`[contactSync] chat refresh failed for ${userId}:`, error.message);
         }
     }, CHAT_REFRESH_DEBOUNCE_MS));
 }
 
-function scheduleContactNamesSync(userId, io) {
+function scheduleContactNamesSync(userId) {
     const key = String(userId);
     clearTimer(nameSyncTimers, key);
 
@@ -63,7 +59,7 @@ function scheduleContactNamesSync(userId, io) {
             const chatNameService = require('./chatNameService');
             const updated = await chatNameService.syncContactNamesToChats(userId);
             if (updated > 0) {
-                scheduleChatListRefresh(userId, io);
+                scheduleChatListRefresh(userId);
             }
         } catch (error) {
             console.warn(`[contactSync] contact names sync failed for ${userId}:`, error.message);
@@ -84,7 +80,7 @@ function resetDeviceContactSync(userId) {
     deviceSyncAt.delete(String(userId));
 }
 
-async function syncDeviceContactsIfDue(userId, sock, contactStore, io) {
+async function syncDeviceContactsIfDue(userId, sock, contactStore) {
     if (!shouldSyncDeviceContacts(userId)) {
         return { synced: 0, skipped: true };
     }
@@ -93,8 +89,8 @@ async function syncDeviceContactsIfDue(userId, sock, contactStore, io) {
     const synced = await contactService.syncContactsFromDevice(userId, sock, contactStore);
     if (synced > 0) {
         markDeviceContactSynced(userId);
-        scheduleContactNamesSync(userId, io);
-        scheduleContactsEmit(userId, io);
+        scheduleContactNamesSync(userId);
+        scheduleContactsEmit(userId);
         console.log(`[contactSync] user ${userId} device contacts synced (${synced})`);
     } else {
         markDeviceContactSynced(userId);
@@ -103,26 +99,26 @@ async function syncDeviceContactsIfDue(userId, sock, contactStore, io) {
     return { synced, skipped: false };
 }
 
-async function syncDeviceContactsForced(userId, sock, contactStore, io) {
+async function syncDeviceContactsForced(userId, sock, contactStore) {
     resetDeviceContactSync(userId);
     const contactService = require('./contactService');
     const synced = await contactService.syncContactsFromDevice(userId, sock, contactStore);
     markDeviceContactSynced(userId);
 
     if (synced > 0) {
-        scheduleContactNamesSync(userId, io);
+        scheduleContactNamesSync(userId);
     }
-    scheduleContactsEmit(userId, io);
-    scheduleChatListRefresh(userId, io);
+    scheduleContactsEmit(userId);
+    scheduleChatListRefresh(userId);
 
     return synced;
 }
 
-function afterContactsMutation(userId, io, { refreshChats = true } = {}) {
-    scheduleContactNamesSync(userId, io);
-    scheduleContactsEmit(userId, io);
+function afterContactsMutation(userId, { refreshChats = true } = {}) {
+    scheduleContactNamesSync(userId);
+    scheduleContactsEmit(userId);
     if (refreshChats) {
-        scheduleChatListRefresh(userId, io);
+        scheduleChatListRefresh(userId);
     }
 }
 

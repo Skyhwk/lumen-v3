@@ -25,6 +25,16 @@ function loadEnv() {
             .includes(String(process.env.WA_ENABLE_MESSAGE_HISTORY_SYNC || '').trim().toLowerCase()),
         autoDownloadMedia: ['1', 'true', 'yes', 'on']
             .includes(String(process.env.WA_AUTO_DOWNLOAD_MEDIA || '').trim().toLowerCase()),
+        mqtt: {
+            brokerUrl: (process.env.MQTT_BROKER_URL || '').trim(),
+            host: process.env.MQTT_HOST || 'apps.intilab.com',
+            port: parseInt(process.env.MQTT_PORT || '1883', 10),
+            username: process.env.MQTT_USERNAME || '',
+            password: process.env.MQTT_PASSWORD || '',
+            topicPrefix: (process.env.WA_MQTT_TOPIC_PREFIX || '/intilab/wa').replace(/\/$/, ''),
+            clientId: process.env.WA_MQTT_CLIENT_ID || 'wa-service-publisher',
+            reconnectMs: parseInt(process.env.WA_MQTT_RECONNECT_MS || '5000', 10),
+        },
     };
 
     if (config.nodeEnv === 'production') {
