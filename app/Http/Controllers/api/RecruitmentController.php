@@ -28,6 +28,7 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\UserAssessmentCategoryService;
 use Carbon\Carbon;
 
 
@@ -1432,15 +1433,19 @@ class RecruitmentController extends Controller{
                     'gender',
                     'prioritas',
                     'divisi_alias',
+                    'personnel_requests.created_by',
                     'use_user_assessment',
-                    'user_assessment_question_count',
-                    'user_assessment_has_time_limit',
-                    'user_assessment_duration_minutes',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
-                ->first()
-                ->makeHidden(['divisi', 'lokasi_penempatan_cabang']);
+                ->first();
+
+            if (!$data) {
+                return response()->json(['message' => 'Data job tidak ditemukan.'], 404);
+            }
+
+            app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
+            $data->makeHidden(['divisi', 'lokasi_penempatan_cabang', 'created_by']);
 
             return response()->json($data, 200);
         } catch (\Exception $th) {
