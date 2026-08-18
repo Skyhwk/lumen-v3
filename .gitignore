@@ -5,7 +5,6 @@
 /docker
 /public
 /storage
-app/Cache/
 /node_modules/
 Homestead.json
 Homestead.yaml

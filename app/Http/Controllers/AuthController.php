@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\UserToken;
 use App\Models\RequestLog;
+use App\Models\MasterKaryawan;
 use App\Models\Menu;
 use App\Models\MenuFdl;
 use Auth;
@@ -18,16 +19,30 @@ use App\Models\DashboardComponent;
 use App\Models\SetAksesDashboard;
 use App\Models\DashboardUserOrder;
 use Illuminate\Support\Facades\Schema;
+use App\Services\AuthTokenService;
+use App\Services\DeviceParser;
+use App\Services\PasswordResetService;
 
 class AuthController extends BaseController
 {
+    /** @var AuthTokenService */
+    private $authTokenService;
+
+    /** @var PasswordResetService */
+    private $passwordResetService;
+
+    public function __construct(AuthTokenService $authTokenService, PasswordResetService $passwordResetService)
+    {
+        $this->authTokenService = $authTokenService;
+        $this->passwordResetService = $passwordResetService;
+    }
+
     public function getToken(Request $request)
     {
         try{
             $rules = [
                 'identity' => 'required|string',
                 'password' => 'required|string',
-                'active'    => '1',
             ];
     
             $messages = [
@@ -54,33 +69,189 @@ class AuthController extends BaseController
                 return response()->json(['message' => 'Login Failed (Wrong Password)', 'status' => '401'], 401);
             }
 
-            UserToken::where('user_id', $user->id)
-                ->where('is_logged_in', true)
-                ->update(['is_logged_in' => false, 'is_expired' => true]);
+            $confirmDisplace = filter_var($request->input('confirm_displace', false), FILTER_VALIDATE_BOOLEAN);
+            $rememberMe = filter_var($request->input('remember_me', false), FILTER_VALIDATE_BOOLEAN);
+            $sessionMeta = $this->authTokenService->buildSessionMetaFromRequest($request);
+            $sessionMeta['token_ttl_days'] = $this->authTokenService->resolveLoginTokenTtlDays($rememberMe);
+            $sessionResult = $this->authTokenService->attemptCreateSession(
+                $user->id,
+                $sessionMeta,
+                $confirmDisplace
+            );
 
-            $token = bin2hex(random_bytes(40)).strtotime(DATE('Y-m-d H:i:s'));
-            $userToken = new UserToken;
-            $userToken->user_id           = $user->id;
-            $userToken->token             = $token;
-            $userToken->create_date      = DATE('Y-m-d H:i:s');
-            $userToken->expired           = DATE("Y-m-d H:i:s", strtotime("+7 day", strtotime($userToken->create_date)));
-            $userToken->is_logged_in      = true;
-            $userToken->type              = 'private';
-            $userToken->save();
+            if ($sessionResult['status'] === 'limit_reached') {
+                $oldest = $sessionResult['oldest'];
+                $displacedSummary = $oldest ? DeviceParser::formatSessionSummary($oldest) : null;
 
-            $response = response()->json([
-                'token' => $token,
-                'created_at' => DATE('Y-m-d H:i:s'),
+                return response()->json([
+                    'message' => 'SESSION_LIMIT_REACHED',
+                    'current_device' => $sessionResult['current_device'],
+                    'active_sessions' => $sessionResult['active_sessions'],
+                    'displaced_session' => $displacedSummary,
+                ], 409);
+            }
+
+            $userToken = $sessionResult['token'];
+            $displaced = $sessionResult['displaced'] ?? null;
+
+            $responseData = [
+                'token' => $userToken->token,
+                'created_at' => $userToken->create_date,
                 'expired_at' => $userToken->expired,
-                'created_at_js' => date("M d Y H:i:s", strtotime(DATE('Y-m-d H:i:s'))),
-                'expired_at_js' => date("M d Y H:i:s", strtotime($userToken->expired)),
-            ]);
+                'created_at_js' => date('M d Y H:i:s', strtotime($userToken->create_date)),
+                'expired_at_js' => date('M d Y H:i:s', strtotime($userToken->expired)),
+                'device' => $sessionMeta['platform'],
+            ];
 
-            $this->logRequest($request, $response->getContent(), $user->karyawan->nama_lengkap);
+            if ($displaced) {
+                $displacedSummary = DeviceParser::formatSessionSummary($displaced);
+                $responseData['session_notice'] = [
+                    'displaced_device' => $displacedSummary['platform'],
+                    'message' => sprintf(
+                        'Sesi %s telah logout otomatis karena batas %d perangkat.',
+                        $displacedSummary['platform'],
+                        $this->authTokenService->getMaxActiveSessions()
+                    ),
+                ];
+            }
+
+            $response = response()->json($responseData);
+
+            $logName = $user->karyawan ? $user->karyawan->nama_lengkap : $user->username;
+            $this->logRequest($request, $response->getContent(), $logName);
 
             return $response;
         } catch (Exception $e) {
             return response()->json(['message' => 'Login Failed (Internal Server Error)'], 500);
+        }
+    }
+
+    public function logout(Request $request)
+    {
+        $token = $request->header('token');
+
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 400);
+        }
+
+        $userToken = UserToken::where('token', $token)->first();
+
+        if ($userToken && $userToken->isActive()) {
+            $this->authTokenService->expireToken($userToken);
+        }
+
+        return response()->json([
+            'message' => 'Logout berhasil',
+        ]);
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+        ], [
+            'email.required' => 'Email perusahaan wajib diisi.',
+            'email.email' => 'Format email tidak valid.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+            ], 400);
+        }
+
+        try {
+            $result = $this->passwordResetService->sendOtp(
+                $request->email,
+                $request->ip()
+            );
+
+            $status = $result['status'] ?? 200;
+
+            return response()->json([
+                'message' => $result['message'],
+            ], $status);
+        } catch (Exception $e) {
+            return response()->json([
+                'message' => 'Gagal mengirim OTP. Silakan coba lagi.',
+            ], 500);
+        }
+    }
+
+    public function verifyResetOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+        ], [
+            'email.required' => 'Email perusahaan wajib diisi.',
+            'otp.required' => 'OTP wajib diisi.',
+            'otp.size' => 'OTP harus 6 digit.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+            ], 400);
+        }
+
+        try {
+            $result = $this->passwordResetService->verifyOtp(
+                $request->email,
+                $request->otp
+            );
+
+            $status = $result['status'] ?? ($result['success'] ? 200 : 400);
+
+            return response()->json([
+                'message' => $result['message'],
+                'valid' => (bool) $result['success'],
+            ], $status);
+        } catch (Exception $e) {
+            return response()->json([
+                'message' => 'Gagal memverifikasi OTP. Silakan coba lagi.',
+            ], 500);
+        }
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+            'new_password' => 'required|string|min:6',
+            'confirm_password' => 'required|string|min:6',
+        ], [
+            'email.required' => 'Email perusahaan wajib diisi.',
+            'otp.required' => 'OTP wajib diisi.',
+            'otp.size' => 'OTP harus 6 digit.',
+            'new_password.required' => 'Password baru wajib diisi.',
+            'confirm_password.required' => 'Konfirmasi password wajib diisi.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+            ], 400);
+        }
+
+        try {
+            $result = $this->passwordResetService->resetPassword(
+                $request->email,
+                $request->otp,
+                $request->new_password,
+                $request->confirm_password
+            );
+
+            $status = $result['status'] ?? ($result['success'] ? 200 : 400);
+
+            return response()->json([
+                'message' => $result['message'],
+            ], $status);
+        } catch (Exception $e) {
+            return response()->json([
+                'message' => 'Gagal reset password. Silakan coba lagi.',
+            ], 500);
         }
     }
 
@@ -95,10 +266,17 @@ class AuthController extends BaseController
 
         $userToken = UserToken::where('token', $token)->first();
 
-        if (!$userToken || $userToken->is_expired) {
-            $this->logRequest($request, 'Token is invalid or expired');
-            return response()->json(['message' => 'Token is invalid or expired.!'], 430);
+        if (!$userToken) {
+            $this->logRequest($request, 'Token not found');
+            return response()->json(['message' => 'Token tidak ditemukan'], 430);
         }
+
+        if (!$userToken->isActive()) {
+            $this->logRequest($request, 'Token is invalid or expired');
+            return response()->json(['message' => 'Sesi telah berakhir, silakan login ulang'], 430);
+        }
+
+        $this->authTokenService->touchSession($userToken);
 
         $karyawan = $userToken->karyawan;
         
@@ -203,6 +381,21 @@ class AuthController extends BaseController
             ->values();
 
         $dashboard = $this->applyDashboardOrder($dashboard, $karyawan->id);
+
+        $impersonatorUserId = $userToken->impersonator_user_id;
+        $canImpersonate = $this->canUseImpersonateFeature($userToken);
+        $isImpersonating = (bool) $userToken->is_impersonate;
+        $impersonatorName = null;
+
+        if ($isImpersonating && $impersonatorUserId) {
+            $impersonatorKaryawan = MasterKaryawan::where('user_id', $impersonatorUserId)->first();
+            $impersonatorName = $impersonatorKaryawan ? $impersonatorKaryawan->nama_lengkap : null;
+        } elseif ($isImpersonating && $canImpersonate) {
+            $actorUserId = $this->resolveActorUserIdForImpersonation($userToken);
+            $impersonatorUserId = $actorUserId;
+            $impersonatorKaryawan = MasterKaryawan::where('user_id', $actorUserId)->first();
+            $impersonatorName = $impersonatorKaryawan ? $impersonatorKaryawan->nama_lengkap : null;
+        }
         
         $response = response()->json([
             'dept' => $karyawan->department,
@@ -216,7 +409,12 @@ class AuthController extends BaseController
             'grade' => $karyawan->grade,
             'role' => $karyawan->role,
             'join' => $karyawan->join_date,
-            'impersonate' => ($karyawan->id == 1 || $karyawan->id == 127 || $karyawan->id == 152) || $userToken->is_impersonate,
+            'impersonate' => $canImpersonate,
+            'can_impersonate' => $canImpersonate,
+            'is_impersonating' => $isImpersonating,
+            'impersonator_name' => $impersonatorName,
+            'impersonator_user_id' => $impersonatorUserId,
+            'portal_user_id' => $userToken->user_id,
             'message' => 'Token Valid',
             'user_id' => $karyawan->id,
             'copy_paste' => $copy_paste,
@@ -305,6 +503,35 @@ class AuthController extends BaseController
         ];
 
         return $defaultOrder[$item->nama_komponen ?? ''] ?? 999999;
+    }
+
+    private function canUseImpersonateFeature(UserToken $userToken)
+    {
+        if (!empty($userToken->impersonator_user_id)) {
+            return $this->userCanImpersonate((int) $userToken->impersonator_user_id);
+        }
+
+        return $this->userCanImpersonate((int) $userToken->user_id);
+    }
+
+    private function userCanImpersonate($userId)
+    {
+        $karyawan = MasterKaryawan::where('user_id', $userId)->first();
+
+        if (!$karyawan) {
+            return false;
+        }
+
+        return in_array((int) $karyawan->id, [1, 127, 152], true);
+    }
+
+    private function resolveActorUserIdForImpersonation(UserToken $userToken)
+    {
+        if (!empty($userToken->impersonator_user_id)) {
+            return (int) $userToken->impersonator_user_id;
+        }
+
+        return (int) $userToken->user_id;
     }
 
     private function logRequest($request, $result, $name_req = null)

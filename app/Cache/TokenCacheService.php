@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Cache;
 
 use App\Models\UserToken;
@@ -8,118 +9,148 @@ use Illuminate\Support\Facades\Log;
 class TokenCacheService
 {
     const CACHE_PREFIX = 'user_token:';
-    const CACHE_TTL = 3600; // 1 jam
     const USER_CACHE_PREFIX = 'user:';
-    const USER_CACHE_TTL = 1800; // 30 menit
 
     /**
-     * Get user token dengan cache
+     * Ambil token user — cache Redis kecuali mode impersonate.
      *
      * @param string $token
-     * @return array|null
+     * @return UserToken|null
      */
     public function getUserTokenWithCache($token)
     {
-        // $cacheKey = self::CACHE_PREFIX . hash('sha256', $token);
-        
-        // $cachedToken = Cache::get($cacheKey);
-        // if ($cachedToken) {
-        //     // Log::info('Cache hit untuk token', ['token' => $token, 'cachedToken' => $cachedToken]);
-        //     return $cachedToken;
-        // }
+        $userToken = $this->fetchTokenFromDatabase($token);
 
-        // Log::info('Cache miss untuk token, query ke database', ['token' => $token]);
-        $userToken = UserToken::where('token', $token)->first();
-        
         if (!$userToken) {
             return null;
         }
 
-        // Cache::put($cacheKey, $userToken, self::CACHE_TTL);
+        // Selalu pakai data DB sebagai sumber kebenaran auth.
+        // Cache hanya dipakai untuk warm-up; hindari stale object Redis
+        // yang bisa memicu token dianggap expired padahal masih aktif di DB.
+        if (!$this->shouldBypassCache($userToken)) {
+            Cache::put(
+                $this->getTokenCacheKey($token),
+                $userToken,
+                $this->getCacheTtl()
+            );
+        }
+
         return $userToken;
     }
 
     /**
-     * Invalidate token cache
-     *
-     * @param string $token
-     * @return void
+     * Invalidate cache token tunggal.
      */
     public function invalidateTokenCache($token)
     {
-        $cacheKey = self::CACHE_PREFIX . hash('sha256', $token);
-        Cache::forget($cacheKey);
-        
-        Log::info('Token cache invalidated', ['token_hash' => hash('sha256', $token)]);
+        if (!$token) {
+            return;
+        }
+
+        Cache::forget($this->getTokenCacheKey($token));
+
+        // Log::info('Token cache invalidated', [
+        //     'token_hash' => hash('sha256', $token),
+        // ]);
     }
 
     /**
-     * Invalidate user cache
-     *
-     * @param int $userId
-     * @return void
+     * Invalidate cache data user.
      */
     public function invalidateUserCache($userId)
     {
-        $cacheKey = self::USER_CACHE_PREFIX . $userId;
-        Cache::forget($cacheKey);
-        
+        if (!$userId) {
+            return;
+        }
+
+        Cache::forget(self::USER_CACHE_PREFIX . $userId);
+
         Log::info('User cache invalidated', ['user_id' => $userId]);
     }
 
     /**
-     * Invalidate semua cache untuk user (token + user data)
-     *
-     * @param int $userId
-     * @param string|null $token
-     * @return void
+     * Invalidate cache user + token spesifik.
      */
     public function invalidateAllUserCache($userId, $token = null)
     {
         $this->invalidateUserCache($userId);
-        
+
         if ($token) {
             $this->invalidateTokenCache($token);
         }
     }
 
     /**
-     * Warm up cache untuk token yang sering digunakan
+     * Invalidate cache untuk semua token aktif milik user.
+     */
+    public function invalidateAllTokensForUser($userId)
+    {
+        if (!$userId) {
+            return;
+        }
+
+        $tokens = UserToken::where('user_id', $userId)
+            ->where('is_expired', false)
+            ->pluck('token');
+
+        foreach ($tokens as $token) {
+            $this->invalidateTokenCache($token);
+        }
+
+        $this->invalidateUserCache($userId);
+    }
+
+    /**
+     * Warm up cache untuk token yang sering digunakan.
      *
      * @param array $tokens
-     * @return void
      */
     public function warmUpCache(array $tokens)
     {
-        // Hapus semua cache lama dengan prefix yang sesuai
         foreach ($tokens as $token) {
-            $cacheKey = self::CACHE_PREFIX . hash('sha256', $token);
-            Cache::forget($cacheKey);
-        }
-
-        // Generate cache baru
-        foreach ($tokens as $token) {
+            $this->invalidateTokenCache($token);
             $this->getUserTokenWithCache($token);
         }
-        
+
         Log::info('Cache warmed up dan diperbarui', [
             'token_count' => count($tokens),
-            'action' => 'refresh_cache'
+            'action' => 'refresh_cache',
         ]);
     }
 
     /**
-     * Get cache statistics
-     *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getCacheStats()
     {
-        // Basic cache stats untuk monitoring
         return [
             'driver' => config('cache.default'),
             'prefix' => config('cache.prefix'),
-            'default_ttl' => self::CACHE_TTL,
+            'default_ttl' => $this->getCacheTtl(),
         ];
+    }
+
+    private function fetchTokenFromDatabase($token)
+    {
+        return UserToken::with(['user.karyawan'])
+            ->where('token', $token)
+            ->first();
+    }
+
+    private function shouldBypassCache(UserToken $userToken)
+    {
+        return (bool) $userToken->is_impersonate
+            || !empty($userToken->impersonator_user_id);
+    }
+
+    private function getTokenCacheKey($token)
+    {
+        return self::CACHE_PREFIX . hash('sha256', $token);
+    }
+
+    private function getCacheTtl()
+    {
+        return (int) config('auth.token_cache_ttl', 3600);
     }
 }
