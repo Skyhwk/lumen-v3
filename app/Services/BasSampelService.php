@@ -21,8 +21,9 @@ class BasSampelService
      * @param callable $getStatusSampling Callback ke fungsi getStatusSampling di controller
      * @return array|null Mengembalikan error array jika ada sampel parsial, null jika sukses
      */
-    public static function processFinalSamples(array $item, callable $getStatusSampling): ?array
+    public static function processFinalSamples(array $item, callable $getStatusSampling)
     {
+        // Force OPcache invalidation
         $fullExpectedNoSampel = OrderDetail::where('no_order', $item['no_order'])
             ->where('is_active', true)
             ->where('tanggal_sampling', $item['tanggal_sampling'])
