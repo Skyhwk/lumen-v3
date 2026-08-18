@@ -124,7 +124,7 @@ class PersonnelRequestController extends Controller
         $allowedIds = $this->getAllowedEmployeeIds();
 
         // Cari nama_lengkap dari semua ID tersebut karena field created_by menggunakan nama_lengkap
-        $allowedNames = \App\Models\MasterKaryawan::whereIn('id', $allowedIds)
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('user_id', $allowedIds)
             ->pluck('nama_lengkap')
             ->toArray();
 
@@ -179,7 +179,7 @@ class PersonnelRequestController extends Controller
         $devUserId = env('DEV_BYPASS_USER_ID');
         
         if ($isDevMode && $devUserId) {
-            $devKaryawan = \App\Models\MasterKaryawan::where('id', $devUserId)->first();
+            $devKaryawan = \App\Models\MasterKaryawan::where('user_id', $devUserId)->first();
             if ($devKaryawan) {
                 return $devKaryawan->nama_lengkap;
             }
@@ -230,7 +230,7 @@ class PersonnelRequestController extends Controller
         }
 
         $availableQuestions = Question::query()
-            ->where('question_category_id', $categoryId)
+            ->where('owner_karyawan', $this->getEffectiveKaryawanName())
             ->where('question_scope', 'manager')
             ->where('status', 'active')
             ->where('is_active', 1)
@@ -382,6 +382,10 @@ class PersonnelRequestController extends Controller
             // Menggunakan helper agar logic impersonasi lebih tersentralisasi
             $createdBy = $this->getEffectiveKaryawanName();
 
+            // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
+            // Menggunakan helper agar logic impersonasi lebih tersentralisasi
+            $createdBy = $this->getEffectiveKaryawanName();
+
             $data = PersonnelRequest::create([
                 'no_request'                => $noRequest,
                 'request_type'              => $request->request_type,
@@ -407,10 +411,10 @@ class PersonnelRequestController extends Controller
                 'tanggal_dibutuhkan'        => $this->nullableValue($request->tanggal_dibutuhkan),
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
-                'use_user_assessment'       => $useUserAssessment,
-                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
-                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
-                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
+                'use_user_assessment'       => $assessmentConfig['use_user_assessment'],
+                'user_assessment_question_count' => $assessmentConfig['user_assessment_question_count'],
+                'user_assessment_has_time_limit' => $assessmentConfig['user_assessment_has_time_limit'],
+                'user_assessment_duration_minutes' => $assessmentConfig['user_assessment_duration_minutes'],
                 'created_by'                => $createdBy,
             ]);
 
