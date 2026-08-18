@@ -483,6 +483,10 @@ async function saveMessage(userId, parsedMessage, { incrementUnread = false } = 
                  WHERE user_id_erp = ? AND jid = ?`,
                 [userId, parsedMessage.jid],
             );
+        } else {
+            sendDeviceReadReceipts(userId, parsedMessage.jid, [
+                toReadMessageKey(parsedMessage.jid, parsedMessage, parsedMessage.jid.endsWith('@g.us')),
+            ]).catch(() => {});
         }
     }
 
@@ -491,7 +495,7 @@ async function saveMessage(userId, parsedMessage, { incrementUnread = false } = 
     return rows[0] || null;
 }
 
-async function processMessages(userId, messages = [], io, {
+async function processMessages(userId, messages = [], {
     emit = true,
     downloadMedia = isAutoDownloadMediaEnabled(),
     applyGroupRetention = false,
@@ -557,8 +561,8 @@ async function processMessages(userId, messages = [], io, {
         if (savedMsg && emit) {
             const formatted = formatMessageRow(savedMsg);
             const [enriched] = await enrichMessagesWithSenders(userId, [formatted]);
-            emitMessageNew(io, userId, { message: enriched || formatted });
-            emitChatUpdate(io, userId, await getChatByJid(userId, parsed.jid));
+            emitMessageNew(userId, { message: enriched || formatted });
+            emitChatUpdate(userId, await getChatByJid(userId, parsed.jid));
         }
 
         saved += 1;
@@ -701,7 +705,7 @@ async function getChats(userId) {
          FROM wa_chats c
          LEFT JOIN wa_contacts ct ON ct.user_id_erp = c.user_id_erp AND ct.jid = c.jid
          WHERE c.user_id_erp = ?
-         ORDER BY c.is_pinned DESC, c.pinned_at DESC, (c.unread_count > 0) DESC, c.unread_count DESC, c.last_message_at DESC, c.updated_at DESC`,
+         ORDER BY c.is_pinned DESC, c.pinned_at DESC, c.last_message_at DESC, c.id DESC`,
         [userId],
     );
 
@@ -746,7 +750,7 @@ async function getChats(userId) {
     return splitChats(deduped);
 }
 
-async function syncChatMedia(userId, jid, io = null, { limit = 25 } = {}) {
+async function syncChatMedia(userId, jid, { limit = 25 } = {}) {
     const session = getWaSession(userId);
     const sock = session?.sock;
     if (!sock) {
@@ -798,9 +802,7 @@ async function syncChatMedia(userId, jid, io = null, { limit = 25 } = {}) {
 
             const formatted = formatMessageRow({ ...row, ...mediaPatch });
             updated.push(formatted);
-            if (io) {
-                emitMessageMedia(io, userId, { jid, message: formatted });
-            }
+            emitMessageMedia(userId, { jid, message: formatted });
         } catch {
             await getPool().execute(
                 `UPDATE wa_messages
@@ -840,7 +842,7 @@ async function syncChatMedia(userId, jid, io = null, { limit = 25 } = {}) {
     return { synced: updated.length, updated, requested };
 }
 
-async function downloadMessageMedia(userId, jid, waMessageId, io = null) {
+async function downloadMessageMedia(userId, jid, waMessageId) {
     const session = getWaSession(userId);
     const sock = session?.sock;
     if (!sock) {
@@ -895,8 +897,8 @@ async function downloadMessageMedia(userId, jid, waMessageId, io = null) {
     const [enriched] = await enrichMessagesWithSenders(userId, [formatted]);
     const message = enriched || formatted;
 
-    if (io && !mediaService.isMediaUnavailable(mediaPatch.media_path)) {
-        emitMessageMedia(io, userId, { jid, message });
+    if (!mediaService.isMediaUnavailable(mediaPatch.media_path)) {
+        emitMessageMedia(userId, { jid, message });
     }
 
     return {
@@ -1041,7 +1043,7 @@ async function syncChatMessages(userId, jid, { count = 50 } = {}) {
     return task;
 }
 
-async function backupAndDeleteMessage(userId, key, reason = 'whatsapp_delete', io = null) {
+async function backupAndDeleteMessage(userId, key, reason = 'whatsapp_delete') {
     const remoteJid = key?.remoteJid;
     const waMessageId = key?.id;
     if (!remoteJid || !waMessageId) return null;
@@ -1088,17 +1090,15 @@ async function backupAndDeleteMessage(userId, key, reason = 'whatsapp_delete', i
 
     await getPool().execute('DELETE FROM wa_messages WHERE id = ?', [row.id]);
 
-    if (io) {
-        emitMessageDeleted(io, userId, {
-            jid: remoteJid,
-            wa_message_id: waMessageId,
-        });
-    }
+    emitMessageDeleted(userId, {
+        jid: remoteJid,
+        wa_message_id: waMessageId,
+    });
 
     return row;
 }
 
-async function backupAndDeleteChatMessages(userId, jid, reason = 'whatsapp_delete_all', io = null) {
+async function backupAndDeleteChatMessages(userId, jid, reason = 'whatsapp_delete_all') {
     const [rows] = await getPool().execute(
         `SELECT m.*, c.jid, c.user_id_erp
          FROM wa_messages m
@@ -1146,9 +1146,7 @@ async function backupAndDeleteChatMessages(userId, jid, reason = 'whatsapp_delet
         [userId, jid],
     );
 
-    if (io) {
-        emitMessageDeleted(io, userId, { jid, all: true });
-    }
+    emitMessageDeleted(userId, { jid, all: true });
 
     return rows.length;
 }
@@ -1239,7 +1237,7 @@ async function clearOpenChatIfNeeded(userId, jid) {
     }
 }
 
-async function purgeChatLocally(userId, jid, reason = 'delete_chat', io = null, {
+async function purgeChatLocally(userId, jid, reason = 'delete_chat', {
     skipMessageBackup = false,
     messageCount = null,
 } = {}) {
@@ -1252,21 +1250,19 @@ async function purgeChatLocally(userId, jid, reason = 'delete_chat', io = null, 
 
     let backedUpMessages = messageCount ?? 0;
     if (!skipMessageBackup) {
-        backedUpMessages = await backupAndDeleteChatMessages(userId, jid, reason, io);
+        backedUpMessages = await backupAndDeleteChatMessages(userId, jid, reason);
     }
 
     await backupChatToDeleted(chat, backedUpMessages, reason);
     await removeChatRow(userId, jid);
     await clearOpenChatIfNeeded(userId, jid);
 
-    if (io) {
-        emitChatDeleted(io, userId, { jid });
-    }
+    emitChatDeleted(userId, { jid });
 
     return { ok: true, jid, backedUpMessages };
 }
 
-async function deleteChat(userId, jid, io = null) {
+async function deleteChat(userId, jid) {
     if (isStatusJid(jid)) {
         throw new Error('Status broadcast tidak bisa dihapus');
     }
@@ -1300,20 +1296,19 @@ async function deleteChat(userId, jid, io = null) {
         throw new Error(`Gagal menghapus chat di WhatsApp: ${error.message}`);
     }
 
-    return purgeChatLocally(userId, jid, 'user_delete_chat', io, {
+    return purgeChatLocally(userId, jid, 'user_delete_chat', {
         messageCount: msgRows.length,
     });
 }
 
-async function handleMessagesDelete(userId, payload, io = null) {
+async function handleMessagesDelete(userId, payload) {
     if (payload?.all && payload?.jid) {
         const backedUpMessages = await backupAndDeleteChatMessages(
             userId,
             payload.jid,
             'whatsapp_delete_all',
-            io,
         );
-        await purgeChatLocally(userId, payload.jid, 'whatsapp_delete_all', io, {
+        await purgeChatLocally(userId, payload.jid, 'whatsapp_delete_all', {
             skipMessageBackup: true,
             messageCount: backedUpMessages,
         });
@@ -1323,7 +1318,7 @@ async function handleMessagesDelete(userId, payload, io = null) {
     const keys = payload?.keys || [];
     let deleted = 0;
     for (const key of keys) {
-        const result = await backupAndDeleteMessage(userId, key, 'whatsapp_delete', io);
+        const result = await backupAndDeleteMessage(userId, key, 'whatsapp_delete');
         if (result) deleted += 1;
     }
     return deleted;
@@ -1718,7 +1713,7 @@ async function sendMedia(userId, jid, file, { caption = '', replyTo = null } = {
     };
 }
 
-async function editMessage(userId, jid, waMessageId, newText, io = null) {
+async function editMessage(userId, jid, waMessageId, newText) {
     const session = await requireWaSession(userId);
 
     const row = await getMessageRow(userId, jid, waMessageId);
@@ -1750,9 +1745,9 @@ async function editMessage(userId, jid, waMessageId, newText, io = null) {
 
     const updated = await getMessageRow(userId, targetJid, waMessageId);
     const formatted = await formatSavedMessage(userId, updated);
-    if (formatted && io) {
-        emitMessageEdited(io, userId, { jid: targetJid, message: formatted });
-        emitChatUpdate(io, userId, await getChatByJid(userId, targetJid));
+    if (formatted) {
+        emitMessageEdited(userId, { jid: targetJid, message: formatted });
+        emitChatUpdate(userId, await getChatByJid(userId, targetJid));
     }
 
     return formatted || {
@@ -1764,7 +1759,7 @@ async function editMessage(userId, jid, waMessageId, newText, io = null) {
     };
 }
 
-async function deleteMessage(userId, jid, waMessageId, { forEveryone = true } = {}, io = null) {
+async function deleteMessage(userId, jid, waMessageId, { forEveryone = true } = {}) {
     const session = await requireWaSession(userId);
 
     const row = await getMessageRow(userId, jid, waMessageId);
@@ -1791,15 +1786,13 @@ async function deleteMessage(userId, jid, waMessageId, { forEveryone = true } = 
         }, targetJid);
     }
 
-    await backupAndDeleteMessage(userId, key, forEveryone ? 'delete_for_everyone' : 'delete_for_me', io);
-    if (io) {
-        emitChatUpdate(io, userId, await getChatByJid(userId, targetJid));
-    }
+    await backupAndDeleteMessage(userId, key, forEveryone ? 'delete_for_everyone' : 'delete_for_me');
+    emitChatUpdate(userId, await getChatByJid(userId, targetJid));
 
     return { ok: true, wa_message_id: waMessageId };
 }
 
-async function forwardMessage(userId, fromJid, waMessageId, toJid, io = null) {
+async function forwardMessage(userId, fromJid, waMessageId, toJid) {
     const session = getWaSession(userId);
     if (!session?.sock) {
         throw new Error('WhatsApp belum terhubung');
@@ -1833,9 +1826,9 @@ async function forwardMessage(userId, fromJid, waMessageId, toJid, io = null) {
             raw_message: rawMessage,
         });
         const formatted = await formatSavedMessage(userId, saved);
-        if (formatted && io) {
-            emitMessageNew(io, userId, { message: formatted });
-            emitChatUpdate(io, userId, await getChatByJid(userId, toJid));
+        if (formatted) {
+            emitMessageNew(userId, { message: formatted });
+            emitChatUpdate(userId, await getChatByJid(userId, toJid));
         }
         return formatted;
     }
@@ -1878,7 +1871,7 @@ async function getGroupParticipants(userId, jid) {
     }).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id'));
 }
 
-async function applyIncomingMessageContent(userId, key, updatePayload, io = null) {
+async function applyIncomingMessageContent(userId, key, updatePayload) {
     const { parseMessageContentUpdate } = require('../utils/messageParser');
     const parsed = parseMessageContentUpdate(key, updatePayload);
     if (!parsed?.content?.trim()) return null;
@@ -1901,9 +1894,9 @@ async function applyIncomingMessageContent(userId, key, updatePayload, io = null
     if (!saved) return null;
 
     const formatted = await formatSavedMessage(userId, saved);
-    if (formatted && io) {
-        emitMessageEdited(io, userId, { jid, message: formatted });
-        emitChatUpdate(io, userId, await getChatByJid(userId, jid));
+    if (formatted) {
+        emitMessageEdited(userId, { jid, message: formatted });
+        emitChatUpdate(userId, await getChatByJid(userId, jid));
     }
 
     return formatted;
@@ -1943,7 +1936,7 @@ async function enrichEmptyContentFromRaw(rows = []) {
     return patched;
 }
 
-async function applyIncomingEdit(userId, editPayload, io = null) {
+async function applyIncomingEdit(userId, editPayload) {
     if (!editPayload?.wa_message_id || !editPayload.content) return null;
 
     await getPool().execute(
@@ -1969,21 +1962,22 @@ async function applyIncomingEdit(userId, editPayload, io = null) {
     );
 
     const formatted = await formatSavedMessage(userId, rows[0]);
-    if (formatted && io) {
-        emitMessageEdited(io, userId, { jid: formatted.jid, message: formatted });
+    if (formatted) {
+        emitMessageEdited(userId, { jid: formatted.jid, message: formatted });
     }
     return formatted;
 }
 
-async function markRead(userId, jid, io = null) {
+async function markRead(userId, jid) {
     const { patchSession } = require('../baileys/sessionManager');
+    const { getChatAnchor } = require('./chatAnchorService');
     patchSession(userId, { openJid: jid });
 
     const presenceService = require('./presenceService');
     presenceService.subscribePresence(userId, jid).catch(() => {});
 
     await getPool().execute(
-        'UPDATE wa_chats SET unread_count = 0, updated_at = NOW() WHERE user_id_erp = ? AND jid = ?',
+        'UPDATE wa_chats SET unread_count = 0 WHERE user_id_erp = ? AND jid = ?',
         [userId, jid],
     );
 
@@ -1992,52 +1986,87 @@ async function markRead(userId, jid, io = null) {
          JOIN wa_chats c ON c.id = m.chat_id
          SET m.status = 'read'
          WHERE c.user_id_erp = ? AND c.jid = ? AND m.from_me = 0
-           AND m.status IN ('delivered', 'sent', 'pending')`,
+           AND (m.status IS NULL OR m.status IN ('delivered', 'sent', 'pending'))`,
         [userId, jid],
     );
 
-    const session = getWaSession(userId);
-    if (session?.sock) {
-        try {
-            const [rows] = await getPool().execute(
-                `SELECT m.wa_message_id, m.sender_jid
-                 FROM wa_messages m
-                 JOIN wa_chats c ON c.id = m.chat_id
-                 WHERE c.user_id_erp = ? AND c.jid = ? AND m.from_me = 0
-                 ORDER BY m.timestamp DESC
-                 LIMIT 100`,
-                [userId, jid],
-            );
+    const isGroup = jid.endsWith('@g.us');
+    const keys = await resolveReadMessageKeys(userId, jid, isGroup);
 
-            const isGroup = jid.endsWith('@g.us');
-            const keys = rows.map((row) => {
-                const key = {
-                    remoteJid: jid,
-                    id: row.wa_message_id,
-                    fromMe: false,
-                };
-                if (isGroup && row.sender_jid && row.sender_jid !== jid) {
-                    key.participant = row.sender_jid;
-                }
-                return key;
-            });
-
-            if (keys.length) {
-                await session.sock.readMessages(keys);
-            }
-        } catch (error) {
-            console.warn(`[messageService] readMessages failed for ${jid}:`, error.message);
+    if (!keys.length) {
+        const anchor = getChatAnchor(userId, jid);
+        if (anchor?.wa_message_id && !anchor.from_me) {
+            keys.push(toReadMessageKey(jid, {
+                wa_message_id: anchor.wa_message_id,
+                sender_jid: null,
+            }, isGroup));
         }
     }
 
-    if (io) {
-        const chat = await getChatByJid(userId, jid);
-        if (chat) {
-            emitChatUpdate(io, userId, chat);
-        }
+    await sendDeviceReadReceipts(userId, jid, keys);
+
+    const chat = await getChatByJid(userId, jid);
+    if (chat) {
+        emitChatUpdate(userId, chat);
     }
 
     return { ok: true };
+}
+
+function toReadMessageKey(jid, row, isGroup) {
+    const key = {
+        remoteJid: jid,
+        id: row.wa_message_id,
+        fromMe: false,
+    };
+    if (isGroup && row.sender_jid && row.sender_jid !== jid) {
+        key.participant = row.sender_jid;
+    }
+    return key;
+}
+
+async function resolveReadMessageKeys(userId, jid, isGroup) {
+    const [unreadRows] = await getPool().execute(
+        `SELECT m.wa_message_id, m.sender_jid
+         FROM wa_messages m
+         JOIN wa_chats c ON c.id = m.chat_id
+         WHERE c.user_id_erp = ? AND c.jid = ? AND m.from_me = 0
+           AND (m.status IS NULL OR m.status IN ('delivered', 'sent', 'pending'))
+         ORDER BY m.timestamp DESC
+         LIMIT 50`,
+        [userId, jid],
+    );
+
+    if (unreadRows.length) {
+        return unreadRows.map((row) => toReadMessageKey(jid, row, isGroup));
+    }
+
+    const [latestRows] = await getPool().execute(
+        `SELECT m.wa_message_id, m.sender_jid
+         FROM wa_messages m
+         JOIN wa_chats c ON c.id = m.chat_id
+         WHERE c.user_id_erp = ? AND c.jid = ? AND m.from_me = 0
+         ORDER BY m.timestamp DESC
+         LIMIT 20`,
+        [userId, jid],
+    );
+
+    return latestRows.map((row) => toReadMessageKey(jid, row, isGroup));
+}
+
+async function sendDeviceReadReceipts(userId, jid, keys = []) {
+    const session = getWaSession(userId);
+    if (!session?.sock || !keys?.length) {
+        return false;
+    }
+
+    try {
+        await session.sock.readMessages(keys);
+        return true;
+    } catch (error) {
+        console.warn(`[messageService] readMessages failed for ${jid}:`, error.message);
+        return false;
+    }
 }
 
 function clearOpenChat(userId) {
@@ -2046,7 +2075,7 @@ function clearOpenChat(userId) {
     return { ok: true };
 }
 
-async function setChatPinned(userId, jid, pinned, io = null) {
+async function setChatPinned(userId, jid, pinned) {
     await ensureChat(userId, jid, {});
     await getPool().execute(
         `UPDATE wa_chats
@@ -2056,8 +2085,8 @@ async function setChatPinned(userId, jid, pinned, io = null) {
     );
 
     const chat = await getChatByJid(userId, jid);
-    if (chat && io) {
-        emitChatUpdate(io, userId, chat);
+    if (chat) {
+        emitChatUpdate(userId, chat);
     }
     return chat;
 }
@@ -2106,13 +2135,13 @@ async function seedGroupAnchorsFromHistory(userId, rawMessages = []) {
     }
 }
 
-async function syncAndEmitChats(userId, io) {
+async function syncAndEmitChats(userId) {
     const { chats, statusChats } = await getChats(userId);
-    emitChatsSync(io, userId, { chats, statusChats });
+    emitChatsSync(userId, { chats, statusChats });
     return { chats, statusChats };
 }
 
-async function startChat(userId, { phone, jid } = {}, io = null) {
+async function startChat(userId, { phone, jid } = {}) {
     const session = await requireWaSession(userId);
 
     let targetJid = resolvePhoneOrJid({ phone, jid });
@@ -2144,11 +2173,11 @@ async function startChat(userId, { phone, jid } = {}, io = null) {
     }
 
     await ensureChat(userId, targetJid, {});
-    chatNameService.enrichSingleChatName(userId, targetJid, io).catch(() => {});
+    chatNameService.enrichSingleChatName(userId, targetJid).catch(() => {});
     const chat = await getChatByJid(userId, targetJid);
 
-    if (chat && io) {
-        emitChatUpdate(io, userId, chat);
+    if (chat) {
+        emitChatUpdate(userId, chat);
     }
 
     return { jid: targetJid, chat };

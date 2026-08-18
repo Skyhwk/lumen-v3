@@ -9,16 +9,13 @@ function compareChats(a, b) {
         if (pa !== pb) return pb - pa;
     }
 
-    const unreadA = Number(a.unread_count) || 0;
-    const unreadB = Number(b.unread_count) || 0;
+    const ta = Number(a.last_message_ms)
+        || new Date(a.last_message_at || 0).getTime();
+    const tb = Number(b.last_message_ms)
+        || new Date(b.last_message_at || 0).getTime();
+    if (ta !== tb) return tb - ta;
 
-    if (unreadA > 0 && unreadB === 0) return -1;
-    if (unreadB > 0 && unreadA === 0) return 1;
-    if (unreadA !== unreadB) return unreadB - unreadA;
-
-    const ta = new Date(a.last_message_at || 0).getTime();
-    const tb = new Date(b.last_message_at || 0).getTime();
-    return tb - ta;
+    return String(a.jid || '').localeCompare(String(b.jid || ''));
 }
 
 function sortChatsByUnread(chats = []) {

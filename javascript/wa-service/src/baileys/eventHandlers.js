@@ -7,19 +7,26 @@ const {
     emitDisconnected,
     emitMessageUpdate,
 } = require('./qrHandler');
+const { closeSocket } = require('./socketUtils');
 const sessionService = require('../services/sessionService');
 const messageService = require('../services/messageService');
 const contactService = require('../services/contactService');
 const avatarService = require('../services/avatarService');
-const { processHistorySync, runInitialConnectSync, buildSyncProgress } = require('../services/syncService');
-const { isMessageHistorySyncEnabled } = require('../utils/syncConfig');
+const { processHistorySync, kickoffConnectSync, buildSyncProgress } = require('../services/syncService');
 
-function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect, patchSession, getSession }) {
+function registerBaileysEventHandlers(sock, userId, {
+    saveCreds,
+    onReconnect,
+    patchSession,
+    getSession,
+    scheduleReconnect,
+    isSessionRestarting,
+}) {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('messaging-history.set', async (payload) => {
         try {
-            await processHistorySync(userId, payload, io, {
+            await processHistorySync(userId, payload, {
                 isLatest: payload.isLatest,
                 progress: payload.progress,
                 syncType: payload.syncType,
@@ -35,11 +42,11 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const named = contacts.filter((c) => c?.name?.trim()).length;
             console.log(`[baileys] contacts.upsert user ${userId}: ${contacts.length} total, ${named} with phonebook name`);
             await contactService.upsertContacts(userId, contacts, { fromPhonebook: true, allowPushName: false });
-            contactSyncCoordinator.afterContactsMutation(userId, io);
+            contactSyncCoordinator.afterContactsMutation(userId);
 
             const jids = contacts.map((c) => c.id || c.jid).filter(Boolean);
             if (jids.length) {
-                avatarService.syncAvatarsInBackground(userId, sock, jids.slice(0, 25), io)
+                avatarService.syncAvatarsInBackground(userId, sock, jids.slice(0, 25))
                     .catch((error) => {
                         console.warn(`[baileys] avatar sync after contacts.upsert failed:`, error.message);
                     });
@@ -53,13 +60,13 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
         try {
             const contactSyncCoordinator = require('../services/contactSyncCoordinator');
             await contactService.upsertContacts(userId, contacts, { fromPhonebook: false, allowPushName: true });
-            contactSyncCoordinator.afterContactsMutation(userId, io, { refreshChats: false });
+            contactSyncCoordinator.afterContactsMutation(userId, { refreshChats: false });
 
             const avatarJids = contacts
                 .filter((c) => c?.id && (c.imgUrl !== undefined || c.notify))
                 .map((c) => c.id);
             if (avatarJids.length) {
-                avatarService.syncAvatarsInBackground(userId, sock, avatarJids.slice(0, 15), io)
+                avatarService.syncAvatarsInBackground(userId, sock, avatarJids.slice(0, 15))
                     .catch((error) => {
                         console.warn(`[baileys] avatar sync after contacts.update failed:`, error.message);
                     });
@@ -73,7 +80,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
         try {
             await messageService.processChats(userId, chats);
             if (getSession()?.status === 'connected') {
-                await messageService.syncAndEmitChats(userId, io);
+                await messageService.syncAndEmitChats(userId);
             }
         } catch (error) {
             console.error(`[baileys] chats.upsert failed:`, error.message);
@@ -83,7 +90,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
     sock.ev.on('chats.update', async (updates) => {
         try {
             await messageService.processChats(userId, updates);
-            await messageService.syncAndEmitChats(userId, io);
+            await messageService.syncAndEmitChats(userId);
         } catch (error) {
             console.error(`[baileys] chats.update failed:`, error.message);
         }
@@ -93,7 +100,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
         try {
             for (const jid of jids || []) {
                 if (!jid) continue;
-                await messageService.purgeChatLocally(userId, jid, 'whatsapp_delete_chat', io);
+                await messageService.purgeChatLocally(userId, jid, 'whatsapp_delete_chat');
             }
         } catch (error) {
             console.error(`[baileys] chats.delete failed:`, error.message);
@@ -106,7 +113,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const { emitPresenceUpdate } = require('./qrHandler');
             const parsed = presenceService.parsePresenceUpdate(update);
             if (parsed) {
-                emitPresenceUpdate(io, userId, parsed);
+                emitPresenceUpdate( userId, parsed);
             }
         } catch (error) {
             console.error(`[baileys] presence.update failed:`, error.message);
@@ -123,7 +130,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
                     await chatNameService.updateChatName(userId, jid, subject);
                 }
             }
-            await messageService.syncAndEmitChats(userId, io);
+            await messageService.syncAndEmitChats(userId);
         } catch (error) {
             console.error(`[baileys] groups.upsert failed:`, error.message);
         }
@@ -139,7 +146,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
                 if (updated) changed = true;
             }
             if (changed) {
-                await messageService.syncAndEmitChats(userId, io);
+                await messageService.syncAndEmitChats(userId);
             }
         } catch (error) {
             console.error(`[baileys] groups.update failed:`, error.message);
@@ -152,7 +159,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             if (!lid || !phoneJid) return;
 
             await contactService.linkJidPair(userId, lid, phoneJid);
-            contactSyncCoordinator.afterContactsMutation(userId, io);
+            contactSyncCoordinator.afterContactsMutation(userId);
         } catch (error) {
             console.error(`[baileys] chats.phoneNumberShare failed:`, error.message);
         }
@@ -162,12 +169,12 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
         if (!messages?.length) return;
         try {
             const shouldEmit = type === 'notify' || type === 'append';
-            await messageService.processMessages(userId, messages, io, {
+            await messageService.processMessages(userId, messages, {
                 emit: shouldEmit,
                 downloadMedia: false,
             });
             if (shouldEmit) {
-                await messageService.syncAndEmitChats(userId, io);
+                await messageService.syncAndEmitChats(userId);
             }
         } catch (error) {
             console.error(`[baileys] messages.upsert failed:`, error.message);
@@ -187,14 +194,13 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
                         userId,
                         update.key,
                         'whatsapp_revoke',
-                        io,
                     );
                     continue;
                 }
 
                 const editPayload = parseEditedMessageUpdate(update.update);
                 if (editPayload) {
-                    await messageService.applyIncomingEdit(userId, editPayload, io);
+                    await messageService.applyIncomingEdit(userId, editPayload);
                     continue;
                 }
 
@@ -203,7 +209,6 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
                         userId,
                         update.key,
                         update.update,
-                        io,
                     );
                     if (applied) continue;
                 }
@@ -230,7 +235,7 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
                     [status, userId, update.key.id],
                 );
 
-                emitMessageUpdate(io, userId, {
+                emitMessageUpdate( userId, {
                     wa_message_id: update.key.id,
                     jid: update.key.remoteJid,
                     status,
@@ -243,9 +248,9 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
     sock.ev.on('messages.delete', async (payload) => {
         try {
-            const deleted = await messageService.handleMessagesDelete(userId, payload, io);
+            const deleted = await messageService.handleMessagesDelete(userId, payload);
             if (deleted) {
-                await messageService.syncAndEmitChats(userId, io);
+                await messageService.syncAndEmitChats(userId);
             }
         } catch (error) {
             console.error(`[baileys] messages.delete failed:`, error.message);
@@ -259,8 +264,8 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             try {
                 const qrDataUrl = await toDataUrl(qr);
                 patchSession(userId, { status: 'qr', qr: qrDataUrl });
-                emitQr(io, userId, qrDataUrl);
-                emitStatus(io, userId, 'qr');
+                emitQr( userId, qrDataUrl);
+                emitStatus( userId, 'qr');
                 await sessionService.upsertSession(userId, { status: 'qr' });
             } catch (error) {
                 console.error(`[baileys] QR encode failed for user ${userId}:`, error.message);
@@ -272,13 +277,24 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             const phone = rawId.split(':')[0]?.split('@')[0] || null;
 
             patchSession(userId, { status: 'connected', phone, qr: null });
-            const initialProgress = buildSyncProgress(0, { phase: 'init' });
-            emitConnected(io, userId, phone, { syncing: true, syncProgress: initialProgress });
-            emitStatus(io, userId, 'connected', {
-                phone,
-                syncing: true,
-                syncProgress: initialProgress,
-            });
+            const sessionAfterConnect = getSession() || {};
+
+            if (sessionAfterConnect.initialSyncDone) {
+                emitConnected(userId, phone, { syncing: false, syncProgress: null });
+                emitStatus(userId, 'connected', {
+                    phone,
+                    syncing: false,
+                    syncProgress: null,
+                });
+            } else {
+                const initialProgress = buildSyncProgress(0, { phase: 'init' });
+                emitConnected(userId, phone, { syncing: true, syncProgress: initialProgress });
+                emitStatus(userId, 'connected', {
+                    phone,
+                    syncing: true,
+                    syncProgress: initialProgress,
+                }, { retain: false });
+            }
             await sessionService.upsertSession(userId, {
                 status: 'connected',
                 phone_number: phone,
@@ -287,19 +303,24 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
 
             console.log(`[baileys] user ${userId} connected as ${phone || rawId}`);
 
-            if (!isMessageHistorySyncEnabled()) {
-                setTimeout(() => {
-                    runInitialConnectSync(userId, io).catch((error) => {
-                        console.error(`[baileys] initial connect sync failed:`, error.message);
-                    });
-                }, 500);
-            }
+            kickoffConnectSync(userId, getSession());
         }
 
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const loggedOut = statusCode === DisconnectReason.loggedOut;
+            const restartRequired = statusCode === DisconnectReason.restartRequired;
             const current = getSession() || {};
+
+            // Socket lama sudah diganti startSession — abaikan close event stale
+            if (current.sock && current.sock !== sock) {
+                return;
+            }
+            // startSession sedang membuat socket baru — jangan timpa state / jadwalkan reconnect
+            if (isSessionRestarting?.() && current.sock !== sock) {
+                return;
+            }
+
             const keepPhone = loggedOut ? null : current.phone;
 
             patchSession(userId, {
@@ -310,27 +331,38 @@ function registerBaileysEventHandlers(sock, userId, io, { saveCreds, onReconnect
             });
 
             if (loggedOut) {
-                emitDisconnected(io, userId, 'logged_out');
-                emitStatus(io, userId, 'disconnected', { phone: null });
+                try {
+                    await closeSocket(sock);
+                } catch {
+                    // ignore
+                }
+                emitDisconnected( userId, 'logged_out');
+                emitStatus( userId, 'disconnected', { phone: null });
                 await sessionService.upsertSession(userId, {
                     status: 'disconnected',
                     phone_number: null,
                 });
-                console.log(`[baileys] user ${userId} logged out`);
+                console.log(`[baileys] user ${userId} logged out (code ${statusCode ?? 'n/a'})`);
+                return;
+            }
+
+            if (restartRequired) {
+                emitStatus( userId, 'connecting', { pairing: true });
+                await sessionService.upsertSession(userId, { status: 'connecting' });
+                console.log(`[baileys] user ${userId} pairing complete — restart socket (code 515)...`);
+                scheduleReconnect?.(() => onReconnect(), 500);
                 return;
             }
 
             const reason = lastDisconnect?.error?.message || 'connection_closed';
-            emitDisconnected(io, userId, reason);
-            emitStatus(io, userId, 'connecting');
+            emitDisconnected( userId, reason);
+            emitStatus( userId, 'connecting');
             await sessionService.upsertSession(userId, { status: 'connecting' });
-            console.log(`[baileys] user ${userId} disconnected (${reason}), reconnecting...`);
+            console.log(
+                `[baileys] user ${userId} disconnected (${reason}, code ${statusCode ?? 'n/a'}), reconnecting in 3s...`,
+            );
 
-            setTimeout(() => {
-                onReconnect().catch((err) => {
-                    console.error(`[baileys] reconnect failed for user ${userId}:`, err.message);
-                });
-            }, 3000);
+            scheduleReconnect?.(() => onReconnect(), 3000);
         }
     });
 }

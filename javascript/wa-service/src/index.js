@@ -2,16 +2,19 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
-const { Server } = require('socket.io');
 const { loadEnv } = require('./config/env');
 const { pingDatabase } = require('./db/connection');
 const { createApiRouter } = require('./routes/api');
-const { initWaSocket } = require('./socket/waSocket');
-const { setIo } = require('./baileys/sessionManager');
+const { initWaMqtt, getWaMqtt, closeWaMqtt } = require('./mqtt/waMqtt');
 
 async function bootstrap() {
     const config = loadEnv();
     const app = express();
+
+    await initWaMqtt().catch((error) => {
+        console.error('[wa-service] MQTT init failed:', error.message);
+        throw error;
+    });
 
     app.set('trust proxy', 1);
     app.use(cors({ origin: config.corsOrigin, credentials: true }));
@@ -31,31 +34,29 @@ async function bootstrap() {
         res.json({
             ok: true,
             service: 'wa-service',
-            version: '0.4.0',
-            phase: 4,
+            version: '0.6.0',
+            phase: 6,
+            realtime: getWaMqtt()?.connected ? 'mqtt' : 'mqtt_offline',
             database: dbOk ? 'connected' : 'not_configured',
         });
     });
 
-    const server = http.createServer(app);
-    const io = new Server(server, {
-        cors: {
-            origin: config.corsOrigin,
-            credentials: true,
-        },
-        // Default /socket.io — Apache strip prefix /wa-service sebelum forward
-        path: '/socket.io',
-        transports: ['polling', 'websocket'],
-        allowEIO3: true,
-    });
+    app.use('/api', createApiRouter());
 
-    initWaSocket(io);
-    setIo(io);
-    app.use('/api', createApiRouter(io));
+    const server = http.createServer(app);
 
     server.listen(config.port, () => {
         console.log(`[wa-service] listening on port ${config.port} (${config.nodeEnv})`);
     });
+
+    const shutdown = async () => {
+        console.log('[wa-service] shutting down...');
+        await closeWaMqtt();
+        server.close(() => process.exit(0));
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
 }
 
 bootstrap().catch((error) => {

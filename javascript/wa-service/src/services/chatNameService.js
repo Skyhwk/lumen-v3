@@ -187,7 +187,7 @@ async function enrichGroupNames(userId, sock) {
     return updated;
 }
 
-async function enrichAllChatNames(userId, io = null) {
+async function enrichAllChatNames(userId) {
     const session = getWaSession(userId);
     const sock = session?.sock;
     if (!sock) return { updated: 0 };
@@ -217,9 +217,9 @@ async function enrichAllChatNames(userId, io = null) {
         if (changed) updated += 1;
     }
 
-    if (updated > 0 && io) {
+    if (updated > 0) {
         const messageService = require('./messageService');
-        await messageService.syncAndEmitChats(userId, io);
+        await messageService.syncAndEmitChats(userId);
     }
 
     if (updated > 0) {
@@ -268,7 +268,7 @@ const enrichMeta = new Map();
 const ENRICH_COOLDOWN_MS = 10 * 60 * 1000;
 const ENRICH_LOCK_MS = 5 * 60 * 1000;
 
-async function enrichSingleChatName(userId, jid, io = null) {
+async function enrichSingleChatName(userId, jid) {
     if (!jid) return false;
 
     const session = getWaSession(userId);
@@ -291,16 +291,16 @@ async function enrichSingleChatName(userId, jid, io = null) {
     if (!resolved) return false;
 
     const changed = await updateChatName(userId, jid, resolved);
-    if (changed && io) {
+    if (changed) {
         const messageService = require('./messageService');
         const { emitChatUpdate } = require('../baileys/qrHandler');
         const chat = await messageService.getChatByJid(userId, jid);
-        if (chat) emitChatUpdate(io, userId, chat);
+        if (chat) emitChatUpdate(userId, chat);
     }
     return changed;
 }
 
-async function maybeEnrichChatNames(userId, io = null, { force = false } = {}) {
+async function maybeEnrichChatNames(userId, { force = false } = {}) {
     const key = String(userId);
     const now = Date.now();
     const meta = enrichMeta.get(key) || {};
@@ -313,7 +313,7 @@ async function maybeEnrichChatNames(userId, io = null, { force = false } = {}) {
         return enrichLocks.get(key);
     }
 
-    const promise = enrichAllChatNames(userId, io).then((result) => {
+    const promise = enrichAllChatNames(userId).then((result) => {
         enrichMeta.set(key, { lastAt: Date.now() });
         return result;
     }).finally(() => {

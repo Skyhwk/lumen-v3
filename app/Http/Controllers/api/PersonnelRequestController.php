@@ -475,8 +475,8 @@ class PersonnelRequestController extends Controller
         }
 
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
+        
         $bawahanAll = GetBawahanAll::where('id', $userId)->get();
-        $dd =$bawahanAll->pluck('id')->toArray();
         
         return $bawahanAll->pluck('id')->toArray();
     }
