@@ -387,6 +387,7 @@ class RecruitmentController extends Controller{
                 'email' => $email,
                 'pendidikan' => $json($request->pendidikan),
                 'pengalaman_kerja' => $json($request->pengalaman_kerja),
+                'skill' => $json($request->skill),
                 'shio' => $shioElemen['shio'] ?? null,
                 'elemen' => $shioElemen['elemen'] ?? null,
                 'personnel_request_id' => $personnelRequest->id,
