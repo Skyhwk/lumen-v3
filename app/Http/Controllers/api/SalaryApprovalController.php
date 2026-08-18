@@ -65,6 +65,10 @@ class SalaryApprovalController extends Controller
 
             $now = Carbon::now();
             $salaryOffer = null;
+
+            // Handle history ketika kandidat accept atau reject email HRD 
+
+            // Handle Director Salary Approval Decision (n16)
             if ($decision !== 'reject') {
                 $salaryOffer = DB::table('sallary_offer')
                     ->where('new_recruitment_id', $recruitment->id)
