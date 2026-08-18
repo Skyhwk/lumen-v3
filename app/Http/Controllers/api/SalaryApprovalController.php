@@ -35,8 +35,12 @@ class SalaryApprovalController extends Controller
         if (!in_array($decision, ['approve', 'reject', 'negotiate'], true)) {
             return response()->json(['message' => 'Keputusan penawaran tidak valid.'], 422);
         }
+        $rejectReason = trim((string) $request->input('reject_reason'));
+        if ($decision === 'reject' && $rejectReason === '') {
+            return response()->json(['message' => 'Alasan penolakan wajib diisi.'], 422);
+        }
 
-        return DB::transaction(function () use ($request, $decision) {
+        return DB::transaction(function () use ($request, $decision, $rejectReason) {
             $recruitment = DB::table('new_recruitment')
                 ->where('token_approval', $request->input('token_approval'))
                 ->lockForUpdate()
@@ -100,7 +104,9 @@ class SalaryApprovalController extends Controller
             }
 
             $historyStatus = $recruitment->status . '_' . $historyAction;
-            $extraData = $decision === 'negotiate' ? ['negotiated_amount' => $amount] : [];
+            $extraData = $decision === 'negotiate'
+                ? ['negotiated_amount' => $amount]
+                : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
 
             (new RecruitmentStatusService())->update(
                 $recruitment->id,
