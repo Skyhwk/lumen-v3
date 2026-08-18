@@ -36,6 +36,7 @@ class CompleteProfileController extends Controller
             'profile' => $profile,
             'educations' => $profile ? DB::table('candidate_educations')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : $this->educations($recruitment),
             'work_experiences' => $profile ? DB::table('candidate_work_experiences')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : $this->workExperiences($recruitment),
+            'skills' => $this->skills($recruitment),
             'documents' => $profile ? DB::table('candidate_documents')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : [],
             'medical' => $profile ? DB::table('candidate_medical_informations')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->first() : null,
         ]);
@@ -136,6 +137,16 @@ class CompleteProfileController extends Controller
             'ekspetasi_gaji' => $recruitment->ekspetasi_gaji,
             'picture_base64' => app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null),
         ];
+    }
+
+    private function skills($recruitment)
+    {
+        return collect(json_decode($recruitment->skill ?: '[]', true) ?: [])->map(function ($item) {
+            return [
+                'keahlian' => trim((string) ($item['keahlian'] ?? $item['skill'] ?? '')),
+                'rate' => $item['rate'] ?? '',
+            ];
+        })->filter(fn ($item) => $item['keahlian'] !== '')->values()->all();
     }
 
     private function educations($recruitment)
@@ -239,6 +250,12 @@ class CompleteProfileController extends Controller
             'email' => strtolower(trim((string) $request->input('email'))),
             'alamat_ktp' => trim((string) $request->input('alamat_ktp')),
             'alamat_domisili' => trim((string) $request->input('alamat_domisili')),
+            'skill' => json_encode(collect((array) $request->input('skills', []))->map(function ($item) {
+                return [
+                    'keahlian' => trim((string) ($item['keahlian'] ?? '')),
+                    'rate' => isset($item['rate']) && $item['rate'] !== '' ? max(1, min(10, (int) $item['rate'])) : null,
+                ];
+            })->filter(fn ($item) => $item['keahlian'] !== '')->values()->all()),
         ];
     }
 

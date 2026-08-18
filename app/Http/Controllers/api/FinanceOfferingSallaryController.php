@@ -170,6 +170,13 @@ class FinanceOfferingSallaryController extends Controller
             ], 404);
         }
 
+        if ((string) $applicant->status !== 'finance_review') {
+            return response()->json([
+                'status' => 409,
+                'message' => 'Kandidat tidak berada pada tahap review Finance.',
+            ], 409);
+        }
+
         $decision = $request->input('decision'); // 'approve' or 'reject'
         $user = $this->karyawan;
         $now = Carbon::now();
@@ -196,9 +203,6 @@ class FinanceOfferingSallaryController extends Controller
                     );
                 }
 
-                $shouldEmailCandidate = RecruitmentStatusService::shouldSendCandidateEmailOnFinanceApprove($applicant);
-
-                // Advance candidate status to internal_sallary_offer so HRD can request Director approval
                 (new RecruitmentStatusService())->update(
                     $id, 
                     'internal_sallary_offer', 
@@ -209,9 +213,7 @@ class FinanceOfferingSallaryController extends Controller
 
                 $applicant = $applicant->fresh(['sallaryOffer', 'personalRequest.masterJabatan']);
 
-                if ($shouldEmailCandidate) {
-                    $this->sendCandidateOfferingEmail($applicant, $user ?? 'Finance');
-                }
+                $directorEmailSent = $this->sendDirectorApprovalEmail($applicant, $user ?? 'Finance');
 
                 DB::commit();
 
@@ -219,9 +221,9 @@ class FinanceOfferingSallaryController extends Controller
 
                 return response()->json([
                     'status'  => 200,
-                    'message' => $shouldEmailCandidate
-                        ? 'Persetujuan Finance berhasil diproses. Email penawaran gaji telah dikirim ke kandidat.'
-                        : 'Persetujuan Finance berhasil diproses. HRD dapat melanjutkan pengajuan ke Direktur.',
+                    'message' => $directorEmailSent
+                        ? 'Persetujuan Finance berhasil diproses dan email persetujuan telah dikirim ke Direktur.'
+                        : 'Persetujuan Finance berhasil diproses. Email Direktur belum dikirim karena alamat email belum tersedia.',
                     'data'    => $applicant,
                 ], 200);
             }
@@ -245,13 +247,12 @@ class FinanceOfferingSallaryController extends Controller
 
                 (new RecruitmentStatusService())->update(
                     $id,
-                    'rejected',
+                    'management_decision',
                     $now,
                     'finance_rejected',
                     [
                         'by'            => $user ?? 'Finance',
                         'reject_reason' => $rejectReason,
-                        'alasan_reject' => $rejectReason,
                     ]
                 );
 
@@ -281,77 +282,38 @@ class FinanceOfferingSallaryController extends Controller
         }
     }
 
-    private function sendCandidateOfferingEmail(NewRecruitment $applicant, string $sender = 'Finance'): void
+    private function sendDirectorApprovalEmail(NewRecruitment $applicant, string $sender = 'Finance'): bool
     {
         if (empty($applicant->token_approval)) {
             $tokenService = new GenerateToken();
-            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'candidate_salary_offer' . str_replace('.', '', microtime(true));
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
             $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
             $applicant->token_approval = $token;
             $applicant->save();
         }
 
-        $subject = 'Penawaran Gaji - PT Inti Surya Laboratorium';
+        $targetEmail = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
+        if ($targetEmail === '') {
+            return false;
+        }
 
         try {
-            $applicant->loadMissing([
-                'sallaryOffer',
-                'candidateDataOffer',
-                'personalRequest.masterJabatan',
-                'personnelRequest.masterJabatan',
-            ]);
-
-            $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
-
-            if (empty($applicant->email)) {
-                GenerateMessageAtsEmail::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
-                return;
-            }
-
-            $bodyEmail = GenerateMessageAtsEmail::bodyEmailCandidateOfferingSalary($applicant);
-            $pdfPath = GenerateMessageAtsEmail::generateSalaryOfferingLetterPdfPath($dataObj);
-
-            $emailQuery = SendEmail::where('to', $applicant->email)
-                ->where('subject', $subject)
-                ->where('body', $bodyEmail)
-                ->where('karyawan', $sender);
-
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                $emailQuery->where('attachment', [$pdfPath]);
-            }
-
-            $emailQuery->noReply()
-                ->replyToAtsHrd()
+            $buttons = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $applicant->token_approval);
+            SendEmail::where('to', $targetEmail)
+                ->where('subject', 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat'))
+                ->where('body', GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $buttons))
+                ->where('karyawan', $sender)
+                ->noReply()
                 ->send();
 
-            GenerateMessageAtsEmail::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
-
-            (new RecruitmentStatusService())->update(
-                (int) $applicant->id,
-                $applicant->status,
-                Carbon::now(),
-                'candidate_offering_email_sent',
-                ['by' => $sender]
-            );
-
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                @unlink($pdfPath);
-            }
+            SallaryOfferService::upsertActive((int) $applicant->id, ['email_sent_at' => Carbon::now()], $sender);
+            return true;
         } catch (\Throwable $exception) {
-            \Log::warning('Candidate offering salary email failed', [
+            \Log::warning('Director salary approval email failed', [
                 'recruitment_id' => $applicant->id,
                 'message' => $exception->getMessage(),
             ]);
-
-            try {
-                $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
-                GenerateMessageAtsEmail::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
-            } catch (\Throwable $waException) {
-                \Log::warning('Candidate offering salary WhatsApp failed', [
-                    'recruitment_id' => $applicant->id,
-                    'message' => $waException->getMessage(),
-                ]);
-            }
+            return false;
         }
     }
 }

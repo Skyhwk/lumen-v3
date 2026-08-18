@@ -35,8 +35,12 @@ class SalaryApprovalController extends Controller
         if (!in_array($decision, ['approve', 'reject', 'negotiate'], true)) {
             return response()->json(['message' => 'Keputusan penawaran tidak valid.'], 422);
         }
+        $rejectReason = trim((string) $request->input('reject_reason'));
+        if ($decision === 'reject' && $rejectReason === '') {
+            return response()->json(['message' => 'Alasan penolakan wajib diisi.'], 422);
+        }
 
-        return DB::transaction(function () use ($request, $decision) {
+        return DB::transaction(function () use ($request, $decision, $rejectReason) {
             $recruitment = DB::table('new_recruitment')
                 ->where('token_approval', $request->input('token_approval'))
                 ->lockForUpdate()
@@ -91,16 +95,16 @@ class SalaryApprovalController extends Controller
                 $historyAction = 'negotiated';
             }
 
-            if ($decision === 'negotiate') {
+            if ($decision === 'negotiate' || $decision === 'reject') {
                 $nextStatus = 'management_decision';
             } else {
-                $nextStatus = $decision === 'approve'
-                    ? $this->salaryOfferStatus()
-                    : $recruitment->status;
+                $nextStatus = 'hired';
             }
 
             $historyStatus = $recruitment->status . '_' . $historyAction;
-            $extraData = $decision === 'negotiate' ? ['negotiated_amount' => $amount] : [];
+            $extraData = $decision === 'negotiate'
+                ? ['negotiated_amount' => $amount]
+                : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
 
             (new RecruitmentStatusService())->update(
                 $recruitment->id,
@@ -110,8 +114,8 @@ class SalaryApprovalController extends Controller
                 $extraData
             );
 
-            if ($decision === 'reject') {
-                $this->notifyRejectedCandidate($recruitment);
+            if ($decision === 'approve') {
+                $this->sendHiringLetter($recruitment);
             }
 
             app(AtsNotificationService::class)->directorSalaryDecision($recruitment, $decision);
@@ -125,6 +129,29 @@ class SalaryApprovalController extends Controller
                 'candidate' => $this->candidate($recruitment, $salaryOffer),
             ]);
         });
+    }
+
+    private function sendHiringLetter($recruitment)
+    {
+        try {
+            $applicant = \App\Models\NewRecruitment::with([
+                'sallaryOffer',
+                'candidateDataOffer',
+                'personalRequest.masterJabatan',
+                'personnelRequest.masterJabatan',
+            ])->find($recruitment->id);
+            if (!$applicant) {
+                return;
+            }
+
+            $dataObj = \App\Services\GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+            \App\Services\GenerateMessageAtsEmail::sendCandidateHiringLetterEmail($applicant, $dataObj, 'Direktur');
+        } catch (\Throwable $exception) {
+            \Log::warning('Candidate hiring letter failed after director approval', [
+                'recruitment_id' => $recruitment->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function state($recruitment)

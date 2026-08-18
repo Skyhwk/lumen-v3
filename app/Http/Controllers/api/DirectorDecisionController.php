@@ -15,14 +15,34 @@ use Illuminate\Support\Facades\DB;
 
 class DirectorDecisionController extends Controller
 {
+    public function overview(Request $request)
+    {
+        $recruitment = DB::table('new_recruitment')
+            ->where('token_approval', $request->input('token_approval'))
+            ->first();
+
+        if (!$recruitment) {
+            return response()->json(['message' => 'Link keputusan tidak valid.'], 404);
+        }
+        if ($recruitment->status !== 'management_decision') {
+            return response()->json(['message' => 'Kandidat tidak berada pada tahap keputusan direktur.'], 409);
+        }
+
+        return response()->json(['result' => 'ready', 'candidate' => $this->candidate($recruitment)]);
+    }
+
     public function decide(Request $request)
     {
         $decision = strtolower(trim((string) $request->input('decision')));
         if (!in_array($decision, ['approve', 'reject'], true)) {
             return response()->json(['message' => 'Keputusan tidak valid.'], 422);
         }
+        $rejectReason = trim((string) $request->input('reject_reason'));
+        if ($decision === 'reject' && $rejectReason === '') {
+            return response()->json(['message' => 'Alasan penolakan wajib diisi.'], 422);
+        }
 
-        return DB::transaction(function () use ($request, $decision) {
+        return DB::transaction(function () use ($request, $decision, $rejectReason) {
             $recruitment = DB::table('new_recruitment')
                 ->where('token_approval', $request->input('token_approval'))
                 ->lockForUpdate()
@@ -68,7 +88,13 @@ class DirectorDecisionController extends Controller
                     ? ['approved_by' => 'Direktur', 'approved_at' => $now]
                     : ['rejected_by' => 'Direktur', 'rejected_at' => $now]
             );
-            (new RecruitmentStatusService())->update($recruitment->id, $status, $now, $historyStatus);
+            (new RecruitmentStatusService())->update(
+                $recruitment->id,
+                $status,
+                $now,
+                $historyStatus,
+                $decision === 'reject' ? ['reject_reason' => $rejectReason] : []
+            );
 
             if ($decision === 'reject' && !empty($recruitment->email)) {
                 try {
