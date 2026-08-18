@@ -1289,7 +1289,7 @@ class AppsBasService
                                 $item,
                                 fn($sample) => $this->getStatusSampling($sample)
                             );
-                            if ($error) {
+                            if (is_array($error)) {
                                 return response()->json($error, 200);
                             }
                         }
