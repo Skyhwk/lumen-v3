@@ -996,17 +996,8 @@ class AssessmentController extends Controller
             }
             $candidateExpStr = implode('; ', array_filter($expList)) ?: 'Belum ada pengalaman kerja';
 
-            // Format Skill & Keahlian Kandidat
-            $skillsList = [];
-            if (!empty($recruitment->keahlian)) {
-                $rawSkills = json_decode($recruitment->keahlian, true) ?: [];
-                foreach ($rawSkills as $s) {
-                    if (is_array($s) && isset($s['keahlianSkill'])) {
-                        $skillsList[] = $s['keahlianSkill'];
-                    }
-                }
-            }
-            $candidateSkillsStr = implode(', ', $skillsList) ?: ($recruitment->skill_wajib ?? 'Skill tidak spesifik');
+            // Format Skill & Keahlian Kandidat (kolom skill: [{"rate": 8, "keahlian": "JavaScript"}, ...])
+            $candidateSkillsStr = $this->candidateSkillsForAi($recruitment);
 
             // Format Hasil Seluruh Test Assessment (Original JSON untuk DISC & PAPI Kostick)
             $structuredSessions = [];
@@ -1089,6 +1080,7 @@ class AssessmentController extends Controller
                     'pendidikan' => $candidateEduStr,
                     'pengalaman_kerja' => $candidateExpStr,
                     'skill' => $candidateSkillsStr,
+                    'skills' => $this->candidateSkillsList($recruitment),
                 ],
                 'assessment_results' => $structuredSessions,
                 'ai_payload' => $aiPayload,
@@ -1177,6 +1169,58 @@ class AssessmentController extends Controller
             ]);
             return null;
         }
+    }
+
+    private function candidateSkillsList($recruitment): array
+    {
+        $skills = [];
+
+        if (!empty($recruitment->skill)) {
+            foreach (json_decode($recruitment->skill, true) ?: [] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $keahlian = trim((string) ($item['keahlian'] ?? $item['skill'] ?? ''));
+                if ($keahlian === '') {
+                    continue;
+                }
+                $skills[] = [
+                    'keahlian' => $keahlian,
+                    'rate' => isset($item['rate']) && $item['rate'] !== '' ? (int) $item['rate'] : null,
+                ];
+            }
+        } elseif (!empty($recruitment->keahlian)) {
+            foreach (json_decode($recruitment->keahlian, true) ?: [] as $item) {
+                if (!is_array($item) || empty($item['keahlianSkill'])) {
+                    continue;
+                }
+                $skills[] = [
+                    'keahlian' => trim((string) $item['keahlianSkill']),
+                    'rate' => null,
+                ];
+            }
+        }
+
+        return $skills;
+    }
+
+    private function candidateSkillsForAi($recruitment): string
+    {
+        $skillsList = collect($this->candidateSkillsList($recruitment))
+            ->map(function ($skill) {
+                if ($skill['rate'] !== null) {
+                    return sprintf('%s (tingkat %d/10)', $skill['keahlian'], $skill['rate']);
+                }
+
+                return $skill['keahlian'];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        return !empty($skillsList)
+            ? implode(', ', $skillsList)
+            : 'Skill tidak spesifik';
     }
 
     private function logAiMatching(string $level, string $message, array $context = []): void

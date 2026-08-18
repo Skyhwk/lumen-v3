@@ -164,7 +164,11 @@ class CandidateOfferingDecisionController extends Controller
             ];
         }
 
-        if ((string) $recruitment->status !== 'salary_offer') {
+        $status = (string) $recruitment->status;
+        $isWaitingCandidateOffering = $status === 'salary_offer'
+            || ($status === 'internal_sallary_offer' && $lastHistoryStatus === 'candidate_offering_sent');
+
+        if (!$isWaitingCandidateOffering) {
             return [
                 'result' => 'unavailable',
                 'message' => 'Link offering letter sudah tidak valid untuk tahap proses kandidat saat ini.',
