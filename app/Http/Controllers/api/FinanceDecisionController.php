@@ -235,7 +235,6 @@ class FinanceDecisionController extends Controller
                     [
                         'by'            => $user ?? 'Finance',
                         'reject_reason' => $rejectReason,
-                        'alasan_reject' => $rejectReason,
                     ]
                 );
 

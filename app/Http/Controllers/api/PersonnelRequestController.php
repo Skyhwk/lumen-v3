@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahan,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -120,7 +120,15 @@ class PersonnelRequestController extends Controller
 
     private function ownedPersonnelRequestQuery()
     {
-        return PersonnelRequest::query()->where('created_by', $this->karyawan);
+        // Dapatkan semua ID bawahan (termasuk diri sendiri)
+        $allowedIds = $this->getAllowedEmployeeIds();
+
+        // Cari nama_lengkap dari semua ID tersebut karena field created_by menggunakan nama_lengkap
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('id', $allowedIds)
+            ->pluck('nama_lengkap')
+            ->toArray();
+
+        return PersonnelRequest::query()->whereIn('created_by', $allowedNames);
     }
 
     private function findOwnedPersonnelRequest($id)
@@ -165,13 +173,36 @@ class PersonnelRequestController extends Controller
         return filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
     }
 
+    private function getEffectiveKaryawanName()
+    {
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID');
+        
+        if ($isDevMode && $devUserId) {
+            $devKaryawan = \App\Models\MasterKaryawan::where('id', $devUserId)->first();
+            if ($devKaryawan) {
+                return $devKaryawan->nama_lengkap;
+            }
+        }
+        return $this->karyawan;
+    }
+
     private function validatedUserAssessmentFlag(Request $request): int
     {
         return $this->parseFormBoolean($request->input('use_user_assessment'), false) ? 1 : 0;
     }
 
-    private function syncUserAssessmentCategoryConfig(Request $request): void
+    private function managerHierarchyNames(): array
     {
+        $allowedIds = $this->getAllowedEmployeeIds();
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('id', $allowedIds)
+            ->pluck('nama_lengkap')
+            ->toArray();
+        $allowedNames[] = $this->getEffectiveKaryawanName();
+        return array_unique($allowedNames);
+    }
+
+    private function syncUserAssessmentCategoryConfig(Request $request): void{
         $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
         if (!$useAssessment) {
             return;
@@ -185,8 +216,21 @@ class PersonnelRequestController extends Controller
             abort(422, 'Jumlah soal test user wajib diisi minimal 1.');
         }
 
+        $categoryId = $request->input('assesment_question_category');
+        if (!$categoryId) {
+            abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
+        }
+
+        $category = \App\Models\QuestionCategory::where('id', $categoryId)
+            ->whereIn('owner_karyawan', $this->managerHierarchyNames())
+            ->first();
+            
+        if (!$category) {
+            abort(422, 'Kategori soal tidak valid atau Anda tidak memiliki akses.');
+        }
+
         $availableQuestions = Question::query()
-            ->where('owner_karyawan', $this->karyawan)
+            ->where('question_category_id', $categoryId)
             ->where('question_scope', 'manager')
             ->where('status', 'active')
             ->where('is_active', 1)
@@ -205,13 +249,11 @@ class PersonnelRequestController extends Controller
             abort(422, 'Durasi test user wajib diisi minimal 1 menit apabila batas waktu aktif.');
         }
 
-        app(UserAssessmentCategoryService::class)->syncConfig(
-            (string) $this->karyawan,
-            $questionCount,
-            $hasTimeLimit,
-            $durationMinutes,
-            (string) $this->karyawan
-        );
+        $category->update([
+            'question_count' => $questionCount,
+            'has_time_limit' => $hasTimeLimit,
+            'duration_minutes' => $hasTimeLimit ? $durationMinutes : 0,
+        ]);
     }
 
     public function getUserAssessmentCategoryConfig()
@@ -336,6 +378,10 @@ class PersonnelRequestController extends Controller
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
 
+            // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
+            // Menggunakan helper agar logic impersonasi lebih tersentralisasi
+            $createdBy = $this->getEffectiveKaryawanName();
+
             $data = PersonnelRequest::create([
                 'no_request'                => $noRequest,
                 'request_type'              => $request->request_type,
@@ -354,6 +400,7 @@ class PersonnelRequestController extends Controller
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'minimum_matching'          => $this->nullableInt($request->minimum_matching),
+                'assesment_question_category'=> $this->nullableInt($request->assesment_question_category),
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
@@ -361,7 +408,10 @@ class PersonnelRequestController extends Controller
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
                 'use_user_assessment'       => $useUserAssessment,
-                'created_by'                => $this->karyawan ?? null,
+                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
+                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
+                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
+                'created_by'                => $createdBy,
             ]);
 
             DB::commit();
@@ -414,10 +464,21 @@ class PersonnelRequestController extends Controller
      */
     private function getAllowedEmployeeIds()
     {
+        // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
+        // Fitur ini otomatis MATI jika APP_ENV='production' di .env
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID'); // Ambil dari .env
+        
         $userId = $this->user_id;
 
+        if ($isDevMode && $devUserId) {
+            $userId = $devUserId;
+        }
+
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
-        $bawahanAll = GetBawahan::where('id', $userId)->get();
+        
+        $bawahanAll = GetBawahanAll::where('id', $userId)->get();
+        
         return $bawahanAll->pluck('id')->toArray();
     }
 
@@ -460,7 +521,7 @@ class PersonnelRequestController extends Controller
 
             $grades = MasterKaryawan::select('grade')
                 ->where('is_active', true)
-                ->whereIn('user_id', $allowedIds)
+                ->whereIn('id', $allowedIds)
                 ->whereNotNull('grade')
                 ->where('grade', '!=', '')
                 ->distinct()

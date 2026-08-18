@@ -66,7 +66,7 @@ class BankSoalController extends Controller
             ->where('is_active', true)
             ->where(function ($query) use ($managerHierarchyNames) {
                 $query->whereIn('owner_karyawan', $managerHierarchyNames)
-                    ->orWhere('assigned_manager', $this->karyawan);
+                    ->orWhere('assigned_manager', $this->getEffectiveKaryawanName());
             })
             ->orderBy('name')
             ->get()
@@ -706,10 +706,24 @@ class BankSoalController extends Controller
         return strtolower((string) ($category->category_scope ?? 'hr')) === 'manager';
     }
 
+    private function getEffectiveKaryawanName()
+    {
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID');
+        
+        if ($isDevMode && $devUserId) {
+            $devKaryawan = \App\Models\MasterKaryawan::where('id', $devUserId)->first();
+            if ($devKaryawan) {
+                return $devKaryawan->nama_lengkap;
+            }
+        }
+        return $this->karyawan;
+    }
+
     private function countManagerAvailableQuestions(): int
     {
         return Question::query()
-            ->where('owner_karyawan', $this->karyawan)
+            ->whereIn('owner_karyawan', $this->managerHierarchyNames())
             ->where('is_active', 1)
             ->where('question_type', 'single_choice')
             ->count();
@@ -753,11 +767,20 @@ class BankSoalController extends Controller
         return $category;
     }
 
+    private function getEffectiveUserId()
+    {
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        if ($isDevMode) {
+            return env('DEV_BYPASS_USER_ID');
+        }
+        return $this->user_id;
+    }
+
     private function managerHierarchyNames(): array
     {
-        return GetBawahan::where('id', $this->user_id)->get()
+        return GetBawahan::where('id', $this->getEffectiveUserId())->get()
             ->pluck('nama_lengkap')
-            ->push($this->karyawan)
+            ->push($this->getEffectiveKaryawanName())
             ->filter()
             ->map(fn ($name) => (string) $name)
             ->unique()
