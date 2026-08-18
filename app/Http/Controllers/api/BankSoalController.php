@@ -719,11 +719,7 @@ class BankSoalController extends Controller
         $devUserId = env('DEV_BYPASS_USER_ID');
         
         if ($isDevMode && $devUserId) {
-<<<<<<< HEAD
             $devKaryawan = \App\Models\MasterKaryawan::where('id', $devUserId)->first();
-=======
-            $devKaryawan = \App\Models\MasterKaryawan::where('user_id', $devUserId)->first();
->>>>>>> 720af05c (perubahan logic akses lihat data personnel request)
             if ($devKaryawan) {
                 return $devKaryawan->nama_lengkap;
             }
@@ -734,11 +730,7 @@ class BankSoalController extends Controller
     private function countManagerAvailableQuestions(): int
     {
         return Question::query()
-<<<<<<< HEAD
             ->whereIn('owner_karyawan', $this->managerHierarchyNames())
-=======
-            ->where('owner_karyawan', $this->getEffectiveKaryawanName())
->>>>>>> 720af05c (perubahan logic akses lihat data personnel request)
             ->where('is_active', 1)
             ->where('question_type', 'single_choice')
             ->count();

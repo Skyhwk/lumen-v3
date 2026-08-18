@@ -230,7 +230,7 @@ class PersonnelRequestController extends Controller
         }
 
         $availableQuestions = Question::query()
-            ->where('owner_karyawan', $this->getEffectiveKaryawanName())
+            ->where('question_category_id', $categoryId)
             ->where('question_scope', 'manager')
             ->where('status', 'active')
             ->where('is_active', 1)
