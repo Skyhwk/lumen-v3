@@ -61,6 +61,56 @@ class SalaryApprovalController extends Controller
 
             $now = Carbon::now();
             $salaryOffer = null;
+
+            // Handle history ketika kandidat accept atau reject email HRD 
+            $history = RecruitmentStatusService::parseMetaHistory($recruitment);
+            $lastHistory = !empty($history) ? end($history) : [];
+            $lastStatus = (string) ($lastHistory['status'] ?? '');
+
+            if ($lastStatus === 'candidate_offering_sent') {
+                if ($decision === 'approve') {
+                    (new RecruitmentStatusService())->update(
+                        $recruitment->id,
+                        'finance_review',
+                        $now,
+                        'candidate_approved'
+                    );
+                    (new RecruitmentStatusService())->update(
+                        $recruitment->id,
+                        'finance_review',
+                        $now,
+                        'waiting_approve_finance'
+                    );
+
+                    return response()->json([
+                        'result' => 'approve',
+                        'already_processed' => false,
+                        'requested_decision' => 'approve',
+                        'decided_at' => $now->toDateTimeString(),
+                        'message' => 'Penawaran gaji berhasil disetujui kandidat dan dikirim ke Finance Review.',
+                        'candidate' => $this->candidate($recruitment),
+                    ]);
+                } else if ($decision === 'reject') {
+                    (new RecruitmentStatusService())->update(
+                        $recruitment->id,
+                        'rejected',
+                        $now,
+                        'candidate_rejected',
+                        ['reason' => $request->input('reject_reason') ?? 'Candidate rejected salary offer']
+                    );
+
+                    return response()->json([
+                        'result' => 'reject',
+                        'already_processed' => false,
+                        'requested_decision' => 'reject',
+                        'decided_at' => $now->toDateTimeString(),
+                        'message' => 'Penawaran gaji ditolak oleh kandidat.',
+                        'candidate' => $this->candidate($recruitment),
+                    ]);
+                }
+            }
+
+            // Handle Director Salary Approval Decision (n16)
             if ($decision !== 'reject') {
                 $salaryOffer = DB::table('sallary_offer')
                     ->where('new_recruitment_id', $recruitment->id)
@@ -93,13 +143,13 @@ class SalaryApprovalController extends Controller
 
             if ($decision === 'negotiate') {
                 $nextStatus = 'management_decision';
+            } elseif ($decision === 'approve') {
+                $nextStatus = 'hired';
             } else {
-                $nextStatus = $decision === 'approve'
-                    ? $this->salaryOfferStatus()
-                    : $recruitment->status;
+                $nextStatus = 'rejected';
             }
 
-            $historyStatus = $recruitment->status . '_' . $historyAction;
+            $historyStatus = 'internal_sallary_offer_' . $historyAction;
             $extraData = $decision === 'negotiate' ? ['negotiated_amount' => $amount] : [];
 
             (new RecruitmentStatusService())->update(
@@ -134,13 +184,18 @@ class SalaryApprovalController extends Controller
         $last = !empty($history) ? $history[count($history) - 1] : [];
         $lastStatus = (string) ($last['status'] ?? '');
         $result = null;
-        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $lastStatus, $matches)) {
-            $result = $matches[1] === 'negotiated' ? 'negotiate' : ($matches[1] === 'approved' ? 'approve' : 'reject');
-        }
-        if ($result) {
+
+        if (in_array($lastStatus, ['candidate_approved', 'candidate_rejected'], true)) {
+            $result = $lastStatus === 'candidate_approved' ? 'approve' : 'reject';
             return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
         }
-        if ($recruitment->status !== 'internal_sallary_offer') {
+
+        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $lastStatus, $matches)) {
+            $result = $matches[1] === 'negotiated' ? 'negotiate' : ($matches[1] === 'approved' ? 'approve' : 'reject');
+            return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
+        }
+
+        if (!in_array($recruitment->status, ['internal_sallary_offer', 'waiting_candidate_approval'], true)) {
             return ['result' => 'unavailable', 'message' => 'Kandidat tidak berada pada tahap persetujuan penawaran.', 'candidate' => $this->candidate($recruitment)];
         }
         return ['result' => 'ready', 'candidate' => $this->candidate($recruitment)];
