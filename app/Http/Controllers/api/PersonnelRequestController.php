@@ -414,7 +414,7 @@ class PersonnelRequestController extends Controller
      */
     private function getAllowedEmployeeIds()
     {
-        $userId = auth()->user()->id ?? $this->user_id;
+        $userId = $this->user_id;
 
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
         $bawahanAll = GetBawahanAll::where('id', $userId)->get();
