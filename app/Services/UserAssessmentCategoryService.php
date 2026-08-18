@@ -31,7 +31,7 @@ class UserAssessmentCategoryService
         }
 
         $payload = [
-            'name' => 'Assessment User',
+            'name' => 'Assessment User - ' . $ownerKaryawan,
             'category_scope' => 'manager',
             'owner_karyawan' => $ownerKaryawan,
             'assigned_manager' => null,

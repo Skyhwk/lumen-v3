@@ -249,13 +249,11 @@ class PersonnelRequestController extends Controller
             abort(422, 'Durasi test user wajib diisi minimal 1 menit apabila batas waktu aktif.');
         }
 
-        app(UserAssessmentCategoryService::class)->syncConfig(
-            (string) $this->karyawan,
-            $questionCount,
-            $hasTimeLimit,
-            $durationMinutes,
-            (string) $this->karyawan
-        );
+        $category->update([
+            'question_count' => $questionCount,
+            'has_time_limit' => $hasTimeLimit,
+            'duration_minutes' => $hasTimeLimit ? $durationMinutes : 0,
+        ]);
     }
 
     public function getUserAssessmentCategoryConfig()
@@ -402,7 +400,7 @@ class PersonnelRequestController extends Controller
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'minimum_matching'          => $this->nullableInt($request->minimum_matching),
-                'assesment_question_category'=> $useUserAssessment ? $this->nullableInt($request->assesment_question_category) : null,
+                'assesment_question_category'=> $this->nullableInt($request->assesment_question_category),
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
@@ -410,6 +408,9 @@ class PersonnelRequestController extends Controller
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
                 'use_user_assessment'       => $useUserAssessment,
+                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
+                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
+                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
                 'created_by'                => $createdBy,
             ]);
 
