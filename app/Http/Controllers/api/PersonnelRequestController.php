@@ -179,7 +179,7 @@ class PersonnelRequestController extends Controller
         $devUserId = env('DEV_BYPASS_USER_ID');
         
         if ($isDevMode && $devUserId) {
-            $devKaryawan = \App\Models\MasterKaryawan::where('user_id', $devUserId)->first();
+            $devKaryawan = \App\Models\MasterKaryawan::where('id', $devUserId)->first();
             if ($devKaryawan) {
                 return $devKaryawan->nama_lengkap;
             }
@@ -379,16 +379,13 @@ class PersonnelRequestController extends Controller
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'minimum_matching'          => $this->nullableInt($request->minimum_matching),
+                'assesment_question_category'=> $useUserAssessment ? $this->nullableInt($request->assesment_question_category) : null,
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
                 'tanggal_dibutuhkan'        => $this->nullableValue($request->tanggal_dibutuhkan),
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
-                'use_user_assessment'       => $assessmentConfig['use_user_assessment'],
-                'user_assessment_question_count' => $assessmentConfig['user_assessment_question_count'],
-                'user_assessment_has_time_limit' => $assessmentConfig['user_assessment_has_time_limit'],
-                'user_assessment_duration_minutes' => $assessmentConfig['user_assessment_duration_minutes'],
                 'use_user_assessment'       => $useUserAssessment,
                 'created_by'                => $createdBy,
             ]);
@@ -456,6 +453,8 @@ class PersonnelRequestController extends Controller
 
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
         $bawahanAll = GetBawahanAll::where('id', $userId)->get();
+        $dd =$bawahanAll->pluck('id')->toArray();
+        
         return $bawahanAll->pluck('id')->toArray();
     }
 
@@ -466,7 +465,7 @@ class PersonnelRequestController extends Controller
 
             $list = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
                 ->where('is_active', true)
-                ->whereIn('user_id', $allowedIds)
+                ->whereIn('id', $allowedIds)
                 ->orderBy('nama_lengkap')
                 ->get()
                 ->map(function ($k) {
@@ -498,7 +497,7 @@ class PersonnelRequestController extends Controller
 
             $grades = MasterKaryawan::select('grade')
                 ->where('is_active', true)
-                ->whereIn('user_id', $allowedIds)
+                ->whereIn('id', $allowedIds)
                 ->whereNotNull('grade')
                 ->where('grade', '!=', '')
                 ->distinct()
