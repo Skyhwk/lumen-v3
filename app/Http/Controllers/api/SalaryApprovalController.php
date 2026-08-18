@@ -67,52 +67,6 @@ class SalaryApprovalController extends Controller
             $salaryOffer = null;
 
             // Handle history ketika kandidat accept atau reject email HRD 
-            $history = RecruitmentStatusService::parseMetaHistory($recruitment);
-            $lastHistory = !empty($history) ? end($history) : [];
-            $lastStatus = (string) ($lastHistory['status'] ?? '');
-
-            if ($lastStatus === 'candidate_offering_sent') {
-                if ($decision === 'approve') {
-                    (new RecruitmentStatusService())->update(
-                        $recruitment->id,
-                        'finance_review',
-                        $now,
-                        'candidate_approved'
-                    );
-                    (new RecruitmentStatusService())->update(
-                        $recruitment->id,
-                        'finance_review',
-                        $now,
-                        'waiting_approve_finance'
-                    );
-
-                    return response()->json([
-                        'result' => 'approve',
-                        'already_processed' => false,
-                        'requested_decision' => 'approve',
-                        'decided_at' => $now->toDateTimeString(),
-                        'message' => 'Penawaran gaji berhasil disetujui kandidat dan dikirim ke Finance Review.',
-                        'candidate' => $this->candidate($recruitment),
-                    ]);
-                } else if ($decision === 'reject') {
-                    (new RecruitmentStatusService())->update(
-                        $recruitment->id,
-                        'rejected',
-                        $now,
-                        'candidate_rejected',
-                        ['reason' => $request->input('reject_reason') ?? 'Candidate rejected salary offer']
-                    );
-
-                    return response()->json([
-                        'result' => 'reject',
-                        'already_processed' => false,
-                        'requested_decision' => 'reject',
-                        'decided_at' => $now->toDateTimeString(),
-                        'message' => 'Penawaran gaji ditolak oleh kandidat.',
-                        'candidate' => $this->candidate($recruitment),
-                    ]);
-                }
-            }
 
             // Handle Director Salary Approval Decision (n16)
             if ($decision !== 'reject') {
