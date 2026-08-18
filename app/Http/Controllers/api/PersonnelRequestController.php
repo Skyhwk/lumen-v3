@@ -124,7 +124,7 @@ class PersonnelRequestController extends Controller
         $allowedIds = $this->getAllowedEmployeeIds();
 
         // Cari nama_lengkap dari semua ID tersebut karena field created_by menggunakan nama_lengkap
-        $allowedNames = \App\Models\MasterKaryawan::whereIn('user_id', $allowedIds)
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('id', $allowedIds)
             ->pluck('nama_lengkap')
             ->toArray();
 
