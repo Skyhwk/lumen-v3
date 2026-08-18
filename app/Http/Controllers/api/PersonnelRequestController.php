@@ -445,7 +445,7 @@ class PersonnelRequestController extends Controller
         $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
         $devUserId = env('DEV_BYPASS_USER_ID'); // Ambil dari .env
         
-        $userId = auth()->user()->id ?? $this->user_id;
+        $userId = $this->user_id;
 
         if ($isDevMode && $devUserId) {
             $userId = $devUserId;
