@@ -26,10 +26,14 @@ class BankSoalController extends Controller
     public function index(Request $request)
     {
         $scope = $this->scope($request);
+        $managerQuestionCreators = $scope === 'manager'
+            ? $this->managerHierarchyNames()
+            : [];
+
         $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
             ->where('question_scope', $scope)
-            ->when($scope === 'manager', function ($query) {
-                $query->whereIn('question_category_id', $this->accessibleManagerCategoryIds());
+            ->when($scope === 'manager', function ($query) use ($managerQuestionCreators) {
+                $query->whereIn('created_by', $managerQuestionCreators);
             })
             ->when($request->filled('question_category_id'), fn ($query) => $query->where('question_category_id', $request->question_category_id))
             ->when($request->filled('status'), fn ($query) => $query->where('status', 'like', '%' . $request->status . '%'))->orderBy('id','desc');
@@ -56,17 +60,18 @@ class BankSoalController extends Controller
 
     public function managerCategories(Request $request)
     {
+        $managerHierarchyNames = $this->managerHierarchyNames();
         $categories = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'manager')->where('status', '!=', 'retired')])
             ->where('category_scope', 'manager')
             ->where('is_active', true)
-            ->where(function ($query) {
-                $query->where('owner_karyawan', $this->karyawan)
+            ->where(function ($query) use ($managerHierarchyNames) {
+                $query->whereIn('owner_karyawan', $managerHierarchyNames)
                     ->orWhere('assigned_manager', $this->karyawan);
             })
             ->orderBy('name')
             ->get()
-            ->map(function ($category) {
-                $category->can_manage = (string) $category->owner_karyawan === (string) $this->karyawan;
+            ->map(function ($category) use ($managerHierarchyNames) {
+                $category->can_manage = in_array((string) $category->owner_karyawan, $managerHierarchyNames, true);
 
                 return $category;
             });
@@ -396,7 +401,7 @@ class BankSoalController extends Controller
         }
 
         try {
-            $rows = IOFactory::load($file->getRealPath())->getActiveSheet()->toArray('', true, true, false);
+            $rows = IOFactory::load($file->getRealPath())->getActiveSheet()->toArray('', false, true, false);
         } catch (\Throwable $exception) {
             abort(422, 'Template tidak dapat dibaca. Gunakan file .xlsx atau .csv dari template yang disediakan.');
         }
@@ -631,7 +636,7 @@ class BankSoalController extends Controller
         $data = $request->all();
         $data['question_text'] = trim($data['question_text']);
         $data['difficulty'] = $data['difficulty'] ?? 'easy';
-        $data['status'] = $data['status'] ?? 'draft';
+        $data['status'] = $data['status'] ?? 'active';
         $data['question_type'] = in_array($request->input('question_type'), ['single_choice', 'multiple_choice', 'scale'], true)
             ? $request->input('question_type')
             : 'single_choice';
@@ -662,7 +667,9 @@ class BankSoalController extends Controller
         $data['scoring_type'] = 'correct_answer';
 
         if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) abort(422, 'Answer option wajib diisi.');
-        if ($data['question_type'] === 'single_choice' && collect($data['options'])->filter(fn ($option) => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN))->count() > 1) abort(422, 'Single Choice hanya boleh memiliki satu jawaban benar.');
+        $correctOptionCount = collect($data['options'])->filter(fn ($option) => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN))->count();
+        if ($correctOptionCount === 0) abort(422, 'Pilih minimal satu Answer Option sebagai jawaban Correct.');
+        if ($data['question_type'] === 'single_choice' && $correctOptionCount > 1) abort(422, 'Single Choice hanya boleh memiliki satu jawaban benar.');
         return $data;
     }
 
@@ -742,22 +749,34 @@ class BankSoalController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        $isOwner = (string) $category->owner_karyawan === (string) $this->karyawan;
+        $canManageOwner = in_array((string) $category->owner_karyawan, $this->managerHierarchyNames(), true);
         $isAssignedManager = (string) $category->assigned_manager === (string) $this->karyawan;
 
         if ($accessLevel === 'write') {
-            if (!$isOwner) {
-                abort(403, 'Hanya pemilik kategori yang dapat mengubah data.');
+            if (!$canManageOwner) {
+                abort(403, 'Hanya pemilik kategori atau atasannya yang dapat mengubah data.');
             }
 
             return $category;
         }
 
-        if (!$isOwner && !$isAssignedManager) {
+        if (!$canManageOwner && !$isAssignedManager) {
             abort(403, 'Kategori tidak dapat diakses.');
         }
 
         return $category;
+    }
+
+    private function managerHierarchyNames(): array
+    {
+        return GetBawahan::where('id', $this->user_id)->get()
+            ->pluck('nama_lengkap')
+            ->push($this->karyawan)
+            ->filter()
+            ->map(fn ($name) => (string) $name)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function ensureQuestionScope(Question $question, $scope, Request $request, string $accessLevel = 'view')

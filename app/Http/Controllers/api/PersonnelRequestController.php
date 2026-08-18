@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -187,17 +187,15 @@ class PersonnelRequestController extends Controller
         return $this->karyawan;
     }
 
-    private function validatedUserAssessmentConfig(Request $request): array
+    private function validatedUserAssessmentFlag(Request $request): int
     {
-        $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
+        return $this->parseFormBoolean($request->input('use_user_assessment'), false) ? 1 : 0;
+    }
 
+    private function syncUserAssessmentCategoryConfig(Request $request): void{
+        $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
         if (!$useAssessment) {
-            return [
-                'use_user_assessment' => 0,
-                'user_assessment_question_count' => null,
-                'user_assessment_has_time_limit' => 0,
-                'user_assessment_duration_minutes' => null,
-            ];
+            return;
         }
 
         $questionCount = (int) $request->input('user_assessment_question_count');
@@ -228,12 +226,29 @@ class PersonnelRequestController extends Controller
             abort(422, 'Durasi test user wajib diisi minimal 1 menit apabila batas waktu aktif.');
         }
 
-        return [
-            'use_user_assessment' => 1,
-            'user_assessment_question_count' => $questionCount,
-            'user_assessment_has_time_limit' => $hasTimeLimit ? 1 : 0,
-            'user_assessment_duration_minutes' => $durationMinutes,
-        ];
+        app(UserAssessmentCategoryService::class)->syncConfig(
+            (string) $this->karyawan,
+            $questionCount,
+            $hasTimeLimit,
+            $durationMinutes,
+            (string) $this->karyawan
+        );
+    }
+
+    public function getUserAssessmentCategoryConfig()
+    {
+        $service = app(UserAssessmentCategoryService::class);
+        $category = $service->findOwnerCategory((string) $this->karyawan);
+        $config = $service->toConfigObject($category);
+
+        return response()->json([
+            'success' => true,
+            'data' => $config ? [
+                'question_count' => (int) $config->question_count,
+                'has_time_limit' => (bool) $config->has_time_limit,
+                'duration_minutes' => (int) $config->duration_minutes,
+            ] : null,
+        ], 200);
     }
 
     /**
@@ -257,7 +272,14 @@ class PersonnelRequestController extends Controller
                 }
             ])->orderBy('id', 'desc');
     
+            $assessmentCategoryService = app(UserAssessmentCategoryService::class);
+
             return Datatables::of($data)
+                ->editColumn('no_request', function ($row) use ($assessmentCategoryService) {
+                    $assessmentCategoryService->appendLegacyConfigFields($row);
+
+                    return $row->no_request;
+                })
                 ->addColumn('total_pelamar', function ($row) {
                     return $row->total_pelamar ?? 0;
                 })
@@ -332,7 +354,8 @@ class PersonnelRequestController extends Controller
         try {
             $noRequest = $this->generateNoRequest();
 
-            $assessmentConfig = $this->validatedUserAssessmentConfig($request);
+            $useUserAssessment = $this->validatedUserAssessmentFlag($request);
+            $this->syncUserAssessmentCategoryConfig($request);
 
             // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
             // Menggunakan helper agar logic impersonasi lebih tersentralisasi
@@ -366,6 +389,7 @@ class PersonnelRequestController extends Controller
                 'user_assessment_question_count' => $assessmentConfig['user_assessment_question_count'],
                 'user_assessment_has_time_limit' => $assessmentConfig['user_assessment_has_time_limit'],
                 'user_assessment_duration_minutes' => $assessmentConfig['user_assessment_duration_minutes'],
+                'use_user_assessment'       => $useUserAssessment,
                 'created_by'                => $createdBy,
             ]);
 
@@ -396,6 +420,8 @@ class PersonnelRequestController extends Controller
         if (!$data) {
             return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
         }
+
+        app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
 
         return response()->json($data, 200);
     }

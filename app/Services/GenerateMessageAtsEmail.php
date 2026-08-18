@@ -29,9 +29,20 @@ class GenerateMessageAtsEmail
         $encodedToken = rawurlencode($token ?? $recruitment->token_approval ?? '');
 
         return (object) [
-            'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
-            'reject'  => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
+            'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=approve" : '',
+            'reject'  => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=reject" : '',
         ];
+    }
+
+    private static function candidateOfferingActionButtonsHtml($btn): string
+    {
+        if (!$btn || (empty($btn->approve) && empty($btn->reject))) {
+            return '';
+        }
+
+        return view('TemplateEmail.hrd.partials.action-buttons-candidate-offering', [
+            'btn' => $btn,
+        ])->render();
     }
 
     public static function bodyEmailCandidateOfferingSalary($data, $btn = null): string
@@ -39,6 +50,12 @@ class GenerateMessageAtsEmail
         if ($data == null) {
             return '';
         }
+
+        if ($btn === null && !empty($data->token_approval)) {
+            $btn = self::buildCandidateOfferingButtons($data);
+        }
+
+        $actionButtonsHtml = self::candidateOfferingActionButtonsHtml($btn);
 
         $posisi = htmlspecialchars(HrdEmailViewData::getNamaJabatan($data));
         $offerAmount = optional($data->sallaryOffer)->sallary_offer_hrd
@@ -92,8 +109,92 @@ class GenerateMessageAtsEmail
                             Sebagai lampiran email ini, kami sertakan <strong>Surat Penawaran Gaji (PDF)</strong> yang memuat rincian penawaran. Silakan unduh dan pelajari dokumen tersebut.
                         </p>
 
+                        {$actionButtonsHtml}
+
                         <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
                             Apabila Anda memiliki pertanyaan, silakan menghubungi tim HRD kami. Atas perhatian Anda, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+
+                " . self::emailFooterHtml() . "
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Pemberitahuan ke Finance saat kandidat menyetujui penawaran gaji HRD.
+     *
+     * @param object $data { nama_kandidat, posisi, no_request, penawaran_gaji, approved_at }
+     */
+    public static function bodyEmailFinanceCandidateSalaryApproved($data): string
+    {
+        $namaKandidat = htmlspecialchars($data->nama_kandidat ?? 'Kandidat');
+        $posisi = htmlspecialchars($data->posisi ?? '-');
+        $noRequest = htmlspecialchars($data->no_request ?? '-');
+        $penawaranGaji = htmlspecialchars($data->penawaran_gaji ?? '-');
+        $approvedAt = htmlspecialchars($data->approved_at ?? '-');
+        $greeting = self::internalGreetingHtml('Tim Finance');
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Pemberitahuan Persetujuan Penawaran Gaji Kandidat - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                " . self::emailHeaderHtml() . "
+
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #dcfce7; border-left: 4px solid #16a34a; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px;'>&#10003; Kandidat Menyetujui Penawaran Gaji</span>
+                        </div>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style='padding: 32px;'>
+                        {$greeting}
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
+                            Melalui email ini kami informasikan bahwa kandidat berikut telah <strong>menyetujui penawaran gaji</strong> yang sebelumnya ditawarkan oleh HRD melalui surat penawaran gaji.
+                        </p>
+
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Ringkasan Kandidat
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600; width: 150px;'>Nama Kandidat</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Posisi</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$posisi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>No. Request</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 600;'>{$noRequest}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Penawaran Gaji HRD</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$penawaranGaji}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Waktu Persetujuan</td>
+                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 600;'>{$approvedAt}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
+                            Email ini bersifat pemberitahuan agar Divisi Finance dapat mengetahui bahwa kandidat telah menerima penawaran gaji yang diajukan HRD. Mohon ditindaklanjuti sesuai prosedur rekrutmen yang berlaku.
                         </p>
                     </td>
                 </tr>

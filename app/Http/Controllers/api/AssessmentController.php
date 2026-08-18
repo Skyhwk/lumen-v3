@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
 use App\Services\AtsNotificationService;
+use App\Services\UserAssessmentCategoryService;
 
 class AssessmentController extends Controller
 {
@@ -326,16 +327,30 @@ class AssessmentController extends Controller
             return null;
         }
 
+        $service = app(UserAssessmentCategoryService::class);
+        $categoryConfig = $service->toConfigObject(
+            $service->findOwnerCategory((string) $personnelRequest->created_by)
+        );
+
+        if ($categoryConfig && (int) $categoryConfig->question_count >= 1) {
+            return (object) [
+                'owner_karyawan' => $personnelRequest->created_by,
+                'question_count' => (int) $categoryConfig->question_count,
+                'duration_minutes' => (int) $categoryConfig->duration_minutes,
+                'has_time_limit' => (bool) $categoryConfig->has_time_limit,
+            ];
+        }
+
         $questionCount = (int) ($personnelRequest->user_assessment_question_count ?? 0);
         if ($questionCount < 1) {
-            throw new \RuntimeException('Konfigurasi jumlah soal test user pada personnel request belum diisi.');
+            throw new \RuntimeException('Konfigurasi jumlah soal test user pada kategori bank soal belum diisi.');
         }
 
         $hasTimeLimit = (int) ($personnelRequest->user_assessment_has_time_limit ?? 0) === 1;
         $durationMinutes = $hasTimeLimit ? (int) ($personnelRequest->user_assessment_duration_minutes ?? 0) : 0;
 
         if ($hasTimeLimit && $durationMinutes < 1) {
-            throw new \RuntimeException('Konfigurasi durasi test user pada personnel request belum diisi.');
+            throw new \RuntimeException('Konfigurasi durasi test user pada kategori bank soal belum diisi.');
         }
 
         return (object) [
@@ -1028,7 +1043,7 @@ class AssessmentController extends Controller
 
             // Formulate Prompt String for AI Ollama Server
             $promptText = sprintf(
-                "Analisis kecocokan kandidat terhadap posisi yang dilamar.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\nSkor minimum technical test: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia.",
+                "Analisis kecocokan kandidat terhadap posisi yang dilamar.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia.",
                 $candidateEduStr,
                 $candidateExpStr,
                 $candidateSkillsStr,
