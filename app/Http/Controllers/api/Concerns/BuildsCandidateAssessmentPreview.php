@@ -434,9 +434,29 @@ trait BuildsCandidateAssessmentPreview
         ];
     }
 
+    protected function resolveMatchingReason($candidate): ?string
+    {
+        if (!empty($candidate->ai_matching_reason)) {
+            return trim((string) $candidate->ai_matching_reason);
+        }
+
+        if (!empty($candidate->ai_matching_response)) {
+            $parsed = json_decode($candidate->ai_matching_response, true);
+            if (is_array($parsed) && !empty($parsed['reason'])) {
+                return trim((string) $parsed['reason']);
+            }
+        }
+
+        return null;
+    }
+
     protected function formatCandidatePreviewItem($candidate, RecruitmentPictureService $pictureService)
     {
         $status = strtolower((string) $candidate->status);
+        $matchingScore = $candidate->nilai_kecocokan;
+        if (($matchingScore === null || $matchingScore === '') && isset($candidate->matching_score)) {
+            $matchingScore = $candidate->matching_score;
+        }
 
         return [
             'id' => $candidate->id,
@@ -447,7 +467,8 @@ trait BuildsCandidateAssessmentPreview
             'picture_url' => $pictureService->toDataUri($candidate->picture),
             'status' => $status,
             'status_label' => $this->recruitmentStatusLabel($status),
-            'nilai_kecocokan' => $candidate->nilai_kecocokan,
+            'nilai_kecocokan' => $matchingScore,
+            'ai_matching_reason' => $this->resolveMatchingReason($candidate),
             'posisi_dilamar' => $candidate->posisi_dilamar,
             'applied_at' => $candidate->created_at,
             'updated_at' => $candidate->updated_at,

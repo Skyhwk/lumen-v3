@@ -6,11 +6,12 @@ use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\NewRecruitment;
 use App\Models\RecruitmentInterview;
-use App\Models\SallaryOffer;
+use App\Services\SallaryOfferService;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -358,6 +359,7 @@ class AtsInterviewUserController extends Controller
                     ->where('body', $candidateEmailBody)
                     ->where('karyawan', $user)
                     ->noReply()
+                    ->replyToAtsHrd()
                     ->send();
             }
 
@@ -406,6 +408,11 @@ class AtsInterviewUserController extends Controller
                     ->noReply()
                     ->send();
             }
+
+            app(AtsNotificationService::class)->userInterviewSchedulePrepared(
+                $applicant,
+                $pr
+            );
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Failed sending User Interview notifications: " . $e->getMessage());
         }
@@ -566,11 +573,10 @@ class AtsInterviewUserController extends Controller
                 $offerData['final_sallary'] = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('final_sallary'))));
             }
 
-            SallaryOffer::updateOrCreate(
-                ['new_recruitment_id' => $id],
-                array_merge($offerData, [
-                    'created_by' => $user,
-                ])
+            SallaryOfferService::upsertActive(
+                (int) $id,
+                $offerData,
+                $user
             );
         }
 

@@ -4,8 +4,9 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question,SallaryOffer};
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService};
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
+use App\Services\SallaryOfferService;
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,8 @@ class PersonnelRequestController extends Controller
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
         }
 
-        $personnelRequest = PersonnelRequest::with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
+        $personnelRequest = $this->ownedPersonnelRequestQuery()
+            ->with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
             ->withCount('newRecruitments as total_pelamar')
             ->find($id);
 
@@ -116,9 +118,56 @@ class PersonnelRequestController extends Controller
         return (int) $value;
     }
 
+    private function ownedPersonnelRequestQuery()
+    {
+        return PersonnelRequest::query()->where('created_by', $this->karyawan);
+    }
+
+    private function findOwnedPersonnelRequest($id)
+    {
+        return $this->ownedPersonnelRequestQuery()->find($id);
+    }
+
+    private function findOwnedRecruitment($newRecruitmentId)
+    {
+        return NewRecruitment::query()
+            ->where('id', $newRecruitmentId)
+            ->whereHas('personnelRequest', function ($query) {
+                $query->where('created_by', $this->karyawan);
+            })
+            ->first();
+    }
+
+    private function parseFormBoolean($value, bool $default = false): bool
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+            return true;
+        }
+
+        if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+            return false;
+        }
+
+        return filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
+    }
+
     private function validatedUserAssessmentConfig(Request $request): array
     {
-        $useAssessment = filter_var($request->input('use_user_assessment'), FILTER_VALIDATE_BOOLEAN);
+        $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
 
         if (!$useAssessment) {
             return [
@@ -130,7 +179,7 @@ class PersonnelRequestController extends Controller
         }
 
         $questionCount = (int) $request->input('user_assessment_question_count');
-        $hasTimeLimit = filter_var($request->input('user_assessment_has_time_limit'), FILTER_VALIDATE_BOOLEAN);
+        $hasTimeLimit = $this->parseFormBoolean($request->input('user_assessment_has_time_limit'), false);
         $durationMinutes = $hasTimeLimit ? (int) $request->input('user_assessment_duration_minutes') : null;
 
         if ($questionCount < 1) {
@@ -139,6 +188,8 @@ class PersonnelRequestController extends Controller
 
         $availableQuestions = Question::query()
             ->where('owner_karyawan', $this->karyawan)
+            ->where('question_scope', 'manager')
+            ->where('status', 'active')
             ->where('is_active', 1)
             ->where('question_type', 'single_choice')
             ->count();
@@ -170,7 +221,7 @@ class PersonnelRequestController extends Controller
     {
         try {
             // Fetch records with counts for NewRecruitment and eager load relations
-            $data = PersonnelRequest::select('personnel_requests.*')->with([
+            $data = $this->ownedPersonnelRequestQuery()->select('personnel_requests.*')->with([
                 'detailCabang', 
                 'detailDivisi', 
                 'detailPosisi',
@@ -220,15 +271,30 @@ class PersonnelRequestController extends Controller
     public function kanban()
     {
         try {
-            // Fetch all records, Kanban component will handle categorization
-            // Eager load relations to display exact names in Kanban board
+            $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+            if ($ownedRequestIds->isEmpty()) {
+                return response()->json([], 200);
+            }
+
+            // Fetch records milik user login; Kanban component will handle categorization
             $data = NewRecruitment::with([
-                'personnelRequest.detailCabang', 
-                'personnelRequest.detailDivisi', 
+                'personnelRequest.detailCabang',
+                'personnelRequest.detailDivisi',
                 'personnelRequest.detailPosisi',
                 'userInterview',
-                'hrdInterview'
-            ])->orderBy('id', 'desc')->get();
+                'hrdInterview',
+                'candidateProfile',
+            ])
+                ->whereIn('personnel_request_id', $ownedRequestIds)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($item) {
+                    $item->has_completed_profile = $item->candidateProfile !== null;
+
+                    return $item;
+                })
+                ->values();
+
             return response()->json($data, 200);
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()], 400);
@@ -278,6 +344,8 @@ class PersonnelRequestController extends Controller
             ]);
 
             DB::commit();
+            app(AtsNotificationService::class)->personnelRequestSubmitted($data);
+
             return response()->json([
                 'status'     => 'success',
                 'message'    => 'Personal Request berhasil dibuat.',
@@ -298,7 +366,11 @@ class PersonnelRequestController extends Controller
      */
     public function show(Request $request)
     {
-        $data = PersonnelRequest::findOrFail($request->id);
+        $data = $this->findOwnedPersonnelRequest($request->id);
+        if (!$data) {
+            return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
+        }
+
         return response()->json($data, 200);
     }
 
@@ -445,6 +517,10 @@ class PersonnelRequestController extends Controller
     {
         DB::beginTransaction();
         try {
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
 
             // Nonaktifkan jadwal interview user sebelumnya (jika ada reschedule)
             RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
@@ -465,9 +541,7 @@ class PersonnelRequestController extends Controller
                 'is_active'          => 1,
             ]);
 
-            // Dapatkan data recruitment berserta relasi yang dibutuhkan
-            $recruitment = NewRecruitment::with(['personnelRequest.detailDivisi', 'personnelRequest.detailPosisi', 'personnelRequest.detailCabang'])
-                ->findOrFail($request->new_recruitment_id);
+            $recruitment->load(['personnelRequest.detailDivisi', 'personnelRequest.detailPosisi', 'personnelRequest.detailCabang']);
             
             $recruitment->update([
                 'status' => 'interview_user'
@@ -504,6 +578,11 @@ class PersonnelRequestController extends Controller
                 }
             }
 
+            app(AtsNotificationService::class)->userInterviewScheduledByRequester(
+                $recruitment,
+                $recruitment->personnelRequest
+            );
+
             DB::commit();
             return response()->json([
                 'message' => 'Berhasil menjadwalkan interview!',
@@ -526,6 +605,11 @@ class PersonnelRequestController extends Controller
     {
         DB::beginTransaction();
         try {
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
             $interview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
                 ->where('stage', 'user')
                 ->where('is_active', 1)
@@ -558,7 +642,10 @@ class PersonnelRequestController extends Controller
         try {
 
             
-            $recruitment = NewRecruitment::findOrFail($request->new_recruitment_id);
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
             
             $isApproved = $request->decision === 'approve' ? 1 : 0; 
             
@@ -593,13 +680,10 @@ class PersonnelRequestController extends Controller
                 // Simpan salary offer user jika diisi
                 if ($request->filled('sallary_offer_user')) {
                     $salaryValue = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_user'))));
-                    SallaryOffer::updateOrCreate(
-                        ['new_recruitment_id' => $recruitment->id],
-                        [
-                            'sallary_offer_user' => $salaryValue ?: null,
-                            'created_by'         => $this->karyawan,
-                            'updated_by'         => $this->karyawan,
-                        ]
+                    SallaryOfferService::upsertActive(
+                        (int) $recruitment->id,
+                        ['sallary_offer_user' => $salaryValue ?: null],
+                        $this->karyawan
                     );
                 }
 
@@ -613,12 +697,16 @@ class PersonnelRequestController extends Controller
                             ->where('body', $emailContent)
                             ->noReply()
                             ->send();
+
+                app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
             } else {
                 $recruitment->update([
                     'reject_interview_user_by' => $this->karyawan,
                     'reject_interview_user_at' => Carbon::now(),
                     'is_approve_interview_user' => $isApproved
                 ]);
+
+                app(AtsNotificationService::class)->userInterviewRejected($recruitment, $pr);
 
                 try {
                     // Set posisi untuk template
@@ -632,6 +720,7 @@ class PersonnelRequestController extends Controller
                                     ->where('subject', $subject)
                                     ->where('body', $emailContent)
                                     ->noReply()
+                                    ->replyToAtsHrd()
                                     ->send();
                     }
 

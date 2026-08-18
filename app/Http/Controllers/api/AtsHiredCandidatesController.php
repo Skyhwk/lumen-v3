@@ -15,6 +15,7 @@ use App\Models\SertifikatKaryawan;
 use App\Models\User;
 use App\Services\KaryawanArsipDokumenService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
@@ -227,6 +228,12 @@ class AtsHiredCandidatesController extends Controller
             ->addColumn('is_migrated', function ($row) {
                 return $this->isEmployeeMigrated($row);
             })
+            ->addColumn('can_migrate', function ($row) {
+                return !$this->isEmployeeMigrated($row);
+            })
+            ->addColumn('migration_block_reason', function ($row) {
+                return $this->migrationBlockReason($row);
+            })
             ->rawColumns([])
             ->make(true);
     }
@@ -367,33 +374,28 @@ class AtsHiredCandidatesController extends Controller
 
     private function isEmployeeMigrated($recruitment)
     {
-        $profile = $recruitment->candidateProfile ?? null;
-        $nikKaryawan = trim((string) optional($profile)->nik_ktp);
-        if ($nikKaryawan === '') {
+        $recruitmentId = is_object($recruitment)
+            ? ($recruitment->id ?? null)
+            : ($recruitment['id'] ?? null);
+
+        if (!$recruitmentId || !Schema::hasTable('candidate_onboarding_verification')) {
             return false;
         }
 
-        if (!Schema::hasTable('master_karyawan')) {
-            return false;
+        $migratedAt = DB::table('candidate_onboarding_verification')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->value('employee_migrated_at');
+
+        return !empty($migratedAt);
+    }
+
+    private function migrationBlockReason($recruitment): ?string
+    {
+        if (!$this->isEmployeeMigrated($recruitment)) {
+            return null;
         }
 
-        if (Schema::hasTable('candidate_onboarding_verification')) {
-            $migratedAt = DB::table('candidate_onboarding_verification')
-                ->where('new_recruitment_id', $recruitment->id)
-                ->value('employee_migrated_at');
-
-            if (!empty($migratedAt)) {
-                return true;
-            }
-        }
-
-        return DB::table('master_karyawan')
-            ->where('is_active', 1)
-            ->where(function ($query) use ($nikKaryawan) {
-                $query->where('nik_ktp', $nikKaryawan)
-                    ->orWhere('nik_karyawan', $nikKaryawan);
-            })
-            ->exists();
+        return 'Data karyawan sudah pernah dimigrasikan ke Master Karyawan.';
     }
 
     private function buildMigrationPreview($recruitment)
@@ -821,6 +823,15 @@ class AtsHiredCandidatesController extends Controller
         }
 
         $personnelRequestSync = $this->syncPersonnelRequestAfterMigration($recruitment, $timestamp);
+
+        if (!empty($personnelRequestSync['request_closed'])) {
+            $personnelRequest = DB::table('personnel_requests')
+                ->where('id', $personnelRequestSync['personnel_request_id'] ?? $recruitment->personnel_request_id)
+                ->first();
+            app(AtsNotificationService::class)->personnelRequestFulfilled($personnelRequest);
+        }
+
+        app(AtsNotificationService::class)->employeeMigrated($recruitment);
 
         return [
             'karyawan_id' => $karyawan->id,

@@ -11,7 +11,9 @@ use Exception;
 
 use App\Models\PersonnelRequest;
 use App\Models\NewRecruitment;
+use App\Services\HrdAssessmentReadinessService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsNotificationService;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 
 class PersonnelRequesthrdController extends Controller
@@ -159,9 +161,13 @@ class PersonnelRequesthrdController extends Controller
         try {
             DB::table('personnel_requests')->where('id', $id)->update([
                 'is_approve' => 1,
-                // 'is_rejected' => 0,
+                'approved_by' => $this->karyawan,
+                'approved_at' => Carbon::now(),
+                'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
             ]);
+
+            app(AtsNotificationService::class)->personnelRequestApproved($data);
 
             return response()->json([
                 'status' => 'success',
@@ -195,8 +201,13 @@ class PersonnelRequesthrdController extends Controller
             DB::table('personnel_requests')->where('id', $id)->update([
                 'is_approve' => 0,
                 'is_reject' => 1,
+                'rejected_by' => $this->karyawan,
+                'rejected_at' => Carbon::now(),
+                'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
             ]);
+
+            app(AtsNotificationService::class)->personnelRequestRejected($data);
 
             return response()->json([
                 'status' => 'success',
@@ -208,6 +219,21 @@ class PersonnelRequesthrdController extends Controller
                 'message' => 'Gagal menolak request: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Check HRD bank soal readiness before publish.
+     */
+    public function checkHrdSoalReadiness(Request $request)
+    {
+        $readiness = app(HrdAssessmentReadinessService::class)->check();
+
+        return response()->json([
+            'status' => $readiness['ready'] ? 'success' : 'error',
+            'ready' => $readiness['ready'],
+            'message' => $readiness['message'],
+            'issues' => $readiness['issues'],
+        ], 200);
     }
 
     /**
@@ -227,6 +253,15 @@ class PersonnelRequesthrdController extends Controller
             return response()->json(['message' => 'Data tidak ditemukan'], 404);
         }
 
+        $readiness = app(HrdAssessmentReadinessService::class)->check();
+        if (!$readiness['ready']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $readiness['message'],
+                'issues' => $readiness['issues'],
+            ], 422);
+        }
+
         try {
             $updateData = [
                 'is_publish' => 1,
@@ -240,6 +275,8 @@ class PersonnelRequesthrdController extends Controller
             }
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
+
+            app(AtsNotificationService::class)->personnelRequestPublished($data);
 
         return response()->json([
             'status' => 'success',

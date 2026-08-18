@@ -7,9 +7,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CandidateDataOffers;
 use App\Models\NewRecruitment;
 use App\Models\RecruitmentInterview;
-use App\Models\SallaryOffer;
 use App\Services\GenerateMessageAtsEmail;
+use App\Services\RecruitmentStatusService;
+use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -105,6 +107,7 @@ class AtsFinalDecisionController extends Controller
                 'internal_sallary_offer',
                 'salary_offer',
                 'sallary_offer',
+                'finance_review',
             ])
             ->orWhere(function ($sub) {
                 $sub->where('status', 'rejected')
@@ -112,6 +115,8 @@ class AtsFinalDecisionController extends Controller
                         $meta->where('meta_history', 'like', '%management_decision%')
                             ->orWhere('meta_history', 'like', '%internal_sallary_offer%')
                             ->orWhere('meta_history', 'like', '%interview_user%')
+                            ->orWhere('meta_history', 'like', '%finance_review%')
+                            ->orWhere('meta_history', 'like', '%finance_rejected%')
                             ->orWhere('is_approve_interview_user', 1);
                     });
             });
@@ -152,9 +157,20 @@ class AtsFinalDecisionController extends Controller
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
             })
+            ->addColumn('sallary_offer_user', function ($row) {
+                return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
+            })
             ->addColumn('offering_status', function ($row) {
                 $offer = $row->sallaryOffer;
                 $emailSentAt = $offer->email_sent_at ?? null;
+
+                if (RecruitmentStatusService::isAwaitingDirectorSalaryApproval($row)) {
+                    return [
+                        'code' => 'awaiting_direktur',
+                        'label' => 'Menunggu Direktur (Salary)',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
 
                 $history = json_decode($row->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
@@ -209,6 +225,9 @@ class AtsFinalDecisionController extends Controller
                     'label' => 'Email Terkirim',
                     'email_sent_at' => $emailSentAt,
                 ];
+            })
+            ->addColumn('finance_reject_reason', function ($row) {
+                return \App\Services\RecruitmentStatusService::getFinanceRejectReason($row);
             })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
@@ -287,6 +306,37 @@ class AtsFinalDecisionController extends Controller
             ], 404);
         }
 
+        $applicantStatus = strtolower(trim((string) $applicant->status));
+        if ($applicantStatus === 'finance_review') {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data tidak dapat diedit karena sedang dalam review Finance.',
+            ], 422);
+        }
+
+        if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($applicant)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data tidak dapat diedit karena masih menunggu keputusan manajemen.',
+            ], 422);
+        }
+
+        if (RecruitmentStatusService::isAwaitingDirectorSalaryApproval($applicant)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data tidak dapat diedit karena masih menunggu persetujuan Direktur atas Offering Salary.',
+            ], 422);
+        }
+
+        $decision = $request->input('decision');
+
+        if (!$decision && RecruitmentStatusService::isFinanceSalaryLocked($applicant)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Gaji tidak dapat diubah setelah disetujui Finance.',
+            ], 422);
+        }
+
         if ($this->isOfferingRejected($applicant)) {
             return response()->json([
                 'status'  => 400,
@@ -294,13 +344,12 @@ class AtsFinalDecisionController extends Controller
             ], 400);
         }
 
-        $decision = $request->input('decision');
         $user = $this->karyawan;
         $now = Carbon::now();
 
         if ($decision === 'approve') {
             $reqFinalSalary = $request->input('final_salary') ?? $request->input('final_sallary');
-            $offer = SallaryOffer::where('new_recruitment_id', $id)->first();
+            $offer = SallaryOfferService::getActive((int) $id);
 
             if ($reqFinalSalary !== null && $reqFinalSalary !== '') {
                 $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $reqFinalSalary)));
@@ -309,12 +358,10 @@ class AtsFinalDecisionController extends Controller
                 $finalSalary = optional($offer)->sallary_offer_direktur ?? optional($offer)->sallary_offer_hrd ?? $applicant->ekspetasi_gaji;
             }
 
-            SallaryOffer::updateOrCreate(
-                ['new_recruitment_id' => $id],
-                [
-                    'final_sallary' => $finalSalary,
-                    'updated_by'    => $user ?? 'HRD',
-                ]
+            SallaryOfferService::upsertActive(
+                (int) $id,
+                ['final_sallary' => $finalSalary],
+                $user ?? 'HRD'
             );
 
             $cleanNumber = function ($val) {
@@ -359,56 +406,39 @@ class AtsFinalDecisionController extends Controller
             (new \App\Services\RecruitmentStatusService())->update($id, 'hired', $now, 'internal_sallary_offer_approved');
 
             try {
-                $targetEmail = $applicant->email;
-                $posisiName = $this->resolvePositionName($applicant);
-                $dataObj = (object) [
-                    'nama_lengkap'        => $applicant->nama_lengkap,
-                    'alamat'              => $applicant->alamat_domisili ?: ($applicant->alamat_ktp ?: '-'),
-                    'no_telepon'          => $applicant->no_telepon ?: ($applicant->no_hp ?: '-'),
-                    'nama_jabatan'        => $posisiName,
-                    'posisi_di_lamar'     => $posisiName,
+                $applicant->loadMissing([
+                    'sallaryOffer',
+                    'candidateDataOffer',
+                    'personalRequest.masterJabatan',
+                    'personnelRequest.masterJabatan',
+                ]);
+
+                $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                     'gaji_pokok'          => $gajiPokok,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
                     'pencadangan_upah'    => $pencadanganUpah,
                     'tanggal_mulai_kerja' => !empty($startDate) ? Carbon::parse($startDate)->translatedFormat('d F Y') : '-',
-                    'hari_kerja'          => 'Senin s.d Jumat',
-                ];
+                ]);
 
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailOfferingLetter($dataObj);
+                GenerateMessageAtsEmail::sendCandidateHiringLetterEmail(
+                    $applicant,
+                    $dataObj,
+                    $user ?? 'HRD'
+                );
+            } catch (\Exception $e) {
+                \Log::warning('Hiring letter email failed on internal salary approve', [
+                    'recruitment_id' => $id,
+                    'message'        => $e->getMessage(),
+                ]);
+            }
 
-                $pdfPath = sys_get_temp_dir() . '/Offering_Letter_' . preg_replace('/[^A-Za-z0-9_]/', '_', $applicant->nama_lengkap) . '.pdf';
-                try {
-                    $mpdf = new \Mpdf\Mpdf([
-                        'mode' => 'utf-8',
-                        'format' => 'A4',
-                        'margin_top' => 15,
-                        'margin_bottom' => 15,
-                        'margin_left' => 15,
-                        'margin_right' => 15,
-                    ]);
-                    $mpdf->WriteHTML($bodyEmail);
-                    $mpdf->Output($pdfPath, \Mpdf\Output\Destination::FILE);
-                } catch (\Exception $pdfEx) {
-                    $pdfPath = null;
-                }
-
-                $emailQuery = SendEmail::where('to', $targetEmail)
-                    ->where('subject', 'Offering Letter - PT Inti Surya Laboratorium')
-                    ->where('body', $bodyEmail)
-                    ->where('karyawan', $user);
-
-                if (!empty($pdfPath) && file_exists($pdfPath)) {
-                    $emailQuery->where('attachment', [$pdfPath]);
-                }
-
-                $emailQuery->noReply()->send();
-
-                if (!empty($pdfPath) && file_exists($pdfPath)) {
-                    @unlink($pdfPath);
-                }
-            } catch (\Exception $e) {}
+            $applicant->loadMissing('personalRequest', 'personnelRequest');
+            app(AtsNotificationService::class)->candidateHired(
+                $applicant,
+                $applicant->personalRequest ?? $applicant->personnelRequest
+            );
 
             return response()->json([
                 'status'  => 200,
@@ -437,6 +467,7 @@ class AtsFinalDecisionController extends Controller
                         ->where('body', $bodyEmail)
                         ->where('karyawan', $user)
                         ->noReply()
+                        ->replyToAtsHrd()
                         ->send();
                 }
             } catch (\Exception $e) {}
@@ -456,10 +487,17 @@ class AtsFinalDecisionController extends Controller
 
             $user = $this->karyawan;
 
+            $applicant->loadMissing('userInterview');
+            $userReferenceSalary = SallaryOfferService::resolveUserReferenceSalary($applicant);
+
             $offerData = [
                 'sallary_offer_hrd' => $valueToSave,
                 'updated_by'        => $user,
             ];
+
+            if ($userReferenceSalary !== null) {
+                $offerData['sallary_offer_user'] = $userReferenceSalary;
+            }
 
             if ($request->has('sallary_offer_direktur')) {
                 $offerData['sallary_offer_direktur'] = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_direktur'))));
@@ -469,12 +507,25 @@ class AtsFinalDecisionController extends Controller
                 $offerData['final_sallary'] = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('final_sallary'))));
             }
 
-            SallaryOffer::updateOrCreate(
-                ['new_recruitment_id' => $id],
-                array_merge($offerData, [
-                    'created_by' => $user,
-                ])
+            $forceNewOffer = RecruitmentStatusService::hasFinanceRejected($applicant)
+                || RecruitmentStatusService::isAwaitingHrdResubmitAfterDirectorNegotiation($applicant);
+
+            (new RecruitmentStatusService())->update(
+                $applicant->id,
+                'finance_review',
+                Carbon::now(),
+                'waiting_approve_finance',
+                ['by' => $user]
             );
+
+            SallaryOfferService::upsertActive(
+                (int) $id,
+                $offerData,
+                $user,
+                $forceNewOffer
+            );
+
+            app(AtsNotificationService::class)->salarySubmittedToFinance($applicant);
         }
 
         return response()->json([
@@ -514,6 +565,21 @@ class AtsFinalDecisionController extends Controller
             ], 400);
         }
 
+        $applicantStatus = strtolower((string) $applicant->status);
+        if ($applicantStatus === 'finance_review' || $applicantStatus === 'finance review') {
+            return response()->json([
+                'status'  => 400,
+                'message' => 'Status kandidat saat ini sedang dalam Finance Review. Pengiriman email ke Direktur dinonaktifkan.',
+            ], 400);
+        }
+
+        if (!\App\Services\RecruitmentStatusService::hasFinanceApproved($applicant)) {
+            return response()->json([
+                'status'  => 400,
+                'message' => 'Email ke Direktur hanya dapat dikirim setelah Finance menyetujui gaji yang diajukan HRD.',
+            ], 400);
+        }
+
         if (empty($applicant->token_approval)) {
             $tokenService = new \App\Services\GenerateToken();
             $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
@@ -539,12 +605,10 @@ class AtsFinalDecisionController extends Controller
                 ->noReply()
                 ->send();
 
-            SallaryOffer::updateOrCreate(
-                ['new_recruitment_id' => $applicant->id],
-                [
-                    'email_sent_at' => Carbon::now(),
-                    'updated_by'    => $user ?? 'System',
-                ]
+            SallaryOfferService::upsertActive(
+                (int) $applicant->id,
+                ['email_sent_at' => Carbon::now()],
+                $user ?? 'System'
             );
 
             return response()->json([
@@ -616,12 +680,10 @@ class AtsFinalDecisionController extends Controller
             ]
         );
 
-        SallaryOffer::updateOrCreate(
-            ['new_recruitment_id' => $id],
-            [
-                'final_sallary' => $gajiPokok,
-                'updated_by'    => $user ?? 'HRD',
-            ]
+        SallaryOfferService::upsertActive(
+            (int) $id,
+            ['final_sallary' => $gajiPokok],
+            $user ?? 'HRD'
         );
 
         $applicant->approved_by = $user ?? 'HRD';
@@ -630,61 +692,44 @@ class AtsFinalDecisionController extends Controller
 
         (new \App\Services\RecruitmentStatusService())->update($id, 'hired', $now, 'candidate_approved');
 
-        try {
-            $targetEmail = $applicant->email;
-            $posisiName = $this->resolvePositionName($applicant);
-            $dataObj = (object) [
-                'nama_lengkap'        => $applicant->nama_lengkap,
-                'alamat'              => $applicant->alamat_domisili ?: ($applicant->alamat_ktp ?: '-'),
-                'no_telepon'          => $applicant->no_telepon ?: ($applicant->no_hp ?: '-'),
-                'nama_jabatan'        => $posisiName,
-                'posisi_di_lamar'     => $posisiName,
+        $emailSent = false;
+        if (!empty($applicant->email)) {
+            $applicant->loadMissing([
+                'sallaryOffer',
+                'candidateDataOffer',
+                'personalRequest.masterJabatan',
+                'personnelRequest.masterJabatan',
+            ]);
+
+            $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                 'gaji_pokok'          => $gajiPokok,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,
                 'pencadangan_upah'    => $pencadanganUpah,
                 'tanggal_mulai_kerja' => Carbon::parse($startDate)->translatedFormat('d F Y'),
-                'hari_kerja'          => 'Senin s.d Jumat',
-            ];
+            ]);
 
-            $bodyEmail = GenerateMessageAtsEmail::bodyEmailOfferingLetter($dataObj);
+            $emailSent = GenerateMessageAtsEmail::sendCandidateHiringLetterEmail(
+                $applicant,
+                $dataObj,
+                $user ?? 'HRD'
+            );
+        }
 
-            $pdfPath = sys_get_temp_dir() . '/Offering_Letter_' . preg_replace('/[^A-Za-z0-9_]/', '_', $applicant->nama_lengkap) . '.pdf';
-            try {
-                $mpdf = new \Mpdf\Mpdf([
-                    'mode' => 'utf-8',
-                    'format' => 'A4',
-                    'margin_top' => 15,
-                    'margin_bottom' => 15,
-                    'margin_left' => 15,
-                    'margin_right' => 15,
-                ]);
-                $mpdf->WriteHTML($bodyEmail);
-                $mpdf->Output($pdfPath, \Mpdf\Output\Destination::FILE);
-            } catch (\Exception $pdfEx) {
-                $pdfPath = null;
-            }
-
-            $emailQuery = SendEmail::where('to', $targetEmail)
-                ->where('subject', 'Offering Letter - PT Inti Surya Laboratorium')
-                ->where('body', $bodyEmail)
-                ->where('karyawan', $user);
-
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                $emailQuery->where('attachment', [$pdfPath]);
-            }
-
-            $emailQuery->noReply()->send();
-
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                @unlink($pdfPath);
-            }
-        } catch (\Exception $e) {}
+        $applicant->loadMissing('personalRequest', 'personnelRequest');
+        app(AtsNotificationService::class)->candidateHired(
+            $applicant,
+            $applicant->personalRequest ?? $applicant->personnelRequest
+        );
 
         return response()->json([
             'status'  => 200,
-            'message' => 'Candidate approved successfully with candidate data offer.',
+            'message' => $emailSent
+                ? 'Kandidat berhasil disetujui. Surat Keputusan Penerimaan (Hiring Letter) telah dikirim ke email kandidat.'
+                : (empty($applicant->email)
+                    ? 'Kandidat berhasil disetujui, namun email kandidat tidak tersedia sehingga Hiring Letter tidak terkirim.'
+                    : 'Kandidat berhasil disetujui, namun pengiriman Hiring Letter ke email kandidat gagal.'),
             'data'    => $applicant->fresh(['candidateDataOffer']),
         ], 200);
     }

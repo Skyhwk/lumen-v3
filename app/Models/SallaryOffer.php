@@ -14,7 +14,14 @@ class SallaryOffer extends Model
         'sallary_offer_user'     => 'float',
         'sallary_offer_direktur' => 'float',
         'final_sallary'          => 'float',
+        'is_active'              => 'boolean',
+        'rejected_at'            => 'datetime',
     ];
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
 
     public function applicant()
     {

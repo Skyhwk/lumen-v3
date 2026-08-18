@@ -218,4 +218,70 @@ class GenerateMessageAtsWhatsapp
 
         return $msg;
     }
+
+    /**
+     * WhatsApp notifikasi Salary Offering Letter ke kandidat.
+     */
+    public function SalaryOfferingLetter()
+    {
+        $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
+        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $gaji = HrdEmailViewData::formatRupiah(
+            $this->data->gaji_pokok
+                ?? $this->data->sallary_offer_hrd
+                ?? $this->data->ekspetasi_gaji
+                ?? 0
+        );
+        $email = trim((string) ($this->data->email ?? ''));
+
+        $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
+        $msg .= "Terima kasih atas partisipasi Anda dalam proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
+        $msg .= "Kami informasikan bahwa *Surat Penawaran Gaji (Salary Offering Letter)* telah kami kirimkan";
+        if ($email !== '') {
+            $msg .= " ke email: *" . $email . "*";
+        }
+        $msg .= ".\n\n";
+        $msg .= "*Ringkasan Penawaran:*\n";
+        $msg .= "• Posisi: " . $posisi . "\n";
+        $msg .= "• Penawaran Gaji: " . $gaji . "\n\n";
+        $msg .= "Mohon periksa email Anda (termasuk folder spam) dan pelajari dokumen PDF yang kami lampirkan.\n";
+        $msg .= "Catatan: surat ini *bukan keputusan penerimaan kerja resmi* — keputusan final akan diberikan setelah tahapan administrasi berikutnya selesai.\n\n";
+        $msg .= "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment HRD*\n";
+        $msg .= "*PT Inti Surya Laboratorium*";
+
+        return $msg;
+    }
+
+    /**
+     * WhatsApp notifikasi Hiring Letter ke kandidat.
+     */
+    public function HiringLetter()
+    {
+        $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
+        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $gaji = HrdEmailViewData::formatRupiah($this->data->gaji_pokok ?? 0);
+        $tglMulai = $this->data->tanggal_mulai_kerja ?? '-';
+        $email = trim((string) ($this->data->email ?? ''));
+
+        $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
+        $msg .= "Selamat! Berdasarkan hasil seleksi rekrutmen, Anda *diterima* untuk bergabung di *PT Inti Surya Laboratorium* pada posisi *" . $posisi . "*.\n\n";
+        $msg .= "*Ringkasan Keputusan:*\n";
+        $msg .= "• Posisi: " . $posisi . "\n";
+        $msg .= "• Gaji Pokok: " . $gaji . "\n";
+        $msg .= "• Tanggal Mulai Kerja: " . $tglMulai . "\n\n";
+        $msg .= "Surat Keputusan Penerimaan Kerja (Hiring Letter) PDF telah kami kirimkan";
+        if ($email !== '') {
+            $msg .= " ke email: *" . $email . "*";
+        }
+        $msg .= ".\n\n";
+        $msg .= "Mohon periksa email Anda (termasuk folder spam), unduh lampiran PDF, dan berikan konfirmasi penerimaan paling lambat *1 x 24 jam* sejak surat diterima.\n\n";
+        $msg .= "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n";
+        $msg .= "Salam,\n";
+        $msg .= "*Tim Recruitment HRD*\n";
+        $msg .= "*PT Inti Surya Laboratorium*";
+
+        return $msg;
+    }
 }

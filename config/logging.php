@@ -250,6 +250,13 @@ return [
             'days' => 3,
         ],
 
+        'ats_ai_matching' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ats_ai_matching/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'transaction' => [
             'driver' => 'daily',
             'path' => storage_path('logs/transaction/transaction.log'),

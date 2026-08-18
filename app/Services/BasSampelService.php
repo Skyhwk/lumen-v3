@@ -35,7 +35,7 @@ class BasSampelService
             return null;
         }
 
-        Log::info('Reaching BasSampelSelesai loop. expectedNoSampel: ' . json_encode($fullExpectedNoSampel));
+        // Log::info('Reaching BasSampelSelesai loop. expectedNoSampel: ' . json_encode($fullExpectedNoSampel));
 
         foreach ($fullExpectedNoSampel as $fullNoSampel) {
             $detailSample = OrderDetail::where('no_sampel', $fullNoSampel)->first();
@@ -80,7 +80,7 @@ class BasSampelService
                     ]);
                 }
             } else {
-                Log::info('Inserting into bas_sampel_selesai: ' . $fullNoSampel);
+                // Log::info('Inserting into bas_sampel_selesai: ' . $fullNoSampel);
                 BasSampelSelesai::updateOrCreate(
                     [
                         'no_order' => $item['no_order'],
@@ -100,6 +100,6 @@ class BasSampelService
             }
         }
 
-        return null; // Sukses, tidak ada error
+        return true; // Sukses, tidak ada error
     }
 }

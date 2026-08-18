@@ -27,6 +27,7 @@ use App\Services\SendWhatsapp;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 
 
@@ -415,6 +416,7 @@ class RecruitmentController extends Controller{
                 ->where('bcc', [])
                 ->where('karyawan', 'Recruitment System')
                 ->noReply('PT Inti Surya Laboratorium')
+                ->replyToAtsHrd()
                 ->send();
 
             try {
@@ -434,6 +436,11 @@ class RecruitmentController extends Controller{
             }
 
             DB::commit();
+
+            app(AtsNotificationService::class)->newApplicantSubmitted(
+                (object) ['nama_lengkap' => $namaLengkap],
+                $personnelRequest
+            );
 
             return response()->json([
                 'message'=> 'Berhasil mendaftar',
@@ -509,6 +516,7 @@ class RecruitmentController extends Controller{
                 ->where('bcc', [])
                 ->where('karyawan', trim((string) $request->input('approved_by')) ?: 'Recruitment HRD')
                 ->noReply('PT Inti Surya Laboratorium')
+                ->replyToAtsHrd()
                 ->send();
 
             DB::commit();
@@ -1423,6 +1431,10 @@ class RecruitmentController extends Controller{
                     'gender',
                     'prioritas',
                     'divisi_alias',
+                    'use_user_assessment',
+                    'user_assessment_question_count',
+                    'user_assessment_has_time_limit',
+                    'user_assessment_duration_minutes',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
