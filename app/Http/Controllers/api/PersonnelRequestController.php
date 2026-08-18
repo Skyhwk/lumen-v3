@@ -192,6 +192,16 @@ class PersonnelRequestController extends Controller
         return $this->parseFormBoolean($request->input('use_user_assessment'), false) ? 1 : 0;
     }
 
+    private function managerHierarchyNames(): array
+    {
+        $allowedIds = $this->getAllowedEmployeeIds();
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('id', $allowedIds)
+            ->pluck('nama_lengkap')
+            ->toArray();
+        $allowedNames[] = $this->getEffectiveKaryawanName();
+        return array_unique($allowedNames);
+    }
+
     private function syncUserAssessmentCategoryConfig(Request $request): void{
         $useAssessment = $this->parseFormBoolean($request->input('use_user_assessment'), false);
         if (!$useAssessment) {
@@ -206,8 +216,21 @@ class PersonnelRequestController extends Controller
             abort(422, 'Jumlah soal test user wajib diisi minimal 1.');
         }
 
+        $categoryId = $request->input('assesment_question_category');
+        if (!$categoryId) {
+            abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
+        }
+
+        $category = \App\Models\QuestionCategory::where('id', $categoryId)
+            ->whereIn('owner_karyawan', $this->managerHierarchyNames())
+            ->first();
+            
+        if (!$category) {
+            abort(422, 'Kategori soal tidak valid atau Anda tidak memiliki akses.');
+        }
+
         $availableQuestions = Question::query()
-            ->where('owner_karyawan', $this->getEffectiveKaryawanName())
+            ->where('question_category_id', $categoryId)
             ->where('question_scope', 'manager')
             ->where('status', 'active')
             ->where('is_active', 1)
