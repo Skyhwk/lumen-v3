@@ -178,6 +178,42 @@ class AuthController extends BaseController
         }
     }
 
+    public function verifyResetOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+        ], [
+            'email.required' => 'Email perusahaan wajib diisi.',
+            'otp.required' => 'OTP wajib diisi.',
+            'otp.size' => 'OTP harus 6 digit.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+            ], 400);
+        }
+
+        try {
+            $result = $this->passwordResetService->verifyOtp(
+                $request->email,
+                $request->otp
+            );
+
+            $status = $result['status'] ?? ($result['success'] ? 200 : 400);
+
+            return response()->json([
+                'message' => $result['message'],
+                'valid' => (bool) $result['success'],
+            ], $status);
+        } catch (Exception $e) {
+            return response()->json([
+                'message' => 'Gagal memverifikasi OTP. Silakan coba lagi.',
+            ], 500);
+        }
+    }
+
     public function resetPassword(Request $request)
     {
         $validator = Validator::make($request->all(), [

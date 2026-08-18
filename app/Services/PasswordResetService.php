@@ -7,7 +7,7 @@ use App\Models\PasswordResetOtp;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
-use SendEmail;
+use App\Services\SendEmail;
 
 class PasswordResetService
 {
@@ -72,6 +72,25 @@ class PasswordResetService
     }
 
     /**
+     * Verifikasi OTP tanpa mengubah password (step forgot password modern).
+     *
+     * @return array{success: bool, message: string, status?: int}
+     */
+    public function verifyOtp($email, $otp)
+    {
+        $result = $this->validateOtpAttempt($email, $otp);
+
+        if (!$result['success']) {
+            return $result;
+        }
+
+        return [
+            'success' => true,
+            'message' => 'OTP valid. Silakan buat password baru.',
+        ];
+    }
+
+    /**
      * Reset password dengan OTP, lalu logout semua sesi user.
      *
      * @return array{success: bool, message: string, status?: int}
@@ -96,6 +115,43 @@ class PasswordResetService
                 'status' => 400,
             ];
         }
+
+        $otpResult = $this->validateOtpAttempt($email, $otp);
+        if (!$otpResult['success']) {
+            return $otpResult;
+        }
+
+        $karyawan = $otpResult['karyawan'];
+        $otpRecord = $otpResult['otp_record'];
+
+        /** @var User $user */
+        $user = $karyawan->user;
+        $user->password = Hash::make($newPassword);
+        $user->save();
+
+        $otpRecord->is_used = true;
+        $otpRecord->used_at = Carbon::now()->toDateTimeString();
+        $otpRecord->save();
+
+        PasswordResetOtp::where('user_id', $user->id)
+            ->where('id', '!=', $otpRecord->id)
+            ->delete();
+
+        $this->authTokenService->expireAllUserTokens($user->id);
+
+        return [
+            'success' => true,
+            'message' => 'Password berhasil diubah. Silakan login kembali.',
+        ];
+    }
+
+    /**
+     * @return array{success: bool, message: string, status?: int, otp_record?: PasswordResetOtp, karyawan?: MasterKaryawan}
+     */
+    private function validateOtpAttempt($email, $otp)
+    {
+        $email = strtolower(trim((string) $email));
+        $otp = trim((string) $otp);
 
         if (!preg_match('/^\d{6}$/', $otp)) {
             return [
@@ -162,24 +218,10 @@ class PasswordResetService
             ];
         }
 
-        /** @var User $user */
-        $user = $karyawan->user;
-        $user->password = Hash::make($newPassword);
-        $user->save();
-
-        $otpRecord->is_used = true;
-        $otpRecord->used_at = Carbon::now()->toDateTimeString();
-        $otpRecord->save();
-
-        PasswordResetOtp::where('user_id', $user->id)
-            ->where('id', '!=', $otpRecord->id)
-            ->delete();
-
-        $this->authTokenService->expireAllUserTokens($user->id);
-
         return [
             'success' => true,
-            'message' => 'Password berhasil diubah. Silakan login kembali.',
+            'otp_record' => $otpRecord,
+            'karyawan' => $karyawan,
         ];
     }
 
@@ -215,9 +257,9 @@ class PasswordResetService
 
         $body = '
             <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="margin-bottom: 8px;">Reset Password Portal INTILAB</h2>
+                <h2 style="margin-bottom: 8px;">Reset Password INTILAB SUPER APPS</h2>
                 <p>Halo ' . $greetingName . ',</p>
-                <p>Kami menerima permintaan reset password untuk akun portal Anda.</p>
+                <p>Kami menerima permintaan reset password untuk akun SUPER APPS Anda.</p>
                 <p style="font-size: 28px; font-weight: bold; letter-spacing: 6px; margin: 24px 0;">' . $otp . '</p>
                 <p>Kode OTP di atas berlaku selama <strong>' . $ttlMinutes . ' menit</strong>.</p>
                 <p>Jika Anda tidak meminta reset password, abaikan email ini.</p>
@@ -225,7 +267,7 @@ class PasswordResetService
             </div>';
 
         SendEmail::where('to', $email)
-            ->where('subject', 'Kode OTP Reset Password - INTILAB Portal')
+            ->where('subject', 'Kode OTP Reset Password - INTILAB SUPER APPS')
             ->where('body', $body)
             ->where('karyawan', env('MAIL_NOREPLY_USERNAME'))
             ->noReply()

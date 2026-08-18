@@ -21,6 +21,7 @@ $router->post('/api/cektoken', 'AuthController@checkToken');
 $router->post('/api/logout', 'AuthController@logout');
 $router->post('/api/stop-impersonate', 'api\UserController@stopImpersonate');
 $router->post('/api/forgot-password', 'AuthController@forgotPassword');
+$router->post('/api/verify-reset-otp', 'AuthController@verifyResetOtp');
 $router->post('/api/reset-password', 'AuthController@resetPassword');
 
 $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.user', 'log.request', 'decrypt.slice']], function () use ($router) {
