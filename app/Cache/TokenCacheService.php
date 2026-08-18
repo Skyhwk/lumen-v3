@@ -50,9 +50,9 @@ class TokenCacheService
 
         Cache::forget($this->getTokenCacheKey($token));
 
-        Log::info('Token cache invalidated', [
-            'token_hash' => hash('sha256', $token),
-        ]);
+        // Log::info('Token cache invalidated', [
+        //     'token_hash' => hash('sha256', $token),
+        // ]);
     }
 
     /**
