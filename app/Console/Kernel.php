@@ -49,6 +49,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncOrderDetaolFromJadwal::class,
         Commands\SyncOrderDetail::class,
         Commands\UpdateFtcVerifierFromScanTc::class,
+        Commands\TestCsTicketGeneratorCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
