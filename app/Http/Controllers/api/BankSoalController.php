@@ -117,8 +117,15 @@ class BankSoalController extends Controller
         if (is_array($categories)) {
             foreach ($categories as $item) {
                 if (isset($item['id'])) {
+                    $category = QuestionCategory::find($item['id']);
+                    $questionCount = isset($item['question_count']) ? (int) $item['question_count'] : 0;
+
+                    if ($category && !$this->isMandatoryAssessmentCategory($category->name)) {
+                        $questionCount = max(30, $questionCount);
+                    }
+
                     $updateData = [
-                        'question_count' => isset($item['question_count']) ? (int) $item['question_count'] : 0,
+                        'question_count' => $questionCount,
                         'updated_at'     => Carbon::now(),
                     ];
 
@@ -813,6 +820,13 @@ class BankSoalController extends Controller
         }
         $question->question_image = $stored;
         $question->save();
+    }
+
+    private function isMandatoryAssessmentCategory(?string $name): bool
+    {
+        $normalized = strtoupper(trim((string) $name));
+
+        return in_array($normalized, ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
     }
 
     private function parseFormBoolean($value, bool $default = false): bool
