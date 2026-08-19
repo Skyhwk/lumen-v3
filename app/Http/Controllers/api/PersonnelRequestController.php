@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahan,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -124,7 +124,7 @@ class PersonnelRequestController extends Controller
         $allowedIds = $this->getAllowedEmployeeIds();
 
         // Cari nama_lengkap dari semua ID tersebut karena field created_by menggunakan nama_lengkap
-        $allowedNames = \App\Models\MasterKaryawan::whereIn('user_id', $allowedIds)
+        $allowedNames = \App\Models\MasterKaryawan::whereIn('id', $allowedIds)
             ->pluck('nama_lengkap')
             ->toArray();
 
@@ -191,7 +191,7 @@ class PersonnelRequestController extends Controller
         return $this->karyawan;
     }
 
-    private function validatedUserAssessmentConfig(Request $request): array
+    private function validatedUserAssessmentFlag(Request $request): int
     {
         return $this->parseFormBoolean($request->input('use_user_assessment'), false) ? 1 : 0;
     }
@@ -386,10 +386,6 @@ class PersonnelRequestController extends Controller
             // Menggunakan helper agar logic impersonasi lebih tersentralisasi
             $createdBy = $this->getEffectiveKaryawanName();
 
-            // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
-            // Menggunakan helper agar logic impersonasi lebih tersentralisasi
-            $createdBy = $this->getEffectiveKaryawanName();
-
             $data = PersonnelRequest::create([
                 'no_request'                => $noRequest,
                 'request_type'              => $request->request_type,
@@ -408,7 +404,7 @@ class PersonnelRequestController extends Controller
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'minimum_matching'          => $this->nullableInt($request->minimum_matching),
-                'assesment_question_category'=> $useUserAssessment ? $this->nullableInt($request->assesment_question_category) : null,
+                'assesment_question_category'=> $this->nullableInt($request->assesment_question_category),
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
@@ -416,6 +412,9 @@ class PersonnelRequestController extends Controller
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
                 'use_user_assessment'       => $useUserAssessment,
+                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
+                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
+                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
                 'created_by'                => $createdBy,
             ]);
 
@@ -559,15 +558,15 @@ class PersonnelRequestController extends Controller
         $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
         $devUserId = env('DEV_BYPASS_USER_ID'); // Ambil dari .env
         
-        $userId = auth()->user()->id ?? $this->user_id;
+        $userId = $this->user_id;
 
         if ($isDevMode && $devUserId) {
             $userId = $devUserId;
         }
 
         // Get hierarchy (manager + all subordinates up to 3 levels deep)
+        
         $bawahanAll = GetBawahanAll::where('id', $userId)->get();
-        $dd =$bawahanAll->pluck('id')->toArray();
         
         return $bawahanAll->pluck('id')->toArray();
     }
