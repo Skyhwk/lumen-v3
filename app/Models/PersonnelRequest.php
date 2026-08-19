@@ -52,6 +52,9 @@ class PersonnelRequest extends Model
         'publish_at',
         'published_by',
         'published_at',
+        'is_active',
+        'cancled_by',
+        'cancled_at',
     ];
 
     protected $casts = [
