@@ -618,6 +618,7 @@ class FollowUpQuotationController extends Controller
                 'is_malam' => $request->is_malam,
                 'tambahan' => $request->tambahan,
                 'keterangan_lain' => $request->keterangan_lain,
+                'google_maps_url' => $request->google_maps_url,
                 'karyawan' => $this->karyawan
             ];
             if ($request->status_quotation == 'kontrak') {
@@ -650,6 +651,7 @@ class FollowUpQuotationController extends Controller
                 "jam_sampling" => $request->jam_sampling,
                 "tambahan" => $request->tambahan,
                 "keterangan_lain" => $request->keterangan_lain,
+                'google_maps_url' => $request->google_maps_url,
                 "tanggal_penawaran" => $request->tanggal_penawaran,
                 'is_sabtu' => $request->is_sabtu,
                 'is_minggu' => $request->is_minggu,
