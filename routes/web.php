@@ -123,6 +123,8 @@ $router->group(['prefix' => 'director'], function () use ($router) {
 // Print Termal
 $router->get('/mobile/print-termal', 'mobile\PrintTermalController@createPrintJob');
 
+$router->get('/cs-tickets/{file}', 'CsTicketAssetController@show');
+
 
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);

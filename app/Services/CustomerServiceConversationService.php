@@ -182,7 +182,7 @@ class CustomerServiceConversationService
             'message' => $item->message,
             'attachment' => $item->attachment,
             'attachment_url' => $item->attachment
-                ? self::ATTACHMENT_DIR . '/' . $item->attachment
+                ? 'cs-tickets/' . $item->attachment
                 : null,
             'created_at' => $item->created_at,
             'is_own' => $isOwn,
