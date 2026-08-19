@@ -426,12 +426,18 @@ class PersonnelRequestController extends Controller
                 'message'    => 'Personal Request berhasil dibuat.',
                 'no_request' => $noRequest,
             ], 201);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (\Throwable $th) {
             DB::rollBack();
             Log::error('PersonnelRequestController@store: ' . $th->getMessage());
             return response()->json([
                 'status'  => 'error',
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan sistem, silakan hubungi administrator.',
             ], 500);
         }
     }
@@ -487,12 +493,18 @@ class PersonnelRequestController extends Controller
                 'status'     => 'success',
                 'message'    => 'Personal Request berhasil diupdate.',
             ], 200);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (\Throwable $th) {
             DB::rollBack();
             Log::error('PersonnelRequestController@update: ' . $th->getMessage());
             return response()->json([
                 'status'  => 'error',
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan sistem, silakan hubungi administrator.',
             ], 500);
         }
     }
