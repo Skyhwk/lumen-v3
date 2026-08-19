@@ -99,6 +99,9 @@ class PortalNotificationService
             'claim_reward_complete' => fn () => $this->buildCompletedTemplate($extraData, $user),
             'claim_reward_cancelled' => fn () => $this->buildCancelledTemplate($extraData, $user),
             'claim_reward_cancel' => fn () => $this->buildCancelledTemplate($extraData, $user),
+            'cs_created' => fn () => $this->buildCustomerServiceTemplate($extraData, 'created'),
+            'cs_reply' => fn () => $this->buildCustomerServiceTemplate($extraData, 'reply'),
+            'cs_status' => fn () => $this->buildCustomerServiceTemplate($extraData, 'status'),
         ];
 
         if (!isset($templates[$key])) {
@@ -278,6 +281,45 @@ class PortalNotificationService
                 'type' => 'claim_reward',
                 'screen' => 'HistoryTukarPoin',
                 'claim_code' => $claimCode,
+            ], $this->normalizeData($extraData['data'] ?? [])),
+        ];
+    }
+
+    protected function buildCustomerServiceTemplate(array $extraData, string $mode): array
+    {
+        $ticketNo = $extraData['ticket_no'] ?? $extraData['data']['ticket_no'] ?? null;
+        $ticketText = $ticketNo ? " {$ticketNo}" : '';
+        $status = $extraData['status'] ?? $extraData['data']['status'] ?? null;
+
+        $templates = [
+            'created' => [
+                'title' => 'Ticket Customer Service Diterima',
+                'body' => "Ticket{$ticketText} berhasil dibuat. Tim kami akan segera merespon.",
+            ],
+            'reply' => [
+                'title' => 'Balasan Customer Service',
+                'body' => "Tim kami membalas ticket{$ticketText}. Yuk cek pesan terbarunya.",
+            ],
+            'status' => [
+                'title' => 'Update Ticket Customer Service',
+                'body' => $status === 'closed'
+                    ? "Ticket{$ticketText} telah ditutup."
+                    : "Status ticket{$ticketText} telah diperbarui.",
+            ],
+        ];
+
+        $template = $templates[$mode] ?? $templates['reply'];
+        $url = $ticketNo ? '/customer-service/' . $ticketNo : '/customer-service';
+
+        return [
+            'title' => $template['title'],
+            'body' => $template['body'],
+            'url' => $url,
+            'data' => array_merge([
+                'for' => "cs_{$mode}",
+                'type' => 'customer_service',
+                'ticket_no' => $ticketNo,
+                'status' => $status,
             ], $this->normalizeData($extraData['data'] ?? [])),
         ];
     }
