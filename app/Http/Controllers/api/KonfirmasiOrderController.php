@@ -298,6 +298,7 @@ class KonfirmasiOrderController extends Controller
 				'is_malam' => $request->is_malam,
 				'tambahan' => $request->tambahan,
 				'keterangan_lain' => $request->keterangan_lain,
+				'google_maps_url' => $request->google_maps_url,
 				'karyawan' => $this->karyawan
 			];
 			if ($request->status_quotation == 'kontrak') {
@@ -333,6 +334,7 @@ class KonfirmasiOrderController extends Controller
 				'is_malam' => $request->is_malam,
 				"tambahan" => $request->tambahan,
 				"keterangan_lain" => $request->keterangan_lain,
+				'google_maps_url' => $request->google_maps_url,
 				"tanggal_penawaran" => $request->tanggal_penawaran,
 			];
 
