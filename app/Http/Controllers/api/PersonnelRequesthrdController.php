@@ -28,6 +28,7 @@ class PersonnelRequesthrdController extends Controller
         try {
             $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
                 ->withCount('newRecruitments as total_pelamar')
+                ->where('is_active',1)
                 ->orderBy('id', 'desc');
 
             if ($request->has('year') && !empty($request->year)) {
