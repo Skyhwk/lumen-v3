@@ -11,6 +11,7 @@ class MasterJabatan extends Sector
     protected $fillable = [
         'kode_jabatan',
         'nama_jabatan',
+        'id_divisi',
         'created_by',
         'created_at',
         'updated_by',
@@ -20,9 +21,19 @@ class MasterJabatan extends Sector
         'is_active'
     ];
 
+    public function divisi()
+    {
+        return $this->belongsTo(MasterDivisi::class, 'id_divisi');
+    }
+
     public function karyawans()
     {
         return $this->hasMany(MasterKaryawan::class, 'id_jabatan');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where($this->getTable() . '.is_active', 1);
     }
 
     public $timestamps = false;
