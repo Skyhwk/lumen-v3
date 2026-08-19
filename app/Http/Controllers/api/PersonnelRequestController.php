@@ -652,10 +652,10 @@ class PersonnelRequestController extends Controller
     {
         try {
             $allowedIds = $this->getAllowedEmployeeIds();
-            $allowedPosisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_jabatan')->pluck('id_jabatan')->unique()->toArray();
+            $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
 
             $posisi = MasterJabatan::where('is_active', 1)
-                ->whereIn('id', $allowedPosisiIds)
+                ->whereIn('id_divisi', $allowedDivisiIds)
                 ->orderBy('nama_jabatan')
                 ->get()
                 ->map(fn($j) => ['id' => $j->id, 'text' => $j->nama_jabatan]);
