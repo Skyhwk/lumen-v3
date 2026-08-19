@@ -26,14 +26,15 @@ class BankSoalController extends Controller
     public function index(Request $request)
     {
         $scope = $this->scope($request);
-        $managerQuestionCreators = $scope === 'manager'
-            ? $this->managerHierarchyNames()
-            : [];
 
         $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
             ->where('question_scope', $scope)
-            ->when($scope === 'manager', function ($query) use ($managerQuestionCreators) {
-                $query->whereIn('created_by', $managerQuestionCreators);
+            ->when($scope === 'manager', function ($query) use ($request) {
+                if ($request->filled('question_category_id')) {
+                    $this->resolveManagerCategory((int) $request->question_category_id, 'view');
+                } else {
+                    $query->whereIn('question_category_id', $this->accessibleManagerCategoryIds());
+                }
             })
             ->when($request->filled('question_category_id'), fn ($query) => $query->where('question_category_id', $request->question_category_id))
             ->when($request->filled('status'), fn ($query) => $query->where('status', 'like', '%' . $request->status . '%'))->orderBy('id','desc');
@@ -71,7 +72,7 @@ class BankSoalController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function ($category) use ($managerHierarchyNames) {
-                $category->can_manage = in_array((string) $category->owner_karyawan, $managerHierarchyNames, true);
+                $category->can_manage = $this->canManageManagerCategory($category, $managerHierarchyNames);
 
                 return $category;
             });
@@ -842,15 +843,26 @@ class BankSoalController extends Controller
 
     private function accessibleManagerCategoryIds(): array
     {
+        $managerHierarchyNames = $this->managerHierarchyNames();
+
         return QuestionCategory::query()
             ->where('category_scope', 'manager')
             ->where('is_active', true)
-            ->where(function ($query) {
-                $query->where('owner_karyawan', $this->karyawan)
-                    ->orWhere('assigned_manager', $this->karyawan);
+            ->where(function ($query) use ($managerHierarchyNames) {
+                $query->whereIn('owner_karyawan', $managerHierarchyNames)
+                    ->orWhere('assigned_manager', $this->getEffectiveKaryawanName());
             })
             ->pluck('id')
             ->all();
+    }
+
+    private function canManageManagerCategory($category, ?array $managerHierarchyNames = null): bool
+    {
+        $managerHierarchyNames ??= $this->managerHierarchyNames();
+        $canManageOwner = in_array((string) $category->owner_karyawan, $managerHierarchyNames, true);
+        $isAssignedManager = (string) $category->assigned_manager === (string) $this->getEffectiveKaryawanName();
+
+        return $canManageOwner || $isAssignedManager;
     }
 
     private function resolveManagerCategory(int $categoryId, string $accessLevel = 'view'): QuestionCategory
@@ -860,19 +872,10 @@ class BankSoalController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        $canManageOwner = in_array((string) $category->owner_karyawan, $this->managerHierarchyNames(), true);
-        $isAssignedManager = (string) $category->assigned_manager === (string) $this->karyawan;
-
-        if ($accessLevel === 'write') {
-            if (!$canManageOwner) {
-                abort(403, 'Hanya pemilik kategori atau atasannya yang dapat mengubah data.');
-            }
-
-            return $category;
-        }
-
-        if (!$canManageOwner && !$isAssignedManager) {
-            abort(403, 'Kategori tidak dapat diakses.');
+        if (!$this->canManageManagerCategory($category)) {
+            abort(403, $accessLevel === 'write'
+                ? 'Hanya pemilik kategori, atasannya, atau manager terkait yang dapat mengubah data.'
+                : 'Kategori tidak dapat diakses.');
         }
 
         return $category;
