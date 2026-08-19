@@ -652,7 +652,8 @@ class PersonnelRequestController extends Controller
     {
         try {
             $allowedIds = $this->getAllowedEmployeeIds();
-            $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+            $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)
+            ->where('is_active',1)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
 
             $posisi = MasterJabatan::where('is_active', 1)
                 ->whereIn('id_divisi', $allowedDivisiIds)
