@@ -993,11 +993,11 @@ class BankSoalController extends Controller
         return Str::lower($text);
     }
 
-    private function fail(string $message): void
+    private function fail(string $message)
     {
-        throw new HttpResponseException(response()->json([
+        return response()->json([
             'success' => false,
             'message' => $message,
-        ], 500));
+        ], 401);
     }
 }
