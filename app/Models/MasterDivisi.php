@@ -26,4 +26,14 @@ class MasterDivisi extends Sector
     {
         return $this->hasMany(MasterKaryawan::class, 'id_department');
     }
+
+    public function jabatan()
+    {
+        return $this->hasMany(MasterJabatan::class, 'id_divisi');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where($this->getTable() . '.is_active', 1);
+    }
 }
