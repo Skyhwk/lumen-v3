@@ -39,7 +39,7 @@ class SamplingPlanController extends Controller
     {
         
         $active = $request->is_active == '' ? true : $request->is_active;
-        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
+        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active,google_maps_url',
         'samplingPlan' => function ($query) {
             $query->WithTypeModelSub();
         },])
