@@ -648,16 +648,23 @@ class PersonnelRequestController extends Controller
     /**
      * Get list of active posisi/jabatan (for Select2)
      */
-    public function getPosisi()
+    public function getPosisi(Request $request)
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
-            $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)
-            ->where('is_active',1)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+            $divisiId = $request->input('divisi_id');
 
-            $posisi = MasterJabatan::where('is_active', 1)
-                ->whereIn('id_divisi', $allowedDivisiIds)
-                ->orderBy('nama_jabatan')
+            $query = MasterJabatan::where('is_active', 1);
+
+            if ($divisiId) {
+                $query->where('id_divisi', $divisiId);
+            } else {
+                $allowedIds = $this->getAllowedEmployeeIds();
+                $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)
+                    ->where('is_active',1)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+                $query->whereIn('id_divisi', $allowedDivisiIds);
+            }
+
+            $posisi = $query->orderBy('nama_jabatan')
                 ->get()
                 ->map(fn($j) => ['id' => $j->id, 'text' => $j->nama_jabatan]);
 
