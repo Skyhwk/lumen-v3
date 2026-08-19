@@ -129,15 +129,7 @@ class PublicRecruitmentJobListService
             'total' => 0,
         ];
 
-        if ($primaryCounts['early'] >= self::EARLY_MIN) {
-            return $primary;
-        }
-
-        if ($primaryCounts['hrd'] >= self::HRD_MIN) {
-            return $primary;
-        }
-
-        if ($primaryCounts['user'] >= self::USER_MIN) {
+        if (!$this->hasAnyQuotaFulfilled($primaryCounts)) {
             return $primary;
         }
 
@@ -150,8 +142,17 @@ class PublicRecruitmentJobListService
             return $idleAlternate;
         }
 
-        $alternate = $alternates->sortBy(fn ($job) => $job->created_at ?? $job->id ?? 0)->first();
+        $alternate = $alternates
+            ->sortByDesc(fn ($job) => $job->created_at ?? $job->id ?? 0)
+            ->first();
 
         return $alternate ?? $primary;
+    }
+
+    private function hasAnyQuotaFulfilled(array $counts): bool
+    {
+        return $counts['early'] >= self::EARLY_MIN
+            || $counts['hrd'] >= self::HRD_MIN
+            || $counts['user'] >= self::USER_MIN;
     }
 }
