@@ -11,6 +11,7 @@ use App\Services\BankSoalImageService;
 use App\Services\GetBawahan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -177,20 +178,20 @@ class BankSoalController extends Controller
             $assignedManager = trim((string) $request->input('assigned_manager', ''));
             $hasSubordinateManagers = $this->hasSubordinateManagers();
             if ($hasSubordinateManagers && $assignedManager === '') {
-                abort(422, 'Manager terkait wajib dipilih.');
+                $this->fail('Manager terkait wajib dipilih.');
             }
             if (!$hasSubordinateManagers) {
                 $assignedManager = '';
             }
             if ($data['name'] === '') {
-                abort(422, 'Nama kategori wajib diisi.');
+                $this->fail('Nama kategori wajib diisi.');
             }
             if ($assignedManager !== '' && QuestionCategory::where('category_scope', 'manager')
                 ->where('owner_karyawan', $this->karyawan)
                 ->where('assigned_manager', $assignedManager)
                 ->where('is_active', true)
                 ->exists()) {
-                abort(422, 'Kategori untuk manager ini sudah ada.');
+                $this->fail('Kategori untuk manager ini sudah ada.');
             }
 
             $data['category_scope'] = 'manager';
@@ -219,7 +220,7 @@ class BankSoalController extends Controller
             } else {
                 $assignedManager = trim((string) $request->input('assigned_manager'));
                 if ($assignedManager === '') {
-                    abort(422, 'Manager terkait wajib dipilih.');
+                    $this->fail('Manager terkait wajib dipilih.');
                 }
                 if (QuestionCategory::where('category_scope', 'manager')
                     ->where('owner_karyawan', $category->owner_karyawan)
@@ -227,7 +228,7 @@ class BankSoalController extends Controller
                     ->where('is_active', true)
                     ->where('id', '!=', $category->id)
                     ->exists()) {
-                    abort(422, 'Kategori untuk manager ini sudah ada.');
+                    $this->fail('Kategori untuk manager ini sudah ada.');
                 }
                 $data['assigned_manager'] = $assignedManager;
             }
@@ -301,7 +302,7 @@ class BankSoalController extends Controller
         $questionCount = (int) $request->input('question_count');
         $durationMinutes = (int) $request->input('duration_minutes');
         if ($questionCount < 1 || $durationMinutes < 1) {
-            abort(422, 'Jumlah soal dan durasi wajib lebih dari 0.');
+            $this->fail('Jumlah soal dan durasi wajib lebih dari 0.');
         }
 
         $owner = $this->managerOwnerName();
@@ -345,7 +346,7 @@ class BankSoalController extends Controller
             '',
             'A',
             'easy',
-            'draft',
+            'active',
             'Contoh penjelasan atau konteks tambahan untuk soal ini',
         ], null, 'A2');
         $sheet->getStyle('A1:K1')->applyFromArray([
@@ -370,7 +371,7 @@ class BankSoalController extends Controller
             ['3. Kolom opsi dapat ditambahkan berurutan (Option A, Option B, dan seterusnya) sebelum Correct Option'],
             ['4. Correct Option harus sesuai huruf pilihan yang terisi pada baris tersebut'],
             ['5. Difficulty: easy, medium, atau hard'],
-            ['6. Status: draft atau active'],
+            ['6. Status: draft atau active. Jika kolom atau nilainya kosong, status otomatis active'],
             ['7. Explanation bersifat opsional dan boleh dikosongkan. Kolom ini untuk penjelasan atau konteks soal, bukan penjelasan jawaban tertentu'],
             ['8. Jangan mengubah nama dan urutan header selain menambahkan kolom Option secara berurutan'],
         ], null, 'A1');
@@ -399,16 +400,16 @@ class BankSoalController extends Controller
     public function importQuestions(Request $request)
     {
         if (!$request->hasFile('file') || !$request->file('file')->isValid()) {
-            abort(422, 'File template wajib diunggah.');
+            $this->fail('File template wajib diunggah.');
         }
 
         $file = $request->file('file');
         $extension = strtolower($file->getClientOriginalExtension());
         if (!in_array($extension, ['xlsx', 'csv'], true)) {
-            abort(422, 'Format file harus .xlsx atau .csv.');
+            $this->fail('Format file harus .xlsx atau .csv.');
         }
         if ($file->getSize() > 5 * 1024 * 1024) {
-            abort(422, 'Ukuran file maksimal 5 MB.');
+            $this->fail('Ukuran file maksimal 5 MB.');
         }
 
         try {
@@ -423,11 +424,11 @@ class BankSoalController extends Controller
             }
             $rows = $spreadsheet->getActiveSheet()->toArray('', false, true, false);
         } catch (\Throwable $exception) {
-            abort(422, 'Template tidak dapat dibaca. Gunakan file .xlsx atau .csv dari template yang disediakan.');
+            $this->fail('Template tidak dapat dibaca. Gunakan file .xlsx atau .csv dari template yang disediakan.');
         }
 
         if (count($rows) < 2) {
-            abort(422, 'Template belum memiliki data soal.');
+            $this->fail('Template belum memiliki data soal.');
         }
 
         $headers = array_map(fn ($value) => strtolower(trim(ltrim((string) $value, "\xEF\xBB\xBF"))), array_shift($rows));
@@ -441,14 +442,18 @@ class BankSoalController extends Controller
             $expectedOptionHeaders[] = 'option ' . chr(ord('a') + $optionIndex);
         }
         $fixedHeaders = $correctOptionIndex === false ? [] : array_slice($headers, $correctOptionIndex);
+        $validFixedHeaders = [
+            ['correct option', 'difficulty', 'status', 'explanation'],
+            ['correct option', 'difficulty', 'explanation'],
+        ];
         if (
             ($headers[0] ?? null) !== 'question'
             || count($optionHeaders) < 2
             || count($optionHeaders) > 26
             || $optionHeaders !== $expectedOptionHeaders
-            || $fixedHeaders !== ['correct option', 'difficulty', 'status', 'explanation']
+            || !in_array($fixedHeaders, $validFixedHeaders, true)
         ) {
-            abort(422, 'Format kolom template tidak sesuai. Unduh template terbaru lalu isi tanpa mengubah header.');
+            $this->fail('Format kolom template tidak sesuai. Unduh template terbaru lalu isi tanpa mengubah header.');
         }
 
         $scope = $this->scope($request);
@@ -456,14 +461,24 @@ class BankSoalController extends Controller
             ? $this->resolveManagerCategory((int) $request->input('question_category_id'), 'write')
             : QuestionCategory::where('id', $request->input('question_category_id'))->where('is_active', true)->first();
         if ($scope === 'hr' && !$category) {
-            abort(422, 'Pilih kategori aktif sebelum mengunggah soal.');
+            $this->fail('Pilih kategori aktif sebelum mengunggah soal.');
         }
         if ($scope === 'manager' && !$category) {
-            abort(422, 'Pilih kategori aktif sebelum mengunggah soal.');
+            $this->fail('Pilih kategori aktif sebelum mengunggah soal.');
         }
 
         $questions = [];
         $errors = [];
+        $existingQuestionKeys = Question::query()
+            ->where('question_scope', $scope)
+            ->where('question_category_id', $category->id)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get(['id', 'question_text'])
+            ->mapWithKeys(fn ($question) => [
+                $this->normalizedQuestionText($question->question_text) => $question->id,
+            ])
+            ->all();
         foreach ($rows as $rowIndex => $row) {
             if (!array_filter($row, fn ($value) => trim((string) $value) !== '')) continue;
 
@@ -472,7 +487,7 @@ class BankSoalController extends Controller
             $questionText = trim((string) $data['question']);
             $correctOption = strtoupper(trim((string) $data['correct option']));
             $difficulty = strtolower(trim((string) $data['difficulty'] ?: 'easy'));
-            $status = strtolower(trim((string) $data['status'] ?: 'draft'));
+            $status = strtolower(trim((string) ($data['status'] ?? ''))) ?: 'active';
             $options = [];
 
             foreach ($optionHeaders as $optionHeader) {
@@ -489,12 +504,14 @@ class BankSoalController extends Controller
 
             $line = $rowIndex + 2;
             if ($questionText === '') $errors[] = "Baris {$line}: Question wajib diisi.";
+            $questionKey = $this->normalizedQuestionText($questionText);
             if (count($options) < 2) $errors[] = "Baris {$line}: minimal isi Option A dan Option B.";
             if (!collect($options)->contains('is_correct', true)) $errors[] = "Baris {$line}: Correct Option harus sesuai huruf pilihan yang terisi.";
             if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) $errors[] = "Baris {$line}: Difficulty harus easy, medium, atau hard.";
             if (!in_array($status, ['draft', 'active'], true)) $errors[] = "Baris {$line}: Status harus draft atau active.";
 
-            $questions[] = [
+            $questions[$questionKey !== '' ? $questionKey : '__row_' . $line] = [
+                'existing_question_id' => $existingQuestionKeys[$questionKey] ?? null,
                 'question_text' => $questionText,
                 'explanation' => trim((string) $data['explanation']) ?: null,
                 'difficulty' => $difficulty,
@@ -503,12 +520,24 @@ class BankSoalController extends Controller
             ];
         }
 
-        if (!$questions) abort(422, 'Template belum memiliki baris soal yang dapat diimpor.');
-        if (count($questions) > 500) abort(422, 'Maksimal 500 soal untuk satu kali unggah.');
+        if (!$questions) $this->fail('Template belum memiliki baris soal yang dapat diimpor.');
+        if (count($questions) > 500) $this->fail('Maksimal 500 soal untuk satu kali unggah.');
         if ($errors) return response()->json(['message' => 'Ada data template yang perlu diperbaiki.', 'errors' => $errors], 422);
 
-        DB::transaction(function () use ($questions, $scope, $category) {
+        $result = ['created' => 0, 'updated' => 0];
+        DB::transaction(function () use ($questions, $scope, $category, &$result) {
             foreach ($questions as $data) {
+                if ($data['existing_question_id']) {
+                    $question = Question::where('id', $data['existing_question_id'])
+                        ->where('is_active', 1)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                    $this->replaceOptions($question, $data['options']);
+                    $question->update(['updated_at' => Carbon::now()]);
+                    $result['updated']++;
+                    continue;
+                }
+
                 $question = Question::create([
                     'question_scope' => $scope,
                     'owner_karyawan' => $scope === 'manager' ? $category->owner_karyawan : null,
@@ -528,10 +557,14 @@ class BankSoalController extends Controller
                     'updated_at' => Carbon::now(),
                 ]);
                 $this->replaceOptions($question, $data['options']);
+                $result['created']++;
             }
         });
 
-        return response()->json(['success' => true, 'message' => count($questions) . ' soal berhasil diimpor.']);
+        return response()->json([
+            'success' => true,
+            'message' => $result['created'] . ' soal dibuat dan ' . $result['updated'] . ' soal diperbarui.',
+        ]);
     }
 
     public function store(Request $request)
@@ -599,6 +632,53 @@ class BankSoalController extends Controller
         return response()->json(['success' => true, 'message' => 'Status bank soal berhasil diperbarui.']);
     }
 
+    public function bulkAction(Request $request)
+    {
+        $ids = collect($request->input('ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+        $action = strtolower(trim((string) $request->input('action')));
+
+        if ($ids->isEmpty()) $this->fail('Pilih minimal satu soal.');
+        if ($ids->count() > 100) $this->fail('Maksimal 100 soal untuk satu bulk action.');
+        if (!in_array($action, ['active', 'draft', 'retired', 'delete'], true)) {
+            $this->fail('Bulk action tidak valid.');
+        }
+
+        $questions = Question::with('options')->whereIn('id', $ids)->get();
+        if ($questions->count() !== $ids->count()) $this->fail('Sebagian soal tidak ditemukan.');
+
+        foreach ($questions as $question) {
+            $this->ensureQuestionScope($question, $this->scope($request), $request, 'write');
+        }
+
+        DB::transaction(function () use ($questions, $action) {
+            if ($action !== 'delete') {
+                Question::whereIn('id', $questions->pluck('id'))->update([
+                    'status' => $action,
+                    'updated_at' => Carbon::now(),
+                ]);
+                return;
+            }
+
+            $imageService = new BankSoalImageService();
+            foreach ($questions as $question) {
+                foreach ($question->question_image as $image) $imageService->deleteImg($image);
+                foreach ($question->options as $option) $imageService->deleteImg($option->option_image);
+                $question->options()->delete();
+                $question->delete();
+            }
+        });
+
+        $label = $action === 'delete' ? 'dihapus' : 'diubah menjadi ' . $action;
+        return response()->json([
+            'success' => true,
+            'message' => $questions->count() . " soal berhasil {$label}.",
+        ]);
+    }
+
     public function delete(Request $request)
     {
         $question = Question::with('options')->findOrFail($request->input('id'));
@@ -619,19 +699,19 @@ class BankSoalController extends Controller
         unset($data['code']);
         unset($data['sort_order']);
 
-        if ($data['name'] === '') abort(422, 'Nama Scale Type wajib diisi.');
+        if ($data['name'] === '') $this->fail('Nama Scale Type wajib diisi.');
 
         $options = is_string($request->input('options')) ? json_decode($request->input('options'), true) : $request->input('options', []);
-        if (!is_array($options) || count($options) < 2) abort(422, 'Scale Type minimal memiliki dua pilihan.');
+        if (!is_array($options) || count($options) < 2) $this->fail('Scale Type minimal memiliki dua pilihan.');
 
         $data['options'] = collect($options)->map(function ($option) {
             $value = trim((string) ($option['value'] ?? ''));
             $label = trim((string) ($option['label'] ?? ''));
             if ($value === '' || $label === '') {
-                abort(422, 'Nilai dan label setiap pilihan wajib diisi.');
+                $this->fail('Nilai dan label setiap pilihan wajib diisi.');
             }
             if (!is_numeric($value)) {
-                abort(422, 'Nilai pilihan Scale Type harus berupa angka.');
+                $this->fail('Nilai pilihan Scale Type harus berupa angka.');
             }
 
             return [
@@ -641,7 +721,7 @@ class BankSoalController extends Controller
         })->sortByDesc('value')->values()->all();
 
         if (collect($data['options'])->pluck('value')->unique()->count() !== count($data['options'])) {
-            abort(422, 'Nilai pilihan Scale Type tidak boleh duplikat.');
+            $this->fail('Nilai pilihan Scale Type tidak boleh duplikat.');
         }
 
         return $data;
@@ -676,7 +756,7 @@ class BankSoalController extends Controller
         $data['options'] = $data['options'] ?? [];
         if ($this->scope($request) === 'manager') {
             if (empty($data['question_category_id'])) {
-                abort(422, 'Pilih kategori soal terlebih dahulu.');
+                $this->fail('Pilih kategori soal terlebih dahulu.');
             }
             $this->resolveManagerCategory((int) $data['question_category_id'], 'write');
             $data['question_type'] = 'single_choice';
@@ -687,7 +767,7 @@ class BankSoalController extends Controller
         if ($data['question_type'] === 'scale') {
             $scaleTypeId = (int) $request->input('scale_type_id');
             if (!$scaleTypeId) {
-                abort(422, 'Scale Type wajib dipilih untuk soal bertipe scale.');
+                $this->fail('Scale Type wajib dipilih untuk soal bertipe scale.');
             }
             ScaleType::where('id', $scaleTypeId)->where('is_active', true)->firstOrFail();
             $data['scale_type_id'] = $scaleTypeId;
@@ -699,10 +779,10 @@ class BankSoalController extends Controller
         $data['scale_type_id'] = null;
         $data['scoring_type'] = 'correct_answer';
 
-        if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) abort(422, 'Answer option wajib diisi.');
+        if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) $this->fail('Answer option wajib diisi.');
         $correctOptionCount = collect($data['options'])->filter(fn ($option) => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN))->count();
-        if ($correctOptionCount === 0) abort(422, 'Pilih minimal satu Answer Option sebagai jawaban Correct.');
-        if ($data['question_type'] === 'single_choice' && $correctOptionCount > 1) abort(422, 'Single Choice hanya boleh memiliki satu jawaban benar.');
+        if ($correctOptionCount === 0) $this->fail('Pilih minimal satu Answer Option sebagai jawaban Correct.');
+        if ($data['question_type'] === 'single_choice' && $correctOptionCount > 1) $this->fail('Single Choice hanya boleh memiliki satu jawaban benar.');
         return $data;
     }
 
@@ -710,7 +790,7 @@ class BankSoalController extends Controller
     {
         $scope = strtolower(trim((string) $request->input('question_scope', 'hr')));
         if (!in_array($scope, ['hr', 'manager'], true)) {
-            abort(422, 'Scope bank soal tidak valid.');
+            $this->fail('Scope bank soal tidak valid.');
         }
 
         return $scope;
@@ -728,7 +808,7 @@ class BankSoalController extends Controller
     private function managerOwnerName()
     {
         if (!$this->karyawan) {
-            abort(401, 'User tidak terautentikasi.');
+            $this->fail('User tidak terautentikasi.');
         }
 
         return $this->karyawan;
@@ -794,7 +874,7 @@ class BankSoalController extends Controller
             ->firstOrFail();
 
         if (!$this->canManageManagerCategory($category)) {
-            abort(403, $accessLevel === 'write'
+            $this->fail($accessLevel === 'write'
                 ? 'Hanya pemilik kategori, atasannya, atau manager terkait yang dapat mengubah data.'
                 : 'Kategori tidak dapat diakses.');
         }
@@ -826,7 +906,7 @@ class BankSoalController extends Controller
     private function ensureQuestionScope(Question $question, $scope, Request $request, string $accessLevel = 'view')
     {
         if ($question->question_scope !== $scope) {
-            abort(403, 'Soal tidak dapat diakses dari bank soal ini.');
+            $this->fail('Soal tidak dapat diakses dari bank soal ini.');
         }
 
         if ($scope === 'manager') {
@@ -903,5 +983,21 @@ class BankSoalController extends Controller
                 $model->save();
             }
         }
+    }
+
+    private function normalizedQuestionText($value): string
+    {
+        $text = trim(strip_tags((string) $value));
+        $text = preg_replace('/\s+/u', ' ', $text) ?: '';
+
+        return Str::lower($text);
+    }
+
+    private function fail(string $message)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+        ], 401);
     }
 }
