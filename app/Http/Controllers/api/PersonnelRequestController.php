@@ -128,7 +128,11 @@ class PersonnelRequestController extends Controller
             ->pluck('nama_lengkap')
             ->toArray();
 
-        return PersonnelRequest::query()->whereIn('created_by', $allowedNames);
+        return PersonnelRequest::query()
+            ->whereIn('created_by', $allowedNames)
+            ->where(function($q) {
+                $q->whereNull('is_active')->orWhere('is_active', '!=', 0);
+            });
     }
 
     private function findOwnedPersonnelRequest($id)
@@ -430,6 +434,91 @@ class PersonnelRequestController extends Controller
                 'status'  => 'error',
                 'message' => $th->getMessage(),
             ], 500);
+        }
+    }
+
+    public function update(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = $this->findOwnedPersonnelRequest($request->id);
+            if (!$data) {
+                return response()->json(['message' => 'Data tidak ditemukan'], 404);
+            }
+            if ($data->is_approve == 1) {
+                return response()->json(['message' => 'Request yang sudah disetujui HR tidak dapat diubah.'], 400);
+            }
+
+            $useUserAssessment = $this->validatedUserAssessmentFlag($request);
+            $this->syncUserAssessmentCategoryConfig($request);
+
+            $data->update([
+                'request_type'              => $request->request_type,
+                'karyawan_lama_nama'        => $this->nullableValue($request->karyawan_lama_nama),
+                'karyawan_lama_nik'         => $this->nullableValue($request->karyawan_lama_nik),
+                'alasan_replacement'        => $this->nullableValue($request->alasan_replacement),
+                'alasan_replacement_lainnya'=> $this->nullableValue($request->alasan_replacement_lainnya),
+                'divisi'                    => $request->divisi,
+                'posisi'                    => $request->posisi,
+                'jumlah_personal'           => $request->jumlah_personal,
+                'lokasi_penempatan_cabang'  => $this->nullableInt($request->lokasi_penempatan_cabang),
+                'grade_master_karyawan'     => $this->nullableValue($request->grade_master_karyawan),
+                'alasan_kebutuhan'          => $this->nullableValue($request->alasan_kebutuhan),
+                'job_description'           => $this->nullableValue($request->job_description),
+                'pendidikan'                => $this->nullableValue($request->pendidikan),
+                'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
+                'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
+                'minimum_matching'          => $this->nullableInt($request->minimum_matching),
+                'assesment_question_category'=> $this->nullableInt($request->assesment_question_category),
+                'gender'                    => $request->gender,
+                'skill_wajib'               => $this->nullableValue($request->skill_wajib),
+                'sertifikasi'               => $this->nullableValue($request->sertifikasi),
+                'tanggal_dibutuhkan'        => $this->nullableValue($request->tanggal_dibutuhkan),
+                'prioritas'                 => $request->prioritas,
+                'max_salary'                => $this->nullableValue($request->max_salary),
+                'use_user_assessment'       => $useUserAssessment,
+                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
+                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
+                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
+                'updated_by'                => $this->getEffectiveKaryawanName(),
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'status'     => 'success',
+                'message'    => 'Personal Request berhasil diupdate.',
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            Log::error('PersonnelRequestController@update: ' . $th->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroy(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = $this->findOwnedPersonnelRequest($request->id);
+            if (!$data) {
+                return response()->json(['message' => 'Data tidak ditemukan'], 404);
+            }
+            if ($data->is_approve == 1) {
+                return response()->json(['message' => 'Request yang sudah disetujui HR tidak dapat dibatalkan.'], 400);
+            }
+            $data->update([
+                'is_active' => 0,
+                'cancled_at' => \Carbon\Carbon::now(),
+                'cancled_by' => $this->getEffectiveKaryawanName()
+            ]);
+            DB::commit();
+            return response()->json(['message' => 'Request berhasil dibatalkan']);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(["message" => $th->getMessage()], 500);
         }
     }
 
