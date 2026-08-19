@@ -26,14 +26,15 @@ class BankSoalController extends Controller
     public function index(Request $request)
     {
         $scope = $this->scope($request);
-        $managerQuestionCreators = $scope === 'manager'
-            ? $this->managerHierarchyNames()
-            : [];
 
         $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
             ->where('question_scope', $scope)
-            ->when($scope === 'manager', function ($query) use ($managerQuestionCreators) {
-                $query->whereIn('created_by', $managerQuestionCreators);
+            ->when($scope === 'manager', function ($query) use ($request) {
+                if ($request->filled('question_category_id')) {
+                    $this->resolveManagerCategory((int) $request->question_category_id, 'view');
+                } else {
+                    $query->whereIn('question_category_id', $this->accessibleManagerCategoryIds());
+                }
             })
             ->when($request->filled('question_category_id'), fn ($query) => $query->where('question_category_id', $request->question_category_id))
             ->when($request->filled('status'), fn ($query) => $query->where('status', 'like', '%' . $request->status . '%'))->orderBy('id','desc');
@@ -71,7 +72,7 @@ class BankSoalController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function ($category) use ($managerHierarchyNames) {
-                $category->can_manage = in_array((string) $category->owner_karyawan, $managerHierarchyNames, true);
+                $category->can_manage = $this->canManageManagerCategory($category, $managerHierarchyNames);
 
                 return $category;
             });
@@ -332,7 +333,7 @@ class BankSoalController extends Controller
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Bank Soal');
-        $headers = ['Question', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Option', 'Difficulty', 'Status', 'Explanation'];
+        $headers = ['Question', 'Option A', 'Option B', 'Option C', 'Option D', 'Option E', 'Option F', 'Correct Option', 'Difficulty', 'Status', 'Explanation'];
         $sheet->fromArray($headers, null, 'A1');
         $sheet->fromArray([
             'Contoh: Manakah jawaban yang benar?',
@@ -340,22 +341,24 @@ class BankSoalController extends Controller
             'Pilihan B',
             'Pilihan C',
             'Pilihan D',
+            '',
+            '',
             'A',
             'easy',
             'draft',
             'Contoh penjelasan atau konteks tambahan untuk soal ini',
         ], null, 'A2');
-        $sheet->getStyle('A1:I1')->applyFromArray([
+        $sheet->getStyle('A1:K1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E78']],
         ]);
         $sheet->freezePane('A2');
         $sheet->getColumnDimension('A')->setWidth(45);
-        foreach (['B', 'C', 'D', 'E'] as $column) $sheet->getColumnDimension($column)->setWidth(28);
-        $sheet->getColumnDimension('F')->setWidth(16);
-        $sheet->getColumnDimension('G')->setWidth(14);
-        $sheet->getColumnDimension('H')->setWidth(14);
-        $sheet->getColumnDimension('I')->setWidth(45);
+        foreach (['B', 'C', 'D', 'E', 'F', 'G'] as $column) $sheet->getColumnDimension($column)->setWidth(28);
+        $sheet->getColumnDimension('H')->setWidth(16);
+        $sheet->getColumnDimension('I')->setWidth(14);
+        $sheet->getColumnDimension('J')->setWidth(14);
+        $sheet->getColumnDimension('K')->setWidth(45);
 
         $guide = $spreadsheet->createSheet();
         $guide->setTitle('Petunjuk');
@@ -364,11 +367,12 @@ class BankSoalController extends Controller
             ['PENTING: Hapus baris contoh pada sheet Bank Soal sebelum upload. Jika tidak dihapus, contoh tersebut akan ikut dibuat menjadi soal.'],
             ['1. Isi satu soal per baris pada sheet Bank Soal'],
             ['2. Minimal isi Question, Option A, Option B, Correct Option, Difficulty, dan Status'],
-            ['3. Correct Option hanya A, B, C, atau D dan harus sesuai pilihan yang terisi'],
-            ['4. Difficulty: easy, medium, atau hard'],
-            ['5. Status: draft atau active'],
-            ['6. Explanation bersifat opsional dan boleh dikosongkan. Kolom ini untuk penjelasan atau konteks soal, bukan penjelasan jawaban tertentu'],
-            ['7. Jangan mengubah nama dan urutan header pada sheet Bank Soal'],
+            ['3. Kolom opsi dapat ditambahkan berurutan (Option A, Option B, dan seterusnya) sebelum Correct Option'],
+            ['4. Correct Option harus sesuai huruf pilihan yang terisi pada baris tersebut'],
+            ['5. Difficulty: easy, medium, atau hard'],
+            ['6. Status: draft atau active'],
+            ['7. Explanation bersifat opsional dan boleh dikosongkan. Kolom ini untuk penjelasan atau konteks soal, bukan penjelasan jawaban tertentu'],
+            ['8. Jangan mengubah nama dan urutan header selain menambahkan kolom Option secara berurutan'],
         ], null, 'A1');
         $guide->getStyle('A1')->getFont()->setBold(true);
         $guide->getStyle('A2')->applyFromArray([
@@ -408,7 +412,16 @@ class BankSoalController extends Controller
         }
 
         try {
-            $rows = IOFactory::load($file->getRealPath())->getActiveSheet()->toArray('', false, true, false);
+            if ($extension === 'csv') {
+                $reader = IOFactory::createReader('Csv');
+                $reader->setDelimiter(',');
+                $reader->setEnclosure('"');
+                $reader->setInputEncoding('UTF-8');
+                $spreadsheet = $reader->load($file->getRealPath());
+            } else {
+                $spreadsheet = IOFactory::load($file->getRealPath());
+            }
+            $rows = $spreadsheet->getActiveSheet()->toArray('', false, true, false);
         } catch (\Throwable $exception) {
             abort(422, 'Template tidak dapat dibaca. Gunakan file .xlsx atau .csv dari template yang disediakan.');
         }
@@ -421,8 +434,20 @@ class BankSoalController extends Controller
         while ($headers && end($headers) === '') {
             array_pop($headers);
         }
-        $requiredHeaders = ['question', 'option a', 'option b', 'option c', 'option d', 'correct option', 'difficulty', 'status', 'explanation'];
-        if ($headers !== $requiredHeaders) {
+        $correctOptionIndex = array_search('correct option', $headers, true);
+        $optionHeaders = $correctOptionIndex === false ? [] : array_slice($headers, 1, $correctOptionIndex - 1);
+        $expectedOptionHeaders = [];
+        for ($optionIndex = 0; $optionIndex < count($optionHeaders) && $optionIndex < 26; $optionIndex++) {
+            $expectedOptionHeaders[] = 'option ' . chr(ord('a') + $optionIndex);
+        }
+        $fixedHeaders = $correctOptionIndex === false ? [] : array_slice($headers, $correctOptionIndex);
+        if (
+            ($headers[0] ?? null) !== 'question'
+            || count($optionHeaders) < 2
+            || count($optionHeaders) > 26
+            || $optionHeaders !== $expectedOptionHeaders
+            || $fixedHeaders !== ['correct option', 'difficulty', 'status', 'explanation']
+        ) {
             abort(422, 'Format kolom template tidak sesuai. Unduh template terbaru lalu isi tanpa mengubah header.');
         }
 
@@ -450,8 +475,9 @@ class BankSoalController extends Controller
             $status = strtolower(trim((string) $data['status'] ?: 'draft'));
             $options = [];
 
-            foreach (['A', 'B', 'C', 'D'] as $letter) {
-                $optionText = trim((string) $data['option ' . strtolower($letter)]);
+            foreach ($optionHeaders as $optionHeader) {
+                $letter = strtoupper(substr($optionHeader, strlen('option ')));
+                $optionText = trim((string) $data[$optionHeader]);
                 if ($optionText !== '') {
                     $options[] = [
                         'option_text' => $optionText,
@@ -464,7 +490,7 @@ class BankSoalController extends Controller
             $line = $rowIndex + 2;
             if ($questionText === '') $errors[] = "Baris {$line}: Question wajib diisi.";
             if (count($options) < 2) $errors[] = "Baris {$line}: minimal isi Option A dan Option B.";
-            if (!in_array($correctOption, ['A', 'B', 'C', 'D'], true) || !collect($options)->contains('is_correct', true)) $errors[] = "Baris {$line}: Correct Option harus A, B, C, atau D dan pilihannya wajib terisi.";
+            if (!collect($options)->contains('is_correct', true)) $errors[] = "Baris {$line}: Correct Option harus sesuai huruf pilihan yang terisi.";
             if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) $errors[] = "Baris {$line}: Difficulty harus easy, medium, atau hard.";
             if (!in_array($status, ['draft', 'active'], true)) $errors[] = "Baris {$line}: Status harus draft atau active.";
 
@@ -738,15 +764,26 @@ class BankSoalController extends Controller
 
     private function accessibleManagerCategoryIds(): array
     {
+        $managerHierarchyNames = $this->managerHierarchyNames();
+
         return QuestionCategory::query()
             ->where('category_scope', 'manager')
             ->where('is_active', true)
-            ->where(function ($query) {
-                $query->where('owner_karyawan', $this->karyawan)
-                    ->orWhere('assigned_manager', $this->karyawan);
+            ->where(function ($query) use ($managerHierarchyNames) {
+                $query->whereIn('owner_karyawan', $managerHierarchyNames)
+                    ->orWhere('assigned_manager', $this->getEffectiveKaryawanName());
             })
             ->pluck('id')
             ->all();
+    }
+
+    private function canManageManagerCategory($category, ?array $managerHierarchyNames = null): bool
+    {
+        $managerHierarchyNames ??= $this->managerHierarchyNames();
+        $canManageOwner = in_array((string) $category->owner_karyawan, $managerHierarchyNames, true);
+        $isAssignedManager = (string) $category->assigned_manager === (string) $this->getEffectiveKaryawanName();
+
+        return $canManageOwner || $isAssignedManager;
     }
 
     private function resolveManagerCategory(int $categoryId, string $accessLevel = 'view'): QuestionCategory
@@ -756,19 +793,10 @@ class BankSoalController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        $canManageOwner = in_array((string) $category->owner_karyawan, $this->managerHierarchyNames(), true);
-        $isAssignedManager = (string) $category->assigned_manager === (string) $this->karyawan;
-
-        if ($accessLevel === 'write') {
-            if (!$canManageOwner) {
-                abort(403, 'Hanya pemilik kategori atau atasannya yang dapat mengubah data.');
-            }
-
-            return $category;
-        }
-
-        if (!$canManageOwner && !$isAssignedManager) {
-            abort(403, 'Kategori tidak dapat diakses.');
+        if (!$this->canManageManagerCategory($category)) {
+            abort(403, $accessLevel === 'write'
+                ? 'Hanya pemilik kategori, atasannya, atau manager terkait yang dapat mengubah data.'
+                : 'Kategori tidak dapat diakses.');
         }
 
         return $category;

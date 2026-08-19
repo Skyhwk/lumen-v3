@@ -39,7 +39,7 @@ class SamplingPlanController extends Controller
     {
         
         $active = $request->is_active == '' ? true : $request->is_active;
-        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
+        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active,google_maps_url',
         'samplingPlan' => function ($query) {
             $query->WithTypeModelSub();
         },])
@@ -767,26 +767,26 @@ class SamplingPlanController extends Controller
             }
 
             if ($jadwal) {
-                try {
-                    $trackingDates = array_unique(array_filter([
-                        $request->tanggal_lama,
-                        $request->tanggal,
-                    ]));
+                // try {
+                //     $trackingDates = array_unique(array_filter([
+                //         $request->tanggal_lama,
+                //         $request->tanggal,
+                //     ]));
 
-                    foreach ($trackingDates as $trackingDate) {
-                        app(SamplerTrackingService::class)->sync(
-                            Carbon::parse($trackingDate)->toDateString()
-                        );
-                    }
-                } catch (\Throwable $trackingSyncException) {
-                    Log::warning('Gagal sync activity sampler setelah update jadwal. ' . $trackingSyncException->getMessage(), [
-                        'no_quotation' => $request->no_quotation,
-                        'tanggal_lama' => $request->tanggal_lama,
-                        'tanggal_baru' => $request->tanggal,
-                        'line' => $trackingSyncException->getLine(),
-                        'file' => $trackingSyncException->getFile(),
-                    ]);
-                }
+                //     foreach ($trackingDates as $trackingDate) {
+                //         app(SamplerTrackingService::class)->sync(
+                //             Carbon::parse($trackingDate)->toDateString()
+                //         );
+                //     }
+                // } catch (\Throwable $trackingSyncException) {
+                //     Log::warning('Gagal sync activity sampler setelah update jadwal. ' . $trackingSyncException->getMessage(), [
+                //         'no_quotation' => $request->no_quotation,
+                //         'tanggal_lama' => $request->tanggal_lama,
+                //         'tanggal_baru' => $request->tanggal,
+                //         'line' => $trackingSyncException->getLine(),
+                //         'file' => $trackingSyncException->getFile(),
+                //     ]);
+                // }
 
                 return response()->json([
                     'message' => 'Berhasil melakukan update Jadwal.!',
