@@ -344,7 +344,7 @@ class BankSoalController extends Controller
             '',
             'A',
             'easy',
-            'draft',
+            'active',
             'Contoh penjelasan atau konteks tambahan untuk soal ini',
         ], null, 'A2');
         $sheet->getStyle('A1:K1')->applyFromArray([
@@ -369,7 +369,7 @@ class BankSoalController extends Controller
             ['3. Kolom opsi dapat ditambahkan berurutan (Option A, Option B, dan seterusnya) sebelum Correct Option'],
             ['4. Correct Option harus sesuai huruf pilihan yang terisi pada baris tersebut'],
             ['5. Difficulty: easy, medium, atau hard'],
-            ['6. Status: draft atau active'],
+            ['6. Status: draft atau active. Jika kolom atau nilainya kosong, status otomatis active'],
             ['7. Explanation bersifat opsional dan boleh dikosongkan. Kolom ini untuk penjelasan atau konteks soal, bukan penjelasan jawaban tertentu'],
             ['8. Jangan mengubah nama dan urutan header selain menambahkan kolom Option secara berurutan'],
         ], null, 'A1');
@@ -440,12 +440,16 @@ class BankSoalController extends Controller
             $expectedOptionHeaders[] = 'option ' . chr(ord('a') + $optionIndex);
         }
         $fixedHeaders = $correctOptionIndex === false ? [] : array_slice($headers, $correctOptionIndex);
+        $validFixedHeaders = [
+            ['correct option', 'difficulty', 'status', 'explanation'],
+            ['correct option', 'difficulty', 'explanation'],
+        ];
         if (
             ($headers[0] ?? null) !== 'question'
             || count($optionHeaders) < 2
             || count($optionHeaders) > 26
             || $optionHeaders !== $expectedOptionHeaders
-            || $fixedHeaders !== ['correct option', 'difficulty', 'status', 'explanation']
+            || !in_array($fixedHeaders, $validFixedHeaders, true)
         ) {
             abort(422, 'Format kolom template tidak sesuai. Unduh template terbaru lalu isi tanpa mengubah header.');
         }
@@ -463,6 +467,16 @@ class BankSoalController extends Controller
 
         $questions = [];
         $errors = [];
+        $existingQuestionKeys = Question::query()
+            ->where('question_scope', $scope)
+            ->where('question_category_id', $category->id)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get(['id', 'question_text'])
+            ->mapWithKeys(fn ($question) => [
+                $this->normalizedQuestionText($question->question_text) => $question->id,
+            ])
+            ->all();
         foreach ($rows as $rowIndex => $row) {
             if (!array_filter($row, fn ($value) => trim((string) $value) !== '')) continue;
 
@@ -471,7 +485,7 @@ class BankSoalController extends Controller
             $questionText = trim((string) $data['question']);
             $correctOption = strtoupper(trim((string) $data['correct option']));
             $difficulty = strtolower(trim((string) $data['difficulty'] ?: 'easy'));
-            $status = strtolower(trim((string) $data['status'] ?: 'draft'));
+            $status = strtolower(trim((string) ($data['status'] ?? ''))) ?: 'active';
             $options = [];
 
             foreach ($optionHeaders as $optionHeader) {
@@ -488,12 +502,14 @@ class BankSoalController extends Controller
 
             $line = $rowIndex + 2;
             if ($questionText === '') $errors[] = "Baris {$line}: Question wajib diisi.";
+            $questionKey = $this->normalizedQuestionText($questionText);
             if (count($options) < 2) $errors[] = "Baris {$line}: minimal isi Option A dan Option B.";
             if (!collect($options)->contains('is_correct', true)) $errors[] = "Baris {$line}: Correct Option harus sesuai huruf pilihan yang terisi.";
             if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) $errors[] = "Baris {$line}: Difficulty harus easy, medium, atau hard.";
             if (!in_array($status, ['draft', 'active'], true)) $errors[] = "Baris {$line}: Status harus draft atau active.";
 
-            $questions[] = [
+            $questions[$questionKey !== '' ? $questionKey : '__row_' . $line] = [
+                'existing_question_id' => $existingQuestionKeys[$questionKey] ?? null,
                 'question_text' => $questionText,
                 'explanation' => trim((string) $data['explanation']) ?: null,
                 'difficulty' => $difficulty,
@@ -506,8 +522,20 @@ class BankSoalController extends Controller
         if (count($questions) > 500) abort(422, 'Maksimal 500 soal untuk satu kali unggah.');
         if ($errors) return response()->json(['message' => 'Ada data template yang perlu diperbaiki.', 'errors' => $errors], 422);
 
-        DB::transaction(function () use ($questions, $scope, $category) {
+        $result = ['created' => 0, 'updated' => 0];
+        DB::transaction(function () use ($questions, $scope, $category, &$result) {
             foreach ($questions as $data) {
+                if ($data['existing_question_id']) {
+                    $question = Question::where('id', $data['existing_question_id'])
+                        ->where('is_active', 1)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                    $this->replaceOptions($question, $data['options']);
+                    $question->update(['updated_at' => Carbon::now()]);
+                    $result['updated']++;
+                    continue;
+                }
+
                 $question = Question::create([
                     'question_scope' => $scope,
                     'owner_karyawan' => $scope === 'manager' ? $category->owner_karyawan : null,
@@ -527,10 +555,14 @@ class BankSoalController extends Controller
                     'updated_at' => Carbon::now(),
                 ]);
                 $this->replaceOptions($question, $data['options']);
+                $result['created']++;
             }
         });
 
-        return response()->json(['success' => true, 'message' => count($questions) . ' soal berhasil diimpor.']);
+        return response()->json([
+            'success' => true,
+            'message' => $result['created'] . ' soal dibuat dan ' . $result['updated'] . ' soal diperbarui.',
+        ]);
     }
 
     public function store(Request $request)
@@ -596,6 +628,53 @@ class BankSoalController extends Controller
         $this->ensureQuestionScope($question, $this->scope($request), $request, 'write');
         $question->update(['status' => $request->status]);
         return response()->json(['success' => true, 'message' => 'Status bank soal berhasil diperbarui.']);
+    }
+
+    public function bulkAction(Request $request)
+    {
+        $ids = collect($request->input('ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+        $action = strtolower(trim((string) $request->input('action')));
+
+        if ($ids->isEmpty()) abort(422, 'Pilih minimal satu soal.');
+        if ($ids->count() > 100) abort(422, 'Maksimal 100 soal untuk satu bulk action.');
+        if (!in_array($action, ['active', 'draft', 'retired', 'delete'], true)) {
+            abort(422, 'Bulk action tidak valid.');
+        }
+
+        $questions = Question::with('options')->whereIn('id', $ids)->get();
+        if ($questions->count() !== $ids->count()) abort(404, 'Sebagian soal tidak ditemukan.');
+
+        foreach ($questions as $question) {
+            $this->ensureQuestionScope($question, $this->scope($request), $request, 'write');
+        }
+
+        DB::transaction(function () use ($questions, $action) {
+            if ($action !== 'delete') {
+                Question::whereIn('id', $questions->pluck('id'))->update([
+                    'status' => $action,
+                    'updated_at' => Carbon::now(),
+                ]);
+                return;
+            }
+
+            $imageService = new BankSoalImageService();
+            foreach ($questions as $question) {
+                foreach ($question->question_image as $image) $imageService->deleteImg($image);
+                foreach ($question->options as $option) $imageService->deleteImg($option->option_image);
+                $question->options()->delete();
+                $question->delete();
+            }
+        });
+
+        $label = $action === 'delete' ? 'dihapus' : 'diubah menjadi ' . $action;
+        return response()->json([
+            'success' => true,
+            'message' => $questions->count() . " soal berhasil {$label}.",
+        ]);
     }
 
     public function delete(Request $request)
@@ -900,5 +979,13 @@ class BankSoalController extends Controller
                 $model->save();
             }
         }
+    }
+
+    private function normalizedQuestionText($value): string
+    {
+        $text = trim(strip_tags((string) $value));
+        $text = preg_replace('/\s+/u', ' ', $text) ?: '';
+
+        return Str::lower($text);
     }
 }
