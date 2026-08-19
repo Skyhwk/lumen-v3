@@ -102,13 +102,13 @@ class SalaryApprovalController extends Controller
             if ($decision === 'negotiate' || $decision === 'reject') {
                 $nextStatus = 'management_decision';
             } else {
-                $nextStatus = $decision === 'approve'
-                    ? $this->salaryOfferStatus()
-                    : $recruitment->status;
+                $nextStatus = 'hired';
             }
 
             $historyStatus = $recruitment->status . '_' . $historyAction;
-            $extraData = $decision === 'negotiate' ? ['negotiated_amount' => $amount] : [];
+            $extraData = $decision === 'negotiate'
+                ? ['negotiated_amount' => $amount]
+                : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
 
             (new RecruitmentStatusService())->update(
                 $recruitment->id,
