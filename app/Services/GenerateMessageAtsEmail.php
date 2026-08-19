@@ -46,7 +46,7 @@ class GenerateMessageAtsEmail
         ])->render();
     }
 
-    public static function bodyEmailCandidateOfferingSalary($data, $btn = null): string
+    public static function bodyEmailCandidateOfferingSalary($data, $btn = null, object $letterData = null): string
     {
         if ($data == null) {
             return '';
@@ -56,14 +56,18 @@ class GenerateMessageAtsEmail
             $btn = self::buildCandidateOfferingButtons($data);
         }
 
+        $letter = $letterData ?? (object) [];
         $actionButtonsHtml = self::candidateOfferingActionButtonsHtml($btn);
 
         $posisi = htmlspecialchars(HrdEmailViewData::getNamaJabatan($data));
-        $offerAmount = optional($data->sallaryOffer)->sallary_offer_hrd
+        $offerAmount = $letter->gaji_pokok
+            ?? optional($data->sallaryOffer)->sallary_offer_hrd
             ?? $data->sallary_offer_hrd
             ?? $data->ekspetasi_gaji
             ?? null;
         $offerFormatted = htmlspecialchars(HrdEmailViewData::formatRupiah($offerAmount));
+        $deductionRowsHtml = $letterData ? self::buildSalaryDeductionEmailRows($letterData) : '';
+        $pencadanganNoteHtml = $letterData ? self::buildPencadanganNoteEmail($letterData) : '';
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
 
         return "
@@ -71,49 +75,65 @@ class GenerateMessageAtsEmail
         <html>
         <head>
             <meta charset='utf-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
             <title>Penawaran Gaji - PT Inti Surya Laboratorium</title>
         </head>
-        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
-            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+        <body style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 36px 0; color: #1e293b; -webkit-font-smoothing: antialiased;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='620' style='max-width: 620px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.06); margin: 0 auto;'>
                 " . self::emailHeaderHtml() . "
 
                 <tr>
-                    <td style='padding: 32px;'>
+                    <td style='padding: 36px 36px 28px 36px;'>
+                        <!-- Header Badge -->
+                        <div style='display: inline-block; background-color: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 5px 14px; border-radius: 20px; margin-bottom: 20px;'>
+                            Job Offer &amp; Compensation Details
+                        </div>
+
                         {$greeting}
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Terima kasih atas partisipasi Anda dalam proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>.
+                        <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-top: 16px; margin-bottom: 14px;'>
+                            Terima kasih atas partisipasi dan antusiasme Anda selama mengikuti tahapan seleksi rekrutmen untuk posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>.
                         </p>
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Setelah melalui tahapan evaluasi, kami bermaksud menginformasikan penawaran gaji berikut. Mohon dicatat bahwa
-                            <strong>penawaran ini belum merupakan keputusan penerimaan kerja</strong> — keputusan final akan ditetapkan setelah menyelesaikan tahapan administrasi berikutnya.
+                        <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-bottom: 20px;'>
+                            Berdasarkan hasil evaluasi kualifikasi dan wawancara, kami dengan senang hati menyampaikan rincian penawaran gaji sebagai berikut. Mohon dicatat bahwa <strong>penawaran ini merupakan klarifikasi awal hak gaji</strong> sebelum penerbitan Surat Keputusan Penerimaan Resmi (Hiring Letter).
                         </p>
 
-                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
-                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
-                                Rincian Penawaran
+                        <!-- Compensation Card -->
+                        <div style='background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; margin: 24px 0 18px 0;'>
+                            <div style='background-color: #0f2942; padding: 12px 18px; color: #ffffff; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;'>
+                                Rincian Penawaran Gaji
                             </div>
-                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px; border-collapse: collapse;'>
                                 <tr>
-                                    <td style='padding: 4px 0; color: #475569; font-weight: 600; width: 140px;'>Posisi</td>
-                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$posisi}</td>
+                                    <td style='padding: 12px 18px; color: #64748b; font-weight: 600; width: 180px;'>Posisi / Jabatan</td>
+                                    <td style='padding: 12px 18px; color: #0f172a; font-weight: 700;'>{$posisi}</td>
                                 </tr>
                                 <tr>
-                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Penawaran Gaji</td>
-                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$offerFormatted}</td>
+                                    <td style='padding: 12px 18px; color: #64748b; font-weight: 600; border-top: 1px solid #e2e8f0;'>Gaji Pokok (Gross)</td>
+                                    <td style='padding: 12px 18px; color: #0284c7; font-weight: 800; font-size: 16px; border-top: 1px solid #e2e8f0;'>
+                                        {$offerFormatted} <span style='font-size: 12px; font-weight: 500; color: #64748b;'>/ bulan</span>
+                                    </td>
                                 </tr>
+                                {$deductionRowsHtml}
                             </table>
                         </div>
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Sebagai lampiran email ini, kami sertakan <strong>Surat Penawaran Gaji (PDF)</strong> yang memuat rincian penawaran. Silakan unduh dan pelajari dokumen tersebut.
+                        {$pencadanganNoteHtml}
+
+                        <!-- PDF Attachment Box -->
+                        <div style='background-color: #f0f9ff; border: 1px dashed #0284c7; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 13px; color: #0369a1; line-height: 1.6;'>
+                            <strong>Dokumen Lampiran:</strong> Rincian resmi Surat Penawaran Gaji telah dilampirkan dalam format <strong>PDF (Surat Penawaran Gaji.pdf)</strong> pada email ini.
+                        </div>
+
+                        <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-top: 20px; margin-bottom: 8px;'>
+                            Silakan memberikan konfirmasi keputusan Anda mengenai penawaran gaji ini melalui tombol di bawah:
                         </p>
 
                         {$actionButtonsHtml}
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
-                            Apabila Anda memiliki pertanyaan, silakan menghubungi tim HRD kami. Atas perhatian Anda, kami ucapkan terima kasih.
+                        <p style='font-size: 13px; line-height: 1.6; color: #64748b; margin-top: 24px; margin-bottom: 0;'>
+                            Apabila Anda memerlukan penjelasan lebih lanjut mengenai rincian gaji ini, Anda dapat menghubungi Tim HRD kami melalui balasan email ini.
                         </p>
                     </td>
                 </tr>
@@ -223,6 +243,8 @@ class GenerateMessageAtsEmail
         $posisi = htmlspecialchars(HrdEmailViewData::getNamaJabatan($data));
         $gajiFormatted = htmlspecialchars(HrdEmailViewData::formatRupiah($letter->gaji_pokok ?? 0));
         $tglMulaiKerja = htmlspecialchars($letter->tanggal_mulai_kerja ?? '-');
+        $deductionRowsHtml = $letterData ? self::buildSalaryDeductionEmailRows($letterData) : '';
+        $pencadanganNoteHtml = $letterData ? self::buildPencadanganNoteEmail($letterData) : '';
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
 
         return "
@@ -230,50 +252,59 @@ class GenerateMessageAtsEmail
         <html>
         <head>
             <meta charset='utf-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
             <title>Surat Keputusan Penerimaan - PT Inti Surya Laboratorium</title>
         </head>
-        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
-            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+        <body style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 36px 0; color: #1e293b; -webkit-font-smoothing: antialiased;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='620' style='max-width: 620px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.06); margin: 0 auto;'>
                 " . self::emailHeaderHtml() . "
 
                 <tr>
-                    <td style='padding: 32px;'>
+                    <td style='padding: 36px 36px 28px 36px;'>
+                        <!-- Header Badge -->
+                        <div style='display: inline-block; background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 5px 14px; border-radius: 20px; margin-bottom: 20px;'>
+                            &#10003; Official Hiring Decision
+                        </div>
+
                         {$greeting}
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Selamat! Berdasarkan hasil seleksi rekrutmen, kami sampaikan bahwa Anda
-                            <strong>diterima</strong> untuk bergabung di <strong>PT Inti Surya Laboratorium</strong>
-                            pada posisi <strong>{$posisi}</strong>.
+                        <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-top: 16px; margin-bottom: 14px;'>
+                            Selamat! Berdasarkan seluruh tahapan evaluasi rekrutmen, kami dengan bangga menyampaikan bahwa Anda <strong>diterima bergabung</strong> di <strong>PT Inti Surya Laboratorium</strong> untuk posisi <strong>{$posisi}</strong>.
                         </p>
 
-                        <div style='background-color: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 4px; padding: 18px; margin: 20px 0;'>
-                            <div style='font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
-                                Ringkasan Keputusan
+                        <!-- Decision Summary Card -->
+                        <div style='background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; margin: 24px 0 18px 0;'>
+                            <div style='background-color: #166534; padding: 12px 18px; color: #ffffff; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;'>
+                                Ringkasan Keputusan Penerimaan
                             </div>
-                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px; border-collapse: collapse;'>
                                 <tr>
-                                    <td style='padding: 4px 0; color: #475569; font-weight: 600; width: 150px;'>Posisi</td>
-                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$posisi}</td>
+                                    <td style='padding: 12px 18px; color: #64748b; font-weight: 600; width: 180px;'>Posisi / Jabatan</td>
+                                    <td style='padding: 12px 18px; color: #0f172a; font-weight: 700;'>{$posisi}</td>
                                 </tr>
                                 <tr>
-                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Gaji Pokok</td>
-                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$gajiFormatted}</td>
+                                    <td style='padding: 12px 18px; color: #64748b; font-weight: 600; border-top: 1px solid #e2e8f0;'>Gaji Pokok (Gross)</td>
+                                    <td style='padding: 12px 18px; color: #15803d; font-weight: 800; font-size: 16px; border-top: 1px solid #e2e8f0;'>
+                                        {$gajiFormatted} <span style='font-size: 12px; font-weight: 500; color: #64748b;'>/ bulan</span>
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td style='padding: 4px 0; color: #475569; font-weight: 600;'>Tanggal Mulai Kerja</td>
-                                    <td style='padding: 4px 0; color: #0f172a; font-weight: 700;'>{$tglMulaiKerja}</td>
+                                    <td style='padding: 12px 18px; color: #64748b; font-weight: 600; border-top: 1px solid #e2e8f0;'>Tanggal Mulai Bekerja</td>
+                                    <td style='padding: 12px 18px; color: #0284c7; font-weight: 700; border-top: 1px solid #e2e8f0;'>{$tglMulaiKerja}</td>
                                 </tr>
+                                {$deductionRowsHtml}
                             </table>
                         </div>
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Sebagai lampiran email ini, kami sertakan <strong>Surat Keputusan Penerimaan Kerja (Hiring Letter) PDF</strong>.
-                            Mohon unduh, pelajari, dan berikan konfirmasi penerimaan paling lambat <strong>1 x 24 jam</strong>
-                            sejak surat ini diterima.
-                        </p>
+                        {$pencadanganNoteHtml}
 
-                        <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
-                            Apabila Anda memiliki pertanyaan, silakan menghubungi tim HRD kami. Atas perhatian Anda, kami ucapkan terima kasih.
+                        <!-- PDF Attachment Box -->
+                        <div style='background-color: #f0fdf4; border: 1px dashed #16a34a; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 13px; color: #166534; line-height: 1.6;'>
+                            <strong>Dokumen Resmi:</strong> Surat Keputusan Penerimaan Kerja (Hiring Letter) resmi telah dilampirkan dalam format <strong>PDF (Hiring_Letter.pdf)</strong> pada email ini.
+                        </div>
+
+                        <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-top: 20px; margin-bottom: 0;'>
+                            Mohon unduh, pelajari dokumen lampiran tersebut, dan berikan konfirmasi penerimaan Anda paling lambat <strong>1 x 24 jam</strong> sejak email ini diterima.
                         </p>
                     </td>
                 </tr>
@@ -346,7 +377,7 @@ class GenerateMessageAtsEmail
 
         $subject = 'Penawaran Gaji - PT Inti Surya Laboratorium';
         $btn = $btn ?? self::buildCandidateOfferingButtons($applicant);
-        $bodyEmail = self::bodyEmailCandidateOfferingSalary($applicant, $btn);
+        $bodyEmail = self::bodyEmailCandidateOfferingSalary($applicant, $btn, $dataObj);
         $pdfPath = self::generateSalaryOfferingLetterPdfPath($dataObj);
 
         try {
@@ -593,6 +624,97 @@ class GenerateMessageAtsEmail
         return $photoUrl ?: '';
     }
 
+    private static function letterIssueLocation(): string
+    {
+        return 'Tangerang Selatan';
+    }
+
+    private static function positiveAmount($value): float
+    {
+        return max(0, (float) ($value ?? 0));
+    }
+
+    private static function formatLetterRupiah($value): string
+    {
+        return number_format(self::positiveAmount($value), 0, ',', '.');
+    }
+
+    private static function salaryDeductionItems(object $data): array
+    {
+        $items = [];
+        $map = [
+            'Potongan BPJS Kesehatan' => 'potongan_bpjs_kes',
+            'Potongan BPJS Ketenagakerjaan' => 'potongan_bpjs_tk',
+            'Potongan PPh 21' => 'pot_pph21',
+            'Pencadangan Upah' => 'pencadangan_upah',
+        ];
+
+        foreach ($map as $label => $key) {
+            $amount = self::positiveAmount($data->{$key} ?? 0);
+            if ($amount > 0) {
+                $items[] = ['label' => $label, 'amount' => $amount];
+            }
+        }
+
+        return $items;
+    }
+
+    private static function buildSalaryDeductionPdfRows(object $data): string
+    {
+        $html = '';
+        foreach (self::salaryDeductionItems($data) as $item) {
+            $label = htmlspecialchars($item['label']);
+            $formatted = self::formatLetterRupiah($item['amount']);
+            $html .= "
+                    <tr>
+                        <td class='label-col'>{$label}</td>
+                        <td class='value-col'>Rp {$formatted}</td>
+                    </tr>";
+        }
+
+        return $html;
+    }
+
+    private static function buildSalaryDeductionEmailRows(object $data): string
+    {
+        $html = '';
+        foreach (self::salaryDeductionItems($data) as $item) {
+            $label = htmlspecialchars($item['label']);
+            $formatted = htmlspecialchars(HrdEmailViewData::formatRupiah($item['amount']));
+            $html .= "
+                                <tr>
+                                    <td style='padding: 8px 12px; color: #64748b; font-weight: 600; font-size: 13px; border-top: 1px solid #f1f5f9; width: 200px;'>{$label}</td>
+                                    <td style='padding: 8px 12px; color: #dc2626; font-weight: 700; font-size: 13px; border-top: 1px solid #f1f5f9;'>- {$formatted}</td>
+                                </tr>";
+        }
+
+        return $html;
+    }
+
+    private static function buildPencadanganNotePdf(object $data): string
+    {
+        if (self::positiveAmount($data->pencadangan_upah ?? 0) <= 0) {
+            return '';
+        }
+
+        return "
+                <div class='note-box'>
+                    <strong>Catatan Pencadangan Upah:</strong> Pencadangan upah akan dikembalikan secara bertahap setelah masa Training selesai.
+                </div>";
+    }
+
+    private static function buildPencadanganNoteEmail(object $data): string
+    {
+        if (self::positiveAmount($data->pencadangan_upah ?? 0) <= 0) {
+            return '';
+        }
+
+        return "
+                        <div style='background-color: #fffbebf5; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 14px 18px; margin: 18px 0; font-size: 13px; color: #92400e; line-height: 1.6;'>
+                            <strong style='color: #b45309;'>Catatan Pencadangan Upah:</strong> Pencadangan upah akan dikembalikan secara bertahap setelah masa Training selesai.
+                        </div>";
+    }
+
     public static function resolveSalutation($data)
     {
         $gender = strtolower(trim((string) ($data->jenis_kelamin ?? $data->gender ?? '')));
@@ -627,9 +749,15 @@ class GenerateMessageAtsEmail
     {
         return "
                 <tr>
-                    <td bgcolor='#1e293b' style='padding: 24px 32px; text-align: left;'>
-                        <div style='color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px;'>PT INTI SURYA LABORATORIUM</div>
-                        <div style='color: #94a3b8; font-size: 13px; margin-top: 2px;'>HRD Division</div>
+                    <td style='background: linear-gradient(135deg, #0f2942 0%, #1e3a5f 100%); padding: 28px 36px; border-bottom: 3px solid #2563eb; text-align: left;'>
+                        <table border='0' cellpadding='0' cellspacing='0' width='100%'>
+                            <tr>
+                                <td>
+                                    <div style='color: #ffffff; font-size: 19px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;'>PT INTI SURYA LABORATORIUM</div>
+                                    <div style='color: #94a3b8; font-size: 12px; font-weight: 600; margin-top: 4px; letter-spacing: 0.5px; text-transform: uppercase;'>Human Resources Division</div>
+                                </td>
+                            </tr>
+                        </table>
                     </td>
                 </tr>";
     }
@@ -638,10 +766,20 @@ class GenerateMessageAtsEmail
     {
         return "
                 <tr>
-                    <td bgcolor='#f8fafc' style='padding: 18px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
-                        <strong style='color: #334155;'>Salam,</strong><br>
-                        <span style='font-weight: 600; color: #0f172a;'>Tim Recruitment</span><br>
-                        PT Inti Surya Laboratorium
+                    <td style='background-color: #f8fafc; padding: 24px 36px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: left;'>
+                        <table border='0' cellpadding='0' cellspacing='0' width='100%'>
+                            <tr>
+                                <td>
+                                    <strong style='color: #1e293b; font-size: 13px;'>Hormat kami,</strong><br>
+                                    <span style='font-weight: 700; color: #0f2942; font-size: 13px;'>Tim Human Resources Division</span><br>
+                                    <span style='color: #475569;'>PT Inti Surya Laboratorium</span>
+                                    <div style='margin-top: 14px; font-size: 11px; color: #94a3b8; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 12px;'>
+                                        Ruko Icon Business Park Blok O No. 5-6, BSD City, Kec. Cisauk, Tangerang Selatan, Banten 15345<br>
+                                        Pesan ini dikirimkan secara otomatis oleh Sistem ATS PT Inti Surya Laboratorium. Mohon menjaga kerahasiaan isi dokumen penawaran ini.
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
                     </td>
                 </tr>";
     }
@@ -766,6 +904,9 @@ class GenerateMessageAtsEmail
         $tanggalSurat = htmlspecialchars(
             $data->tanggal_surat ?? \Carbon\Carbon::now()->locale('id')->translatedFormat('d F Y')
         );
+        $lokasiSurat = htmlspecialchars(self::letterIssueLocation());
+        $deductionRowsHtml = self::buildSalaryDeductionPdfRows($data);
+        $pencadanganNoteHtml = self::buildPencadanganNotePdf($data);
 
         return "
         <!DOCTYPE html>
@@ -912,20 +1053,20 @@ class GenerateMessageAtsEmail
                             <span style='color: #475569;'>No. Telp / HP: {$noTelepon}</span>
                         </td>
                         <td width='42%' style='text-align: right;'>
-                            <span style='color: #64748b; font-size: 12px;'>Bogor, {$tanggalSurat}</span><br>
+                            <span style='color: #64748b; font-size: 12px;'>{$lokasiSurat}, {$tanggalSurat}</span><br>
                             <span style='color: #64748b; font-size: 11px; display: inline-block; margin-top: 4px; padding: 2px 8px; background-color: #f1f5f9; border-radius: 4px; font-weight: 600;'>Sifat: Rahasia (Confidential)</span>
                         </td>
                     </tr>
                 </table>
 
                 <div style='margin-bottom: 16px; font-weight: 600; color: #0f2942;'>
-                    Perihal: Penawaran Kompensasi Gaji &mdash; Posisi {$posisi}
+                    Perihal: Penawaran Gaji &mdash; Posisi {$posisi}
                 </div>
 
                 <p style='margin-top: 0;'>Dengan hormat,</p>
 
                 <p style='text-align: justify;'>
-                    Sehubungan dengan hasil evaluasi kualifikasi dan tahapan wawancara yang telah Anda jalani di <strong>PT Inti Surya Laboratorium</strong>, Perusahaan bermaksud menyampaikan penawaran kompensasi (gaji) awal untuk posisi <strong>{$posisi}</strong> dengan rincian sebagai berikut:
+                    Sehubungan dengan hasil evaluasi kualifikasi dan tahapan wawancara yang telah Anda jalani di <strong>PT Inti Surya Laboratorium</strong>, Perusahaan bermaksud menyampaikan penawaran gaji awal untuk posisi <strong>{$posisi}</strong> dengan rincian sebagai berikut:
                 </p>
 
                 <!-- Rincian Tabel -->
@@ -938,11 +1079,14 @@ class GenerateMessageAtsEmail
                         <td class='label-col'>Penawaran Gaji Pokok</td>
                         <td class='value-col' style='color: #0f2942; font-size: 14px;'>Rp {$gajiPokok} <span style='font-weight: 400; font-size: 12px; color: #64748b;'>/ bulan (gross)</span></td>
                     </tr>
+                    {$deductionRowsHtml}
                 </table>
+
+                {$pencadanganNoteHtml}
 
                 <!-- Note Disclaimer Box -->
                 <div class='note-box'>
-                    <strong>Catatan Penting:</strong> Dokumen ini merupakan <strong>Surat Penawaran Gaji (Salary Offering Letter)</strong> dalam rangka klarifikasi dan persetujuan awal hak kompensasi. Surat ini <strong>bukan merupakan Perjanjian Kerja maupun Surat Keputusan Penerimaan Kerja (Hiring Letter) resmi</strong>. Keputusan penerimaan kerja resmi akan diterbitkan setelah seluruh tahapan administrasi dan persetujuan Manajemen Direksi diselesaikan.
+                    <strong>Catatan Penting:</strong> Dokumen ini merupakan <strong>Surat Penawaran Gaji (Salary Offering Letter)</strong> dalam rangka klarifikasi dan persetujuan awal hak gaji. Surat ini <strong>bukan merupakan Perjanjian Kerja maupun Surat Keputusan Penerimaan Kerja (Hiring Letter) resmi</strong>. Keputusan penerimaan kerja resmi akan diterbitkan setelah seluruh tahapan administrasi dan persetujuan Manajemen Direksi diselesaikan.
                 </div>
 
                 <p style='text-align: justify;'>
@@ -991,6 +1135,9 @@ class GenerateMessageAtsEmail
         $tanggalSurat = htmlspecialchars(
             $data->tanggal_surat ?? \Carbon\Carbon::now()->locale('id')->translatedFormat('d F Y')
         );
+        $lokasiSurat = htmlspecialchars(self::letterIssueLocation());
+        $deductionRowsHtml = self::buildSalaryDeductionPdfRows($data);
+        $pencadanganNoteHtml = self::buildPencadanganNotePdf($data);
 
         return "
         <!DOCTYPE html>
@@ -1137,7 +1284,7 @@ class GenerateMessageAtsEmail
                             <span style='color: #475569;'>No. Telp / HP: {$noTelepon}</span>
                         </td>
                         <td width='42%' style='text-align: right;'>
-                            <span style='color: #64748b; font-size: 12px;'>Bogor, {$tanggalSurat}</span><br>
+                            <span style='color: #64748b; font-size: 12px;'>{$lokasiSurat}, {$tanggalSurat}</span><br>
                             <span style='color: #64748b; font-size: 11px; display: inline-block; margin-top: 4px; padding: 2px 8px; background-color: #f1f5f9; border-radius: 4px; font-weight: 600;'>Sifat: Penting &amp; Rahasia</span>
                         </td>
                     </tr>
@@ -1167,6 +1314,7 @@ class GenerateMessageAtsEmail
                         <td class='label-col'>Gaji Pokok</td>
                         <td class='value-col' style='color: #0f2942; font-size: 14px;'>Rp {$gajiPokok} <span style='font-weight: 400; font-size: 12px; color: #64748b;'>/ bulan (gross)</span></td>
                     </tr>
+                    {$deductionRowsHtml}
                     <tr>
                         <td class='label-col'>Tanggal Mulai Bekerja</td>
                         <td class='value-col' style='color: #0284c7;'>{$tglMulaiKerja}</td>
@@ -1176,6 +1324,8 @@ class GenerateMessageAtsEmail
                         <td class='value-col'>{$hariKerja}, 08.00 &ndash; 17.00 WIB</td>
                     </tr>
                 </table>
+
+                {$pencadanganNoteHtml}
 
                 <!-- Confirm Box -->
                 <div class='confirm-box'>
@@ -1542,19 +1692,18 @@ class GenerateMessageAtsEmail
                 ->where('new_recruitment_id', $recruitment->id)
                 ->where('is_active', 1)->get();
     
-            $photoDoc = \Illuminate\Support\Facades\DB::table('candidate_documents')
-                ->where('new_recruitment_id', $recruitment->id)
-                ->where('is_active', 1)
-                ->where(function($q) {
-                    $q->where('jenis_dokumen', 'like', '%Foto%')
-                      ->orWhere('jenis_dokumen', 'like', '%Photo%');
-                })->first();
-            
             $medicalInfo = \Illuminate\Support\Facades\DB::table('candidate_medical_informations')
                 ->where('new_recruitment_id', $recruitment->id)
                 ->first();
     
             $photoUrl = self::recruitmentPhotoForEmail($recruitment);
+
+            $birthDate = $recruitment->tanggal_lahir ?? null;
+            $shioElemen = \App\Helpers\ShioElemenHelper::resolve(
+                $birthDate,
+                $recruitment->shio ?? null,
+                $recruitment->elemen ?? null
+            );
 
             $formatDateId = function($dateStr) {
                 if (empty($dateStr) || $dateStr === '-' || $dateStr === '0000-00-00') return '-';
@@ -1582,6 +1731,8 @@ class GenerateMessageAtsEmail
                     'tgl_nikah' => $formatDateId($recruitment->tgl_nikah ?? null),
                     'tanggal_lahir' => $formatDateId($recruitment->tanggal_lahir ?? null),
                     'tgl_exp_identitas' => $formatDateId($recruitment->tgl_exp_identitas ?? null),
+                    'shio' => $shioElemen['shio'] ?? null,
+                    'elemen' => $shioElemen['elemen'] ?? null,
                 ]
             );
     
@@ -1620,7 +1771,45 @@ class GenerateMessageAtsEmail
                 'kursus' => [],
                 'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
             ];
-           
+
+            $umur = '-';
+            if (!empty($birthDate)) {
+                try {
+                    $umur = \Carbon\Carbon::parse($birthDate)->age;
+                } catch (\Exception $e) {
+                    $umur = $recruitment->umur ?? $recruitment->usia ?? '-';
+                }
+            } elseif (!empty($recruitment->umur ?? $recruitment->usia ?? null)) {
+                $umur = $recruitment->umur ?? $recruitment->usia;
+            }
+
+            $alamat = trim((string) ($profile->alamat_domisili ?? $recruitment->alamat_domisili ?? $recruitment->alamat_ktp ?? ''));
+            $kota = trim((string) ($profile->kota_domisili ?? ''));
+            $provinsi = trim((string) ($profile->provinsi_domisili ?? ''));
+            if ($alamat !== '' && $kota !== '' && stripos($alamat, $kota) === false) {
+                $alamat .= ', ' . $kota;
+            }
+            if ($alamat !== '' && $provinsi !== '' && stripos($alamat, $provinsi) === false) {
+                $alamat .= ', ' . $provinsi;
+            }
+            if ($alamat === '') {
+                $alamat = '-';
+            }
+
+            $candidateInfo = (object) [
+                'nama_lengkap' => $recruitment->nama_lengkap ?? '-',
+                'shio' => $shioElemen['shio'] ?? '-',
+                'elemen' => $shioElemen['elemen'] ?? '-',
+                'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? $pr->posisi ?? '-',
+                'umur' => $umur,
+                'alamat' => $alamat,
+            ];
+
+            $contact = \App\Services\HrdEmailViewData::contactLine((object) [
+                'no_hp' => $recruitment->no_telepon ?? null,
+                'email' => $recruitment->email ?? null,
+            ]);
+
             $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
                 ->where('new_recruitment_id', $recruitment->id)
                 ->where('stage', 'hrd')
@@ -1634,6 +1823,8 @@ class GenerateMessageAtsEmail
                 'interview' => $interview,
                 'hrdInterview' => $hrdInterview,
                 'decision' => $decision,
+                'candidateInfo' => $candidateInfo,
+                'contact' => $contact,
                 'cv' => $cv,
                 'btn' => self::directorDecisionButtons($recruitment),
             ])->render();

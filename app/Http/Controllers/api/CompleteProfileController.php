@@ -91,6 +91,9 @@ class CompleteProfileController extends Controller
                 'nama_kontak_darurat' => trim((string) $request->input('nama_kontak_darurat')) ?: null,
                 'hubungan_kontak_darurat' => trim((string) $request->input('hubungan_kontak_darurat')) ?: null,
                 'no_telepon_darurat' => trim((string) $request->input('no_telepon_darurat')) ?: null,
+                'nama_kontak_darurat_2' => trim((string) $request->input('nama_kontak_darurat_2')) ?: null,
+                'hubungan_kontak_darurat_2' => trim((string) $request->input('hubungan_kontak_darurat_2')) ?: null,
+                'no_telepon_darurat_2' => trim((string) $request->input('no_telepon_darurat_2')) ?: null,
                 'created_by' => 'Candidate Profile Portal',
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -187,12 +190,17 @@ class CompleteProfileController extends Controller
 
     private function validateInput(Request $request)
     {
-        $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat', 'tinggi_badan', 'berat_badan', 'mata'];
+        $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat', 'nama_kontak_darurat_2', 'hubungan_kontak_darurat_2', 'no_telepon_darurat_2', 'tinggi_badan', 'berat_badan', 'mata'];
         $errors = [];
         foreach ($required as $field) {
             if (trim((string) $request->input($field)) === '') {
                 $errors[$field] = ['Field wajib diisi.'];
             }
+        }
+
+        $duplicateEmergencyContactErrors = $this->validateEmergencyContacts($request);
+        if (!empty($duplicateEmergencyContactErrors)) {
+            $errors = array_merge($errors, $duplicateEmergencyContactErrors);
         }
         if ($request->input('email') && !filter_var($request->input('email'), FILTER_VALIDATE_EMAIL)) {
             $errors['email'] = ['Format email tidak valid.'];
@@ -212,11 +220,41 @@ class CompleteProfileController extends Controller
         return $errors;
     }
 
+    private function validateEmergencyContacts(Request $request)
+    {
+        $errors = [];
+        $name1 = $this->normalizeEmergencyText($request->input('nama_kontak_darurat'));
+        $name2 = $this->normalizeEmergencyText($request->input('nama_kontak_darurat_2'));
+        $phone1 = $this->normalizeEmergencyPhone($request->input('no_telepon_darurat'));
+        $phone2 = $this->normalizeEmergencyPhone($request->input('no_telepon_darurat_2'));
+
+        if ($phone1 !== '' && $phone2 !== '' && $phone1 === $phone2) {
+            $errors['no_telepon_darurat_2'] = ['Nomor telepon kontak darurat 1 dan 2 tidak boleh sama.'];
+        }
+
+        if ($name1 !== '' && $name2 !== '' && $name1 === $name2) {
+            $errors['nama_kontak_darurat_2'] = ['Nama kontak darurat 1 dan 2 tidak boleh sama.'];
+        }
+
+        return $errors;
+    }
+
+    private function normalizeEmergencyPhone($value)
+    {
+        return preg_replace('/\D+/', '', trim((string) $value));
+    }
+
+    private function normalizeEmergencyText($value)
+    {
+        return mb_strtolower(trim((string) $value));
+    }
+
     private function validateRequiredDocuments(array $documents): array
     {
         $requiredTypes = [
             'KTP' => 'Dokumen KTP wajib diunggah.',
             'KARTU KELUARGA' => 'Dokumen Kartu Keluarga wajib diunggah.',
+            'IJAZAH / SKL' => 'Dokumen Ijazah / SKL wajib diunggah.',
         ];
         $uploadedTypes = [];
 

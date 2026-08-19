@@ -378,6 +378,18 @@ class RecruitmentController extends Controller{
 
             DB::beginTransaction();
 
+            $sumberInformasi = trim((string) $request->input('sumber_informasi'));
+            if ($sumberInformasi === 'Lainnya') {
+                $sumberInformasi = trim((string) $request->input('sumber_informasi_lainnya'));
+            }
+
+            if ($sumberInformasi === '') {
+                return response()->json([
+                    'message' => 'Sumber informasi lowongan wajib diisi.',
+                    'status' => false,
+                ], 422);
+            }
+
             $id = DB::table('new_recruitment')->insertGetId([
                 'nama_lengkap' => $namaLengkap,
                 'tempat_lahir' => $request->tempat_lahir,
@@ -389,6 +401,8 @@ class RecruitmentController extends Controller{
                 'email' => $email,
                 'pendidikan' => $json($request->pendidikan),
                 'pengalaman_kerja' => $json($request->pengalaman_kerja),
+                'referensi' => $json($request->referensi),
+                'sumber_informasi' => $sumberInformasi,
                 'skill' => $json($request->skill),
                 'shio' => $shioElemen['shio'] ?? null,
                 'elemen' => $shioElemen['elemen'] ?? null,

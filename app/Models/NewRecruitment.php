@@ -12,6 +12,7 @@ class NewRecruitment extends Model
     protected $casts = [
         'pendidikan' => 'array',
         'pengalaman_kerja' => 'array',
+        'referensi' => 'array',
         'tanggal_join_tercepat' => 'date',
     ];
 
