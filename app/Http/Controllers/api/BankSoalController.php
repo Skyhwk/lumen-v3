@@ -470,13 +470,16 @@ class BankSoalController extends Controller
         $questions = [];
         $errors = [];
         $existingQuestionKeys = Question::query()
+            ->with(['options' => function ($query) {
+                $query->orderBy('option_order')->orderBy('id');
+            }])
             ->where('question_scope', $scope)
             ->where('question_category_id', $category->id)
             ->where('is_active', 1)
             ->orderBy('id')
             ->get(['id', 'question_text'])
             ->mapWithKeys(fn ($question) => [
-                $this->normalizedQuestionText($question->question_text) => $question->id,
+                $this->importQuestionKey($question->question_text, $question->options->toArray()) => $question->id,
             ])
             ->all();
         foreach ($rows as $rowIndex => $row) {
@@ -504,14 +507,16 @@ class BankSoalController extends Controller
 
             $line = $rowIndex + 2;
             if ($questionText === '') $errors[] = "Baris {$line}: Question wajib diisi.";
-            $questionKey = $this->normalizedQuestionText($questionText);
             if (count($options) < 2) $errors[] = "Baris {$line}: minimal isi Option A dan Option B.";
             if (!collect($options)->contains('is_correct', true)) $errors[] = "Baris {$line}: Correct Option harus sesuai huruf pilihan yang terisi.";
             if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) $errors[] = "Baris {$line}: Difficulty harus easy, medium, atau hard.";
             if (!in_array($status, ['draft', 'active'], true)) $errors[] = "Baris {$line}: Status harus draft atau active.";
 
-            $questions[$questionKey !== '' ? $questionKey : '__row_' . $line] = [
-                'existing_question_id' => $existingQuestionKeys[$questionKey] ?? null,
+            $questionKey = $questionText !== ''
+                ? $this->importQuestionKey($questionText, $options)
+                : '__row_' . $line;
+            $questions[$questionKey] = [
+                'existing_question_id' => $questionText !== '' ? ($existingQuestionKeys[$questionKey] ?? null) : null,
                 'question_text' => $questionText,
                 'explanation' => trim((string) $data['explanation']) ?: null,
                 'difficulty' => $difficulty,
@@ -991,6 +996,28 @@ class BankSoalController extends Controller
         $text = preg_replace('/\s+/u', ' ', $text) ?: '';
 
         return Str::lower($text);
+    }
+
+    private function importQuestionKey($questionText, array $options): string
+    {
+        $normalizedOptions = collect($options)
+            ->sortBy(function ($option, $index) {
+                return (int) ($option['option_order'] ?? ($index + 1));
+            })
+            ->values()
+            ->map(function ($option, $index) {
+                return [
+                    'order' => (int) ($option['option_order'] ?? ($index + 1)),
+                    'text' => $this->normalizedQuestionText($option['option_text'] ?? ''),
+                    'is_correct' => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                ];
+            })
+            ->all();
+
+        return hash('sha256', json_encode([
+            'question' => $this->normalizedQuestionText($questionText),
+            'options' => $normalizedOptions,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     private function fail(string $message)
