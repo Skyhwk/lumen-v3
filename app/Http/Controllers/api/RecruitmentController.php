@@ -317,7 +317,7 @@ class RecruitmentController extends Controller{
             // Satu kandidat hanya dapat mengikuti satu proses rekrutmen pada satu waktu,
             // walaupun lowongan yang dipilih berbeda.
             $existingApplications = DB::table('new_recruitment')
-                ->select(['id', 'status', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
+                ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
                 ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
                 ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
                 ->orderByDesc('id')
@@ -336,6 +336,10 @@ class RecruitmentController extends Controller{
             ];
 
             foreach ($existingApplications as $existingApplication) {
+                if ((int) ($existingApplication->is_active ?? 1) === 0) {
+                    continue;
+                }
+
                 $history = json_decode($existingApplication->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
                 $lastHistory = !empty($history) ? end($history) : [];
@@ -413,6 +417,7 @@ class RecruitmentController extends Controller{
                 'tanggal_join_tercepat' => $request->tanggal_join_tercepat,
                 'picture' => $pictureFilename,
                 'token' => $token,
+                'is_active' => true,
                 'created_at' => DATE('Y-m-d H:i:s'),
                 'updated_at' => DATE('Y-m-d H:i:s'),
             ]);

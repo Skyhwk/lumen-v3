@@ -24,6 +24,7 @@ trait BuildsCandidateAssessmentPreview
             'approved' => 'Disetujui',
             'hired' => 'Hired',
             'rejected' => 'Ditolak',
+            'void' => 'Void',
         ];
 
         return $labels[strtolower((string) $status)] ?? ucfirst(str_replace('_', ' ', (string) $status));
@@ -453,6 +454,7 @@ trait BuildsCandidateAssessmentPreview
     protected function formatCandidatePreviewItem($candidate, RecruitmentPictureService $pictureService)
     {
         $status = strtolower((string) $candidate->status);
+        $isActive = (int) ($candidate->is_active ?? 1) === 1;
         $matchingScore = $candidate->nilai_kecocokan;
         if (($matchingScore === null || $matchingScore === '') && isset($candidate->matching_score)) {
             $matchingScore = $candidate->matching_score;
@@ -466,7 +468,9 @@ trait BuildsCandidateAssessmentPreview
             'picture' => $candidate->picture,
             'picture_url' => $pictureService->toDataUri($candidate->picture),
             'status' => $status,
-            'status_label' => $this->recruitmentStatusLabel($status),
+            'is_active' => $isActive,
+            'is_void' => !$isActive,
+            'status_label' => $isActive ? $this->recruitmentStatusLabel($status) : 'Void',
             'nilai_kecocokan' => $matchingScore,
             'ai_matching_reason' => $this->resolveMatchingReason($candidate),
             'posisi_dilamar' => $candidate->posisi_dilamar,

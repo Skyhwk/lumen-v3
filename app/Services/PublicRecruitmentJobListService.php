@@ -66,6 +66,9 @@ class PublicRecruitmentJobListService
         $rows = DB::table('new_recruitment')
             ->whereIn('personnel_request_id', $requestIds)
             ->where(function ($query) {
+                $query->where('is_active', true)->orWhereNull('is_active');
+            })
+            ->where(function ($query) {
                 $query->whereNull('status')
                     ->orWhere('status', '!=', 'rejected');
             })
