@@ -199,19 +199,90 @@ class PermintaanDokumentasiSamplingController extends Controller
         return response()->json(['message' => 'Anda tidak memiliki akses untuk reject permintaan'], 401);
     }
 
-    public function rerender(Request $request) // buat postman
+    public function search(Request $request)
     {
-        $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
+        $search = trim($request->input('q') ?? $request->input('no_document') ?? $request->input('id') ?? '');
+
+        if (!$search) {
+            return response()->json(['message' => 'Keyword pencarian harus diisi'], 400);
+        }
+
+        $data = PermintaanDokumentasiSampling::where('is_active', 1)
+            ->where(function ($q) use ($search) {
+                $q->where('no_document', 'LIKE', "%{$search}%")
+                  ->orWhere('no_quotation', 'LIKE', "%{$search}%")
+                  ->orWhere('no_order', 'LIKE', "%{$search}%")
+                  ->orWhere('nama_perusahaan', 'LIKE', "%{$search}%")
+                  ->orWhere('id', $search);
+            })
+            ->latest('id')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data
+        ], 200);
+    }
+
+    public function rerender(Request $request)
+    {
+        $id = $request->id;
+        $noDocument = $request->no_document;
+
+        $query = PermintaanDokumentasiSampling::query();
+        if ($id) {
+            $query->where('id', $id);
+        } elseif ($noDocument) {
+            $query->where('no_document', $noDocument);
+        } else {
+            return response()->json(['message' => 'ID atau No Document harus diisi'], 400);
+        }
+
+        $permintaanDokumentasiSampling = $query->first();
+
+        if (!$permintaanDokumentasiSampling) {
+            return response()->json(['message' => 'Data Permintaan Dokumentasi Sampling tidak ditemukan.'], 404);
+        }
+
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
             ->where('type_document', 'permintaan_dokumentasi_sampling')
             ->where('is_active', 1)
             ->first();
 
-        // $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
-        $service = new RenderPermintaanDokumentasiSampling();
-        $service->renderPdf($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode);
+        if (!$qr) {
+            $qr = new QrDocument();
+            $qr->id_document = $permintaanDokumentasiSampling->id;
+            $qr->type_document = 'permintaan_dokumentasi_sampling';
+            $qr->kode_qr = $this->generateQr($permintaanDokumentasiSampling->no_document);
+            $qr->file = str_replace("/", "_", $permintaanDokumentasiSampling->no_document);
 
-        return response()->json(['message' => 'Proses rerender telah dimulai'], 200);
+            $qr->data = json_encode([
+                'no_document' => $permintaanDokumentasiSampling->no_document,
+                'type_document' => 'permintaan_dokumentasi_sampling',
+                'no_quotation' => $permintaanDokumentasiSampling->no_quotation,
+                'no_order' => $permintaanDokumentasiSampling->no_order,
+                'periode' => $permintaanDokumentasiSampling->periode ? Carbon::parse($permintaanDokumentasiSampling->periode)->translatedFormat('F Y') : '-',
+                'nama_perusahaan' => $permintaanDokumentasiSampling->nama_perusahaan
+            ]);
+
+            $qr->created_by = $this->karyawan ?? 'system';
+            $qr->created_at = Carbon::now();
+            $qr->save();
+        }
+
+        $periode = $request->input('periode') ?: $permintaanDokumentasiSampling->periode;
+
+        $service = new RenderPermintaanDokumentasiSampling();
+        $service->renderPdf($permintaanDokumentasiSampling, $qr, $periode);
+
+        $permintaanDokumentasiSampling->refresh();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Proses re-render PDF berhasil dilakukan.',
+            'data' => $permintaanDokumentasiSampling
+        ], 200);
     }
 
     public function renderPdf(Request $request) // tangkep dari python
