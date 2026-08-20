@@ -22,6 +22,7 @@ class PersonnelRequest extends Model
         'grade_master_karyawan',
         'alasan_kebutuhan',
         'job_description',
+        'requirement',
         'pendidikan',
         'pengalaman_kerja',
         'usia_maksimum',
