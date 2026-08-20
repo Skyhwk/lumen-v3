@@ -16,7 +16,7 @@ class CreateCsTicketsTables extends Migration
             $schema->create('cs_tickets', function (Blueprint $table) {
                 $table->bigIncrements('id');
                 $table->char('ticket_no', 8)->unique();
-                $table->unsignedBigInteger('customer_id')->index();
+                $table->string('customer_id', 30)->index();
                 $table->string('customer_name', 255);
                 $table->unsignedBigInteger('created_by_user_id')->index();
                 $table->string('created_by_name', 255);

@@ -182,7 +182,7 @@ class CustomerServiceConversationService
             'message' => $item->message,
             'attachment' => $item->attachment,
             'attachment_url' => $item->attachment
-                ? 'cs-tickets/' . $item->attachment
+                ? self::ATTACHMENT_DIR . '/' . $item->attachment
                 : null,
             'created_at' => $item->created_at,
             'is_own' => $isOwn,
@@ -298,7 +298,7 @@ class CustomerServiceConversationService
             return null;
         }
 
-        $ext = strtolower($file->getClientOriginalExtension());
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->guessExtension() ?: '');
         if (!in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
             throw new \InvalidArgumentException('Format lampiran harus jpg, jpeg, png, gif, webp, atau pdf.');
         }
@@ -467,6 +467,7 @@ class CustomerServiceConversationService
                     'type' => 'customer_service',
                     'ticket_id' => $ticket->id,
                     'ticket_no' => $ticket->ticket_no,
+                    'conversation' => self::formatMessage($message, 'customer', (int) $ticket->created_by_user_id),
                 ])
                 ->send();
         } catch (\Throwable $exception) {
