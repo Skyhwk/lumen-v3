@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\ScaleScoringService;
 
 class CompleteProfileController extends Controller
 {
@@ -39,6 +41,7 @@ class CompleteProfileController extends Controller
             'skills' => $this->skills($recruitment),
             'documents' => $profile ? DB::table('candidate_documents')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->get() : [],
             'medical' => $profile ? DB::table('candidate_medical_informations')->where('candidate_profile_id', $profile->id)->where('is_active', 1)->first() : null,
+            'supporting_categories' => $this->supportingQuestionCategories(),
         ]);
     }
 
@@ -88,6 +91,9 @@ class CompleteProfileController extends Controller
                 'provinsi_domisili' => trim((string) $request->input('provinsi_domisili')) ?: null,
                 'kode_pos_domisili' => trim((string) $request->input('kode_pos_domisili')) ?: null,
                 'status_tempat_tinggal' => trim((string) $request->input('status_tempat_tinggal')) ?: null,
+                'jumlah_tanggungan' => is_numeric($request->input('jumlah_tanggungan'))
+                    ? (int) $request->input('jumlah_tanggungan')
+                    : null,
                 'nama_kontak_darurat' => trim((string) $request->input('nama_kontak_darurat')) ?: null,
                 'hubungan_kontak_darurat' => trim((string) $request->input('hubungan_kontak_darurat')) ?: null,
                 'no_telepon_darurat' => trim((string) $request->input('no_telepon_darurat')) ?: null,
@@ -103,6 +109,7 @@ class CompleteProfileController extends Controller
             $this->storeEducations($request->input('educations', []), $profileId, $recruitment->id, $now);
             $this->storeWorkExperiences($request->input('work_experiences', []), $profileId, $recruitment->id, $now);
             $this->storeDocuments($request->input('documents', []), $profileId, $recruitment->id, $now);
+            $this->storeSupportingAnswers($request->input('supporting_answers', []), $profileId, $recruitment->id, $now);
             (new RecruitmentStatusService())->update($recruitment->id, 'interview_user', $now);
 
             $personnelRequest = DB::table('personnel_requests')
@@ -190,11 +197,24 @@ class CompleteProfileController extends Controller
 
     private function validateInput(Request $request)
     {
-        $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat', 'nama_kontak_darurat_2', 'hubungan_kontak_darurat_2', 'no_telepon_darurat_2', 'tinggi_badan', 'berat_badan', 'mata'];
+        $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'jumlah_tanggungan', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat', 'nama_kontak_darurat_2', 'hubungan_kontak_darurat_2', 'no_telepon_darurat_2', 'tinggi_badan', 'berat_badan', 'mata'];
         $errors = [];
         foreach ($required as $field) {
+            if ($field === 'jumlah_tanggungan') {
+                if ($request->input('jumlah_tanggungan') === null || $request->input('jumlah_tanggungan') === '') {
+                    $errors[$field] = ['Field wajib diisi.'];
+                }
+                continue;
+            }
             if (trim((string) $request->input($field)) === '') {
                 $errors[$field] = ['Field wajib diisi.'];
+            }
+        }
+
+        if ($request->input('jumlah_tanggungan') !== null && $request->input('jumlah_tanggungan') !== '') {
+            $jumlahTanggungan = (int) $request->input('jumlah_tanggungan');
+            if ($jumlahTanggungan < 0 || $jumlahTanggungan > 8) {
+                $errors['jumlah_tanggungan'] = ['Jumlah tanggungan harus antara 0 sampai 8.'];
             }
         }
 
@@ -215,6 +235,11 @@ class CompleteProfileController extends Controller
         $documentErrors = $this->validateRequiredDocuments($request->input('documents', []));
         if (!empty($documentErrors)) {
             $errors = array_merge($errors, $documentErrors);
+        }
+
+        $supportingErrors = $this->validateSupportingAnswers($request->input('supporting_answers', []));
+        if (!empty($supportingErrors)) {
+            $errors = array_merge($errors, $supportingErrors);
         }
 
         return $errors;
@@ -374,6 +399,232 @@ class CompleteProfileController extends Controller
             $fileName = 'candidate-' . $recruitmentId . '-' . $safeType . '-' . time() . '-' . substr(md5($item['nama_file']), 0, 6) . '.' . $extension;
             file_put_contents($directory . DIRECTORY_SEPARATOR . $fileName, $binary);
             DB::table('candidate_documents')->insert(['candidate_profile_id' => $profileId, 'new_recruitment_id' => $recruitmentId, 'jenis_dokumen' => $item['jenis_dokumen'], 'nama_file' => $item['nama_file'] ?? $fileName, 'path_file' => 'recruitment/candidate-documents/' . $fileName, 'mime_type' => $matches[1], 'ukuran_file' => strlen($binary), 'catatan' => $item['catatan'] ?? null, 'created_at' => $now, 'updated_at' => $now]);
+        }
+    }
+
+    private function supportingQuestionCategories(): array
+    {
+        if (!Schema::hasTable('question_categories') || !Schema::hasTable('questions')) {
+            return [];
+        }
+
+        $categories = DB::table('question_categories')
+            ->where('is_active', 1)
+            ->where(function ($query) {
+                $query->whereRaw('UPPER(name) = ?', ['INFORMASI PENDUKUNG']);
+                if (Schema::hasColumn('question_categories', 'category_scope')) {
+                    $query->orWhere('category_scope', 'profile_support');
+                }
+            })
+            ->orderBy('name')
+            ->get();
+
+        return $categories->map(function ($category) {
+            $questions = DB::table('questions')
+                ->where('question_category_id', $category->id)
+                ->where('is_active', 1)
+                ->where('status', 'active')
+                ->where(function ($query) {
+                    $query->where('question_scope', 'hr')->orWhereNull('question_scope');
+                })
+                ->whereIn('question_type', ['single_choice', 'multiple_choice', 'scale'])
+                ->orderBy('id')
+                ->get()
+                ->map(function ($question) {
+                    return $this->mapSupportingQuestion($question);
+                })
+                ->values()
+                ->all();
+
+            return [
+                'id' => (int) $category->id,
+                'name' => $category->name,
+                'questions' => $questions,
+            ];
+        })->filter(function ($category) {
+            return !empty($category['questions']);
+        })->values()->all();
+    }
+
+    private function mapSupportingQuestion($question): array
+    {
+        $options = DB::table('question_options')
+            ->where('question_id', $question->id)
+            ->orderBy('option_order')
+            ->get()
+            ->map(function ($option) {
+                return [
+                    'id' => (string) $option->id,
+                    'text' => $option->option_text,
+                ];
+            })
+            ->values()
+            ->all();
+
+        if ($question->question_type === 'scale' && Schema::hasTable('scale_types')) {
+            $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
+            $options = $scale ? ScaleScoringService::buildScaleOptions($scale) : [];
+            $options = collect($options)->map(function ($option) {
+                return [
+                    'id' => (string) ($option['id'] ?? ''),
+                    'text' => (string) ($option['text'] ?? ''),
+                    'label' => (string) ($option['label'] ?? ''),
+                    'value' => $option['value'] ?? null,
+                ];
+            })->values()->all();
+        }
+
+        return [
+            'id' => (int) $question->id,
+            'question_category_id' => (int) $question->question_category_id,
+            'question_type' => $question->question_type,
+            'question_text' => $question->question_text,
+            'question_image' => json_decode($question->question_image ?: '[]', true) ?: [],
+            'options' => $options,
+        ];
+    }
+
+    private function flattenSupportingQuestions(): array
+    {
+        $items = [];
+        foreach ($this->supportingQuestionCategories() as $category) {
+            foreach ($category['questions'] as $question) {
+                $items[(string) $question['id']] = array_merge($question, [
+                    'category_id' => $category['id'],
+                    'category_name' => $category['name'],
+                ]);
+            }
+        }
+
+        return $items;
+    }
+
+    private function validateSupportingAnswers($answers): array
+    {
+        $questions = $this->flattenSupportingQuestions();
+        if (empty($questions)) {
+            return [];
+        }
+
+        $answers = is_array($answers) ? $answers : [];
+        $errors = [];
+
+        foreach ($questions as $questionId => $question) {
+            $rawAnswer = $answers[$questionId] ?? $answers[(int) $questionId] ?? null;
+            if (!$this->hasSupportingAnswerValue($rawAnswer)) {
+                $errors['supporting_answers.' . $questionId] = ['Pertanyaan wajib dijawab: ' . ($question['question_text'] ?? 'Soal')];
+                continue;
+            }
+
+            if (!$this->isValidSupportingAnswer($question, $rawAnswer)) {
+                $errors['supporting_answers.' . $questionId] = ['Jawaban tidak valid untuk pertanyaan: ' . ($question['question_text'] ?? 'Soal')];
+            }
+        }
+
+        return $errors;
+    }
+
+    private function hasSupportingAnswerValue($value): bool
+    {
+        if (is_array($value)) {
+            return count(array_filter($value, function ($item) {
+                return trim((string) $item) !== '';
+            })) > 0;
+        }
+
+        return trim((string) $value) !== '';
+    }
+
+    private function isValidSupportingAnswer(array $question, $rawAnswer): bool
+    {
+        $type = $question['question_type'] ?? 'single_choice';
+        $options = collect($question['options'] ?? []);
+        $allowedIds = $options->pluck('id')->map(function ($id) {
+            return (string) $id;
+        })->all();
+
+        if ($type === 'multiple_choice') {
+            $selected = array_map('strval', (array) $rawAnswer);
+            if (empty($selected)) {
+                return false;
+            }
+
+            foreach ($selected as $item) {
+                if (!in_array($item, $allowedIds, true)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        $selected = trim((string) $rawAnswer);
+        return $selected !== '' && in_array($selected, $allowedIds, true);
+    }
+
+    private function resolveSupportingAnswerLabel(array $question, $rawAnswer): string
+    {
+        $options = collect($question['options'] ?? [])->keyBy(function ($option) {
+            return (string) ($option['id'] ?? '');
+        });
+
+        if (($question['question_type'] ?? '') === 'multiple_choice') {
+            return collect((array) $rawAnswer)
+                ->map(function ($item) use ($options) {
+                    $option = $options->get((string) $item);
+                    return $option['text'] ?? (string) $item;
+                })
+                ->filter(function ($label) {
+                    return trim((string) $label) !== '';
+                })
+                ->implode(', ');
+        }
+
+        $option = $options->get((string) $rawAnswer);
+        return $option['text'] ?? trim((string) $rawAnswer);
+    }
+
+    private function storeSupportingAnswers($answers, $profileId, $recruitmentId, $now): void
+    {
+        if (!Schema::hasTable('candidate_supporting_info_answers')) {
+            return;
+        }
+
+        $questions = $this->flattenSupportingQuestions();
+        if (empty($questions)) {
+            return;
+        }
+
+        $answers = is_array($answers) ? $answers : [];
+
+        foreach ($questions as $questionId => $question) {
+            $rawAnswer = $answers[$questionId] ?? $answers[(int) $questionId] ?? null;
+            if (!$this->hasSupportingAnswerValue($rawAnswer)) {
+                continue;
+            }
+
+            $normalizedAnswer = ($question['question_type'] ?? '') === 'multiple_choice'
+                ? array_values(array_map('strval', (array) $rawAnswer))
+                : trim((string) $rawAnswer);
+
+            DB::table('candidate_supporting_info_answers')->insert([
+                'candidate_profile_id' => $profileId,
+                'new_recruitment_id' => $recruitmentId,
+                'question_category_id' => $question['category_id'] ?? $question['question_category_id'] ?? null,
+                'question_id' => (int) $questionId,
+                'category_name' => $question['category_name'] ?? null,
+                'question_text' => $question['question_text'] ?? null,
+                'question_type' => $question['question_type'] ?? null,
+                'answer_text' => $this->resolveSupportingAnswerLabel($question, $rawAnswer),
+                'answer_payload' => json_encode([
+                    'raw' => $normalizedAnswer,
+                    'question_type' => $question['question_type'] ?? null,
+                ]),
+                'is_active' => 1,
+                'created_by' => 'Candidate Profile Portal',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
     }
 
