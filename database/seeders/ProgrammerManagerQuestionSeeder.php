@@ -9,10 +9,15 @@ use Illuminate\Support\Facades\DB;
 /**
  * Seeder bank soal assessment user (manager scope) untuk posisi Programmer.
  *
- * 100 soal aktif per kategori:
+ * 100 soal aktif per kategori (Bahasa Indonesia, skenario kontekstual):
  * - DEV_ALGORITMA      : kompleksitas, struktur data, tracing kode
  * - DEV_DATABASE       : SQL, relasi, transaksi, indexing
  * - DEV_ENGINEERING    : Git, API, keamanan, best practice tim dev
+ *
+ * Setiap soal memiliki penjelasan dengan referensi jurnal/literatur, mis.:
+ * - JOCSTEC, JSIT, JRSIKOM, Journal Mediapublikasi (algoritma)
+ * - SIGARUDA Journal, CAI, Sitasi, arxiv (database)
+ * - OWASP, UGM Secure Coding thesis, SemVer, Fielding REST (engineering)
  *
  * Data soal:
  *   database/seeders/data/ProgrammerAlgorithmQuestions.php
