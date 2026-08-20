@@ -243,10 +243,19 @@ class PersonnelRequesthrdController extends Controller
     public function publish(Request $request)
     {
         $id = $request->input('id');
-        $divisiAlias = $request->input('divisi_alias');
+        $divisiAlias = trim((string) $request->input('divisi_alias', ''));
+        $requirement = trim((string) $request->input('requirement', ''));
 
         if (!$id) {
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
+        }
+
+        if ($divisiAlias === '') {
+            return response()->json(['message' => 'Division alias wajib diisi.'], 422);
+        }
+
+        if ($requirement === '' || strip_tags($requirement) === '') {
+            return response()->json(['message' => 'Requirement wajib diisi.'], 422);
         }
 
         $data = DB::table('personnel_requests')->where('id', $id)->first();
@@ -266,14 +275,13 @@ class PersonnelRequesthrdController extends Controller
         try {
             $updateData = [
                 'is_publish' => 1,
+                'divisi_alias' => $divisiAlias,
                 'published_at' => Carbon::now(),
                 'published_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
+                'divisi_alias' => $divisiAlias,
+                'requirement' => $requirement,
             ];
-
-            if ($divisiAlias !== null) {
-                $updateData['divisi_alias'] = $divisiAlias;
-            }
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
 
@@ -315,10 +323,14 @@ class PersonnelRequesthrdController extends Controller
 
         $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
             ->where('personnel_request_id', $id)
+            ->where('is_active',1)
             ->orderByDesc('created_at')
             ->get();
 
         $statusCounts = $candidates
+            ->filter(function ($candidate) {
+                return (int) ($candidate->is_active ?? 1) === 1;
+            })
             ->groupBy(function ($candidate) {
                 return strtolower((string) $candidate->status);
             })
@@ -326,6 +338,12 @@ class PersonnelRequesthrdController extends Controller
                 return $group->count();
             })
             ->toArray();
+
+        $voidCount = $candidates
+            ->filter(function ($candidate) {
+                return (int) ($candidate->is_active ?? 1) === 0;
+            })
+            ->count();
 
         $pictureService = app(RecruitmentPictureService::class);
 
@@ -343,6 +361,7 @@ class PersonnelRequesthrdController extends Controller
                     'divisi' => optional($personnelRequest->masterDivisi)->nama_divisi ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
                     'jumlah_personal' => (int) $personnelRequest->jumlah_personal,
                     'divisi_alias' => $personnelRequest->divisi_alias,
+                    'grade_master_karyawan' => $personnelRequest->grade_master_karyawan,
                     'minimum_matching' => $personnelRequest->minimum_matching,
                     'published_at' => $personnelRequest->published_at,
                     'published_by' => $personnelRequest->published_by,
@@ -359,9 +378,71 @@ class PersonnelRequesthrdController extends Controller
                     'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
                     'hired' => (int) ($statusCounts['hired'] ?? 0),
                     'rejected' => (int) ($statusCounts['rejected'] ?? 0),
+                    'void' => (int) $voidCount,
                 ],
                 'candidates' => $candidateItems,
             ],
         ], 200);
+    }
+
+    /**
+     * Void candidate application so the candidate can submit again.
+     */
+    public function voidCandidate(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID kandidat tidak ditemukan'], 400);
+        }
+
+        $candidate = NewRecruitment::query()->find($id);
+        if (!$candidate) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        if (strtoupper(trim((string) ($this->grade ?? ''))) !== 'MANAGER') {
+            return response()->json(['message' => 'Void kandidat hanya dapat dilakukan oleh user dengan grade MANAGER'], 403);
+        }
+
+        $status = strtolower(trim((string) ($candidate->status ?? '')));
+        if ((int) ($candidate->is_active ?? 1) === 0) {
+            return response()->json(['message' => 'Kandidat sudah divoid sebelumnya'], 422);
+        }
+
+        if ($status === 'hired') {
+            return response()->json(['message' => 'Kandidat yang sudah hired tidak dapat divoid'], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $history = json_decode($candidate->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $history[] = [
+                'status' => 'void',
+                'at' => Carbon::now()->toDateTimeString(),
+                'voided_by' => $this->karyawan,
+            ];
+
+            DB::table('new_recruitment')->where('id', $candidate->id)->update([
+                'is_active' => false,
+                'meta_history' => json_encode(array_values($history)),
+                'updated_at' => Carbon::now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Kandidat berhasil divoid. Kandidat dapat melakukan input/lamaran ulang.',
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal void kandidat: ' . $th->getMessage(),
+            ], 500);
+        }
     }
 }

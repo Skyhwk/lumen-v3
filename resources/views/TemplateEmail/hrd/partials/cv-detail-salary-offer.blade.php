@@ -90,8 +90,11 @@
         'Gender' => $data->jenis_kelamin ?? $data->gender ?? '-',
         'Email' => $data->email ?? '-',
         'Status Tempat Tinggal' => $profile->status_tempat_tinggal ?? '-',
-        'Kontak Darurat' => !empty($profile->nama_kontak_darurat)
+        'Kontak Darurat 1' => !empty($profile->nama_kontak_darurat)
             ? ($profile->nama_kontak_darurat . ' (' . ($profile->hubungan_kontak_darurat ?? 'Kontak') . ') - ' . ($profile->no_telepon_darurat ?? '-'))
+            : '-',
+        'Kontak Darurat 2' => !empty($profile->nama_kontak_darurat_2)
+            ? ($profile->nama_kontak_darurat_2 . ' (' . ($profile->hubungan_kontak_darurat_2 ?? 'Kontak') . ') - ' . ($profile->no_telepon_darurat_2 ?? '-'))
             : '-',
     ];
 @endphp

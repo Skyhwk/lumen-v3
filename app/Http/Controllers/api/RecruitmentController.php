@@ -317,7 +317,7 @@ class RecruitmentController extends Controller{
             // Satu kandidat hanya dapat mengikuti satu proses rekrutmen pada satu waktu,
             // walaupun lowongan yang dipilih berbeda.
             $existingApplications = DB::table('new_recruitment')
-                ->select(['id', 'status', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
+                ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
                 ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
                 ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
                 ->orderByDesc('id')
@@ -336,6 +336,10 @@ class RecruitmentController extends Controller{
             ];
 
             foreach ($existingApplications as $existingApplication) {
+                if ((int) ($existingApplication->is_active ?? 1) === 0) {
+                    continue;
+                }
+
                 $history = json_decode($existingApplication->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
                 $lastHistory = !empty($history) ? end($history) : [];
@@ -378,6 +382,18 @@ class RecruitmentController extends Controller{
 
             DB::beginTransaction();
 
+            $sumberInformasi = trim((string) $request->input('sumber_informasi'));
+            if ($sumberInformasi === 'Lainnya') {
+                $sumberInformasi = trim((string) $request->input('sumber_informasi_lainnya'));
+            }
+
+            if ($sumberInformasi === '') {
+                return response()->json([
+                    'message' => 'Sumber informasi lowongan wajib diisi.',
+                    'status' => false,
+                ], 422);
+            }
+
             $id = DB::table('new_recruitment')->insertGetId([
                 'nama_lengkap' => $namaLengkap,
                 'tempat_lahir' => $request->tempat_lahir,
@@ -389,6 +405,8 @@ class RecruitmentController extends Controller{
                 'email' => $email,
                 'pendidikan' => $json($request->pendidikan),
                 'pengalaman_kerja' => $json($request->pengalaman_kerja),
+                'referensi' => $json($request->referensi),
+                'sumber_informasi' => $sumberInformasi,
                 'skill' => $json($request->skill),
                 'shio' => $shioElemen['shio'] ?? null,
                 'elemen' => $shioElemen['elemen'] ?? null,
@@ -399,6 +417,7 @@ class RecruitmentController extends Controller{
                 'tanggal_join_tercepat' => $request->tanggal_join_tercepat,
                 'picture' => $pictureFilename,
                 'token' => $token,
+                'is_active' => true,
                 'created_at' => DATE('Y-m-d H:i:s'),
                 'updated_at' => DATE('Y-m-d H:i:s'),
             ]);
@@ -1398,9 +1417,11 @@ class RecruitmentController extends Controller{
                     'jumlah_personal',
                     'lokasi_penempatan_cabang',
                     'pengalaman_kerja',
+                    'pendidikan',
                     'gender',
                     'prioritas',
                     'divisi_alias',
+                    'grade_master_karyawan',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
@@ -1436,9 +1457,12 @@ class RecruitmentController extends Controller{
                     'jumlah_personal',
                     'lokasi_penempatan_cabang',
                     'pengalaman_kerja',
+                    'pendidikan',
                     'gender',
+                    'requirement',
                     'prioritas',
                     'divisi_alias',
+                    'grade_master_karyawan',
                     'personnel_requests.created_by',
                     'use_user_assessment',
                     'md.nama_divisi as divisi_name',

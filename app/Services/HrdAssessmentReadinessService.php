@@ -19,6 +19,7 @@ class HrdAssessmentReadinessService
             ->where(function ($query) {
                 $query->where('category_scope', 'hr')->orWhereNull('category_scope');
             })
+            ->whereRaw('UPPER(name) != ?', ['INFORMASI PENDUKUNG'])
             ->orderBy('name')
             ->get();
 

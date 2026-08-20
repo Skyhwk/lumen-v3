@@ -126,14 +126,15 @@ class LabelParameterController extends Controller
                 'margin_bottom' => 0,
                 'margin_footer' => 0,
             ]);
+            $type = $request->type ?? 'label';
+            $view = $type === 'qr' ? 'pdf.label_parameter_qr' : 'pdf.label_parameter';
 
-            $mpdf->WriteHTML(view('pdf.label_parameter', ['data' => $parameterDetail, 'selectedDate' => $request->selectedDate, 'selectedParameter' => $request->selectedParameter])->render());
+            $mpdf->WriteHTML(view($view, ['data' => $parameterDetail, 'selectedDate' => $request->selectedDate, 'selectedParameter' => $request->selectedParameter])->render());
 
-            // $filename = 'Label_Parameter_' . urlencode($request->selectedParameter) . '_' . $request->selectedDate . '.pdf';
             $parameter = preg_replace('/[^A-Za-z0-9\- ]/', '', $request->selectedParameter);
             $parameter = str_replace(' ', '_', $parameter);
 
-            $filename = 'Label_Parameter_' . $parameter . '_' . $request->selectedDate . '.pdf';
+            $filename = 'Label_Parameter_' . $parameter . '_' . $request->selectedDate . '_' . $type . '.pdf';
             $path = public_path('label_parameter');
 
             if (!file_exists($path)) mkdir($path, 0777, true);

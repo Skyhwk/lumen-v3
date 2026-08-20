@@ -12,21 +12,19 @@
     Dengan hormat, kami informasikan bahwa saat ini terdapat kandidat potensial yang telah melalui tahap seleksi awal dan dinyatakan memenuhi kriteria untuk dipertimbangkan dalam proses selanjutnya. Kami mohon persetujuan Bapak/Ibu Direktur atas kandidat berikut:
 </p>
 
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin:0 0 20px 0;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:linear-gradient(180deg,#eff6ff 0%,#f8fafc 100%);border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
     @foreach([
-        'Candidate Name' => $recruitment->nama_lengkap ?? '-',
-        'Email' => $recruitment->email ?? '-',
-        'Phone' => $recruitment->no_telepon ?? '-',
-        'Request No.' => $pr->no_request ?? '-',
-        'Division' => $pr->detailDivisi->nama_divisi ?? $pr->divisi ?? '-',
-        'Applied Position' => $pr->detailPosisi->nama_jabatan ?? $pr->posisi ?? '-',
-        'Branch' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
-        'Interview Type' => ucfirst($interview->jenis_interview ?? '-'),
-        'Interview Date' => !empty($interview->tgl_interview) ? \Carbon\Carbon::parse($interview->tgl_interview)->locale('id')->isoFormat('D MMMM YYYY') : '-',
+        'Nama Kandidat' => $candidateInfo->nama_lengkap ?? '-',
+        'Shio' => $candidateInfo->shio ?? '-',
+        'Elemen' => $candidateInfo->elemen ?? '-',
+        'Posisi yang Dilamar' => $candidateInfo->nama_jabatan ?? '-',
+        'Usia' => $candidateInfo->umur ?? '-',
+        'Alamat' => $candidateInfo->alamat ?? '-',
+        'Kontak' => $contact ?? '-',
     ] as $label => $value)
         <tr>
-            <td class="info-label" style="padding:10px 16px;width:40%;font-size:13px;color:#64748b;{{ $loop->first ? '' : 'border-top:1px solid #e2e8f0;' }}vertical-align:top;">{{ $label }}</td>
-            <td style="padding:10px 16px;font-size:13px;color:#0f172a;font-weight:600;{{ $loop->first ? '' : 'border-top:1px solid #e2e8f0;' }}vertical-align:top;">{{ $value }}</td>
+            <td style="padding:12px 18px;width:38%;font-size:13px;color:#64748b;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $label }}</td>
+            <td style="padding:12px 18px;font-size:14px;color:#0f172a;font-weight:600;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $value }}</td>
         </tr>
     @endforeach
 </table>
