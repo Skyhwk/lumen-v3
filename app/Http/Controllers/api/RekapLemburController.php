@@ -11,7 +11,8 @@ use Mpdf;
 use DataTables;
 use Carbon\Carbon;
 
-use App\Models\FormDetail;
+use App\Models\OvertimeRequest;
+use App\Models\OvertimeRequestMembers;
 use App\Models\MasterDivisi;
 use App\Models\MasterKaryawan;
 
@@ -24,12 +25,13 @@ class RekapLemburController extends Controller
 {
     public function index()
     {
-        $rekap = FormDetail::on('intilab_apps')
-            ->select('tanggal_mulai as tanggal', DB::raw('count(user_id) as jumlah'))
-            ->whereNotNull('approved_finance_by')
-            ->where('is_active', true)
-            ->groupBy('tanggal_mulai')
-            ->orderByDesc('tanggal_mulai');
+        $rekap = OvertimeRequest::on('intilab_apps')
+            ->leftJoin('intilab_apps.overtime_request_members as m', 'm.no_document', '=', 'overtime_requests.no_document')
+            ->select('overtime_requests.start_date as tanggal', DB::raw('COUNT(m.employee_id) as jumlah'))
+            ->whereNotNull('overtime_requests.approved_finance_by')
+            ->where('overtime_requests.is_active', true)
+            ->groupBy('overtime_requests.start_date')
+            ->orderByDesc('overtime_requests.start_date');
 
         return DataTables::of($rekap)->make(true);
     }
@@ -40,21 +42,28 @@ class RekapLemburController extends Controller
 
         $rekap = [];
         foreach ($divisi as $item) {
-            $detail = FormDetail::on('intilab_apps')
-                ->where('department_id', $item->id)
-                ->where('tanggal_mulai', $date)
-                ->whereNotNull('approved_finance_by')
-                ->where('is_active', true)
+            $detail = OvertimeRequestMembers::on('intilab_apps')
+                ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
+                ->where('h.department_id', $item->id)
+                ->where('h.start_date', $date)
+                ->whereNotNull('h.approved_finance_by')
+                ->where('h.is_active', true)
+                ->select(
+                    'overtime_request_members.employee_id',
+                    'h.start_time as jam_mulai',
+                    'h.end_time as jam_selesai',
+                    'h.description as keterangan'
+                )
                 ->get();
 
             if ($detail->isNotEmpty()) {
-                $karyawan = MasterKaryawan::whereIn('id', $detail->pluck('user_id')->unique()->toArray())->get();
+                $karyawan = MasterKaryawan::whereIn('id', $detail->pluck('employee_id')->unique()->toArray())->get();
 
-                $detail->map(function ($item) use ($karyawan) {
-                    $item->karyawan = $karyawan->where('id', $item->user_id)->first();
+                $detail->map(function ($row) use ($karyawan) {
+                    $row->karyawan = $karyawan->where('id', $row->employee_id)->first();
                 });
 
-                $detail = $detail->sortBy(fn($item) => $item->karyawan->nama_lengkap ?? '')->values();
+                $detail = $detail->sortBy(fn($row) => $row->karyawan->nama_lengkap ?? '')->values();
 
                 $rekap[] = [
                     'kode_divisi' => $item->kode_divisi,
@@ -192,7 +201,9 @@ class RekapLemburController extends Controller
         $filename = 'Rekap_Lembur_' . $request->tanggal . '.pdf';
         $path = public_path('rekap_lembur');
 
-        if (!file_exists($path)) mkdir($path, 0777, true);
+        if (!is_dir($path)) {
+            @mkdir($path, 0777, true);
+        }
 
         $mpdf->Output($path . '/' . $filename, \Mpdf\Output\Destination::FILE);
 
