@@ -1415,6 +1415,7 @@ class RecruitmentController extends Controller{
                     'gender',
                     'prioritas',
                     'divisi_alias',
+                    'grade_master_karyawan',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
