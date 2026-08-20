@@ -24,7 +24,7 @@ use App\Models\MasterKategori;
 use App\Models\Parameter;
 use App\Models\OrderDetail;
 
-class LembarKerjaController extends Controller
+class AppsLembarKerjaController extends Controller
 {
     /**
      * Get list of created Workspaces
