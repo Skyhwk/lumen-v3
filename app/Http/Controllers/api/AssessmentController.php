@@ -180,7 +180,14 @@ class AssessmentController extends Controller
                     $pendingSessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->get();
                     $userConfig = $this->userAssessmentConfig($recruitment);
 
+                    $hasDeletedInformasiPendukung = false;
                     foreach ($pendingSessions as $session) {
+                        if (strtoupper(trim((string) $session->category_name)) === 'INFORMASI PENDUKUNG') {
+                            DB::table('assessment_sessions')->where('id', $session->id)->delete();
+                            $hasDeletedInformasiPendukung = true;
+                            continue;
+                        }
+
                         if (($session->category_name ?? '') === 'Assessment User') {
                             if (!$userConfig) {
                                 DB::table('assessment_sessions')->where('id', $session->id)->delete();
@@ -211,6 +218,22 @@ class AssessmentController extends Controller
                                 'questions_json' => json_encode($items),
                                 'updated_at' => Carbon::now()
                             ]);
+                        }
+                    }
+
+                    if ($hasDeletedInformasiPendukung) {
+                        $remainingSessions = DB::table('assessment_sessions')
+                            ->where('assessment_attempt_id', $attempt->id)
+                            ->orderBy('session_order')
+                            ->get();
+
+                        foreach ($remainingSessions as $index => $s) {
+                            if ((int) $s->session_order !== ($index + 1)) {
+                                DB::table('assessment_sessions')->where('id', $s->id)->update([
+                                    'session_order' => $index + 1,
+                                    'updated_at' => Carbon::now(),
+                                ]);
+                            }
                         }
                     }
 
@@ -387,9 +410,16 @@ class AssessmentController extends Controller
         $selectedIds = DB::table('assessment_sessions')->where('assessment_attempt_id', $attemptId)->pluck('questions_json')->flatMap(function ($questions) {
             return collect(json_decode($questions ?: '[]', true) ?: [])->pluck('id');
         })->filter()->unique()->values()->all();
+        $excludedCategoryIds = DB::table('question_categories')
+            ->whereRaw('UPPER(name) = ?', ['INFORMASI PENDUKUNG'])
+            ->pluck('id')
+            ->all();
         $query = DB::table('questions')->where('is_active', 1)->whereIn('question_type', ['single_choice', 'multiple_choice']);
         if (!empty($selectedIds)) {
             $query->whereNotIn('id', $selectedIds);
+        }
+        if (!empty($excludedCategoryIds)) {
+            $query->whereNotIn('question_category_id', $excludedCategoryIds);
         }
         return $query->inRandomOrder()->limit($limit)->get()->map(function ($question, $index) {
             return ['id' => $question->id, 'order' => $index + 1, 'type' => $question->question_type, 'text' => $question->question_text, 'image' => json_decode($question->question_image ?: '[]', true) ?: [], 'options' => DB::table('question_options')->where('question_id', $question->id)->orderBy('option_order')->get(['id', 'option_text'])->map(function ($option) { return ['id' => (string) $option->id, 'text' => $option->option_text]; })->all()];
@@ -404,6 +434,7 @@ class AssessmentController extends Controller
             ->where(function ($query) {
                 $query->where('category_scope', 'hr')->orWhereNull('category_scope');
             })
+            ->whereRaw('UPPER(name) != ?', ['INFORMASI PENDUKUNG'])
             ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
             ->orderBy('id');
     }

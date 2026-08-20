@@ -62,7 +62,7 @@ class CompleteProfileController extends Controller
                 return response()->json(['message' => 'Data kelengkapan profil sudah pernah dikirim.'], 409);
             }
 
-            $errors = $this->validateInput($request);
+            $errors = $this->validateInput($request, $recruitment);
             if ($errors) {
                 return response()->json(['message' => 'Mohon lengkapi data yang wajib diisi.', 'errors' => $errors], 422);
             }
@@ -100,14 +100,15 @@ class CompleteProfileController extends Controller
                 'nama_kontak_darurat_2' => trim((string) $request->input('nama_kontak_darurat_2')) ?: null,
                 'hubungan_kontak_darurat_2' => trim((string) $request->input('hubungan_kontak_darurat_2')) ?: null,
                 'no_telepon_darurat_2' => trim((string) $request->input('no_telepon_darurat_2')) ?: null,
+                'is_agreed' => $request->input('agreement') ? 1 : 0,
                 'created_by' => 'Candidate Profile Portal',
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
 
             $this->storeMedicalInformation($request, $profileId, $recruitment->id, $now);
-            $this->storeEducations($request->input('educations', []), $profileId, $recruitment->id, $now);
-            $this->storeWorkExperiences($request->input('work_experiences', []), $profileId, $recruitment->id, $now);
+            $this->storeEducations($request->input('educations', []), $profileId, $recruitment->id, $now, $recruitment);
+            $this->storeWorkExperiences($request->input('work_experiences', []), $profileId, $recruitment->id, $now, $recruitment);
             $this->storeDocuments($request->input('documents', []), $profileId, $recruitment->id, $now);
             $this->storeSupportingAnswers($request->input('supporting_answers', []), $profileId, $recruitment->id, $now);
             (new RecruitmentStatusService())->update($recruitment->id, 'interview_user', $now);
@@ -228,7 +229,11 @@ class CompleteProfileController extends Controller
         if ($request->input('jenis_kelamin') && !in_array($request->input('jenis_kelamin'), ['Male', 'Female'], true)) {
             $errors['jenis_kelamin'] = ['Jenis kelamin tidak valid.'];
         }
-        if (empty($request->input('educations', []))) {
+        $educations = $request->input('educations', []);
+        if (empty($educations) && $recruitment) {
+            $educations = $this->educations($recruitment);
+        }
+        if (empty($educations)) {
             $errors['educations'] = ['Minimal satu riwayat pendidikan wajib diisi.'];
         }
 
@@ -240,6 +245,10 @@ class CompleteProfileController extends Controller
         $supportingErrors = $this->validateSupportingAnswers($request->input('supporting_answers', []));
         if (!empty($supportingErrors)) {
             $errors = array_merge($errors, $supportingErrors);
+        }
+
+        if (!$request->input('agreement')) {
+            $errors['agreement'] = ['Persetujuan pernyataan wajib dicheklist.'];
         }
 
         return $errors;
@@ -304,6 +313,11 @@ class CompleteProfileController extends Controller
 
     private function baseData(Request $request, $recruitment)
     {
+        $skills = $request->input('skills', []);
+        if (empty($skills) && $recruitment) {
+            $skills = $this->skills($recruitment);
+        }
+
         return [
             'nama_lengkap' => trim((string) $request->input('nama_lengkap')),
             'tempat_lahir' => trim((string) $request->input('tempat_lahir')),
@@ -313,7 +327,7 @@ class CompleteProfileController extends Controller
             'email' => strtolower(trim((string) $request->input('email'))),
             'alamat_ktp' => trim((string) $request->input('alamat_ktp')),
             'alamat_domisili' => trim((string) $request->input('alamat_domisili')),
-            'skill' => json_encode(collect((array) $request->input('skills', []))->map(function ($item) {
+            'skill' => json_encode(collect((array) $skills)->map(function ($item) {
                 return [
                     'keahlian' => trim((string) ($item['keahlian'] ?? '')),
                     'rate' => isset($item['rate']) && $item['rate'] !== '' ? max(1, min(10, (int) $item['rate'])) : null,
@@ -322,8 +336,12 @@ class CompleteProfileController extends Controller
         ];
     }
 
-    private function storeEducations($items, $profileId, $recruitmentId, $now)
+    private function storeEducations($items, $profileId, $recruitmentId, $now, $recruitment = null)
     {
+        if (empty($items) && $recruitment) {
+            $items = $this->educations($recruitment);
+        }
+
         foreach ((array) $items as $item) {
             if (empty($item['jenjang_pendidikan']) || empty($item['nama_institusi'])) {
                 continue;
@@ -343,8 +361,12 @@ class CompleteProfileController extends Controller
         }
     }
 
-    private function storeWorkExperiences($items, $profileId, $recruitmentId, $now)
+    private function storeWorkExperiences($items, $profileId, $recruitmentId, $now, $recruitment = null)
     {
+        if (empty($items) && $recruitment) {
+            $items = $this->workExperiences($recruitment);
+        }
+
         foreach ((array) $items as $item) {
             if (!is_array($item)) {
                 continue;
