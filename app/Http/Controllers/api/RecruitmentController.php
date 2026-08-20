@@ -1454,6 +1454,7 @@ class RecruitmentController extends Controller{
                     'gender',
                     'prioritas',
                     'divisi_alias',
+                    'grade_master_karyawan',
                     'personnel_requests.created_by',
                     'use_user_assessment',
                     'md.nama_divisi as divisi_name',
