@@ -42,14 +42,16 @@ class PublicRecruitmentJobListService
 
     private function positionGroupKey(object $job): string
     {
-        $divisi = trim((string) ($job->divisi ?? ''));
-        if ($divisi !== '') {
-            return 'divisi:' . $divisi;
+        $grade = mb_strtolower(trim((string) ($job->grade_master_karyawan ?? '')));
+        $alias = mb_strtolower(trim((string) ($job->divisi_alias ?? '')));
+
+        if ($alias !== '') {
+            return 'alias:' . $alias . ':grade:' . $grade;
         }
 
-        $alias = trim((string) ($job->divisi_alias ?? ''));
+        $divisi = trim((string) ($job->divisi ?? ''));
 
-        return 'alias:' . mb_strtolower($alias);
+        return 'divisi:' . $divisi . ':grade:' . $grade;
     }
 
     /**
