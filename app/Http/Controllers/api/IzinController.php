@@ -2,228 +2,262 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lemburan;
-use App\Models\{FormHeader, FormDetail};
-use App\Models\Rfid;
-use App\Models\MasterDivisi;
-use App\Models\MasterJabatan;
-use App\Models\MasterKaryawan;
+use App\Models\PermissionRequest;
+use App\Models\LeaveRequest;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Yajra\Datatables\Datatables;
-
-
 
 class IzinController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
-        $data = FormHeader::on('android_intilab')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_karyawan as k', 'fd.delegasi', '=', 'k.user_id')
+        $permissions = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                DB::raw("CONCAT('PR-', pr.id) as id"),
+                'pr.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-            WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED ATASAN" 
-            WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-            WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-            WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED ATASAN" 
-            WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-            WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+            WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD" 
+            WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN" 
+            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD" 
             ELSE "WAITING" 
         END as status'),
-                'form_header.type_document',
-                'fd.tanggal_mulai',
-                'fd.tanggal_selesai',
-                'fd.jam_mulai',
-                'fd.jam_selesai',
-                'fd.keterangan',
-                'fd.approved_atasan_by',
-                'fd.approved_atasan_at',
-                'fd.approved_hrd_by',
-                'fd.approved_hrd_at',
-                'fd.rejected_atasan_by',
-                'fd.rejected_atasan_at',
-                'fd.rejected_hrd_by',
-                'fd.rejected_hrd_at',
-                'form_header.created_by as nama_pengaju',
-                'fd.filename',
-                'k.nama_lengkap as nama_delegasi',
-                'form_header.created_at as diajukan_pada'
+                DB::raw('CASE 
+            WHEN pr.type = "Event Leave" THEN "kegiatan" 
+            WHEN pr.type = "Sick Leave" THEN "sakit" 
+            WHEN pr.type = "Late Arrival" THEN "datang_terlambat" 
+            ELSE pr.type 
+        END as type_document'),
+                'pr.start_date as tanggal_mulai',
+                'pr.end_date as tanggal_selesai',
+                'pr.start_time as jam_mulai',
+                'pr.end_time as jam_selesai',
+                'pr.description as keterangan',
+                'pr.approved_atasan_by',
+                'pr.approved_atasan_at',
+                'pr.approved_hrd_by',
+                'pr.approved_hrd_at',
+                'pr.rejected_atasan_by',
+                'pr.rejected_atasan_at',
+                'pr.rejected_hrd_by',
+                'pr.rejected_hrd_at',
+                'pr.created_by as nama_pengaju',
+                'pr.attachment as filename',
+                DB::raw('NULL as nama_delegasi'),
+                'pr.created_at as diajukan_pada'
             )
-            ->whereNotIn('form_header.type_document', ['Lembur'])
-            ->whereNull('fd.rejected_atasan_by')
-            ->whereNull('fd.rejected_hrd_by')
-            ->where('status', 'APPROVE ATASAN')
-            ->where('fd.atasan_langsung', 'NOT LIKE', '%"1"%')
-            ->whereNotNull('fd.approved_atasan_by')
-            ->whereNotNull('fd.approved_atasan_at')
-            ->whereYear('form_header.created_at', $request->periode)
-            ->get();
+            ->whereNull('pr.rejected_atasan_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->where('pr.status', 'Approved Atasan')
+            ->where(function ($query) {
+                 $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                       ->orWhereNull('u.atasan_langsung');
+            })
+            ->whereNotNull('pr.approved_atasan_by')
+            ->whereNotNull('pr.approved_atasan_at')
+            ->whereYear('pr.created_at', $request->periode);
+
+        $leaves = LeaveRequest::query()->toBase()
+            ->from('intilab_apps.leave_requests as lr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->select(
+                DB::raw("CONCAT('LR-', lr.id) as id"),
+                'lr.no_document',
+                'd.nama_divisi',
+                DB::raw('CASE 
+            WHEN lr.status = "Approved Atasan" THEN "APPROVED ATASAN" 
+            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD" 
+            WHEN lr.status = "Rejected Atasan" THEN "REJECTED ATASAN" 
+            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD" 
+            ELSE "WAITING" 
+        END as status'),
+                DB::raw('CASE 
+            WHEN lr.type = "Annual Leave" THEN "cuti" 
+            WHEN lr.type = "Special Leave" THEN "cuti_khusus" 
+            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave" 
+            ELSE lr.type 
+        END as type_document'),
+                'lr.start_date as tanggal_mulai',
+                'lr.end_date as tanggal_selesai',
+                DB::raw('NULL as jam_mulai'),
+                DB::raw('NULL as jam_selesai'),
+                'lr.description as keterangan',
+                'lr.approved_atasan_by',
+                'lr.approved_atasan_at',
+                'lr.approved_hrd_by',
+                'lr.approved_hrd_at',
+                'lr.rejected_atasan_by',
+                'lr.rejected_atasan_at',
+                'lr.rejected_hrd_by',
+                'lr.rejected_hrd_at',
+                'lr.created_by as nama_pengaju',
+                'lr.attachment as filename',
+                DB::raw('NULL as nama_delegasi'),
+                'lr.created_at as diajukan_pada'
+            )
+            ->whereNull('lr.rejected_atasan_by')
+            ->whereNull('lr.rejected_hrd_by')
+            ->where('lr.status', 'Approved Atasan')
+            ->where(function ($query) {
+                 $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                       ->orWhereNull('u.atasan_langsung');
+            })
+            ->whereNotNull('lr.approved_atasan_by')
+            ->whereNotNull('lr.approved_atasan_at')
+            ->whereYear('lr.created_at', $request->periode);
+
+        $data = $permissions->unionAll($leaves)->get();
 
         return Datatables::of($data)->make(true);
-
-
     }
-
 
     public function indexProcessed(Request $request)
     {
-
-         $data = FormHeader::on('android_intilab')
-            ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_karyawan as k', 'fd.delegasi', '=', 'k.user_id')
+         $permissions = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
-                'form_header.id',
-                'form_header.no_document',
+                DB::raw("CONCAT('PR-', pr.id) as id"),
+                'pr.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-            WHEN form_header.status = "APPROVE ATASAN" THEN "APPROVED" 
-            WHEN form_header.status = "APPROVE HRD" THEN "APPROVED HRD" 
-            WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED FINANCE" 
-            WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
-            WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
-            WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+            WHEN pr.status = "Approved Atasan" THEN "APPROVED" 
+            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD" 
+            WHEN pr.status = "Rejected Atasan" THEN "REJECTED" 
+            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD" 
             ELSE "WAITING" 
         END as status'),
-                'form_header.type_document',
-                'fd.tanggal_mulai',
-                'fd.tanggal_selesai',
-                'fd.jam_mulai',
-                'fd.jam_selesai',
-                'fd.keterangan',
-                'fd.approved_atasan_by',
-                'fd.approved_atasan_at',
-                'fd.approved_hrd_by',
-                'fd.approved_hrd_at',
-                'fd.rejected_atasan_by',
-                'fd.rejected_atasan_at',
-                'fd.rejected_hrd_by',
-                'fd.rejected_hrd_at',
-                'form_header.created_by as nama_pengaju',
-                'fd.filename',
-                'k.nama_lengkap as nama_delegasi',
-                'form_header.created_at as diajukan_pada'
+                DB::raw('CASE 
+            WHEN pr.type = "Event Leave" THEN "kegiatan" 
+            WHEN pr.type = "Sick Leave" THEN "sakit" 
+            WHEN pr.type = "Late Arrival" THEN "datang_terlambat" 
+            ELSE pr.type 
+        END as type_document'),
+                'pr.start_date as tanggal_mulai',
+                'pr.end_date as tanggal_selesai',
+                'pr.start_time as jam_mulai',
+                'pr.end_time as jam_selesai',
+                'pr.description as keterangan',
+                'pr.approved_atasan_by',
+                'pr.approved_atasan_at',
+                'pr.approved_hrd_by',
+                'pr.approved_hrd_at',
+                'pr.rejected_atasan_by',
+                'pr.rejected_atasan_at',
+                'pr.rejected_hrd_by',
+                'pr.rejected_hrd_at',
+                'pr.created_by as nama_pengaju',
+                'pr.attachment as filename',
+                DB::raw('NULL as nama_delegasi'),
+                'pr.created_at as diajukan_pada'
             )
-            ->whereNotIn('form_header.type_document', ['Lembur'])
-            ->whereNotNull('fd.approved_hrd_by')
-            ->whereNotNull('fd.approved_hrd_at')
-            ->whereNull('fd.rejected_atasan_by')
-            ->whereNull('fd.rejected_hrd_by')
-            ->whereYear('form_header.created_at', $request->periode)
-            ->where(function ($query) {
-                $query->where(function ($q) {
-                    $q->where('fd.atasan_langsung', 'LIKE', '%"1"%')
-                        ->whereNotNull('fd.approved_atasan_by');
-                })->orWhere(function ($q) {
-                    $q->where('fd.atasan_langsung', 'NOT LIKE', '%"1"%')
-                        ->whereNotNull('fd.approved_atasan_by');
-                });
-            })
-            ->get();
+            ->whereNotNull('pr.approved_hrd_by')
+            ->whereNotNull('pr.approved_hrd_at')
+            ->whereNull('pr.rejected_atasan_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->whereYear('pr.created_at', $request->periode)
+            ->whereNotNull('pr.approved_atasan_by');
+
+        $leaves = LeaveRequest::query()->toBase()
+            ->from('intilab_apps.leave_requests as lr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->select(
+                DB::raw("CONCAT('LR-', lr.id) as id"),
+                'lr.no_document',
+                'd.nama_divisi',
+                DB::raw('CASE 
+            WHEN lr.status = "Approved Atasan" THEN "APPROVED" 
+            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD" 
+            WHEN lr.status = "Rejected Atasan" THEN "REJECTED" 
+            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD" 
+            ELSE "WAITING" 
+        END as status'),
+                DB::raw('CASE 
+            WHEN lr.type = "Annual Leave" THEN "cuti" 
+            WHEN lr.type = "Special Leave" THEN "cuti_khusus" 
+            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave" 
+            ELSE lr.type 
+        END as type_document'),
+                'lr.start_date as tanggal_mulai',
+                'lr.end_date as tanggal_selesai',
+                DB::raw('NULL as jam_mulai'),
+                DB::raw('NULL as jam_selesai'),
+                'lr.description as keterangan',
+                'lr.approved_atasan_by',
+                'lr.approved_atasan_at',
+                'lr.approved_hrd_by',
+                'lr.approved_hrd_at',
+                'lr.rejected_atasan_by',
+                'lr.rejected_atasan_at',
+                'lr.rejected_hrd_by',
+                'lr.rejected_hrd_at',
+                'lr.created_by as nama_pengaju',
+                'lr.attachment as filename',
+                DB::raw('NULL as nama_delegasi'),
+                'lr.created_at as diajukan_pada'
+            )
+            ->whereNotNull('lr.approved_hrd_by')
+            ->whereNotNull('lr.approved_hrd_at')
+            ->whereNull('lr.rejected_atasan_by')
+            ->whereNull('lr.rejected_hrd_by')
+            ->whereYear('lr.created_at', $request->periode)
+            ->whereNotNull('lr.approved_atasan_by');
+
+        $data = $permissions->unionAll($leaves)->get();
 
         return Datatables::of($data)->make(true);
-
     }
-
-    // public function getKaryawanLembur(Request $request)
-    // {
-    //     try {
-    //         $users = FormDetail::leftJoin('master_karyawan as u', 'form_detail.user_id', '=', 'u.id')
-    //             ->select([
-    //                 'form_detail.user_id',
-    //                 'u.nama_lengkap',
-    //             ])
-    //             ->where('form_detail.no_document', $request->no_document)
-    //             ->where('u.nama_lengkap', 'LIKE', '%' . $request->search . '%')
-    //             ->whereNull('form_detail.rejected_atasan_by')
-    //             ->whereNull('form_detail.approved_hrd_by')
-    //             ->limit(10)
-    //             ->get();
-
-    //         return response()->json([
-    //             'results' => $users,
-    //             'pagination' => [
-    //                 'more' => false
-    //             ]
-    //         ]);
-    //     } catch (Exception $e) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Error: ' . $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
 
     public function approveIzin(Request $request)
     {
         DB::beginTransaction();
         try {
-
-            $formHeader = FormHeader::on('android_intilab')->where('id', $request->id)->first();
-
-            if (!$formHeader) {
+            $idStr = $request->id;
+            
+            if (strpos($idStr, 'PR-') === 0) {
+                $id = substr($idStr, 3);
+                $model = PermissionRequest::find($id);
+            } else if (strpos($idStr, 'LR-') === 0) {
+                $id = substr($idStr, 3);
+                $model = LeaveRequest::find($id);
+            } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Form Izin tidak ditemukan'
+                    'message' => 'Format ID tidak valid'
+                ], 400);
+            }
+
+            if (!$model) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Form tidak ditemukan'
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('android_intilab')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
-
-            $formHeader->status = 'APPROVE HRD';
-            $formHeader->save();
-
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
-                $formDetail->approved_hrd_by = $this->karyawan;
-                $formDetail->approved_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->save();
-            }
-
+            $model->update([
+                'status' => 'Approved HRD',
+                'approved_hrd_by' => $this->karyawan,
+                'approved_hrd_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'updated_by' => $this->karyawan,
+                'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
+            ]);
             DB::commit();
             return response()->json([
                 'success' => true,
-                'message' => 'Form Izin berhasil disetujui'
+                'message' => 'Form berhasil disetujui'
             ], 200);
 
-
-
-            // DB::connection(env('ANDROID'))
-            //     ->table('form_detail as fd')
-            //     ->where('fd.no_document', $request->nodoc)
-            //     ->update([
-            //         'approved_hrd_by' => DB::raw('CASE WHEN user_id IN (' . implode(',', $request->user_id) . ') THEN "' . $this->name . '" ELSE NULL END'),
-            //         'approved_hrd_at' => DB::raw('CASE WHEN user_id IN (' . implode(',', $request->user_id) . ') THEN "' . $this->globaldate . '" ELSE NULL END'),
-            //         'rejected_hrd_by' => DB::raw('CASE WHEN user_id NOT IN (' . implode(',', $request->user_id) . ') THEN "' . $this->name . '" ELSE NULL END'),
-            //         'rejected_hrd_at' => DB::raw('CASE WHEN user_id NOT IN (' . implode(',', $request->user_id) . ') THEN "' . $this->globaldate . '" ELSE NULL END'),
-            //         'keterangan_reject' => DB::raw('CASE WHEN user_id NOT IN (' . implode(',', $request->user_id) . ') THEN "' . ($request->has('keterangan') ? $request->keterangan : NULL) . '" ELSE NULL END'),
-            //         'updated_by' => $this->name,
-            //         'updated_at' => date('Y-m-d H:i:s'),
-            //     ]);
-
-            // DB::connection(env('ANDROID'))
-            //     ->table('form_header as fh')
-            //     ->where('fh.no_document', $request->nodoc)
-            //     ->update([
-            //         'status' => 'APPROVE HRD',
-            //         'updated_by' => $this->name,
-            //         'updated_at' => date('Y-m-d H:i:s'),
-            //     ]);
-
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'success' => false,
@@ -237,60 +271,44 @@ class IzinController extends Controller
     {
         DB::beginTransaction();
         try {
-
-            $formHeader = FormHeader::on('android_intilab')->where('id', $request->id)->first();
-
-            if (!$formHeader) {
+            $idStr = $request->id;
+            
+            if (strpos($idStr, 'PR-') === 0) {
+                $id = substr($idStr, 3);
+                $model = PermissionRequest::find($id);
+            } else if (strpos($idStr, 'LR-') === 0) {
+                $id = substr($idStr, 3);
+                $model = LeaveRequest::find($id);
+            } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Form Izin tidak ditemukan'
+                    'message' => 'Format ID tidak valid'
+                ], 400);
+            }
+
+            if (!$model) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Form tidak ditemukan'
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on('android_intilab')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
-
-            $formHeader->status = 'REJECT HRD';
-            $formHeader->save();
-
-            foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
-                $formDetail->rejected_hrd_by = $this->karyawan;
-                $formDetail->rejected_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
-                $formDetail->keterangan_reject = $request->keterangan;
-                $formDetail->save();
-            }
+            $model->update([
+                'status' => 'Rejected HRD',
+                'rejected_hrd_by' => $this->karyawan,
+                'rejected_hrd_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'reject_hrd_reason' => $request->keterangan,
+                'updated_by' => $this->karyawan,
+                'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
+            ]);
 
             DB::commit();
             return response()->json([
                 'success' => true,
-                'message' => 'Form Izin berhasil ditolak'
+                'message' => 'Form berhasil ditolak'
             ], 200);
 
-
-
-            // DB::connection(env('ANDROID'))
-            //     ->table('form_detail as fd')
-            //     ->where('fd.no_document', $request->nodoc)
-            //     ->update([
-            //         'approved_hrd_by' => DB::raw('CASE WHEN user_id IN (' . implode(',', $request->user_id) . ') THEN "' . $this->name . '" ELSE NULL END'),
-            //         'approved_hrd_at' => DB::raw('CASE WHEN user_id IN (' . implode(',', $request->user_id) . ') THEN "' . $this->globaldate . '" ELSE NULL END'),
-            //         'rejected_hrd_by' => DB::raw('CASE WHEN user_id NOT IN (' . implode(',', $request->user_id) . ') THEN "' . $this->name . '" ELSE NULL END'),
-            //         'rejected_hrd_at' => DB::raw('CASE WHEN user_id NOT IN (' . implode(',', $request->user_id) . ') THEN "' . $this->globaldate . '" ELSE NULL END'),
-            //         'keterangan_reject' => DB::raw('CASE WHEN user_id NOT IN (' . implode(',', $request->user_id) . ') THEN "' . ($request->has('keterangan') ? $request->keterangan : NULL) . '" ELSE NULL END'),
-            //         'updated_by' => $this->name,
-            //         'updated_at' => date('Y-m-d H:i:s'),
-            //     ]);
-
-            // DB::connection(env('ANDROID'))
-            //     ->table('form_header as fh')
-            //     ->where('fh.no_document', $request->nodoc)
-            //     ->update([
-            //         'status' => 'APPROVE HRD',
-            //         'updated_by' => $this->name,
-            //         'updated_at' => date('Y-m-d H:i:s'),
-            //     ]);
-
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'success' => false,
