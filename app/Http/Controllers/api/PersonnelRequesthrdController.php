@@ -354,6 +354,7 @@ class PersonnelRequesthrdController extends Controller
                     'divisi' => optional($personnelRequest->masterDivisi)->nama_divisi ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
                     'jumlah_personal' => (int) $personnelRequest->jumlah_personal,
                     'divisi_alias' => $personnelRequest->divisi_alias,
+                    'grade_master_karyawan' => $personnelRequest->grade_master_karyawan,
                     'minimum_matching' => $personnelRequest->minimum_matching,
                     'published_at' => $personnelRequest->published_at,
                     'published_by' => $personnelRequest->published_by,
@@ -390,6 +391,10 @@ class PersonnelRequesthrdController extends Controller
         $candidate = NewRecruitment::query()->find($id);
         if (!$candidate) {
             return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        if (strtoupper(trim((string) ($this->grade ?? ''))) !== 'MANAGER') {
+            return response()->json(['message' => 'Void kandidat hanya dapat dilakukan oleh user dengan grade MANAGER'], 403);
         }
 
         $status = strtolower(trim((string) ($candidate->status ?? '')));
