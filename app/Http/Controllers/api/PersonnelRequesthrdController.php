@@ -244,13 +244,18 @@ class PersonnelRequesthrdController extends Controller
     {
         $id = $request->input('id');
         $divisiAlias = trim((string) $request->input('divisi_alias', ''));
+        $requirement = trim((string) $request->input('requirement', ''));
 
         if (!$id) {
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
         }
 
         if ($divisiAlias === '') {
-            return response()->json(['message' => 'Division alias wajib dipilih'], 422);
+            return response()->json(['message' => 'Division alias wajib diisi.'], 422);
+        }
+
+        if ($requirement === '' || strip_tags($requirement) === '') {
+            return response()->json(['message' => 'Requirement wajib diisi.'], 422);
         }
 
         $data = DB::table('personnel_requests')->where('id', $id)->first();
@@ -274,6 +279,8 @@ class PersonnelRequesthrdController extends Controller
                 'published_at' => Carbon::now(),
                 'published_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
+                'divisi_alias' => $divisiAlias,
+                'requirement' => $requirement,
             ];
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
