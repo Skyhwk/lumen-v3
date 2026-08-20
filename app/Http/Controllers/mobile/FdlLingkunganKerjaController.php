@@ -36,6 +36,10 @@ class FdlLingkunganKerjaController extends Controller
 {
     public function getSample(Request $request)
     {
+        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+        //     return $response;
+        // }
+
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'lingkungan_kerja')->where('is_active', 1)->first();
             $listParameter = json_decode($parameter->parameters, true);
@@ -205,145 +209,192 @@ class FdlLingkunganKerjaController extends Controller
     public function getShift(Request $request)
     {
         try {
-
-            $parameter_tsp = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','parameter_tsp_lk')->first();
-
+            $parameter_tsp = ParameterFdl::select("parameters")
+                ->where('is_active', 1)
+                ->where('nama_fdl', 'parameter_tsp_lk')
+                ->first();
+    
             $parameter_no2 = [
-                "NO2", "NO2 (24 Jam)", "NO2 (8 Jam)", "NO2 (6 Jam)", "NOx", "NO2 8J (LK-pm)","NO2 8J (LK-µg)","NO2 SS (LK-pm)","NO2 SS (LK-µg)"
+                "NO2", "NO2 (24 Jam)", "NO2 (8 Jam)", "NO2 (6 Jam)", "NOx",
+                "NO2 8J (LK-pm)", "NO2 8J (LK-µg)", "NO2 SS (LK-pm)", "NO2 SS (LK-µg)"
             ];
-
+    
             $data = DetailLingkunganKerja::where('no_sampel', $request->no_sample);
-            // dd($data);
             $lk_parameter = DetailLingkunganKerja::where('no_sampel', $request->no_sample);
-            if($request->shift == 'L1'){
+    
+            if ($request->shift == 'L1') {
                 $data = $data->where(function ($query) {
                     $query->where('shift_pengambilan', 'Sesaat')
                         ->orWhere('shift_pengambilan', 'L1');
                 })->first();
-
+    
                 $lk_parameter = $lk_parameter->where(function ($query) {
                     $query->where('shift_pengambilan', 'Sesaat')
                         ->orWhere('shift_pengambilan', 'L1');
                 })->pluck('parameter')->toArray();
-
-            }else{
-                $data = $data->where(function ($q) {
-                    $q->where('shift_pengambilan', 'L1')
-                    ->orWhere('shift_pengambilan', 'Sesaat');
+            } else {
+                $data = $data->where(function ($q) use ($request) {
+                    $q->where('shift_pengambilan', $request->shift)
+                        ->orWhere('shift_pengambilan', 'Sesaat');
                 })->first();
-                $lk_parameter = $lk_parameter->where('shift_pengambilan', $request->shift)
-                    ->orWhere('shift_pengambilan', 'Sesaat')
-                    ->pluck('parameter')
-                    ->toArray();
+    
+                // FIX: dibungkus closure supaya no_sampel tetap ikut ke-AND-kan
+                $lk_parameter = $lk_parameter->where(function ($query) use ($request) {
+                    $query->where('shift_pengambilan', $request->shift)
+                        ->orWhere('shift_pengambilan', 'Sesaat');
+                })->pluck('parameter')->toArray();
             }
+    
             $po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
             \DB::statement("SET SQL_MODE=''");
+    
+            // Parameter dengan syarat durasi (24/8/6 Jam) yang jumlah datanya belum lengkap
             $param = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->groupBy('parameter')->get();
             $parNonSes = array();
             foreach ($param as $value) {
-                $p = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $value->parameter)->get();
+                $p = DetailLingkunganKerja::where('no_sampel', $request->no_sample)
+                    ->where('parameter', $value->parameter)
+                    ->get();
+    
                 $l = $value->kategori_pengujian;
                 $li = explode("-", $l);
-                $shift = '';
+                $shiftThreshold = 1;
+    
                 if ($li[0] == '24 Jam') {
-                    $shift = 25;
+                    $shiftThreshold = 25;
                 } else if ($li[0] == '8 Jam') {
-                    $shift = 8;
+                    $shiftThreshold = 8;
                 } else if ($li[0] == '6 Jam') {
-                    $shift = 6;
+                    $shiftThreshold = 6;
                 }
-                if ($shift > count($p)) {
+    
+                if ($shiftThreshold > count($p)) {
                     $parNonSes[] = $value->parameter;
                 }
             }
-
+    
+            // Ambil daftar parameter dari order detail, bersihkan format "id;nama_param"
             $p = json_decode($po->parameter);
-            $nilai_param = array();
             $nilai_param2 = array();
-            // Membersihkan array $p agar hanya menyimpan bagian setelah ";"
-            $cleaned_p = array_map(function($item) {
+            foreach ($p as $item) {
                 $parts = explode(";", $item);
-                return $parts[1] ?? ''; // Ambil bagian setelah ";"
-            }, $p);
-
-            // Bandingkan dengan array yang sudah bersih
-            $param1 = array_diff($cleaned_p, $nilai_param);
-
-            foreach ($param1 as $ke => $val) {
-                $nilai_param2[] =  $val;
+                $nilai_param2[] = $parts[1] ?? '';
             }
-            $pp1 = str_replace("[", "", json_encode($nilai_param2));
-            $pp2 = str_replace("]", "", $pp1);
-            $pp3 = str_replace("[", "", json_encode($parNonSes));
-            $pp4 = str_replace("]", "", $pp3);
-
-            if ($pp2 == '') {
-                $param_fin = json_encode($parNonSes);
-            } else if ($pp4 == "") {
-                $param_fin = '[' . $pp2 . ']';
-            } else if ($pp2 !== "") {
-                $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
-            }
-            
-            // Hapus parameter yang ada di $existing_parameters
+            // Parameter TANPA syarat durasi -> cek apakah sudah pernah diinput di shift ini / Sesaat / L1
             $filtered_param = array_values(array_diff($nilai_param2, $lk_parameter));
-
-            // Buat output JSON yang sesuai
-            $param_fin = json_encode($filtered_param);
-            $parameterList = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','lingkungan_kerja')->first();
-            $parameterVolatile = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile_lk')->first();
+    
+            // Gabungkan: parameter durasi yang belum lengkap + parameter non-durasi yang belum diinput
+            $param_fin_array = array_values(array_unique(array_merge($parNonSes, $filtered_param)));
+            $param_fin = json_encode($param_fin_array);
+    
+            // Ganti 'lingkungan_kerja' di bawah kalau nama_fdl aslinya berbeda
+            $parameterList = ParameterFdl::select("parameters")
+                ->where('is_active', 1)
+                ->where('nama_fdl', 'lingkungan_kerja')
+                ->first();
+    
+            $parameterVolatile = ParameterFdl::select("parameters")
+                ->where('is_active', 1)
+                ->where('nama_fdl', 'senyawa_volatile_lk')
+                ->first();
+    
+            $volatile_array = json_decode($parameterVolatile->parameters, true) ?? [];
+            $volatile_lower = array_map('strtolower', $volatile_array);
+    
+            $form_mappings = [];
+            foreach ($param_fin_array as $pr) {
+                $pLower = strtolower($pr);
+                $kateg = '';
+    
+                if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+                    $kateg = '24 Jam';
+                } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+                    $kateg = '8 Jam';
+                } else if (str_contains($pLower, '6 jam')) {
+                    $kateg = '6 Jam';
+                }
+    
+                $satuan = '(L/m)';
+                $type = 6;
+    
+                if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 2.5 (24 jam)"])) {
+                    $type = 1;
+                } else if (in_array($pLower, ["o3", "o3 (8 jam)", "ox", "o3 8j (lk-mg)", "o3 8j (lk-pm)", "o3 ss (lk-mg)", "o3 ss (lk-pm)"])) {
+                    $type = 2;
+                } else if (in_array($pLower, $volatile_lower)) {
+                    $type = 3;
+                } else if ($pLower === "pertukaran udara") {
+                    $type = 4;
+                } else if (in_array($pLower, ["passive so2", "passive no2"])) {
+                    $type = 5;
+                }
+    
+                $form_mappings[$pr] = [
+                    'type' => $type,
+                    'kateg' => $kateg,
+                    'satuan' => $satuan
+                ];
+            }
+    
             if ($data) {
                 return response()->json([
-                    'non'      => 1,
-                    'keterangan'     => $data->keterangan,
-                    'keterangan_2'   => $data->keterangan_2,
-                    'waktu'          => $data->waktu_pengukuran,
-                    'lat'            => $data->latitude,
-                    'long'           => $data->longitude,
-                    'lokasi'         => $data->lokasi,
-                    'cuaca'          => $data->cuaca,
-                    'ventilasi'      => $data->laju_ventilasi,
-                    'intensitas'     => $data->intensitas,
-                    'aktifitas'     => $data->aktifitas,
-                    'jarak'          => $data->jarak_sumber_cemaran,
-                    'suhu'           => $data->suhu,
-                    'kelem'          => $data->kelembapan,
-                    'tekanan_u'      => $data->tekanan_udara,
-                    'desk_bau'       => $data->deskripsi_bau,
-                    'metode'         => $data->metode_pengukuran,
-                    'catatan'          => $data->catatan_kondisi_lapangan,
-                    'durasi_pengambilan'          => $data->durasi_pengujian,
-                    'kecepatan'         => $data->kecepatan_angin,
-                    'titik_koordinat'         => $data->titik_koordinat,
-                    'foto_lok'       => $data->foto_lokasi_sampel,
-                    'foto_kon'       => $data->foto_kondisi_sampel,
-                    'foto_lain'      => $data->foto_lain,
-                    'param' => json_decode($param_fin, true),
-                    'parameterList' => json_decode($parameterList->parameters,true),
-                    'is_filled' => true,
-                    // 'important_keyword' => $importantKeyword,
-                    'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
+                    'non'                => 1,
+                    'keterangan'         => $data->keterangan,
+                    'keterangan_2'       => $data->keterangan_2,
+                    'waktu'              => $data->waktu_pengukuran,
+                    'lat'                => $data->latitude,
+                    'long'               => $data->longitude,
+                    'lokasi'             => $data->lokasi,
+                    'cuaca'              => $data->cuaca,
+                    'ventilasi'          => $data->laju_ventilasi,
+                    'intensitas'         => $data->intensitas,
+                    'aktifitas'          => $data->aktifitas,
+                    'jarak'              => $data->jarak_sumber_cemaran,
+                    'suhu'               => $data->suhu,
+                    'kelem'              => $data->kelembapan,
+                    'tekanan_u'          => $data->tekanan_udara,
+                    'desk_bau'           => $data->deskripsi_bau,
+                    'metode'             => $data->metode_pengukuran,
+                    'catatan'            => $data->catatan_kondisi_lapangan,
+                    'durasi_pengambilan' => $data->durasi_pengujian,
+                    'kecepatan'          => $data->kecepatan_angin,
+                    'titik_koordinat'    => $data->titik_koordinat,
+                    'foto_lok'           => $data->foto_lokasi_sampel,
+                    'foto_kon'           => $data->foto_kondisi_sampel,
+                    'foto_lain'          => $data->foto_lain,
+                    'param'              => json_decode($param_fin, true),
+                    'parameterList'      => json_decode($parameterList->parameters, true),
+                    'is_filled'          => true,
+                    'parameter_tsp'      => json_decode($parameter_tsp->parameters, true),
                     'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                    'parameter_no2' => $parameter_no2
+                    'parameter_no2'      => $parameter_no2,
+                    'form_mappings'      => $form_mappings
                 ], 200);
-                $this->resultx = 'get shift sample lingkungan kerja success';
             } else {
                 return response()->json([
-                    'no_sample'    => $po->no_sampel,
-                    'keterangan' => $po->keterangan_1,
-                    'id_ket' => explode('-', $po->kategori_3)[0],
-                    'param' => json_decode($param_fin, true),
-                    'parameterList' => json_decode($parameterList->parameters,true),
-                    'is_filled' => false,
-                    // 'important_keyword' => $importantKeyword,
-                    'parameter_tsp' => json_decode($parameter_tsp->parameters, true),
+                    'no_sample'          => $po->no_sampel,
+                    'keterangan'         => $po->keterangan_1,
+                    'id_ket'             => explode('-', $po->kategori_3)[0],
+                    'param'              => json_decode($param_fin, true),
+                    'parameterList'      => json_decode($parameterList->parameters, true),
+                    'is_filled'          => false,
+                    'parameter_tsp'      => json_decode($parameter_tsp->parameters, true),
                     'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
-                    'parameter_no2' => $parameter_no2
+                    'parameter_no2'      => $parameter_no2,
+                    'form_mappings'      => $form_mappings
                 ], 200);
             }
         } catch (\Exception $th) {
+            \Log::error('getShift error: ' . $th->getMessage(), [
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+    
             return response()->json([
-                'message' => $th
+                'message' => $th->getMessage(),
+                'file'    => $th->getFile(),
+                'line'    => $th->getLine(),
             ], 500);
         }
     }

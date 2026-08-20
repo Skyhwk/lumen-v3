@@ -13,6 +13,7 @@ class CreateOrderDetailTable extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('order_detail')) {
         Schema::create('order_detail', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('id_order_header')->nullable();
@@ -64,6 +65,7 @@ class CreateOrderDetailTable extends Migration
             $table->index('tanggal_sampling', 'idx_order_detail_tanggal_sampling');
             $table->index('tanggal_terima', 'idx_order_detail_tanggal_terima');
         });
+        }
     }
 
     public function down(): void

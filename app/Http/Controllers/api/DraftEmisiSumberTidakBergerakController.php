@@ -583,7 +583,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     ->pluck('method')->toArray();
 
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
-
                 return response()->json([
                     'status'             => true,
                     'data'               => $mainData,
@@ -608,7 +607,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
     private function formatEntry($val, $regulasiId, &$methodsUsed = [], $getHasilUji)
     {
-        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)->where('parameter', $val->parameter_emisi->nama_lab)->first();
+        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)->where('parameter', $val->parameter_emisi->nama_lab)->where('is_active', true)->first();
         $satuan     = $bakumutu ? $bakumutu->satuan : null;
         $akreditasi = $bakumutu && isset($bakumutu->akreditasi) ? $bakumutu->akreditasi : '';
 
@@ -655,7 +654,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         $nilai     = null;
         if ($index === null) {
             $nilai = null;
-            for ($i = 0; $i <= 10; $i++) {
+            for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                 $key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
                 if (! empty($ws[$key])) {
                     $nilai = $ws[$key];
@@ -665,7 +664,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
             // Kalau belum ketemu, cari dari C...C10
             if($nilai === null) {
-                for ($i = 0; $i <= 10; $i++) {
+                for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                     $key = $i === 0 ? 'C' : "C$i";
 
                     // Khusus C3, kalau kosong ambil dari C3_persen
@@ -702,7 +701,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
         if ($index === null) {
             // Cari dari f_koreksi_c...f_koreksi_c10
-            for ($i = 0; $i <= 10; $i++) {
+            for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
                 $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
                 if (! empty($ws[$key])) {
                     $nilai = $ws[$key];

@@ -47,16 +47,11 @@ class SwabTest
 
 				$satuan = 'CFU/cm2';
 				$processed = [
-					// 'luas' => $data->luas,
-					// 'jumlah_mikroba' => $data->jumlah_mikroba,
-					// 'cairan_pengencer' => $data->jumlah_pengencer,
-					// 'volume' => $data->volume,
 					'satuan' => $satuan,
 					'hasil' => $rumus,
 					'hasil2' => $hasil2,
 					'hasil3' => $hasil3,
 					'hasil4' => $hasil4,
-					'hasil5' => '',
 				];
 			}
 

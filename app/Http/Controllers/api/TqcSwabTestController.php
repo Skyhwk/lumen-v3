@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\DetailLingkunganKerja;
 use App\Models\HistoryAppReject;
 use App\Models\MasterBakumutu;
-use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\SwabTestHeader;
 use App\Models\SubKontrak;
@@ -16,11 +15,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
-class TqcSwabTesController extends Controller
+class TqcSwabTestController extends Controller
 {
     public function index(Request $request)
     {
-
         $data = OrderDetail::selectRaw('
             cfr,
             GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
@@ -41,7 +39,7 @@ class TqcSwabTesController extends Controller
                 'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
             ])
             ->where('is_active', true)
-            ->where('kategori_3', '46-Udara Swab Test')
+            ->where('kategori_2', '7-Swab Test')
             ->where('status', 1)
             ->groupBy('cfr')
             ->orderBy('tanggal_terima_min')
@@ -122,14 +120,7 @@ class TqcSwabTesController extends Controller
                 ->where('is_active', 1)
                 ->get();
 
-            if ($header->isEmpty()) {
-                $header = MicrobioHeader::with('ws_udara')
-                    ->where('no_sampel', $orderDetail->no_sampel)
-                    ->where('is_active', 1)
-                    ->get();
-            }
-
-            $header2 = SubKontrak::with(['ws_value_linkungan', 'ws_udara'])
+            $header2 = SubKontrak::with(['ws_udara'])
                 ->where('no_sampel', $orderDetail->no_sampel)
                 ->where('is_active', 1)
                 ->get();
@@ -159,7 +150,7 @@ class TqcSwabTesController extends Controller
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
                     ->first();
 
-                $ws = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+                $ws = $item->ws_udara ?? null;
 
                 $nilai = '-';
 
@@ -170,7 +161,7 @@ class TqcSwabTesController extends Controller
 
                     if ($index === null) {
                         // cari f_koreksi_1..17 dulu
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $key = "f_koreksi_$i";
                             if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
@@ -180,7 +171,7 @@ class TqcSwabTesController extends Controller
 
                         // kalau masih kosong, cari hasil1..17
                         if ($nilai === '-' || $nilai === null || $nilai === '') {
-                            for ($i = 1; $i <= 17; $i++) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
                                 if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
@@ -218,19 +209,6 @@ class TqcSwabTesController extends Controller
             'message' => 'Berhasil mendapatkan data',
             'data'    => $data,
         ]);
-    }
-    public function detailLapangan(Request $request)
-    {
-        try {
-            $data = DetailLingkunganKerja::where('no_sampel', $request->no_sampel)->first();
-            if ($data) {
-                return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-            } else {
-                return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
-            }
-        } catch (\Exception $ex) {
-            dd($ex);
-        }
     }
 
     public function handleApproveSelected(Request $request)

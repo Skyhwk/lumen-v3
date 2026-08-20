@@ -1714,7 +1714,7 @@ class BasOnlineController extends Controller
             }
 
             // ── Ambil data pendukung dari DB ──────────────────────────
-            $infoSampling = json_decode($request->info_sampling, true);
+            $infoSampling = is_array($request->info_sampling) ? $request->info_sampling : json_decode($request->info_sampling, true);
 
             $orderH = OrderHeader::where('no_document', $request->no_document)
                 ->where('no_order', $request->no_order)
@@ -2737,14 +2737,16 @@ class BasOnlineController extends Controller
             return $this->handleEnvironmentModel($sample_number, $parameter, $model, $model2, $model3);
         }
 
-        // non-environment: hanya kembalikan builder jika count >= requiredCount, else null
-        $query = $model::where('no_sampel', $sample_number);
+        // non-environment: cek model 1, jika belum memenuhi cek model 2, lalu model 3
         $modelsWithParameter = [
             DetailLingkunganHidup::class,
             DetailSenyawaVolatile::class,
             DetailMicrobiologi::class,
             DataLapanganDirectLain::class,
         ];
+
+        // 1. Cek Model Pertama
+        $query = $model::where('no_sampel', $sample_number);
         if (in_array($model, $modelsWithParameter, true) && $paramName !== null) {
             $query->where('parameter', $paramName);
         }
@@ -2752,6 +2754,31 @@ class BasOnlineController extends Controller
         if ($count >= $requiredCount) {
             return $query;
         }
+
+        // 2. Cek Model Kedua jika ada
+        if ($model2) {
+            $query2 = $model2::where('no_sampel', $sample_number);
+            if (in_array($model2, $modelsWithParameter, true) && $paramName !== null) {
+                $query2->where('parameter', $paramName);
+            }
+            $count2 = $query2->count();
+            if ($count2 >= $requiredCount) {
+                return $query2;
+            }
+        }
+
+        // 3. Cek Model Ketiga jika ada
+        if ($model3) {
+            $query3 = $model3::where('no_sampel', $sample_number);
+            if (in_array($model3, $modelsWithParameter, true) && $paramName !== null) {
+                $query3->where('parameter', $paramName);
+            }
+            $count3 = $query3->count();
+            if ($count3 >= $requiredCount) {
+                return $query3;
+            }
+        }
+
         return null;
     }
 

@@ -27,16 +27,16 @@ class SpektroUvVisUdaraController extends Controller
     public function index(Request $request)
     {
         $data = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
-            ->where('is_approved', $request->approve)
+            ->where('lingkungan_header.is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
-            ->where('template_stp', $request->template_stp)
+            ->where('lingkungan_header.template_stp', $request->template_stp)
             ->select('lingkungan_header.*')
             ->orderByRaw("
                 CASE 
-                    WHEN tanggal_terima IS NULL THEN 1
+                    WHEN lingkungan_header.tanggal_terima IS NULL THEN 1
                     ELSE 0
                 END,
-                tanggal_terima DESC
+                lingkungan_header.tanggal_terima DESC
             ");
 
         return Datatables::of($data)
@@ -66,6 +66,18 @@ class SpektroUvVisUdaraController extends Controller
                 });
             })
 
+            ->filterColumn('hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
+            ->filterColumn('ws_value.hasil', function ($query, $keyword) {
+                $query->whereHas('ws_value', function ($query) use ($keyword) {
+                    $query->where('hasil', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
 
                 if ($request->has('columns')) {
@@ -80,9 +92,15 @@ class SpektroUvVisUdaraController extends Controller
 
                             // HANYA BOLEH FILTER KOLOM colorimetri
                             if (in_array($columnName, [
+                                'no_sampel',
                                 'parameter',
                                 'jenis_pengujian',
-                                'created_at'
+                                'approved_by',
+                                'approved_at',
+                                'created_at',
+                                'created_by',
+                                'note',
+                                'notes_reject'
                             ])) {
                                 $query->where("lingkungan_header.$columnName", 'like', "%{$searchValue}%");
                             }

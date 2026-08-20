@@ -13,6 +13,7 @@ class PointEarnings extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('point_earnings')) {
         Schema::create('point_earnings', function (Blueprint $table) {
             $table->id();
             $table->string('customer_id')->index();
@@ -32,6 +33,7 @@ class PointEarnings extends Migration
         
             $table->index(['customer_id', 'claim_expired_at']);
         });
+        }
     }
 
     /**

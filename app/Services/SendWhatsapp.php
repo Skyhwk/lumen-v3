@@ -42,15 +42,14 @@ class SendWhatsapp
 
     private function formatNumber()
     {
-        $number = $this->number;
-        if (substr($number, 0, 2) == '08') {
-            $format_number = '62' . substr($number, 1);
-        } else if(substr($number, 0, 3) == '+62') {
-            $format_number = substr($number, 1);
-        } else {
-            $format_number = $number;
+        $number = preg_replace('/[^0-9]/', '', $this->number);
+        if (substr($number, 0, 2) === '08') {
+            return '62' . substr($number, 1);
         }
-        return $format_number;
+        if (substr($number, 0, 1) === '8') {
+            return '62' . $number;
+        }
+        return $number;
     }
 
     public function send()

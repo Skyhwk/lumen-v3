@@ -105,7 +105,11 @@ class ProcessPurchasesController extends Controller
                 });
             })
             ->addColumn('requester_divisi', fn($row) => KaryawanProfileService::resolveDivisi(optional($row->purchaseRequest)->employee))
-            ->filterColumn('requester_divisi', fn($query, $keyword) => $this->applyRequesterDivisiFilter($query, $keyword))
+            ->filterColumn('requester_divisi', function ($query, $keyword) {
+                $query->whereHas('purchaseRequest', function ($q) use ($keyword) {
+                    KaryawanProfileService::applyRequesterDivisiFilter($q, $keyword);
+                });
+            })
             ->addColumn('po_approved_at', fn($row) => $row->processed_at)
             ->filterColumn('po_approved_at', function ($query, $keyword) {
                 $query->where('purchase_order_documents.processed_at', 'like', "%{$keyword}%");
@@ -325,22 +329,5 @@ class ProcessPurchasesController extends Controller
         }
 
         return json_encode($files);
-    }
-
-    private function applyRequesterDivisiFilter($query, string $keyword): void
-    {
-        $matchingDivisiIds = MasterDivisi::where('is_active', true)
-            ->where('nama_divisi', 'like', "%{$keyword}%")
-            ->pluck('id');
-
-        $query->whereHas('purchaseRequest.employee', function ($employeeQuery) use ($keyword, $matchingDivisiIds) {
-            $employeeQuery->where(function ($q) use ($keyword, $matchingDivisiIds) {
-                $q->where('department', 'like', "%{$keyword}%");
-
-                if ($matchingDivisiIds->isNotEmpty()) {
-                    $q->orWhereIn('id_divisi', $matchingDivisiIds);
-                }
-            });
-        });
     }
 }

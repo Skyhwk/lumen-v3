@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 
 use Datatables;
 use App\Models\OrderHeader;
+use App\Models\CatatanLhpRilis;
 use App\Services\GroupedCfrByLhp;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -166,6 +167,21 @@ class RekapOrderController extends Controller
                     $query->where('order_detail.kontrak', '!=', 'C');
                 }
             })
+            ->addColumn('catatan_keterangan', function ($data) {
+                static $catatanCache = [];
+                $key = $data->no_order . '_' . ($data->kontrak === 'C' ? $data->periode : '');
+
+                if (!array_key_exists($key, $catatanCache)) {
+                    $cat = DB::table('catatan_lhp_rilis')
+                        ->where('no_order', $data->no_order)
+                        ->when($data->kontrak === 'C', fn($q) => $q->where('periode', $data->periode))
+                        ->when($data->kontrak !== 'C', fn($q) => $q->whereNull('periode'))
+                        ->first();
+                    $catatanCache[$key] = $cat ? $cat->keterangan : null;
+                }
+
+                return $catatanCache[$key];
+            })
             ->make(true);
     }
 
@@ -188,5 +204,56 @@ class RekapOrderController extends Controller
             'tanggal_order' => $orderHeader->tanggal_order,
             'groupedCFRs' => $groupedCFRs
         ], 200);
+    }
+
+    public function getCatatan(Request $request)
+    {
+        $catatan = CatatanLhpRilis::where('no_order', $request->no_order)
+            ->when($request->filled('periode'), fn($q) => $q->where('periode', $request->periode))
+            ->when(!$request->filled('periode'), fn($q) => $q->whereNull('periode'))
+            ->first();
+
+        return response()->json(['data' => $catatan], 200);
+    }
+
+    public function saveCatatan(Request $request)
+    {
+        try {
+            //code...
+            $this->validate($request, [
+                'no_order'   => 'required|string',
+                'keterangan' => 'required|string',
+            ]);
+    
+            $existing = CatatanLhpRilis::where('no_order', $request->no_order)
+                ->when($request->filled('periode'), fn($q) => $q->where('periode', $request->periode))
+                ->when(!$request->filled('periode'), fn($q) => $q->whereNull('periode'))
+                ->first();
+    
+            if ($existing) {
+                $existing->keterangan = $request->keterangan;
+                $existing->save();
+                $catatan = $existing;
+            } else {
+                $catatan = CatatanLhpRilis::create([
+                    'no_order'   => $request->no_order,
+                    'periode'    => $request->periode ? $request->periode : null,
+                    'keterangan' => $request->keterangan,
+                    'created_at' => Carbon::now(),
+                    'created_by' => $this->karyawan ?? null,
+                ]);
+            }
+    
+            return response()->json([
+                'message' => 'Catatan berhasil disimpan',
+                'data'    => $catatan,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line'    => $th->getLine(),
+                'file'    => $th->getFile(),
+            ], 400);
+        }
     }
 }

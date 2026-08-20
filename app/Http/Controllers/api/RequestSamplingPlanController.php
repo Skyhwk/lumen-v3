@@ -8,6 +8,7 @@ use App\Models\PraNoSample;
 use App\Models\MasterKaryawan;
 use App\Jobs\RenderSamplingPlan;
 use App\Services\JadwalServices;
+use App\Services\SamplerTrackingService;
 use App\Models\MasterDriver;
 use App\Models\MasterCabang;
 use App\Models\QuotationNonKontrak;
@@ -373,6 +374,23 @@ class RequestSamplingPlanController extends Controller
         $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
 
         if ($addJadwal) {
+            try {
+                $trackingDates = is_array($ObjectData->tanggal) ? $ObjectData->tanggal : [$ObjectData->tanggal];
+
+                foreach (array_unique(array_filter($trackingDates)) as $trackingDate) {
+                    app(SamplerTrackingService::class)->sync(
+                        Carbon::parse($trackingDate)->toDateString()
+                    );
+                }
+            } catch (\Throwable $trackingSyncException) {
+                Log::warning('Gagal sync activity sampler setelah membuat jadwal sampling. ' . $trackingSyncException->getMessage(), [
+                    'no_quotation' => $request->no_quotation,
+                    'id_sampling' => $request->id_sampling,
+                    'line' => $trackingSyncException->getLine(),
+                    'file' => $trackingSyncException->getFile(),
+                ]);
+            }
+
             $type = explode("/", $request->no_quotation)[1];
             if ($type == 'QTC') {
                 $job = new RenderSamplingPlan($request->quotation_id, 'kontrak');

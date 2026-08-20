@@ -14,7 +14,6 @@ use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpsSwabTesHeaderHistory;
 use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
-use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\Parameter;
@@ -29,7 +28,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
-class DraftSwabTesController extends Controller
+class DraftSwabTestController extends Controller
 {
 
     public function index(Request $request)
@@ -57,7 +56,7 @@ class DraftSwabTesController extends Controller
                 'orderHeader',
             ])
             ->where('is_active', true)
-            ->where('kategori_3', '46-Udara Swab Test')
+            ->where('kategori_2', '7-Swab Test')
             ->where('status', 2)
             ->groupBy('cfr')
             ->get();
@@ -139,7 +138,7 @@ class DraftSwabTesController extends Controller
     public function handleMetodeParameter(Request $request)
     {
         $methode_parameter = Parameter::where('is_active', true)
-            ->where('nama_kategori', 'Udara')->pluck('method')->toArray();
+            ->whereIn('nama_kategori', ['Udara', 'Swab Test'])->pluck('method')->toArray();
 
         return response()->json([
             'status'  => true,
@@ -160,25 +159,25 @@ class DraftSwabTesController extends Controller
                 ->first();
 
             $methode_parameter = Parameter::where('is_active', true)
-                ->where('nama_kategori', 'Udara')->select('id', 'method')->limit(10)->get();
+                ->whereIn('nama_kategori', ['Udara','Swab Test'])->select('id', 'method')->limit(10)->get();
 
             // Ambil list no_sampel dari order yang memenuhi syarat
             $orders = OrderDetail::where('cfr', $request->cfr)
                 ->where('is_approve', 0)
                 ->where('is_active', true)
-                ->where('kategori_2', '4-Udara')
+                ->where('kategori_2', '7-Swab Test')
                 ->where('kategori_3', $request->kategori_3)
                 ->where('status', 2)
                 ->pluck('no_sampel');
 
-            $swabData = MicrobioHeader::with('ws_udara')
+            $swabData = SwabTestHeader::with('ws_udara')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approved', 1)
                 ->where('is_active', 1)
                 ->where('lhps', 1)
                 ->get();
 
-            $swabData2 = Subkontrak::with('ws_udara', 'ws_value_linkungan')
+            $swabData2 = Subkontrak::with('ws_udara')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approve', 1)
                 ->where('is_active', 1)
@@ -220,7 +219,7 @@ class DraftSwabTesController extends Controller
                     $parameterRegulasi = Parameter::where('nama_lab', $val->parameter)->first()->nama_regulasi ?? null;
                     $parameterLhp      = Parameter::where('nama_lab', $val->parameter)->first()->nama_lhp ?? null;
 
-                    $ws       = $val->ws_udara ?? $val->ws_value_linkungan ?? null;
+                    $ws       = $val->ws_udara ?? null;
                     $hasil    = $ws->toArray();
                     $orderRow = OrderDetail::where('no_sampel', $val->no_sampel)
                         ->where('is_active', 1)
@@ -237,7 +236,7 @@ class DraftSwabTesController extends Controller
 
                     if ($index === null) {
                         // cari f_koreksi_1..17 dulu
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $key = "f_koreksi_$i";
                             if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
@@ -247,7 +246,7 @@ class DraftSwabTesController extends Controller
 
                         // kalau masih kosong, cari hasil1..17
                         if ($nilai === '-' || $nilai === null || $nilai === '') {
-                            for ($i = 1; $i <= 17; $i++) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
                                 if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];

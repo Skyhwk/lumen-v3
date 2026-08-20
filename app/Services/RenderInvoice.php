@@ -1872,16 +1872,16 @@ class RenderInvoice
             ');
 
             $needsSignature = self::shouldRenderSignature($nilai_tagihan, $forceSignature);
-            $footerReservedHeight = $needsSignature ? 30 : 15;
-            $signatureRequiredHeight = $needsSignature ? 100 : 25;
-            $remainingPageHeight = $pdf->h - $pdf->y - $footerReservedHeight;
-
-            if ($remainingPageHeight < $signatureRequiredHeight) {
+            $pageBreakTrigger = isset($pdf->PageBreakTrigger) ? $pdf->PageBreakTrigger : ($pdf->h - 25);
+            $signatureRequiredHeight = $needsSignature ? 115 : 25;
+            $signatureSafeStartY = 165;
+            $remainingPageHeight = $pageBreakTrigger - $pdf->y;
+            if ($remainingPageHeight < $signatureRequiredHeight || ($needsSignature && $pdf->y > $signatureSafeStartY)) {
                 $pdf->AddPage();
             }
 
             $pdf->writeHTML('
-                <table style="margin-top: 30px;" width="100%">
+                <table style="margin-top: 10mm; page-break-inside: avoid;" width="100%">
                     <tr>
                         <td style="padding-right:50px;">
                         </td>
@@ -1897,7 +1897,7 @@ class RenderInvoice
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td style="font-size:100px; line-height:100px;">&nbsp;</td>
+                                        <td style="height:30mm; line-height:30mm;">&nbsp;</td>
                                     </tr>
                                     <tr>
                                         <td style="text-align:center; border-bottom:1px solid #000; font-size:10px;">
@@ -1955,7 +1955,7 @@ class RenderInvoice
                 'mode' => 'utf-8',
                 'format' => 'A4',
                 'margin_header' => 3, // 30mm not pixel
-                'margin_bottom' => 3, // 30mm not pixel
+                'margin_bottom' => 10, // 30mm not pixel
                 'margin_footer' => 3,
                 'setAutoTopMargin' => 'stretch',
                 'setAutoBottomMargin' => 'stretch',
@@ -2280,46 +2280,16 @@ class RenderInvoice
                 </table>
             ');
 
-            $pdf->writeHTML('
-                <table style="margin-top: 30px;" width="100%">
-                    <tr>
-                        <td style="padding-right:50px;">
-                        </td>
-            ');
-
             $qr_img = '';
             $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
             $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            $customNeedsSignature = self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature);
             if ($qr) {
-                if (self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature)) {
+                if ($customNeedsSignature) {
                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
                 } else {
                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
                 }
-            }
-            if (self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature)) {
-                $pdf->writeHTML('
-                            <td width="25%" style="text-align:center;">
-                                <div style="float: right; text-align: center;">
-                                    <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br><br><br><br><br><br>
-                                    <span style="border-bottom: solid 1px #000; font-size:10px;"><b>' . $dataHead->nama_pj . '</b></span><br>
-                                    <span style="font-size:10px;">' . $dataHead->jabatan_pj . '</span>
-                                </div>
-                            </td>
-                        </tr>
-                    </table>
-                ');
-            } else {
-                $pdf->writeHTML('
-                        <td width="25%" style="text-align:center;">
-                            <div style="float: right; text-align: center;">
-                                <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br>
-                                <span>' . $qr_img . '</span><br>
-                            </div>
-                        </td>
-                    </tr>
-                </table>
-            ');
             }
 
             $footer = array(
@@ -2340,7 +2310,7 @@ class RenderInvoice
                         'color' => '#000000'
                     ),
                     'L' => array(
-                        'content' =>  self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature) ? '' . $qr_img . '' : '',
+                        'content' => $customNeedsSignature ? '' . $qr_img . '' : '',
                         'font-size' => 4,
                         'font-style' => 'I',
                         // 'font-style' => 'B',
@@ -2353,6 +2323,60 @@ class RenderInvoice
 
             $pdf->setFooter($footer);
 
+            if ($customNeedsSignature) {
+                $pageBreakTrigger = isset($pdf->PageBreakTrigger) ? $pdf->PageBreakTrigger : ($pdf->h - 25);
+                $signatureRequiredHeight = 115;
+                $signatureSafeStartY = 165;
+                $remainingPageHeight = $pageBreakTrigger - $pdf->y;
+
+                if ($remainingPageHeight < $signatureRequiredHeight || $pdf->y > $signatureSafeStartY) {
+                    $pdf->AddPage();
+                }
+
+                $pdf->writeHTML('
+                    <table style="margin-top: 10mm; page-break-inside: avoid;" width="100%">
+                        <tr>
+                            <td style="padding-right:50px;"></td>
+                            <td width="25%" style="text-align:center;">
+                                <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; page-break-inside: avoid;">
+                                    <tr>
+                                        <td style="text-align:center; font-size:10px;">
+                                            ' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="height:30mm; line-height:30mm;">&nbsp;</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="text-align:center; border-bottom:1px solid #000; font-size:10px;">
+                                            <b>' . $dataHead->nama_pj . '</b>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="text-align:center; font-size:10px;">
+                                            ' . $dataHead->jabatan_pj . '
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                ');
+            } else {
+                $pdf->writeHTML('
+                    <table style="margin-top: 30px;" width="100%">
+                        <tr>
+                            <td style="padding-right:50px;"></td>
+                            <td width="25%" style="text-align:center;">
+                                <div style="float: right; text-align: center;">
+                                    <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br>
+                                    <span>' . $qr_img . '</span><br>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                ');
+            }
             $filePath = public_path('invoice/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
             return $fileName;

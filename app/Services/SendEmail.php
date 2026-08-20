@@ -227,6 +227,15 @@ class SendEmail
         return $this;
     }
 
+    /**
+     * Reply-To untuk email ATS ke kandidat (HRD Applicant Tracking System).
+     */
+    public function replyToAtsHrd(?string $email = null)
+    {
+        $this->replyto = [$email ?? env('ATS_HRD_REPLY_TO', 'hrd-1@intilab.com')];
+        return $this;
+    }
+
     public function send()
     {
         try {
@@ -275,8 +284,10 @@ class SendEmail
                 foreach ($this->replyto as $email) {
                     if ($email == 'admsales01@intilab.com') {
                         $mail->addReplyTo($email, 'Admin Sales');
-                    }elseif ($email == 'adminlhp@intilab.com') {
+                    } elseif ($email == 'adminlhp@intilab.com') {
                         $mail->addReplyTo($email, 'Admin LHP');
+                    } elseif ($email === 'hrd-1@intilab.com' || $email === env('ATS_HRD_REPLY_TO')) {
+                        $mail->addReplyTo(preg_replace('/\s+/', '', $email), 'HRD PT Inti Surya Laboratorium');
                     } else {
                         $trimTo = preg_replace('/\s+/', '', $email);
                         $mail->addReplyTo($trimTo);

@@ -44,8 +44,9 @@ namespace App\Http\Middleware;
 
 use Closure;
 use App\Cache\TokenCacheService;
+use App\Models\UserToken;
+use App\Services\AuthTokenService;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class CheckToken
 {
@@ -54,9 +55,17 @@ class CheckToken
      */
     private $tokenCacheService;
 
-    public function __construct(TokenCacheService $tokenCacheService)
-    {
+    /**
+     * @var AuthTokenService
+     */
+    private $authTokenService;
+
+    public function __construct(
+        TokenCacheService $tokenCacheService,
+        AuthTokenService $authTokenService
+    ) {
         $this->tokenCacheService = $tokenCacheService;
+        $this->authTokenService = $authTokenService;
     }
 
     /**
@@ -88,8 +97,20 @@ class CheckToken
                 ], 430);
             }
 
-            if (!$tokenData || $tokenData->is_expired) {
-                return response()->json(['message' => 'Token is invalid or expired.!'], 430);
+            if (!$tokenData->isActive()) {
+                $freshToken = UserToken::where('token', $token)->first();
+
+                if ($freshToken && $freshToken->isActive()) {
+                    $tokenData = $freshToken;
+                } else {
+                    if ($freshToken && !$freshToken->is_expired) {
+                        $freshToken->is_expired = true;
+                        $freshToken->save();
+                        $this->tokenCacheService->invalidateTokenCache($token);
+                    }
+
+                    return response()->json(['message' => 'Token is invalid or expired.!'], 430);
+                }
             }
     
             $user = $tokenData->user;
@@ -99,6 +120,8 @@ class CheckToken
             }
 
             $request->attributes->add(['user' => $user]);
+
+            $this->authTokenService->touchSession($tokenData);
             
             return $next($request);
 

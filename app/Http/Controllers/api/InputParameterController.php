@@ -13,24 +13,30 @@ use App\Models\User;
 use App\Models\Usertoken;
 use App\Models\Requestlog;
 use App\Models\OrderDetail;
+use App\Models\AnalisParameter;
+use App\Models\AnalystFormula as Formula;
+use App\Models\KuotaAnalisaParameter;
+
+// INI HEADER
 use App\Models\Titrimetri;
 use App\Models\Colorimetri;
 use App\Models\Gravimetri;
 use App\Models\LingkunganHeader;
 use App\Models\DebuPersonalHeader;
-use App\Models\WsValueLingkungan;
 use App\Models\EmisiCerobongHeader;
 use App\Models\DustFallHeader;
 use App\Models\MicrobioHeader;
 use App\Models\IsokinetikHeader;
 use App\Models\SwabTestHeader;
 use App\Models\Subkontrak;
-// use App\Models\WsValueEmisiCerobong;
+
+// INI WS VALUE
+use App\Models\WsValueLingkungan;
 use App\Models\WsValueAir;
-use App\Models\WsValueMicrobio;
-use App\Models\WsValueSwab;
 use App\Models\WsValueUdara;
 use App\Models\WsValueEmisiCerobong;
+
+// INI DATA LAPANGAN
 use App\Models\DataLapanganDebuPersonal;
 use App\Models\DataLapanganLingkunganHidup;
 use App\Models\DataLapanganLingkunganKerja;
@@ -42,16 +48,17 @@ use App\Models\DetailLingkunganHidup;
 use App\Models\DetailLingkunganKerja;
 use App\Models\DetailSenyawaVolatile;
 use App\Models\DetailMicrobiologi;
-use App\Models\AnalisParameter;
-use Illuminate\Http\Request;
-use Yajra\Datatables\Datatables;
-use Illuminate\Support\Facades\Hash;
+
+// SERVICES
 use App\Services\FunctionValue;
 use App\Services\AnalystRender;
 use App\Services\AnalystFormula;
 use App\Services\AutomatedFormula;
-use App\Models\AnalystFormula as Formula;
-use App\Models\KuotaAnalisaParameter;
+
+// UTILS
+use Illuminate\Http\Request;
+use Yajra\Datatables\Datatables;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Exception;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -667,7 +674,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'SWAB TEST' && $stp->sample->nama_kategori == 'Udara'){
+            }else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Swab Test')){ // ini untuk kategori SWAB TEST
                 $swab = SwabTestHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -862,7 +869,6 @@ class InputParameterController extends Controller
 
     public function addValueParamApi(Request $request){
 		$stp = TemplateStp::with('sample')->where('id', $request->id_stp)->select('name','category_id')->first();
-		// dd($request->all());
         $repo_quota = json_decode(
             Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
             true
@@ -1780,7 +1786,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		}else if($stp->name == 'SWAB TEST' && $stp->sample->nama_kategori == 'Udara'){
+		}else if($stp->name == 'SWAB TEST' && ($stp->sample->nama_kategori == 'Swab Test')){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -3287,31 +3293,48 @@ class InputParameterController extends Controller
 
 				$data_udara['id_lingkungan_header'] = $data->id;
 				$data_udara['no_sampel']            = $request->no_sample;
-				$data_udara['hasil1']  = isset($data_kalkulasi['C'])   ? $data_kalkulasi['C']   : null;
-				$data_udara['hasil2']  = isset($data_kalkulasi['C1'])  ? $data_kalkulasi['C1']  : null;
-				$data_udara['hasil3']  = isset($data_kalkulasi['C2'])  ? $data_kalkulasi['C2']  : null;
-				$data_udara['hasil4']  = isset($data_kalkulasi['C3'])  ? $data_kalkulasi['C3']  : null;
-				$data_udara['hasil5']  = isset($data_kalkulasi['C4'])  ? $data_kalkulasi['C4']  : null;
-				$data_udara['hasil6']  = isset($data_kalkulasi['C5'])  ? $data_kalkulasi['C5']  : null;
-				$data_udara['hasil7']  = isset($data_kalkulasi['C6'])  ? $data_kalkulasi['C6']  : null;
-				$data_udara['hasil8']  = isset($data_kalkulasi['C7'])  ? $data_kalkulasi['C7']  : null;
-				$data_udara['hasil9']  = isset($data_kalkulasi['C8'])  ? $data_kalkulasi['C8']  : null;
-				$data_udara['hasil10'] = isset($data_kalkulasi['C9'])  ? $data_kalkulasi['C9']  : null;
-				$data_udara['hasil11'] = isset($data_kalkulasi['C10']) ? $data_kalkulasi['C10'] : null;
-				$data_udara['hasil12'] = isset($data_kalkulasi['C11']) ? $data_kalkulasi['C11'] : null;
-				$data_udara['hasil13'] = isset($data_kalkulasi['C12']) ? $data_kalkulasi['C12'] : null;
-				$data_udara['hasil14'] = isset($data_kalkulasi['C13']) ? $data_kalkulasi['C13'] : null;
-				$data_udara['hasil15'] = isset($data_kalkulasi['C14']) ? $data_kalkulasi['C14'] : null;
-				$data_udara['hasil16'] = isset($data_kalkulasi['C15']) ? $data_kalkulasi['C15'] : null;
-				$data_udara['hasil17'] = isset($data_kalkulasi['C16']) ? $data_kalkulasi['C16'] : null;
-				$data_udara['satuan']  = $data_kalkulasi['satuan'];
+				$minWsUdara = config('column_ws.ws_value_udara.min', 1);
+				$maxWsUdara = config('column_ws.ws_value_udara.max', 23);
+				$minWsLingkungan = config('column_ws.ws_value_lingkungan.min', 0);
+				$maxWsLingkungan = config('column_ws.ws_value_lingkungan.max', 18);
+
+				$idxLingkungan = $minWsLingkungan;
+				for ($i = $minWsUdara; $i <= $maxWsUdara; $i++) {
+					if ($idxLingkungan > $maxWsLingkungan) break;
+					$keyC = $idxLingkungan == 0 ? 'C' : 'C' . $idxLingkungan;
+					$data_udara['hasil' . $i] = isset($data_kalkulasi[$keyC]) ? $data_kalkulasi[$keyC] : null;
+					$idxLingkungan++;
+				}
+				$data_udara['flow'] 			 	= isset($data_kalkulasi['flow']) ? $data_kalkulasi['flow'] : null;
+				$data_udara['satuan']  			 	= isset($data_kalkulasi['satuan']) ? $data_kalkulasi['satuan'] : null;
+				$data_udara['durasi'] 			 	= isset($data_kalkulasi['durasi']) ? $data_kalkulasi['durasi'] : null;
+				$data_udara['tekanan_udara'] 		= isset($data_kalkulasi['tekanan_u']) ? $data_kalkulasi['tekanan_u'] : null;
+				$data_udara['suhu'] 			 	= isset($data_kalkulasi['suhu']) ? $data_kalkulasi['suhu'] : null;
+				$data_udara['k_sample'] 			= isset($data_kalkulasi['k_sample']) ? $data_kalkulasi['k_sample'] : null;
+				$data_udara['k_blanko'] 			= isset($data_kalkulasi['k_blanko']) ? $data_kalkulasi['k_blanko'] : null;
+				$data_udara['Qs'] 			 		= isset($data_kalkulasi['Qs']) ? $data_kalkulasi['Qs'] : null;
+				$data_udara['w1'] 			 		= isset($data_kalkulasi['w1']) ? $data_kalkulasi['w1'] : null;
+				$data_udara['w2'] 			 		= isset($data_kalkulasi['w2']) ? $data_kalkulasi['w2'] : null;
+				$data_udara['b1'] 			 		= isset($data_kalkulasi['b1']) ? $data_kalkulasi['b1'] : null;
+				$data_udara['b2'] 			 		= isset($data_kalkulasi['b2']) ? $data_kalkulasi['b2'] : null;
+				$data_udara['vl']					= isset($data_kalkulasi['vl']) ? $data_kalkulasi['vl'] : null;
+				$data_udara['st']					= isset($data_kalkulasi['st']) ? $data_kalkulasi['st'] : null;
+				$data_udara['Vstd']					= isset($data_kalkulasi['Vstd']) ? $data_kalkulasi['Vstd'] : null;
+				$data_udara['V']					= isset($data_kalkulasi['V']) ? $data_kalkulasi['V'] : null;
+				$data_udara['Vu']					= isset($data_kalkulasi['Vu']) ? $data_kalkulasi['Vu'] : null;
+				$data_udara['Vs']					= isset($data_kalkulasi['Vs']) ? $data_kalkulasi['Vs'] : null;
+				$data_udara['Ta']					= isset($data_kalkulasi['Ta']) ? $data_kalkulasi['Ta'] : null;
+				$data_udara['t']					= isset($data_kalkulasi['t']) ? $data_kalkulasi['t'] : null; // ini khusus duftall
+				$data_udara['a']					= isset($data_kalkulasi['a']) ? $data_kalkulasi['a'] : null; // ini khusus duftall
+				
 				WsValueUdara::create($data_udara);
 
-				$data_kalkulasi['lingkungan_header_id'] = $data->id;
-				$data_kalkulasi['tanggal_terima']       = $tgl_terima;
-				$data_kalkulasi['no_sampel']            = $request->no_sample;
-				unset($data_kalkulasi['satuan']);
-				WsValueLingkungan::create($data_kalkulasi);
+				// $data_kalkulasi['lingkungan_header_id'] = $data->id;
+				// $data_kalkulasi['tanggal_terima']       = $tgl_terima;
+				// $data_kalkulasi['no_sampel']            = $request->no_sample;
+				// unset($data_kalkulasi['satuan']);
+				
+				// WsValueLingkungan::create($data_kalkulasi);
 
 				DB::commit();
 				return (object)[
@@ -4013,7 +4036,8 @@ class InputParameterController extends Controller
 				if(!is_null($swab)){
 					$header->luas = $luas;
 					$header->jumlah_mikroba = $request->jumlah_mikroba;
-					$header->fp = isset($request->fp) ? $request->fp : $request->jumlah_pengencer;
+					$header->fp = $request->fp;
+					$header->jumlah_pengencer = $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
 				$header->data_pershift = $data_pershift;
@@ -4057,7 +4081,7 @@ class InputParameterController extends Controller
 
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
-					'status' => 500,
+					'status' => 401,
 					'line' => $e->getLine(),
 					'file' => $e->getFile()
 				];
@@ -4130,6 +4154,12 @@ class InputParameterController extends Controller
 				$header = new SwabTestHeader();
 				$header->no_sampel = $request->no_sample;
 				$header->parameter = $request->parameter;
+				$header->luas = $luas ?? null;
+				$header->volume = $request->volume;
+				$header->fp = $request->fp;
+				$header->jumlah_pengencer = $request->jumlah_pengencer;
+				$header->jumlah_mikroba = $request->jumlah_mikroba;
+
 				$header->template_stp = $request->id_stp;
 				$header->id_parameter = $data_parameter->id;
 				$header->note = $request->note;
@@ -4137,12 +4167,6 @@ class InputParameterController extends Controller
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
-
-				// $data_kalkulasi['id_swab_header'] = $header->id;
-				// $data_kalkulasi['no_sampel'] = $request->no_sample;
-				// $data_kalkulasi['created_by'] = $this->karyawan;
-				// // Simpan hasil ke tabel ws_value_swabtest
-				// WsValueSwab::create($data_kalkulasi);
 
 				$data_swab = array();
 				$data_swab['id_swab_header'] = $header->id;
@@ -4152,10 +4176,9 @@ class InputParameterController extends Controller
                 $data_swab['hasil13'] = isset($data_kalkulasi['hasil3']) ? $data_kalkulasi['hasil3'] : null;
                 $data_swab['hasil14'] = isset($data_kalkulasi['hasil4']) ? $data_kalkulasi['hasil4'] : null;
                 $data_swab['hasil19'] = isset($data_kalkulasi['hasil5']) ? $data_kalkulasi['hasil5'] : null;
-                $data_swab['created_by'] = $this->karyawan;
+				$data_swab['satuan']  = isset($data_kalkulasi['satuan']) ? $data_kalkulasi['satuan'] : null;
 				WsValueUdara::create($data_swab);
 
-				// Commit transaksi jika semua berhasil
 				DB::commit();
 
 				return (object)[
@@ -4165,12 +4188,10 @@ class InputParameterController extends Controller
 				];
 
 			} catch (\Exception $e) {
-				// Rollback transaksi jika terjadi kesalahan
 				DB::rollBack();
-
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
-					'status' => 500
+					'status' => 401
 				];
 			}
 		} else {
@@ -4458,7 +4479,7 @@ class InputParameterController extends Controller
 				if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
 					$data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id)->orderBy('id', 'desc')->first();
 					$data_udara->id_subkontrak  = $data->id;
-					for ($i = 1; $i <= 19; $i++) { // f_koreksi_1 - f_koreksi_17
+					for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 						$key = 'f_koreksi_' . $i;
 						if (isset($data_udara->{$key})) {
 							$data_udara->{$key} = $data_kalkulasi['hasil'];
@@ -4469,7 +4490,7 @@ class InputParameterController extends Controller
 					$data_udara = [];
 					$data_udara['id_subkontrak'] = $data->id;
 					$data_udara['no_sampel'] = trim($request->no_sample);
-					for ($i = 1; $i <= 19; $i++) { // f_koreksi_1 - f_koreksi_17
+					for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 						$key = 'f_koreksi_' . $i;
 						$data_udara[$key] = $data_kalkulasi['hasil'];
 					}
@@ -4483,7 +4504,7 @@ class InputParameterController extends Controller
 				if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
 					$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id)->orderBy('id', 'desc')->first();
 					$data_emisi->id_subkontrak  = $data->id;
-					for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+					for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
 						$key = 'f_koreksi_c';
 						$key .= $i == 0 ? '' : $i;
 						if (isset($data_emisi->{$key})) {
@@ -4495,7 +4516,7 @@ class InputParameterController extends Controller
 					$data_emisi = [];
 					$data_emisi['id_subkontrak'] = $data->id;
 					$data_emisi['no_sampel'] = trim($request->no_sample);
-					for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+					for ($i = config('column_ws.ws_value_emisi.min'); $i <= config('column_ws.ws_value_emisi.max'); $i++) {
 						$key = 'f_koreksi_c';
 						$key .= $i == 0 ? '' : $i;
 						$data_emisi[$key] = $data_kalkulasi['hasil'];

@@ -24,6 +24,7 @@ use App\Services\GetAtasan;
 use App\Services\JadwalServices;
 use App\Services\Notification;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
+use App\Services\SamplerTrackingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +39,7 @@ class SamplingPlanController extends Controller
     {
         
         $active = $request->is_active == '' ? true : $request->is_active;
-        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active',
+        $data = Jadwal::with(['samplingPlan:id,created_at,filename,is_active,google_maps_url',
         'samplingPlan' => function ($query) {
             $query->WithTypeModelSub();
         },])
@@ -725,9 +726,7 @@ class SamplingPlanController extends Controller
                 $jadwal = JadwalServices::on('updateJadwalKategori', $dataObject)->updateJadwalSPKategori();
             }
 
-            // TAMBAHAN UNTUK UPDATE ORDER DETAIL
-            $this->updateOrderDetail($dataObject, $request->tanggal);
-
+            // Update order detail now handled inside JadwalServices
             // ========================================================
             // 2. SNAPSHOT AFTER: Tarik data setelah SP dieksekusi
             // ========================================================
@@ -768,6 +767,27 @@ class SamplingPlanController extends Controller
             }
 
             if ($jadwal) {
+                // try {
+                //     $trackingDates = array_unique(array_filter([
+                //         $request->tanggal_lama,
+                //         $request->tanggal,
+                //     ]));
+
+                //     foreach ($trackingDates as $trackingDate) {
+                //         app(SamplerTrackingService::class)->sync(
+                //             Carbon::parse($trackingDate)->toDateString()
+                //         );
+                //     }
+                // } catch (\Throwable $trackingSyncException) {
+                //     Log::warning('Gagal sync activity sampler setelah update jadwal. ' . $trackingSyncException->getMessage(), [
+                //         'no_quotation' => $request->no_quotation,
+                //         'tanggal_lama' => $request->tanggal_lama,
+                //         'tanggal_baru' => $request->tanggal,
+                //         'line' => $trackingSyncException->getLine(),
+                //         'file' => $trackingSyncException->getFile(),
+                //     ]);
+                // }
+
                 return response()->json([
                     'message' => 'Berhasil melakukan update Jadwal.!',
                     'status'  => '200',
@@ -834,8 +854,7 @@ class SamplingPlanController extends Controller
                 $jadwal = JadwalServices::on('insertParsial', $dataObject)->insertParsial();
             }
 
-            $this->updateOrderDetail($dataObject, $request->tanggal);
-
+            // Update order detail now handled inside JadwalServices
            
             switch ($type) {
                 case 'QT':
@@ -894,26 +913,6 @@ class SamplingPlanController extends Controller
         }
     }
 
-    private function updateOrderDetail($data, $tanggal)
-    {
-        $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
-        if ($cekOrder) {
-            $array_no_samples = [];
-            foreach ($data->kategori as $x => $y) {
-                $pra_no_sample      = explode(" - ", $y)[1];
-                $no_samples         = $cekOrder->no_order . '/' . $pra_no_sample;
-                $array_no_samples[] = $no_samples;
-            }
-
-            $orderDetail = OrderDetail::where('id_order_header', $cekOrder->id)->whereIn('no_sampel', $array_no_samples)->get();
-            foreach ($orderDetail as $od) {
-                $od->tanggal_sampling = $tanggal;
-                $od->save();
-
-                Log::channel('perubahan_tanggal')->info('Order Detail updated: ' . $od->no_sampel . ' -> ' . $tanggal);
-            }
-        }
-    }
 
     public function cancelJadwal(Request $request)
     {

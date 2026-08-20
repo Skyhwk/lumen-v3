@@ -142,7 +142,9 @@ class DashboardStaffTc extends Controller
             }
 
             if ($section === 'global' || $section === 'all') {
+                $monthNow = Carbon::now()->month;
                 $orderTahunIni = OrderDetail::whereYear('tanggal_terima', $tahunFilter)
+                    ->whereMonth('tanggal_terima', '<=',$monthNow)
                     ->where('is_active', true)
                     ->get(['no_sampel', 'status', 'tanggal_terima', 'approved_at']);
 

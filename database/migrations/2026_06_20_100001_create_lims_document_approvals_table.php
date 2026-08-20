@@ -8,6 +8,7 @@ class CreateLimsDocumentApprovalsTable extends Migration
 {
     public function up()
     {
+        if (!Schema::hasTable('lims_document_approvals')) {
         Schema::create('lims_document_approvals', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('lims_document_id');
@@ -21,6 +22,7 @@ class CreateLimsDocumentApprovalsTable extends Migration
 
             $table->index(['lims_document_id', 'action', 'is_active']);
         });
+        }
     }
 
     public function down()

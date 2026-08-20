@@ -268,7 +268,7 @@ class DraftUdaraMikrobiologiController extends Controller
                     $index = $getSatuan->udara($bakumutu->satuan ?? null);
 
                     if ($index === null) {
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $key = "f_koreksi_$i";
                             if (! empty($hasil[$key])) {
                                 $nilai = $hasil[$key];
@@ -276,7 +276,7 @@ class DraftUdaraMikrobiologiController extends Controller
                             }
                         }
                         if ($nilai === '-' || $nilai === null) {
-                            for ($i = 1; $i <= 17; $i++) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
                                 if (! empty($hasil[$key])) {
                                     $nilai = $hasil[$key];

@@ -170,4 +170,16 @@ class WsValueAir extends Sector
         }
         return null;
     }
+
+    public function getHasilAnalyst(){
+        return $this->titrimetri 
+            ?? $this->gravimetri 
+            ?? $this->colorimetri 
+            ?? $this->subkontrak;
+    }
+    public function getHasilParameterAttribute()
+    {
+        return optional($this->getHasilAnalyst())->parameter ?? $this->parameter;
+    }
+
 }

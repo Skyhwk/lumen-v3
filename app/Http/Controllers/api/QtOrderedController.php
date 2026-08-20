@@ -440,6 +440,7 @@ class QtOrderedController extends Controller
                 "jam_sampling" => $request->jam_sampling,
                 "tambahan" => $request->tambahan,
                 "keterangan_lain" => $request->keterangan_lain,
+                'google_maps_url' => $request->google_maps_url,
                 "tanggal_penawaran" => $request->tanggal_penawaran,
             ];
 

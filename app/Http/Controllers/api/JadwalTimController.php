@@ -49,6 +49,8 @@ class JadwalTimController extends Controller
             }
         ])
             ->select(
+                'no_quotation',
+                'kendaraan',
                 'parsial',
                 'nama_perusahaan',
                 'periode',
@@ -64,6 +66,8 @@ class JadwalTimController extends Controller
                 )
             )
             ->groupBy(
+                'no_quotation',
+                'kendaraan',
                 'parsial',
                 'periode',
                 'nama_perusahaan',
@@ -75,54 +79,24 @@ class JadwalTimController extends Controller
                 'id_cabang',
                 'note'
             )
-            ->whereNotNull(
-                'no_quotation'
-            )
-            ->where(
-                'is_active',
-                true
-            )
-            ->where(
-                'tanggal',
-                $request->tanggal
-            )
+            ->whereNotNull('no_quotation')
+            ->where('is_active',true)
+            ->where('tanggal',$request->tanggal)
             ->orderBy('jam_mulai', 'asc')
             ->get()
 
-            // mapping PIC
             ->map(function ($item) {
-
-                $quotation =
-                    strpos(
-                        $item->no_quotation,
-                        'QTC'
-                    ) !== false
+                $quotation = strpos($item->no_quotation,'QTC') !== false
                         ? $item->quotationKontrakH
                         : $item->quotationNonKontrak;
-
-                $item->pic = $quotation
-                    ? [
-                        'nama_pic_sampling'
-                        => $quotation->nama_pic_sampling,
-
-                        'no_tlp_pic_sampling'
-                        => $quotation->no_tlp_pic_sampling,
-                    ]
-                    : null;
-
-                unset(
-                    $item->quotationKontrakH,
-                    $item->quotationNonKontrak
-                );
-
-                // buat tim sampler yang konsisten
+                $item->pic = $quotation ? [
+                        'nama_pic_sampling'=> $quotation->nama_pic_sampling,
+                        'no_tlp_pic_sampling'=> $quotation->no_tlp_pic_sampling,
+                    ]: null;
+                unset($item->quotationKontrakH,$item->quotationNonKontrak);
                 $teamSamplers = collect(
                     explode(',', $item->sampler)
-                )
-                    ->map(fn($s) => trim($s))
-                    ->filter()
-                    ->unique()
-                    ->values();
+                )->map(fn($s) => trim($s))->filter()->unique()->values();
 
                 // tambahkan driver jika belum ada
                 if (

@@ -10,6 +10,7 @@ use App\Models\MasterDriver;
 use App\Models\PraNoSample;
 use App\Models\MasterCabang;
 use App\Services\JadwalServices;
+use App\Services\SamplerTrackingService;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
@@ -359,9 +360,40 @@ class RequestSamplingPlanRevisiController extends Controller
             
             $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
 
-            $this->updateOrderDetail($ObjectData, $request->tanggal);
+            if ($ObjectData->kategori != null) {
+                if (is_array($ObjectData->tanggal)) {
+                    for ($i = 0; $i < count($ObjectData->tanggal); $i++) {
+                        $tanggal_baru = $ObjectData->tanggal[$i];
+                        $kategori_array = $ObjectData->kategori[$i];
+                        
+                        if (is_array($kategori_array) && count($kategori_array) > 0) {
+                            JadwalServices::syncTanggalSamplingOrderDetail($ObjectData->no_quotation, $kategori_array, $tanggal_baru);
+                        }
+                    }
+                } else {
+                    // Fallback jika dikirim bukan sebagai array (misal format lama)
+                    JadwalServices::syncTanggalSamplingOrderDetail($ObjectData->no_quotation, $ObjectData->kategori, $ObjectData->tanggal);
+                }
+            }
             
             if ($addJadwal) {
+                try {
+                    $trackingDates = is_array($ObjectData->tanggal) ? $ObjectData->tanggal : [$ObjectData->tanggal];
+
+                    foreach (array_unique(array_filter($trackingDates)) as $trackingDate) {
+                        app(SamplerTrackingService::class)->sync(
+                            Carbon::parse($trackingDate)->toDateString()
+                        );
+                    }
+                } catch (\Throwable $trackingSyncException) {
+                    Log::warning('Gagal sync activity sampler setelah revisi jadwal sampling. ' . $trackingSyncException->getMessage(), [
+                        'no_quotation' => $request->no_quotation,
+                        'id_sampling' => $request->id,
+                        'line' => $trackingSyncException->getLine(),
+                        'file' => $trackingSyncException->getFile(),
+                    ]);
+                }
+
                 $type = explode("/", $request->no_quotation)[1];
                 if ($type == 'QTC') {
                     $job = new RenderSamplingPlan($request->quotation_id, 'kontrak');
@@ -378,7 +410,7 @@ class RequestSamplingPlanRevisiController extends Controller
                 'status'  => $th->getCode(),
             ];
             Log::channel('sampling')->error("=== addJadwal ===", $logData);
-            return response()->json($th);
+            return response()->json(['message' => $th->getMessage(), 'status' => 'error'], 400);
         }
     }
 

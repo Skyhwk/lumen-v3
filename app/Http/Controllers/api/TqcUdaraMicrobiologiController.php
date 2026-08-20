@@ -7,6 +7,7 @@ use App\Models\DetailMicrobiologi;
 use App\Models\HistoryAppReject;
 
 use App\Models\MicrobioHeader;
+use App\Models\MasterKaryawan;
 use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 use App\Models\ParameterFdl;
@@ -103,7 +104,9 @@ class TqcUdaraMicrobiologiController extends Controller
                 ->get();
 
             if ($header->isEmpty()) {
-                continue;
+                $header = Subkontrak::with('ws_udara')
+                    ->where('no_sampel', $orderDetail->no_sampel)
+                    ->get();
             }
 
             // 2. Ambil id_regulasi dari field regulasi di OrderDetail
@@ -136,8 +139,7 @@ class TqcUdaraMicrobiologiController extends Controller
                     $index = $getSatuan->udara($bakuMutu->satuan ?? null);
 
                     if ($index === null) {
-                        // cari f_koreksi_1..17 dulu
-                        for ($i = 1; $i <= 17; $i++) {
+                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                             $key = "f_koreksi_$i";
                             if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                 $nilai = $hasil[$key];
@@ -145,9 +147,8 @@ class TqcUdaraMicrobiologiController extends Controller
                             }
                         }
 
-                        // kalau masih kosong, cari hasil1..17
                         if ($nilai === '-' || $nilai === null || $nilai === '') {
-                            for ($i = 1; $i <= 17; $i++) {
+                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $key = "hasil$i";
                                 if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
@@ -167,16 +168,26 @@ class TqcUdaraMicrobiologiController extends Controller
                     }
                 }
 
+                $verifikatorGrade = null;
+                if (!empty($item->approved_by)) {
+                    $karyawan = MasterKaryawan::where('nama_lengkap', $item->approved_by)->first();
+                    if ($karyawan) {
+                        $verifikatorGrade = $karyawan->grade;
+                    }
+                }
+
                 $data[] = [
-                    'no_sampel'   => $orderDetail->no_sampel,
-                    'parameter'   => $item->parameter,
-                    'baku_mutu'   => $bakuMutu->baku_mutu ?? null,
-                    'satuan'      => $bakuMutu->satuan ?? null,
-                    'method'      => $bakuMutu->method ?? null,
-                    'nama_header' => $bakuMutu->nama_header ?? null,
-                    'nilai_uji'   => $nilai,
-                    'verifikator' => $item->approved_by ?? null,
+                    'no_sampel'         => $orderDetail->no_sampel,
+                    'parameter'         => $item->parameter,
+                    'baku_mutu'         => $bakuMutu->baku_mutu ?? null,
+                    'satuan'            => $bakuMutu->satuan ?? null,
+                    'method'            => $bakuMutu->method ?? null,
+                    'nama_header'       => $bakuMutu->nama_header ?? null,
+                    'nilai_uji'         => $nilai,
+                    'verifikator'       => $item->approved_by ?? null,
+                    'verifikator_grade' => $verifikatorGrade,
                 ];
+
             }
         }
 

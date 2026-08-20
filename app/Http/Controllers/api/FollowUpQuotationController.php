@@ -48,6 +48,7 @@ class FollowUpQuotationController extends Controller
                     ->where('request_quotation.is_active', true)
                     ->where('is_approved', true)
                     ->where('is_emailed', true)
+                    ->where('status_sampling','!=','SD')
                     ->whereYear('tanggal_penawaran', $request->year)
                     ->orderBy('tanggal_penawaran', 'desc')
                     ->orderBy('id', 'desc');
@@ -71,7 +72,7 @@ class FollowUpQuotationController extends Controller
                     ->orderBy('tanggal_penawaran', 'desc')
                     ->orderBy('id', 'desc');
             }
-
+         
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -85,6 +86,8 @@ class FollowUpQuotationController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
+           
+          
 
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
@@ -158,7 +161,7 @@ class FollowUpQuotationController extends Controller
                     ->orderBy('tanggal_penawaran', 'desc')
                     ->orderBy('id', 'desc');
             }
-
+            
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -172,6 +175,7 @@ class FollowUpQuotationController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
+          
 
             $data = $data->get();
             
@@ -614,6 +618,7 @@ class FollowUpQuotationController extends Controller
                 'is_malam' => $request->is_malam,
                 'tambahan' => $request->tambahan,
                 'keterangan_lain' => $request->keterangan_lain,
+                'google_maps_url' => $request->google_maps_url,
                 'karyawan' => $this->karyawan
             ];
             if ($request->status_quotation == 'kontrak') {
@@ -646,6 +651,7 @@ class FollowUpQuotationController extends Controller
                 "jam_sampling" => $request->jam_sampling,
                 "tambahan" => $request->tambahan,
                 "keterangan_lain" => $request->keterangan_lain,
+                'google_maps_url' => $request->google_maps_url,
                 "tanggal_penawaran" => $request->tanggal_penawaran,
                 'is_sabtu' => $request->is_sabtu,
                 'is_minggu' => $request->is_minggu,

@@ -1,0 +1,68 @@
+@include('TemplateEmail.ats.partials.shell-open', [
+    'title' => 'Permohonan Persetujuan Kandidat',
+    'heading' => 'Permohonan Persetujuan Kandidat',
+    'subheading' => 'Review kandidat untuk persetujuan Direktur',
+])
+
+<p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#334155;">
+    Yth. Bapak/Ibu Direktur,
+</p>
+
+<p style="margin:0 0 20px 0;font-size:14px;line-height:1.8;color:#475569;text-align:justify;">
+    Dengan hormat, kami informasikan bahwa saat ini terdapat kandidat potensial yang telah melalui tahap seleksi awal dan dinyatakan memenuhi kriteria untuk dipertimbangkan dalam proses selanjutnya. Kami mohon persetujuan Bapak/Ibu Direktur atas kandidat berikut:
+</p>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:linear-gradient(180deg,#eff6ff 0%,#f8fafc 100%);border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
+    @foreach([
+        'Nama Kandidat' => $candidateInfo->nama_lengkap ?? '-',
+        'Shio' => $candidateInfo->shio ?? '-',
+        'Elemen' => $candidateInfo->elemen ?? '-',
+        'Posisi yang Dilamar' => $candidateInfo->nama_jabatan ?? '-',
+        'Usia' => $candidateInfo->umur ?? '-',
+        'Alamat' => $candidateInfo->alamat ?? '-',
+        'Kontak' => $contact ?? '-',
+    ] as $label => $value)
+        <tr>
+            <td style="padding:12px 18px;width:38%;font-size:13px;color:#64748b;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $label }}</td>
+            <td style="padding:12px 18px;font-size:14px;color:#0f172a;font-weight:600;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $value }}</td>
+        </tr>
+    @endforeach
+</table>
+
+<!-- Review HRD -->
+<div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 14px; border-radius: 8px; margin-bottom: 14px;">
+    <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #334155; text-transform: uppercase; letter-spacing: 0.05em;">
+        <strong>HRD Interview Review</strong>
+    </h3>
+    <div style="margin: 0; font-size: 13px; color: #475569; line-height: 1.5;">
+        {!! $hrdInterview->catatan_interview ?? '<i>Tidak ada catatan</i>' !!}
+    </div>
+</div>
+
+<!-- Review User -->
+<div style="background-color: {{ $decision === 'approve' ? '#f0fdf4' : '#fef2f2' }}; border: 1px solid {{ $decision === 'approve' ? '#bbf7d0' : '#fecaca' }}; padding: 14px; border-radius: 8px; margin-bottom: 20px;">
+    <h3 style="margin: 0 0 8px 0; font-size: 13px; color: {{ $decision === 'approve' ? '#166534' : '#991b1b' }}; text-transform: uppercase; letter-spacing: 0.05em;">
+        <strong>User Interview Review</strong>
+    </h3>
+    <div style="margin: 0; font-size: 13px; color: #475569; line-height: 1.5;">
+        {!! $interview->catatan_interview ?? '<i>Tidak ada catatan</i>' !!}
+    </div>
+</div>
+
+<p style="margin:0 0 20px 0;font-size:14px;line-height:1.8;color:#475569;text-align:justify;">
+    Kandidat ini telah memenuhi sejumlah persyaratan awal dan memiliki potensi sesuai dengan kebutuhan perusahaan. Persetujuan Bapak/Ibu Direktur akan sangat membantu dalam menentukan langkah selanjutnya.
+</p>
+
+<p style="margin:0 0 28px 0;font-size:14px;line-height:1.8;color:#475569;">
+    Terima kasih atas perhatian dan kerja samanya.<br><br>
+    Hormat kami,<br>
+    <strong style="color:#1e40af;">HRD Recruitment Team</strong>
+</p>
+
+<div style="height:1px;background-color:#e2e8f0;margin:0 0 28px 0;"></div>
+
+@include('TemplateEmail.ats.partials.action-buttons', ['btn' => $btn ?? (object) []])
+
+@include('TemplateEmail.ats.partials.cv-detail', $cv)
+
+@include('TemplateEmail.ats.partials.shell-close')

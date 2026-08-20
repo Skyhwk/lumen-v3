@@ -18,6 +18,13 @@ use Illuminate\Support\Facades\DB;
 
 $router->post('/api/gettoken', 'AuthController@gettoken');
 $router->post('/api/cektoken', 'AuthController@checkToken');
+$router->post('/api/logout', 'AuthController@logout');
+$router->post('/api/stop-impersonate', 'api\UserController@stopImpersonate');
+$router->post('/api/forgot-password', 'AuthController@forgotPassword');
+$router->post('/api/verify-reset-otp', 'AuthController@verifyResetOtp');
+$router->post('/api/reset-password', 'AuthController@resetPassword');
+
+$router->get('/api/cs-attachment', 'CsTicketAssetController@show');
 
 $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.user', 'log.request', 'decrypt.slice']], function () use ($router) {
     $router->post('route', 'BaseController@handle');
@@ -117,6 +124,9 @@ $router->group(['prefix' => 'director'], function () use ($router) {
 });
 // Print Termal
 $router->get('/mobile/print-termal', 'mobile\PrintTermalController@createPrintJob');
+
+$router->get('/cs-tickets/{file}', 'CsTicketAssetController@show');
+$router->get('/cs_tickets/conversation/{file}', 'CsTicketAssetController@show');
 
 
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
