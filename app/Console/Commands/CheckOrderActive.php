@@ -413,6 +413,12 @@ class CheckOrderActive extends Command
             ? ($d['tanggal_terima'] ?? null)
             : ($isDirect ? ($d['tanggal_terima'] ?? null) : ($d['tanggal_terima'] ?? null));
 
+        if($d['kategori_2'] == '1-Air')
+        {
+            // do if water get from fdl
+            $samplingDate = $d['tanggal_sampling'];
+        }
+
         $steps['sampling'] = [
             'label' => $isSD ? 'Sampel Diterima' : ($isDirect ? 'Direct' : 'Sampling'),
             'date'  => $samplingDate,
