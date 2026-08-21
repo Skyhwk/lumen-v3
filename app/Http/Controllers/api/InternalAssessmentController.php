@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Services\ScaleScoringService;
 
 class InternalAssessmentController extends Controller
 {
@@ -208,48 +209,51 @@ class InternalAssessmentController extends Controller
 
     public function answer(Request $request)
     {
-        $attempt = $this->authorizedAttempt($request);
-        $session = DB::table('assessment_internal_sessions')
-            ->where('assessment_internal_attempt_id', $attempt->id)
-            ->where('status', 'in_progress')
-            ->orderBy('session_order')
-            ->first();
-        if (!$session) {
-            return response()->json(['message' => 'Sesi assessment tidak aktif.'], 409);
-        }
+        return DB::transaction(function () use ($request) {
+            $authorizedAttempt = $this->authorizedAttempt($request);
+            $attempt = DB::table('assessment_internal_attempts')
+                ->where('id', $authorizedAttempt->id)
+                ->lockForUpdate()
+                ->first();
+            $state = $this->statePayload($attempt->id);
+            if (($state['status'] ?? null) !== 'in_progress' || (string) $state['question']['id'] !== (string) $request->question_id) {
+                return response()->json($state, 409);
+            }
 
-        $questions = collect(json_decode($session->questions_json ?: '[]', true) ?: []);
-        $question = $questions->first(function ($item) use ($request) {
-            return (string) ($item['id'] ?? '') === (string) $request->question_id;
-        });
-        if (!$question) {
-            return response()->json(['message' => 'Soal tidak ditemukan pada sesi aktif.'], 404);
-        }
-        if ($request->input('answer') === null || $request->input('answer') === '') {
-            return response()->json(['message' => 'Jawaban wajib diisi.'], 422);
-        }
+            $session = DB::table('assessment_internal_sessions')
+                ->where('id', $state['session']['id'])
+                ->lockForUpdate()
+                ->first();
+            $answers = json_decode($session->answers_json ?: '{}', true) ?: [];
+            $question = collect(json_decode($session->questions_json ?: '[]', true) ?: [])
+                ->firstWhere('id', (string) $request->question_id);
 
-        $answer = $request->input('answer');
-        DB::table('assessment_internal_answers')->updateOrInsert(
-            [
-                'assessment_internal_attempt_id' => $attempt->id,
-                'question_id' => (string) $question['id'],
-            ],
-            [
-                'assessment_internal_session_id' => $session->id,
-                'answer_json' => json_encode($answer),
-                'is_correct' => null,
-                'score' => null,
-                'created_at' => Carbon::now(),
+            if ($question && $question['type'] === 'disc') {
+                $most = $request->answer['P'] ?? null;
+                $least = $request->answer['K'] ?? null;
+                if ($most === null || $least === null || (string) $most === (string) $least) {
+                    return response()->json(['message' => 'Pilih pernyataan yang paling dan paling tidak menggambarkan diri Anda.'], 422);
+                }
+                if (!array_key_exists($request->question_id, $answers)) {
+                    $answers[$request->question_id] = ['P' => (string) $most, 'K' => (string) $least];
+                }
+            } elseif (!array_key_exists($request->question_id, $answers)) {
+                $answers[$request->question_id] = is_array($request->answer)
+                    ? array_values($request->answer)
+                    : [$request->answer];
+            }
+
+            DB::table('assessment_internal_sessions')->where('id', $session->id)->update([
+                'answers_json' => json_encode($answers),
                 'updated_at' => Carbon::now(),
-            ]
-        );
-        DB::table('assessment_internal_attempts')->where('id', $attempt->id)->update([
-            'last_activity_at' => Carbon::now(),
-            'updated_at' => Carbon::now(),
-        ]);
+            ]);
+            DB::table('assessment_internal_attempts')->where('id', $attempt->id)->update([
+                'last_activity_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
 
-        return response()->json($this->statePayload($attempt->id));
+            return response()->json($this->statePayload($attempt->id));
+        });
     }
 
     public function updateProfile(Request $request)
@@ -259,7 +263,10 @@ class InternalAssessmentController extends Controller
         if (!$assessment || !(bool) ($assessment->is_completed_profile ?? false)) {
             return response()->json(['message' => 'Sesi kelengkapan profil tidak tersedia.'], 404);
         }
-        if (DB::table('assessment_internal_sessions')->where('assessment_internal_attempt_id', $attempt->id)->where('status', '!=', 'completed')->exists()) {
+        if (DB::table('assessment_internal_sessions')
+            ->where('assessment_internal_attempt_id', $attempt->id)
+            ->whereNotIn('status', ['completed', 'expired'])
+            ->exists()) {
             return response()->json(['message' => 'Selesaikan seluruh sesi assessment terlebih dahulu.'], 409);
         }
 
@@ -453,6 +460,8 @@ class InternalAssessmentController extends Controller
                 'category_name' => $category->name,
                 'duration_minutes' => $definition['duration_minutes'] ?? $category->duration_minutes ?? null,
                 'questions_json' => json_encode($questions),
+                'answers_json' => json_encode(new \stdClass()),
+                'result_json' => null,
                 'status' => 'pending',
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
@@ -519,7 +528,9 @@ class InternalAssessmentController extends Controller
                         'name' => $pending->category_name,
                         'duration_minutes' => $pending->duration_minutes,
                         'question_count' => count($pendingQuestions),
-                        'is_first' => !$sessions->contains('status', 'completed'),
+                        'is_first' => !$sessions->contains(function ($item) {
+                            return in_array($item->status, ['completed', 'expired'], true);
+                        }),
                     ],
                 ];
             }
@@ -536,28 +547,25 @@ class InternalAssessmentController extends Controller
         }
 
         if ($session->expires_at && Carbon::parse($session->expires_at)->isPast()) {
-            DB::table('assessment_internal_sessions')->where('id', $session->id)->update([
-                'status' => 'completed',
-                'completed_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ]);
+            $expiredAnswers = json_decode($session->answers_json ?: '{}', true) ?: [];
+            foreach ($questions as $question) {
+                $questionId = (string) ($question['id'] ?? '');
+                if ($questionId !== '' && !array_key_exists($questionId, $expiredAnswers)) {
+                    $expiredAnswers[$questionId] = null;
+                }
+            }
+            $this->finishSession($session, $expiredAnswers, 'expired');
             return $this->statePayload($attemptId);
         }
 
         $questions = collect(json_decode($session->questions_json ?: '[]', true) ?: []);
-        $answers = DB::table('assessment_internal_answers')
-            ->where('assessment_internal_session_id', $session->id)
-            ->pluck('answer_json', 'question_id');
+        $answers = collect(json_decode($session->answers_json ?: '{}', true) ?: []);
         $next = $questions->first(function ($question) use ($answers) {
             return !$answers->has((string) ($question['id'] ?? ''));
         });
 
         if (!$next) {
-            DB::table('assessment_internal_sessions')->where('id', $session->id)->update([
-                'status' => 'completed',
-                'completed_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ]);
+            $this->finishSession($session, $answers->all(), 'completed');
             return $this->statePayload($attemptId);
         }
 
@@ -570,6 +578,7 @@ class InternalAssessmentController extends Controller
             'status' => 'in_progress',
             'sessions' => $sessionNavigation,
             'session' => [
+                'id' => $session->id,
                 'order' => $session->session_order,
                 'name' => $session->category_name,
                 'duration_minutes' => $session->duration_minutes,
@@ -579,6 +588,90 @@ class InternalAssessmentController extends Controller
             'total' => $questions->count(),
             'question' => $next,
             'proctoring' => $this->proctoringPayload($attemptId),
+        ];
+    }
+
+    private function finishSession($session, array $answers, $status)
+    {
+        $result = $this->scoreSession($session, $answers);
+        $result['status'] = $status;
+        $result['scored_at'] = Carbon::now()->toDateTimeString();
+
+        DB::table('assessment_internal_sessions')->where('id', $session->id)->update([
+            'answers_json' => json_encode($answers),
+            'result_json' => json_encode($result),
+            'status' => $status,
+            'completed_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+    }
+
+    private function scoreSession($session, array $answers)
+    {
+        $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+        $scaleQuestions = collect($questions)->filter(function ($question) {
+            return ($question['type'] ?? '') === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
+        });
+        $choiceQuestions = collect($questions)->reject(function ($question) {
+            return ($question['type'] ?? '') === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
+        });
+
+        if ($scaleQuestions->isNotEmpty() && $choiceQuestions->isEmpty()) {
+            return ScaleScoringService::scoreQuestions($questions, $answers);
+        }
+
+        $answered = 0;
+        $correct = 0;
+        foreach ($choiceQuestions as $question) {
+            $answer = $answers[$question['id']] ?? null;
+            if ($answer === null) {
+                continue;
+            }
+            $answered++;
+            $given = is_array($answer) ? array_values($answer) : [$answer];
+            $key = array_values($question['answer_key'] ?? []);
+            sort($given);
+            sort($key);
+            if ($key && $given === $key) {
+                $correct++;
+            }
+        }
+
+        $choiceTotal = $choiceQuestions->count();
+        $choiceScore = $choiceTotal ? round(($correct / $choiceTotal) * 100, 2) : null;
+        $scaleResult = $scaleQuestions->isNotEmpty()
+            ? ScaleScoringService::scoreQuestions($scaleQuestions->values()->all(), $answers)
+            : null;
+
+        if ($scaleResult && $choiceTotal > 0) {
+            $combinedTotal = $choiceTotal + ($scaleResult['total_questions'] ?? 0);
+            $combinedScore = $combinedTotal > 0
+                ? round((($choiceScore * $choiceTotal) + (($scaleResult['score'] ?? 0) * ($scaleResult['total_questions'] ?? 0))) / $combinedTotal, 2)
+                : 0;
+
+            return [
+                'engine' => 'mixed',
+                'answered' => $answered + ($scaleResult['answered'] ?? 0),
+                'total_questions' => count($questions),
+                'correct_answers' => $correct,
+                'choice_score' => $choiceScore,
+                'scale_score' => $scaleResult['score'] ?? 0,
+                'scale_details' => $scaleResult['details'] ?? [],
+                'score' => min(100, max(0, $combinedScore)),
+            ];
+        }
+
+        if ($scaleResult) {
+            return $scaleResult;
+        }
+
+        $totalQuestions = count($questions);
+        return [
+            'engine' => 'question_bank',
+            'answered' => $answered,
+            'total_questions' => $totalQuestions,
+            'correct_answers' => $correct,
+            'score' => $totalQuestions ? round(($correct / $totalQuestions) * 100, 2) : 0,
         ];
     }
 

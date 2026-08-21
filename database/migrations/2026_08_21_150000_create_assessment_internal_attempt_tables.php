@@ -40,6 +40,8 @@ class CreateAssessmentInternalAttemptTables extends Migration
                 $table->string('category_name')->nullable();
                 $table->unsignedInteger('duration_minutes')->nullable();
                 $table->longText('questions_json');
+                $table->longText('answers_json')->nullable();
+                $table->longText('result_json')->nullable();
                 $table->string('status', 30)->default('pending');
                 $table->dateTime('started_at')->nullable();
                 $table->dateTime('expires_at')->nullable();
@@ -47,22 +49,6 @@ class CreateAssessmentInternalAttemptTables extends Migration
                 $table->timestamps();
 
                 $table->unique(['assessment_internal_attempt_id', 'session_order'], 'assessment_internal_attempt_session_unique');
-            });
-        }
-
-        if (!Schema::hasTable('assessment_internal_answers')) {
-            Schema::create('assessment_internal_answers', function (Blueprint $table) {
-                $table->bigIncrements('id');
-                $table->unsignedBigInteger('assessment_internal_attempt_id');
-                $table->unsignedBigInteger('assessment_internal_session_id');
-                $table->string('question_id', 100);
-                $table->longText('answer_json');
-                $table->boolean('is_correct')->nullable();
-                $table->decimal('score', 10, 2)->nullable();
-                $table->timestamps();
-
-                $table->unique(['assessment_internal_attempt_id', 'question_id'], 'assessment_internal_attempt_answer_unique');
-                $table->index('assessment_internal_session_id', 'assessment_internal_answer_session_idx');
             });
         }
 
