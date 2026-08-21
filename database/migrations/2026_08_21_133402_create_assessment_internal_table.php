@@ -13,6 +13,10 @@ return new class extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable('assessment_internal')) {
+            return;
+        }
+
         Schema::create('assessment_internal', function (Blueprint $table) {
             $table->id();
             

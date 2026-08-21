@@ -150,7 +150,6 @@ class AssessmentInternalController extends Controller
                 ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
                 ->orderBy('name')
                 ->get();
-
             return response()->json(['data' => $categories], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()], 500);
@@ -192,7 +191,6 @@ class AssessmentInternalController extends Controller
             if (empty($normalizedCategories)) {
                 return response()->json(['message' => 'Minimal pilih 1 kategori soal!'], 400);
             }
-
             $assessment = AssessmentInternal::find($request->id);
             if (!$assessment) {
                 return response()->json(['message' => 'Data not found'], 404);
