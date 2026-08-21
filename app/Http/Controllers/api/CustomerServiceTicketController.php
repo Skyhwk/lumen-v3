@@ -22,11 +22,38 @@ class CustomerServiceTicketController extends Controller
         return CsTicket::where('is_active', true)->where('id', $ticketId)->first();
     }
 
+    protected function findTicket($ticketId = null, ?string $ticketNo = null): ?CsTicket
+    {
+        if (!$ticketId && !$ticketNo) {
+            return null;
+        }
+
+        $query = CsTicket::query();
+        if ($ticketId) {
+            $query->where('id', $ticketId);
+        } else {
+            $query->where('ticket_no', $ticketNo);
+        }
+
+        return $query->first();
+    }
+
     public function index(Request $request)
     {
         try {
-            $query = CsTicket::where('is_active', true)
-                ->orderByDesc('last_message_at')
+            $scope = $request->filled('scope') ? (string) $request->scope : null;
+
+            if ($scope === 'closed') {
+                $query = CsTicket::where('status', 'closed');
+            } else {
+                $query = CsTicket::where('is_active', true);
+
+                if (in_array($scope, ['active', 'on_process'], true)) {
+                    $query->whereIn('status', ['open', 'in_progress', 'waiting_customer']);
+                }
+            }
+
+            $query->orderByDesc('last_message_at')
                 ->orderByDesc('id');
 
             if ($request->filled('status')) {
@@ -63,16 +90,11 @@ class CustomerServiceTicketController extends Controller
             $ticketId = $request->input('ticket_id') ?? $request->input('id');
             $ticketNo = $request->input('ticket_no');
 
-            $query = CsTicket::where('is_active', true);
-            if ($ticketId) {
-                $query->where('id', $ticketId);
-            } elseif ($ticketNo) {
-                $query->where('ticket_no', $ticketNo);
-            } else {
+            if (!$ticketId && !$ticketNo) {
                 return response()->json(['message' => 'Ticket ID atau ticket_no wajib diisi', 'status' => 422], 422);
             }
 
-            $ticket = $query->first();
+            $ticket = $this->findTicket($ticketId, $ticketNo);
             if (!$ticket) {
                 return response()->json(['message' => 'Ticket tidak ditemukan', 'status' => 404], 404);
             }
@@ -152,7 +174,7 @@ class CustomerServiceTicketController extends Controller
     public function getConversations(Request $request)
     {
         try {
-            $ticket = $this->findActiveTicket($request->ticket_id);
+            $ticket = $this->findTicket($request->ticket_id);
             if (!$ticket) {
                 return response()->json(['success' => false, 'message' => 'Ticket tidak ditemukan'], 404);
             }
@@ -166,13 +188,11 @@ class CustomerServiceTicketController extends Controller
                     (int) $this->user_id
                 ));
 
-            return response()->json([
+            return response()->json(array_merge([
                 'success' => true,
                 'data' => $conversations,
-                'is_closed' => CustomerServiceConversationService::isClosed($ticket->status),
-                'ticket_status' => $ticket->status,
                 'message' => 'Conversation berhasil diambil',
-            ]);
+            ], CustomerServiceConversationService::buildConversationMeta($ticket, 'staff')));
         } catch (\Throwable $exception) {
             return response()->json(['success' => false, 'message' => $exception->getMessage()], 500);
         }
@@ -198,9 +218,13 @@ class CustomerServiceTicketController extends Controller
             }
 
             if (!CustomerServiceConversationService::canStaffSend($ticket->status)) {
+                $message = $ticket->status === 'open'
+                    ? 'Ticket belum diproses. Klik Proses terlebih dahulu sebelum mengirim pesan.'
+                    : 'Ticket sudah ditutup, tidak dapat mengirim pesan';
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'Ticket sudah ditutup, tidak dapat mengirim pesan',
+                    'message' => $message,
                 ], 422);
             }
 
@@ -255,20 +279,135 @@ class CustomerServiceTicketController extends Controller
         }
     }
 
+    public function process(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $ticket = $this->findActiveTicket($request->ticket_id);
+            if (!$ticket) {
+                return response()->json(['message' => 'Ticket tidak ditemukan', 'status' => 404], 404);
+            }
+
+            $result = CustomerServiceConversationService::processTicket(
+                $ticket,
+                (int) $this->user_id,
+                $this->karyawan ?? 'Staff'
+            );
+
+            DB::commit();
+
+            $payload = CustomerServiceConversationService::transformTicket($result['ticket'], 'staff', (int) $this->user_id);
+            $payload['assigned_to_name'] = CustomerServiceConversationService::resolveStaffName($result['ticket']->assigned_to);
+            $payload['messages'] = collect($result['messages'])
+                ->map(fn ($item) => CustomerServiceConversationService::formatMessage(
+                    $item,
+                    'staff',
+                    (int) $this->user_id
+                ))
+                ->values()
+                ->all();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Ticket berhasil diproses',
+                'data' => $payload,
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            DB::rollBack();
+            return response()->json(['message' => $exception->getMessage(), 'status' => 422], 422);
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+            return response()->json(['message' => $exception->getMessage(), 'status' => 500], 500);
+        }
+    }
+
+    public function clear(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $ticket = $this->findActiveTicket($request->ticket_id);
+            if (!$ticket) {
+                return response()->json(['message' => 'Ticket tidak ditemukan', 'status' => 404], 404);
+            }
+
+            $result = CustomerServiceConversationService::clearTicket(
+                $ticket,
+                (int) $this->user_id,
+                $this->karyawan ?? 'Staff'
+            );
+
+            DB::commit();
+
+            $payload = CustomerServiceConversationService::transformTicket($result['ticket'], 'staff', (int) $this->user_id);
+            $payload['assigned_to_name'] = CustomerServiceConversationService::resolveStaffName($result['ticket']->assigned_to);
+            $payload['message'] = CustomerServiceConversationService::formatMessage(
+                $result['message'],
+                'staff',
+                (int) $this->user_id
+            );
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Ticket berhasil di-clear',
+                'data' => $payload,
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            DB::rollBack();
+            return response()->json(['message' => $exception->getMessage(), 'status' => 422], 422);
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+            return response()->json(['message' => $exception->getMessage(), 'status' => 500], 500);
+        }
+    }
+
+    public function close(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $ticket = $this->findActiveTicket($request->ticket_id);
+            if (!$ticket) {
+                return response()->json(['message' => 'Ticket tidak ditemukan', 'status' => 404], 404);
+            }
+
+            $updated = CustomerServiceConversationService::closeTicket(
+                $ticket,
+                (int) $this->user_id,
+                $this->karyawan ?? 'Staff'
+            );
+
+            DB::commit();
+
+            $payload = CustomerServiceConversationService::transformTicket($updated, 'staff', (int) $this->user_id);
+            $payload['assigned_to_name'] = CustomerServiceConversationService::resolveStaffName($updated->assigned_to);
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Ticket berhasil ditutup',
+                'data' => $payload,
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            DB::rollBack();
+            return response()->json(['message' => $exception->getMessage(), 'status' => 422], 422);
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+            return response()->json(['message' => $exception->getMessage(), 'status' => 500], 500);
+        }
+    }
+
     public function summary()
     {
         try {
-            $base = CsTicket::where('is_active', true);
+            $activeBase = CsTicket::where('is_active', true);
 
             return response()->json([
                 'status' => 200,
                 'data' => [
-                    'open' => (clone $base)->where('status', 'open')->count(),
-                    'in_progress' => (clone $base)->where('status', 'in_progress')->count(),
-                    'waiting_customer' => (clone $base)->where('status', 'waiting_customer')->count(),
-                    'resolved' => (clone $base)->where('status', 'resolved')->count(),
-                    'closed' => (clone $base)->where('status', 'closed')->count(),
-                    'total' => (clone $base)->count(),
+                    'open' => (clone $activeBase)->where('status', 'open')->count(),
+                    'in_progress' => (clone $activeBase)->where('status', 'in_progress')->count(),
+                    'waiting_customer' => (clone $activeBase)->where('status', 'waiting_customer')->count(),
+                    'closed' => CsTicket::where('status', 'closed')->count(),
+                    'on_process' => (clone $activeBase)->whereIn('status', ['open', 'in_progress', 'waiting_customer'])->count(),
+                    'total' => (clone $activeBase)->count(),
                 ],
             ]);
         } catch (\Throwable $exception) {
