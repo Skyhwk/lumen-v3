@@ -149,11 +149,41 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Data not found'], 404);
             }
 
+            // 1. Simpan Kategori Soal & Pengaturan Profil
             $assessment->category_question = $request->category_question;
+            if ($request->has('is_completed_profile')) {
+                $assessment->is_completed_profile = filter_var($request->is_completed_profile, FILTER_VALIDATE_BOOLEAN);
+            }
+
+            // 2. Generate Token & Link jika belum ada
+            if (empty($assessment->link_qr)) {
+                $secretKey = 'anak kuat yang tangguh ini juga sering error';
+                $key = hash('sha256', $secretKey, true);
+                $encrypted = openssl_encrypt($assessment->batch, 'aes-256-ecb', $key, OPENSSL_RAW_DATA);
+                $token = bin2hex($encrypted);
+                
+                $baseUrl = env('PORTALV4');
+                $assessment->token = $token;
+                $assessment->link_qr = $baseUrl . '/private/assessment/' . $token;
+                $assessment->is_link_active = true;
+            }
+
+            // 3. Generate File Gambar QR Code jika belum ada
+            if (empty($assessment->image_qr)) {
+                $fileName = 'QR_' . $assessment->batch . '_' . time() . '.png';
+                $path = base_path('public/QR_Assessment');
+                if (!file_exists($path)) {
+                    mkdir($path, 0775, true);
+                }
+                \SimpleSoftwareIO\QrCode\Facades\QrCode::format('png')->size(300)->generate($assessment->link_qr, $path . '/' . $fileName);
+                $assessment->image_qr = $fileName;
+            }
+
+            // 4. Ubah Status
             $assessment->is_publish = true;
             $assessment->save();
 
-            return response()->json(['message' => 'Assessment berhasil dipublish dan kategori tersimpan'], 200);
+            return response()->json(['message' => 'Assessment berhasil dipublish (Link & QR telah di-generate)!'], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()], 500);
         }
