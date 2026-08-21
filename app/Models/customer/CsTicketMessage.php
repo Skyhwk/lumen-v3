@@ -11,6 +11,10 @@ class CsTicketMessage extends Sector
     protected $guarded = [];
     public $timestamps = false;
 
+    protected $casts = [
+        'is_auto' => 'boolean',
+    ];
+
     public function ticket()
     {
         return $this->belongsTo(CsTicket::class, 'ticket_id', 'id');
