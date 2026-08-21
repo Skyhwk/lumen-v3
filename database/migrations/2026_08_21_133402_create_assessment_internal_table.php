@@ -19,15 +19,18 @@ return new class extends Migration
             // varchar 8 dan unique
             $table->string('batch', 8)->unique(); 
             
+            $table->string('nama_assesment');
             $table->string('link_qr')->nullable();
             $table->string('image_qr')->nullable(); // Kolom baru untuk path gambar QR
             $table->boolean('is_publish')->default(false);
-            $table->string('nama_assesment');
+            $table->boolean('is_link_active')->default(false);
+            $table->timestamp('link_deactivated_at')->nullable() ;
+            $table->json('category_question')->nullable();
             
+            $table->string('created_by')->nullable();
             $table->string('canceled_by')->nullable(); 
             $table->timestamp('canceled_at')->nullable();
             
-            $table->string('created_by')->nullable();
             
             // Otomatis membuat kolom 'created_at' dan 'updated_at'
             $table->timestamps(); 
