@@ -50,6 +50,8 @@ class Kernel extends ConsoleKernel
         Commands\SyncOrderDetail::class,
         Commands\UpdateFtcVerifierFromScanTc::class,
         Commands\TestCsTicketGeneratorCommand::class,
+        Commands\CustomerServiceAutoCloseCommand::class,
+        Commands\CustomerServiceAutoArchiveCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -64,6 +66,9 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        $schedule->command('cs:auto-close')->everyMinute();
+        $schedule->command('cs:auto-archive')->everyMinute();
+
         // Sementara dimatikan untuk debugging — uncomment jika sudah fix
         // $schedule->command('qsd:monitor-revenue')->everyFiveMinutes();
         // $schedule->command('qsd:monitor-forecast')->everyFiveMinutes();

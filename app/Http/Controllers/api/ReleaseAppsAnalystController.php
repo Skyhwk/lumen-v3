@@ -34,7 +34,7 @@ class ReleaseAppsAnalystController extends Controller
 
             $commands = [
                 "cd $projectDir && git pull --ff-only origin main",
-                "cd $projectDir && npm i && npm run build",
+                "cd $projectDir && npm i && node scripts/generate-version.js && npm run build",
                 "mkdir -p $backupDir && cp -r $deployDir/* $backupDir/ || true",
                 "rsync -a --delete $buildDir/ $deployDir/"
             ];
@@ -60,6 +60,55 @@ class ReleaseAppsAnalystController extends Controller
                     ], 500);
                 }
             }
+
+            // ╔══════════════════════════════════════════════════════════════╗
+            // ║  BLOK LOCAL WINDOWS (UNTUK TESTING)                         ║
+            // ║  Unremark blok ini & remark blok server di atas untuk test  ║
+            // ╚══════════════════════════════════════════════════════════════╝
+            // $projectDir = 'D:\Apps-Analyst';
+            // $buildDir   = "$projectDir\\build";
+            // $deployDir  = 'D:\TesDeploy\apps-Analyst_deploy';
+            // $backupDir  = 'D:\TesDeploy\apps-Analyst\backup-' . date('dmyHi');
+            
+            // $commands = [
+            //     ['cmd' => 'C:/PROGRA~1/nodejs/node.exe scripts/generate-version.js', 'cwd' => $projectDir],
+            //     ['cmd' => 'C:/PROGRA~1/nodejs/npm.cmd run build', 'cwd' => $projectDir],
+            //     ['cmd' => "if not exist \"$backupDir\" mkdir \"$backupDir\"", 'cwd' => null],
+            //     ['cmd' => "if exist \"$deployDir\" xcopy /E /I /Y \"$deployDir\" \"$backupDir\"", 'cwd' => null],
+            //     ['cmd' => "if not exist \"$deployDir\" mkdir \"$deployDir\"", 'cwd' => null],
+            //     ['cmd' => "xcopy /E /I /Y \"$buildDir\" \"$deployDir\"", 'cwd' => null],
+            // ];
+            
+            // foreach ($commands as $item) {
+            //     $process = Process::fromShellCommandline($item['cmd']);
+            //     $process->setTimeout(1200);
+            //     if ($item['cwd']) {
+            //         $process->setWorkingDirectory($item['cwd']);
+            //     }
+            //     $env = array_merge($_SERVER, $_ENV, [
+            //         'CI'   => 'false',
+            //         'DISABLE_ESLINT_PLUGIN' => 'true',
+            //         'PATH' => getenv('PATH') . ';C:\\Program Files\\nodejs',
+            //     ]);
+            //     $process->setEnv($env);
+            //     $process->run();
+            
+            //     $outputLog[] = [
+            //         'command' => $item['cmd'],
+            //         'output'  => $process->getOutput(),
+            //         'error'   => $process->getErrorOutput(),
+            //         'success' => $process->isSuccessful()
+            //     ];
+            
+            //     if (!$process->isSuccessful()) {
+            //         DB::rollBack();
+            //         return response()->json([
+            //             'success' => false,
+            //             'message' => "Command gagal: " . $item['cmd'],
+            //             'logs' => $outputLog
+            //         ], 500);
+            //     }
+            // }
 
             $endTime = Carbon::now();
             $duration = $endTime->diffInSeconds($startTime);
