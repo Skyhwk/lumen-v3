@@ -72,18 +72,14 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Data not found'], 404);
             }
 
-            // Kata spesial sebagai key encrypt/decrypt
-            $secretKey = 'anak kuat yang tangguh ini juga sering error';
-            
-            // Hash key dengan sha256 agar menjadi 32 bytes (syarat aes-256)
-            $key = hash('sha256', $secretKey, true);
-            
-            // Encrypt batch dengan AES-256-ECB lalu convert ke Hex agar terbebas dari karakter spesial (hanya angka & huruf)
-            $encrypted = openssl_encrypt($assessment->batch, 'aes-256-ecb', $key, OPENSSL_RAW_DATA);
-            $token = bin2hex($encrypted); // Panjangnya akan statis 32 karakter alfanumerik
+            $token = bin2hex(random_bytes(32));
+            while (AssessmentInternal::where('token', $token)->where('id', '!=', $assessment->id)->exists()) {
+                $token = bin2hex(random_bytes(32));
+            }
 
             // Format URL Assessment
             $baseUrl = env('PORTALV4');
+            $assessment->token = $token;
             $assessment->link_qr = $baseUrl . '/private/assessment/' . $token;
             $assessment->is_link_active = true;
             
@@ -111,20 +107,6 @@ class AssessmentInternalController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()], 500);
         }
-    }
-
-    /**
-     * Helper Function: Contoh cara decrypt token dari URL nantinya
-     */
-    public function decryptToken($token)
-    {
-        $secretKey = 'anak kuat yang tangguh ini juga sering error';
-        $key = hash('sha256', $secretKey, true);
-        
-        // Convert hex kembali ke binary, lalu decrypt
-        $batch = openssl_decrypt(hex2bin($token), 'aes-256-ecb', $key, OPENSSL_RAW_DATA);
-        
-        return $batch;
     }
 
     public function getCategories(Request $request)
