@@ -103,7 +103,7 @@ class ReleaseAttendanceController extends Controller
 
             $commands = [
                 "cd $projectDir && git pull --ff-only origin main",
-                "cd $projectDir && npm i && npm run build",
+                "cd $projectDir && npm i && node scripts/generate-version.js && npm run build",
                 "mkdir -p $backupDir && cp -r $deployDir/* $backupDir/ || true",
                 "rsync -a --delete $buildDir/ $deployDir/"
             ];
