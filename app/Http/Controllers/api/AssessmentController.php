@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\GetBawahan;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
 use App\Services\AtsNotificationService;
@@ -194,7 +195,10 @@ class AssessmentController extends Controller
                                 continue;
                             }
 
-                            if ($this->sessionDefinitionFromSession($session) !== $this->userSessionDefinition($userConfig)) {
+                            $needsUserSessionRefresh = $this->sessionDefinitionFromSession($session) !== $this->userSessionDefinition($userConfig)
+                                || !$this->sessionIsReady($session);
+
+                            if ($needsUserSessionRefresh) {
                                 $items = $this->userSessionQuestions($userConfig);
 
                                 DB::table('assessment_sessions')->where('id', $session->id)->update([
@@ -209,7 +213,12 @@ class AssessmentController extends Controller
                         }
 
                         $category = DB::table('question_categories')->where('id', $session->question_category_id)->first();
-                        if ($category && $this->sessionDefinitionFromSession($session) !== $this->sessionDefinitionFromCategory($category)) {
+                        $needsCategorySessionRefresh = $category && (
+                            $this->sessionDefinitionFromSession($session) !== $this->sessionDefinitionFromCategory($category)
+                            || !$this->sessionIsReady($session)
+                        );
+
+                        if ($needsCategorySessionRefresh) {
                             $items = $this->sessionQuestions($category);
                             DB::table('assessment_sessions')->where('id', $session->id)->update([
                                 'category_name' => $category->name,
@@ -340,6 +349,7 @@ class AssessmentController extends Controller
             (int) $userConfig->question_count,
             (int) $userConfig->duration_minutes,
             (bool) $userConfig->has_time_limit,
+            (int) ($userConfig->question_category_id ?? 0),
         ];
     }
 
@@ -350,10 +360,13 @@ class AssessmentController extends Controller
             return null;
         }
 
+        $questionCategoryId = !empty($personnelRequest->assesment_question_category)
+            ? (int) $personnelRequest->assesment_question_category
+            : null;
+
         $service = app(UserAssessmentCategoryService::class);
-        $categoryConfig = $service->toConfigObject(
-            $service->findOwnerCategory((string) $personnelRequest->created_by)
-        );
+        $ownerCategory = $service->findOwnerCategory((string) $personnelRequest->created_by);
+        $categoryConfig = $service->toConfigObject($ownerCategory);
 
         if ($categoryConfig && (int) $categoryConfig->question_count >= 1) {
             return (object) [
@@ -361,6 +374,7 @@ class AssessmentController extends Controller
                 'question_count' => (int) $categoryConfig->question_count,
                 'duration_minutes' => (int) $categoryConfig->duration_minutes,
                 'has_time_limit' => (bool) $categoryConfig->has_time_limit,
+                'question_category_id' => $questionCategoryId ?: ($ownerCategory ? (int) $ownerCategory->id : null),
             ];
         }
 
@@ -381,18 +395,76 @@ class AssessmentController extends Controller
             'question_count' => $questionCount,
             'duration_minutes' => $durationMinutes,
             'has_time_limit' => $hasTimeLimit,
+            'question_category_id' => $questionCategoryId,
         ];
+    }
+
+    private function managerHierarchyNamesForKaryawan(string $karyawanName): array
+    {
+        $employee = DB::table('master_karyawan')
+            ->where('nama_lengkap', $karyawanName)
+            ->where('is_active', 1)
+            ->first(['id']);
+
+        if (!$employee) {
+            return array_values(array_filter([(string) $karyawanName]));
+        }
+
+        return GetBawahan::where('id', (int) $employee->id)
+            ->get()
+            ->pluck('nama_lengkap')
+            ->filter()
+            ->map(fn ($name) => (string) $name)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function accessibleManagerCategoryIdsForHierarchy(array $hierarchyNames, string $rootKaryawan): array
+    {
+        if (empty($hierarchyNames)) {
+            return [];
+        }
+
+        return DB::table('question_categories')
+            ->where('category_scope', 'manager')
+            ->where('is_active', 1)
+            ->where(function ($query) use ($hierarchyNames, $rootKaryawan) {
+                $query->whereIn('owner_karyawan', $hierarchyNames)
+                    ->orWhereIn('assigned_manager', $hierarchyNames)
+                    ->orWhere('assigned_manager', $rootKaryawan);
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     private function userSessionQuestions($config)
     {
-        return DB::table('questions')
-            ->where('owner_karyawan', $config->owner_karyawan)
+        $hierarchyNames = $this->managerHierarchyNamesForKaryawan((string) $config->owner_karyawan);
+        $rootKaryawan = (string) $config->owner_karyawan;
+
+        $query = DB::table('questions')
             ->where('question_scope', 'manager')
             ->where('status', 'active')
             ->where('is_active', 1)
-            ->where('question_type', 'single_choice')
-            ->inRandomOrder()
+            ->where('question_type', 'single_choice');
+
+        if (!empty($config->question_category_id)) {
+            $query->where('question_category_id', (int) $config->question_category_id);
+        } else {
+            $accessibleCategoryIds = $this->accessibleManagerCategoryIdsForHierarchy($hierarchyNames, $rootKaryawan);
+
+            $query->where(function ($builder) use ($hierarchyNames, $accessibleCategoryIds) {
+                $builder->whereIn('owner_karyawan', $hierarchyNames);
+
+                if (!empty($accessibleCategoryIds)) {
+                    $builder->orWhereIn('question_category_id', $accessibleCategoryIds);
+                }
+            });
+        }
+
+        return $query->inRandomOrder()
             ->limit($config->question_count)
             ->get()
             ->values()
