@@ -225,8 +225,12 @@ class PersonnelRequestController extends Controller
             abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
         }
 
+        $hierarchyNames = $this->managerHierarchyNames();
         $category = \App\Models\QuestionCategory::where('id', $categoryId)
-            ->whereIn('owner_karyawan', $this->managerHierarchyNames())
+            ->where(function ($query) use ($hierarchyNames) {
+                $query->whereIn('owner_karyawan', $hierarchyNames)
+                      ->orWhereIn('assigned_manager', $hierarchyNames);
+            })
             ->first();
             
         if (!$category) {
