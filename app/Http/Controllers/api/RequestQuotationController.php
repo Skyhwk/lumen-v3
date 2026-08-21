@@ -6305,4 +6305,42 @@ class RequestQuotationController extends Controller
             ->rawColumns(['sampleName'])
             ->make(true);
     } 
+
+    public function getNamaTitik (Request $request) {
+         try {
+            $data = OrderDetail::query()
+                ->where('is_active', true)
+                ->where('id_order_header', $request->id_order_header)
+                ->select([
+                    'id',
+                    'id_order_header',
+                    'kategori_3',
+                    'keterangan_1',
+                    'is_active'
+                ])
+                ->get()
+                ->groupBy('kategori_3')
+                ->map(function ($items) {
+                    return $items->pluck('keterangan_1')
+                        ->map(function ($val) {
+                            return trim($val);
+                        })
+                        ->filter()
+                        ->unique()
+                        ->values();
+                });
+
+            return response()->json([
+                'status' => true,
+                'data' => $data
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ], 500);
+        }
+    }
 }
