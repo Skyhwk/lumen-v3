@@ -317,6 +317,14 @@ class AtsFinalDecisionController extends Controller
                     ];
                 }
 
+                if (RecruitmentStatusService::isReadyToSendDirectorAfterFinanceApprove($row)) {
+                    return [
+                        'code' => 'finance_approved',
+                        'label' => 'Disetujui Finance (Siap Kirim ke Direktur)',
+                        'email_sent_at' => null,
+                    ];
+                }
+
                 $history = json_decode($row->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
 

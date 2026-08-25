@@ -148,16 +148,50 @@ class RecruitmentStatusService
         return $status === 'management_decision';
     }
 
+    public static function isDirectorSalaryDecisionSuperseded(array $history, int $decisionIndex): bool
+    {
+        for ($i = $decisionIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'finance_approved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function getLatestDirectorSalaryDecision(array $history): ?string
     {
         for ($i = count($history) - 1; $i >= 0; $i--) {
             $status = (string) ($history[$i]['status'] ?? '');
-            if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $status, $matches)) {
-                return $matches[1];
+            if (!preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $status, $matches)) {
+                continue;
             }
+
+            if (self::isDirectorSalaryDecisionSuperseded($history, $i)) {
+                continue;
+            }
+
+            return $matches[1];
         }
 
         return null;
+    }
+
+    public static function isReadyToSendDirectorAfterFinanceApprove($recruitment): bool
+    {
+        if (!self::hasFinanceApproved($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingDirectorSalaryResubmit($recruitment)
+            || self::isAwaitingFinanceResubmit($recruitment)
+            || self::isAwaitingDirectorSalaryApproval($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+
+        return self::getLatestDirectorSalaryDecision($history) === null;
     }
 
     public static function isAwaitingDirectorSalaryApproval($recruitment): bool
