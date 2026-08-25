@@ -229,7 +229,7 @@ class FinanceDecisionController extends Controller
 
                 (new RecruitmentStatusService())->update(
                     $id, 
-                    'rejected', 
+                    'internal_sallary_offer', 
                     $now, 
                     'finance_rejected', 
                     [

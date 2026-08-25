@@ -100,7 +100,7 @@ class SalaryApprovalController extends Controller
             }
 
             if ($decision === 'negotiate' || $decision === 'reject') {
-                $nextStatus = 'management_decision';
+                $nextStatus = 'internal_sallary_offer';
             } else {
                 $nextStatus = 'hired';
             }
@@ -109,6 +109,22 @@ class SalaryApprovalController extends Controller
             $extraData = $decision === 'negotiate'
                 ? ['negotiated_amount' => $amount]
                 : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
+
+            if ($decision === 'reject') {
+                $salaryOffer = DB::table('sallary_offer')
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->where('is_active', true)
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($salaryOffer) {
+                    DB::table('sallary_offer')->where('id', $salaryOffer->id)->update([
+                        'email_sent_at' => null,
+                        'updated_by'    => 'Direktur',
+                        'updated_at'    => $now,
+                    ]);
+                }
+            }
 
             (new RecruitmentStatusService())->update(
                 $recruitment->id,
