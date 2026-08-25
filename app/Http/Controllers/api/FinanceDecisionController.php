@@ -199,6 +199,12 @@ class FinanceDecisionController extends Controller
                     ['by' => $user ?? 'Finance']
                 );
 
+                SallaryOfferService::upsertActive(
+                    (int) $id,
+                    ['email_sent_at' => null],
+                    $user ?? 'Finance'
+                );
+
                 DB::commit();
 
                 app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
