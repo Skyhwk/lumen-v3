@@ -12,7 +12,14 @@ class AssessmentInternalController extends Controller
     use Concerns\BuildsCandidateAssessmentPreview;
     public function index(Request $request)
     {
-        $data = AssessmentInternal::query()->orderBy('id', 'desc');
+        $data = AssessmentInternal::query()
+            ->select('assessment_internal.*')
+            ->selectRaw('(
+                SELECT COUNT(*)
+                FROM assessment_internal_attempts
+                WHERE assessment_internal_attempts.assessment_internal_id = assessment_internal.id
+            ) as participants_count')
+            ->orderBy('id', 'desc');
 
         return datatables()->of($data)->make(true);
     }
