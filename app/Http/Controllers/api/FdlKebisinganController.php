@@ -191,72 +191,38 @@ class FdlKebisinganController extends Controller
                 }
             }
 
-            // // ==== Update atau Buat Header dan WS ====
-            // $dataHeader = KebisinganHeader::firstOrNew(['no_sampel' => $no_sample]);
-            // $ws = WsValueUdara::firstOrNew(['no_sampel' => $no_sample]);
+            // Gunakan firstOrNew untuk menghindari duplikasi, update kalau sudah ada, buat baru kalau tidak ada
+            $dataHeader = KebisinganHeader::firstOrNew([
+                'no_sampel'    => $no_sample,
+                'id_parameter' => $param->id,
+            ]);
 
-            // $dataHeader->fill([
-            //     'id_parameter' => $param->id,
-            //     'parameter' => $param->nama_lab,
-            //     'min' => $nilaiMin,
-            //     'max' => $nilaiMax,
-            //     'suhu_udara' => $reratasuhu,
-            //     'kelembapan_udara' => $reratakelemb,
-            //     'ls' => $calculate['totalLSM'] ?? null,
-            //     'lm' => $calculate['rerataLSM'] ?? null,
-            //     'leq_ls' => $calculate['leqLS'] ?? null,
-            //     'leq_lm' => $calculate['leqLM'] ?? null,
-            //     'is_approved' => true,
-            //     'approved_by' => $this->karyawan,
-            //     'approved_at' => Carbon::now(),
-            //     'created_by' => $this->karyawan,
-            //     'created_at' => Carbon::now(),
-            // ]);
-            // $dataHeader->save();
+            $dataHeader->parameter        = $param->nama_lab;
+            $dataHeader->min              = $nilaiMin;
+            $dataHeader->max              = $nilaiMax;
+            $dataHeader->suhu_udara       = $reratasuhu;
+            $dataHeader->kelembapan_udara = $reratakelemb;
+            $dataHeader->ls               = $calculate['totalLSM'] ?? null;
+            $dataHeader->lm               = $calculate['rerataLSM'] ?? null;
+            $dataHeader->leq_ls           = $calculate['leqLS'] ?? null;
+            $dataHeader->leq_lm           = $calculate['leqLM'] ?? null;
+            $dataHeader->leq              = $calculate['jumlah_leq'] ?? null;
+            $dataHeader->is_approved      = true;
+            $dataHeader->approved_by      = $this->karyawan;
+            $dataHeader->approved_at      = Carbon::now();
+            $dataHeader->created_by       = $this->karyawan;
+            $dataHeader->save();
 
-            // $ws->fill([
-            //     'id_kebisingan_header' => $dataHeader->id,
-            //     'id_po' => $po->id,
-            //     'hasil1' => $calculate['hasil'] ?? null,
-            //     'hasil2' => $calculate['hasil2'] ?? null,
-            //     'satuan' => $calculate['satuan'] ?? null,
-            // ]);
-            // $ws->save();
-
-            $dataHeader = KebisinganHeader::updateOrCreate(
-                [
-                    'no_sampel'    => $no_sample,
-                    'id_parameter' => $param->id,
-                ],
-                [
-                    'parameter'        => $param->nama_lab,
-                    'min'              => $nilaiMin,
-                    'max'              => $nilaiMax,
-                    'suhu_udara'       => $reratasuhu,
-                    'kelembapan_udara' => $reratakelemb,
-                    'ls'               => $calculate['totalLSM'] ?? null,
-                    'lm'               => $calculate['rerataLSM'] ?? null,
-                    'leq_ls'           => $calculate['leqLS'] ?? null,
-                    'leq_lm'           => $calculate['leqLM'] ?? null,
-                    'is_approved'      => true,
-                    'approved_by'      => $this->karyawan,  // siapa yang approve
-                    'approved_at'      => Carbon::now(),     // kapan approve terakhir
-                    'created_by'       => $this->karyawan,  // biarkan update kalau memang tidak dipisah
-                ]
-            );
-
-            $ws = WsValueUdara::updateOrCreate(
-                [
-                    'no_sampel' => $no_sample,
-                    'id_kebisingan_header' => $dataHeader->id,
-                ],
-                [
-                    'id_po' => $po->id,
-                    'hasil1' => $calculate['hasil'] ?? null,
-                    'hasil2' => $calculate['hasil2'] ?? null,
-                    'satuan' => $calculate['satuan'] ?? null,
-                ]
-            );
+            // Sama logikanya untuk WS, cari yang sudah ada (berdasar no_sampel dan header_id), jika tidak ada buat baru
+            $ws = WsValueUdara::firstOrNew([
+                'no_sampel' => $no_sample,
+                'id_kebisingan_header' => $dataHeader->id,
+            ]);
+            $ws->id_po   = $po->id;
+            $ws->hasil1  = $calculate['hasil'] ?? null;
+            $ws->hasil2  = $calculate['hasil2'] ?? null;
+            $ws->satuan  = $calculate['satuan'] ?? null;
+            $ws->save();
 
             // ==== Update status Approve ====
             $dataLapangan->update([
