@@ -59,7 +59,9 @@ class CandidateOfferingDecisionController extends Controller
             }
 
             $now = Carbon::now();
-            $nextStatus = $decision === 'approve' ? 'finance_review' : 'management_decision';
+            $nextStatus = $decision === 'approve'
+                ? 'finance_review'
+                : 'salary_offer';
             $historyStatus = 'candidate_offering_' . ($decision === 'approve' ? 'approved' : 'rejected');
 
             (new RecruitmentStatusService())->update(
