@@ -29,15 +29,24 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			->where('status', 0)
 			->where('parameter', 'like', '%Iso-%')
 			->whereNotNull('tanggal_terima')
+            ->when($request->filled('year'), function ($q) use ($request) {
+                return $q->whereYear('tanggal_sampling', (int) $request->year);
+            })
             ->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
                 $from = $request->from . '-01';
                 $to = date('Y-m-t', strtotime($request->to . '-01'));
                 return $q->whereBetween('tanggal_sampling', [$from, $to]);
             })
-            ->when(!$request->filled('from') && !$request->filled('to') && $request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->when(
+                !$request->filled('year') && !$request->filled('from') && !$request->filled('to') && $request->date,
+                fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+            )
 			->orderBy('tanggal_sampling');
 		$data = $data->get();
 		$data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
+        if ($request->filled('year')) {
+            $data = \App\Services\WsFinalApprovalService::applyEmisiYearMonthSort($data, $request->year);
+        }
 		return Datatables::of($data)->make(true);
 	}
 
