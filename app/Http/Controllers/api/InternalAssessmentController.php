@@ -114,6 +114,9 @@ class InternalAssessmentController extends Controller
     public function state(Request $request)
     {
         $attempt = $this->authorizedAttempt($request);
+        $assessment = DB::table('assessment_internal')->where('id', $attempt->assessment_internal_id)->first();
+        $this->ensureSessions($assessment, $attempt->id);
+
         return response()->json($this->statePayload($attempt->id));
     }
 
@@ -400,10 +403,6 @@ class InternalAssessmentController extends Controller
 
     private function ensureSessions($assessment, $attemptId)
     {
-        if (DB::table('assessment_internal_sessions')->where('assessment_internal_attempt_id', $attemptId)->exists()) {
-            return;
-        }
-
         $definitions = json_decode($assessment->category_question ?: '[]', true) ?: [];
         foreach (array_values($definitions) as $index => $definition) {
             $definition = is_array($definition) ? $definition : ['id' => $definition];
@@ -414,6 +413,14 @@ class InternalAssessmentController extends Controller
 
             $category = DB::table('question_categories')->where('id', $categoryId)->first();
             if (!$category) {
+                continue;
+            }
+
+            $sessionExists = DB::table('assessment_internal_sessions')
+                ->where('assessment_internal_attempt_id', $attemptId)
+                ->where('question_category_id', $categoryId)
+                ->exists();
+            if ($sessionExists) {
                 continue;
             }
 
@@ -428,36 +435,7 @@ class InternalAssessmentController extends Controller
                 $durationMinutes = null;
             }
 
-            $query = DB::table('questions')
-                ->where('question_category_id', $categoryId)
-                ->where('is_active', 1)
-                ->whereIn('question_type', ['single_choice', 'multiple_choice', 'scale']);
-            if ($questionCount > 0) {
-                $query->limit($questionCount);
-            }
-            $questions = $query->inRandomOrder()->get()->values()->map(function ($question, $questionIndex) {
-                $options = DB::table('question_options')
-                    ->where('question_id', $question->id)
-                    ->orderBy('option_order')
-                    ->get()
-                    ->map(function ($option) {
-                        return [
-                            'id' => (string) $option->id,
-                            'text' => $option->option_text,
-                            'is_correct' => (bool) $option->is_correct,
-                        ];
-                    })->all();
-
-                return [
-                    'id' => (string) $question->id,
-                    'order' => $questionIndex + 1,
-                    'type' => $question->question_type,
-                    'text' => $question->question_text,
-                    'image' => json_decode($question->question_image ?: '[]', true) ?: [],
-                    'options' => $options,
-                    'answer_key' => collect($options)->where('is_correct', true)->pluck('id')->values()->all(),
-                ];
-            })->all();
+            $questions = $this->sessionQuestions($category, $questionCount);
 
             if (!$questions) {
                 continue;
@@ -477,6 +455,121 @@ class InternalAssessmentController extends Controller
                 'updated_at' => Carbon::now(),
             ]);
         }
+    }
+
+    private function sessionQuestions($category, $questionCount)
+    {
+        $categoryName = strtoupper(trim((string) $category->name));
+        if ($categoryName === 'DISC') {
+            return $this->discQuestions($questionCount);
+        }
+        if (in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
+            return $this->papiQuestions($questionCount);
+        }
+
+        $query = DB::table('questions')
+            ->where('question_category_id', $category->id)
+            ->where('is_active', 1)
+            ->whereIn('question_type', ['single_choice', 'multiple_choice', 'scale']);
+        if ($questionCount > 0) {
+            $query->limit($questionCount);
+        }
+
+        return $query->inRandomOrder()->get()->values()->map(function ($question, $questionIndex) {
+            $options = DB::table('question_options')
+                ->where('question_id', $question->id)
+                ->orderBy('option_order')
+                ->get()
+                ->map(function ($option) {
+                    return [
+                        'id' => (string) $option->id,
+                        'text' => $option->option_text,
+                        'is_correct' => (bool) $option->is_correct,
+                    ];
+                })->all();
+
+            if ($question->question_type === 'scale') {
+                $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
+                $options = $scale ? ScaleScoringService::buildScaleOptions($scale) : [];
+                $values = collect($options)->pluck('value');
+                $scaleMin = $values->isNotEmpty() ? (float) $values->min() : 0;
+                $scaleMax = $values->isNotEmpty() ? (float) $values->max() : 0;
+            }
+
+            $payload = [
+                'id' => (string) $question->id,
+                'source' => 'question_bank',
+                'order' => $questionIndex + 1,
+                'type' => $question->question_type,
+                'text' => $question->question_text,
+                'image' => json_decode($question->question_image ?: '[]', true) ?: [],
+                'options' => $options,
+                'answer_key' => collect($options)->where('is_correct', true)->pluck('id')->values()->all(),
+                'scoring_type' => $question->scoring_type,
+            ];
+
+            if ($question->question_type === 'scale') {
+                $payload['scale_type_id'] = $question->scale_type_id;
+                $payload['scale_min'] = $scaleMin ?? 0;
+                $payload['scale_max'] = $scaleMax ?? 0;
+            }
+
+            return $payload;
+        })->all();
+    }
+
+    private function discQuestions($questionCount)
+    {
+        $query = DB::table('soal_psikotes')->where('kategori_soal', 'DISC')->orderBy('id');
+        if ($questionCount > 0) {
+            $query->limit($questionCount);
+        }
+
+        return $query->get()->values()->map(function ($question, $index) {
+            $prompt = json_decode($question->pertanyaan ?: '{}', true) ?: [];
+            $answer = json_decode($question->jawaban ?: '{}', true) ?: [];
+            $options = array_values($prompt['data'] ?? []);
+
+            return [
+                'id' => (string) $question->id,
+                'source' => 'disc',
+                'order' => $index + 1,
+                'type' => 'disc',
+                'text' => 'Pilih satu pernyataan yang paling dan paling tidak menggambarkan diri Anda',
+                'options' => collect($options)->map(function ($text, $optionIndex) {
+                    return ['id' => (string) $optionIndex, 'text' => $text];
+                })->all(),
+                'answer_map' => $answer['data'] ?? ['P' => [], 'K' => []],
+            ];
+        })->all();
+    }
+
+    private function papiQuestions($questionCount)
+    {
+        $query = DB::table('soal_psikotes')->whereIn('kategori_soal', ['KOSTICK PAPI', 'PAPI KOSTICK'])->orderBy('id');
+        if ($questionCount > 0) {
+            $query->limit($questionCount);
+        }
+
+        return $query->get()->values()->map(function ($question, $index) {
+            $answer = json_decode($question->jawaban ?: '{}', true) ?: [];
+            $options = array_values($answer['data'] ?? []);
+
+            return [
+                'id' => (string) $question->id,
+                'source' => 'papi_kostick',
+                'order' => $index + 1,
+                'type' => 'single_choice',
+                'text' => '',
+                'options' => collect($options)->map(function ($text, $optionIndex) {
+                    return [
+                        'id' => (string) $optionIndex,
+                        'text' => preg_replace('/^[a-zA-Z][\)\.]\s*/', '', $text),
+                    ];
+                })->all(),
+                'answer_map' => array_values($answer['value'] ?? []),
+            ];
+        })->all();
     }
 
     private function statePayload($attemptId)
@@ -579,7 +672,7 @@ class InternalAssessmentController extends Controller
             return $this->statePayload($attemptId);
         }
 
-        unset($next['answer_key']);
+        unset($next['answer_key'], $next['answer_map']);
         foreach ($next['options'] as &$option) {
             unset($option['is_correct']);
         }
@@ -619,6 +712,14 @@ class InternalAssessmentController extends Controller
     private function scoreSession($session, array $answers)
     {
         $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+        $categoryName = strtoupper(trim((string) $session->category_name));
+        if ($categoryName === 'DISC') {
+            return $this->scoreDisc($questions, $answers);
+        }
+        if (in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
+            return $this->scorePapi($questions, $answers);
+        }
+
         $scaleQuestions = collect($questions)->filter(function ($question) {
             return ($question['type'] ?? '') === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
         });
@@ -682,6 +783,109 @@ class InternalAssessmentController extends Controller
             'total_questions' => $totalQuestions,
             'correct_answers' => $correct,
             'score' => $totalQuestions ? round(($correct / $totalQuestions) * 100, 2) : 0,
+        ];
+    }
+
+    private function scorePapi(array $questions, array $answers)
+    {
+        $roleIds = [];
+        foreach ($questions as $question) {
+            $answer = $answers[$question['id']] ?? null;
+            $choice = is_array($answer) ? reset($answer) : $answer;
+            $roleId = $question['answer_map'][(int) $choice] ?? null;
+            if ($choice !== null && $roleId !== null) {
+                $roleIds[] = (int) $roleId;
+            }
+        }
+
+        $scores = array_count_values($roleIds);
+        $roles = DB::table('papi_roles')
+            ->join('papi_aspects', 'papi_aspects.id', '=', 'papi_roles.aspect_id')
+            ->select('papi_roles.id', 'papi_roles.code', 'papi_roles.role', 'papi_aspects.id as aspect_id', 'papi_aspects.aspect as aspect_name')
+            ->get()
+            ->keyBy('id');
+        $aspects = [];
+        foreach ($scores as $roleId => $score) {
+            $role = $roles[$roleId] ?? null;
+            if (!$role) {
+                continue;
+            }
+            $rule = DB::table('papi_rules')
+                ->where('role_id', $roleId)
+                ->where('low_value', '<=', $score)
+                ->where('high_value', '>=', $score)
+                ->first();
+            if (!isset($aspects[$role->aspect_id])) {
+                $aspects[$role->aspect_id] = [
+                    'aspect_id' => $role->aspect_id,
+                    'aspect_name' => $role->aspect_name,
+                    'roles' => [],
+                ];
+            }
+            $aspects[$role->aspect_id]['roles'][] = [
+                'role_id' => (int) $role->id,
+                'role_code' => $role->code,
+                'role_description' => $role->role,
+                'score' => $score,
+                'interpretation' => $rule->interprestation ?? 'Interpretasi tidak ditemukan',
+            ];
+        }
+
+        return [
+            'engine' => 'papi_kostick',
+            'answered' => count($roleIds),
+            'total_questions' => count($questions),
+            'aspects' => array_values($aspects),
+        ];
+    }
+
+    private function scoreDisc(array $questions, array $answers)
+    {
+        $most = [];
+        $least = [];
+        foreach ($questions as $question) {
+            $answer = $answers[$question['id']] ?? null;
+            if (!is_array($answer)) {
+                continue;
+            }
+            $mostValue = $question['answer_map']['P'][(int) ($answer['P'] ?? -1)] ?? null;
+            $leastValue = $question['answer_map']['K'][(int) ($answer['K'] ?? -1)] ?? null;
+            if ($mostValue) {
+                $most[] = $mostValue;
+            }
+            if ($leastValue) {
+                $least[] = $leastValue;
+            }
+        }
+
+        $mostCounts = array_count_values($most);
+        $leastCounts = array_count_values($least);
+        $result = [];
+        foreach (['D', 'I', 'S', 'C', 'N'] as $aspect) {
+            $result[$aspect] = [
+                1 => $mostCounts[$aspect] ?? 0,
+                2 => $leastCounts[$aspect] ?? 0,
+                3 => $aspect === 'N' ? 0 : (($mostCounts[$aspect] ?? 0) - ($leastCounts[$aspect] ?? 0)),
+            ];
+        }
+
+        $legacyScorer = app()->make(\App\Http\Controllers\api\EvaluasiKaryawanController::class);
+        $profiles = [];
+        foreach ([1, 2, 3] as $line) {
+            $legacyResult = $legacyScorer->getPattern($result, $line);
+            $profiles[] = [
+                'line' => $line,
+                'scores' => (array) $legacyResult[0],
+                'pattern' => isset($legacyResult[1]) && is_object($legacyResult[1]) ? $legacyResult[1]->toArray() : null,
+            ];
+        }
+
+        return [
+            'engine' => 'disc',
+            'answered' => count($most),
+            'total_questions' => count($questions),
+            'raw_scores' => $result,
+            'profiles' => $profiles,
         ];
     }
 
