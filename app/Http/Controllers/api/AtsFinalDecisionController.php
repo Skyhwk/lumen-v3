@@ -123,6 +123,15 @@ class AtsFinalDecisionController extends Controller
                             ->orWhere('is_approve_interview_user', 1);
                     });
             });
+        })
+        ->where(function ($q) {
+            $q->whereNull('meta_history')
+                ->orWhere('meta_history', 'not like', '%hrd_final_decision_rejected%');
+        })
+        ->where(function ($q) {
+            $q->whereNull('rejected_by')
+                ->orWhere('is_approved_interview_hrd', 1)
+                ->orWhereNotNull('approved_interview_hrd_by');
         });
     }
 
@@ -142,6 +151,7 @@ class AtsFinalDecisionController extends Controller
                         ->orWhereNull('created_at');
                 });
             })
+            ->where('is_active', true)
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)
