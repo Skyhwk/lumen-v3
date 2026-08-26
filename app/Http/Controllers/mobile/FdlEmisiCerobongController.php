@@ -532,10 +532,9 @@ class FdlEmisiCerobongController extends Controller
                             $data->nilai_opasitas = json_encode(array_values($filteredNilOpas));
                         }
                     }
-            
+
                     if ($request->foto_asap != '') $data->foto_asap     = self::convertImg($request->foto_asap, 6, $this->user_id);
                     if ($request->foto_lain3 != '') $data->foto_lain3     = self::convertImg($request->foto_lain3, 7, $this->user_id);
-
                     $data->permission_3                     = (empty($request->permission)) ? 1 : $request->permission;
                     $data->updated_by                                                 = $this->karyawan;
                     $data->updated_at                                                = Carbon::now()->format('Y-m-d H:i:s');
