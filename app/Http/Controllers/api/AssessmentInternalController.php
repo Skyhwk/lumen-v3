@@ -130,7 +130,19 @@ class AssessmentInternalController extends Controller
     public function getCategories(Request $request)
     {
         try {
-            $categories = QuestionCategory::where('category_scope', 'hr')->get(['id', 'name']);
+            $categories = QuestionCategory::withCount([
+                'questions as current_question_count' => function ($query) {
+                    $query->where('question_scope', 'hr')->where('status', '!=', 'retired');
+                },
+            ])
+                ->where('is_active', true)
+                ->where(function ($builder) {
+                    $builder->where('category_scope', 'hr')->orWhereNull('category_scope');
+                })
+                ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
+                ->orderBy('name')
+                ->get();
+
             return response()->json(['data' => $categories], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()], 500);
@@ -144,13 +156,42 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Kategori soal harus dipilih!'], 400);
             }
 
+            $normalizedCategories = [];
+            foreach ($request->category_question as $item) {
+                if (is_numeric($item)) {
+                    return response()->json([
+                        'message' => 'Format kategori tidak valid. Kirim objek berisi id, question_count, duration_minutes, dan has_time_limit.',
+                    ], 400);
+                }
+
+                if (!is_array($item) || empty($item['id'])) {
+                    continue;
+                }
+
+                $category = QuestionCategory::find($item['id']);
+                $isMandatory = $category && in_array(strtoupper(trim($category->name)), ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
+
+                $normalizedCategories[] = [
+                    'id' => (int) $item['id'],
+                    'question_count' => $isMandatory
+                        ? (int) ($item['question_count'] ?? 0)
+                        : max(30, (int) ($item['question_count'] ?? 30)),
+                    'duration_minutes' => max(1, (int) ($item['duration_minutes'] ?? 15)),
+                    'has_time_limit' => filter_var($item['has_time_limit'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                ];
+            }
+
+            if (empty($normalizedCategories)) {
+                return response()->json(['message' => 'Minimal pilih 1 kategori soal!'], 400);
+            }
+
             $assessment = AssessmentInternal::find($request->id);
             if (!$assessment) {
                 return response()->json(['message' => 'Data not found'], 404);
             }
 
             // 1. Simpan Kategori Soal & Pengaturan Profil
-            $assessment->category_question = $request->category_question;
+            $assessment->category_question = $normalizedCategories;
             if ($request->has('is_completed_profile')) {
                 $assessment->is_completed_profile = filter_var($request->is_completed_profile, FILTER_VALIDATE_BOOLEAN);
             }
