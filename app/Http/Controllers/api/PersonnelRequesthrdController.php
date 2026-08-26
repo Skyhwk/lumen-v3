@@ -445,4 +445,136 @@ class PersonnelRequesthrdController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * List active published personnel requests for move-candidate dropdown.
+     */
+    public function listActivePersonnelRequests(Request $request)
+    {
+        if (strtoupper(trim((string) ($this->grade ?? ''))) !== 'MANAGER') {
+            return response()->json(['message' => 'Akses hanya untuk user dengan grade MANAGER'], 403);
+        }
+
+        $excludeId = (int) $request->input('exclude_id', 0);
+
+        $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
+            ->where('is_active', 1)
+            ->where('is_publish', 1)
+            ->where(function ($q) {
+                $q->where('is_reject', 0)->orWhereNull('is_reject');
+            })
+            ->orderByDesc('id');
+
+        if ($excludeId > 0) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        $items = $query->get()->map(function ($row) {
+            $posisi = optional($row->masterJabatan)->nama_jabatan ?: ($row->posisi ?: '-');
+            $divisi = optional($row->masterDivisi)->nama_divisi ?: ($row->divisi_alias ?: ($row->divisi ?: '-'));
+
+            return [
+                'id' => $row->id,
+                'no_request' => $row->no_request,
+                'posisi' => $posisi,
+                'divisi' => $divisi,
+                'jumlah_personal' => (int) $row->jumlah_personal,
+                'label' => trim(($row->no_request ?: '-') . ' — ' . $posisi . ' / ' . $divisi),
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $items,
+        ], 200);
+    }
+
+    /**
+     * Move candidate to another active personnel request. Keeps pipeline status.
+     */
+    public function moveCandidate(Request $request)
+    {
+        if (strtoupper(trim((string) ($this->grade ?? ''))) !== 'MANAGER') {
+            return response()->json(['message' => 'Pindah kandidat hanya dapat dilakukan oleh user dengan grade MANAGER'], 403);
+        }
+
+        $candidateId = $request->input('id');
+        $targetPersonnelRequestId = (int) $request->input('target_personnel_request_id', 0);
+
+        if (!$candidateId) {
+            return response()->json(['message' => 'ID kandidat tidak ditemukan'], 400);
+        }
+        if ($targetPersonnelRequestId <= 0) {
+            return response()->json(['message' => 'Target personnel request wajib dipilih'], 400);
+        }
+
+        $candidate = NewRecruitment::query()->find($candidateId);
+        if (!$candidate) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        if ((int) $candidate->personnel_request_id === $targetPersonnelRequestId) {
+            return response()->json(['message' => 'Kandidat sudah berada pada personnel request tersebut'], 422);
+        }
+
+        $target = PersonnelRequest::with('masterJabatan')
+            ->where('id', $targetPersonnelRequestId)
+            ->where('is_active', 1)
+            ->where('is_publish', 1)
+            ->where(function ($q) {
+                $q->where('is_reject', 0)->orWhereNull('is_reject');
+            })
+            ->first();
+
+        if (!$target) {
+            return response()->json(['message' => 'Target personnel request tidak aktif / tidak tersedia'], 422);
+        }
+
+        $source = PersonnelRequest::query()->find($candidate->personnel_request_id);
+
+        try {
+            DB::beginTransaction();
+
+            $history = json_decode($candidate->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $history[] = [
+                'status' => 'moved_personnel_request',
+                'at' => Carbon::now()->toDateTimeString(),
+                'moved_by' => $this->karyawan,
+                'from_personnel_request_id' => $candidate->personnel_request_id,
+                'from_no_request' => optional($source)->no_request,
+                'to_personnel_request_id' => $target->id,
+                'to_no_request' => $target->no_request,
+            ];
+
+            $posisiDilamar = optional($target->masterJabatan)->nama_jabatan
+                ?: ($target->posisi ?: $candidate->posisi_dilamar);
+
+            DB::table('new_recruitment')->where('id', $candidate->id)->update([
+                'personnel_request_id' => $target->id,
+                'posisi_dilamar' => $posisiDilamar,
+                'meta_history' => json_encode(array_values($history)),
+                'updated_at' => Carbon::now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Kandidat berhasil dipindahkan ke personnel request ' . ($target->no_request ?: $target->id),
+                'data' => [
+                    'candidate_id' => $candidate->id,
+                    'personnel_request_id' => $target->id,
+                    'no_request' => $target->no_request,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal memindahkan kandidat: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
 }

@@ -406,7 +406,7 @@ class InternalAssessmentController extends Controller
 
         $definitions = json_decode($assessment->category_question ?: '[]', true) ?: [];
         foreach (array_values($definitions) as $index => $definition) {
-            $definition = is_array($definition) ? $definition : ['question_category_id' => $definition];
+            $definition = is_array($definition) ? $definition : ['id' => $definition];
             $categoryId = $definition['question_category_id'] ?? $definition['category_id'] ?? $definition['id'] ?? null;
             if (!$categoryId) {
                 continue;
@@ -417,13 +417,23 @@ class InternalAssessmentController extends Controller
                 continue;
             }
 
-            $limit = (int) ($definition['question_count'] ?? $definition['jumlah_soal'] ?? $category->question_count ?? 0);
+            $questionCount = (int) ($definition['question_count'] ?? $definition['jumlah_soal'] ?? 0);
+            $hasTimeLimit = array_key_exists('has_time_limit', $definition)
+                ? filter_var($definition['has_time_limit'], FILTER_VALIDATE_BOOLEAN)
+                : ((int) ($definition['duration_minutes'] ?? 0) > 0);
+            $durationMinutes = $hasTimeLimit
+                ? (int) ($definition['duration_minutes'] ?? 0)
+                : null;
+            if ($hasTimeLimit && $durationMinutes <= 0) {
+                $durationMinutes = null;
+            }
+
             $query = DB::table('questions')
                 ->where('question_category_id', $categoryId)
                 ->where('is_active', 1)
                 ->whereIn('question_type', ['single_choice', 'multiple_choice', 'scale']);
-            if ($limit > 0) {
-                $query->limit($limit);
+            if ($questionCount > 0) {
+                $query->limit($questionCount);
             }
             $questions = $query->inRandomOrder()->get()->values()->map(function ($question, $questionIndex) {
                 $options = DB::table('question_options')
@@ -458,7 +468,7 @@ class InternalAssessmentController extends Controller
                 'question_category_id' => $categoryId,
                 'session_order' => $index + 1,
                 'category_name' => $category->name,
-                'duration_minutes' => $definition['duration_minutes'] ?? $category->duration_minutes ?? null,
+                'duration_minutes' => $durationMinutes,
                 'questions_json' => json_encode($questions),
                 'answers_json' => json_encode(new \stdClass()),
                 'result_json' => null,

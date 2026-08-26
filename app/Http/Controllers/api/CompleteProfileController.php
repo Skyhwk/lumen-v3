@@ -21,7 +21,10 @@ class CompleteProfileController extends Controller
             return response()->json(['message' => 'Link kelengkapan profil tidak valid.'], 404);
         }
         if (!(int) $recruitment->is_approved_interview_hrd) {
-            return response()->json(['message' => 'Kelengkapan profil baru dapat diisi setelah Anda disetujui pada tahap interview HRD.'], 403);
+            return response()->json([
+                'result' => 'expired',
+                'message' => 'Link kelengkapan profil sudah kedaluwarsa atau belum tersedia untuk tahap proses kandidat saat ini.',
+            ], 403);
         }
         $profile = DB::table('candidate_profiles')->where('new_recruitment_id', $recruitment->id)->first();
         if ($recruitment->status !== 'profile_completion' || $profile) {
@@ -53,7 +56,10 @@ class CompleteProfileController extends Controller
                 return response()->json(['message' => 'Link kelengkapan profil tidak valid.'], 404);
             }
             if (!(int) $recruitment->is_approved_interview_hrd) {
-                return response()->json(['message' => 'Kelengkapan profil baru dapat diisi setelah Anda disetujui pada tahap interview HRD.'], 403);
+                return response()->json([
+                    'result' => 'expired',
+                    'message' => 'Link kelengkapan profil sudah kedaluwarsa atau belum tersedia untuk tahap proses kandidat saat ini.',
+                ], 403);
             }
             if ($recruitment->status !== 'profile_completion') {
                 return response()->json(['message' => 'Kelengkapan profil sudah pernah dikirim.'], 409);
