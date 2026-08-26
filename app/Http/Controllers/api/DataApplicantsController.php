@@ -534,6 +534,16 @@ class DataApplicantsController extends Controller
         // ── Position & score ──
         $posisiName = $this->resolvePositionName($applicant);
         $score      = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: 85);
+        $photoDataUri = app(RecruitmentPictureService::class)->toDataUri($applicant->picture ?? null);
+        $nameParts = preg_split('/\s+/', trim((string) $namaLengkap));
+        $initials = '';
+        foreach (array_slice(array_filter($nameParts), 0, 2) as $namePart) {
+            $initials .= strtoupper(substr($namePart, 0, 1));
+        }
+        $initials = $initials ?: 'CV';
+        $photoHtml = $photoDataUri
+            ? "<img class='profile-photo' src='{$photoDataUri}' alt='Candidate photo'>"
+            : "<div class='profile-placeholder'>{$initials}</div>";
 
         // ── Earliest Join ──
         $tanggalJoin = $applicant->tanggal_join_tercepat
@@ -693,68 +703,123 @@ class DataApplicantsController extends Controller
             <title>ATS CV - {$namaLengkap}</title>
             <style>
                 body {
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                    font-family: Arial, Helvetica, sans-serif;
                     color: #334155;
-                    font-size: 12px;
-                    line-height: 1.5;
+                    font-size: 11px;
+                    line-height: 1.55;
+                    margin: 0;
                 }
                 .header-table {
                     width: 100%;
-                    border-bottom: 2px solid #2563eb;
-                    padding-bottom: 12px;
-                    margin-bottom: 15px;
+                    border-collapse: collapse;
+                    background-color: #0f2747;
+                    margin-bottom: 18px;
+                }
+                .photo-cell {
+                    width: 126px;
+                    padding: 20px 0 20px 20px;
+                    vertical-align: middle;
+                }
+                .profile-photo,
+                .profile-placeholder {
+                    width: 104px;
+                    height: 124px;
+                    border: 4px solid #ffffff;
+                    border-radius: 8px;
+                }
+                .profile-photo {
+                    object-fit: cover;
+                }
+                .profile-placeholder {
+                    background-color: #2563eb;
+                    color: #ffffff;
+                    font-size: 32px;
+                    font-weight: bold;
+                    line-height: 124px;
+                    text-align: center;
+                }
+                .identity-cell {
+                    padding: 20px 18px;
+                    vertical-align: middle;
                 }
                 .applicant-name {
-                    font-size: 22px;
+                    font-size: 25px;
                     font-weight: bold;
-                    color: #1e293b;
-                    margin: 0 0 4px 0;
+                    color: #ffffff;
+                    margin: 0 0 6px 0;
                     text-transform: uppercase;
+                    letter-spacing: 0.8px;
                 }
                 .applied-position {
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #2563eb;
-                    margin: 0;
-                }
-                .meta-badge {
-                    background-color: #eff6ff;
-                    color: #1d4ed8;
-                    border: 1px solid #bfdbfe;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: bold;
-                    display: inline-block;
-                }
-                .section-title {
                     font-size: 13px;
                     font-weight: bold;
-                    color: #1e293b;
+                    color: #93c5fd;
+                    margin: 0;
+                }
+                .contact-line {
+                    margin-top: 10px;
+                    color: #dbeafe;
+                    font-size: 10px;
+                }
+                .score-cell {
+                    width: 120px;
+                    padding: 20px 20px 20px 0;
+                    text-align: right;
+                    vertical-align: middle;
+                }
+                .meta-badge {
+                    background-color: #ffffff;
+                    color: #0f2747;
+                    padding: 10px 12px;
+                    border-radius: 8px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    display: inline-block;
+                    text-align: center;
+                }
+                .score-number {
+                    display: block;
+                    color: #2563eb;
+                    font-size: 22px;
+                    line-height: 1.1;
+                }
+                .section-title {
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: #0f2747;
                     text-transform: uppercase;
-                    border-bottom: 1px solid #cbd5e1;
-                    padding-bottom: 4px;
-                    margin-top: 15px;
-                    margin-bottom: 10px;
-                    letter-spacing: 0.5px;
+                    border-left: 4px solid #2563eb;
+                    border-bottom: 1px solid #dbe4ef;
+                    padding: 5px 0 5px 9px;
+                    margin-top: 18px;
+                    margin-bottom: 8px;
+                    letter-spacing: 0.8px;
+                    background-color: #f8fafc;
                 }
                 .info-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin-bottom: 10px;
+                    border: 1px solid #e2e8f0;
+                    margin-bottom: 12px;
                 }
                 .info-table td {
-                    padding: 4px 8px;
+                    padding: 6px 10px;
                     vertical-align: top;
+                    border-bottom: 1px solid #edf2f7;
                 }
                 .info-label {
-                    width: 30%;
+                    width: 32%;
                     font-weight: bold;
-                    color: #475569;
+                    color: #64748b;
+                    background-color: #f8fafc;
                 }
                 .info-value {
-                    width: 70%;
+                    width: 68%;
                     color: #0f172a;
+                }
+                .section-note {
+                    color: #64748b;
+                    font-size: 10px;
                 }
             </style>
         </head>
@@ -762,22 +827,27 @@ class DataApplicantsController extends Controller
 
             <table class='header-table'>
                 <tr>
-                    <td style='width: 70%;'>
-                        <div class='applicant-name'>{$namaLengkap}" . ($namaPanggilan !== '-' ? " <span style='font-size:14px; color:#64748b; font-weight:400;'>({$namaPanggilan})</span>" : '') . "</div>
-                        <div class='applied-position'>Applied Position: {$posisiName}</div>
-                        <div style='margin-top: 6px; color: #64748b; font-size: 11px;'>
-                            Email: {$email} &nbsp;|&nbsp; Phone: {$noTelepon}" . ($noWhatsapp !== '-' ? " &nbsp;|&nbsp; WA: {$noWhatsapp}" : '') . "
+                    <td class='photo-cell'>
+                        {$photoHtml}
+                    </td>
+                    <td class='identity-cell'>
+                        <div class='applicant-name'>{$namaLengkap}</div>
+                        <div class='applied-position'>{$posisiName}</div>
+                        <div class='contact-line'>
+                            {$email}<br>
+                            {$noTelepon}" . ($noWhatsapp !== '-' ? " &nbsp;&bull;&nbsp; WhatsApp {$noWhatsapp}" : '') . "
                         </div>
                     </td>
-                    <td style='width: 30%; text-align: right; vertical-align: top;'>
-                        <div class='meta-badge' style='background: #1e40af; color: #ffffff; padding: 6px 10px; border-radius: 4px; font-size: 12px;'>
-                            Matching Score: {$score}%
+                    <td class='score-cell'>
+                        <div class='meta-badge'>
+                            ATS MATCH
+                            <span class='score-number'>{$score}%</span>
                         </div>
                     </td>
                 </tr>
             </table>
 
-            <div class='section-title'>Personal Information &amp; Qualifications</div>
+            <div class='section-title'>Professional Profile</div>
             <table class='info-table'>
                 <tr>
                     <td class='info-label'>Full Name</td>
@@ -788,7 +858,7 @@ class DataApplicantsController extends Controller
                     <td class='info-value'>{$namaPanggilan}</td>
                 </tr>
                 <tr>
-                    <td class='info-label'>Place &amp; Date of Birth</td>
+                    <td class='info-label'>Place / Date of Birth</td>
                     <td class='info-value'>{$ttlDisplay}" . ($usia !== '-' ? " ({$usia})" : '') . "</td>
                 </tr>
                 <tr>
@@ -808,7 +878,7 @@ class DataApplicantsController extends Controller
                     <td class='info-value'>{$golDarah}</td>
                 </tr>
                 <tr>
-                    <td class='info-label'>Shio &amp; Element</td>
+                    <td class='info-label'>Shio / Element</td>
                     <td class='info-value'>{$shio} " . ($elemen !== '-' ? "({$elemen})" : '') . "</td>
                 </tr>
                 <tr>
@@ -857,7 +927,7 @@ class DataApplicantsController extends Controller
                 </tr>
             </table>
 
-            <div class='section-title'>Medical &amp; Physical Information</div>
+            <div class='section-title'>Medical &amp; Physical Profile</div>
             <table class='info-table'>
                 <tr>
                     <td class='info-label'>Height / Weight</td>
