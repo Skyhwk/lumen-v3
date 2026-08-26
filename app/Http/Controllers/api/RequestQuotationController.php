@@ -383,7 +383,7 @@ class RequestQuotationController extends Controller
             foreach ($bakumutu as $a) {
                 array_push($param, $a->id_parameter . ';' . $a->parameter);
             }
-            
+
             $data = Parameter::where('is_active', true)
                 ->where('id_kategori', $category[0])
                 ->get();
@@ -2896,7 +2896,7 @@ class RequestQuotationController extends Controller
                         $idParameter = array_map(function($par) {
                             return explode(';', $par)[0];
                         }, $sampling->parameter);
-                        
+
                         $harga_parameter = [];
                         $volume_parameter = [];
 
@@ -2938,7 +2938,7 @@ class RequestQuotationController extends Controller
                             foreach ($dataPaketAnalisa as $paket) {
                                 if(
                                     $paket['regulasi'] == $sampling->regulasi &&
-                                    $paket['parameter'] == $sampling->parameter && 
+                                    $paket['parameter'] == $sampling->parameter &&
                                     $paket['kategori_1'] == $sampling->kategori_1 &&
                                     $paket['kategori_2'] == $sampling->kategori_2
                                 ) {
@@ -2951,7 +2951,7 @@ class RequestQuotationController extends Controller
                                     continue;
                                 }
                             }
-                        } 
+                        }
 
                         $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
                         $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
@@ -4442,7 +4442,7 @@ class RequestQuotationController extends Controller
                             foreach ($dataPaketAnalisa as $paket) {
                                 if(
                                     $paket['regulasi'] == $sampling->regulasi &&
-                                    $paket['parameter'] == $sampling->parameter && 
+                                    $paket['parameter'] == $sampling->parameter &&
                                     $paket['kategori_1'] == $sampling->kategori_1 &&
                                     $paket['kategori_2'] == $sampling->kategori_2
                                 ) {
@@ -4455,7 +4455,7 @@ class RequestQuotationController extends Controller
                                     continue;
                                 }
                             }
-                        } 
+                        }
 
                         $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
                         $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
@@ -6271,7 +6271,7 @@ class RequestQuotationController extends Controller
         }
 
         $headerIds = $headers->pluck('id')->toArray();
-        
+
         $data = OrderDetail::whereIn('id_order_header', $headerIds)->get();
         $data_sampled = $data->filter(function ($item) {
             return $item->tanggal_terima !== null;
@@ -6295,7 +6295,7 @@ class RequestQuotationController extends Controller
         $data->whereHas('sample', function ($q) use ($request) {
                 $q->where('nama_kategori', 'like', '%' . 'Udara' . '%');
         });
-        
+
         $data->where('name', 'like', '%' . 'ICP' . '%');
 
         return Datatables::of($data)
@@ -6304,13 +6304,23 @@ class RequestQuotationController extends Controller
             })
             ->rawColumns(['sampleName'])
             ->make(true);
-    } 
+    }
 
-    public function getNamaTitik (Request $request) {
-         try {
+    public function getNamaTitik(Request $request)
+    {
+        try {
+            $queryHeader = OrderHeader::query();
+
+            if ($request->filled('id_pelanggan') && $request->filled('nama_pelanggan')) {
+                $queryHeader->where('id_pelanggan', $request->id_pelanggan)
+                    ->where('nama_perusahaan', $request->nama_pelanggan);
+            }
+
+            $orderHeaderIds = $queryHeader->pluck('id');
+
             $data = OrderDetail::query()
                 ->where('is_active', true)
-                ->where('id_order_header', $request->id_order_header)
+                ->whereIn('id_order_header', $orderHeaderIds)
                 ->select([
                     'id',
                     'id_order_header',
