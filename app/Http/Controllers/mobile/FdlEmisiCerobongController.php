@@ -523,7 +523,16 @@ class FdlEmisiCerobongController extends Controller
                         $waktu_opas[] = 'Waktu Awal : ' . $request->waktuAwal . '; Waktu Akhir : ' . $request->waktuAkhir;
                     }
                     $data->waktu_opasitas                                  = json_encode($waktu_opas);
-                    if (count($request->nilOpas) > 0 ) $data->nilai_opasitas                  = json_encode($request->nilOpas);
+                    if (is_array($request->nilOpas) && count($request->nilOpas) > 0) {
+                        // Filter out null or "" values
+                        $filteredNilOpas = array_filter($request->nilOpas, function($value) {
+                            return $value !== null && $value !== "";
+                        });
+                        if (count($filteredNilOpas) > 0) {
+                            $data->nilai_opasitas = json_encode(array_values($filteredNilOpas));
+                        }
+                    }
+            
                     if ($request->foto_asap != '') $data->foto_asap     = self::convertImg($request->foto_asap, 6, $this->user_id);
                     if ($request->foto_lain3 != '') $data->foto_lain3     = self::convertImg($request->foto_lain3, 7, $this->user_id);
 
