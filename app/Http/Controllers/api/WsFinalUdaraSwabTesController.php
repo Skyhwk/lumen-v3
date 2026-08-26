@@ -50,11 +50,9 @@ class WsFinalUdaraSwabTesController extends Controller
             ->where('is_active', true)
             ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
             ->where('status', 0)
-            ->when($request->from && $request->to, function ($q) use ($request) {
-                $from = $request->from . '-01';
-                $to = date('Y-m-t', strtotime($request->to . '-01'));
-                $q->whereBetween('tanggal_sampling', [$from, $to]);
-            })
+            ->when($request->filled('year'), function ($q) use ($request) {
+				return $q->whereYear('tanggal_sampling', $request->year);
+			})
             ->groupBy('cfr')
             ->orderBy('tanggal_sampling');
 

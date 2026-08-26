@@ -60,13 +60,9 @@ class WsFinalUdaraKebisinganController extends Controller
                     $q->orWhereJsonContains('parameter', $p);
                 }
             })
-            ->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
-                $from = $request->from . '-01';
-                $to = date('Y-m-t', strtotime($request->to . '-01'));
-
-                return $q->whereBetween('tanggal_sampling', [$from, $to]);
-            })
-            ->when(!$request->filled('from') && !$request->filled('to') && $request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->when($request->filled('year'), function ($q) use ($request) {
+				return $q->whereYear('tanggal_sampling', $request->year);
+			})
             ->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
             ->orderBy('tanggal_sampling');
 

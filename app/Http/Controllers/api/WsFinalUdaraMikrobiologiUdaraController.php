@@ -45,15 +45,9 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ['33-Mikrobiologi Udara', '12-Udara Angka Kuman', '27-Udara Lingkungan Kerja', '26-Kualitas Udara Dalam Ruang'])
             ->whereNotNull('tanggal_terima')
-            ->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
-                $from = $request->from . '-01';
-                $to = date('Y-m-t', strtotime($request->to . '-01'));
-                return $q->whereBetween('tanggal_sampling', [$from, $to]);
-            })
-            ->when(
-                !$request->filled('from') && !$request->filled('to') && $request->date,
-                fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-            )
+            ->when($request->filled('year'), function ($q) use ($request) {
+				return $q->whereYear('tanggal_sampling', $request->year);
+			})
             ->where(function ($query) use ($parameterAllowed) {
                 foreach ($parameterAllowed as $param) {
                     $query->orWhere('parameter', 'LIKE', "%;$param%");
@@ -65,16 +59,6 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
         $data = $data->get();
         $data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
         return Datatables::of($data)->make(true);
-        // $data = OrderDetail::where('is_active', $request->is_active)
-        // 	->where('kategori_2', '4-Udara')
-        // 	->whereIn('kategori_3', ['33-Mikrobiologi Udara', "12-Udara Angka Kuman"])
-        // 	->where('status', 0)
-        // 	->whereNotNull('tanggal_terima')
-        // 	->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-        // 	->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-        // 	->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-        // 	->orderBy('id', "desc");
-        // return Datatables::of($data)->make(true);
     }
 
     public function getDetailCfr(Request $request)
