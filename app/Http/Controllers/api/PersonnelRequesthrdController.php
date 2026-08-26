@@ -447,7 +447,7 @@ class PersonnelRequesthrdController extends Controller
     }
 
     /**
-     * List active published personnel requests for move-candidate dropdown.
+     * List active published personnel requests for transfer-candidate dropdown.
      */
     public function listActivePersonnelRequests(Request $request)
     {
@@ -490,12 +490,12 @@ class PersonnelRequesthrdController extends Controller
     }
 
     /**
-     * Move candidate to another active personnel request. Keeps pipeline status.
+     * Transfer candidate to another active personnel request. Keeps pipeline status.
      */
-    public function moveCandidate(Request $request)
+    public function transferCandidate(Request $request)
     {
         if (strtoupper(trim((string) ($this->grade ?? ''))) !== 'MANAGER') {
-            return response()->json(['message' => 'Pindah kandidat hanya dapat dilakukan oleh user dengan grade MANAGER'], 403);
+            return response()->json(['message' => 'Transfer kandidat hanya dapat dilakukan oleh user dengan grade MANAGER'], 403);
         }
 
         $candidateId = $request->input('id');
@@ -538,9 +538,9 @@ class PersonnelRequesthrdController extends Controller
             $history = json_decode($candidate->meta_history ?: '[]', true);
             $history = is_array($history) ? $history : [];
             $history[] = [
-                'status' => 'moved_personnel_request',
+                'status' => 'transfer_personnel_request',
                 'at' => Carbon::now()->toDateTimeString(),
-                'moved_by' => $this->karyawan,
+                'transferred_by' => $this->karyawan,
                 'from_personnel_request_id' => $candidate->personnel_request_id,
                 'from_no_request' => optional($source)->no_request,
                 'to_personnel_request_id' => $target->id,
@@ -561,7 +561,7 @@ class PersonnelRequesthrdController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Kandidat berhasil dipindahkan ke personnel request ' . ($target->no_request ?: $target->id),
+                'message' => 'Kandidat berhasil ditransfer ke personnel request ' . ($target->no_request ?: $target->id),
                 'data' => [
                     'candidate_id' => $candidate->id,
                     'personnel_request_id' => $target->id,
@@ -573,7 +573,7 @@ class PersonnelRequesthrdController extends Controller
 
             return response()->json([
                 'status' => 'error',
-                'message' => 'Gagal memindahkan kandidat: ' . $th->getMessage(),
+                'message' => 'Gagal transfer kandidat: ' . $th->getMessage(),
             ], 500);
         }
     }
