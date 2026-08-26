@@ -52,6 +52,7 @@ use App\Models\LhpsPencahayaanHeader;
 use App\Models\LhpsSinarUVHeader;
 use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpUdaraPsikologiHeader;
+use App\Models\NewRecruitment;
 // end model LHP
 
 
@@ -857,7 +858,7 @@ class FixingController extends Controller
                 ->pluck('id_order_header')
                 ->unique()
                 ->toArray();
-                
+
             if (empty($orderHeaderIds)) {
                 return response()->json(['message' => 'No Quotation tidak ditemukan pada Order Detail!'], 404);
             }
@@ -2417,15 +2418,15 @@ class FixingController extends Controller
 
         foreach ($models as $modelClass) {
             if (!class_exists($modelClass)) continue;
-            
+
             $table = (new $modelClass)->getTable();
             $hasLhp = \Illuminate\Support\Facades\Schema::hasColumn($table, 'no_lhp');
             $hasCfr = \Illuminate\Support\Facades\Schema::hasColumn($table, 'no_cfr');
             $hasIsApprove = \Illuminate\Support\Facades\Schema::hasColumn($table, 'is_approve');
             $hasIsApproved = \Illuminate\Support\Facades\Schema::hasColumn($table, 'is_approved');
-            
+
             $approveColumn = $hasIsApprove ? 'is_approve' : ($hasIsApproved ? 'is_approved' : null);
-            
+
             // Step 1: Find no_lhp that appear more than once for this no_order
             if ($hasLhp) {
                 $dupNos = DB::table($table)
@@ -2445,7 +2446,7 @@ class FixingController extends Controller
                     $records = $modelClass::where('no_order', $noOrder)
                         ->whereIn('no_lhp', $dupNos)
                         ->get($selectColumns);
-                    
+
                     foreach ($records as $record) {
                         $duplicates[] = [
                             'id' => $record->id,
@@ -2480,7 +2481,7 @@ class FixingController extends Controller
                     $recordsCfr = $modelClass::where('no_order', $noOrder)
                         ->whereIn('no_cfr', $dupCfrs)
                         ->get($selectColumns);
-                    
+
                     foreach ($recordsCfr as $record) {
                         // Avoid adding duplicates if already added by no_lhp check
                         $alreadyAdded = false;
@@ -2535,13 +2536,13 @@ class FixingController extends Controller
 
             $detailModelName = str_replace('Header', 'Detail', $modelName);
             $detailModelClass = "\\App\\Models\\" . $detailModelName;
-            
+
             if (class_exists($detailModelClass)) {
                 $detailModelClass::where('id_header', $id)->delete();
             }
 
             $record->delete();
-            
+
             DB::commit();
             return response()->json(['message' => 'Data berhasil dihapus'], 200);
         } catch (\Exception $e) {
@@ -2572,6 +2573,458 @@ class FixingController extends Controller
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
             ], 500);
+        }
+    }
+
+
+    private function hasSuccessfulAiMatching($recruitment): bool
+    {
+        if (!$recruitment) {
+            return false;
+        }
+
+        if (!empty($recruitment->ai_matching_response)) {
+            $parsed = json_decode($recruitment->ai_matching_response, true);
+            if (is_array($parsed) && array_key_exists('score', $parsed)) {
+                return true;
+            }
+        }
+
+        $score = $recruitment->matching_score ?? $recruitment->nilai_kecocokan ?? null;
+        if ($score === null || $score === '') {
+            return false;
+        }
+
+        return (float) $score > 0;
+    }
+
+    private function logAiMatching(string $level, string $message, array $context = []): void
+    {
+        Log::channel('ats_ai_matching')->{$level}($message, $context);
+    }
+
+    private function candidateSkillsList($recruitment): array
+    {
+        $skills = [];
+
+        if (!empty($recruitment->skill)) {
+            foreach (json_decode($recruitment->skill, true) ?: [] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $keahlian = trim((string) ($item['keahlian'] ?? $item['skill'] ?? ''));
+                if ($keahlian === '') {
+                    continue;
+                }
+                $skills[] = [
+                    'keahlian' => $keahlian,
+                    'rate' => isset($item['rate']) && $item['rate'] !== '' ? (int) $item['rate'] : null,
+                ];
+            }
+        } elseif (!empty($recruitment->keahlian)) {
+            foreach (json_decode($recruitment->keahlian, true) ?: [] as $item) {
+                if (!is_array($item) || empty($item['keahlianSkill'])) {
+                    continue;
+                }
+                $skills[] = [
+                    'keahlian' => trim((string) $item['keahlianSkill']),
+                    'rate' => null,
+                ];
+            }
+        }
+
+        return $skills;
+    }
+
+    private function summarizeAiMatchingPayload(array $payload): array
+    {
+        $prompt = (string) ($payload['prompt'] ?? '');
+
+        return [
+            'model' => $payload['model'] ?? null,
+            'stream' => $payload['stream'] ?? null,
+            'format' => $payload['format'] ?? null,
+            'prompt_length' => strlen($prompt),
+        ];
+    }
+
+    private function sendToOllamaAi(array $payload)
+    {
+        $endpoint = rtrim((string) env('ATS_AI_GENERATE_URL', 'http://10.88.209.240:11434/api/generate'), '/');
+
+        try {
+            $ch = curl_init($endpoint);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlError) {
+                $this->logAiMatching('error', 'sendToOllamaAi cURL error', [
+                    'endpoint' => $endpoint,
+                    'error' => $curlError,
+                    'payload' => $this->summarizeAiMatchingPayload($payload),
+                ]);
+            }
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                return json_decode($response, true);
+            }
+
+            $this->logAiMatching('warning', 'sendToOllamaAi HTTP error', [
+                'endpoint' => $endpoint,
+                'http_code' => $httpCode,
+                'response' => $response,
+                'payload' => $this->summarizeAiMatchingPayload($payload),
+            ]);
+            return null;
+        } catch (\Throwable $e) {
+            $this->logAiMatching('error', 'sendToOllamaAi exception', [
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+                'payload' => $this->summarizeAiMatchingPayload($payload),
+            ]);
+            return null;
+        }
+    }
+
+    private function candidateSkillsForAi($recruitment): string
+    {
+        $skillsList = collect($this->candidateSkillsList($recruitment))
+            ->map(function ($skill) {
+                if ($skill['rate'] !== null) {
+                    return sprintf('%s (tingkat %d/10)', $skill['keahlian'], $skill['rate']);
+                }
+
+                return $skill['keahlian'];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        return !empty($skillsList)
+            ? implode(', ', $skillsList)
+            : 'Skill tidak spesifik';
+    }
+
+    public function getNewRecruitmentList(Request $request)
+    {
+        $data = NewRecruitment::where('is_active', 1)
+            ->select('id', 'nama_lengkap')
+            ->get();
+        return response()->json([
+            'data' => $data,
+        ], 200);
+    }
+
+    public function getAiPayload(Request $request)
+    {
+        $recruitmentId = $request->input('recruitment_id') ?? $request->input('id');
+        if (!$recruitmentId) {
+            return response()->json(['message' => 'ID recruitment tidak ditemukan'], 400);
+        }
+
+        $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitmentId)->orderBy('id', 'desc')->first();
+        if (!$attempt) {
+            return response()->json(['message' => 'Assessment attempt tidak ditemukan untuk kandidat ini'], 404);
+        }
+
+        $payloadData = $this->processAiMatching($attempt->id, $recruitmentId);
+        if (!$payloadData) {
+            return response()->json(['message' => 'Gagal memproses data AI payload'], 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $payloadData
+        ], 200);
+    }
+
+    private function summarizeAiMatchingResponse(?array $aiResult): ?array
+    {
+        if (!$aiResult) {
+            return null;
+        }
+
+        $parsedResponse = null;
+        if (!empty($aiResult['response'])) {
+            $decoded = json_decode($aiResult['response'], true);
+            $parsedResponse = is_array($decoded) ? $decoded : $aiResult['response'];
+        }
+
+        return [
+            'model' => $aiResult['model'] ?? null,
+            'created_at' => $aiResult['created_at'] ?? null,
+            'done' => $aiResult['done'] ?? null,
+            'done_reason' => $aiResult['done_reason'] ?? null,
+            'response' => $parsedResponse,
+            'prompt_eval_count' => $aiResult['prompt_eval_count'] ?? null,
+            'eval_count' => $aiResult['eval_count'] ?? null,
+            'total_duration' => $aiResult['total_duration'] ?? null,
+        ];
+    }
+
+    public function processAiMatching($attemptId, $recruitmentId)
+    {
+        try {
+            $recruitment = DB::table('new_recruitment')->where('id', $recruitmentId)->first();
+            if (!$recruitment) {
+                return null;
+            }
+
+            if ($this->hasSuccessfulAiMatching($recruitment)) {
+                $this->logAiMatching('info', 'AI matching skipped (already processed)', [
+                    'recruitment_id' => $recruitmentId,
+                    'attempt_id' => $attemptId,
+                ]);
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_data')
+                    && !empty($recruitment->ai_matching_data)) {
+                    return json_decode($recruitment->ai_matching_data, true);
+                }
+
+                return null;
+            }
+
+            // 1. Data Personal Request (Posisi Target & Kebutuhan)
+            $personnelRequest = DB::table('personnel_requests')
+                ->leftJoin('master_jabatan', 'master_jabatan.id', '=', 'personnel_requests.posisi')
+                ->leftJoin('master_divisi', 'master_divisi.id', '=', 'personnel_requests.divisi')
+                ->leftJoin('master_cabang', 'master_cabang.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
+                ->where('personnel_requests.id', $recruitment->personnel_request_id)
+                ->select(
+                    'personnel_requests.*',
+                    'master_jabatan.nama_jabatan as nama_posisi',
+                    'master_divisi.nama_divisi as nama_divisi',
+                    'master_cabang.nama_cabang as nama_cabang'
+                )
+                ->first();
+
+            // 2. Data Diri Pelamar / Candidate
+            $candidateEducations = DB::table('candidate_educations')
+                ->where('new_recruitment_id', $recruitmentId)
+                ->get();
+
+            $candidateWorkExps = DB::table('candidate_work_experiences')
+                ->where('new_recruitment_id', $recruitmentId)
+                ->get();
+
+            // 3. Hasil Assessment (Seluruh Test)
+            $sessions = DB::table('assessment_sessions')
+                ->where('assessment_attempt_id', $attemptId)
+                ->get();
+
+            // Format Riwayat Pendidikan Kandidat
+            $eduList = [];
+            if ($candidateEducations->isNotEmpty()) {
+                foreach ($candidateEducations as $edu) {
+                    $eduList[] = implode(' ', array_filter([$edu->jenjang_pendidikan, $edu->jurusan, $edu->nama_institusi]));
+                }
+            } elseif (!empty($recruitment->pendidikan)) {
+                $rawEdu = json_decode($recruitment->pendidikan, true) ?: [];
+                foreach ($rawEdu as $e) {
+                    if (is_array($e)) {
+                        $eduList[] = implode(' ', array_filter([$e['jenjang'] ?? '', $e['jurusan'] ?? '', $e['institusi'] ?? '']));
+                    }
+                }
+            }
+            $candidateEduStr = implode('; ', array_filter($eduList)) ?: ($recruitment->pendidikan_terakhir ?? 'Pendidikan tidak diisi');
+
+            // Format Pengalaman Kerja Kandidat
+            $expList = [];
+            if ($candidateWorkExps->isNotEmpty()) {
+                foreach ($candidateWorkExps as $exp) {
+                    $expList[] = implode(' ', array_filter([$exp->posisi_terakhir, 'di', $exp->nama_perusahaan]));
+                }
+            } elseif (!empty($recruitment->pengalaman_kerja)) {
+                $rawExp = json_decode($recruitment->pengalaman_kerja, true) ?: [];
+                foreach ($rawExp as $x) {
+                    if (is_array($x)) {
+                        $expList[] = implode(' ', array_filter([$x['posisi_kerja'] ?? '', 'di', $x['nama_perusahaan'] ?? '']));
+                    }
+                }
+            }
+            $candidateExpStr = implode('; ', array_filter($expList)) ?: 'Belum ada pengalaman kerja';
+
+            // Format Skill & Keahlian Kandidat (kolom skill: [{"rate": 8, "keahlian": "JavaScript"}, ...])
+            $candidateSkillsStr = $this->candidateSkillsForAi($recruitment);
+
+            // Format Hasil Seluruh Test Assessment (Original JSON untuk DISC & PAPI Kostick)
+            $structuredSessions = [];
+            $assessmentSummary = [];
+            foreach ($sessions as $session) {
+                $res = json_decode($session->result_json, true) ?: [];
+                $answers = json_decode($session->answers_json, true) ?: [];
+
+                $structuredSessions[] = [
+                    'session_id' => $session->id,
+                    'category_name' => $session->category_name,
+                    'session_order' => $session->session_order,
+                    'status' => $session->status,
+                    'answers' => $answers,
+                    'result_json' => $res, // Original JSON result
+                ];
+
+                if (isset($res['engine']) && $res['engine'] === 'disc') {
+                    $assessmentSummary[] = 'Hasil DISC (Original JSON): ' . json_encode($res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                } elseif (isset($res['engine']) && $res['engine'] === 'papi_kostick') {
+                    $assessmentSummary[] = 'Hasil PAPI Kostick (Original JSON): ' . json_encode($res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                } elseif (isset($res['score'])) {
+                    $assessmentSummary[] = $session->category_name . ': ' . $res['score'] . '/100';
+                }
+            }
+            $testSummaryStr = implode(' | ', $assessmentSummary) ?: 'Assessment Selesai';
+
+            // Clean HTML tags from requirement fields for plain text prompt
+            $cleanEduReq = trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($personnelRequest->pendidikan ?? '')))) ?: 'Kualifikasi pendidikan tidak ditentukan';
+            $cleanExpReq = trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($personnelRequest->pengalaman_kerja ?? '')))) ?: 'Pengalaman tidak ditentukan';
+            $cleanSkillsReq = trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($personnelRequest->skill_wajib ?? '')))) ?: 'Skill wajib tidak ditentukan';
+            $posisiReq = $personnelRequest->nama_posisi ?? ($personnelRequest->posisi ?? 'Jabatan tidak ditentukan');
+            $minScoreReq = $personnelRequest->minimum_matching ?? 75;
+
+            // Formulate Prompt String for AI Ollama Server
+            $promptText = sprintf(
+                "Analisis kecocokan kandidat terhadap posisi yang dilamar.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia.",
+                $candidateEduStr,
+                $candidateExpStr,
+                $candidateSkillsStr,
+                $testSummaryStr,
+                $posisiReq,
+                $cleanEduReq,
+                $cleanExpReq,
+                $cleanSkillsReq,
+                $minScoreReq
+            );
+
+            // Construct payload for Ollama structured JSON response
+            $aiPayload = [
+                'model' => 'intilab-ats',
+                'prompt' => $promptText,
+                'stream' => false,
+                'format' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'score' => [
+                            'type' => 'integer',
+                        ],
+                        'reason' => [
+                            'type' => 'string',
+                        ],
+                    ],
+                    'required' => [
+                        'score',
+                        'reason',
+                    ],
+                    'additionalProperties' => false,
+                ],
+            ];
+
+            // Full Structured Data Object with Original JSON
+            $structuredData = [
+                'personnel_request' => $personnelRequest,
+                'candidate_profile' => [
+                    'id' => $recruitment->id,
+                    'nama_lengkap' => $recruitment->nama_lengkap,
+                    'email' => $recruitment->email,
+                    'no_telepon' => $recruitment->no_telepon,
+                    'pendidikan' => $candidateEduStr,
+                    'pengalaman_kerja' => $candidateExpStr,
+                    'skill' => $candidateSkillsStr,
+                    'skills' => $this->candidateSkillsList($recruitment),
+                ],
+                'assessment_results' => $structuredSessions,
+                'ai_payload' => $aiPayload,
+            ];
+
+            // Log AI request (prompt once, metadata only in payload summary)
+            $this->logAiMatching('info', 'AI matching request', [
+                'recruitment_id' => $recruitmentId,
+                'attempt_id' => $attemptId,
+                'kandidat' => $recruitment->nama_lengkap ?? '',
+                'model' => $aiPayload['model'] ?? null,
+                'prompt_length' => strlen($promptText),
+                'prompt' => $promptText,
+            ]);
+
+            // Send to Ollama AI Server via HTTP POST cURL
+            $aiResult = $this->sendToOllamaAi($aiPayload);
+
+            // Log AI response (strip verbose token context from Ollama)
+            $this->logAiMatching('info', 'AI matching response', [
+                'recruitment_id' => $recruitmentId,
+                'attempt_id' => $attemptId,
+                'kandidat' => $recruitment->nama_lengkap ?? '',
+                'ai_response' => $this->summarizeAiMatchingResponse($aiResult),
+            ]);
+
+            if ($aiResult && !empty($aiResult['response'])) {
+                $parsedResponse = json_decode($aiResult['response'], true);
+                $matchingScore = null;
+                $matchingReason = null;
+                $responseStr = $aiResult['response'];
+
+                if (is_array($parsedResponse)) {
+                    if (isset($parsedResponse['score'])) {
+                        $matchingScore = max(0, min(100, (int) $parsedResponse['score']));
+                    }
+                    if (isset($parsedResponse['reason'])) {
+                        $matchingReason = trim((string) $parsedResponse['reason']);
+                    }
+                    if ($matchingScore !== null || $matchingReason !== null) {
+                        $responseStr = json_encode([
+                            'score' => $matchingScore,
+                            'reason' => $matchingReason ?? '',
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
+                } elseif (preg_match('/(\d{1,3})\s*%?/', $aiResult['response'], $matches)) {
+                    $scoreVal = (int) $matches[1];
+                    if ($scoreVal <= 100) {
+                        $matchingScore = $scoreVal;
+                    }
+                }
+
+                $updateData = [
+                    'updated_at' => Carbon::now(),
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_response')) {
+                    $updateData['ai_matching_response'] = $responseStr;
+                }
+                if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_data')) {
+                    $updateData['ai_matching_data'] = json_encode($structuredData);
+                }
+                if ($matchingReason !== null && $matchingReason !== ''
+                    && \Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'ai_matching_reason')) {
+                    $updateData['ai_matching_reason'] = $matchingReason;
+                }
+                if ($matchingScore !== null) {
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'matching_score')) {
+                        $updateData['matching_score'] = $matchingScore;
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'nilai_kecocokan')) {
+                        $updateData['nilai_kecocokan'] = $matchingScore;
+                    }
+                }
+
+                DB::table('new_recruitment')->where('id', $recruitmentId)->update($updateData);
+                $structuredData['ai_response'] = $aiResult;
+            }
+
+            return $structuredData;
+        } catch (\Throwable $e) {
+            $this->logAiMatching('error', 'processAiMatching error', [
+                'recruitment_id' => $recruitmentId,
+                'attempt_id' => $attemptId,
+                'message' => $e->getMessage(),
+            ]);
+            return null;
         }
     }
 }
