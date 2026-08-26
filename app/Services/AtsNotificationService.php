@@ -317,6 +317,18 @@ class AtsNotificationService
         $this->notifyHrdTeam($title, $message, self::URL_FINAL_DECISION);
     }
 
+    public function finalDecisionRejectedByHrd($recruitment, $personnelRequest = null, ?string $priorSource = null): void
+    {
+        $candidate = $this->candidateName($recruitment);
+        $sourceText = $priorSource ? " (setelah penolakan {$priorSource})" : '';
+        $this->notifyPersonnelRequestCreator(
+            $personnelRequest,
+            'Kandidat Ditolak — Final Decision',
+            "HRD menolak kandidat {$candidate} pada tahap Final Decision{$sourceText}.",
+            self::URL_PERSONNEL_REQUEST
+        );
+    }
+
     public function candidateHired($recruitment, $personnelRequest = null): void
     {
         $candidate = $this->candidateName($recruitment);

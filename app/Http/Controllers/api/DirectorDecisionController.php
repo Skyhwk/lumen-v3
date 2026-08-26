@@ -90,7 +90,7 @@ class DirectorDecisionController extends Controller
                         'rejected_by' => 'Direktur',
                         'rejected_at' => $now,
                         'is_approved_interview_hrd' => 0,
-                        'is_approved_interview_user' => 0,
+                        'is_approve_interview_user' => 0,
                     ]
             );
             (new RecruitmentStatusService())->update(

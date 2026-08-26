@@ -199,6 +199,12 @@ class FinanceDecisionController extends Controller
                     ['by' => $user ?? 'Finance']
                 );
 
+                SallaryOfferService::upsertActive(
+                    (int) $id,
+                    ['email_sent_at' => null],
+                    $user ?? 'Finance'
+                );
+
                 DB::commit();
 
                 app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
@@ -229,7 +235,7 @@ class FinanceDecisionController extends Controller
 
                 (new RecruitmentStatusService())->update(
                     $id, 
-                    'rejected', 
+                    'internal_sallary_offer', 
                     $now, 
                     'finance_rejected', 
                     [

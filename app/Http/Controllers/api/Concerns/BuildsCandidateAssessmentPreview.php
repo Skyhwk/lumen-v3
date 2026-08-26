@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\Concerns;
 
 use App\Models\NewRecruitment;
 use App\Services\RecruitmentPictureService;
+use App\Services\RecruitmentStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -460,6 +461,13 @@ trait BuildsCandidateAssessmentPreview
             $matchingScore = $candidate->matching_score;
         }
 
+        $pipelineStatus = RecruitmentStatusService::resolvePipelineStatus($candidate);
+        $directorRejectReason = RecruitmentStatusService::getDirectorManagementRejectReason($candidate);
+        $statusLabel = $isActive ? $this->recruitmentStatusLabel($status) : 'Void';
+        if ($isActive && $pipelineStatus) {
+            $statusLabel = $pipelineStatus['label'];
+        }
+
         return [
             'id' => $candidate->id,
             'nama_lengkap' => $candidate->nama_lengkap,
@@ -470,7 +478,10 @@ trait BuildsCandidateAssessmentPreview
             'status' => $status,
             'is_active' => $isActive,
             'is_void' => !$isActive,
-            'status_label' => $isActive ? $this->recruitmentStatusLabel($status) : 'Void',
+            'status_label' => $statusLabel,
+            'pipeline_status' => $pipelineStatus['code'] ?? null,
+            'pipeline_status_label' => $pipelineStatus['label'] ?? null,
+            'reject_reason' => $directorRejectReason,
             'nilai_kecocokan' => $matchingScore,
             'ai_matching_reason' => $this->resolveMatchingReason($candidate),
             'posisi_dilamar' => $candidate->posisi_dilamar,

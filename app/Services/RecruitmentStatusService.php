@@ -33,22 +33,165 @@ class RecruitmentStatusService
         return null;
     }
 
+    public static function hasManagementDecisionApproved($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'management_decision_approved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function getLatestCandidateOfferingRejectEntry(array $history): ?array
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_rejected') {
+                return $history[$i];
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingCandidateOfferingResubmit($recruitment): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $rejectedIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_rejected') {
+                $rejectedIndex = $i;
+                break;
+            }
+        }
+
+        if ($rejectedIndex === null) {
+            return false;
+        }
+
+        for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_sent') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function hasHrdSalaryInputSavedAfterCandidateReject($recruitment): bool
+    {
+        if (!self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $rejectedIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_rejected') {
+                $rejectedIndex = $i;
+                break;
+            }
+        }
+
+        if ($rejectedIndex === null) {
+            return false;
+        }
+
+        for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'hrd_salary_input_saved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function isCandidateOfferingRejected($recruitment): bool
+    {
+        return self::isAwaitingCandidateOfferingResubmit($recruitment);
+    }
+
+    public static function getCandidateOfferingRejectReason($recruitment): ?string
+    {
+        if (!self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return null;
+        }
+
+        $entry = self::getLatestCandidateOfferingRejectEntry(self::parseMetaHistory($recruitment));
+        if (!$entry) {
+            return null;
+        }
+
+        $reason = trim((string) ($entry['reject_reason'] ?? $entry['alasan_reject'] ?? $entry['reason'] ?? ''));
+
+        return $reason !== '' ? $reason : null;
+    }
+
     public static function isAwaitingIbuDirekturApproval($recruitment): bool
     {
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingDirectorSalaryResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::hasManagementDecisionApproved($recruitment)) {
+            return false;
+        }
+
         $status = strtolower(trim((string) (is_object($recruitment) ? ($recruitment->status ?? '') : ($recruitment['status'] ?? ''))));
         return $status === 'management_decision';
+    }
+
+    public static function isDirectorSalaryDecisionSuperseded(array $history, int $decisionIndex): bool
+    {
+        for ($i = $decisionIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'finance_approved') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function getLatestDirectorSalaryDecision(array $history): ?string
     {
         for ($i = count($history) - 1; $i >= 0; $i--) {
             $status = (string) ($history[$i]['status'] ?? '');
-            if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $status, $matches)) {
-                return $matches[1];
+            if (!preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $status, $matches)) {
+                continue;
             }
+
+            if (self::isDirectorSalaryDecisionSuperseded($history, $i)) {
+                continue;
+            }
+
+            return $matches[1];
         }
 
         return null;
+    }
+
+    public static function isReadyToSendDirectorAfterFinanceApprove($recruitment): bool
+    {
+        if (!self::hasFinanceApproved($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingDirectorSalaryResubmit($recruitment)
+            || self::isAwaitingFinanceResubmit($recruitment)
+            || self::isAwaitingDirectorSalaryApproval($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+
+        return self::getLatestDirectorSalaryDecision($history) === null;
     }
 
     public static function isAwaitingDirectorSalaryApproval($recruitment): bool
@@ -83,14 +226,44 @@ class RecruitmentStatusService
 
     public static function hasFinanceApproved($recruitment): bool
     {
-        $entry = self::getLatestFinanceHistoryEntry(self::parseMetaHistory($recruitment));
+        $history = self::parseMetaHistory($recruitment);
+        $directorResubmitIndex = self::getLatestDirectorSalaryResubmitIndex($history);
+
+        if ($directorResubmitIndex !== null) {
+            for ($i = $directorResubmitIndex + 1; $i < count($history); $i++) {
+                if (($history[$i]['status'] ?? '') === 'finance_approved') {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $entry = self::getLatestFinanceHistoryEntry($history);
+
         return strtolower((string) ($entry['status'] ?? '')) === 'finance_approved';
     }
 
     public static function hasFinanceRejected($recruitment): bool
     {
+        if (!self::isAwaitingFinanceResubmit($recruitment)) {
+            return false;
+        }
+
         $entry = self::getLatestFinanceHistoryEntry(self::parseMetaHistory($recruitment));
+
         return strtolower((string) ($entry['status'] ?? '')) === 'finance_rejected';
+    }
+
+    public static function isWaitingCandidateAfterFinanceResubmit($recruitment): bool
+    {
+        if (!self::hasHistoryStatusAfterFinanceReject($recruitment, 'candidate_offering_sent')) {
+            return false;
+        }
+
+        $last = self::getLastHistoryEntry($recruitment);
+
+        return ($last['status'] ?? '') === 'candidate_offering_sent';
     }
 
     public static function getLatestDirectorNegotiationIndex(array $history): ?int
@@ -105,18 +278,58 @@ class RecruitmentStatusService
         return null;
     }
 
-    public static function isAwaitingHrdResubmitAfterDirectorNegotiation($recruitment): bool
+    public static function getLatestDirectorSalaryRejectIndex(array $history): ?int
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'internal_sallary_offer_rejected') {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    public static function getLatestDirectorSalaryNegotiateIndex(array $history): ?int
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'internal_sallary_offer_negotiated') {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    public static function getLatestDirectorSalaryResubmitIndex(array $history): ?int
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if (preg_match('/^internal_sallary_offer_(rejected|negotiated)$/', $status)) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingDirectorSalaryResubmit($recruitment): bool
     {
         $history = self::parseMetaHistory($recruitment);
-        $negotiatedIndex = self::getLatestDirectorNegotiationIndex($history);
+        $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
 
-        if ($negotiatedIndex === null) {
+        if ($decisionIndex === null) {
             return false;
         }
 
-        for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
-            $status = strtolower((string) ($history[$i]['status'] ?? ''));
-            if (in_array($status, ['waiting_approve_finance', 'finance_approved'], true)) {
+        for ($i = $decisionIndex + 1; $i < count($history); $i++) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if (in_array($status, [
+                'candidate_offering_sent',
+                'finance_approved',
+                'candidate_offering_approved',
+                'internal_sallary_offer_approved',
+                'director_salary_email_sent',
+            ], true)) {
                 return false;
             }
         }
@@ -124,13 +337,289 @@ class RecruitmentStatusService
         return true;
     }
 
-    public static function isFinanceSalaryLocked($recruitment): bool
+    public static function isAwaitingDirectorSalaryRejectResubmit($recruitment): bool
     {
-        if (!self::hasFinanceApproved($recruitment)) {
+        if (!self::isAwaitingDirectorSalaryResubmit($recruitment)) {
             return false;
         }
 
-        if (self::isAwaitingHrdResubmitAfterDirectorNegotiation($recruitment)) {
+        $history = self::parseMetaHistory($recruitment);
+        $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
+
+        return $decisionIndex !== null
+            && ($history[$decisionIndex]['status'] ?? '') === 'internal_sallary_offer_rejected';
+    }
+
+    public static function isAwaitingDirectorSalaryNegotiateResubmit($recruitment): bool
+    {
+        if (!self::isAwaitingDirectorSalaryResubmit($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
+
+        return $decisionIndex !== null
+            && ($history[$decisionIndex]['status'] ?? '') === 'internal_sallary_offer_negotiated';
+    }
+
+    public static function hasHistoryStatusAfterDirectorResubmit($recruitment, string $status): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
+
+        if ($decisionIndex === null) {
+            return false;
+        }
+
+        for ($i = $decisionIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === $status) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @deprecated use hasHistoryStatusAfterDirectorResubmit */
+    public static function hasHistoryStatusAfterDirectorReject($recruitment, string $status): bool
+    {
+        return self::hasHistoryStatusAfterDirectorResubmit($recruitment, $status);
+    }
+
+    public static function isWaitingCandidateAfterDirectorResubmit($recruitment): bool
+    {
+        if (!self::hasHistoryStatusAfterDirectorResubmit($recruitment, 'candidate_offering_sent')) {
+            return false;
+        }
+
+        $last = self::getLastHistoryEntry($recruitment);
+
+        return ($last['status'] ?? '') === 'candidate_offering_sent';
+    }
+
+    public static function hasHrdSalaryInputSavedAfterDirectorResubmit($recruitment): bool
+    {
+        if (!self::isAwaitingDirectorSalaryResubmit($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
+
+        if ($decisionIndex === null) {
+            return false;
+        }
+
+        for ($i = $decisionIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'hrd_salary_input_saved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function hasHrdSalaryInputSavedAfterDirectorReject($recruitment): bool
+    {
+        return self::isAwaitingDirectorSalaryRejectResubmit($recruitment)
+            && self::hasHrdSalaryInputSavedAfterDirectorResubmit($recruitment);
+    }
+
+    public static function hasHrdSalaryInputSavedAfterDirectorNegotiate($recruitment): bool
+    {
+        return self::isAwaitingDirectorSalaryNegotiateResubmit($recruitment)
+            && self::hasHrdSalaryInputSavedAfterDirectorResubmit($recruitment);
+    }
+
+    public static function getDirectorSalaryNegotiateAmount($recruitment): ?string
+    {
+        if (!self::isAwaitingDirectorSalaryNegotiateResubmit($recruitment)) {
+            return null;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
+
+        if ($decisionIndex === null) {
+            return null;
+        }
+
+        $amount = trim((string) ($history[$decisionIndex]['negotiated_amount'] ?? ''));
+
+        return $amount !== '' ? $amount : null;
+    }
+
+    public static function getDirectorSalaryRejectReason($recruitment): ?string
+    {
+        if (!self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
+            return null;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') !== 'internal_sallary_offer_rejected') {
+                continue;
+            }
+
+            $reason = trim((string) ($history[$i]['reject_reason'] ?? $history[$i]['alasan_reject'] ?? $history[$i]['reason'] ?? ''));
+
+            return $reason !== '' ? $reason : null;
+        }
+
+        return null;
+    }
+
+    public static function hasHrdFinalDecisionRejected($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (($entry['status'] ?? '') === 'hrd_final_decision_rejected') {
+                return true;
+            }
+        }
+
+        $status = strtolower(trim((string) (is_object($recruitment) ? ($recruitment->status ?? '') : ($recruitment['status'] ?? ''))));
+
+        return $status === 'rejected'
+            && !self::isAwaitingDirectorSalaryResubmit($recruitment)
+            && !self::isAwaitingFinanceResubmit($recruitment)
+            && !self::isAwaitingCandidateOfferingResubmit($recruitment);
+    }
+
+    public static function canHrdRejectFromFinalDecision($recruitment): bool
+    {
+        if (self::hasHrdFinalDecisionRejected($recruitment)) {
+            return false;
+        }
+
+        return self::isAwaitingDirectorSalaryResubmit($recruitment)
+            || self::isAwaitingFinanceResubmit($recruitment)
+            || self::isAwaitingCandidateOfferingResubmit($recruitment);
+    }
+
+    public static function getPriorRejectionSummaryForHrd($recruitment): ?array
+    {
+        if (self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
+            return [
+                'source' => 'Direktur',
+                'reason' => self::getDirectorSalaryRejectReason($recruitment),
+            ];
+        }
+
+        if (self::isAwaitingDirectorSalaryNegotiateResubmit($recruitment)) {
+            $history = self::parseMetaHistory($recruitment);
+            $idx = self::getLatestDirectorSalaryNegotiateIndex($history);
+
+            return [
+                'source' => 'Direktur (Negosiasi)',
+                'reason' => $idx !== null ? ($history[$idx]['negotiated_amount'] ?? null) : null,
+            ];
+        }
+
+        if (self::isAwaitingFinanceResubmit($recruitment)) {
+            return [
+                'source' => 'Finance',
+                'reason' => self::getFinanceRejectReason($recruitment),
+            ];
+        }
+
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return [
+                'source' => 'Kandidat',
+                'reason' => self::getCandidateOfferingRejectReason($recruitment),
+            ];
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingHrdResubmitAfterDirectorNegotiation($recruitment): bool
+    {
+        return self::isAwaitingDirectorSalaryResubmit($recruitment);
+    }
+
+    public static function getLatestFinanceRejectIndex(array $history): ?int
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'finance_rejected') {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingFinanceResubmit($recruitment): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $rejectedIndex = self::getLatestFinanceRejectIndex($history);
+
+        if ($rejectedIndex === null) {
+            return false;
+        }
+
+        for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if (in_array($status, ['candidate_offering_sent', 'finance_approved', 'candidate_offering_approved'], true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function hasHrdSalaryInputSavedAfterFinanceReject($recruitment): bool
+    {
+        if (!self::isAwaitingFinanceResubmit($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $rejectedIndex = self::getLatestFinanceRejectIndex($history);
+
+        if ($rejectedIndex === null) {
+            return false;
+        }
+
+        for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'hrd_salary_input_saved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function hasHistoryStatusAfterFinanceReject($recruitment, string $status): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $rejectedIndex = self::getLatestFinanceRejectIndex($history);
+
+        if ($rejectedIndex === null) {
+            return false;
+        }
+
+        for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === $status) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function isFinanceSalaryLocked($recruitment): bool
+    {
+        if (self::isAwaitingFinanceResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingDirectorSalaryResubmit($recruitment)) {
+            return false;
+        }
+
+        if (!self::hasFinanceApproved($recruitment)) {
             return false;
         }
 
@@ -168,6 +657,10 @@ class RecruitmentStatusService
 
     public static function getFinanceRejectReason($recruitment): ?string
     {
+        if (!self::isAwaitingFinanceResubmit($recruitment)) {
+            return null;
+        }
+
         $recruitmentId = is_object($recruitment) ? ($recruitment->id ?? null) : (is_array($recruitment) ? ($recruitment['id'] ?? null) : null);
 
         if ($recruitmentId) {
@@ -190,6 +683,85 @@ class RecruitmentStatusService
         }
 
         return null;
+    }
+
+    public static function getLastHistoryEntry($recruitment): ?array
+    {
+        $history = self::parseMetaHistory($recruitment);
+
+        if (empty($history)) {
+            return null;
+        }
+
+        return $history[count($history) - 1];
+    }
+
+    public static function isReturnedFromDirectorManagementRejection($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment) ? ($recruitment->status ?? '') : ($recruitment['status'] ?? ''))));
+        if ($status !== 'interview_hrd') {
+            return false;
+        }
+
+        $last = self::getLastHistoryEntry($recruitment);
+
+        return strtolower((string) ($last['status'] ?? '')) === 'management_decision_rejected';
+    }
+
+    public static function getDirectorManagementRejectReason($recruitment): ?string
+    {
+        if (!self::isReturnedFromDirectorManagementRejection($recruitment)) {
+            return null;
+        }
+
+        $last = self::getLastHistoryEntry($recruitment);
+        $reason = trim((string) ($last['reject_reason'] ?? $last['alasan_reject'] ?? $last['reason'] ?? ''));
+
+        return $reason !== '' ? $reason : null;
+    }
+
+    public static function resolvePipelineStatus($recruitment): ?array
+    {
+        if (!self::isReturnedFromDirectorManagementRejection($recruitment)) {
+            return null;
+        }
+
+        return [
+            'code' => 'reject_ibu_direktur',
+            'label' => 'Reject Ibu Direktur',
+        ];
+    }
+
+    public static function hasCompletedProfile($recruitment): bool
+    {
+        $recruitmentId = is_object($recruitment)
+            ? ($recruitment->id ?? null)
+            : (is_array($recruitment) ? ($recruitment['id'] ?? null) : null);
+
+        if (!$recruitmentId) {
+            return false;
+        }
+
+        return DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->exists();
+    }
+
+    public static function hasDirectorManagementRejectionInHistory($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'management_decision_rejected') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function shouldSkipProfileCompletionOnHrdPass($recruitment): bool
+    {
+        return self::hasCompletedProfile($recruitment)
+            && self::hasDirectorManagementRejectionInHistory($recruitment);
     }
 
     public function update($recruitmentId, $status, $at = null, $historyStatus = null, array $extraData = [])

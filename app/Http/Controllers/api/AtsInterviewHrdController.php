@@ -176,6 +176,19 @@ class AtsInterviewHrdController extends Controller
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'interview_hrd';
             })
+            ->addColumn('pipeline_status', function ($row) {
+                $pipelineStatus = RecruitmentStatusService::resolvePipelineStatus($row);
+
+                return $pipelineStatus['code'] ?? null;
+            })
+            ->addColumn('pipeline_status_label', function ($row) {
+                $pipelineStatus = RecruitmentStatusService::resolvePipelineStatus($row);
+
+                return $pipelineStatus['label'] ?? null;
+            })
+            ->addColumn('reject_reason', function ($row) {
+                return RecruitmentStatusService::getDirectorManagementRejectReason($row);
+            })
             ->addColumn('has_reschedule_history', function ($row) {
                 $count = DB::table('recruitment_interviews')
                     ->where('new_recruitment_id', $row->id)
@@ -355,12 +368,13 @@ class AtsInterviewHrdController extends Controller
         }
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+        $skipProfileCompletion = RecruitmentStatusService::shouldSkipProfileCompletionOnHrdPass($applicant);
+        $nextStatus = $skipProfileCompletion ? 'interview_user' : 'profile_completion';
 
-        // Record HRD approval audit trail & update status to 'profile_completion' with RecruitmentStatusService meta_history tracking
-        (new RecruitmentStatusService())->update($applicant->id, 'profile_completion', Carbon::now());
+        (new RecruitmentStatusService())->update($applicant->id, $nextStatus, Carbon::now());
 
         $applicant->update([
-            'status'                    => 'profile_completion',
+            'status'                    => $nextStatus,
             'is_approved_interview_hrd' => 1,
             'approved_interview_hrd_by' => $user,
             'approved_interview_hrd_at' => Carbon::now(),
@@ -414,39 +428,41 @@ class AtsInterviewHrdController extends Controller
             }
 
             // 3. Email & WhatsApp notification to Candidate to complete data profile
-            $token = $applicant->token ?? '';
-            $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
-            $profileUrl = "{$baseUrl}/public/recruitment/complete-profile/" . rawurlencode($token);
+            if (!$skipProfileCompletion) {
+                $token = $applicant->token ?? '';
+                $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
+                $profileUrl = "{$baseUrl}/public/recruitment/complete-profile/" . rawurlencode($token);
 
-            $candidateDataObj = (object) [
-                'id'                    => $applicant->id,
-                'nama_lengkap'          => $applicant->nama_lengkap,
-                'jenis_kelamin'         => $applicant->jenis_kelamin,
-                'posisi_di_lamar'       => $posisiName,
-                'nama_jabatan'          => $posisiName,
-                'link_complete_profile' => $profileUrl,
-            ];
+                $candidateDataObj = (object) [
+                    'id'                    => $applicant->id,
+                    'nama_lengkap'          => $applicant->nama_lengkap,
+                    'jenis_kelamin'         => $applicant->jenis_kelamin,
+                    'posisi_di_lamar'       => $posisiName,
+                    'nama_jabatan'          => $posisiName,
+                    'link_complete_profile' => $profileUrl,
+                ];
 
-            // 3a. Email to candidate
-            if (!empty($applicant->email)) {
-                $bodyCandidateEmail = GenerateMessageAtsEmail::bodyEmailCompleteProfileCandidate($candidateDataObj);
-                SendEmail::where('to', $applicant->email)
-                    ->where('subject', "Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium")
-                    ->where('body', $bodyCandidateEmail)
-                    ->where('karyawan', $user)
-                    ->noReply()
-                    ->replyToAtsHrd()
-                    ->send();
-            }
+                // 3a. Email to candidate
+                if (!empty($applicant->email)) {
+                    $bodyCandidateEmail = GenerateMessageAtsEmail::bodyEmailCompleteProfileCandidate($candidateDataObj);
+                    SendEmail::where('to', $applicant->email)
+                        ->where('subject', "Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium")
+                        ->where('body', $bodyCandidateEmail)
+                        ->where('karyawan', $user)
+                        ->noReply()
+                        ->replyToAtsHrd()
+                        ->send();
+                }
 
-            // 3b. WhatsApp to candidate
-            $candidatePhone = $applicant->no_telepon ?? $applicant->no_hp ?? $applicant->no_whatsapp ?? null;
-            if (!empty($candidatePhone)) {
-                $genWa = new GenerateMessageAtsWhatsapp($candidateDataObj);
-                $waMessage = $genWa->CompleteProfileCandidate();
+                // 3b. WhatsApp to candidate
+                $candidatePhone = $applicant->no_telepon ?? $applicant->no_hp ?? $applicant->no_whatsapp ?? null;
+                if (!empty($candidatePhone)) {
+                    $genWa = new GenerateMessageAtsWhatsapp($candidateDataObj);
+                    $waMessage = $genWa->CompleteProfileCandidate();
 
-                $sendWa = new SendWhatsapp($candidatePhone, $waMessage);
-                $sendWa->send();
+                    $sendWa = new SendWhatsapp($candidatePhone, $waMessage);
+                    $sendWa->send();
+                }
             }
         } catch (\Exception $e) {
             // Silence — notification/email/wa failure must not block the approval response
@@ -454,8 +470,11 @@ class AtsInterviewHrdController extends Controller
 
         return response()->json([
             'status' => 200,
-            'message' => 'HRD Interview approved. Candidate is ready for User Interview scheduling.',
-            'data' => $applicant,
+            'message' => $skipProfileCompletion
+                ? 'HRD Interview approved. Kandidat langsung siap untuk penjadwalan Interview User (profil sudah lengkap).'
+                : 'HRD Interview approved. Candidate is ready for User Interview scheduling.',
+            'skipped_profile_completion' => $skipProfileCompletion,
+            'data' => $applicant->fresh(),
         ], 200);
     }
 
