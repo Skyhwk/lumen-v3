@@ -471,6 +471,39 @@ class RecruitmentStatusService
         return null;
     }
 
+    /**
+     * Kandidat ditolak HRD di tahap screening/interview (belum lulus interview HRD).
+     */
+    public static function isRejectedByHrdBeforeFinalDecision($recruitment): bool
+    {
+        $rejectedBy = is_object($recruitment)
+            ? ($recruitment->rejected_by ?? null)
+            : ($recruitment['rejected_by'] ?? null);
+
+        if ($rejectedBy === null || trim((string) $rejectedBy) === '') {
+            return false;
+        }
+
+        $isApprovedHrd = is_object($recruitment)
+            ? ($recruitment->is_approved_interview_hrd ?? false)
+            : ($recruitment['is_approved_interview_hrd'] ?? false);
+
+        $approvedBy = is_object($recruitment)
+            ? ($recruitment->approved_interview_hrd_by ?? null)
+            : ($recruitment['approved_interview_hrd_by'] ?? null);
+
+        return !((bool) $isApprovedHrd) && ($approvedBy === null || trim((string) $approvedBy) === '');
+    }
+
+    public static function shouldExcludeFromFinalDecisionList($recruitment): bool
+    {
+        if (self::hasHrdFinalDecisionRejected($recruitment)) {
+            return true;
+        }
+
+        return self::isRejectedByHrdBeforeFinalDecision($recruitment);
+    }
+
     public static function hasHrdFinalDecisionRejected($recruitment): bool
     {
         foreach (self::parseMetaHistory($recruitment) as $entry) {
