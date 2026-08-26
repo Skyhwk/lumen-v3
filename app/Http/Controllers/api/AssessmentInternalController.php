@@ -9,6 +9,7 @@ use App\Models\QuestionCategory;
 
 class AssessmentInternalController extends Controller
 {
+    use Concerns\BuildsCandidateAssessmentPreview;
     public function index(Request $request)
     {
         $data = AssessmentInternal::query()->orderBy('id', 'desc');
@@ -280,89 +281,119 @@ class AssessmentInternalController extends Controller
         }
     }
 
+    protected function buildInternalAssessmentData($attempt, $sessions)
+    {
+        $sessionData = [];
+        $totalAnswered = 0;
+        $totalQuestions = 0;
+
+        foreach ($sessions as $session) {
+            $answered = $this->countAnsweredQuestions($session->answers_json);
+            $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+            $questionCount = count($questions);
+
+            $totalAnswered += $answered;
+            $totalQuestions += $questionCount;
+
+            $sessionData[] = [
+                'id' => (int) $session->id,
+                'order' => (int) ($session->session_order ?? 1),
+                'name' => $session->category_name ?? 'Kategori Soal',
+                'status' => $session->status ?? 'pending',
+                'answered' => $answered,
+                'total' => $questionCount,
+                'progress_percent' => $questionCount > 0 ? round(($answered / $questionCount) * 100) : 0,
+                'has_result' => !empty($session->result_json),
+                'duration_minutes' => (int) ($session->duration_minutes ?? 0),
+                'started_at' => $session->started_at,
+                'completed_at' => $session->completed_at,
+            ];
+        }
+
+        usort($sessionData, function ($a, $b) {
+            return ($a['order'] ?? 0) <=> ($b['order'] ?? 0);
+        });
+
+        $summary = 'Assessment belum dimulai';
+        if (($attempt->status ?? '') === 'completed') {
+            $summary = 'Assessment selesai';
+        } elseif (($attempt->status ?? '') === 'in_progress') {
+            $summary = 'Assessment sedang berlangsung';
+            foreach ($sessions as $session) {
+                if (($session->status ?? '') === 'in_progress') {
+                    $answered = $this->countAnsweredQuestions($session->answers_json);
+                    $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+                    $total = count($questions);
+                    $summary = 'Sedang mengerjakan ' . ($session->category_name ?? 'sesi')
+                        . ' (' . $answered . '/' . $total . ' soal)';
+                    break;
+                }
+                if (($session->status ?? '') === 'pending') {
+                    $summary = 'Menunggu sesi ' . ($session->category_name ?? 'berikutnya');
+                    break;
+                }
+            }
+        }
+
+        return [
+            'summary' => $summary,
+            'total_answered' => $totalAnswered,
+            'total_questions' => $totalQuestions,
+            'attempt_status' => $attempt->status ?? 'in_progress',
+            'overall_progress' => $totalQuestions > 0 ? round(($totalAnswered / $totalQuestions) * 100) : 0,
+            'sessions' => $sessionData,
+        ];
+    }
+
     public function getParticipants(Request $request)
     {
         try {
             $assessmentId = $request->input('assessment_id') ?? $request->id;
-            
-            // Fetch attempts (participants)
+
             $attempts = DB::table('assessment_internal_attempts')
                 ->where('assessment_internal_id', $assessmentId)
+                ->orderByDesc('id')
                 ->get();
 
             $participantsMap = [];
             foreach ($attempts as $attempt) {
-                $candidateId = $attempt->id; // Use attempt ID as unique candidate identifier
-                
-                $participantsMap[$candidateId] = [
-                    'id' => $candidateId,
+                $participantsMap[$attempt->id] = [
+                    'id' => (int) $attempt->id,
                     'nama_lengkap' => $attempt->participant_name ?? 'Unknown',
-                    'nik' => $attempt->email ?? '-', // Display email since nik is not in table
+                    'nik' => $attempt->email ?? '-',
                     'status' => $attempt->status ?? 'in_progress',
                     'progress' => 0,
                     'started_at' => $attempt->started_at,
-                    'assessment_data' => [
-                        'summary' => 'Assessment Internal',
-                        'total_answered' => 0,
-                        'total_questions' => 0,
-                        'attempt_status' => $attempt->status ?? 'in_progress',
-                        'overall_progress' => 0,
-                        'sessions' => []
-                    ]
+                    'assessment_data' => $this->buildInternalAssessmentData($attempt, collect()),
                 ];
             }
 
-            // Fetch sessions for all these attempts
             $attemptIds = array_keys($participantsMap);
-            
+
             if (!empty($attemptIds)) {
                 $sessions = DB::table('assessment_internal_sessions')
                     ->whereIn('assessment_internal_attempt_id', $attemptIds)
-                    ->get();
+                    ->orderBy('session_order')
+                    ->get()
+                    ->groupBy('assessment_internal_attempt_id');
 
-                    foreach ($sessions as $session) {
-                        $candidateId = $session->assessment_internal_attempt_id;
-                        
-                        $resultData = json_decode($session->result_json ?? '{}', true) ?? [];
-                        
-                        $totalQ = $resultData['total_questions'] ?? 0;
-                        $answeredQ = $resultData['answered'] ?? 0;
-                        
-                        $progressPct = $totalQ > 0 ? round(($answeredQ / $totalQ) * 100) : 0;
-
-                        $participantsMap[$candidateId]['assessment_data']['sessions'][] = [
-                            'id' => $session->id,
-                            'order' => $session->session_order ?? 1,
-                            'name' => $session->category_name ?? 'Kategori Soal',
-                            'status' => $session->status,
-                            'progress_percent' => $progressPct,
-                            'answered' => $answeredQ,
-                            'total' => $totalQ,
-                            'has_result' => ($session->status === 'completed')
-                        ];
-                        
-                        $participantsMap[$candidateId]['assessment_data']['total_answered'] += $answeredQ;
-                        $participantsMap[$candidateId]['assessment_data']['total_questions'] += $totalQ;
-                    }
+                foreach ($participantsMap as $attemptId => &$participant) {
+                    $attemptSessions = $sessions->get($attemptId, collect());
+                    $attempt = $attempts->firstWhere('id', $attemptId);
+                    $participant['assessment_data'] = $this->buildInternalAssessmentData($attempt, $attemptSessions);
+                    $participant['progress'] = $participant['assessment_data']['overall_progress'];
                 }
-            
-
-            // Calculate overall progress
-            foreach ($participantsMap as &$p) {
-                $totalQ = $p['assessment_data']['total_questions'];
-                $totalA = $p['assessment_data']['total_answered'];
-                $p['progress'] = $totalQ > 0 ? round(($totalA / $totalQ) * 100) : 0;
-                $p['assessment_data']['overall_progress'] = $p['progress'];
+                unset($participant);
             }
 
             return response()->json([
                 'success' => true,
-                'data' => array_values($participantsMap)
+                'data' => array_values($participantsMap),
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch participants: ' . $e->getMessage()
+                'message' => 'Failed to fetch participants: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -371,7 +402,11 @@ class AssessmentInternalController extends Controller
     {
         try {
             $sessionId = $request->input('session_id') ?? $request->id;
-            
+
+            if (!$sessionId) {
+                return response()->json(['success' => false, 'message' => 'Parameter session_id wajib diisi'], 400);
+            }
+
             $session = DB::table('assessment_internal_sessions')
                 ->where('id', $sessionId)
                 ->first();
@@ -380,55 +415,41 @@ class AssessmentInternalController extends Controller
                 return response()->json(['success' => false, 'message' => 'Session not found'], 404);
             }
 
-            $resultJson = json_decode($session->result_json ?? '{}', true) ?? [];
-            $engine = $resultJson['engine'] ?? 'generic';
-
-            // Jika DISC atau PAPI Kostick, hasil detail ada di $resultJson
-            if ($engine === 'disc' || $engine === 'papi_kostick') {
+            if (empty($session->result_json)) {
                 return response()->json([
                     'success' => true,
                     'data' => [
-                        'has_result' => true,
-                        'engine' => $engine,
-                        'summary_text' => 'Test Result - ' . ($session->category_name ?? 'Sesi Ujian'),
-                        'disc_detail' => $engine === 'disc' ? $resultJson : null,
-                        'papi_detail' => $engine === 'papi_kostick' ? $resultJson : null,
-                        'scored_at' => $session->completed_at ?? $session->updated_at
-                    ]
-                ]);
+                        'session_id' => (int) $session->id,
+                        'session_name' => $session->category_name,
+                        'session_order' => (int) $session->session_order,
+                        'status' => $session->status,
+                        'has_result' => false,
+                        'summary_text' => $session->status === 'completed'
+                            ? 'Sesi selesai, namun hasil belum tersedia.'
+                            : 'Sesi belum selesai — hasil belum tersedia.',
+                        'items' => [],
+                        'scored_at' => null,
+                    ],
+                ], 200);
             }
 
-            // Untuk generic (seperti NALAR, LOGIKA, INTEGRITAS / question_bank)
-            $totalScore = $resultJson['score'] ?? 0;
-            $correctAnswers = $resultJson['correct_answers'] ?? 0;
-            $totalQuestions = $resultJson['total_questions'] ?? 0;
-
-            $items = [
-                [
-                    'label' => 'Skor',
-                    'value' => round((float)$totalScore, 2) . '/100'
-                ],
-                [
-                    'label' => 'Jawaban Benar',
-                    'value' => $correctAnswers . '/' . $totalQuestions
-                ]
-            ];
+            $result = json_decode($session->result_json, true) ?: [];
+            $summary = $this->buildSessionResultSummary($session, $result);
 
             return response()->json([
                 'success' => true,
-                'data' => [
+                'data' => array_merge([
+                    'session_id' => (int) $session->id,
+                    'session_name' => $session->category_name,
+                    'session_order' => (int) $session->session_order,
+                    'status' => $session->status,
                     'has_result' => true,
-                    'engine' => 'generic',
-                    'summary_text' => 'Test Result - ' . ($session->category_name ?? 'Sesi Ujian'),
-                    'score' => $totalScore,
-                    'items' => $items,
-                    'scored_at' => $session->completed_at ?? $session->updated_at
-                ]
-            ]);
+                ], $summary),
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch session result: ' . $e->getMessage()
+                'message' => 'Failed to fetch session result: ' . $e->getMessage(),
             ], 500);
         }
     }
