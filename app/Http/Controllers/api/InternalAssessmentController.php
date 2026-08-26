@@ -649,6 +649,8 @@ class InternalAssessmentController extends Controller
             return ['status' => 'ready_to_complete', 'sessions' => $sessionNavigation];
         }
 
+        $questions = collect(json_decode($session->questions_json ?: '[]', true) ?: []);
+
         if ($session->expires_at && Carbon::parse($session->expires_at)->isPast()) {
             $expiredAnswers = json_decode($session->answers_json ?: '{}', true) ?: [];
             foreach ($questions as $question) {
@@ -661,7 +663,6 @@ class InternalAssessmentController extends Controller
             return $this->statePayload($attemptId);
         }
 
-        $questions = collect(json_decode($session->questions_json ?: '[]', true) ?: []);
         $answers = collect(json_decode($session->answers_json ?: '{}', true) ?: []);
         $next = $questions->first(function ($question) use ($answers) {
             return !$answers->has((string) ($question['id'] ?? ''));
