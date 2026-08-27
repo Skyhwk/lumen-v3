@@ -18,6 +18,10 @@ class AssessmentController extends Controller
     public function overview(Request $request)
     {
         $recruitment = $this->recruitment($request->token);
+        if (!$recruitment) {
+            return $this->expiredLinkResponse();
+        }
+
         $attempt = $this->ensureAttempt($recruitment);
         $sessions = DB::table('assessment_sessions')
             ->where('assessment_attempt_id', $attempt->id)
@@ -37,6 +41,9 @@ class AssessmentController extends Controller
         })->values();
         $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
         $status = $hasStartedSession ? $this->stateFor($attempt)['status'] : 'ready';
+        if ($status === 'expired') {
+            return $this->expiredLinkResponse('Waktu akses assessment sudah habis.');
+        }
         $nextPendingSession = $sessions->firstWhere('status', 'pending');
         $canStart = $nextPendingSession ? $this->sessionIsReady($nextPendingSession) : false;
         $userConfig = $this->userAssessmentConfig($recruitment);
@@ -62,11 +69,15 @@ class AssessmentController extends Controller
     public function start(Request $request)
     {
         $recruitment = $this->recruitment($request->token);
+        if (!$recruitment) {
+            return $this->expiredLinkResponse();
+        }
+
         $attempt = $this->ensureAttempt($recruitment);
         return DB::transaction(function () use ($attempt) {
             $attempt = DB::table('assessment_attempts')->where('id', $attempt->id)->lockForUpdate()->first();
             if (!$attempt) {
-                abort(404, 'Assessment tidak ditemukan.');
+                return response()->json(['message' => 'Assessment tidak ditemukan.'], 404);
             }
             $activeSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'in_progress')->first();
             if (!$activeSession) {
@@ -89,13 +100,18 @@ class AssessmentController extends Controller
                 $this->startNextSession($attempt->id);
             }
 
-            return response()->json($this->stateFor($attempt));
+            return $this->jsonState($attempt);
         });
     }
 
     public function preview(Request $request)
     {
-        $attempt = $this->ensureAttempt($this->recruitment($request->token));
+        $recruitment = $this->recruitment($request->token);
+        if (!$recruitment) {
+            return $this->expiredLinkResponse();
+        }
+
+        $attempt = $this->ensureAttempt($recruitment);
         return response()->json(['questions' => $this->previewQuestions($attempt->id, 3), 'duration_seconds' => 300]);
     }
 
@@ -103,9 +119,9 @@ class AssessmentController extends Controller
     {
         $attempt = $this->attemptByToken($request->token);
         if (!$attempt) {
-            abort(404, 'Assessment tidak ditemukan.');
+            return response()->json(['message' => 'Assessment tidak ditemukan.'], 404);
         }
-        return response()->json($this->stateFor($attempt));
+        return $this->jsonState($attempt);
     }
 
     public function answer(Request $request)
@@ -113,9 +129,12 @@ class AssessmentController extends Controller
         return DB::transaction(function () use ($request) {
             $attempt = $this->attemptByToken($request->token, true);
             if (!$attempt) {
-                abort(404, 'Assessment tidak ditemukan.');
+                return response()->json(['message' => 'Assessment tidak ditemukan.'], 404);
             }
             $state = $this->stateFor($attempt);
+            if (($state['status'] ?? null) === 'expired') {
+                return response()->json($state, 403);
+            }
             if (($state['status'] ?? null) !== 'in_progress' || (string) $state['question']['id'] !== (string) $request->question_id) return response()->json($state, 409);
             $session = DB::table('assessment_sessions')->where('id', $state['session']['id'])->lockForUpdate()->first();
             $answers = json_decode($session->answers_json ?: '{}', true) ?: [];
@@ -129,7 +148,7 @@ class AssessmentController extends Controller
                 $answers[$request->question_id] = is_array($request->answer) ? array_values($request->answer) : [$request->answer];
             }
             DB::table('assessment_sessions')->where('id', $session->id)->update(['answers_json' => json_encode($answers), 'updated_at' => Carbon::now()]);
-            return response()->json($this->stateFor($attempt));
+            return $this->jsonState($attempt);
         });
     }
 
@@ -139,7 +158,7 @@ class AssessmentController extends Controller
         if (!in_array($request->event, $allowed, true)) return response()->json(['message' => 'Event tidak valid.'], 422);
         $attempt = $this->attemptByToken($request->token);
         if (!$attempt) {
-            abort(404, 'Assessment tidak ditemukan.');
+            return response()->json(['message' => 'Assessment tidak ditemukan.'], 404);
         }
         $meta = json_decode($attempt->proctoring_meta ?: '[]', true) ?: [];
         $meta[] = ['event' => $request->event, 'at' => Carbon::now()->toDateTimeString()];
@@ -151,7 +170,7 @@ class AssessmentController extends Controller
     {
         $attempt = $this->attemptByToken($request->token);
         if (!$attempt) {
-            abort(404, 'Assessment tidak ditemukan.');
+            return response()->json(['message' => 'Assessment tidak ditemukan.'], 404);
         }
 
         $events = collect(json_decode($attempt->proctoring_meta ?: '[]', true) ?: []);
@@ -589,9 +608,28 @@ class AssessmentController extends Controller
     {
         $row = $this->findRecruitmentByToken($token, $lock);
         if (!$row || Carbon::now()->greaterThanOrEqualTo(Carbon::parse($row->created_at)->addDays(2))) {
-            abort(410, 'Link assessment tidak valid atau sudah kedaluwarsa.');
+            return null;
         }
         return $row;
+    }
+
+    private function expiredLinkResponse($message = 'Link assessment tidak valid atau sudah kedaluwarsa.')
+    {
+        return response()->json([
+            'result' => 'expired',
+            'status' => 'expired',
+            'message' => $message,
+        ], 403);
+    }
+
+    private function jsonState($attempt)
+    {
+        $state = $this->stateFor($attempt);
+        if (($state['status'] ?? null) === 'expired') {
+            return response()->json($state, 403);
+        }
+
+        return response()->json($state);
     }
 
     private function attemptByToken($token, $lock = false)

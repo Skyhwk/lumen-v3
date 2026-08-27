@@ -23,7 +23,10 @@ class DirectorDecisionController extends Controller
             return response()->json(['message' => 'Link keputusan tidak valid.'], 404);
         }
         if ($recruitment->status !== 'management_decision') {
-            return response()->json(['message' => 'Kandidat tidak berada pada tahap keputusan direktur.'], 409);
+            return response()->json([
+                'result' => 'unavailable',
+                'message' => 'Link keputusan sudah kedaluwarsa atau kandidat tidak berada pada tahap keputusan direktur.',
+            ], 403);
         }
 
         return response()->json(['result' => 'ready', 'candidate' => $this->candidate($recruitment)]);
@@ -75,9 +78,9 @@ class DirectorDecisionController extends Controller
                 return response()->json([
                     'result' => 'unavailable',
                     'requested_decision' => $decision,
-                    'message' => 'Kandidat tidak berada pada tahap keputusan direktur.',
+                    'message' => 'Link keputusan sudah kedaluwarsa atau kandidat tidak berada pada tahap keputusan direktur.',
                     'candidate' => $this->candidate($recruitment),
-                ], 409);
+                ], 403);
             }
 
             $now = Carbon::now();
