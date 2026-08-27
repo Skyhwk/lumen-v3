@@ -156,7 +156,6 @@ class AtsFinalDecisionController extends Controller
                         ->orWhereNull('created_at');
                 });
             })
-            ->where('is_active', true)
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)
