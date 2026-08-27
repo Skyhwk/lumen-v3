@@ -13,6 +13,11 @@ use Yajra\Datatables\Datatables;
 
 class CustomerServiceTicketController extends Controller
 {
+    protected function portalCustomerDb()
+    {
+        return DB::connection('portal_customer');
+    }
+
     protected function findActiveTicket($ticketId): ?CsTicket
     {
         if (!$ticketId) {
@@ -200,7 +205,8 @@ class CustomerServiceTicketController extends Controller
 
     public function sendConversation(Request $request)
     {
-        DB::beginTransaction();
+        $db = $this->portalCustomerDb();
+        $db->beginTransaction();
         try {
             $message = trim($request->message ?? '');
             $hasAttachment = $request->hasFile('attachment');
@@ -236,7 +242,7 @@ class CustomerServiceTicketController extends Controller
                 $request->file('attachment')
             );
 
-            DB::commit();
+            $db->commit();
 
             return response()->json([
                 'success' => true,
@@ -248,10 +254,10 @@ class CustomerServiceTicketController extends Controller
                 'message' => 'Pesan berhasil dikirim',
             ]);
         } catch (\InvalidArgumentException $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['success' => false, 'message' => $exception->getMessage()], 422);
         } catch (\Throwable $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['success' => false, 'message' => $exception->getMessage()], 500);
         }
     }
@@ -281,7 +287,8 @@ class CustomerServiceTicketController extends Controller
 
     public function process(Request $request)
     {
-        DB::beginTransaction();
+        $db = $this->portalCustomerDb();
+        $db->beginTransaction();
         try {
             $ticket = $this->findActiveTicket($request->ticket_id);
             if (!$ticket) {
@@ -294,7 +301,7 @@ class CustomerServiceTicketController extends Controller
                 $this->karyawan ?? 'Staff'
             );
 
-            DB::commit();
+            $db->commit();
 
             $payload = CustomerServiceConversationService::transformTicket($result['ticket'], 'staff', (int) $this->user_id);
             $payload['assigned_to_name'] = CustomerServiceConversationService::resolveStaffName($result['ticket']->assigned_to);
@@ -313,17 +320,18 @@ class CustomerServiceTicketController extends Controller
                 'data' => $payload,
             ]);
         } catch (\InvalidArgumentException $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['message' => $exception->getMessage(), 'status' => 422], 422);
         } catch (\Throwable $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['message' => $exception->getMessage(), 'status' => 500], 500);
         }
     }
 
     public function clear(Request $request)
     {
-        DB::beginTransaction();
+        $db = $this->portalCustomerDb();
+        $db->beginTransaction();
         try {
             $ticket = $this->findActiveTicket($request->ticket_id);
             if (!$ticket) {
@@ -336,7 +344,7 @@ class CustomerServiceTicketController extends Controller
                 $this->karyawan ?? 'Staff'
             );
 
-            DB::commit();
+            $db->commit();
 
             $payload = CustomerServiceConversationService::transformTicket($result['ticket'], 'staff', (int) $this->user_id);
             $payload['assigned_to_name'] = CustomerServiceConversationService::resolveStaffName($result['ticket']->assigned_to);
@@ -352,17 +360,18 @@ class CustomerServiceTicketController extends Controller
                 'data' => $payload,
             ]);
         } catch (\InvalidArgumentException $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['message' => $exception->getMessage(), 'status' => 422], 422);
         } catch (\Throwable $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['message' => $exception->getMessage(), 'status' => 500], 500);
         }
     }
 
     public function close(Request $request)
     {
-        DB::beginTransaction();
+        $db = $this->portalCustomerDb();
+        $db->beginTransaction();
         try {
             $ticket = $this->findActiveTicket($request->ticket_id);
             if (!$ticket) {
@@ -375,7 +384,7 @@ class CustomerServiceTicketController extends Controller
                 $this->karyawan ?? 'Staff'
             );
 
-            DB::commit();
+            $db->commit();
 
             $payload = CustomerServiceConversationService::transformTicket($updated, 'staff', (int) $this->user_id);
             $payload['assigned_to_name'] = CustomerServiceConversationService::resolveStaffName($updated->assigned_to);
@@ -386,10 +395,10 @@ class CustomerServiceTicketController extends Controller
                 'data' => $payload,
             ]);
         } catch (\InvalidArgumentException $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['message' => $exception->getMessage(), 'status' => 422], 422);
         } catch (\Throwable $exception) {
-            DB::rollBack();
+            $db->rollBack();
             return response()->json(['message' => $exception->getMessage(), 'status' => 500], 500);
         }
     }
