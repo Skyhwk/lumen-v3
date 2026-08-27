@@ -109,6 +109,7 @@ class AtsInterviewUserController extends Controller
         $mode = $request->input('mode', 'scheduled');
 
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
+            ->where('is_active', 1)
             ->whereIn('status', ['interview_user', 'profile_completion'])
             ->where(function ($q) use ($mode) {
                 if ($mode === 'scheduled') {

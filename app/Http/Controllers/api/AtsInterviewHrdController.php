@@ -31,6 +31,7 @@ class AtsInterviewHrdController extends Controller
         $todayStr = Carbon::today()->toDateString();
 
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
+            ->where('is_active', 1)
             ->where(function ($q) {
                 $q->where('status', 'interview_hrd')
                   ->orWhereHas('hrdInterview');
@@ -195,6 +196,12 @@ class AtsInterviewHrdController extends Controller
                 return $pipelineStatus['label'] ?? null;
             })
             ->addColumn('reject_reason', function ($row) {
+                if (RecruitmentStatusService::isRejectedKandidat($row) && !RecruitmentStatusService::isReturnedFromDirectorManagementRejection($row)) {
+                    $reason = trim((string) ($row->alasan_reject ?? ''));
+
+                    return $reason !== '' ? $reason : null;
+                }
+
                 return RecruitmentStatusService::getDirectorManagementRejectReason($row);
             })
             ->addColumn('has_reschedule_history', function ($row) {
@@ -505,6 +512,8 @@ class AtsInterviewHrdController extends Controller
 
         // Update candidate status to 'rejected' with RecruitmentStatusService meta_history tracking
         (new RecruitmentStatusService())->update($applicant->id, 'rejected', Carbon::now());
+
+        RecruitmentStatusService::markRejectedKandidat((int) $applicant->id, (string) $user, $reason, Carbon::now());
 
         $applicant->update([
             // 'status' => 'interview_hrd',

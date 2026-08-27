@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +27,9 @@ class PersonnelRequestController extends Controller
 
         $personnelRequest = $this->ownedPersonnelRequestQuery()
             ->with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
-            ->withCount('newRecruitments as total_pelamar')
+            ->withCount(['newRecruitments as total_pelamar' => function ($query) {
+                $query->where('is_active', 1);
+            }])
             ->find($id);
 
         if (!$personnelRequest) {
@@ -36,8 +38,13 @@ class PersonnelRequestController extends Controller
 
         $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
             ->where('personnel_request_id', $id)
+            ->where('is_active', 1)
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->filter(function ($candidate) {
+                return !RecruitmentStatusService::isRejectedKandidat($candidate);
+            })
+            ->values();
 
         $statusCounts = $candidates
             ->groupBy(function ($candidate) {
@@ -365,7 +372,7 @@ class PersonnelRequestController extends Controller
                     $query->where('status', 'hired');
                 },
                 'newRecruitments as total_keterima' => function($query) {
-                    $query->whereIn('status', ['completed', 'hired']); 
+                    $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
                 }
             ])->orderBy('id', 'desc');
 
@@ -999,10 +1006,26 @@ class PersonnelRequestController extends Controller
 
                 app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
             } else {
+                $rejectReason = trim((string) ($request->input('alasan_reject') ?? $interview->catatan_interview ?? ''));
+                if ($rejectReason === '') {
+                    $rejectReason = 'Tidak lulus interview user';
+                }
+
+                $rejectAt = Carbon::now();
+
+                RecruitmentStatusService::markRejectedKandidat(
+                    (int) $recruitment->id,
+                    (string) $this->karyawan,
+                    $rejectReason,
+                    $rejectAt
+                );
+
                 $recruitment->update([
                     'reject_interview_user_by' => $this->karyawan,
-                    'reject_interview_user_at' => Carbon::now(),
-                    'is_approve_interview_user' => $isApproved
+                    'reject_interview_user_at' => $rejectAt,
+                    'is_approve_interview_user' => $isApproved,
+                    'alasan_reject' => $rejectReason,
+                    'status' => 'rejected',
                 ]);
 
                 app(AtsNotificationService::class)->userInterviewRejected($recruitment, $pr);
