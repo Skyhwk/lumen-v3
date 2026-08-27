@@ -19,12 +19,9 @@ class WsFinalUdaraErgonomiController extends Controller
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-            ->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
-                $from = $request->from . '-01';
-                $to = date('Y-m-t', strtotime($request->to . '-01'));
-                return $q->whereBetween('tanggal_sampling', [$from, $to]);
-            })
-            ->when(!$request->filled('from') && !$request->filled('to') && $request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->when($request->filled('year'), function ($q) use ($request) {
+				return $q->whereYear('tanggal_sampling', $request->year);
+			})
 			->orderBy('tanggal_sampling');
 		$data = $data->get();
 		$data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
