@@ -246,6 +246,16 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Data not found'], 404);
             }
 
+            $participantCount = DB::table('assessment_internal_attempts')
+                ->where('assessment_internal_id', $assessment->id)
+                ->count();
+
+            if ($participantCount > 0) {
+                return response()->json([
+                    'message' => 'Assessment tidak dapat dibatalkan karena sudah ada peserta yang masuk.',
+                ], 400);
+            }
+
             $hrdName = $this->karyawan ?? 'HRD';
 
             $assessment->canceled_by = $hrdName;
