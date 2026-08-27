@@ -876,21 +876,63 @@ class DataApplicantsController extends Controller
                     color: #0f172a;
                 }
                 .cv-doc-note {
-                    font-size: 10px;
+                    font-size: 9px;
                     color: #64748b;
-                    margin-top: 6px;
+                    margin-top: 4px;
+                    line-height: 1.35;
                 }
-                .cv-doc-preview-wrap {
-                    margin-top: 8px;
+                .cv-doc-grid {
+                    width: 100%;
+                    border-collapse: separate;
+                    border-spacing: 8px 6px;
+                    margin-bottom: 10px;
+                }
+                .cv-doc-cell {
+                    width: 33.33%;
+                    vertical-align: top;
+                    padding: 6px;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    background-color: #ffffff;
                     page-break-inside: avoid;
                 }
-                .cv-doc-preview-image {
+                .cv-doc-cell-empty {
+                    border: none;
+                    background: transparent;
+                }
+                .cv-doc-type {
+                    font-size: 9px;
+                    font-weight: bold;
+                    color: #475569;
+                    text-transform: uppercase;
+                    letter-spacing: 0.4px;
+                    margin-bottom: 6px;
+                    text-align: center;
+                }
+                .cv-doc-thumb {
                     display: block;
+                    width: 100%;
                     max-width: 100%;
-                    max-height: 340px;
-                    margin-top: 4px;
+                    max-height: 170px;
+                    margin: 0 auto;
+                    object-fit: contain;
                     border: 1px solid #dbeafe;
-                    border-radius: 6px;
+                    border-radius: 4px;
+                    background-color: #f8fafc;
+                }
+                .cv-doc-placeholder {
+                    height: 120px;
+                    border: 1px dashed #cbd5e1;
+                    border-radius: 4px;
+                    background-color: #f8fafc;
+                    color: #64748b;
+                    font-size: 10px;
+                    font-weight: bold;
+                    text-align: center;
+                    line-height: 120px;
+                }
+                .cv-doc-placeholder-pdf {
+                    color: #dc2626;
                 }
             </style>
         </head>

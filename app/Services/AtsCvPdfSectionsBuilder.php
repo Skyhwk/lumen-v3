@@ -157,59 +157,153 @@ class AtsCvPdfSectionsBuilder
         }
 
         $rowsHtml = '';
-        foreach ($documents as $doc) {
-            $type = $this->escape($doc->jenis_dokumen ?? '-');
-            $fileName = $this->escape($doc->nama_file ?? '-');
-            $size = $this->formatBytes($doc->ukuran_file ?? 0);
-            $note = trim((string) ($doc->catatan ?? ''));
-            $previewHtml = $this->buildDocumentPreview($doc);
+        foreach (array_chunk($documents->all(), 3) as $rowDocs) {
+            $cellsHtml = '';
+            foreach ($rowDocs as $doc) {
+                $cellsHtml .= $this->buildDocumentCell($doc);
+            }
 
-            $rowsHtml .= "
-                <tr>
-                    <td class='info-label'>{$type}</td>
-                    <td class='info-value'>
-                        <strong>{$fileName}</strong><br>
-                        <span style='font-size:10px;color:#64748b;'>Size: {$size}</span>
-                        " . ($note !== '' ? "<br><span style='font-size:10px;color:#475569;'>Note: {$this->escape($note)}</span>" : '') . "
-                        {$previewHtml}
-                    </td>
-                </tr>";
+            $missingCells = 3 - count($rowDocs);
+            for ($i = 0; $i < $missingCells; $i++) {
+                $cellsHtml .= "<td class='cv-doc-cell cv-doc-cell-empty'></td>";
+            }
+
+            $rowsHtml .= "<tr>{$cellsHtml}</tr>";
         }
 
         return "
             <div class='section-title'>Document Attachments</div>
-            <table class='info-table'>{$rowsHtml}</table>";
+            <table class='cv-doc-grid'>{$rowsHtml}</table>";
     }
 
-    private function buildDocumentPreview($doc): string
+    private function buildDocumentCell($doc): string
     {
-        $relativePath = ltrim(str_replace(['\\'], '/', (string) ($doc->path_file ?? '')), '/');
-        if ($relativePath === '') {
-            return '';
+        $type = $this->escape($doc->jenis_dokumen ?? 'Dokumen');
+        $previewHtml = $this->buildDocumentPreviewContent($doc);
+        $note = trim((string) ($doc->catatan ?? ''));
+        $noteHtml = $note !== '' ? "<div class='cv-doc-note'>{$this->escape($note)}</div>" : '';
+
+        return "
+            <td class='cv-doc-cell'>
+                <div class='cv-doc-type'>{$type}</div>
+                {$previewHtml}
+                {$noteHtml}
+            </td>";
+    }
+
+    private function buildDocumentPreviewContent($doc): string
+    {
+        $absolutePath = $this->resolveDocumentAbsolutePath($doc);
+        if (!$absolutePath) {
+            return "<div class='cv-doc-placeholder'>Preview unavailable</div>";
         }
 
-        $absolutePath = public_path(str_replace('/', DIRECTORY_SEPARATOR, $relativePath));
-        if (!is_file($absolutePath) || !is_readable($absolutePath)) {
-            return "<div class='cv-doc-note'>File stored in ATS system.</div>";
+        $mime = strtolower((string) ($doc->mime_type ?? ''));
+        if ($mime === '' && function_exists('mime_content_type')) {
+            $mime = strtolower((string) mime_content_type($absolutePath));
         }
-
-        $mime = $doc->mime_type ?? (function_exists('mime_content_type') ? mime_content_type($absolutePath) : null);
         $mime = $mime ?: 'application/octet-stream';
 
-        if (stripos($mime, 'image/') === 0) {
-            $dataUri = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($absolutePath));
-            return "
-                <div class='cv-doc-preview-wrap'>
-                    <div class='cv-doc-note'>Preview:</div>
-                    <img src='{$dataUri}' class='cv-doc-preview-image' alt='Document preview'>
-                </div>";
+        if (strpos($mime, 'image/') === 0) {
+            $dataUri = $this->buildCompactImageDataUri($absolutePath, $mime);
+            if (!$dataUri) {
+                return "<div class='cv-doc-placeholder'>Preview unavailable</div>";
+            }
+
+            return "<img src='{$dataUri}' class='cv-doc-thumb' alt='Document preview'>";
         }
 
         if ($mime === 'application/pdf') {
-            return "<div class='cv-doc-note'>PDF attachment available in ATS system.</div>";
+            return "<div class='cv-doc-placeholder cv-doc-placeholder-pdf'>PDF Document</div>";
         }
 
-        return "<div class='cv-doc-note'>Attachment type: {$this->escape($mime)}</div>";
+        return "<div class='cv-doc-placeholder'>Attachment</div>";
+    }
+
+    private function resolveDocumentAbsolutePath($doc): ?string
+    {
+        $relativePath = ltrim(str_replace(['\\'], '/', (string) ($doc->path_file ?? '')), '/');
+        $candidates = [];
+
+        if ($relativePath !== '') {
+            $candidates[] = public_path(str_replace('/', DIRECTORY_SEPARATOR, $relativePath));
+        }
+
+        $baseName = basename($relativePath !== '' ? $relativePath : (string) ($doc->nama_file ?? ''));
+        if ($baseName !== '' && $baseName !== '.' && $baseName !== '/') {
+            $candidates[] = public_path('recruitment' . DIRECTORY_SEPARATOR . 'candidate-documents' . DIRECTORY_SEPARATOR . $baseName);
+        }
+
+        foreach ($candidates as $path) {
+            if (is_file($path) && is_readable($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    private function buildCompactImageDataUri(string $absolutePath, string $mime, int $maxWidth = 240, int $maxHeight = 170): ?string
+    {
+        $binary = @file_get_contents($absolutePath);
+        if ($binary === false || $binary === '') {
+            return null;
+        }
+
+        if (!function_exists('imagecreatefromstring')) {
+            return 'data:' . $mime . ';base64,' . base64_encode($binary);
+        }
+
+        $source = @imagecreatefromstring($binary);
+        if (!$source) {
+            return 'data:' . $mime . ';base64,' . base64_encode($binary);
+        }
+
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        if ($sourceWidth <= 0 || $sourceHeight <= 0) {
+            imagedestroy($source);
+            return null;
+        }
+
+        $scale = min($maxWidth / $sourceWidth, $maxHeight / $sourceHeight, 1);
+        $targetWidth = max(1, (int) round($sourceWidth * $scale));
+        $targetHeight = max(1, (int) round($sourceHeight * $scale));
+
+        $target = imagecreatetruecolor($targetWidth, $targetHeight);
+        $background = imagecolorallocate($target, 255, 255, 255);
+        imagefill($target, 0, 0, $background);
+
+        if ($mime === 'image/png' || $mime === 'image/webp') {
+            imagealphablending($target, false);
+            imagesavealpha($target, true);
+        }
+
+        imagecopyresampled(
+            $target,
+            $source,
+            0,
+            0,
+            0,
+            0,
+            $targetWidth,
+            $targetHeight,
+            $sourceWidth,
+            $sourceHeight
+        );
+
+        ob_start();
+        imagejpeg($target, null, 78);
+        $output = ob_get_clean();
+
+        imagedestroy($source);
+        imagedestroy($target);
+
+        if ($output === false || $output === '') {
+            return null;
+        }
+
+        return 'data:image/jpeg;base64,' . base64_encode($output);
     }
 
     private function buildInfoTableSection(string $title, array $rows): string
