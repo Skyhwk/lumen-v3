@@ -67,6 +67,9 @@ class PersonnelRequesthrdController extends Controller
                     });
                 })
                 ->addColumn('status_label', function ($row) {
+                    if (!empty($row->is_completed)) {
+                        return 'Completed';
+                    }
                     if (isset($row->is_publish) && $row->is_publish == 1) {
                         return 'Published';
                     }
@@ -102,7 +105,9 @@ class PersonnelRequesthrdController extends Controller
                 })
                 ->filterColumn('status_label', function ($q, $keyword) {
                     $keyword = strtolower($keyword);
-                    if (strpos('published', $keyword) !== false) {
+                    if (strpos('completed', $keyword) !== false) {
+                        $q->where('is_completed', 1);
+                    } elseif (strpos('published', $keyword) !== false) {
                         $q->where('is_publish', 1);
                     } elseif (strpos('approved', $keyword) !== false) {
                         $q->where('is_approve', 1);

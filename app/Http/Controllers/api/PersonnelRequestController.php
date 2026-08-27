@@ -304,7 +304,7 @@ class PersonnelRequestController extends Controller
             ])->withCount([
                 'newRecruitments as total_pelamar',
                 'newRecruitments as total_keterima' => function($query) {
-                    $query->whereIn('status', ['completed', 'hired']); 
+                    $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
                 }
             ])->orderBy('id', 'desc');
     
