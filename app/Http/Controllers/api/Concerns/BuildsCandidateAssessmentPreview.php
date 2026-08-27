@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\Concerns;
 
 use App\Models\NewRecruitment;
 use App\Services\RecruitmentPictureService;
+use App\Services\RecruitmentStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -460,6 +461,13 @@ trait BuildsCandidateAssessmentPreview
             $matchingScore = $candidate->matching_score;
         }
 
+        $pipelineStatus = RecruitmentStatusService::resolvePipelineStatus($candidate);
+        $directorRejectReason = RecruitmentStatusService::getDirectorManagementRejectReason($candidate);
+        $statusLabel = $isActive ? $this->recruitmentStatusLabel($status) : 'Void';
+        if ($isActive && $pipelineStatus) {
+            $statusLabel = $pipelineStatus['label'];
+        }
+
         return [
             'id' => $candidate->id,
             'nama_lengkap' => $candidate->nama_lengkap,
@@ -470,7 +478,11 @@ trait BuildsCandidateAssessmentPreview
             'status' => $status,
             'is_active' => $isActive,
             'is_void' => !$isActive,
-            'status_label' => $isActive ? $this->recruitmentStatusLabel($status) : 'Void',
+            'status_label' => $statusLabel,
+            'pipeline_status' => $pipelineStatus['code'] ?? null,
+            'pipeline_status_label' => $pipelineStatus['label'] ?? null,
+            'reject_reason' => $directorRejectReason,
+            'alasan_reject' => $candidate->alasan_reject,
             'nilai_kecocokan' => $matchingScore,
             'ai_matching_reason' => $this->resolveMatchingReason($candidate),
             'posisi_dilamar' => $candidate->posisi_dilamar,
@@ -481,7 +493,64 @@ trait BuildsCandidateAssessmentPreview
             'hrd_interview' => $this->formatHrdInterviewSummary($candidate),
             'user_interview' => $this->formatUserInterviewSummary($candidate),
             'is_input_review_hrd' => (int) ($candidate->is_input_review_hrd ?? 0),
+            'is_rejected_kandidat' => (int) ($candidate->is_rejected_kandidat ?? 0),
+            'is_rejected_kandidat_by' => $candidate->is_rejected_kandidat_by ?? null,
+            'is_rejected_kandidat_at' => $candidate->is_rejected_kandidat_at ?? null,
+            'is_rejected_kandidat_reason' => $candidate->is_rejected_kandidat_reason ?? null,
+            'rejected_kandidat_tracking' => RecruitmentStatusService::getRejectedKandidatTracking($candidate),
+            'has_completed_profile' => $this->candidateHasCompletedProfile($candidate->id),
+            'attachments' => $this->formatCandidateAttachments($candidate->id),
         ];
+    }
+
+    protected function candidateHasCompletedProfile($candidateId): bool
+    {
+        if (!DB::getSchemaBuilder()->hasTable('candidate_profiles')) {
+            return false;
+        }
+
+        return DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $candidateId)
+            ->exists();
+    }
+
+    protected function formatCandidateAttachments($candidateId): array
+    {
+        if (!DB::getSchemaBuilder()->hasTable('candidate_documents')) {
+            return [];
+        }
+
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $candidateId)
+            ->value('id');
+
+        if (!$profileId) {
+            return [];
+        }
+
+        return DB::table('candidate_documents')
+            ->where('candidate_profile_id', $profileId)
+            ->where('is_active', 1)
+            ->orderBy('jenis_dokumen')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($doc) {
+                $mime = strtolower((string) ($doc->mime_type ?? ''));
+
+                return [
+                    'id' => (int) $doc->id,
+                    'jenis_dokumen' => $doc->jenis_dokumen,
+                    'nama_file' => $doc->nama_file,
+                    'path_file' => $doc->path_file,
+                    'mime_type' => $doc->mime_type,
+                    'ukuran_file' => $doc->ukuran_file,
+                    'catatan' => $doc->catatan,
+                    'is_image' => strpos($mime, 'image/') === 0,
+                    'is_pdf' => $mime === 'application/pdf',
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     public function candidateSessionResult(Request $request)

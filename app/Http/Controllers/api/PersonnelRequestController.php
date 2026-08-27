@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +26,9 @@ class PersonnelRequestController extends Controller
 
         $personnelRequest = $this->ownedPersonnelRequestQuery()
             ->with(['detailPosisi', 'detailDivisi', 'masterJabatan', 'masterDivisi'])
-            ->withCount('newRecruitments as total_pelamar')
+            ->withCount(['newRecruitments as total_pelamar' => function ($query) {
+                $query->where('is_active', 1);
+            }])
             ->find($id);
 
         if (!$personnelRequest) {
@@ -35,8 +37,13 @@ class PersonnelRequestController extends Controller
 
         $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
             ->where('personnel_request_id', $id)
+            ->where('is_active', 1)
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->filter(function ($candidate) {
+                return !RecruitmentStatusService::isRejectedKandidat($candidate);
+            })
+            ->values();
 
         $statusCounts = $candidates
             ->groupBy(function ($candidate) {
@@ -297,7 +304,7 @@ class PersonnelRequestController extends Controller
             ])->withCount([
                 'newRecruitments as total_pelamar',
                 'newRecruitments as total_keterima' => function($query) {
-                    $query->whereIn('status', ['completed', 'hired']); 
+                    $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
                 }
             ])->orderBy('id', 'desc');
     
@@ -719,11 +726,30 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
             }
 
+            if ((int) ($recruitment->is_approve_interview_user ?? 0) === 1) {
+                return response()->json([
+                    'message' => 'Jadwal interview tidak dapat diubah karena keputusan interview user sudah final.',
+                ], 400);
+            }
+
+            $existingInterview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            $isReschedule = (bool) $existingInterview;
+            $previousNotes = $existingInterview ? $existingInterview->catatan_interview : null;
+
             // Nonaktifkan jadwal interview user sebelumnya (jika ada reschedule)
             RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
                 ->where('stage', 'user')
                 ->where('is_active', 1)
                 ->update(['is_active' => 0]);
+
+            // Saat reschedule, link/ruangan dari HR otomatis dihapus agar HR mengisi ulang
+            $linkGmeet = $isReschedule ? null : $this->nullableValue($request->link_gmeet);
+            $ruanganInterview = $isReschedule ? null : $this->nullableValue($request->ruangan_interview);
 
             // Save to recruitment_interviews
             $interview = RecruitmentInterview::create([
@@ -731,9 +757,10 @@ class PersonnelRequestController extends Controller
                 'stage'              => 'user',
                 'tgl_interview'      => $request->tgl_interview,
                 'jenis_interview'    => $request->jenis_interview,
-                'link_gmeet'         => $request->link_gmeet,
-                'ruangan_interview'  => $request->ruangan_interview,
+                'link_gmeet'         => $linkGmeet,
+                'ruangan_interview'  => $ruanganInterview,
                 'catatan'            => $request->catatan,
+                'catatan_interview'  => $previousNotes,
                 'created_by'         => $this->karyawan ?? 'System',
                 'is_active'          => 1,
             ]);
@@ -782,7 +809,9 @@ class PersonnelRequestController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Berhasil menjadwalkan interview!',
+                'message' => $isReschedule
+                    ? 'Berhasil mengubah jadwal interview. Link/ruangan dari HR direset dan perlu diisi ulang oleh HRD.'
+                    : 'Berhasil menjadwalkan interview!',
                 'data'    => $interview
             ], 200);
         } catch (\Throwable $th) {
@@ -897,10 +926,26 @@ class PersonnelRequestController extends Controller
 
                 app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
             } else {
+                $rejectReason = trim((string) ($request->input('alasan_reject') ?? $interview->catatan_interview ?? ''));
+                if ($rejectReason === '') {
+                    $rejectReason = 'Tidak lulus interview user';
+                }
+
+                $rejectAt = Carbon::now();
+
+                RecruitmentStatusService::markRejectedKandidat(
+                    (int) $recruitment->id,
+                    (string) $this->karyawan,
+                    $rejectReason,
+                    $rejectAt
+                );
+
                 $recruitment->update([
                     'reject_interview_user_by' => $this->karyawan,
-                    'reject_interview_user_at' => Carbon::now(),
-                    'is_approve_interview_user' => $isApproved
+                    'reject_interview_user_at' => $rejectAt,
+                    'is_approve_interview_user' => $isApproved,
+                    'alasan_reject' => $rejectReason,
+                    'status' => 'rejected',
                 ]);
 
                 app(AtsNotificationService::class)->userInterviewRejected($recruitment, $pr);

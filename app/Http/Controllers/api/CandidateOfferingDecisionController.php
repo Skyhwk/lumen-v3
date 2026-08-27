@@ -23,7 +23,7 @@ class CandidateOfferingDecisionController extends Controller
 
         $invalid = $this->invalidState($recruitment);
         if ($invalid) {
-            return response()->json($invalid, 410);
+            return response()->json($invalid, 403);
         }
 
         return response()->json([
@@ -55,11 +55,13 @@ class CandidateOfferingDecisionController extends Controller
 
             $invalid = $this->invalidState($recruitment);
             if ($invalid) {
-                return response()->json($invalid, 410);
+                return response()->json($invalid, 403);
             }
 
             $now = Carbon::now();
-            $nextStatus = $decision === 'approve' ? 'finance_review' : 'management_decision';
+            $nextStatus = $decision === 'approve'
+                ? 'finance_review'
+                : 'salary_offer';
             $historyStatus = 'candidate_offering_' . ($decision === 'approve' ? 'approved' : 'rejected');
 
             (new RecruitmentStatusService())->update(

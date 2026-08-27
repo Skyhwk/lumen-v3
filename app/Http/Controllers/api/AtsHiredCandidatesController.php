@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\KaryawanArsipDokumenService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
@@ -109,14 +110,13 @@ class AtsHiredCandidatesController extends Controller
     // ─── Index — DataTables list of hired candidates ─────────────────────────
 
     /**
-     * List candidates with status = hired
+     * List candidates with status hired (belum migrasi) atau training (sudah migrasi).
      */
     public function index(Request $request)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'salaryOffer', 'candidateDataOffer', 'candidateProfile'])
             ->where(function ($q) {
-                $q->where('status', 'hired')
-                  ->orWhere('status', 'HIRED');
+                $q->whereRaw('LOWER(status) IN (?, ?)', ['hired', 'training']);
             })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
@@ -130,9 +130,17 @@ class AtsHiredCandidatesController extends Controller
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
+            ->addColumn('request_by', function ($row) {
+                return optional($row->personalRequest)->created_by ?: '-';
+            })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
                     $sub->where('no_request', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('request_by', function ($q, $keyword) {
+                $q->whereHas('personalRequest', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
                 });
             })
             ->filterColumn('nama_lengkap', function ($q, $keyword) {
@@ -173,6 +181,11 @@ class AtsHiredCandidatesController extends Controller
                 return $score . '%';
             })
             ->editColumn('status', function ($row) {
+                $status = strtolower(trim((string) ($row->status ?? 'hired')));
+                if ($status === 'training' || $this->isEmployeeMigrated($row)) {
+                    return 'training';
+                }
+
                 return 'hired';
             })
             ->addColumn('onboarding_checklist', function ($row) {
@@ -822,6 +835,14 @@ class AtsHiredCandidatesController extends Controller
             );
         }
 
+        app(RecruitmentStatusService::class)->update(
+            $recruitment->id,
+            'training',
+            $now,
+            'employee_migrated_to_master',
+            ['by' => $this->karyawan]
+        );
+
         $personnelRequestSync = $this->syncPersonnelRequestAfterMigration($recruitment, $timestamp);
 
         if (!empty($personnelRequestSync['request_closed'])) {
@@ -1280,6 +1301,9 @@ class AtsHiredCandidatesController extends Controller
         $updatePayload = [
             'is_publish' => 0,
             'is_active' => 0,
+            'is_completed' => 1,
+            'completed_at' => $timestamp,
+            'completed_by' => $this->karyawan,
             'updated_by' => $this->karyawan,
             'updated_at' => $timestamp,
         ];

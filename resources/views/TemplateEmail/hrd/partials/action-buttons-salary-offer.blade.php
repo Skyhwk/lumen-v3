@@ -24,7 +24,7 @@
                     @if(!empty($btn->negotiate))
                         <td align="center" style="padding:4px 6px;">
                             <a href="{{ $btn->negotiate }}" target="_blank" style="display:inline-block;background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%);color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:12px 24px;border-radius:24px;white-space:nowrap;box-shadow:0 4px 12px rgba(2,132,199,0.3);letter-spacing:0.3px;">
-                                Negotiate Gaji
+                                Negosiasi Gaji
                             </a>
                         </td>
                     @endif

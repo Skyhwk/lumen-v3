@@ -23,7 +23,12 @@ class SalaryApprovalController extends Controller
             return response()->json(['message' => 'Link persetujuan penawaran tidak valid.'], 404);
         }
 
-        return response()->json($this->state($recruitment));
+        $state = $this->state($recruitment);
+        if (($state['result'] ?? null) === 'unavailable') {
+            return response()->json($state, 403);
+        }
+
+        return response()->json($state);
     }
 
     public function decide(Request $request)
@@ -52,7 +57,7 @@ class SalaryApprovalController extends Controller
             $state = $this->state($recruitment);
             if (($state['result'] ?? null) !== 'ready') {
                 $state['requested_decision'] = $decision;
-                return response()->json($state, ($state['result'] ?? null) === 'unavailable' ? 409 : 200);
+                return response()->json($state, ($state['result'] ?? null) === 'unavailable' ? 403 : 200);
             }
 
             $amount = null;
@@ -100,7 +105,7 @@ class SalaryApprovalController extends Controller
             }
 
             if ($decision === 'negotiate' || $decision === 'reject') {
-                $nextStatus = 'management_decision';
+                $nextStatus = 'internal_sallary_offer';
             } else {
                 $nextStatus = 'hired';
             }
@@ -109,6 +114,22 @@ class SalaryApprovalController extends Controller
             $extraData = $decision === 'negotiate'
                 ? ['negotiated_amount' => $amount]
                 : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
+
+            if ($decision === 'reject') {
+                $salaryOffer = DB::table('sallary_offer')
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->where('is_active', true)
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($salaryOffer) {
+                    DB::table('sallary_offer')->where('id', $salaryOffer->id)->update([
+                        'email_sent_at' => null,
+                        'updated_by'    => 'Direktur',
+                        'updated_at'    => $now,
+                    ]);
+                }
+            }
 
             (new RecruitmentStatusService())->update(
                 $recruitment->id,
@@ -172,7 +193,11 @@ class SalaryApprovalController extends Controller
             return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
         }
         if ($recruitment->status !== 'internal_sallary_offer') {
-            return ['result' => 'unavailable', 'message' => 'Kandidat tidak berada pada tahap persetujuan penawaran.', 'candidate' => $this->candidate($recruitment)];
+            return [
+                'result' => 'unavailable',
+                'message' => 'Link persetujuan penawaran sudah kedaluwarsa atau kandidat tidak berada pada tahap persetujuan penawaran.',
+                'candidate' => $this->candidate($recruitment),
+            ];
         }
         return ['result' => 'ready', 'candidate' => $this->candidate($recruitment)];
     }
