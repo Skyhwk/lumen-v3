@@ -781,11 +781,30 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
             }
 
+            if ((int) ($recruitment->is_approve_interview_user ?? 0) === 1) {
+                return response()->json([
+                    'message' => 'Jadwal interview tidak dapat diubah karena keputusan interview user sudah final.',
+                ], 400);
+            }
+
+            $existingInterview = RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            $isReschedule = (bool) $existingInterview;
+            $previousNotes = $existingInterview ? $existingInterview->catatan_interview : null;
+
             // Nonaktifkan jadwal interview user sebelumnya (jika ada reschedule)
             RecruitmentInterview::where('new_recruitment_id', $request->new_recruitment_id)
                 ->where('stage', 'user')
                 ->where('is_active', 1)
                 ->update(['is_active' => 0]);
+
+            // Saat reschedule, link/ruangan dari HR otomatis dihapus agar HR mengisi ulang
+            $linkGmeet = $isReschedule ? null : $this->nullableValue($request->link_gmeet);
+            $ruanganInterview = $isReschedule ? null : $this->nullableValue($request->ruangan_interview);
 
             // Save to recruitment_interviews
             $interview = RecruitmentInterview::create([
@@ -793,9 +812,10 @@ class PersonnelRequestController extends Controller
                 'stage'              => 'user',
                 'tgl_interview'      => $request->tgl_interview,
                 'jenis_interview'    => $request->jenis_interview,
-                'link_gmeet'         => $request->link_gmeet,
-                'ruangan_interview'  => $request->ruangan_interview,
+                'link_gmeet'         => $linkGmeet,
+                'ruangan_interview'  => $ruanganInterview,
                 'catatan'            => $request->catatan,
+                'catatan_interview'  => $previousNotes,
                 'created_by'         => $this->karyawan ?? 'System',
                 'is_active'          => 1,
             ]);
@@ -844,7 +864,9 @@ class PersonnelRequestController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Berhasil menjadwalkan interview!',
+                'message' => $isReschedule
+                    ? 'Berhasil mengubah jadwal interview. Link/ruangan dari HR direset dan perlu diisi ulang oleh HRD.'
+                    : 'Berhasil menjadwalkan interview!',
                 'data'    => $interview
             ], 200);
         } catch (\Throwable $th) {

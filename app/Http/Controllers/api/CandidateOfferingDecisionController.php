@@ -23,7 +23,7 @@ class CandidateOfferingDecisionController extends Controller
 
         $invalid = $this->invalidState($recruitment);
         if ($invalid) {
-            return response()->json($invalid, 410);
+            return response()->json($invalid, 403);
         }
 
         return response()->json([
@@ -55,7 +55,7 @@ class CandidateOfferingDecisionController extends Controller
 
             $invalid = $this->invalidState($recruitment);
             if ($invalid) {
-                return response()->json($invalid, 410);
+                return response()->json($invalid, 403);
             }
 
             $now = Carbon::now();

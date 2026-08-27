@@ -61,9 +61,17 @@ class AtsInterviewHrdController extends Controller
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
+            ->addColumn('request_by', function ($row) {
+                return optional($row->personalRequest)->created_by ?: '-';
+            })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
                     $sub->where('no_request', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('request_by', function ($q, $keyword) {
+                $q->whereHas('personalRequest', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
                 });
             })
             ->filterColumn('nama_lengkap', function ($q, $keyword) {

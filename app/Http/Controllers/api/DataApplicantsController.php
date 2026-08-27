@@ -11,6 +11,7 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsCvPdfSectionsBuilder;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
@@ -45,9 +46,17 @@ class DataApplicantsController extends Controller
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
+            ->addColumn('request_by', function ($row) {
+                return optional($row->personalRequest)->created_by ?: '-';
+            })
             ->filterColumn('no_request', function ($q, $keyword) {
                 $q->whereHas('personalRequest', function ($sub) use ($keyword) {
                     $sub->where('no_request', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('request_by', function ($q, $keyword) {
+                $q->whereHas('personalRequest', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
                 });
             })
             ->filterColumn('nama_lengkap', function ($q, $keyword) {
@@ -377,8 +386,12 @@ class DataApplicantsController extends Controller
             'personalRequest.masterJabatan',
             'hrdInterview',
             'userInterview',
-            'candidateProfile.educations',
-            'candidateProfile.workExperiences',
+            'candidateProfile.educations' => function ($query) {
+                $query->where('is_active', 1);
+            },
+            'candidateProfile.workExperiences' => function ($query) {
+                $query->where('is_active', 1);
+            },
         ])->find($id);
 
         if (!$applicant) {
@@ -695,6 +708,9 @@ class DataApplicantsController extends Controller
             $pengalamanHtml = "<p style='color: #64748b; font-size: 11px; margin: 0;'>Fresh Graduate / No work experience recorded.</p>";
         }
 
+        $profileCompletionHtml = app(AtsCvPdfSectionsBuilder::class)
+            ->buildProfileCompletionSections($applicant, $cp);
+
         $html = "
         <!DOCTYPE html>
         <html>
@@ -820,6 +836,103 @@ class DataApplicantsController extends Controller
                 .section-note {
                     color: #64748b;
                     font-size: 10px;
+                }
+                .cv-card-block {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 8px;
+                    padding: 10px 12px;
+                    margin-bottom: 12px;
+                    background: #ffffff;
+                }
+                .cv-list-item {
+                    margin-bottom: 10px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px dashed #e2e8f0;
+                    font-size: 11px;
+                    color: #0f172a;
+                }
+                .cv-list-item:last-child {
+                    margin-bottom: 0;
+                    padding-bottom: 0;
+                    border-bottom: none;
+                }
+                .cv-subsection-title {
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #2563eb;
+                    text-transform: uppercase;
+                    letter-spacing: 0.4px;
+                    margin: 8px 0 6px 0;
+                }
+                .cv-subsection-title:first-child {
+                    margin-top: 0;
+                }
+                .cv-question {
+                    font-weight: bold;
+                    color: #334155;
+                    margin-bottom: 3px;
+                }
+                .cv-answer {
+                    color: #0f172a;
+                }
+                .cv-doc-note {
+                    font-size: 9px;
+                    color: #64748b;
+                    margin-top: 4px;
+                    line-height: 1.35;
+                }
+                .cv-doc-grid {
+                    width: 100%;
+                    border-collapse: separate;
+                    border-spacing: 8px 6px;
+                    margin-bottom: 10px;
+                }
+                .cv-doc-cell {
+                    width: 33.33%;
+                    vertical-align: top;
+                    padding: 6px;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    background-color: #ffffff;
+                    page-break-inside: avoid;
+                }
+                .cv-doc-cell-empty {
+                    border: none;
+                    background: transparent;
+                }
+                .cv-doc-type {
+                    font-size: 9px;
+                    font-weight: bold;
+                    color: #475569;
+                    text-transform: uppercase;
+                    letter-spacing: 0.4px;
+                    margin-bottom: 6px;
+                    text-align: center;
+                }
+                .cv-doc-thumb {
+                    display: block;
+                    width: 100%;
+                    max-width: 100%;
+                    max-height: 170px;
+                    margin: 0 auto;
+                    object-fit: contain;
+                    border: 1px solid #dbeafe;
+                    border-radius: 4px;
+                    background-color: #f8fafc;
+                }
+                .cv-doc-placeholder {
+                    height: 120px;
+                    border: 1px dashed #cbd5e1;
+                    border-radius: 4px;
+                    background-color: #f8fafc;
+                    color: #64748b;
+                    font-size: 10px;
+                    font-weight: bold;
+                    text-align: center;
+                    line-height: 120px;
+                }
+                .cv-doc-placeholder-pdf {
+                    color: #dc2626;
                 }
             </style>
         </head>
@@ -960,6 +1073,8 @@ class DataApplicantsController extends Controller
 
             <div class='section-title'>Work Experience</div>
             {$pengalamanHtml}
+
+            {$profileCompletionHtml}
 
         </body>
         </html>

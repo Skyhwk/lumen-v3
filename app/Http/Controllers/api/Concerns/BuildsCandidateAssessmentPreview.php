@@ -492,7 +492,59 @@ trait BuildsCandidateAssessmentPreview
             'hrd_interview' => $this->formatHrdInterviewSummary($candidate),
             'user_interview' => $this->formatUserInterviewSummary($candidate),
             'is_input_review_hrd' => (int) ($candidate->is_input_review_hrd ?? 0),
+            'has_completed_profile' => $this->candidateHasCompletedProfile($candidate->id),
+            'attachments' => $this->formatCandidateAttachments($candidate->id),
         ];
+    }
+
+    protected function candidateHasCompletedProfile($candidateId): bool
+    {
+        if (!DB::getSchemaBuilder()->hasTable('candidate_profiles')) {
+            return false;
+        }
+
+        return DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $candidateId)
+            ->exists();
+    }
+
+    protected function formatCandidateAttachments($candidateId): array
+    {
+        if (!DB::getSchemaBuilder()->hasTable('candidate_documents')) {
+            return [];
+        }
+
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $candidateId)
+            ->value('id');
+
+        if (!$profileId) {
+            return [];
+        }
+
+        return DB::table('candidate_documents')
+            ->where('candidate_profile_id', $profileId)
+            ->where('is_active', 1)
+            ->orderBy('jenis_dokumen')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($doc) {
+                $mime = strtolower((string) ($doc->mime_type ?? ''));
+
+                return [
+                    'id' => (int) $doc->id,
+                    'jenis_dokumen' => $doc->jenis_dokumen,
+                    'nama_file' => $doc->nama_file,
+                    'path_file' => $doc->path_file,
+                    'mime_type' => $doc->mime_type,
+                    'ukuran_file' => $doc->ukuran_file,
+                    'catatan' => $doc->catatan,
+                    'is_image' => strpos($mime, 'image/') === 0,
+                    'is_pdf' => $mime === 'application/pdf',
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     public function candidateSessionResult(Request $request)
