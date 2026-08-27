@@ -311,6 +311,8 @@ class CustomerServiceConversationService
             'processed_by_name' => $staffName,
         ]);
 
+        self::publishInboxUpdate($ticket->fresh(), 'status_change');
+
         return [
             'ticket' => $ticket->fresh(),
             'messages' => $messages,
@@ -350,6 +352,8 @@ class CustomerServiceConversationService
             'auto_close_at' => $ticket->auto_close_at,
             'cleared_by' => $staffId,
         ]);
+
+        self::publishInboxUpdate($ticket->fresh(), 'status_change');
 
         return [
             'ticket' => $ticket->fresh(),
@@ -407,6 +411,8 @@ class CustomerServiceConversationService
             'closed_by_name' => $closedByName,
             'archived_at' => $ticket->archived_at,
         ]);
+
+        self::publishInboxUpdate($ticket->fresh(), 'status_change');
 
         self::notifyCustomerStatusChange($ticket, 'closed');
 
@@ -609,6 +615,22 @@ class CustomerServiceConversationService
         ];
     }
 
+    protected static function publishInboxUpdate(CsTicket $ticket, string $event, array $extra = []): void
+    {
+        $payload = array_merge([
+            'type' => 'cs_ticket_inbox',
+            'event' => $event,
+            'ticket_id' => $ticket->id,
+            'ticket_no' => $ticket->ticket_no,
+            'status' => $ticket->status,
+            'customer_name' => $ticket->customer_name,
+            'subject' => $ticket->subject,
+        ], $extra);
+
+        $job = new SendCustomerServiceConversationJob('/v3/cs-ticket/inbox', $payload);
+        $job->handle();
+    }
+
     protected static function publishConversationUpdate(CsTicket $ticket, ?CsTicketMessage $message = null, array $extra = []): void
     {
         $formatted = $message
@@ -666,16 +688,22 @@ class CustomerServiceConversationService
     protected static function notifyInternalNewTicket(CsTicket $ticket): void
     {
         $targets = self::resolveInternalNotifyIds();
-        if (empty($targets)) {
-            return;
+
+        if (!empty($targets)) {
+            try {
+                Notification::whereIn('id', $targets)
+                    ->title('Ticket Customer Service Baru')
+                    ->message("Ticket baru {$ticket->ticket_no} dari {$ticket->customer_name}: {$ticket->subject}")
+                    ->url('/sales/customer-service?ticket=' . $ticket->ticket_no)
+                    ->send();
+            } catch (\Throwable $exception) {
+            }
         }
 
         try {
-            Notification::whereIn('id', $targets)
-                ->title('Ticket Customer Service Baru')
-                ->message("Ticket baru {$ticket->ticket_no} dari {$ticket->customer_name}: {$ticket->subject}")
-                ->url('/sales/customer-service?ticket=' . $ticket->ticket_no)
-                ->send();
+            self::publishInboxUpdate($ticket, 'new_ticket', [
+                'message' => "Ticket baru {$ticket->ticket_no} dari {$ticket->customer_name}",
+            ]);
         } catch (\Throwable $exception) {
         }
     }
@@ -683,16 +711,22 @@ class CustomerServiceConversationService
     protected static function notifyInternalCustomerReply(CsTicket $ticket): void
     {
         $targets = self::resolveInternalNotifyIds();
-        if (empty($targets)) {
-            return;
+
+        if (!empty($targets)) {
+            try {
+                Notification::whereIn('id', $targets)
+                    ->title('Balasan Customer Service')
+                    ->message("Pelanggan membalas ticket {$ticket->ticket_no}")
+                    ->url('/sales/customer-service?ticket=' . $ticket->ticket_no)
+                    ->send();
+            } catch (\Throwable $exception) {
+            }
         }
 
         try {
-            Notification::whereIn('id', $targets)
-                ->title('Balasan Customer Service')
-                ->message("Pelanggan membalas ticket {$ticket->ticket_no}")
-                ->url('/sales/customer-service?ticket=' . $ticket->ticket_no)
-                ->send();
+            self::publishInboxUpdate($ticket->fresh(), 'customer_reply', [
+                'message' => "Pelanggan membalas ticket {$ticket->ticket_no}",
+            ]);
         } catch (\Throwable $exception) {
         }
     }
