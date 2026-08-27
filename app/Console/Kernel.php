@@ -2,9 +2,7 @@
 
 namespace App\Console;
 
-use Illuminate\Console\Scheduling\Schedule;
 use Laravel\Lumen\Console\Kernel as ConsoleKernel;
-use Carbon\Carbon;
 
 class Kernel extends ConsoleKernel
 {
@@ -57,22 +55,6 @@ class Kernel extends ConsoleKernel
         // Commands\LhpRefreshLingHeaderCommand::class,
         // Commands\LhpRefreshIsokinetikCustomCommand::class,
     ];
-
-    /**
-     * Define the application's command schedule.
-     *
-     * @param  \Illuminate\Console\Scheduling\Schedule  $schedule
-     * @return void
-     */
-    protected function schedule(Schedule $schedule)
-    {
-        $schedule->command('cs:auto-close')->everyMinute();
-        $schedule->command('cs:auto-archive')->everyMinute();
-
-        // Sementara dimatikan untuk debugging — uncomment jika sudah fix
-        // $schedule->command('qsd:monitor-revenue')->everyFiveMinutes();
-        // $schedule->command('qsd:monitor-forecast')->everyFiveMinutes();
-    }
 
     protected function commands()
     {

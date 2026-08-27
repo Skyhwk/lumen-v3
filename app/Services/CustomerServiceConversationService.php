@@ -247,24 +247,45 @@ class CustomerServiceConversationService
         ]);
     }
 
+    public static function needsProcessResume(CsTicket $ticket): bool
+    {
+        if ($ticket->status !== 'in_progress') {
+            return false;
+        }
+
+        return !CsTicketMessage::where('ticket_id', $ticket->id)
+            ->where('is_auto', true)
+            ->whereIn('message_kind', ['system', 'auto_staff'])
+            ->exists();
+    }
+
     public static function processTicket(CsTicket $ticket, int $staffId, string $staffName): array
     {
-        if ($ticket->status !== 'open') {
+        $resumePartialProcess = self::needsProcessResume($ticket);
+
+        if ($ticket->status === 'in_progress') {
+            if (!$resumePartialProcess) {
+                throw new \InvalidArgumentException('Ticket sudah diproses.');
+            }
+        } elseif ($ticket->status !== 'open') {
             throw new \InvalidArgumentException('Ticket hanya dapat diproses saat status open.');
         }
 
         $now = Carbon::now()->format('Y-m-d H:i:s');
-        $ticket->status = 'in_progress';
-        $ticket->processed_at = $now;
-        $ticket->processed_by = $staffId;
-        $ticket->assigned_to = $staffId;
-        $ticket->updated_at = $now;
-        $ticket->save();
+
+        if (!$resumePartialProcess) {
+            $ticket->status = 'in_progress';
+            $ticket->processed_at = $now;
+            $ticket->processed_by = $staffId;
+            $ticket->assigned_to = $staffId;
+            $ticket->updated_at = $now;
+            $ticket->save();
+        }
 
         $messages = [];
 
         $messages[] = self::insertMessage($ticket, [
-            'sender_type' => 'system',
+            'sender_type' => 'bot',
             'sender_id' => null,
             'sender_name' => self::BOT_NAME,
             'message' => 'Anda terhubung ke ' . $staffName,
@@ -527,6 +548,7 @@ class CustomerServiceConversationService
             'is_closed' => self::isClosed($ticket->status),
             'can_customer_send' => self::canCustomerSend($ticket->status),
             'can_staff_send' => self::canStaffSend($ticket->status),
+            'can_resume_process' => self::needsProcessResume($ticket),
         ];
 
         if ($readerType && $readerId) {
