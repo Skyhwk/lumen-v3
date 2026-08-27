@@ -129,10 +129,15 @@ class AtsFinalDecisionController extends Controller
                 ->orWhere('meta_history', 'not like', '%hrd_final_decision_rejected%');
         })
         ->where(function ($q) {
+            $q->where('is_rejected_kandidat', false)
+                ->orWhereNull('is_rejected_kandidat');
+        })
+        ->where(function ($q) {
             $q->whereNull('rejected_by')
                 ->orWhere('is_approved_interview_hrd', 1)
                 ->orWhereNotNull('approved_interview_hrd_by');
-        });
+        })
+        ->where('is_active', 1);
     }
 
     // ─── Index — DataTables list of management_decision candidates ───────────
@@ -151,7 +156,6 @@ class AtsFinalDecisionController extends Controller
                         ->orWhereNull('created_at');
                 });
             })
-            ->where('is_active', true)
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)
@@ -635,7 +639,20 @@ class AtsFinalDecisionController extends Controller
         }
 
         if ($decision === 'reject') {
+            $rejectReason = trim((string) ($request->input('alasan_reject') ?? $request->input('reject_reason') ?? ''));
+            if ($rejectReason === '') {
+                $rejectReason = 'Negotiated salary offer rejected';
+            }
+
             (new \App\Services\RecruitmentStatusService())->update($id, 'rejected', $now, 'internal_sallary_offer_rejected');
+
+            RecruitmentStatusService::markRejectedKandidat((int) $id, (string) ($user ?? 'HRD'), $rejectReason, $now);
+
+            $applicant->update([
+                'rejected_by' => $user ?? 'HRD',
+                'rejected_at' => $now,
+                'alasan_reject' => $rejectReason,
+            ]);
 
             try {
                 if (!empty($applicant->email)) {
@@ -645,7 +662,7 @@ class AtsFinalDecisionController extends Controller
                         'jenis_kelamin'   => $applicant->jenis_kelamin,
                         'nama_jabatan'    => $posisiName,
                         'posisi_di_lamar' => $posisiName,
-                        'alasan_reject'   => 'Negotiated salary offer rejected',
+                        'alasan_reject'   => $rejectReason,
                     ];
 
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataObj);
@@ -1160,6 +1177,8 @@ class AtsFinalDecisionController extends Controller
                 'prior_rejection_reason' => $priorRejection['reason'] ?? null,
             ]
         );
+
+        RecruitmentStatusService::markRejectedKandidat((int) $id, (string) $user, $reason, $now);
 
         $applicant->update([
             'rejected_by' => $user,

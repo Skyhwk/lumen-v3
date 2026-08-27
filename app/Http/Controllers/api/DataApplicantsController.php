@@ -34,6 +34,7 @@ class DataApplicantsController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where('status', 'screening')
+            ->where('is_active', 1)
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
@@ -321,8 +322,9 @@ class DataApplicantsController extends Controller
         // Update applicant status to 'rejected' with RecruitmentStatusService meta_history tracking
         (new RecruitmentStatusService())->update($applicant->id, 'rejected', Carbon::now());
 
+        RecruitmentStatusService::markRejectedKandidat((int) $applicant->id, (string) $user, $reason, Carbon::now());
+
         $applicant->update([
-            // 'status' => 'screening',
             'rejected_by' => $user,
             'rejected_at' => Carbon::now(),
             'alasan_reject' => $reason,

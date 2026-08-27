@@ -14,6 +14,7 @@ use App\Models\NewRecruitment;
 use App\Services\HrdAssessmentReadinessService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\RecruitmentStatusService;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 
 class PersonnelRequesthrdController extends Controller
@@ -310,7 +311,9 @@ class PersonnelRequesthrdController extends Controller
         }
 
         $personnelRequest = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
-            ->withCount('newRecruitments as total_pelamar')
+            ->withCount(['newRecruitments as total_pelamar' => function ($query) {
+                $query->where('is_active', 1);
+            }])
             ->find($id);
 
         if (!$personnelRequest) {
@@ -323,14 +326,15 @@ class PersonnelRequesthrdController extends Controller
 
         $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
             ->where('personnel_request_id', $id)
-            ->where('is_active',1)
+            ->where('is_active', 1)
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->filter(function ($candidate) {
+                return !RecruitmentStatusService::isRejectedKandidat($candidate);
+            })
+            ->values();
 
         $statusCounts = $candidates
-            ->filter(function ($candidate) {
-                return (int) ($candidate->is_active ?? 1) === 1;
-            })
             ->groupBy(function ($candidate) {
                 return strtolower((string) $candidate->status);
             })
@@ -338,12 +342,6 @@ class PersonnelRequesthrdController extends Controller
                 return $group->count();
             })
             ->toArray();
-
-        $voidCount = $candidates
-            ->filter(function ($candidate) {
-                return (int) ($candidate->is_active ?? 1) === 0;
-            })
-            ->count();
 
         $pictureService = app(RecruitmentPictureService::class);
 
@@ -378,7 +376,6 @@ class PersonnelRequesthrdController extends Controller
                     'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
                     'hired' => (int) ($statusCounts['hired'] ?? 0),
                     'rejected' => (int) ($statusCounts['rejected'] ?? 0),
-                    'void' => (int) $voidCount,
                 ],
                 'candidates' => $candidateItems,
             ],

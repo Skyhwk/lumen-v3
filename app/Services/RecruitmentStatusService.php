@@ -472,9 +472,126 @@ class RecruitmentStatusService
     }
 
     /**
-     * Kandidat ditolak HRD di tahap screening/interview (belum lulus interview HRD).
+     * Kandidat sudah ditolak dan menerima notifikasi tidak lolos seleksi
+     * (screening, interview HRD, interview user, atau keputusan final HRD).
      */
-    public static function isRejectedByHrdBeforeFinalDecision($recruitment): bool
+    public static function isRejectedKandidat($recruitment): bool
+    {
+        $flag = is_object($recruitment)
+            ? ($recruitment->is_rejected_kandidat ?? null)
+            : ($recruitment['is_rejected_kandidat'] ?? null);
+
+        if ((int) $flag === 1) {
+            return true;
+        }
+
+        $rejectInterviewUserAt = is_object($recruitment)
+            ? ($recruitment->reject_interview_user_at ?? null)
+            : ($recruitment['reject_interview_user_at'] ?? null);
+
+        if ($rejectInterviewUserAt !== null && trim((string) $rejectInterviewUserAt) !== '') {
+            return true;
+        }
+
+        if (self::hasHrdFinalDecisionRejected($recruitment)) {
+            return true;
+        }
+
+        $status = strtolower(trim((string) (is_object($recruitment) ? ($recruitment->status ?? '') : ($recruitment['status'] ?? ''))));
+        if ($status !== 'rejected') {
+            return false;
+        }
+
+        $rejectedBy = is_object($recruitment)
+            ? ($recruitment->rejected_by ?? null)
+            : ($recruitment['rejected_by'] ?? null);
+
+        return $rejectedBy !== null && trim((string) $rejectedBy) !== '';
+    }
+
+    public static function markRejectedKandidat(int $recruitmentId, string $by, ?string $reason = null, $at = null): void
+    {
+        $at = $at ? Carbon::parse($at) : Carbon::now();
+        $by = trim($by);
+        $reason = trim((string) ($reason ?? ''));
+
+        DB::table('new_recruitment')->where('id', $recruitmentId)->update([
+            'is_rejected_kandidat' => true,
+            'is_rejected_kandidat_by' => $by !== '' ? $by : null,
+            'is_rejected_kandidat_at' => $at,
+            'is_rejected_kandidat_reason' => $reason !== '' ? $reason : null,
+            'updated_at' => $at,
+        ]);
+    }
+
+    public static function getRejectedKandidatTracking($recruitment): ?array
+    {
+        if (!self::isRejectedKandidat($recruitment)) {
+            return null;
+        }
+
+        $by = is_object($recruitment)
+            ? ($recruitment->is_rejected_kandidat_by ?? null)
+            : ($recruitment['is_rejected_kandidat_by'] ?? null);
+
+        $at = is_object($recruitment)
+            ? ($recruitment->is_rejected_kandidat_at ?? null)
+            : ($recruitment['is_rejected_kandidat_at'] ?? null);
+
+        $reason = is_object($recruitment)
+            ? ($recruitment->is_rejected_kandidat_reason ?? null)
+            : ($recruitment['is_rejected_kandidat_reason'] ?? null);
+
+        if ($by === null || trim((string) $by) === '') {
+            $by = is_object($recruitment)
+                ? ($recruitment->rejected_by ?? $recruitment->reject_interview_user_by ?? null)
+                : ($recruitment['rejected_by'] ?? $recruitment['reject_interview_user_by'] ?? null);
+        }
+
+        if ($at === null || trim((string) $at) === '') {
+            $at = is_object($recruitment)
+                ? ($recruitment->rejected_at ?? $recruitment->reject_interview_user_at ?? null)
+                : ($recruitment['rejected_at'] ?? $recruitment['reject_interview_user_at'] ?? null);
+        }
+
+        if ($reason === null || trim((string) $reason) === '') {
+            $reason = is_object($recruitment)
+                ? ($recruitment->alasan_reject ?? null)
+                : ($recruitment['alasan_reject'] ?? null);
+        }
+
+        if (($reason === null || trim((string) $reason) === '') && self::hasHrdFinalDecisionRejected($recruitment)) {
+            foreach (self::parseMetaHistory($recruitment) as $entry) {
+                if (($entry['status'] ?? '') !== 'hrd_final_decision_rejected') {
+                    continue;
+                }
+
+                $reason = trim((string) ($entry['reject_reason'] ?? $entry['alasan_reject'] ?? $entry['reason'] ?? ''));
+                $by = $by ?: ($entry['by'] ?? null);
+                $at = $at ?: ($entry['at'] ?? null);
+                break;
+            }
+        }
+
+        return [
+            'by' => ($by !== null && trim((string) $by) !== '') ? (string) $by : null,
+            'at' => ($at !== null && trim((string) $at) !== '') ? (string) $at : null,
+            'reason' => ($reason !== null && trim((string) $reason) !== '') ? (string) $reason : null,
+        ];
+    }
+
+    /**
+     * @deprecated Gunakan isRejectedKandidat()
+     */
+    public static function isHrdRejected($recruitment): bool
+    {
+        return self::isRejectedKandidat($recruitment);
+    }
+
+    /**
+     * Kandidat ditolak HRD di tahap interview HRD (legacy heuristic).
+     */
+    private static function isLegacyRejectedByHrdInterview($recruitment): bool
     {
         $rejectedBy = is_object($recruitment)
             ? ($recruitment->rejected_by ?? null)
@@ -495,13 +612,35 @@ class RecruitmentStatusService
         return !((bool) $isApprovedHrd) && ($approvedBy === null || trim((string) $approvedBy) === '');
     }
 
-    public static function shouldExcludeFromFinalDecisionList($recruitment): bool
+    /**
+     * Kandidat ditolak HRD di tahap screening/interview (belum lulus interview HRD).
+     */
+    public static function isRejectedByHrdBeforeFinalDecision($recruitment): bool
     {
         if (self::hasHrdFinalDecisionRejected($recruitment)) {
+            return false;
+        }
+
+        if ((int) (is_object($recruitment)
+            ? ($recruitment->is_rejected_kandidat ?? 0)
+            : ($recruitment['is_rejected_kandidat'] ?? 0)) === 1) {
+            $rejectUserAt = is_object($recruitment)
+                ? ($recruitment->reject_interview_user_at ?? null)
+                : ($recruitment['reject_interview_user_at'] ?? null);
+
+            if ($rejectUserAt !== null && trim((string) $rejectUserAt) !== '') {
+                return false;
+            }
+
             return true;
         }
 
-        return self::isRejectedByHrdBeforeFinalDecision($recruitment);
+        return self::isLegacyRejectedByHrdInterview($recruitment);
+    }
+
+    public static function shouldExcludeFromFinalDecisionList($recruitment): bool
+    {
+        return self::isRejectedKandidat($recruitment);
     }
 
     public static function hasHrdFinalDecisionRejected($recruitment): bool
@@ -755,14 +894,22 @@ class RecruitmentStatusService
 
     public static function resolvePipelineStatus($recruitment): ?array
     {
-        if (!self::isReturnedFromDirectorManagementRejection($recruitment)) {
-            return null;
+        if (self::isReturnedFromDirectorManagementRejection($recruitment)
+            && !self::isRejectedKandidat($recruitment)) {
+            return [
+                'code' => 'reject_ibu_direktur',
+                'label' => 'Reject Ibu Direktur',
+            ];
         }
 
-        return [
-            'code' => 'reject_ibu_direktur',
-            'label' => 'Reject Ibu Direktur',
-        ];
+        if (self::isRejectedKandidat($recruitment)) {
+            return [
+                'code' => 'rejected_kandidat',
+                'label' => 'Tidak Lolos Seleksi',
+            ];
+        }
+
+        return null;
     }
 
     public static function hasCompletedProfile($recruitment): bool
