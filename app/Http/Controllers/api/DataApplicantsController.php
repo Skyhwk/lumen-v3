@@ -11,6 +11,7 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\MpdfService;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
+use App\Services\AtsCvPdfSectionsBuilder;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
@@ -385,8 +386,12 @@ class DataApplicantsController extends Controller
             'personalRequest.masterJabatan',
             'hrdInterview',
             'userInterview',
-            'candidateProfile.educations',
-            'candidateProfile.workExperiences',
+            'candidateProfile.educations' => function ($query) {
+                $query->where('is_active', 1);
+            },
+            'candidateProfile.workExperiences' => function ($query) {
+                $query->where('is_active', 1);
+            },
         ])->find($id);
 
         if (!$applicant) {
@@ -703,6 +708,9 @@ class DataApplicantsController extends Controller
             $pengalamanHtml = "<p style='color: #64748b; font-size: 11px; margin: 0;'>Fresh Graduate / No work experience recorded.</p>";
         }
 
+        $profileCompletionHtml = app(AtsCvPdfSectionsBuilder::class)
+            ->buildProfileCompletionSections($applicant, $cp);
+
         $html = "
         <!DOCTYPE html>
         <html>
@@ -828,6 +836,61 @@ class DataApplicantsController extends Controller
                 .section-note {
                     color: #64748b;
                     font-size: 10px;
+                }
+                .cv-card-block {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 8px;
+                    padding: 10px 12px;
+                    margin-bottom: 12px;
+                    background: #ffffff;
+                }
+                .cv-list-item {
+                    margin-bottom: 10px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px dashed #e2e8f0;
+                    font-size: 11px;
+                    color: #0f172a;
+                }
+                .cv-list-item:last-child {
+                    margin-bottom: 0;
+                    padding-bottom: 0;
+                    border-bottom: none;
+                }
+                .cv-subsection-title {
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #2563eb;
+                    text-transform: uppercase;
+                    letter-spacing: 0.4px;
+                    margin: 8px 0 6px 0;
+                }
+                .cv-subsection-title:first-child {
+                    margin-top: 0;
+                }
+                .cv-question {
+                    font-weight: bold;
+                    color: #334155;
+                    margin-bottom: 3px;
+                }
+                .cv-answer {
+                    color: #0f172a;
+                }
+                .cv-doc-note {
+                    font-size: 10px;
+                    color: #64748b;
+                    margin-top: 6px;
+                }
+                .cv-doc-preview-wrap {
+                    margin-top: 8px;
+                    page-break-inside: avoid;
+                }
+                .cv-doc-preview-image {
+                    display: block;
+                    max-width: 100%;
+                    max-height: 340px;
+                    margin-top: 4px;
+                    border: 1px solid #dbeafe;
+                    border-radius: 6px;
                 }
             </style>
         </head>
@@ -968,6 +1031,8 @@ class DataApplicantsController extends Controller
 
             <div class='section-title'>Work Experience</div>
             {$pengalamanHtml}
+
+            {$profileCompletionHtml}
 
         </body>
         </html>
