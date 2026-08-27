@@ -11,6 +11,7 @@ use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 Carbon::setLocale('id');
 class PersonnelRequestController extends Controller
@@ -302,10 +303,23 @@ class PersonnelRequestController extends Controller
             return $query;
         }
 
+        $query->where('is_reject', '!=', 1);
+
+        if (Schema::hasColumn('personnel_requests', 'is_completed')) {
+            if ($filter === 'completed') {
+                $query->where('is_completed', 1);
+            } else {
+                $query->where(function ($q) {
+                    $q->whereNull('is_completed')
+                        ->orWhere('is_completed', '!=', 1);
+                });
+            }
+
+            return $query;
+        }
+
         $hiredSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id AND nr.status = \'hired\')';
         $pelamarSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id)';
-
-        $query->where('is_reject', '!=', 1);
 
         if ($filter === 'completed') {
             $query->where('is_approve', 1)
@@ -375,6 +389,10 @@ class PersonnelRequestController extends Controller
                     return $row->total_keterima ?? 0;
                 })
                 ->addColumn('is_fulfilled', function ($row) {
+                    if (isset($row->is_completed)) {
+                        return (int) $row->is_completed === 1;
+                    }
+
                     return $this->isPersonnelRequestFulfilled($row);
                 })
                 ->addColumn('highest_status', function ($row) {

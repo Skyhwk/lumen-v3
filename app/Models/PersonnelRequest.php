@@ -55,6 +55,7 @@ class PersonnelRequest extends Model
         'published_by',
         'published_at',
         'is_active',
+        'is_completed',
         'cancled_by',
         'cancled_at',
     ];
@@ -64,6 +65,7 @@ class PersonnelRequest extends Model
         'max_salary' => 'decimal:2',
         'jumlah_personal' => 'integer',
         'usia_maksimum' => 'integer',
+        'is_completed' => 'boolean',
     ];
 
     public function masterDivisi()
