@@ -16,7 +16,7 @@ class SummaryQSDController extends Controller
 
     public function __construct()
     {
-        $this->managerIds = [19, 41, 14];
+        $this->managerIds = [19, 41, 14]; // 19 : Faidhah 41 : novva 14 : ica yesika
     }
 
     public function index(Request $request)
@@ -119,7 +119,8 @@ class SummaryQSDController extends Controller
         $addedIds = [];
 
         foreach ($this->managerIds as $manager) {
-            $team = GetBawahan::on('id', $manager)
+            $team = GetBawahan::where('id', $manager)
+                ->where('is_active', 1)
                 ->all()
                 ->filter(function ($item) use (&$addedIds) {
                     if (in_array($item->id, $addedIds)) {
