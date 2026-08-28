@@ -981,7 +981,7 @@ class AtsFinalDecisionController extends Controller
 
         $btn = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $token);
 
-        $targetEmail = env('EMAIL_DIREKTUR_BAPAK');
+        $targetEmail = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
         $user = $this->karyawan;
 
         try {
