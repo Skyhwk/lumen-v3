@@ -3,7 +3,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ForecastSP;
-use App\Services\GetBawahan;
+use App\Services\GetBawahanAll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -119,7 +119,7 @@ class SummaryQSDController extends Controller
         $addedIds = [];
 
         foreach ($this->managerIds as $manager) {
-            $team = GetBawahan::on('id', $manager)
+            $team = GetBawahanAll::on('id', $manager)
                 ->all()
                 ->filter(function ($item) use (&$addedIds) {
                     if (in_array($item->id, $addedIds)) {
@@ -206,7 +206,7 @@ class SummaryQSDController extends Controller
             $memberData['total_order']    = array_sum($memberData['order']);
             $memberData['forecast']       = $forecastData['periode'] ?? $this->emptyOrder;
             $memberData['total_forecast'] = $forecastData['total_tahun'] ?? 0;
-            $memberData['is_resigned']    = $isResigned;
+            $memberData['is_resigned']    = $isResigned;             
 
             if ($memberData['total_order'] > 0 || $memberData['total_forecast'] > 0 || in_array($grade, ['manager', 'supervisor'])) {
                 $teamsData[$teamIndex][$grade][] = $memberData;
