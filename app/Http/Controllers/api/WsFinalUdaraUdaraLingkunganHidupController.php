@@ -51,13 +51,10 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-            ->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
-                $from = $request->from . '-01';
-                $to = date('Y-m-t', strtotime($request->to . '-01'));
-
-                return $q->whereBetween('tanggal_sampling', [$from, $to]);
-            })
-            ->when(!$request->filled('from') && !$request->filled('to') && $request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->when($request->filled('year'), function ($q) use ($request) {
+				$fromYear = $request->year;
+				return $q->whereYear('tanggal_sampling', $fromYear);
+			})
 			->orderBy('tanggal_sampling');
 
 		$data = $data->get();
@@ -369,108 +366,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			} catch (\Exception $ex) {
 				dd($ex);
 			}
-		} else if ($request->kategori == 27) {
-			// $parameters = json_decode(html_entity_decode($request->parameter), true);
-
-
-			try {
-				$noOrder = explode('/', $request->no_sampel)[0] ?? null;
-				$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
-				$lapangan2 = $Lapangan->map(function ($item) {
-					return $item->no_sampel;
-				})->unique()->sortBy(function ($item) {
-					return (int) explode('/', $item)[1];
-				})->values();
-				$totLapangan = $lapangan2->count();
-				// Cek apakah 'Ergonomi' ada dalam array
-				if (in_array("Ergonomi", $parameterNames)) {
-
-					$data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->first();
-					$urutan = $lapangan2->search($data->no_sampel);
-					$urutanDisplay = $urutan + 1;
-					$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-					if ($data) {
-						$dataArray = $data->toArray();
-						$dataArray['parameter'] = 'Ergonomi';
-
-						return response()->json([
-							'data' => $dataArray,
-							'message' => 'Berhasil mendapatkan data',
-							'success' => true,
-							'status' => 200
-						]);
-					}
-				} else if (in_array("Sinar UV", $parameterNames)) {
-					$data = DataLapanganSinarUV::where('no_sampel', $request->no_sampel)->first();
-					$urutan = $lapangan2->search($data->no_sampel);
-					$urutanDisplay = $urutan + 1;
-					$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-					if ($data) {
-						$dataArray = $data->toArray();
-						$dataArray['parameter'] = 'Sinar UV';
-
-						return response()->json([
-							'data' => $dataArray,
-							'message' => 'Berhasil mendapatkan data',
-							'success' => true,
-							'status' => 200
-						]);
-					}
-				} else if (in_array("Debu (P8J)", $parameterNames)) {
-					$data = DataLapanganDebuPersonal::where('no_sampel', $request->no_sampel)->first();
-
-
-					if ($data) {
-						$dataArray = $data->toArray();
-						$dataArray['parameter'] = 'Debu (P8J)';
-
-						return response()->json([
-							'data' => $dataArray,
-							'message' => 'Berhasil mendapatkan data',
-							'success' => true,
-							'status' => 200
-						]);
-					}
-				} else if (in_array('Medan Magnit Statis', $parameterNames) || in_array('Medan Listrik', $parameterNames) || in_array('Power Density', $parameterNames)) {
-
-					$data = DataLapanganMedanLM::where('no_sampel', $request->no_sampel)->first();
-					$urutan = $lapangan2->search($data->no_sampel);
-					$urutanDisplay = $urutan + 1;
-					$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-					if ($data) {
-						$dataArray = $data->toArray();
-						switch (true) {
-							case in_array('Medan Magnit Statis', $parameterNames):
-								$dataArray['parameter'] = 'Medan Magnit Statis';
-								break;
-							case in_array('Medan Listrik', $parameterNames):
-								$dataArray['parameter'] = 'Medan Listrik';
-								break;
-							case in_array('Power Density', $parameterNames):
-								$dataArray['parameter'] = 'Power Density';
-								break;
-						}
-
-
-						return response()->json([
-							'data' => $dataArray,
-							'message' => 'Berhasil mendapatkan data',
-							'success' => true,
-							'status' => 200
-						]);
-					}
-				} else {
-					$data = DetailLingkunganKerja::where('no_sampel', $request->no_sampel)->first();
-					if ($data) {
-						return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-					} else {
-						return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
-					}
-				}
-			} catch (\Exception $ex) {
-				dd($ex);
-			}
-		} else {
+		}else {
 			$data = [];
 		}
 	}

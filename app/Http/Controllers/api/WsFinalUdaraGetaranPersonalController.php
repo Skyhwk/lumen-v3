@@ -43,23 +43,6 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 {
 	private $categoryGetaran = [17, 20];
 
-	// public function index(Request $request)
-	// {
-	// 	$data = OrderDetail::where('is_active', $request->is_active)
-	// 		->where('kategori_2', '4-Udara')
-	// 		->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"])
-	// 		->where('status', 0)
-	// 		->whereNotNull('tanggal_terima')
-	// 		->whereJsonDoesntContain('parameter', [
-	// 			"318;Psikologi"
-	// 		])
-	// 		->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-	// 		->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-	// 		->orderBy('id', "desc");
-	// 	$data = $data->get();
-	// 	return Datatables::of($data)->make(true);
-	// }
-
 	public function index(Request $request)
 	{
 		$data = OrderDetail::select(
@@ -78,12 +61,9 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 			->whereIn('kategori_3', ["20-Getaran (Seluruh Tubuh)", "17-Getaran (Lengan & Tangan)"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
-			->when($request->filled('from') && $request->filled('to'), function ($q) use ($request) {
-				$from = $request->from . '-01';
-				$to = date('Y-m-t', strtotime($request->to . '-01'));
-				return $q->whereBetween('tanggal_sampling', [$from, $to]);
+			->when($request->filled('year'), function ($q) use ($request) {
+				return $q->whereYear('tanggal_sampling', $request->year);
 			})
-			->when(!$request->filled('from') && !$request->filled('to') && $request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
 			->orderBy('tanggal_sampling');
 
