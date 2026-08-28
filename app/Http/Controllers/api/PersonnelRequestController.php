@@ -11,6 +11,7 @@ use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 Carbon::setLocale('id');
 class PersonnelRequestController extends Controller
@@ -288,11 +289,75 @@ class PersonnelRequestController extends Controller
     }
 
     /**
+     * Request dianggap selesai jika jumlah pelamar >= kebutuhan dan jumlah hired >= kebutuhan.
+     */
+    private function isPersonnelRequestFulfilled($row): bool
+    {
+        $required = (int) ($row->jumlah_personal ?? 0);
+        if ($required <= 0) {
+            return false;
+        }
+
+        $totalPelamar = (int) ($row->total_pelamar ?? 0);
+        $totalHired = (int) ($row->total_hired ?? 0);
+
+        return $totalPelamar >= $required && $totalHired >= $required;
+    }
+
+    private function applyCompletionFilter($query, ?string $filter)
+    {
+        if (!$filter || !in_array($filter, ['on_progress', 'completed'], true)) {
+            return $query;
+        }
+
+        $query->where('is_reject', '!=', 1);
+
+        if (Schema::hasColumn('personnel_requests', 'is_completed')) {
+            if ($filter === 'completed') {
+                $query->where('is_completed', 1);
+            } else {
+                $query->where(function ($q) {
+                    $q->whereNull('is_completed')
+                        ->orWhere('is_completed', '!=', 1);
+                });
+            }
+
+            return $query;
+        }
+
+        $hiredSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id AND nr.status = \'hired\')';
+        $pelamarSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id)';
+
+        if ($filter === 'completed') {
+            $query->where('is_approve', 1)
+                ->where('jumlah_personal', '>', 0)
+                ->whereRaw("{$pelamarSub} >= personnel_requests.jumlah_personal")
+                ->whereRaw("{$hiredSub} >= personnel_requests.jumlah_personal");
+        } else {
+            $query->where(function ($q) use ($hiredSub, $pelamarSub) {
+                $q->where('is_approve', 0)
+                    ->orWhere(function ($q2) use ($hiredSub, $pelamarSub) {
+                        $q2->where('is_approve', 1)
+                            ->where(function ($q3) use ($hiredSub, $pelamarSub) {
+                                $q3->where('jumlah_personal', '<=', 0)
+                                    ->orWhereRaw("{$pelamarSub} < personnel_requests.jumlah_personal")
+                                    ->orWhereRaw("{$hiredSub} < personnel_requests.jumlah_personal");
+                            });
+                    });
+            });
+        }
+
+        return $query;
+    }
+
+    /**
      * Index - DataTables server-side
      */
     public function index(Request $request)
     {
         try {
+            $completionFilter = $request->input('completion_filter');
+
             // Fetch records with counts for NewRecruitment and eager load relations
             $data = $this->ownedPersonnelRequestQuery()->select('personnel_requests.*')->with([
                 'detailCabang', 
@@ -303,10 +368,15 @@ class PersonnelRequestController extends Controller
                 }
             ])->withCount([
                 'newRecruitments as total_pelamar',
+                'newRecruitments as total_hired' => function ($query) {
+                    $query->where('status', 'hired');
+                },
                 'newRecruitments as total_keterima' => function($query) {
                     $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
                 }
             ])->orderBy('id', 'desc');
+
+            $data = $this->applyCompletionFilter($data, $completionFilter);
     
             $assessmentCategoryService = app(UserAssessmentCategoryService::class);
 
@@ -319,8 +389,18 @@ class PersonnelRequestController extends Controller
                 ->addColumn('total_pelamar', function ($row) {
                     return $row->total_pelamar ?? 0;
                 })
+                ->addColumn('total_hired', function ($row) {
+                    return (int) ($row->total_hired ?? 0);
+                })
                 ->addColumn('total_keterima', function ($row) {
                     return $row->total_keterima ?? 0;
+                })
+                ->addColumn('is_fulfilled', function ($row) {
+                    if (isset($row->is_completed)) {
+                        return (int) $row->is_completed === 1;
+                    }
+
+                    return $this->isPersonnelRequestFulfilled($row);
                 })
                 ->addColumn('highest_status', function ($row) {
                     if ($row->is_reject == 1) {
