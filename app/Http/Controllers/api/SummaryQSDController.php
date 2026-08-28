@@ -16,7 +16,7 @@ class SummaryQSDController extends Controller
 
     public function __construct()
     {
-        $this->managerIds = [19, 41, 14];
+        $this->managerIds = [19, 41, 14]; // 19 : Faidhah 41 : novva 14 : ica yesika
     }
 
     public function index(Request $request)

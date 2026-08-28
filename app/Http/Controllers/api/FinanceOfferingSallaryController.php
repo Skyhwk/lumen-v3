@@ -145,6 +145,12 @@ class FinanceOfferingSallaryController extends Controller
             ->addColumn('finance_reject_reason', function ($row) {
                 return RecruitmentStatusService::getFinanceRejectReason($row);
             })
+            ->addColumn('is_reject_finance', function ($row) {
+                return (bool) ($row->is_reject_finance ?? false);
+            })
+            ->addColumn('finance_reject_tracking', function ($row) {
+                return RecruitmentStatusService::getFinanceRejectTracking($row);
+            })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'finance_review';
             })
@@ -203,6 +209,8 @@ class FinanceOfferingSallaryController extends Controller
                     );
                 }
 
+                RecruitmentStatusService::clearFinanceRejected((int) $id, $now);
+
                 (new RecruitmentStatusService())->update(
                     $id, 
                     'internal_sallary_offer', 
@@ -222,8 +230,8 @@ class FinanceOfferingSallaryController extends Controller
                 return response()->json([
                     'status'  => 200,
                     'message' => $directorEmailSent
-                        ? 'Persetujuan Finance berhasil diproses dan email persetujuan telah dikirim ke Direktur.'
-                        : 'Persetujuan Finance berhasil diproses. Email Direktur belum dikirim karena alamat email belum tersedia.',
+                        ? 'Persetujuan Finance berhasil diproses dan email persetujuan telah dikirim ke Approval (Salary).'
+                        : 'Persetujuan Finance berhasil diproses. Email Approval (Salary) belum dikirim karena alamat email belum tersedia.',
                     'data'    => $applicant,
                 ], 200);
             }
@@ -254,6 +262,13 @@ class FinanceOfferingSallaryController extends Controller
                         'by'            => $user ?? 'Finance',
                         'reject_reason' => $rejectReason,
                     ]
+                );
+
+                RecruitmentStatusService::markFinanceRejected(
+                    (int) $id,
+                    $user ?? 'Finance',
+                    $rejectReason,
+                    $now
                 );
 
                 DB::commit();

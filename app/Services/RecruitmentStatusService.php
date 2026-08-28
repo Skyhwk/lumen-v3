@@ -525,6 +525,63 @@ class RecruitmentStatusService
         ]);
     }
 
+    public static function markFinanceRejected(int $recruitmentId, string $by, ?string $reason = null, $at = null): void
+    {
+        $at = $at ? Carbon::parse($at) : Carbon::now();
+        $by = trim($by);
+        $reason = trim((string) ($reason ?? ''));
+
+        DB::table('new_recruitment')->where('id', $recruitmentId)->update([
+            'is_reject_finance' => true,
+            'is_reject_finance_by' => $by !== '' ? $by : null,
+            'is_reject_finance_at' => $at,
+            'is_reject_finance_reason' => $reason !== '' ? $reason : null,
+            'updated_at' => $at,
+        ]);
+    }
+
+    public static function clearFinanceRejected(int $recruitmentId, $at = null): void
+    {
+        $at = $at ? Carbon::parse($at) : Carbon::now();
+
+        DB::table('new_recruitment')->where('id', $recruitmentId)->update([
+            'is_reject_finance' => false,
+            'is_reject_finance_by' => null,
+            'is_reject_finance_at' => null,
+            'is_reject_finance_reason' => null,
+            'updated_at' => $at,
+        ]);
+    }
+
+    public static function getFinanceRejectTracking($recruitment): ?array
+    {
+        $flag = is_object($recruitment)
+            ? ($recruitment->is_reject_finance ?? null)
+            : ($recruitment['is_reject_finance'] ?? null);
+
+        if ((int) $flag !== 1) {
+            return null;
+        }
+
+        $by = is_object($recruitment)
+            ? ($recruitment->is_reject_finance_by ?? null)
+            : ($recruitment['is_reject_finance_by'] ?? null);
+
+        $at = is_object($recruitment)
+            ? ($recruitment->is_reject_finance_at ?? null)
+            : ($recruitment['is_reject_finance_at'] ?? null);
+
+        $reason = is_object($recruitment)
+            ? ($recruitment->is_reject_finance_reason ?? null)
+            : ($recruitment['is_reject_finance_reason'] ?? null);
+
+        return [
+            'by' => ($by !== null && trim((string) $by) !== '') ? (string) $by : null,
+            'at' => ($at !== null && trim((string) $at) !== '') ? (string) $at : null,
+            'reason' => ($reason !== null && trim((string) $reason) !== '') ? (string) $reason : null,
+        ];
+    }
+
     public static function getRejectedKandidatTracking($recruitment): ?array
     {
         if (!self::isRejectedKandidat($recruitment)) {
@@ -921,6 +978,11 @@ class RecruitmentStatusService
 
     public static function getFinanceRejectReason($recruitment): ?string
     {
+        $tracking = self::getFinanceRejectTracking($recruitment);
+        if ($tracking && !empty($tracking['reason'])) {
+            return $tracking['reason'];
+        }
+
         if (!self::isAwaitingFinanceResubmit($recruitment)) {
             return null;
         }

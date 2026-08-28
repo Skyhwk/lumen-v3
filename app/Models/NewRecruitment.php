@@ -14,6 +14,8 @@ class NewRecruitment extends Model
         'pengalaman_kerja' => 'array',
         'referensi' => 'array',
         'tanggal_join_tercepat' => 'date',
+        'is_reject_finance' => 'boolean',
+        'is_rejected_kandidat' => 'boolean',
     ];
 
     public function personnelRequest()
