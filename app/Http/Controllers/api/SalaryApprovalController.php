@@ -193,7 +193,9 @@ class SalaryApprovalController extends Controller
         $lastStatus = (string) ($last['status'] ?? '');
         $result = null;
         if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $lastStatus, $matches)) {
-            $result = $matches[1] === 'negotiated' ? 'negotiate' : ($matches[1] === 'approved' ? 'approve' : 'reject');
+            if ($matches[1] !== 'rejected' || (int) ($recruitment->rejected_salary ?? 0) === 1) {
+                $result = $matches[1] === 'negotiated' ? 'negotiate' : ($matches[1] === 'approved' ? 'approve' : 'reject');
+            }
         }
         if ($result) {
             return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
