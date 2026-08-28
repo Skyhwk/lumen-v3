@@ -119,8 +119,7 @@ class SummaryQSDController extends Controller
         $addedIds = [];
 
         foreach ($this->managerIds as $manager) {
-            $team = GetBawahan::where('id', $manager)
-                ->where('is_active', 1)
+            $team = GetBawahan::on('id', $manager)
                 ->all()
                 ->filter(function ($item) use (&$addedIds) {
                     if (in_array($item->id, $addedIds)) {
