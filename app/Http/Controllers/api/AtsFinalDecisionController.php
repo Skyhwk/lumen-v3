@@ -321,7 +321,7 @@ class AtsFinalDecisionController extends Controller
                 if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($row)) {
                     return [
                         'code' => 'awaiting_ibu_direktur',
-                        'label' => 'Menunggu Ibu Direktur',
+                        'label' => 'Waitting Approval',
                         'email_sent_at' => null,
                     ];
                 }
@@ -329,7 +329,7 @@ class AtsFinalDecisionController extends Controller
                 if (RecruitmentStatusService::isAwaitingDirectorSalaryApproval($row)) {
                     return [
                         'code' => 'awaiting_direktur',
-                        'label' => 'Menunggu Direktur (Salary)',
+                        'label' => 'Waitting Approval',
                         'email_sent_at' => $emailSentAt,
                     ];
                 }
@@ -508,14 +508,14 @@ class AtsFinalDecisionController extends Controller
         if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($applicant)) {
             return response()->json([
                 'status'  => 422,
-                'message' => 'Data tidak dapat diedit karena masih menunggu persetujuan Ibu Direktur.',
+                'message' => 'Data tidak dapat diedit karena masih menunggu approval.',
             ], 422);
         }
 
         if (RecruitmentStatusService::isAwaitingDirectorSalaryApproval($applicant)) {
             return response()->json([
                 'status'  => 422,
-                'message' => 'Data tidak dapat diedit karena masih menunggu persetujuan Direktur atas Offering Salary.',
+                'message' => 'Data tidak dapat diedit karena masih menunggu approval (Salary).',
             ], 422);
         }
 
@@ -950,7 +950,7 @@ class AtsFinalDecisionController extends Controller
         if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($applicant)) {
             return response()->json([
                 'status'  => 400,
-                'message' => 'Email tidak dapat dikirim karena masih menunggu persetujuan Ibu Direktur.',
+                'message' => 'Email tidak dapat dikirim karena masih menunggu approval.',
             ], 400);
         }
 
@@ -958,14 +958,14 @@ class AtsFinalDecisionController extends Controller
         if ($applicantStatus === 'finance_review' || $applicantStatus === 'finance review') {
             return response()->json([
                 'status'  => 400,
-                'message' => 'Status kandidat saat ini sedang dalam Finance Review. Pengiriman email ke Direktur dinonaktifkan.',
+                'message' => 'Status kandidat saat ini sedang dalam Finance Review. Pengiriman email approval (Salary) dinonaktifkan.',
             ], 400);
         }
 
         if (!\App\Services\RecruitmentStatusService::hasFinanceApproved($applicant)) {
             return response()->json([
                 'status'  => 400,
-                'message' => 'Email ke Direktur hanya dapat dikirim setelah Finance menyetujui gaji yang diajukan HRD.',
+                'message' => 'Email approval (Salary) hanya dapat dikirim setelah Finance menyetujui gaji yang diajukan HRD.',
             ], 400);
         }
 
@@ -1028,7 +1028,7 @@ class AtsFinalDecisionController extends Controller
         if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($applicant)) {
             return response()->json([
                 'status'  => 422,
-                'message' => 'Kandidat belum disetujui Ibu Direktur. Approve kandidat tidak dapat dilakukan.',
+                'message' => 'Kandidat belum disetujui approval. Approve kandidat tidak dapat dilakukan.',
             ], 422);
         }
 
