@@ -67,12 +67,14 @@ class DirectorDecisionController extends Controller
             }
 
             $finalStatus = null;
-            if (preg_match('/_(approved|rejected)$/', $lastHistoryStatus, $matches)) {
-                $finalStatus = $matches[1];
-            } elseif (in_array($lastHistoryStatus, ['approved', 'rejected'], true)) {
-                $finalStatus = $lastHistoryStatus;
-            } elseif (in_array($recruitment->status, ['approved', 'rejected'], true)) {
-                $finalStatus = $recruitment->status;
+            $isDecisionRejected = (int) ($recruitment->rejected_decision ?? 0) === 1;
+
+            if ($isDecisionRejected) {
+                $finalStatus = 'rejected';
+            } elseif (preg_match('/_approved$/', $lastHistoryStatus)) {
+                $finalStatus = 'approved';
+            } elseif ($lastHistoryStatus === 'approved' || $recruitment->status === 'approved') {
+                $finalStatus = 'approved';
             }
 
             if ($finalStatus) {
