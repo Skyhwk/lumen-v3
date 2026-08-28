@@ -66,8 +66,8 @@ class WsFinalUdaraKebauanController extends Controller
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-			->when($request->filled('from'), function ($q) use ($request) {
-				$fromYear = $request->from;
+			->when($request->filled('year'), function ($q) use ($request) {
+				$fromYear = $request->year;
 				return $q->whereYear('tanggal_sampling', $fromYear);
 			})
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
