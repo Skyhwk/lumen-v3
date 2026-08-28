@@ -2,6 +2,7 @@
 
 namespace App\Console;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Laravel\Lumen\Console\Kernel as ConsoleKernel;
 
 class Kernel extends ConsoleKernel
@@ -48,6 +49,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncOrderDetail::class,
         Commands\UpdateFtcVerifierFromScanTc::class,
         Commands\TestCsTicketGeneratorCommand::class,
+        Commands\SendKeptManagementDecisionReminders::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         // Commands\LhpBackfillCommand::class,
@@ -55,6 +57,14 @@ class Kernel extends ConsoleKernel
         // Commands\LhpRefreshLingHeaderCommand::class,
         // Commands\LhpRefreshIsokinetikCustomCommand::class,
     ];
+
+    protected function schedule(Schedule $schedule)
+    {
+        $schedule->command('recruitment:send-kept-management-reminders')
+            ->dailyAt('08:00')
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping();
+    }
 
     protected function commands()
     {
