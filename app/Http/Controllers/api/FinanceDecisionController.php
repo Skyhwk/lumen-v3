@@ -190,6 +190,8 @@ class FinanceDecisionController extends Controller
                     );
                 }
 
+                RecruitmentStatusService::clearFinanceRejected((int) $id, $now);
+
                 // Advance candidate status to internal_sallary_offer so HRD can request Director approval
                 (new RecruitmentStatusService())->update(
                     $id, 
@@ -242,6 +244,13 @@ class FinanceDecisionController extends Controller
                         'by'            => $user ?? 'Finance',
                         'reject_reason' => $rejectReason,
                     ]
+                );
+
+                RecruitmentStatusService::markFinanceRejected(
+                    (int) $id,
+                    $user ?? 'Finance',
+                    $rejectReason,
+                    $now
                 );
 
                 DB::commit();
