@@ -136,8 +136,8 @@ class DirectorDecisionController extends Controller
 
             if ($decision === 'reject') {
                 app(AtsNotificationService::class)->notifyHrdTeam(
-                    'Kandidat Ditolak Direktur',
-                    "Direktur menolak kandidat {$recruitment->nama_lengkap}. Alasan: {$rejectReason}",
+                    'Kandidat Ditolak Approval (Salary)',
+                    "Kandidat {$recruitment->nama_lengkap} ditolak Approval (Salary). Alasan: {$rejectReason}",
                     AtsNotificationService::URL_FINAL_DECISION
                 );
             }
