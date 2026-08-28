@@ -70,8 +70,8 @@ class CustomerServiceTicketController extends Controller
             }
 
             return Datatables::of($query)
-                ->addColumn('assigned_to_name', function ($row) {
-                    return CustomerServiceConversationService::resolveStaffName($row->assigned_to) ?? '-';
+                ->addColumn('processed_by_name', function ($row) {
+                    return CustomerServiceConversationService::resolveStaffName($row->processed_by) ?? '-';
                 })
                 ->addColumn('unread_count', function ($row) {
                     return CustomerServiceConversationService::getUnreadCount(
