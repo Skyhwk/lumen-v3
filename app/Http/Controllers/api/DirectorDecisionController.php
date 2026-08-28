@@ -78,8 +78,8 @@ class DirectorDecisionController extends Controller
             if ($finalStatus) {
                 $result = $this->result($recruitment, $finalStatus, $lastHistory['at'] ?? $this->decisionAt($recruitment, $finalStatus), true);
                 $result['requested_decision'] = $decision;
-                $result['returned_to_hrd'] = $lastHistoryStatus === 'management_decision_rejected';
-                $result['next_status'] = $result['returned_to_hrd'] ? 'interview_hrd' : $recruitment->status;
+                $result['returned_to_hrd'] = false;
+                $result['next_status'] = $recruitment->status;
                 return response()->json($result);
             }
 
@@ -111,7 +111,7 @@ class DirectorDecisionController extends Controller
                 return response()->json($result);
             }
 
-            $status = $decision === 'approve' ? 'internal_sallary_offer' : 'interview_hrd';
+            $status = $decision === 'approve' ? 'internal_sallary_offer' : 'management_decision';
             $historyStatus = $recruitment->status . '_' . ($decision === 'approve' ? 'approved' : 'rejected');
             DB::table('new_recruitment')->where('id', $recruitment->id)->update(
                 $decision === 'approve'
@@ -122,8 +122,6 @@ class DirectorDecisionController extends Controller
                         'rejected_decision' => 1,
                         'rejected_decision_reason' => $rejectReason,
                         'is_keep' => 0,
-                        'is_approved_interview_hrd' => 0,
-                        'is_approve_interview_user' => 0,
                     ]
             );
             (new RecruitmentStatusService())->update(
@@ -136,15 +134,15 @@ class DirectorDecisionController extends Controller
 
             if ($decision === 'reject') {
                 app(AtsNotificationService::class)->notifyHrdTeam(
-                    'Kandidat Dikembalikan ke Interview HRD',
-                    "Direktur mengembalikan kandidat {$recruitment->nama_lengkap} ke Interview HRD. Alasan: {$rejectReason}",
-                    AtsNotificationService::URL_HR_INTERVIEW
+                    'Kandidat Ditolak Direktur',
+                    "Direktur menolak kandidat {$recruitment->nama_lengkap}. Alasan: {$rejectReason}",
+                    AtsNotificationService::URL_FINAL_DECISION
                 );
             }
 
             $result = $this->result($recruitment, $decision === 'approve' ? 'approved' : 'rejected', $now->toDateTimeString(), false);
             $result['requested_decision'] = $decision;
-            $result['returned_to_hrd'] = $decision === 'reject';
+            $result['returned_to_hrd'] = false;
             $result['next_status'] = $status;
             return response()->json($result);
         });
