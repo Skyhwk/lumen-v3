@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class RecruitmentStatusService
 {
@@ -718,8 +719,42 @@ class RecruitmentStatusService
 
     public static function canHrdRejectFromFinalDecision($recruitment): bool
     {
-        if (self::hasHrdFinalDecisionRejected($recruitment)) {
+        if (self::hasHrdFinalDecisionRejected($recruitment) || self::isRejectedKandidat($recruitment)) {
             return false;
+        }
+
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
+            $isRejectFinance = is_object($recruitment)
+                ? (bool) ($recruitment->is_reject_finance ?? false)
+                : (bool) ($recruitment['is_reject_finance'] ?? false);
+
+            if ($status === 'management_decision' && $isRejectFinance) {
+                return true;
+            }
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_decision')) {
+            $rejectedDecision = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_decision ?? false)
+                : (bool) ($recruitment['rejected_decision'] ?? false);
+
+            if ($status === 'management_decision' && $rejectedDecision) {
+                return true;
+            }
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
+            $rejectedSalary = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_salary ?? false)
+                : (bool) ($recruitment['rejected_salary'] ?? false);
+
+            if ($status === 'internal_sallary_offer' && $rejectedSalary) {
+                return true;
+            }
         }
 
         return self::isAwaitingDirectorSalaryResubmit($recruitment)
@@ -729,6 +764,63 @@ class RecruitmentStatusService
 
     public static function getPriorRejectionSummaryForHrd($recruitment): ?array
     {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
+            $isRejectFinance = is_object($recruitment)
+                ? (bool) ($recruitment->is_reject_finance ?? false)
+                : (bool) ($recruitment['is_reject_finance'] ?? false);
+
+            if ($status === 'management_decision' && $isRejectFinance) {
+                return [
+                    'source' => 'Finance',
+                    'reason' => self::getFinanceRejectReason($recruitment),
+                ];
+            }
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_decision')) {
+            $rejectedDecision = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_decision ?? false)
+                : (bool) ($recruitment['rejected_decision'] ?? false);
+
+            if ($status === 'management_decision'
+                && $rejectedDecision
+                && !self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
+                $reason = is_object($recruitment)
+                    ? ($recruitment->rejected_decision_reason ?? null)
+                    : ($recruitment['rejected_decision_reason'] ?? null);
+
+                return [
+                    'source' => 'Ibu Direktur',
+                    'reason' => $reason !== null && trim((string) $reason) !== '' ? trim((string) $reason) : null,
+                ];
+            }
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
+            $rejectedSalary = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_salary ?? false)
+                : (bool) ($recruitment['rejected_salary'] ?? false);
+
+            if ($status === 'internal_sallary_offer'
+                && $rejectedSalary
+                && !self::isAwaitingFinanceResubmit($recruitment)
+                && !self::isAwaitingCandidateOfferingResubmit($recruitment)
+                && !self::isAwaitingDirectorSalaryNegotiateResubmit($recruitment)) {
+                $reason = is_object($recruitment)
+                    ? ($recruitment->rejected_salary_reason ?? null)
+                    : ($recruitment['rejected_salary_reason'] ?? null);
+
+                return [
+                    'source' => 'Penolakan Gaji',
+                    'reason' => $reason !== null && trim((string) $reason) !== '' ? trim((string) $reason) : null,
+                ];
+            }
+        }
+
         if (self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
             return [
                 'source' => 'Direktur',
@@ -1031,5 +1123,151 @@ class RecruitmentStatusService
             'meta_history' => json_encode(array_values($history)),
             'updated_at'   => $at,
         ]);
+
+        self::syncRejectedSectionFlags($recruitmentId);
+    }
+
+    /**
+     * Sinkronkan flag section Final Decision (aktif vs ditolak sementara).
+     * rejected_salary  = penolakan Finance / Kandidat / negosiasi gaji
+     * rejected_decision = penolakan approval salary oleh Direktur
+     */
+    public static function syncRejectedSectionFlags(int $recruitmentId): void
+    {
+        if (!Schema::hasColumn('new_recruitment', 'rejected_decision')) {
+            return;
+        }
+
+        $row = DB::table('new_recruitment')->where('id', $recruitmentId)->first();
+        if (!$row) {
+            return;
+        }
+
+        if (self::isRejectedKandidat($row) || self::hasHrdFinalDecisionRejected($row)) {
+            $clearPayload = [
+                'rejected_decision'        => false,
+                'rejected_decision_reason' => null,
+                'rejected_salary'          => false,
+                'rejected_salary_reason'   => null,
+            ];
+
+            if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
+                $clearPayload['is_reject_finance'] = false;
+            }
+
+            DB::table('new_recruitment')->where('id', $recruitmentId)->update($clearPayload);
+
+            return;
+        }
+
+        $rejectedSalary = false;
+        $rejectedSalaryReason = null;
+        $rejectedDecision = false;
+        $rejectedDecisionReason = null;
+
+        if (self::isAwaitingFinanceResubmit($row)) {
+            $rejectedSalary = true;
+            $rejectedSalaryReason = self::getFinanceRejectReason($row);
+        }
+
+        if (self::isAwaitingCandidateOfferingResubmit($row)) {
+            $rejectedSalary = true;
+            $candidateReason = self::getCandidateOfferingRejectReason($row);
+            $rejectedSalaryReason = $rejectedSalaryReason && $candidateReason
+                ? $rejectedSalaryReason . ' | ' . $candidateReason
+                : ($candidateReason ?: $rejectedSalaryReason);
+        }
+
+        if (self::isAwaitingDirectorSalaryNegotiateResubmit($row)) {
+            $rejectedSalary = true;
+            $history = self::parseMetaHistory($row);
+            $idx = self::getLatestDirectorSalaryNegotiateIndex($history);
+            $negoAmount = $idx !== null ? ($history[$idx]['negotiated_amount'] ?? null) : null;
+            $negoReason = $negoAmount !== null && $negoAmount !== ''
+                ? 'Negosiasi gaji direktur: ' . $negoAmount
+                : 'Negosiasi gaji direktur';
+            $rejectedSalaryReason = $rejectedSalaryReason
+                ? $rejectedSalaryReason . ' | ' . $negoReason
+                : $negoReason;
+        }
+
+        if (self::isAwaitingDirectorSalaryRejectResubmit($row)) {
+            $rejectedDecision = true;
+            $rejectedDecisionReason = self::getDirectorSalaryRejectReason($row);
+        }
+
+        $updatePayload = [
+            'rejected_decision'        => $rejectedDecision,
+            'rejected_decision_reason' => $rejectedDecision ? ($rejectedDecisionReason ?: null) : null,
+            'rejected_salary'          => $rejectedSalary,
+            'rejected_salary_reason'   => $rejectedSalary ? ($rejectedSalaryReason ?: null) : null,
+        ];
+
+        if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
+            $updatePayload['is_reject_finance'] = self::isAwaitingFinanceResubmit($row)
+                && strtolower(trim((string) ($row->status ?? ''))) === 'management_decision';
+        }
+
+        DB::table('new_recruitment')->where('id', $recruitmentId)->update($updatePayload);
+    }
+
+    public static function isFinanceRejectedOnManagementDecision($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'management_decision') {
+            return false;
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
+            $flag = is_object($recruitment)
+                ? ($recruitment->is_reject_finance ?? false)
+                : ($recruitment['is_reject_finance'] ?? false);
+
+            return (bool) $flag;
+        }
+
+        return self::isAwaitingFinanceResubmit($recruitment);
+    }
+
+    /**
+     * Kandidat pernah ditolak (Finance / Direktur / Kandidat) tapi HRD masih boleh ajukan ulang.
+     */
+    public static function canHrdResubmitRejectedOffering($recruitment): bool
+    {
+        if (self::isAwaitingDirectorSalaryResubmit($recruitment)
+            || self::isAwaitingFinanceResubmit($recruitment)
+            || self::isAwaitingCandidateOfferingResubmit($recruitment)
+            || self::isFinanceRejectedOnManagementDecision($recruitment)) {
+            return true;
+        }
+
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
+            $rejectedSalary = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_salary ?? false)
+                : (bool) ($recruitment['rejected_salary'] ?? false);
+
+            if ($rejectedSalary && $status === 'internal_sallary_offer') {
+                return true;
+            }
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
+            $isRejectFinance = is_object($recruitment)
+                ? (bool) ($recruitment->is_reject_finance ?? false)
+                : (bool) ($recruitment['is_reject_finance'] ?? false);
+
+            if ($isRejectFinance && $status === 'management_decision') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
