@@ -1068,6 +1068,37 @@ class WsFinalApprovalService
             : null;
     }
 
+    public static function applyEmisiYearMonthSort(iterable $rows, $filterYear)
+    {
+        $rows = collect($rows)->values();
+        $filterYear = (int) $filterYear;
+        $currentYear = (int) date('Y');
+        $currentMonth = (int) date('n');
+
+        if ($filterYear === $currentYear) {
+            $monthPriority = [$currentMonth => 0];
+            $priority = 1;
+            for ($month = 1; $month <= 12; $month++) {
+                if ($month !== $currentMonth) {
+                    $monthPriority[$month] = $priority++;
+                }
+            }
+        } else {
+            $monthPriority = [];
+            for ($month = 1; $month <= 12; $month++) {
+                $monthPriority[$month] = $month;
+            }
+        }
+
+        return $rows->map(function ($row) use ($monthPriority) {
+            $timestamp = strtotime($row->tanggal_sampling ?? '');
+            $month = $timestamp ? (int) date('n', $timestamp) : 99;
+            $row->month_sort = $monthPriority[$month] ?? 99;
+
+            return $row;
+        })->values();
+    }
+
     public static function appendProgressAndFilter(iterable $rows, $request)
     {
         $rows = collect($rows)->values();

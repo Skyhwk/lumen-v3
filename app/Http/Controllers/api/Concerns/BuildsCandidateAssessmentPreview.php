@@ -24,6 +24,7 @@ trait BuildsCandidateAssessmentPreview
             'sallary_offer' => 'Penawaran Gaji',
             'approved' => 'Disetujui',
             'hired' => 'Hired',
+            'training' => 'Training',
             'rejected' => 'Ditolak',
             'void' => 'Void',
         ];

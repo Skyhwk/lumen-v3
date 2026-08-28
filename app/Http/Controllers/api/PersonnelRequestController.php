@@ -995,10 +995,11 @@ class PersonnelRequestController extends Controller
 
                 // kirim email ke HRD (developer akan mengisi email asli nanti)
                 $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
-                 
-                $subject = "Kandidat Interview User - " . $recruitment->nama_lengkap;
+ 
+                $subject = "Permohonan Persetujuan Kandidat - " . $recruitment->nama_lengkap;
+                $targetEmail = trim((string) env('EMAIL_DIREKTUR_IBU'));
                 
-                SendEmail::where('to', env('EMAIL_DIREKTUR_IBU'))
+                SendEmail::where('to', $targetEmail)
                             ->where('subject', $subject)
                             ->where('body', $emailContent)
                             ->noReply()
