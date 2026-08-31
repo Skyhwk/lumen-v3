@@ -160,6 +160,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
                     $item->method = $bakuMutu->method ?? null;
                     $item->nama_header = $bakuMutu->nama_header ?? null;
                 }
+
                 $getSatuan = new HelperSatuan();
                 return Datatables::of($processedData)
                     ->addColumn('nilai_uji', function ($item) use ($getSatuan) {
