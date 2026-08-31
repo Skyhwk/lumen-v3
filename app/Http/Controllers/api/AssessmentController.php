@@ -383,6 +383,24 @@ class AssessmentController extends Controller
             ? (int) $personnelRequest->assesment_question_category
             : null;
 
+        $questionCount = (int) ($personnelRequest->user_assessment_question_count ?? 0);
+        $hasTimeLimit = (int) ($personnelRequest->user_assessment_has_time_limit ?? 0) === 1;
+        $durationMinutes = $hasTimeLimit ? (int) ($personnelRequest->user_assessment_duration_minutes ?? 0) : 0;
+
+        if ($questionCount >= 1) {
+            if ($hasTimeLimit && $durationMinutes < 1) {
+                throw new \RuntimeException('Konfigurasi durasi test user pada kategori bank soal belum diisi.');
+            }
+
+            return (object) [
+                'owner_karyawan' => $personnelRequest->created_by,
+                'question_count' => $questionCount,
+                'duration_minutes' => $durationMinutes,
+                'has_time_limit' => $hasTimeLimit,
+                'question_category_id' => $questionCategoryId,
+            ];
+        }
+
         $service = app(UserAssessmentCategoryService::class);
         $ownerCategory = $service->findOwnerCategory((string) $personnelRequest->created_by);
         $categoryConfig = $service->toConfigObject($ownerCategory);
@@ -397,25 +415,7 @@ class AssessmentController extends Controller
             ];
         }
 
-        $questionCount = (int) ($personnelRequest->user_assessment_question_count ?? 0);
-        if ($questionCount < 1) {
-            throw new \RuntimeException('Konfigurasi jumlah soal test user pada kategori bank soal belum diisi.');
-        }
-
-        $hasTimeLimit = (int) ($personnelRequest->user_assessment_has_time_limit ?? 0) === 1;
-        $durationMinutes = $hasTimeLimit ? (int) ($personnelRequest->user_assessment_duration_minutes ?? 0) : 0;
-
-        if ($hasTimeLimit && $durationMinutes < 1) {
-            throw new \RuntimeException('Konfigurasi durasi test user pada kategori bank soal belum diisi.');
-        }
-
-        return (object) [
-            'owner_karyawan' => $personnelRequest->created_by,
-            'question_count' => $questionCount,
-            'duration_minutes' => $durationMinutes,
-            'has_time_limit' => $hasTimeLimit,
-            'question_category_id' => $questionCategoryId,
-        ];
+        throw new \RuntimeException('Konfigurasi jumlah soal test user pada kategori bank soal belum diisi.');
     }
 
     private function managerHierarchyNamesForKaryawan(string $karyawanName): array
