@@ -27,8 +27,8 @@ class OfferingSalaryEmail
             return '';
         }
 
-        $photoUrl = app(RecruitmentPictureService::class)->toDataUri($foto);
-
+        // $photoUrl = app(RecruitmentPictureService::class)->toDataUri($foto);
+        $photoUrl = app(RecruitmentPictureService::class)->toPathUrl($foto);
         return $photoUrl ?: '';
     }
 

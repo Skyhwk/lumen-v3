@@ -620,7 +620,7 @@ class GenerateMessageAtsEmail
 
     private static function recruitmentPhotoForEmail($recruitment): string
     {
-        $photoUrl = app(RecruitmentPictureService::class)->toDataUri($recruitment->picture ?? null);
+        $photoUrl = app(RecruitmentPictureService::class)->toPathUrl($recruitment->picture ?? null);
 
         return $photoUrl ?: '';
     }
