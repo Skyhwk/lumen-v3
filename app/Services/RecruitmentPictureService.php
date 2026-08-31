@@ -71,4 +71,36 @@ class RecruitmentPictureService
             @unlink($path);
         }
     }
+
+    /**
+     * Build a public URL for a stored recruitment photo using APP_URL_PATH.
+     */
+    public function toPathUrl($filename)
+    {
+        if (!$filename) {
+            return null;
+        }
+
+        if (str_starts_with($filename, 'data:image') || filter_var($filename, FILTER_VALIDATE_URL)) {
+            return $filename;
+        }
+
+        $base = basename((string) $filename);
+        $relativePath = 'recruitment/' . $base;
+        $path = public_path('recruitment' . DIRECTORY_SEPARATOR . $base);
+        if (!is_file($path) || !is_readable($path)) {
+            $relativePath = 'recruitment/foto/' . $base;
+            $path = public_path('recruitment' . DIRECTORY_SEPARATOR . 'foto' . DIRECTORY_SEPARATOR . $base);
+            if (!is_file($path) || !is_readable($path)) {
+                return null;
+            }
+        }
+
+        $baseUrl = rtrim((string) env('APP_URL_PATH', env('APP_URL', '')), '/');
+        if ($baseUrl === '') {
+            return null;
+        }
+
+        return $baseUrl . '/' . $relativePath;
+    }
 }

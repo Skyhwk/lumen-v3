@@ -331,4 +331,126 @@ class FinanceOfferingSallaryController extends Controller
             return false;
         }
     }
+
+    /**
+     * Testing endpoint: preview / kirim email Permohonan Persetujuan Offering Salary.
+     * Mirror sendDirectorApprovalEmail() — load dari DB by new_recruitment_id.
+     */
+    public function testEmailSalaryOffer(Request $request)
+    {
+        $recruitmentId = (int) ($request->input('new_recruitment_id') ?? $request->input('id') ?? 0);
+        if ($recruitmentId <= 0) {
+            return response()->json(['message' => 'new_recruitment_id wajib diisi'], 422);
+        }
+
+        $send = filter_var($request->input('send', false), FILTER_VALIDATE_BOOLEAN);
+        $format = strtolower((string) $request->input('format', 'json')) === 'html' ? 'html' : 'json';
+        $ensureToken = filter_var($request->input('ensure_token', true), FILTER_VALIDATE_BOOLEAN);
+        $persistToken = filter_var($request->input('persist_token', false), FILTER_VALIDATE_BOOLEAN);
+
+        $applicant = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'sallaryOffer',
+            'candidateProfile',
+            'candidateEducations',
+            'candidateWorkExperiences',
+            'candidateMedicalInformation',
+        ])->find($recruitmentId);
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'Data kandidat tidak ditemukan',
+                'new_recruitment_id' => $recruitmentId,
+            ], 404);
+        }
+
+        $tokenGenerated = false;
+        if ($ensureToken && empty($applicant->token_approval)) {
+            $tokenService = new GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval-test' . str_replace('.', '', microtime(true));
+            $applicant->token_approval = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $tokenGenerated = true;
+
+            if ($persistToken) {
+                $applicant->save();
+            }
+        }
+
+        try {
+            $buttons = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $applicant->token_approval);
+            $emailContent = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $buttons);
+            $subject = 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat');
+            $targetEmail = trim((string) ($request->input('target_email') ?: env('EMAIL_DIREKTUR_BAPAK', '')));
+            $sender = trim((string) ($request->input('sender') ?: 'Finance'));
+
+            $activeOffer = SallaryOfferService::getActive((int) $applicant->id);
+
+            $meta = [
+                'new_recruitment_id' => $applicant->id,
+                'nama_lengkap' => $applicant->nama_lengkap,
+                'personnel_request_id' => $applicant->personnel_request_id,
+                'subject' => $subject,
+                'target_email' => $targetEmail,
+                'sender' => $sender,
+                'sent' => false,
+                'token_approval_preview' => !empty($applicant->token_approval),
+                'token_persisted' => $persistToken && $tokenGenerated,
+                'sources' => [
+                    'new_recruitment' => true,
+                    'sallary_offer' => (bool) $activeOffer,
+                    'sallary_offer_hrd' => optional($activeOffer)->sallary_offer_hrd,
+                    'final_sallary' => optional($activeOffer)->final_sallary,
+                    'personal_request' => (bool) $applicant->personalRequest,
+                    'master_jabatan' => (bool) optional(optional($applicant->personalRequest)->masterJabatan)->nama_jabatan,
+                    'candidate_profile' => (bool) $applicant->candidateProfile,
+                    'candidate_educations' => $applicant->candidateEducations ? $applicant->candidateEducations->count() : 0,
+                    'candidate_work_experiences' => $applicant->candidateWorkExperiences ? $applicant->candidateWorkExperiences->count() : 0,
+                    'candidate_medical' => (bool) $applicant->candidateMedicalInformation,
+                ],
+                'recruitment_fields' => [
+                    'gaji_terakhir' => $applicant->gaji_terakhir,
+                    'ekspetasi_gaji' => $applicant->ekspetasi_gaji,
+                    'picture' => $applicant->picture,
+                    'shio' => $applicant->shio,
+                    'elemen' => $applicant->elemen,
+                ],
+            ];
+
+            if ($send) {
+                if ($targetEmail === '') {
+                    return response()->json([
+                        'message' => 'target_email atau EMAIL_DIREKTUR_BAPAK belum diisi',
+                        'meta' => $meta,
+                    ], 422);
+                }
+
+                SendEmail::where('to', $targetEmail)
+                    ->where('subject', $subject)
+                    ->where('body', $emailContent)
+                    ->where('karyawan', $sender)
+                    ->noReply()
+                    ->send();
+
+                SallaryOfferService::upsertActive((int) $applicant->id, ['email_sent_at' => Carbon::now()], $sender);
+
+                $meta['sent'] = true;
+            }
+
+            if ($format === 'html') {
+                return response($emailContent)->header('Content-Type', 'text/html; charset=UTF-8');
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'meta' => $meta,
+                'html' => $emailContent,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
 }

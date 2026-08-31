@@ -1066,4 +1066,126 @@ class PersonnelRequestController extends Controller
             return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
         }
     }
+
+    /**
+     * Testing endpoint: preview / kirim email Permohonan Persetujuan Kandidat.
+     * Load data dari DB berdasarkan new_recruitment_id (mirror submitUserDecision approve).
+     */
+    public function testEmailHasilInterviewUser(Request $request)
+    {
+        $recruitmentId = (int) ($request->input('new_recruitment_id') ?? $request->input('id') ?? 0);
+        if ($recruitmentId <= 0) {
+            return response()->json(['message' => 'new_recruitment_id wajib diisi'], 422);
+        }
+
+        $decision = $request->input('decision') === 'reject' ? 'reject' : 'approve';
+        $send = filter_var($request->input('send', false), FILTER_VALIDATE_BOOLEAN);
+        $format = strtolower((string) $request->input('format', 'json')) === 'html' ? 'html' : 'json';
+        $ensureToken = filter_var($request->input('ensure_token', true), FILTER_VALIDATE_BOOLEAN);
+
+        $recruitment = NewRecruitment::find($recruitmentId);
+        if (!$recruitment) {
+            return response()->json([
+                'message' => 'Data kandidat tidak ditemukan',
+                'new_recruitment_id' => $recruitmentId,
+            ], 404);
+        }
+
+        $pr = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])
+            ->find($recruitment->personnel_request_id);
+        if (!$pr) {
+            return response()->json(['message' => 'Data personnel request tidak ditemukan'], 422);
+        }
+
+        $interview = RecruitmentInterview::where('new_recruitment_id', $recruitmentId)
+            ->where('stage', 'user')
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $hrdInterview = RecruitmentInterview::where('new_recruitment_id', $recruitmentId)
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($ensureToken && empty($recruitment->token_approval)) {
+            $tokenService = new GenerateToken();
+            $tokenKey = $pr->id . $recruitment->nama_lengkap . 'approval-test' . str_replace('.', '', microtime(true));
+            $recruitment->token_approval = $tokenService->encrypt(
+                md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d'))
+            );
+        }
+
+        try {
+            $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
+                $recruitment,
+                $pr,
+                $interview,
+                $decision
+            );
+
+            $subject = 'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap;
+            $targetEmail = trim((string) ($request->input('target_email') ?: env('EMAIL_DIREKTUR_IBU', '')));
+
+            $meta = [
+                'new_recruitment_id' => $recruitment->id,
+                'nama_lengkap' => $recruitment->nama_lengkap,
+                'personnel_request_id' => $pr->id,
+                'decision' => $decision,
+                'subject' => $subject,
+                'target_email' => $targetEmail,
+                'sent' => false,
+                'sources' => [
+                    'new_recruitment' => true,
+                    'personnel_request' => true,
+                    'master_jabatan' => (bool) optional($pr->detailPosisi)->nama_jabatan,
+                    'master_cabang' => (bool) optional($pr->detailCabang)->nama_cabang,
+                    'interview_user' => (bool) $interview,
+                    'interview_hrd' => (bool) $hrdInterview,
+                    'candidate_profile' => (bool) DB::table('candidate_profiles')
+                        ->where('new_recruitment_id', $recruitmentId)->exists(),
+                    'candidate_educations' => (int) DB::table('candidate_educations')
+                        ->where('new_recruitment_id', $recruitmentId)->where('is_active', 1)->count(),
+                    'candidate_medical' => (bool) DB::table('candidate_medical_informations')
+                        ->where('new_recruitment_id', $recruitmentId)->exists(),
+                ],
+                'token_approval_preview' => !empty($recruitment->token_approval),
+                'picture' => $recruitment->picture,
+            ];
+
+            if ($send) {
+                if ($targetEmail === '') {
+                    return response()->json([
+                        'message' => 'target_email atau EMAIL_DIREKTUR_IBU belum diisi',
+                        'meta' => $meta,
+                    ], 422);
+                }
+
+                SendEmail::where('to', $targetEmail)
+                    ->where('subject', $subject)
+                    ->where('body', $emailContent)
+                    ->noReply()
+                    ->send();
+
+                $meta['sent'] = true;
+            }
+
+            if ($format === 'html') {
+                return response($emailContent)->header('Content-Type', 'text/html; charset=UTF-8');
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'meta' => $meta,
+                'html' => $emailContent,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
 }
