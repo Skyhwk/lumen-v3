@@ -20,6 +20,7 @@ class GenerateMessageAtsEmail
         return (object) [
             'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/decision/{$encodedToken}?decision=approve" : '',
             'reject'  => $portalUrl ? "{$portalUrl}/public/recruitment/decision/{$encodedToken}?decision=reject" : '',
+            'keep'    => $portalUrl ? "{$portalUrl}/public/recruitment/decision/{$encodedToken}?decision=keep" : '',
         ];
     }
 

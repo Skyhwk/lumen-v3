@@ -8,7 +8,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SalesKpi;
 use App\Models\TargetSales;
 use App\Models\SamplingPlan;
-use App\Services\GetBawahan;
+use App\Services\GetBawahanAll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -98,7 +98,7 @@ class DashboardSmsController extends Controller
     public function getSales(Request $request)
     {
         $karyawan_id = 890;
-        $bawahanIds  = GetBawahan::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
+        $bawahanIds  = GetBawahanAll::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
 
         $data = MasterKaryawan::where('is_active', true)
             ->where(function ($query) {
@@ -116,7 +116,7 @@ class DashboardSmsController extends Controller
 
         foreach ($data as $mgr) {
             $mgr->bawahan = MasterKaryawan::where('is_active', true)
-                ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
+                ->whereIn('id', GetBawahanAll::where('id', $mgr->id)->get()->pluck('id')->toArray())
                 ->where('id', '!=', $mgr->id)
                 ->whereIn('id_jabatan', [21, 24, 148])
                 ->select('id', 'nama_lengkap', 'jabatan')
@@ -289,8 +289,8 @@ class DashboardSmsController extends Controller
                     ["title" => "Quote Ordered", "value" => (($cek->qty_qt_order_nonkontrak_new ?? 0) + ($cek->qty_qt_order_nonkontrak_exist ?? 0) + ($cek->qty_qt_order_kontrak_new ?? 0) + ($cek->qty_qt_order_kontrak_exist ?? 0)) . " QS", "color" => "success", "info" => "Exist : " . (($cek->qty_qt_order_nonkontrak_exist ?? 0) + ($cek->qty_qt_order_kontrak_exist ?? 0)) . " \nNew : " . (($cek->qty_qt_order_nonkontrak_new ?? 0) + ($cek->qty_qt_order_kontrak_new ?? 0))],
                     ["title" => "Ordered (Amount)", "value" => "Rp " . number_format(($cek->amount_order_nonkontrak_new ?? 0) + ($cek->amount_order_nonkontrak_exist ?? 0) + ($cek->amount_order_kontrak_new ?? 0) + ($cek->amount_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "danger", "info" => "Exist : Rp " . number_format(($cek->amount_order_nonkontrak_exist ?? 0) + ($cek->amount_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->amount_order_nonkontrak_new ?? 0) + ($cek->amount_order_kontrak_new ?? 0), 0, ',', '.')],
                     ["title" => "Revenue", "value" => "Rp " . number_format(($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_new ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "dark", "info" => "Exist : Rp " . number_format(($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_kontrak_new ?? 0), 0, ',', '.')],
-                    ["title" => "Forecast", "value" => "Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0), 0, ',', '.'), "color" => "dark", "info" => "Exist : Rp " . number_format(($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0), 0, ',', '.')],
-                    ["title" => "Total Revenue + Forecast", "value" => "Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0) + ($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_new ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "dark", "info" => "Exist : Rp " . number_format(($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0) + ($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0) + ($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_kontrak_new ?? 0), 0, ',', '.')],
+                    ["title" => "Forecast", "value" => "Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_bysampling_order_kontrak_exist ?? 0) + ($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0), 0, ',', '.'), "color" => "dark", "info" => "Exist : Rp " . number_format(($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0), 0, ',', '.')],
+                    ["title" => "Total Revenue + Forecast", "value" => "Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_bysampling_order_kontrak_exist ?? 0) + ($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0) + ($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_new ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "dark", "info" => "Exist : Rp " . number_format(($cek->revenue_forecast_nonkontrak_exist ?? 0) + ($cek->revenue_forecast_kontrak_exist ?? 0) + ($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_forecast_nonkontrak_new ?? 0) + ($cek->revenue_forecast_kontrak_new ?? 0) + ($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_kontrak_new ?? 0), 0, ',', '.')],
                     ["title" => "Unscheduled QT", "value" => "Rp " . number_format($amountSp, 0, ',', '.'), "color" => "warning", "info" => "Total SP : " . $qtySp . " \nQT Kontrak : Rp " . number_format($amountKontrakSp, 0, ',', '.') . " \nQT Non Kontrak : Rp " . number_format($amountNonKontrakSp, 0, ',', '.')],
                     // [ "title" => "Revenue (By Sampling)", "value" => "Rp " . number_format(($cek->revenue_bysampling_order_nonkontrak_new ?? 0)+($cek->revenue_bysampling_order_nonkontrak_exist ?? 0)+($cek->revenue_bysampling_order_kontrak_new ?? 0)+($cek->revenue_bysampling_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "secondary", "info" => "Exist : Rp " . number_format(($cek->revenue_bysampling_order_nonkontrak_exist ?? 0)+($cek->revenue_bysampling_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_bysampling_order_nonkontrak_new ?? 0)+($cek->revenue_bysampling_order_kontrak_new ?? 0), 0, ',', '.') ]
                 ];
@@ -445,7 +445,7 @@ class DashboardSmsController extends Controller
                 ], 200);
 
             } else if (strpos($request->mode, "team") !== false) {
-                $bawahanIds = GetBawahan::where('id', str_replace('team_', '', $request->karyawan_id))->get()->pluck('id')->unique()->values()->toArray();
+                $bawahanIds = GetBawahanAll::where('id', str_replace('team_', '', $request->karyawan_id))->get()->pluck('id')->unique()->values()->toArray();
 
                 $tahun = explode('-', $periode)[0];
 
@@ -756,7 +756,7 @@ class DashboardSmsController extends Controller
             $salesIds = null;
 
             if ($request->mode === 'team') {
-                $salesIds = GetBawahan::where('id', str_replace('team_', '', $request->karyawan_id))
+                $salesIds = GetBawahanAll::where('id', str_replace('team_', '', $request->karyawan_id))
                     ->get()
                     ->pluck('id')
                     ->unique()

@@ -11,6 +11,11 @@
                     Reject Kandidat
                 </a>
             @endif
+            @if(!empty($btn->keep))
+                <a href="{{ $btn->keep }}" class="btn-stack" style="display:inline-block;background-color:#ea580c;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 22px;border-radius:10px;margin:0 6px 8px 6px;min-width:140px;">
+                    Keep
+                </a>
+            @endif
         </td>
     </tr>
 </table>

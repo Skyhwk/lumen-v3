@@ -35,7 +35,7 @@ class DirectorDecisionController extends Controller
     public function decide(Request $request)
     {
         $decision = strtolower(trim((string) $request->input('decision')));
-        if (!in_array($decision, ['approve', 'reject'], true)) {
+        if (!in_array($decision, ['approve', 'reject', 'keep'], true)) {
             return response()->json(['message' => 'Keputusan tidak valid.'], 422);
         }
         $rejectReason = trim((string) $request->input('reject_reason'));
@@ -57,20 +57,31 @@ class DirectorDecisionController extends Controller
             $history = is_array($history) ? $history : [];
             $lastHistory = !empty($history) ? $history[count($history) - 1] : [];
             $lastHistoryStatus = (string) ($lastHistory['status'] ?? '');
+            if ($decision === 'keep' && $lastHistoryStatus === 'management_decision_kept' && (int) ($recruitment->is_keep ?? 0) === 1) {
+                $result = $this->result($recruitment, 'kept', $lastHistory['at'] ?? null, true);
+                $result['requested_decision'] = 'keep';
+                $result['remind_at'] = !empty($lastHistory['at'])
+                    ? Carbon::parse($lastHistory['at'])->addDays(7)->toDateTimeString()
+                    : null;
+                return response()->json($result);
+            }
+
             $finalStatus = null;
-            if (preg_match('/_(approved|rejected)$/', $lastHistoryStatus, $matches)) {
-                $finalStatus = $matches[1];
-            } elseif (in_array($lastHistoryStatus, ['approved', 'rejected'], true)) {
-                $finalStatus = $lastHistoryStatus;
-            } elseif (in_array($recruitment->status, ['approved', 'rejected'], true)) {
-                $finalStatus = $recruitment->status;
+            $isDecisionRejected = (int) ($recruitment->rejected_decision ?? 0) === 1;
+
+            if ($isDecisionRejected) {
+                $finalStatus = 'rejected';
+            } elseif (preg_match('/_approved$/', $lastHistoryStatus)) {
+                $finalStatus = 'approved';
+            } elseif ($lastHistoryStatus === 'approved' || $recruitment->status === 'approved') {
+                $finalStatus = 'approved';
             }
 
             if ($finalStatus) {
                 $result = $this->result($recruitment, $finalStatus, $lastHistory['at'] ?? $this->decisionAt($recruitment, $finalStatus), true);
                 $result['requested_decision'] = $decision;
-                $result['returned_to_hrd'] = $lastHistoryStatus === 'management_decision_rejected';
-                $result['next_status'] = $result['returned_to_hrd'] ? 'interview_hrd' : $recruitment->status;
+                $result['returned_to_hrd'] = false;
+                $result['next_status'] = $recruitment->status;
                 return response()->json($result);
             }
 
@@ -84,16 +95,35 @@ class DirectorDecisionController extends Controller
             }
 
             $now = Carbon::now();
-            $status = $decision === 'approve' ? 'internal_sallary_offer' : 'interview_hrd';
+            if ($decision === 'keep') {
+                DB::table('new_recruitment')->where('id', $recruitment->id)->update([
+                    'is_keep' => 1,
+                    'updated_at' => $now,
+                ]);
+                (new RecruitmentStatusService())->update(
+                    $recruitment->id,
+                    'management_decision',
+                    $now,
+                    'management_decision_kept'
+                );
+
+                $result = $this->result($recruitment, 'kept', $now->toDateTimeString(), false);
+                $result['requested_decision'] = 'keep';
+                $result['remind_at'] = $now->copy()->addDays(7)->toDateTimeString();
+                return response()->json($result);
+            }
+
+            $status = $decision === 'approve' ? 'internal_sallary_offer' : 'management_decision';
             $historyStatus = $recruitment->status . '_' . ($decision === 'approve' ? 'approved' : 'rejected');
             DB::table('new_recruitment')->where('id', $recruitment->id)->update(
                 $decision === 'approve'
-                    ? ['approved_by' => 'Direktur', 'approved_at' => $now]
+                    ? ['approved_by' => 'Direktur', 'approved_at' => $now, 'is_keep' => 0]
                     : [
                         'rejected_by' => 'Direktur',
                         'rejected_at' => $now,
-                        'is_approved_interview_hrd' => 0,
-                        'is_approve_interview_user' => 0,
+                        'rejected_decision' => 1,
+                        'rejected_decision_reason' => $rejectReason,
+                        'is_keep' => 0,
                     ]
             );
             (new RecruitmentStatusService())->update(
@@ -106,15 +136,15 @@ class DirectorDecisionController extends Controller
 
             if ($decision === 'reject') {
                 app(AtsNotificationService::class)->notifyHrdTeam(
-                    'Kandidat Dikembalikan ke Interview HRD',
-                    "Direktur mengembalikan kandidat {$recruitment->nama_lengkap} ke Interview HRD. Alasan: {$rejectReason}",
-                    AtsNotificationService::URL_HR_INTERVIEW
+                    'Kandidat Ditolak Approval (Salary)',
+                    "Kandidat {$recruitment->nama_lengkap} ditolak Approval (Salary). Alasan: {$rejectReason}",
+                    AtsNotificationService::URL_FINAL_DECISION
                 );
             }
 
             $result = $this->result($recruitment, $decision === 'approve' ? 'approved' : 'rejected', $now->toDateTimeString(), false);
             $result['requested_decision'] = $decision;
-            $result['returned_to_hrd'] = $decision === 'reject';
+            $result['returned_to_hrd'] = false;
             $result['next_status'] = $status;
             return response()->json($result);
         });

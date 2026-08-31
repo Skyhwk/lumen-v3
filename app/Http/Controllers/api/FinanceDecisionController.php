@@ -213,7 +213,7 @@ class FinanceDecisionController extends Controller
 
                 return response()->json([
                     'status'  => 200,
-                    'message' => 'Persetujuan Finance berhasil diproses. Kandidat siap diajukan ke Direktur.',
+                    'message' => 'Persetujuan Finance berhasil diproses. Kandidat siap diajukan ke Approval (Salary).',
                     'data'    => $applicant->fresh(['sallaryOffer']),
                 ], 200);
             }

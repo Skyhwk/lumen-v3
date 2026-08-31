@@ -1233,7 +1233,7 @@ class AtsFinalDecisionController extends Controller
 
             return response()->json([
                 'status'  => 200,
-                'message' => 'Email permohonan persetujuan kandidat berhasil dikirim ulang ke Ibu Direktur.',
+                'message' => 'Email permohonan persetujuan kandidat berhasil dikirim ulang.',
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
