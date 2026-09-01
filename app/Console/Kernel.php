@@ -48,6 +48,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncOrderDetaolFromJadwal::class,
         Commands\SyncOrderDetail::class,
         Commands\UpdateFtcVerifierFromScanTc::class,
+        Commands\CollectMonitorKeterlambatanAnalisa::class,
         Commands\TestCsTicketGeneratorCommand::class,
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\CustomerServiceAutoCloseCommand::class,
@@ -64,6 +65,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('08:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping();
+
+        // Manual dulu per kategori. Nanti aktifkan jika sudah siap otomatis jam 11 malam:
+        // $schedule->command('collect:monitor-keterlambatan-analisa')
+        //     ->dailyAt('23:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping();
     }
 
     protected function commands()
