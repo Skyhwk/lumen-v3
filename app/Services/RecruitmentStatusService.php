@@ -1046,6 +1046,73 @@ class RecruitmentStatusService
         return $reason !== '' ? $reason : null;
     }
 
+    /**
+     * Direktur menolak kandidat saat tahap management_decision (belum pindah ke interview_hrd).
+     */
+    public static function isAwaitingDirectorManagementDecisionRejectResubmit($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'management_decision') {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $rejectIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (strtolower((string) ($history[$i]['status'] ?? '')) === 'management_decision_rejected') {
+                $rejectIndex = $i;
+                break;
+            }
+        }
+
+        if ($rejectIndex === null) {
+            return false;
+        }
+
+        for ($i = $rejectIndex + 1; $i < count($history); $i++) {
+            if (strtolower((string) ($history[$i]['status'] ?? '')) === 'management_decision_approved') {
+                return false;
+            }
+        }
+
+        $rejectedDecisionFlag = is_object($recruitment)
+            ? ($recruitment->rejected_decision ?? null)
+            : ($recruitment['rejected_decision'] ?? null);
+
+        if ($rejectedDecisionFlag === false || $rejectedDecisionFlag === 0 || $rejectedDecisionFlag === '0') {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static function getDirectorManagementDecisionRejectReason($recruitment): ?string
+    {
+        $history = self::parseMetaHistory($recruitment);
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (strtolower((string) ($history[$i]['status'] ?? '')) !== 'management_decision_rejected') {
+                continue;
+            }
+
+            $reason = trim((string) ($history[$i]['reject_reason'] ?? $history[$i]['alasan_reject'] ?? $history[$i]['reason'] ?? ''));
+
+            if ($reason !== '') {
+                return $reason;
+            }
+        }
+
+        $reason = is_object($recruitment)
+            ? ($recruitment->rejected_decision_reason ?? null)
+            : ($recruitment['rejected_decision_reason'] ?? null);
+
+        return $reason !== null && trim((string) $reason) !== '' ? trim((string) $reason) : null;
+    }
+
     public static function resolvePipelineStatus($recruitment): ?array
     {
         if (self::isReturnedFromDirectorManagementRejection($recruitment)
@@ -1194,6 +1261,11 @@ class RecruitmentStatusService
         if (self::isAwaitingDirectorSalaryRejectResubmit($row)) {
             $rejectedDecision = true;
             $rejectedDecisionReason = self::getDirectorSalaryRejectReason($row);
+        }
+
+        if (self::isAwaitingDirectorManagementDecisionRejectResubmit($row)) {
+            $rejectedDecision = true;
+            $rejectedDecisionReason = self::getDirectorManagementDecisionRejectReason($row);
         }
 
         $updatePayload = [

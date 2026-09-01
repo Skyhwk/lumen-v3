@@ -20,20 +20,25 @@ class BpjsKesehatanController extends Controller
 {
     public function index()
     {
-        $data = BpjsKesehatan::where('bpjs_kesehatan.is_active', true)
-        ->rightJoin('master_karyawan', 'bpjs_kesehatan.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
-        ->select('bpjs_kesehatan.*', 'master_karyawan.jabatan')
-        ->get();
+        $data = BpjsKesehatan::query()
+            ->where('bpjs_kesehatan.is_active', true)
+            ->join('master_karyawan', function ($join) {
+                $join->on('bpjs_kesehatan.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
+                    ->where('master_karyawan.is_active', true);
+            })
+            ->select('bpjs_kesehatan.*', 'master_karyawan.jabatan');
 
         return Datatables::of($data)->make(true);
     }
 
     public function getKaryawan()
     {
-        $existingKaryawan = BpjsKesehatan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNik = BpjsKesehatan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNames = BpjsKesehatan::where('is_active', true)->pluck('karyawan')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
+            ->whereNotIn('nik_karyawan', $existingNik)
+            ->whereNotIn('nama_lengkap', $existingNames)
             ->select('nik_karyawan', 'nama_lengkap')
             ->get();
         
