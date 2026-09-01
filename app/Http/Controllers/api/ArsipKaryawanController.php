@@ -20,7 +20,7 @@ class ArsipKaryawanController extends Controller
 
     public function index(Request $request)
     {
-        $request->validate([
+        $this->validate($request, [
             'karyawan_id' => 'required|integer',
         ]);
 
@@ -46,7 +46,7 @@ class ArsipKaryawanController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $this->validate($request, [
             'karyawan_id' => 'required|integer',
             'jenis_dokumen' => 'required|string|max:100',
         ]);
@@ -84,7 +84,7 @@ class ArsipKaryawanController extends Controller
 
     public function destroy(Request $request)
     {
-        $request->validate([
+        $this->validate($request, [
             'id' => 'required|integer',
             'karyawan_id' => 'required|integer',
         ]);
