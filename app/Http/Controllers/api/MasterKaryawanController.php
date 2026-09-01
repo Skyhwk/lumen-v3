@@ -23,6 +23,7 @@ use App\Models\{
 };
 
 use App\Jobs\NonaktifKaryawanJob;
+use App\Services\MasterSallaryNikSyncService;
 use App\Helpers\ShioElemenHelper;
 
 class MasterKaryawanController extends Controller
@@ -382,7 +383,19 @@ class MasterKaryawanController extends Controller
                         ], 500);
                     }
 
-                    $dataKaryawan['nik_karyawan'] = $request->employee['nik'];
+                    $oldNik = $karyawan->nik_karyawan;
+                    $newNik = $request->employee['nik'];
+
+                    if ($oldNik !== $newNik) {
+                        MasterSallaryNikSyncService::syncOnNikChange(
+                            $request->personal['nama_lengkap'] ?? $karyawan->nama_lengkap,
+                            $oldNik,
+                            $newNik,
+                            $this->karyawan
+                        );
+                    }
+
+                    $dataKaryawan['nik_karyawan'] = $newNik;
                     $dataKaryawan['email'] = $request->employee['email'];
                     $dataKaryawan['email_pribadi'] = $request->employee['email_pribadi'];
                     $dataKaryawan['id_cabang'] = $request->employee['branch'];
