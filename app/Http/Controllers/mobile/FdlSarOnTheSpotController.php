@@ -109,7 +109,6 @@ class FdlSarOnTheSpotController extends Controller
             $header->uang_diterima = (isset($request->uang_diterima) && $request->uang_diterima !== null && $request->uang_diterima !== '') ? $request->uang_diterima : 0;
             $header->created_by = $this->karyawan;
             $header->created_at = Carbon::now();
-            $header->is_rejected = 0;
             $header->save();
 
             if($header)
@@ -180,8 +179,7 @@ class FdlSarOnTheSpotController extends Controller
         $data->koordinat = $request->koordinat;
         $data->created_by = $this->karyawan;
         $data->created_at = Carbon::now();
-        $data->is_rejected = 0;
-            $data->save();
+        $data->save();
 
         $return = sarOnthespotHeader::with('detail', 'hasilUji')->where('id', $cekHeader->id)->first();
 
