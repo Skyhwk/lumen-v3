@@ -15,7 +15,7 @@ class GenerateMessageAtsEmail
     private static function directorDecisionButtons($recruitment): object
     {
         $portalUrl = self::portalBaseUrl();
-        $encodedToken = rawurlencode($recruitment->token_approval ?? '');
+        $encodedToken = $recruitment->token_approval;
 
         return (object) [
             'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/decision/{$encodedToken}?decision=approve" : '',
@@ -27,7 +27,7 @@ class GenerateMessageAtsEmail
     public static function buildCandidateOfferingButtons($recruitment, $token = null): object
     {
         $portalUrl = self::portalBaseUrl();
-        $encodedToken = rawurlencode($token ?? $recruitment->token ?? '');
+        $encodedToken = $token ?? $recruitment->token;
 
         return (object) [
             'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=approve" : '',
@@ -609,7 +609,7 @@ class GenerateMessageAtsEmail
     public static function buildSalaryDecisionButtons($recruitment, $token = null): object
     {
         $portalUrl = self::portalBaseUrl();
-        $encodedToken = rawurlencode($token ?? $recruitment->token_approval ?? '');
+        $encodedToken = $token ?? $recruitment->token_approval ?? '';
 
         return (object) [
             'approve'   => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=approve" : '',

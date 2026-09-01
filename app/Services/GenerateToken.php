@@ -80,4 +80,16 @@ class GenerateToken
 
         return base64_encode($EncryptedText . '::' . $InitializationVector);
     }
+
+    public function encryptv1($data)
+    {
+        $ENCRYPTION_KEY = 'intilab_jaya';
+        $ENCRYPTION_ALGORITHM = 'AES-256-CBC';
+        $EncryptionKey = base64_decode($ENCRYPTION_KEY);
+        $InitializationVector = openssl_random_pseudo_bytes(openssl_cipher_iv_length($ENCRYPTION_ALGORITHM));
+        $EncryptedText = openssl_encrypt($data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
+
+        $base64 = base64_encode($EncryptedText . '::' . $InitializationVector);
+        return rtrim(strtr($base64, '+/', '-_'), '=');
+    }
 }
