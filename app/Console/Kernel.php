@@ -51,6 +51,7 @@ class Kernel extends ConsoleKernel
         Commands\CollectMonitorKeterlambatanAnalisa::class,
         Commands\TestCsTicketGeneratorCommand::class,
         Commands\SendKeptManagementDecisionReminders::class,
+        Commands\SendCandidateActionReminders::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         // Commands\LhpBackfillCommand::class,
@@ -63,6 +64,11 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('recruitment:send-kept-management-reminders')
             ->dailyAt('08:00')
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping();
+
+        $schedule->command('recruitment:send-candidate-action-reminders')
+            ->dailyAt('09:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping();
 
