@@ -7,15 +7,7 @@ use Carbon\CarbonPeriod;
 
 use Illuminate\Support\Facades\DB;
 
-use App\Models\{
-    MasterTargetSales,
-    DailyQsd,
-    MasterFeeSales,
-    ClaimFeeExternal,
-    RekapFeeSales,
-    MutasiFeeSales,
-    SaldoFeeSales,
-};
+use App\Models\{MasterTargetSales, DailyQsd, MasterFeeSales, ClaimFeeExternal, RekapFeeSales, MutasiFeeSales, SaldoFeeSales};
 
 class FeeSalesMonthly2
 {
@@ -66,15 +58,15 @@ class FeeSalesMonthly2
     private function log($message, $type = 'INFO')
     {
         $colors = [
-            'ERROR'   => "\033[31m", // merah
+            'ERROR' => "\033[31m", // merah
             'SUCCESS' => "\033[32m", // ijo
             'WARNING' => "\033[33m", // kuning
-            'INFO'    => "\033[36m", // cyan
+            'INFO' => "\033[36m", // cyan
         ];
 
         $color = $colors[$type] ?? "\033[36m";
         $reset = "\033[0m";
-        $time  = Carbon::now()->format('H:i:s');
+        $time = Carbon::now()->format('H:i:s');
 
         printf("[%s] %s[%-7s]%s %s\n", $time, $color, $type, $reset, $message);
     }
@@ -98,72 +90,95 @@ class FeeSalesMonthly2
         printf("\033[1;35m  FEE SALES (PHASE 2) - CHECKING PAID STATUS UPDATES \033[0m\n");
         printf("\033[1;35m========================================================================\033[0m\n");
 
-        $this->log("Checking updates from: " . $this->cutOff->format('Y-m-d') . " to " . $this->timestamp->format('Y-m-d'));
+        $this->log('Checking updates from: ' . $this->cutOff->format('Y-m-d') . ' to ' . $this->timestamp->format('Y-m-d'));
 
-        DB::beginTransaction();
-        try {
-            $masterTargetSales = MasterTargetSales::with('sales:id,nama_lengkap')->where(['tahun' => $this->year, 'is_active' => true])->whereNotNull($this->monthStr)->get();
-            foreach ($masterTargetSales as $targetSales) {
-                $salesId = $targetSales->karyawan_id;
-                $salesName = $targetSales->sales->nama_lengkap;
+        $masterTargetSales = MasterTargetSales::with('sales:id,nama_lengkap')
+            ->where(['tahun' => $this->year, 'is_active' => true])
+            ->whereNotNull($this->monthStr)
+            ->get();
 
-                $existingRecaps = RekapFeeSales::whereHas('masterFeeSales', fn($q) => $q->where(['sales_id' => $salesId, 'is_active' => true]))->get();
+        foreach ($masterTargetSales as $targetSales) {
+            $salesId = $targetSales->karyawan_id;
+            $salesName = $targetSales->sales->nama_lengkap;
 
-                $isExistsInFeeSales = fn($qsd) => $existingRecaps->contains(function ($recap) use ($qsd) {
-                    if ($recap->no_order !== $qsd->no_order) return false;
+            $existingRecaps = RekapFeeSales::whereHas('masterFeeSales', fn($q) => $q->where(['sales_id' => $salesId, 'is_active' => true]))->get();
 
-                    if (!$qsd->periode) return $recap->is_lunas == $qsd->is_lunas;
-                    return $recap->periode === $qsd->periode && $recap->is_lunas == $qsd->is_lunas;
-                });
+            $isExistsInFeeSales = fn($qsd) => $existingRecaps->contains(function ($recap) use ($qsd) {
+                if ($recap->no_order !== $qsd->no_order) {
+                    return false;
+                }
 
-                $quotations = DailyQsd::with('orderHeader.orderDetail')
-                    ->where('sales_id', $salesId)
-                    ->whereDate('tanggal_kelompok', '>=', $this->cutOff)
-                    ->whereDate('tanggal_kelompok', '<=', $this->timestamp)
-                    ->get()
-                    ->map(function ($qsd) use ($isExistsInFeeSales) {
-                        if ($isExistsInFeeSales($qsd)) return null;
+                if (!$qsd->periode) {
+                    return $recap->is_lunas == $qsd->is_lunas;
+                }
+                return $recap->periode === $qsd->periode && $recap->is_lunas == $qsd->is_lunas;
+            });
 
-                        $totalFeeExternal = ClaimFeeExternal::where(['no_order' => $qsd->no_order, 'is_active' => true])->when($qsd->periode, fn($q) => $q->where('periode', $qsd->periode))->sum('nominal');
-
-                        $totalRevenue = $qsd->total_revenue - ($totalFeeExternal + $qsd->nilai_pengurangan);
-
-                        $qsd->total_revenue = $totalRevenue;
-                        $qsd->total_revenue_yg_lunas = $qsd->is_lunas ? $totalRevenue : 0;
-
-                        if ($qsd->periode) {
-                            $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
-                            if ($orderDetail->isNotEmpty()) {
-                                $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
-                            }
-                        }
-
-                        return $qsd;
-                    })
-                    ->filter()
-                    ->values();
-
-                if ($quotations->isEmpty()) continue;
-
-                printf("\n>>> Found %d items with updated payment status for Sales: %s\n", $quotations->count(), $salesName);
-
-                foreach ($this->periodRange as $period) {
-                    $currentMonth = $period->format('m');
-                    $currentPeriod = $period->format('Y-m');
-
-                    $quotations = $quotations->filter(function ($qsd) use ($currentMonth) {
-                        $tgl = Carbon::parse($qsd->tanggal_kelompok);
-
-                        return $tgl->year == $this->year && $tgl->month == $currentMonth;
-                    });
-
-                    $masterFeeSales = MasterFeeSales::where(['sales_id' => $salesId, 'period' => $currentPeriod, 'is_active' => true])->latest()->first();
-                    if (!$masterFeeSales) {
-                        $this->log("No MasterFeeSales found for $currentPeriod. Skipping update.", "WARNING");
-                        continue;
+            $quotations = DailyQsd::with('orderHeader.orderDetail')
+                ->where('sales_id', $salesId)
+                ->whereDate('tanggal_kelompok', '>=', $this->cutOff)
+                ->whereDate('tanggal_kelompok', '<=', $this->timestamp)
+                ->get()
+                ->map(function ($qsd) use ($isExistsInFeeSales) {
+                    if ($isExistsInFeeSales($qsd)) {
+                        return null;
                     }
 
-                    $paidAchievedAmount = $quotations->sum('total_revenue_yg_lunas');
+                    $totalFeeExternal = ClaimFeeExternal::where(['no_order' => $qsd->no_order, 'is_active' => true])
+                        ->when($qsd->periode, fn($q) => $q->where('periode', $qsd->periode))
+                        ->sum('nominal');
+
+                    $totalRevenue = $qsd->total_revenue - ($totalFeeExternal + $qsd->nilai_pengurangan);
+
+                    $qsd->total_revenue = $totalRevenue;
+                    $qsd->total_revenue_yg_lunas = $qsd->is_lunas ? $totalRevenue : 0;
+
+                    if ($qsd->periode) {
+                        $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
+                        if ($orderDetail->isNotEmpty()) {
+                            $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
+                        }
+                    }
+
+                    return $qsd;
+                })
+                ->filter()
+                ->values();
+
+            if ($quotations->isEmpty()) {
+                continue;
+            }
+
+            printf("\n>>> Found %d items with updated payment status for Sales: %s\n", $quotations->count(), $salesName);
+
+            $allQuotations = $quotations;
+
+            foreach ($this->periodRange as $period) {
+                $currentMonth = $period->format('m');
+                $currentYear = $period->format('Y');
+                $currentPeriod = $period->format('Y-m');
+
+                $periodQuotations = $allQuotations->filter(function ($qsd) use ($currentMonth, $currentYear) {
+                    $tgl = Carbon::parse($qsd->tanggal_kelompok);
+
+                    return $tgl->format('Y') == $currentYear && $tgl->format('m') == $currentMonth;
+                });
+
+                if ($periodQuotations->isEmpty()) {
+                    continue;
+                }
+
+                $masterFeeSales = MasterFeeSales::where(['sales_id' => $salesId, 'period' => $currentPeriod, 'is_active' => true])
+                    ->latest()
+                    ->first();
+                if (!$masterFeeSales) {
+                    $this->log("No MasterFeeSales found for $currentPeriod. Skipping update.", 'WARNING');
+                    continue;
+                }
+
+                DB::beginTransaction();
+                try {
+                    $paidAchievedAmount = $periodQuotations->sum('total_revenue_yg_lunas');
 
                     // TOTAL FEE
                     $claimedFee = $paidAchievedAmount * $masterFeeSales->basis;
@@ -179,9 +194,11 @@ class FeeSalesMonthly2
                         $masterFeeSales->save();
 
                         // REKAP FEE SALES
-                        $this->log("Updating Recaps ...");
-                        foreach ($quotations as $qsd) {
-                            $recap = RekapFeeSales::where(['fee_sales_id' => $masterFeeSales->id, 'no_order' => $qsd->no_order])->when($qsd->periode, fn($q) => $q->where('periode', $qsd->periode))->first();
+                        $this->log('Updating Recaps ...');
+                        foreach ($periodQuotations as $qsd) {
+                            $recap = RekapFeeSales::where(['fee_sales_id' => $masterFeeSales->id, 'no_order' => $qsd->no_order])
+                                ->when($qsd->periode, fn($q) => $q->where('periode', $qsd->periode))
+                                ->first();
 
                             if ($recap) {
                                 $recap->is_lunas = true;
@@ -190,7 +207,7 @@ class FeeSalesMonthly2
                         }
 
                         // MUTASI FEE SALES
-                        $this->log("Creating Mutation Record ...", "INFO");
+                        $this->log('Creating Mutation Record ...', 'INFO');
                         $mutasiFeeSales = new MutasiFeeSales();
 
                         $mutasiFeeSales->sales_id = $salesId;
@@ -206,8 +223,10 @@ class FeeSalesMonthly2
                         $mutasiFeeSales->save();
 
                         // SALDO FEE SALES
-                        $this->log("Updating Balances ...", "INFO");
-                        $saldoFeeSales = SaldoFeeSales::where(['sales_id' => $salesId, 'is_active' => true])->latest()->first();
+                        $this->log('Updating Balances ...', 'INFO');
+                        $saldoFeeSales = SaldoFeeSales::where(['sales_id' => $salesId, 'is_active' => true])
+                            ->latest()
+                            ->first();
                         if ($saldoFeeSales) {
                             $saldoFeeSales->active_balance += $claimedFee;
                             $saldoFeeSales->updated_by = 'System';
@@ -220,20 +239,20 @@ class FeeSalesMonthly2
                             $saldoFeeSales->created_at = $this->timestamp;
                         }
                         $saldoFeeSales->save();
-                        $this->log("Fee Sales updated successfully", "SUCCESS");
+                        $this->log('Fee Sales updated successfully', 'SUCCESS');
                     }
+                    DB::commit();
+
+                    printf("\n");
+                    $this->log('All Done for period ' . $currentPeriod . ' of Sales: ' . $salesName . ' with ' . $periodQuotations->count() . ' items', 'SUCCESS');
+                } catch (\Throwable $th) {
+                    DB::rollBack();
+
+                    printf("\n");
+                    $this->log('Error: ' . $th->getMessage() . ' in Line ' . $th->getLine(), 'ERROR');
+                    $this->log('Transaction Rolled Back', 'ERROR');
                 }
             }
-            DB::commit();
-
-            printf("\n");
-            $this->log("All Done", "SUCCESS");
-        } catch (\Throwable $th) {
-            DB::rollBack();
-
-            printf("\n");
-            $this->log("Error: " . $th->getMessage() . " in Line " . $th->getLine(), "ERROR");
-            $this->log("Transaction Rolled Back", "ERROR");
         }
     }
 }
