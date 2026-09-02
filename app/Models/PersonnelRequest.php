@@ -69,6 +69,7 @@ class PersonnelRequest extends Model
         'usia_maksimum' => 'integer',
         'is_completed' => 'boolean',
         'completed_at' => 'datetime',
+        'assesment_question_category' => 'array',
     ];
 
     public function masterDivisi()
