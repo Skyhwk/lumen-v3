@@ -152,7 +152,6 @@ class MonitorKeterlambatanAnalisaService
                 LingkunganHeader::class,
                 MicrobioHeader::class,
                 Subkontrak::class,
-                DirectLainHeader::class,
                 PartikulatHeader::class,
             ];
         } elseif ($kategori === '5-Emisi') {
