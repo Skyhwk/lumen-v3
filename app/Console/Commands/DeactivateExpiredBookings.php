@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Models\Jadwal;
 use App\Models\SamplingPlan;
 use App\Models\OrderHeader;
+use App\Services\SamplerTrackingService;
 use Carbon\Carbon;
 use DB;
 
@@ -111,6 +112,9 @@ class DeactivateExpiredBookings extends Command
         $this->info('Memperbaiki status jadwal booking aktif dari hari ini ke depan...');
         $this->fixingStatus();
         $this->info('Selesai memperbaiki status jadwal booking aktif dari hari ini ke depan.');
+        $this->info('Sinkronisasi ulang tracking sampler hari ini...');
+        app(SamplerTrackingService::class)->sync($today);
+        $this->info('Selesai sinkronisasi ulang tracking sampler hari ini.');
         return 0;
     }
 
