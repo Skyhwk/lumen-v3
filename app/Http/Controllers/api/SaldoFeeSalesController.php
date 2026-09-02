@@ -22,6 +22,7 @@ class SaldoFeeSalesController extends Controller
 {
     private $idJabatanSales = [
         24, // Sales Officer
+        148,
         21, // Sales Supervisor
     ];
 
@@ -30,16 +31,28 @@ class SaldoFeeSalesController extends Controller
         $currentUser = $request->attributes->get('user')->karyawan;
 
         $sales = MasterKaryawan::where('is_active', true)
-            ->where(fn($q) => $q->whereIn('id_jabatan', $this->idJabatanSales)->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana'))
-            ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
+            ->whereIn('id_jabatan', $this->idJabatanSales)
+            ->when(
+                !in_array($currentUser->id_jabatan, $this->idJabatanSales),
+                function ($q) use ($currentUser) {
+                    // Jika user BUKAN sales, maka tampilkan semua sales; jika sales, filter ke sales sendiri
+                    return $q;
+                },
+                function ($q) use ($currentUser) {
+                    // Jika user sales, hanya tampilkan sales-nya sendiri
+                    return $q->where('id', $currentUser->id);
+                }
+            )
             ->orderBy('nama_lengkap', 'asc')
             ->get();
+ 
 
         return response()->json([
             'sales' => $sales,
             'message' => 'Sales list retrieved successfully',
         ], 200);
     }
+
 
     public function getSaldoFeeSales(Request $request)
     {
