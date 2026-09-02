@@ -20,6 +20,7 @@ use App\Models\{
     LogWebphoneBackup,
     HistoryPerubahanSales,
 };
+use App\Services\PayrollRecordSyncService;
 
 class NonaktifKaryawanService
 {
@@ -43,6 +44,11 @@ class NonaktifKaryawanService
     {
         try {
             DB::transaction(function () {
+                PayrollRecordSyncService::deactivateForKaryawan(
+                    $this->karyawan,
+                    'System'
+                );
+
                 AksesMenu::where('user_id', $this->karyawan->user_id)
                     ->update([
                         'is_active' => false,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\MasterSallary;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\MasterSallaryNikSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,13 @@ class MasterSallaryController extends Controller
                 $join->on('master_karyawan.id_department', '=', 'master_divisi.id')
                     ->where('master_divisi.is_active', true);
             })
-            ->where('master_sallary.is_active', true);
+            ->where('master_sallary.is_active', true)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('master_karyawan as mk_current')
+                    ->whereColumn('mk_current.nik_karyawan', 'master_sallary.nik_karyawan')
+                    ->where('mk_current.is_active', true);
+            });
 
         return Datatables::of($data)
             ->filterColumn('nama_divisi', function($query, $keyword) {
@@ -50,10 +57,12 @@ class MasterSallaryController extends Controller
 
     public function getKaryawan()
     {
-        $existingKaryawan = MasterSallary::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNik = MasterSallary::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNames = MasterSallary::where('is_active', true)->pluck('karyawan')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
+            ->whereNotIn('nik_karyawan', $existingNik)
+            ->whereNotIn('nama_lengkap', $existingNames)
             ->select('nik_karyawan', 'nama_lengkap')
             ->get();
         
@@ -136,12 +145,42 @@ class MasterSallaryController extends Controller
 
     public function getHistory(Request $request)
     {
-        
-        $data = MasterSallary::where('nik_karyawan', $request->nik_karyawan)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = MasterSallary::query();
+
+        if (!empty($request->karyawan)) {
+            $query->where('karyawan', $request->karyawan);
+        } else {
+            $query->where('nik_karyawan', $request->nik_karyawan);
+        }
+
+        $data = $query->orderBy('created_at', 'desc');
 
         return Datatables::of($data)->make(true);
+    }
 
+    /**
+     * Rapikan duplikat master_sallary aktif akibat perubahan NIK (one-time / manual).
+     */
+    public function reconcile(Request $request)
+    {
+        try {
+            $karyawan = MasterKaryawan::where('is_active', true)
+                ->when($request->nik_karyawan, fn ($q) => $q->where('nik_karyawan', $request->nik_karyawan))
+                ->when($request->nama_lengkap, fn ($q) => $q->where('nama_lengkap', $request->nama_lengkap))
+                ->firstOrFail();
+
+            MasterSallaryNikSyncService::reconcileDuplicates(
+                $karyawan->nama_lengkap,
+                $karyawan->nik_karyawan,
+                $this->karyawan
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Master salary berhasil dirapikan untuk NIK terbaru.',
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
     }
 }
