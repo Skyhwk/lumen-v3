@@ -31,6 +31,7 @@ class FeeSalesController extends Controller
 
     private $idJabatanSales = [
         24, // Sales Officer
+        148,
         21, // Sales Supervisor
     ];
 
