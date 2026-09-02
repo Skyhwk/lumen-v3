@@ -13,15 +13,22 @@ class CreateMonitorKeterlambatanAnalisaTable extends Migration
                 $table->id();
                 $table->string('no_sampel', 100);
                 $table->string('nama_parameter', 255);
+                $table->unsignedInteger('id_parameter')->nullable();
                 $table->string('kategori_2', 50);
+                $table->date('tanggal_jadwal')->nullable();
                 $table->dateTime('ftc_laboratory')->nullable();
+                $table->dateTime('ftc_verifier')->nullable();
+                $table->dateTime('input_analisa')->nullable();
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();
 
                 $table->unique(['no_sampel', 'nama_parameter'], 'uk_sampel_parameter');
                 $table->index('kategori_2', 'idx_kategori_2');
                 $table->index('nama_parameter', 'idx_nama_parameter');
+                $table->index('id_parameter', 'idx_id_parameter');
+                $table->index('tanggal_jadwal', 'idx_tanggal_jadwal');
                 $table->index('ftc_laboratory', 'idx_ftc_laboratory');
+                $table->index('ftc_verifier', 'idx_ftc_verifier');
             });
         }
     }
