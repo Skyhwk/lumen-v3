@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\BpjsTk;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,17 +21,22 @@ class BpjsTkController extends Controller
 {
     public function index()
     {
-        $data = BpjsTk::where('is_active', true);
+        $data = PayrollRecordSyncService::scopeActiveKaryawan(
+            BpjsTk::query()->where('bpjs_tk.is_active', true),
+            'bpjs_tk.nik_karyawan'
+        );
 
         return Datatables::of($data)->make(true);
     }
 
     public function getKaryawan()
     {
-        $existingKaryawan = BpjsTk::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNik = BpjsTk::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNames = BpjsTk::where('is_active', true)->pluck('karyawan')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
+            ->whereNotIn('nik_karyawan', $existingNik)
+            ->whereNotIn('nama_lengkap', $existingNames)
             ->select('nik_karyawan', 'nama_lengkap')
             ->get();
         

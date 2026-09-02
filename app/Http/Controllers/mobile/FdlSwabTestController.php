@@ -50,6 +50,7 @@ class FdlSwabTestController extends Controller
                     $q->orWhere('parameter', 'like', "%$keyword%");
                 }
             })
+            ->whereIn('kategori_3', ['46-Udara Swab Test', '57-Swab Test'])
             ->where('is_active', 1)->first();
 
             if (is_null($data)) {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\PPH21;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,17 +21,22 @@ class PPH21Controller extends Controller
 {
     public function index()
     {
-        $data = PPH21::where('is_active', true);
+        $data = PayrollRecordSyncService::scopeActiveKaryawan(
+            PPH21::query()->where('pph_21.is_active', true),
+            'pph_21.nik_karyawan'
+        );
 
         return Datatables::of($data)->make(true);
     }
 
     public function getKaryawan()
     {
-        $existingKaryawan = PPH21::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNik = PPH21::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingNames = PPH21::where('is_active', true)->pluck('karyawan')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
+            ->whereNotIn('nik_karyawan', $existingNik)
+            ->whereNotIn('nama_lengkap', $existingNames)
             ->select('nik_karyawan', 'nama_lengkap')
             ->get();
         

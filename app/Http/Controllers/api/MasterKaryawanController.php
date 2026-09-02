@@ -24,6 +24,7 @@ use App\Models\{
 
 use App\Jobs\NonaktifKaryawanJob;
 use App\Services\MasterSallaryNikSyncService;
+use App\Services\PayrollRecordSyncService;
 use App\Helpers\ShioElemenHelper;
 
 class MasterKaryawanController extends Controller
@@ -687,6 +688,8 @@ class MasterKaryawanController extends Controller
             $karyawan->is_active = false;
 
             $karyawan->save();
+
+            PayrollRecordSyncService::deactivateForKaryawan($karyawan, $this->karyawan);
             
             $user = User::where('id', $karyawan->user_id)->first();
             if ($user) {
