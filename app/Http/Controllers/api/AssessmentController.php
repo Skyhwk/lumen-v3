@@ -11,10 +11,11 @@ use App\Services\GetBawahan;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
 use App\Services\AtsNotificationService;
-use App\Services\UserAssessmentCategoryService;
 
 class AssessmentController extends Controller
 {
+    private const ASSESSMENT_LINK_VALID_DAYS = 6;
+
     public function overview(Request $request)
     {
         $recruitment = $this->recruitment($request->token);
@@ -52,7 +53,7 @@ class AssessmentController extends Controller
 
         return response()->json([
             'status' => $status,
-            'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2),
+            'expires_at' => $this->assessmentAvailableAt($recruitment)->addDays(self::ASSESSMENT_LINK_VALID_DAYS),
             'categories' => $categories,
             'can_start' => $canStart,
             'start_blocked_reason' => $canStart ? null : $this->sessionStartBlockReason($nextPendingSession),
@@ -188,6 +189,18 @@ class AssessmentController extends Controller
             DB::table('new_recruitment')->where('id', $recruitment->id)->lockForUpdate()->first();
             $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitment->id)->lockForUpdate()->first();
             if ($attempt) {
+                $availableAt = $this->assessmentAvailableAt($recruitment);
+                $expectedExpiresAt = $availableAt->copy()->addDays(self::ASSESSMENT_LINK_VALID_DAYS);
+                if (!$attempt->token_expires_at || !Carbon::parse($attempt->token_expires_at)->equalTo($expectedExpiresAt)) {
+                    DB::table('assessment_attempts')->where('id', $attempt->id)->update([
+                        'token_created_at' => $availableAt,
+                        'token_expires_at' => $expectedExpiresAt,
+                        'updated_at' => Carbon::now(),
+                    ]);
+                    $attempt->token_created_at = $availableAt->toDateTimeString();
+                    $attempt->token_expires_at = $expectedExpiresAt->toDateTimeString();
+                }
+
                 $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
                 $sessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->orderBy('session_order')->get();
                 $expectedSessions = $this->sessionDefinitions($recruitment);
@@ -309,8 +322,8 @@ class AssessmentController extends Controller
             $attemptId = DB::table('assessment_attempts')->insertGetId([
                 'recruitment_id' => $recruitment->id,
                 'token' => $recruitment->token,
-                'token_created_at' => $recruitment->created_at,
-                'token_expires_at' => Carbon::parse($recruitment->created_at)->addDays(2),
+                'token_created_at' => $this->assessmentAvailableAt($recruitment),
+                'token_expires_at' => $this->assessmentAvailableAt($recruitment)->addDays(self::ASSESSMENT_LINK_VALID_DAYS),
                 'started_at' => $now,
                 'status' => 'in_progress',
                 'created_at' => $now,
@@ -423,46 +436,49 @@ class AssessmentController extends Controller
             return collect();
         }
 
-        $questionCategoryIds = $this->assessmentQuestionCategoryIds($personnelRequest->assesment_question_category ?? null);
+        $categoryConfigs = $this->assessmentQuestionCategoryConfigs($personnelRequest->assesment_question_category ?? null);
 
-        $questionCount = (int) ($personnelRequest->user_assessment_question_count ?? 0);
-        $hasTimeLimit = (int) ($personnelRequest->user_assessment_has_time_limit ?? 0) === 1;
-        $durationMinutes = $hasTimeLimit ? (int) ($personnelRequest->user_assessment_duration_minutes ?? 0) : 0;
+        if (empty($categoryConfigs)) {
+            throw new \RuntimeException('Kategori soal test user belum dipilih.');
+        }
 
-        if ($questionCount >= 1) {
-            if ($hasTimeLimit && $durationMinutes < 1) {
-                throw new \RuntimeException('Konfigurasi durasi test user pada kategori bank soal belum diisi.');
+        $questionCategoryIds = collect($categoryConfigs)->pluck('id')->all();
+        $categories = DB::table('question_categories')
+            ->whereIn('id', $questionCategoryIds)
+            ->where('is_active', 1)
+            ->get()
+            ->keyBy('id');
+
+        return collect($categoryConfigs)->map(function ($config) use ($categories, $personnelRequest) {
+            $questionCategoryId = (int) $config['id'];
+            $category = $categories->get($questionCategoryId);
+            if (!$category) {
+                throw new \RuntimeException('Kategori soal test user ID ' . $questionCategoryId . ' tidak aktif atau tidak ditemukan.');
             }
 
-            return collect($questionCategoryIds)->map(function ($questionCategoryId) use ($personnelRequest, $questionCount, $durationMinutes, $hasTimeLimit) {
-                return (object) [
-                    'owner_karyawan' => $personnelRequest->created_by,
-                    'question_count' => $questionCount,
-                    'duration_minutes' => $durationMinutes,
-                    'has_time_limit' => $hasTimeLimit,
-                    'question_category_id' => $questionCategoryId,
-                ];
-            })->values();
-        }
+            $questionCount = (int) ($config['question_count'] ?? 0);
+            $hasTimeLimit = filter_var($config['has_time_limit'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $durationMinutes = $hasTimeLimit ? (int) ($config['duration_minutes'] ?? 0) : 0;
 
-        $service = app(UserAssessmentCategoryService::class);
-        $ownerCategory = $service->findOwnerCategory((string) $personnelRequest->created_by);
-        $categoryConfig = $service->toConfigObject($ownerCategory);
+            if ($questionCount < 1) {
+                throw new \RuntimeException('Konfigurasi jumlah soal kategori ' . $category->name . ' belum diisi.');
+            }
 
-        if ($categoryConfig && (int) $categoryConfig->question_count >= 1) {
-            return collect([(object) [
-                'owner_karyawan' => $personnelRequest->created_by,
-                'question_count' => (int) $categoryConfig->question_count,
-                'duration_minutes' => (int) $categoryConfig->duration_minutes,
-                'has_time_limit' => (bool) $categoryConfig->has_time_limit,
-                'question_category_id' => $ownerCategory ? (int) $ownerCategory->id : null,
-            ]]);
-        }
+            if ($hasTimeLimit && $durationMinutes < 1) {
+                throw new \RuntimeException('Konfigurasi durasi kategori ' . $category->name . ' belum diisi.');
+            }
 
-        throw new \RuntimeException('Konfigurasi jumlah soal test user pada kategori bank soal belum diisi.');
+            return (object) [
+                'owner_karyawan' => $category->owner_karyawan ?? $personnelRequest->created_by,
+                'question_count' => $questionCount,
+                'duration_minutes' => $durationMinutes,
+                'has_time_limit' => $hasTimeLimit,
+                'question_category_id' => (int) $category->id,
+            ];
+        })->values();
     }
 
-    private function assessmentQuestionCategoryIds($value): array
+    private function assessmentQuestionCategoryConfigs($value): array
     {
         if (is_string($value)) {
             $decoded = json_decode($value, true);
@@ -470,10 +486,16 @@ class AssessmentController extends Controller
         }
 
         return collect(is_array($value) ? $value : [$value])
-            ->filter(fn ($id) => $id !== null && $id !== '')
-            ->map(fn ($id) => (int) $id)
-            ->filter(fn ($id) => $id > 0)
-            ->unique()
+            ->filter(fn ($config) => is_array($config) && (int) ($config['id'] ?? 0) > 0)
+            ->map(function ($config) {
+                return [
+                    'id' => (int) $config['id'],
+                    'has_time_limit' => $config['has_time_limit'] ?? false,
+                    'question_count' => (int) ($config['question_count'] ?? 0),
+                    'duration_minutes' => (int) ($config['duration_minutes'] ?? 0),
+                ];
+            })
+            ->unique('id')
             ->values()
             ->all();
     }
@@ -667,10 +689,24 @@ class AssessmentController extends Controller
     private function recruitment($token, $lock = false)
     {
         $row = $this->findRecruitmentByToken($token, $lock);
-        if (!$row || Carbon::now()->greaterThanOrEqualTo(Carbon::parse($row->created_at)->addDays(2))) {
+        if (!$row || Carbon::now()->greaterThanOrEqualTo($this->assessmentAvailableAt($row)->addDays(self::ASSESSMENT_LINK_VALID_DAYS))) {
             return null;
         }
         return $row;
+    }
+
+    private function assessmentAvailableAt($recruitment): Carbon
+    {
+        $history = json_decode($recruitment->meta_history ?? '[]', true);
+        if (is_array($history)) {
+            for ($index = count($history) - 1; $index >= 0; $index--) {
+                if (($history[$index]['status'] ?? null) === 'assessment' && !empty($history[$index]['at'])) {
+                    return Carbon::parse($history[$index]['at']);
+                }
+            }
+        }
+
+        return Carbon::parse($recruitment->created_at);
     }
 
     private function expiredLinkResponse($message = 'Link assessment tidak valid atau sudah kedaluwarsa.')
@@ -1084,16 +1120,16 @@ class AssessmentController extends Controller
 
     private function sessionHasTimeLimit($session)
     {
+        if (($session->category_name ?? '') === 'Assessment User') {
+            return (int) ($session->duration_minutes ?? 0) > 0;
+        }
+
         $category = $session->question_category_id
             ? DB::table('question_categories')->where('id', $session->question_category_id)->first()
             : null;
 
         if ($category) {
             return $this->categoryHasTimeLimit($category);
-        }
-
-        if (($session->category_name ?? '') === 'Assessment User') {
-            return (int) ($session->duration_minutes ?? 0) > 0;
         }
 
         return (int) ($session->duration_minutes ?? 0) > 0;
