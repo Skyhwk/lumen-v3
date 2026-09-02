@@ -13,12 +13,12 @@
                     Reject
                 </a>
             @endif
-            @if(!empty($btn->negotiate))
+            {{-- @if(!empty($btn->negotiate))
                 <a href="{{ $btn->negotiate }}" class="btn-stack"
                     style="display:inline-block;background-color:#0284c7;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 22px;border-radius:10px;margin:0 6px 8px 6px;min-width:140px;">
                     Negosiasi Gaji
                 </a>
-            @endif
+            @endif --}}
         </td>
     </tr>
 </table>
