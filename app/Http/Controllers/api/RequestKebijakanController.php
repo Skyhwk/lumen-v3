@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\RequestKebijakan;
 use App\Services\GetBawahan;
+use App\Services\RequestKebijakanWorkflowService;
 use Carbon\Carbon;
 use DataTables;
 use Illuminate\Http\Request;
@@ -18,25 +19,11 @@ class RequestKebijakanController extends Controller
         '09' => 'IX', '10' => 'X', '11' => 'XI', '12' => 'XII',
     ];
 
-    private const STATUS_LABELS = [
-        'waiting_approval' => 'Menunggu Persetujuan',
-        'approved' => 'Selesai',
-        'on_process' => 'Dalam Proses',
-        'rejected' => 'Ditolak',
-    ];
+    private const STATUS_LABELS = RequestKebijakanWorkflowService::STATUS_LABELS;
 
-    private const KATEGORI_LABELS = [
-        'new' => 'Kebijakan Baru',
-        'revision' => 'Revisi Kebijakan',
-        'termination' => 'Terminasi Kebijakan',
-    ];
+    private const KATEGORI_LABELS = RequestKebijakanWorkflowService::KATEGORI_LABELS;
 
-    private const ALLOWED_REQUESTER_GRADES = [
-        'MANAGER',
-        'SENIOR MANAGER',
-        'EXECUTIVE',
-        'DIRECTOR',
-    ];
+    private const ALLOWED_REQUESTER_GRADES = RequestKebijakanWorkflowService::APPROVER_GRADES;
 
     public function initialize(Request $request)
     {
@@ -121,7 +108,7 @@ class RequestKebijakanController extends Controller
             'data' => [
                 'request_kebijakan' => $record,
                 'display_status' => $this->resolveDisplayStatus($record),
-                'pipeline' => $this->buildPipeline($record),
+                'pipeline' => RequestKebijakanWorkflowService::buildPipeline($record),
                 'can_delete' => $this->canDelete($record, $employee),
             ],
             'message' => 'Detail request kebijakan berhasil diambil',
@@ -266,14 +253,14 @@ class RequestKebijakanController extends Controller
     {
         return $query
             ->where('is_active', true)
-            ->whereIn('status', ['waiting_approval', 'on_process']);
+            ->whereIn('status', ['waiting_approval', 'approved', 'on_process']);
     }
 
     private function applyCompletedScope($query)
     {
         return $query
             ->where('is_active', true)
-            ->where('status', 'approved');
+            ->where('status', 'completed');
     }
 
     private function applyVoidScope($query)
@@ -289,14 +276,12 @@ class RequestKebijakanController extends Controller
 
     private function normalizeGrade(?string $grade): string
     {
-        $normalized = strtoupper(trim((string) $grade));
-
-        return str_replace('_', ' ', $normalized);
+        return RequestKebijakanWorkflowService::normalizeGrade($grade);
     }
 
     private function canRequestKebijakan($employee): bool
     {
-        return in_array($this->normalizeGrade($employee->grade ?? ''), self::ALLOWED_REQUESTER_GRADES, true);
+        return RequestKebijakanWorkflowService::canApprove($employee);
     }
 
     private function getAccessDeniedMessage(): string
@@ -371,9 +356,7 @@ class RequestKebijakanController extends Controller
 
     private function resolveKategoriLabel(?string $kategori): string
     {
-        $key = strtolower(trim((string) $kategori));
-
-        return self::KATEGORI_LABELS[$key] ?? ucfirst(str_replace('_', ' ', $key ?: '-'));
+        return RequestKebijakanWorkflowService::resolveKategoriLabel($kategori);
     }
 
     private function resolveVoidReason(RequestKebijakan $record): ?string
@@ -387,93 +370,6 @@ class RequestKebijakanController extends Controller
         }
 
         return null;
-    }
-
-    private function buildPipeline(RequestKebijakan $record): array
-    {
-        $isRejected = $record->status === 'rejected';
-        $isVoid = !$record->is_active && $record->deleted_at;
-        $isApproved = in_array($record->status, ['approved', 'on_process'], true) || $record->approval_at;
-        $isOnProcess = $record->status === 'on_process';
-        $isCompleted = $record->status === 'approved';
-
-        $steps = [
-            [
-                'title' => 'Pengajuan',
-                'icon' => 'fa-paper-plane',
-                'by' => $record->request_by,
-                'at' => $record->request_at,
-                'done' => !!$record->request_at,
-            ],
-            [
-                'title' => 'Disetujui',
-                'icon' => 'fa-check-circle',
-                'by' => $isRejected ? $record->rejected_by : $record->approval_by,
-                'at' => $isRejected ? $record->rejected_at : $record->approval_at,
-                'done' => $isApproved && !$isRejected && !$isVoid,
-                'rejected' => $isRejected,
-                'rejectedBy' => $record->rejected_by,
-                'rejectedAt' => $record->rejected_at,
-                'rejectionNote' => $record->rejected_note,
-                'inProgress' => $record->status === 'waiting_approval' && !$isVoid && !$isRejected,
-            ],
-            [
-                'title' => 'Dalam Proses',
-                'icon' => 'fa-cogs',
-                'by' => $record->approval_by,
-                'at' => $record->approval_at,
-                'done' => $isCompleted,
-                'inProgress' => $isOnProcess,
-            ],
-            [
-                'title' => 'Selesai',
-                'icon' => 'fa-flag-checkered',
-                'by' => $record->approval_by,
-                'at' => $record->approval_at,
-                'done' => $isCompleted,
-            ],
-        ];
-
-        if ($isVoid) {
-            $steps[] = [
-                'title' => 'Void',
-                'icon' => 'fa-ban',
-                'by' => $record->deleted_by,
-                'at' => $record->deleted_at,
-                'done' => true,
-                'rejected' => true,
-                'rejectionNote' => 'Request dihapus oleh pemohon',
-            ];
-        }
-
-        return $this->markCurrentPipelineStep($steps);
-    }
-
-    private function markCurrentPipelineStep(array $steps): array
-    {
-        $currentIndex = null;
-
-        foreach ($steps as $index => $step) {
-            if (!empty($step['inProgress'])) {
-                $currentIndex = $index;
-                break;
-            }
-        }
-
-        if ($currentIndex === null) {
-            foreach ($steps as $index => $step) {
-                if (empty($step['done']) && empty($step['rejected'])) {
-                    $currentIndex = $index;
-                    break;
-                }
-            }
-        }
-
-        return array_map(function ($step, $index) use ($currentIndex) {
-            $step['isCurrent'] = $currentIndex !== null && $index === $currentIndex;
-
-            return $step;
-        }, $steps, array_keys($steps));
     }
 
     private function generateNoRequest(): string

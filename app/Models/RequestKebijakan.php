@@ -14,4 +14,9 @@ class RequestKebijakan extends Sector
     {
         return $this->belongsTo(MasterKaryawan::class, 'request_by', 'nama_lengkap');
     }
+
+    public function drafting()
+    {
+        return $this->hasOne(DraftingKebijakan::class, 'request_kebijakan_id');
+    }
 }
