@@ -119,7 +119,9 @@ class SaldoFeeSalesController extends Controller
     public function requestWithdrawal(Request $request)
     {
         $timestamp = Carbon::now();
-
+        $saldoFeeSales = SaldoFeeSales::where(['sales_id' => $request->sales_id, 'is_active' => true])->latest()->first();
+        if (!$saldoFeeSales) return response()->json(['message' => 'Saldo Fee Sales not found'], 404);
+        if ($saldoFeeSales->active_balance < $request->amount) return response()->json(['message' => 'Saldo Fee Sales tidak cukup'], 400);
         $limitWithdraw = LimitWithdraw::where(['user_id' => $request->sales_id, 'is_active' => true])->latest()->first();
         if (!$limitWithdraw) return response()->json(['message' => 'Limit penarikan belum diatur'], 404);
 
