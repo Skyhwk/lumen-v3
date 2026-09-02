@@ -19,12 +19,15 @@ use Illuminate\Support\Collection;
 
 class MonitorKeterlambatanAnalisaService
 {
-    public const START_DATE = '2026-01-01';
+    public const COLLECT_DAYS = 60;
 
-    public function collectLogRecords(string $kategori): array
-    {
-        $startDate = Carbon::parse(self::START_DATE)->startOfDay();
-        $endDate = Carbon::now()->endOfDay();
+    public function collectLogRecords(
+        string $kategori,
+        ?Carbon $startDate = null,
+        ?Carbon $endDate = null
+    ): array {
+        $endDate = ($endDate ?? Carbon::now())->copy()->endOfDay();
+        $startDate = ($startDate ?? Carbon::now()->subDays(self::COLLECT_DAYS))->copy()->startOfDay();
 
         $pencarian = $this->kategoriPencarian($kategori);
 

@@ -13,6 +13,9 @@ class CollectMonitorKeterlambatanAnalisa extends Command
 {
     protected $signature = 'collect:monitor-keterlambatan-analisa
                             {--kategori= : Kategori spesifik, format id-nama (contoh: 1-Air)}
+                            {--date= : Tanggal spesifik (Y-m-d)}
+                            {--from= : Tanggal awal (Y-m-d)}
+                            {--to= : Tanggal akhir (Y-m-d)}
                             {--dry-run : Simulasi tanpa menulis ke database}';
 
     protected $description = 'Kumpulkan log analisa hasil analisa dari sampel yang sudah di-scan lab';
@@ -23,8 +26,10 @@ class CollectMonitorKeterlambatanAnalisa extends Command
         $dryRun = (bool) $this->option('dry-run');
         $kategoriFilter = $this->option('kategori');
 
+        [$startDate, $endDate] = $this->resolveDateRange();
+
         $this->info('Mulai collect log analisa');
-        $this->info('Periode tanggal jadwal: ' . MonitorKeterlambatanAnalisaService::START_DATE . ' s/d ' . Carbon::now()->toDateString());
+        $this->info('Periode tanggal jadwal: ' . $startDate->toDateString() . ' s/d ' . $endDate->toDateString());
 
         $kategoris = MasterKategori::where('is_active', 1)
             ->when($kategoriFilter, fn ($q) => $q->whereRaw("CONCAT(id, '-', nama_kategori) = ?", [$kategoriFilter]))
@@ -43,20 +48,24 @@ class CollectMonitorKeterlambatanAnalisa extends Command
             $this->line('');
             $this->info("Memproses kategori: {$kategori}");
 
-            $records = $service->collectLogRecords($kategori);
+            $records = $service->collectLogRecords($kategori, $startDate, $endDate);
             $this->info('Ditemukan ' . count($records) . ' record log analisa');
 
             if ($dryRun) {
                 continue;
             }
 
-            DB::transaction(function () use ($kategori, $records, &$totalUpserted, &$totalDeactivated) {
+            DB::transaction(function () use ($kategori, $records, $startDate, $endDate, &$totalUpserted, &$totalDeactivated) {
                 $activeKeys = collect($records)->map(
                     fn ($r) => $r['no_sampel'] . '|' . $r['nama_parameter']
                 )->toArray();
 
                 $deactivated = LogAnalisa::where('kategori_2', $kategori)
                     ->where('is_active', true)
+                    ->whereBetween('tanggal_jadwal', [
+                        $startDate->toDateString(),
+                        $endDate->toDateString(),
+                    ])
                     ->get()
                     ->filter(function ($row) use ($activeKeys) {
                         $key = $row->no_sampel . '|' . $row->nama_parameter;
@@ -94,6 +103,25 @@ class CollectMonitorKeterlambatanAnalisa extends Command
         $this->info('Durasi: ' . $this->formatDuration(microtime(true) - $startedAt));
 
         return 0;
+    }
+
+    private function resolveDateRange(): array
+    {
+        if ($this->option('date')) {
+            $date = Carbon::parse($this->option('date'));
+
+            return [$date->copy()->startOfDay(), $date->copy()->endOfDay()];
+        }
+
+        $endDate = $this->option('to')
+            ? Carbon::parse($this->option('to'))->endOfDay()
+            : Carbon::now()->endOfDay();
+
+        $startDate = $this->option('from')
+            ? Carbon::parse($this->option('from'))->startOfDay()
+            : Carbon::now()->subDays(MonitorKeterlambatanAnalisaService::COLLECT_DAYS)->startOfDay();
+
+        return [$startDate, $endDate];
     }
 
     private function formatDuration(float $seconds): string
