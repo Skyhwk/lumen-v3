@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterKategori;
-use App\Models\MonitorKeterlambatanAnalisa;
+use App\Models\LogAnalisa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -17,7 +17,7 @@ class MonitoringKeterlambatanAnalisaController extends Controller
         $kategori = $request->kategori ?: '1-Air';
         $tahun = (int) ($request->tahun ?: Carbon::now()->year);
 
-        $data = MonitorKeterlambatanAnalisa::where('kategori_2', $kategori)
+        $data = LogAnalisa::where('kategori_2', $kategori)
             ->whereYear('tanggal_jadwal', $tahun)
             ->where('is_active', true)
             ->whereNull('input_analisa')
@@ -50,7 +50,7 @@ class MonitoringKeterlambatanAnalisaController extends Controller
             ], 422);
         }
 
-        $data = MonitorKeterlambatanAnalisa::where('kategori_2', $kategori)
+        $data = LogAnalisa::where('kategori_2', $kategori)
             ->whereYear('tanggal_jadwal', $tahun)
             ->where('nama_parameter', $namaParameter)
             ->where('is_active', true)
@@ -104,7 +104,7 @@ class MonitoringKeterlambatanAnalisaController extends Controller
             $kategori = $request->kategori ?: '1-Air';
             $tanggal = $request->tanggal ?: Carbon::today()->format('Y-m-d');
 
-            $data = MonitorKeterlambatanAnalisa::where('kategori_2', $kategori)
+            $data = LogAnalisa::where('kategori_2', $kategori)
                 ->where('tanggal_jadwal', $tanggal)
                 ->where('is_active', true)
                 ->select(
@@ -157,7 +157,7 @@ class MonitoringKeterlambatanAnalisaController extends Controller
             ], 422);
         }
 
-        $data = MonitorKeterlambatanAnalisa::where('kategori_2', $kategori)
+        $data = LogAnalisa::where('kategori_2', $kategori)
             ->where('tanggal_jadwal', $tanggal)
             ->where('nama_parameter', $namaParameter)
             ->where('is_active', true)

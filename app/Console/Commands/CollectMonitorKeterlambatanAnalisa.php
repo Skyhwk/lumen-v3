@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\MasterKategori;
-use App\Models\MonitorKeterlambatanAnalisa;
+use App\Models\LogAnalisa;
 use App\Services\MonitorKeterlambatanAnalisaService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -19,6 +19,7 @@ class CollectMonitorKeterlambatanAnalisa extends Command
 
     public function handle(MonitorKeterlambatanAnalisaService $service): int
     {
+        $startedAt = microtime(true);
         $dryRun = (bool) $this->option('dry-run');
         $kategoriFilter = $this->option('kategori');
 
@@ -54,7 +55,7 @@ class CollectMonitorKeterlambatanAnalisa extends Command
                     fn ($r) => $r['no_sampel'] . '|' . $r['nama_parameter']
                 )->toArray();
 
-                $deactivated = MonitorKeterlambatanAnalisa::where('kategori_2', $kategori)
+                $deactivated = LogAnalisa::where('kategori_2', $kategori)
                     ->where('is_active', true)
                     ->get()
                     ->filter(function ($row) use ($activeKeys) {
@@ -68,7 +69,7 @@ class CollectMonitorKeterlambatanAnalisa extends Command
                 }
 
                 foreach (array_chunk($records, 500) as $chunk) {
-                    MonitorKeterlambatanAnalisa::upsert(
+                    LogAnalisa::upsert(
                         $chunk,
                         ['no_sampel', 'nama_parameter'],
                         [
@@ -90,7 +91,20 @@ class CollectMonitorKeterlambatanAnalisa extends Command
         $this->line('');
         $this->info('Selesai.');
         $this->info("Upserted: {$totalUpserted} | Deactivated: {$totalDeactivated}");
+        $this->info('Durasi: ' . $this->formatDuration(microtime(true) - $startedAt));
 
         return 0;
+    }
+
+    private function formatDuration(float $seconds): string
+    {
+        if ($seconds < 60) {
+            return round($seconds, 2) . ' detik';
+        }
+
+        $minutes = (int) floor($seconds / 60);
+        $remaining = round($seconds % 60, 2);
+
+        return "{$minutes} menit {$remaining} detik";
     }
 }
