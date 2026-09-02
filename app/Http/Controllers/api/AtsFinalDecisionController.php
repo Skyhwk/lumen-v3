@@ -1115,7 +1115,7 @@ class AtsFinalDecisionController extends Controller
         if (empty($applicant->token_approval)) {
             $tokenService = new \App\Services\GenerateToken();
             $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
-            $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $token = $tokenService->encryptv1(md5($tokenKey) . '|' . date('Y-m-d'));
             $applicant->token_approval = $token;
             $applicant->save();
         } else {
@@ -1208,7 +1208,7 @@ class AtsFinalDecisionController extends Controller
         try {
             $tokenService = new GenerateToken();
             $tokenKey = $pr->id . $applicant->nama_lengkap . 'approval' . str_replace('.', '', microtime(true));
-            $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d')));
+            $token = $tokenService->encryptv1(md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d')));
 
             $applicant->update([
                 'token_approval'           => $token,
