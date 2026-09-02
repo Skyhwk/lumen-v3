@@ -24,8 +24,6 @@ use App\Services\PayrollRecordSyncService;
 
 class NonaktifKaryawanService
 {
-    private const QUOTA_BANK_DATA = 5000;
-
     private const JABATAN_SALES = 24;
     private const JABATAN_CRO = 148;
 
@@ -74,38 +72,29 @@ class NonaktifKaryawanService
 
     private function handleSalesRotation()
     {
+        // 1. Masukkan SEMUA pelanggan yang belum pernah order ke Bank Data (tanpa batasan kuota)
+        $noOrderCustomerIds = MasterPelanggan::where([
+            'sales_id' => $this->karyawan->id,
+            'is_active' => true
+        ])
+        ->whereDoesntHave('order_customer')
+        ->pluck('id_pelanggan')
+        ->toArray();
+
+        if (!empty($noOrderCustomerIds)) {
+            $this->releaseCustomersToBankData($noOrderCustomerIds);
+        }
+
+        // 2. Ambil staff pengganti untuk rotasi sisa pelanggan (yang sudah punya order)
         $salesStaffs = $this->getActiveStaffsByJabatan(self::JABATAN_SALES, true);
         $croStaffs = $this->getActiveStaffsByJabatan(self::JABATAN_CRO);
 
         if ($salesStaffs->isEmpty() && $croStaffs->isEmpty()) {
-            Log::warning("Tidak ada staff pengganti tersedia untuk rotasi pelanggan {$this->karyawan->nama_lengkap}");
+            Log::warning("Tidak ada staff pengganti tersedia untuk rotasi pelanggan ber-order milik {$this->karyawan->nama_lengkap}");
             return;
         }
 
-        $currentBankDataCount = MasterPelanggan::whereNull('sales_id')->where('is_active', true)->count();
-        $remainingQuota = max(0, self::QUOTA_BANK_DATA - $currentBankDataCount); // Pake max 0 biar ga negatif
-
-        if ($remainingQuota > 0) {
-            // 70% dilempar ke bank data
-            $noOrderQuery = MasterPelanggan::where([
-                'sales_id' => $this->karyawan->id,
-                'is_active' => true
-            ])->whereDoesntHave('order_customer');
-
-            $totalCount = $noOrderQuery->count();
-
-            if ($totalCount > 0) {
-                $limit70 = min((int) floor($totalCount * 0.7), $remainingQuota);
-
-                if ($limit70 > 0) {
-                    $idsToBankData = $noOrderQuery->limit($limit70)->pluck('id_pelanggan')->toArray();
-
-                    if (!empty($idsToBankData)) $this->releaseCustomersToBankData($idsToBankData);
-                }
-            };
-        }
-
-        // sisanya didistribusikan ke sales/CRO lain
+        // 3. Sisanya (pelanggan yang punya order) didistribusikan ke sales/CRO lain
         $this->distributeRemainingCustomers($salesStaffs, $croStaffs);
     }
 
@@ -118,18 +107,20 @@ class NonaktifKaryawanService
             'tanggal_rotasi' => $this->timestamp,
         ], $idsToBankData);
 
-        // Insert batch pake chunk biar ga nabrak limit placeholder database
+        // Insert & Update batch pake chunk biar ga nabrak limit placeholder database
         foreach (array_chunk($historyData, 1000) as $chunk) {
             HistoryPerubahanSales::insert($chunk);
         }
 
-        MasterPelanggan::whereIn('id_pelanggan', $idsToBankData)
-            ->update([
-                'sales_id' => null,
-                'sales_penanggung_jawab' => null,
-                'updated_by' => 'System',
-                'updated_at' => $this->timestamp,
-            ]);
+        foreach (array_chunk($idsToBankData, 1000) as $chunkIds) {
+            MasterPelanggan::whereIn('id_pelanggan', $chunkIds)
+                ->update([
+                    'sales_id' => null,
+                    'sales_penanggung_jawab' => null,
+                    'updated_by' => 'System',
+                    'updated_at' => $this->timestamp,
+                ]);
+        }
     }
 
     private function distributeRemainingCustomers($salesStaffs, $croStaffs)
