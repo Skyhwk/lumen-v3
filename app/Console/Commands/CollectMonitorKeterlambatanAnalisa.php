@@ -15,15 +15,15 @@ class CollectMonitorKeterlambatanAnalisa extends Command
                             {--kategori= : Kategori spesifik, format id-nama (contoh: 1-Air)}
                             {--dry-run : Simulasi tanpa menulis ke database}';
 
-    protected $description = 'Kumpulkan data keterlambatan hasil analisa dari sampel yang sudah di-scan lab';
+    protected $description = 'Kumpulkan log analisa hasil analisa dari sampel yang sudah di-scan lab';
 
     public function handle(MonitorKeterlambatanAnalisaService $service): int
     {
         $dryRun = (bool) $this->option('dry-run');
         $kategoriFilter = $this->option('kategori');
 
-        $this->info('Mulai collect monitor keterlambatan analisa');
-        $this->info('Periode: ' . MonitorKeterlambatanAnalisaService::START_DATE . ' s/d ' . Carbon::now()->toDateString());
+        $this->info('Mulai collect log analisa');
+        $this->info('Periode tanggal jadwal: ' . MonitorKeterlambatanAnalisaService::START_DATE . ' s/d ' . Carbon::now()->toDateString());
 
         $kategoris = MasterKategori::where('is_active', 1)
             ->when($kategoriFilter, fn ($q) => $q->whereRaw("CONCAT(id, '-', nama_kategori) = ?", [$kategoriFilter]))
@@ -42,8 +42,8 @@ class CollectMonitorKeterlambatanAnalisa extends Command
             $this->line('');
             $this->info("Memproses kategori: {$kategori}");
 
-            $records = $service->collectDelayedRecords($kategori);
-            $this->info('Ditemukan ' . count($records) . ' record keterlambatan');
+            $records = $service->collectLogRecords($kategori);
+            $this->info('Ditemukan ' . count($records) . ' record log analisa');
 
             if ($dryRun) {
                 continue;
@@ -71,7 +71,16 @@ class CollectMonitorKeterlambatanAnalisa extends Command
                     MonitorKeterlambatanAnalisa::upsert(
                         $chunk,
                         ['no_sampel', 'nama_parameter'],
-                        ['kategori_2', 'ftc_laboratory', 'ftc_verifier', 'is_active', 'updated_at']
+                        [
+                            'id_parameter',
+                            'kategori_2',
+                            'tanggal_jadwal',
+                            'ftc_laboratory',
+                            'ftc_verifier',
+                            'input_analisa',
+                            'is_active',
+                            'updated_at',
+                        ]
                     );
                     $totalUpserted += count($chunk);
                 }

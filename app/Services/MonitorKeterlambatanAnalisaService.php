@@ -21,7 +21,7 @@ class MonitorKeterlambatanAnalisaService
 {
     public const START_DATE = '2026-01-01';
 
-    public function collectDelayedRecords(string $kategori): array
+    public function collectLogRecords(string $kategori): array
     {
         $startDate = Carbon::parse(self::START_DATE)->startOfDay();
         $endDate = Carbon::now()->endOfDay();
@@ -32,6 +32,7 @@ class MonitorKeterlambatanAnalisaService
             'order_detail.no_sampel',
             'order_detail.parameter',
             'order_detail.kategori_2',
+            'order_detail.tanggal_sampling',
             't_ftc.ftc_laboratory',
             't_ftc.ftc_verifier'
         )
@@ -39,7 +40,7 @@ class MonitorKeterlambatanAnalisaService
             ->where('order_detail.is_active', true)
             ->join('t_ftc', 't_ftc.no_sample', '=', 'order_detail.no_sampel')
             ->whereNotNull('t_ftc.ftc_laboratory')
-            ->whereBetween('t_ftc.ftc_laboratory', [$startDate, $endDate]);
+            ->whereBetween('order_detail.tanggal_sampling', [$startDate, $endDate]);
 
         if ($pencarian) {
             $orderDetails->whereIn('order_detail.kategori_3', $pencarian);
@@ -52,30 +53,35 @@ class MonitorKeterlambatanAnalisaService
         }
 
         $noSampelList = $orderDetails->pluck('no_sampel')->unique()->toArray();
-        $testedParams = $this->getTestedParameters($kategori, $noSampelList);
+        $inputTimestamps = $this->getInputAnalisaTimestamps($kategori, $noSampelList);
         $excluded = $this->parameterExcluded($kategori);
 
         $records = [];
 
         foreach ($orderDetails as $item) {
-            $paramAll = $this->parseParameterNames($item->parameter);
+            $paramAll = $this->parseParameters($item->parameter);
+            $tanggalJadwal = $item->tanggal_sampling
+                ? Carbon::parse($item->tanggal_sampling)->format('Y-m-d')
+                : null;
 
-            $paramTested = $testedParams->has($item->no_sampel)
-                ? collect(explode(',', $testedParams[$item->no_sampel]))->map(fn ($p) => trim($p))
-                : collect();
+            $sampleInputs = $inputTimestamps->get($item->no_sampel, collect());
 
-            $belumDiinput = $paramAll
-                ->diff($paramTested)
-                ->reject(fn ($p) => in_array(strtolower($p), $excluded))
-                ->values();
+            foreach ($paramAll as $param) {
+                if (in_array(strtolower($param['nama']), $excluded)) {
+                    continue;
+                }
 
-            foreach ($belumDiinput as $namaParameter) {
+                $inputAnalisa = $sampleInputs->get(strtolower($param['nama']));
+
                 $records[] = [
                     'no_sampel' => $item->no_sampel,
-                    'nama_parameter' => $namaParameter,
+                    'id_parameter' => $param['id'],
+                    'nama_parameter' => $param['nama'],
                     'kategori_2' => $item->kategori_2,
+                    'tanggal_jadwal' => $tanggalJadwal,
                     'ftc_laboratory' => $item->ftc_laboratory,
                     'ftc_verifier' => $item->ftc_verifier,
+                    'input_analisa' => $inputAnalisa,
                     'is_active' => true,
                     'created_at' => Carbon::now(),
                     'updated_at' => Carbon::now(),
@@ -87,6 +93,11 @@ class MonitorKeterlambatanAnalisaService
     }
 
     public function parseParameterNames(?string $parameterJson): Collection
+    {
+        return $this->parseParameters($parameterJson)->pluck('nama');
+    }
+
+    public function parseParameters(?string $parameterJson): Collection
     {
         if (empty($parameterJson)) {
             return collect();
@@ -101,13 +112,31 @@ class MonitorKeterlambatanAnalisaService
         return collect($decoded)
             ->map(function ($p) {
                 $parts = explode(';', $p, 2);
-                return trim($parts[1] ?? $parts[0] ?? '');
+                $id = isset($parts[0]) ? (int) trim($parts[0]) : null;
+                $nama = trim($parts[1] ?? $parts[0] ?? '');
+
+                return [
+                    'id' => $id ?: null,
+                    'nama' => $nama,
+                ];
             })
-            ->filter()
+            ->filter(fn ($param) => $param['nama'] !== '')
             ->values();
     }
 
-    private function getTestedParameters(string $kategori, array $noSampel): Collection
+    public function getInputAnalisaTimestamps(string $kategori, array $noSampel): Collection
+    {
+        return $this->queryHeaderRecords($kategori, $noSampel)
+            ->groupBy('no_sampel')
+            ->map(function ($items) {
+                return $items
+                    ->filter(fn ($item) => !empty($item->parameter) && !empty($item->created_at))
+                    ->groupBy(fn ($item) => strtolower(trim($item->parameter)))
+                    ->map(fn ($group) => $group->sortByDesc('created_at')->first()->created_at);
+            });
+    }
+
+    protected function queryHeaderRecords(string $kategori, array $noSampel): Collection
     {
         if (in_array($kategori, ['1-Air', '6-Padatan'])) {
             $models = [
@@ -136,13 +165,11 @@ class MonitorKeterlambatanAnalisaService
             ->flatMap(function ($model) use ($noSampel) {
                 return $model::where('is_active', true)
                     ->whereIn('no_sampel', $noSampel)
-                    ->get(['no_sampel', 'parameter']);
-            })
-            ->groupBy('no_sampel')
-            ->map(fn ($items) => $items->pluck('parameter')->implode(','));
+                    ->get(['no_sampel', 'parameter', 'created_at']);
+            });
     }
 
-    private function kategoriPencarian(string $kategori): ?array
+    public function kategoriPencarian(string $kategori): ?array
     {
         $map = [
             '4-Udara' => ['11-Udara Ambient', '27-Udara Lingkungan Kerja', '12-Udara Angka Kuman', '46-Udara Swab Test'],
