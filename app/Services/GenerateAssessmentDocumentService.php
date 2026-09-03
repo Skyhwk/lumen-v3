@@ -14,8 +14,166 @@ class GenerateAssessmentDocumentService
     use BuildsCandidateAssessmentPreview;
 
     private const OUTPUT_DIR = 'document_assessment';
+    private const TEMP_DIR = 'temp/email-attachments/assessment';
 
-    public function generateForRecruitment(int $recruitmentId): array
+    public function generateForRecruitment(int $recruitmentId, bool $persist = true): array
+    {
+        $context = $this->loadRecruitmentContext($recruitmentId);
+
+        $outputDir = $persist
+            ? base_path('public/' . self::OUTPUT_DIR)
+            : base_path('public/' . self::TEMP_DIR);
+
+        if (!is_dir($outputDir)) {
+            @mkdir($outputDir, 0775, true);
+        }
+
+        $documents = [];
+        $failedSessions = [];
+
+        foreach ($context['sessions'] as $session) {
+            if (empty($session->result_json)) {
+                continue;
+            }
+
+            $result = json_decode($session->result_json, true) ?: [];
+            $engine = strtolower((string) ($result['engine'] ?? ''));
+
+            try {
+                $document = $this->renderSessionPdf(
+                    $session,
+                    $result,
+                    $engine,
+                    $context['candidate_name'],
+                    $outputDir,
+                    $persist
+                );
+
+                if ($document) {
+                    $documents[] = $document;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Assessment PDF generation failed for session', [
+                    'recruitment_id' => $recruitmentId,
+                    'session_id' => $session->id,
+                    'category' => $session->category_name,
+                    'message' => $e->getMessage(),
+                ]);
+
+                $failedSessions[] = [
+                    'session_id' => (int) $session->id,
+                    'category_name' => trim((string) ($session->category_name ?? 'Assessment')),
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        if (empty($documents)) {
+            throw new \RuntimeException('Tidak ada dokumen PDF yang berhasil dibuat.');
+        }
+
+        return [
+            'recruitment_id' => $recruitmentId,
+            'attempt_id' => (int) $context['attempt']->id,
+            'candidate_name' => $context['candidate_name'],
+            'persisted' => $persist,
+            'documents' => $documents,
+            'failed_sessions' => $failedSessions,
+        ];
+    }
+
+    public function tryGenerateTempAttachments(int $recruitmentId): array
+    {
+        try {
+            return $this->generateForRecruitment($recruitmentId, false);
+        } catch (\RuntimeException $e) {
+            Log::info('Assessment email attachments skipped', [
+                'recruitment_id' => $recruitmentId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [
+                'recruitment_id' => $recruitmentId,
+                'candidate_name' => null,
+                'persisted' => false,
+                'documents' => [],
+                'failed_sessions' => [],
+                'skipped_reason' => $e->getMessage(),
+            ];
+        }
+    }
+
+    public function buildSendEmailAttachments(array $documents): array
+    {
+        $attachments = [];
+
+        foreach ($documents as $document) {
+            if (empty($document['path'])) {
+                continue;
+            }
+
+            $attachments[] = [
+                'path' => $document['path'],
+                'name' => $document['attachment_name'] ?? ($document['filename'] ?? basename($document['path'])),
+            ];
+        }
+
+        return $attachments;
+    }
+
+    public function mapDocumentsToAttachmentLabels(array $documents): array
+    {
+        $labels = [];
+
+        foreach ($documents as $document) {
+            $labels[] = [
+                'name' => $document['attachment_name'] ?? ($document['filename'] ?? 'Assessment.pdf'),
+            ];
+        }
+
+        return $labels;
+    }
+
+    public function listAttachmentLabels(int $recruitmentId): array
+    {
+        try {
+            $context = $this->loadRecruitmentContext($recruitmentId);
+        } catch (\RuntimeException $e) {
+            return [];
+        }
+
+        $labels = [];
+
+        foreach ($context['sessions'] as $session) {
+            if (empty($session->result_json)) {
+                continue;
+            }
+
+            $categoryName = trim((string) ($session->category_name ?? 'Assessment'));
+            $labels[] = [
+                'name' => $this->buildAttachmentDisplayName($context['candidate_name'], $categoryName),
+            ];
+        }
+
+        return $labels;
+    }
+
+    public function cleanupDocuments(array $documents): void
+    {
+        foreach ($documents as $document) {
+            $fullPath = $document['full_path'] ?? null;
+
+            if (!$fullPath && !empty($document['path'])) {
+                $fullPath = public_path($document['path']);
+            }
+
+            if ($fullPath && is_file($fullPath)) {
+                @unlink($fullPath);
+            }
+        }
+    }
+
+    private function loadRecruitmentContext(int $recruitmentId): array
     {
         $candidate = NewRecruitment::find($recruitmentId);
         if (!$candidate) {
@@ -41,61 +199,32 @@ class GenerateAssessmentDocumentService
             throw new \RuntimeException('Belum ada sesi assessment yang selesai.');
         }
 
-        $outputDir = base_path('public/' . self::OUTPUT_DIR);
-        if (!is_dir($outputDir)) {
-            @mkdir($outputDir, 0775, true);
-        }
-
-        $documents = [];
-        $candidateName = trim((string) ($candidate->nama_lengkap ?? 'Kandidat'));
-
-        foreach ($sessions as $session) {
-            if (empty($session->result_json)) {
-                continue;
-            }
-
-            $result = json_decode($session->result_json, true) ?: [];
-            $engine = strtolower((string) ($result['engine'] ?? ''));
-
-            try {
-                $document = $this->renderSessionPdf(
-                    $session,
-                    $result,
-                    $engine,
-                    $candidateName,
-                    $outputDir
-                );
-
-                if ($document) {
-                    $documents[] = $document;
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Assessment PDF generation failed for session', [
-                    'recruitment_id' => $recruitmentId,
-                    'session_id' => $session->id,
-                    'category' => $session->category_name,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        if (empty($documents)) {
-            throw new \RuntimeException('Tidak ada dokumen PDF yang berhasil dibuat.');
-        }
-
         return [
-            'recruitment_id' => $recruitmentId,
-            'attempt_id' => (int) $attempt->id,
-            'candidate_name' => $candidateName,
-            'documents' => $documents,
+            'candidate' => $candidate,
+            'attempt' => $attempt,
+            'sessions' => $sessions,
+            'candidate_name' => trim((string) ($candidate->nama_lengkap ?? 'Kandidat')),
         ];
     }
 
-    private function renderSessionPdf($session, array $result, string $engine, string $candidateName, string $outputDir): ?array
-    {
+    private function renderSessionPdf(
+        $session,
+        array $result,
+        string $engine,
+        string $candidateName,
+        string $outputDir,
+        bool $persist
+    ): ?array {
         $categoryName = trim((string) ($session->category_name ?? 'Assessment'));
         $viewData = $this->buildViewData($session, $result, $engine, $candidateName, $categoryName);
         $viewName = $this->resolveViewName($engine);
+
+        $attachmentName = $this->buildAttachmentDisplayName($candidateName, $categoryName);
+        $filename = $persist
+            ? $this->buildPdfFilename($candidateName, $categoryName)
+            : uniqid('assessment_', true) . '_' . $attachmentName;
+        $relativeDir = $persist ? self::OUTPUT_DIR : self::TEMP_DIR;
+        $fullPath = rtrim($outputDir, '/') . '/' . $filename;
 
         $html = view($viewName, $viewData)->render();
 
@@ -108,12 +237,24 @@ class GenerateAssessmentDocumentService
             'margin_bottom' => 4,
         ]);
 
-        
-        $mpdf->WriteHTML($html);
+        $chartFiles = $viewData['disc_chart_files'] ?? [];
+        foreach ($chartFiles as $chartFile) {
+            if (is_string($chartFile) && is_file($chartFile)) {
+                $mpdf->imageVars['discProfileChart'] = file_get_contents($chartFile);
+                break;
+            }
+        }
 
-        $filename = $this->buildPdfFilename($candidateName, $categoryName);
-        $fullPath = rtrim($outputDir, '/') . '/' . $filename;
-        $mpdf->Output($fullPath, Destination::FILE);
+        try {
+            $mpdf->WriteHTML($html);
+            $mpdf->Output($fullPath, Destination::FILE);
+        } finally {
+            foreach ($chartFiles as $chartFile) {
+                if (is_string($chartFile) && is_file($chartFile)) {
+                    @unlink($chartFile);
+                }
+            }
+        }
 
         if (!is_file($fullPath)) {
             return null;
@@ -125,8 +266,10 @@ class GenerateAssessmentDocumentService
             'category_name' => $categoryName,
             'engine' => $engine ?: 'generic',
             'filename' => $filename,
-            'path' => self::OUTPUT_DIR . '/' . $filename,
-            'url' => $this->buildPublicUrl($filename),
+            'attachment_name' => $attachmentName,
+            'path' => $relativeDir . '/' . $filename,
+            'full_path' => $fullPath,
+            'url' => $persist ? $this->buildPublicUrl($filename) : null,
             'scored_at' => $result['scored_at'] ?? $session->completed_at,
         ];
     }
@@ -142,8 +285,15 @@ class GenerateAssessmentDocumentService
         ];
 
         if ($engine === 'disc') {
+            $discDetail = $this->buildDiscDetail($result);
+            $chartFile = app(DiscProfileChartRenderer::class)->renderToFile($discDetail);
+            if ($chartFile) {
+                $discDetail['chart_image'] = $chartFile;
+            }
+
             return array_merge($base, [
-                'disc_detail' => $this->buildDiscDetail($result),
+                'disc_detail' => $discDetail,
+                'disc_chart_files' => array_values(array_filter([$chartFile])),
                 'summary' => $this->buildSessionResultSummary($session, $result),
             ]);
         }
@@ -271,6 +421,15 @@ class GenerateAssessmentDocumentService
         );
     }
 
+    private function buildAttachmentDisplayName(string $candidateName, string $categoryName): string
+    {
+        return sprintf(
+            '%s_%s.pdf',
+            $this->sanitizeFilenamePart($categoryName),
+            $this->sanitizeFilenamePart($candidateName)
+        );
+    }
+
     private function sanitizeFilenamePart(string $value): string
     {
         $value = preg_replace('/[^A-Za-z0-9_-]+/', '_', $value) ?: 'unknown';
@@ -279,80 +438,24 @@ class GenerateAssessmentDocumentService
         return $value !== '' ? substr($value, 0, 80) : 'unknown';
     }
 
-    private function buildFormalHeaderHtml(): string
-    {
-        return '
-            <div style="border-bottom: 1px solid #000; padding-bottom: 5px; font-family: Times New Roman, Times, serif;">
-                <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                        <td style="font-size: 12pt; font-weight: bold; color: #000;">INTILAB</td>
-                        <td style="text-align: right; font-size: 9pt; color: #333;">Dokumen Assessment</td>
-                    </tr>
-                </table>
-            </div>
-        ';
-    }
-
-    private function buildFormalFooterHtml(): string
-    {
-        return '
-            <div style="border-top: 1px solid #666; padding-top: 4px; font-family: Times New Roman, Times, serif; font-size: 8pt; color: #333;">
-                <table width="100%">
-                    <tr>
-                        <td>Dokumen ini dihasilkan secara otomatis oleh sistem INTILAB ATS</td>
-                        <td style="text-align: right;">Halaman {PAGENO} / {nbpg}</td>
-                    </tr>
-                </table>
-            </div>
-        ';
-    }
-
-    private function buildHeaderHtml(string $candidateName, string $categoryName): string
-    {
-        $candidate = htmlspecialchars($candidateName, ENT_QUOTES, 'UTF-8');
-        $category = htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8');
-
-        return '
-            <div style="border-bottom: 2px solid #0f3460; padding-bottom: 6px; font-family: Helvetica, Arial, sans-serif;">
-                <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                        <td style="font-size: 18px; font-weight: bold; color: #0f3460;">INTILAB</td>
-                        <td style="text-align: right; font-size: 10px; color: #64748b;">
-                            Hasil Assessment<br/>
-                            <span style="font-weight: bold; color: #0f3460;">' . $category . '</span>
-                        </td>
-                    </tr>
-                </table>
-                <div style="font-size: 10px; color: #475569; margin-top: 4px;">Kandidat: ' . $candidate . '</div>
-            </div>
-        ';
-    }
-
-    private function buildFooterHtml(): string
-    {
-        $year = date('Y');
-
-        return '
-            <div style="border-top: 1px solid #cbd5e1; padding-top: 5px; font-family: Helvetica, Arial, sans-serif; font-size: 9px; color: #94a3b8;">
-                <table width="100%">
-                    <tr>
-                        <td>Dokumen dihasilkan otomatis oleh sistem INTILAB ATS</td>
-                        <td style="text-align: right;">Halaman {PAGENO} / {nbpg}</td>
-                    </tr>
-                </table>
-                <div style="text-align: center; margin-top: 2px;">&copy; ' . $year . ' INTILAB</div>
-            </div>
-        ';
-    }
-
     private function buildPublicUrl(string $filename): string
     {
-        $baseUrl = rtrim((string) env('APP_URL', ''), '/');
+        $relativePath = self::OUTPUT_DIR . '/' . rawurlencode($filename);
+        $base = rtrim((string) env('APP_URL_PATH', ''), '/');
 
-        if ($baseUrl === '') {
-            return self::OUTPUT_DIR . '/' . $filename;
+        if ($base !== '') {
+            return $base . '/' . $relativePath;
         }
 
-        return $baseUrl . '/public/' . self::OUTPUT_DIR . '/' . rawurlencode($filename);
+        $base = rtrim((string) env('APP_URL', ''), '/');
+        if ($base === '') {
+            return $relativePath;
+        }
+
+        if (substr($base, -7) === '/public') {
+            return $base . '/' . self::OUTPUT_DIR . '/' . rawurlencode($filename);
+        }
+
+        return $base . '/public/' . self::OUTPUT_DIR . '/' . rawurlencode($filename);
     }
 }

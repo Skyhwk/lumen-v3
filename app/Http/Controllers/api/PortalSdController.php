@@ -251,7 +251,7 @@ class PortalSdController extends Controller
                 $data->no_order = $request->no_order;
                 $data->nama_perusahaan = $request->nama_perusahaan;
                 $data->alamat_perusahaan = $request->alamat_perusahaan;
-                $data->nama_pengantar_sampel = $request->nama_pengantar;
+                $data->nama_pengantar_sampel = $this->normalizePengantarName($request->nama_pengantar);
                 $data->no_hp_pengantar = $request->no_hp_pengantar;
                 $data->ekspedisi = $request->ekspedisi;
                 $data->suhu = $request->suhu;
@@ -267,49 +267,9 @@ class PortalSdController extends Controller
                 $data->nama_penerima = $request->nama_penerima;
                 $data->tanggal_sepakatan = $request->tanggal_sepakatan;
 
-                // conver to img
-                $base64ttd_1 = $request->base64ttd_1;
-                $fileName1 = null; // Default null jika tidak ada tanda tangan
-                if (!empty($base64ttd_1) && strpos($base64ttd_1, 'data:image') === 0) {
-                    @list($type, $data1) = explode(';', $base64ttd_1); // Gunakan $data1 agar tidak bentrok
-                    @list(,$data1) = explode(',', $data1);
-                    $ttd_1 = base64_decode($data1);
-                    
-                    $path = public_path('dokumen/sd');
-
-                    // Pastikan direktori ada, buat jika belum ada
-                    if (!File::exists($path)) {
-                        File::makeDirectory($path, 0777, true, true);
-                    }
-
-                    $fileName1 = 'signature_pengirim_' . time() . '.png'; // Nama file unik untuk pengirim
-                    $filePath1 = $path . DIRECTORY_SEPARATOR . $fileName1;
-                    file_put_contents($filePath1, $ttd_1);
-                }
-
-                // --- Proses Tanda Tangan Penerima ---
-                $base64ttd_2 = $request->base64ttd_2;
-                $fileName2 = null; // Default null jika tidak ada tanda tangan
-                if (!empty($base64ttd_2) && strpos($base64ttd_2, 'data:image') === 0) {
-                    @list($type, $data2) = explode(';', $base64ttd_2); // Gunakan $data2 agar tidak bentrok
-                    @list(,$data2) = explode(',', $data2);
-                    $ttd_2 = base64_decode($data2);
-
-                    $path = public_path('dokumen/sd'); // Path bisa sama
-
-                    // Pastikan direktori ada, buat jika belum ada (cek lagi tidak masalah, sudah ada akan dilewati)
-                    if (!File::exists($path)) {
-                        File::makeDirectory($path, 0777, true, true);
-                    }
-
-                    $fileName2 = 'signature_penerima_' . time() . '.png'; // Nama file unik untuk penerima
-                    $filePath2 = $path . DIRECTORY_SEPARATOR . $fileName2;
-                    file_put_contents($filePath2, $ttd_2);
-                }
-
-                // --- Simpan Nama File ke Model Anda ---
-                $data->ttd_pengirim = $fileName1;
-                $data->ttd_penerima = $fileName2; // Perbaiki typo 'peneriam' menjadi 'penerima'
+                $ttdFiles = $this->storeSignatureFiles($request);
+                $data->ttd_pengirim = $ttdFiles['pengirim'];
+                $data->ttd_penerima = $ttdFiles['penerima'];
                 // $data->nomor_pic = $request->nomor_pic;
                 // $data->ekspedisi = $request->ekspedisi;
 
@@ -333,7 +293,7 @@ class PortalSdController extends Controller
                 DB::commit();
                 return response()->json(['data' => $getId], 200);
             } else {
-                $chek->nama_pengantar_sampel = $request->nama_pengantar;
+                $chek->nama_pengantar_sampel = $this->normalizePengantarName($request->nama_pengantar);
                 $chek->no_hp_pengantar = $request->no_hp_pengantar;
                 $chek->ekspedisi = $request->ekspedisi;
                 $chek->suhu = $request->suhu;
@@ -341,6 +301,30 @@ class PortalSdController extends Controller
                 $chek->volume = $request->volume;
                 $chek->kondisi_ubnormal = json_encode($request->kondisi_ubnormal);
                 $chek->alamat_perusahaan = $request->alamat_perusahaan;
+                if ($request->filled('no_order')) {
+                    $chek->no_order = $request->no_order;
+                }
+                if ($request->exists('nama_penerima')) {
+                    $chek->nama_penerima = $request->nama_penerima;
+                }
+                if ($request->exists('pihak_pengirim')) {
+                    $chek->tanda_persetujuan_pengirim = $request->pihak_pengirim;
+                }
+                if ($request->exists('pihak_penerima')) {
+                    $chek->tanda_persetujuan_penerima = $request->pihak_penerima;
+                }
+                if ($request->exists('tanggal_sepakatan')) {
+                    $chek->tanggal_sepakatan = $request->tanggal_sepakatan;
+                }
+
+                $ttdFiles = $this->storeSignatureFiles($request);
+                if (!empty($ttdFiles['pengirim'])) {
+                    $chek->ttd_pengirim = $ttdFiles['pengirim'];
+                }
+                if (!empty($ttdFiles['penerima'])) {
+                    $chek->ttd_penerima = $ttdFiles['penerima'];
+                }
+
                 $chek->updated_at = DATE('Y-m-d H:i:s');
                 $chek->save();
 
@@ -377,9 +361,10 @@ class PortalSdController extends Controller
         }
     }
 
-    private function storeHeaderEksternal($request)
+    private function storeHeaderEksternal($request, $traceId = null)
     {
-        
+        $traceId = $traceId ?: ($request->input('trace_id') ?: uniqid('storeHeaderEksternal_', true));
+
         DB::beginTransaction();
         try {
             $sampelDiantarID = $request->idSampelDiantar;
@@ -387,6 +372,14 @@ class PortalSdController extends Controller
                 $chek = SampelDiantar::where('id', $sampelDiantarID)->first();
             } else {
                 $chek = null;
+            }
+            if ($chek !== null) {
+                DB::commit();
+                Log::info('[PortalSd][storeHeaderEksternal] Header sudah ada', [
+                    'trace_id' => $traceId,
+                    'id' => $chek->id,
+                ]);
+                return $chek;
             }
             if ($chek == null) {
                 $data = new SampelDiantar;
@@ -431,24 +424,71 @@ class PortalSdController extends Controller
         } catch (\Exception $ex) {
             //throw $th;
             DB::rollback();
-            \Log::error('storeHeaderEksternal ERROR', [
+            Log::error('[PortalSd][storeHeaderEksternal] ERROR', [
+                'trace_id' => $traceId,
                 'message' => $ex->getMessage(),
                 'line'    => $ex->getLine(),
                 'file'    => $ex->getFile(),
                 'request' => $request->all(),
             ]);
             return response()->json([
+                "error" => true,
                 "message" => $ex->getMessage(),
                 "line" => $ex->getLine(),
-                "file" => $ex->getFile()
+                "file" => $ex->getFile(),
+                "trace_id" => $traceId,
             ], 500);
         }
     }
 
+    private function normalizePeriode($periode)
+    {
+        if ($periode === null || $periode === '' || $periode === 'null' || $periode === 'undefined') {
+            return null;
+        }
+
+        return $periode;
+    }
+
+    private function findSampelDiantarDetail($headerId, $periode)
+    {
+        if (!$headerId) {
+            return null;
+        }
+
+        $query = SampelDiantarDetail::where('id_header', $headerId);
+        if ($periode === null) {
+            $query->where(function ($q) {
+                $q->whereNull('periode')
+                    ->orWhere('periode', '')
+                    ->orWhere('periode', 'null');
+            });
+        } else {
+            $query->where('periode', $periode);
+        }
+
+        return $query->first();
+    }
+
     public function saveStep(Request $request)
     {
+        $traceId = $request->input('trace_id') ?: uniqid('lumen_saveStep_', true);
+
         try {
-            
+            Log::info('[PortalSd][saveStep] Start', [
+                'trace_id' => $traceId,
+                'mode' => $request->mode,
+                'idSampelDiantar' => $request->idSampelDiantar,
+                'periode' => $request->periode,
+                'no_order' => $request->no_order,
+                'no_document' => $request->no_document,
+                'has_external_data' => !empty($request->external_data),
+                'has_internal_data' => !empty($request->internal_data),
+                'sample_count' => is_array($request->external_data)
+                    ? count($request->external_data)
+                    : (is_array($request->internal_data) ? count($request->internal_data) : null),
+            ]);
+
             if ($request->mode == 'internal') {
                 $dataSave = SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
                     ->where('periode', $request->periode)
@@ -591,171 +631,211 @@ class PortalSdController extends Controller
                     'periode'         => $request->periode,
                 ], 200);
             } else if ($request->mode == 'external') {
-                $dataSave = SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
-                    ->where('periode', $request->periode)
-                    ->first();
+                $periode = $this->normalizePeriode($request->periode);
+                $headerId = $request->idSampelDiantar;
+                $dataSave = $this->findSampelDiantarDetail($headerId, $periode);
+                $isExistingDetail = $dataSave instanceof SampelDiantarDetail;
 
-                if ($dataSave == null) {
-                    $dataSave = $this->storeHeaderEksternal($request);
+                if (!$isExistingDetail) {
+                    Log::info('[PortalSd][saveStep] Detail belum ada, storeHeaderEksternal', [
+                        'trace_id' => $traceId,
+                        'idSampelDiantar' => $headerId,
+                        'periode' => $periode,
+                    ]);
+                    $createdHeader = $this->storeHeaderEksternal($request, $traceId);
+                    if ($createdHeader instanceof \Illuminate\Http\JsonResponse) {
+                        Log::error('[PortalSd][saveStep] storeHeaderEksternal gagal', [
+                            'trace_id' => $traceId,
+                            'response' => $createdHeader->getContent(),
+                        ]);
+                        return $createdHeader;
+                    }
+                    $headerId = $createdHeader->id ?? $headerId;
+                    $dataSave = $this->findSampelDiantarDetail($headerId, $periode);
+                    $isExistingDetail = $dataSave instanceof SampelDiantarDetail;
+                } else {
+                    $headerId = $dataSave->id_header ?: $headerId;
                 }
 
                 $incoming = $request->external_data;
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
+                if (!is_array($incoming) || empty($incoming)) {
+                    Log::error('[PortalSd][saveStep] external_data kosong/tidak valid', [
+                        'trace_id' => $traceId,
+                        'idSampelDiantar' => $headerId,
+                    ]);
+                    return response()->json([
+                        'error' => true,
+                        'message' => 'Data eksternal kosong, tidak ada yang disimpan.',
+                        'trace_id' => $traceId,
+                    ], 422);
+                }
+
                 $merged = $incoming;
                 $currentDateTime = date('Y-m-d H:i:s');
+                $existing = [];
 
-                if ($dataSave !== null) {
-                    $existing = [];
+                if ($isExistingDetail && !empty($dataSave->eksternal_data)) {
+                    $existing = json_decode($dataSave->eksternal_data, true) ?? [];
+                }
 
-                    if (isset($dataSave->eksternal_data) && !empty($dataSave->eksternal_data)) {
-                        $existing = json_decode($dataSave->eksternal_data, true) ?? [];
+                if (!empty($existing)) {
+                    $indexed = [];
+
+                    foreach ($existing as $item) {
+                        if (!isset($item['history']) || !is_array($item['history'])) {
+                            $item['history'] = [];
+                        }
+                        $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
+                        $indexed[$key] = $item;
                     }
 
-                    if (!empty($existing)) {
-                        $indexed = [];
+                    foreach ($incoming as $item) {
+                        $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
 
-                        foreach ($existing as $item) {
-                            // pastikan history selalu array dari data lama
-                            if (!isset($item['history']) || !is_array($item['history'])) {
-                                $item['history'] = [];
-                            }
-                            $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-                            $indexed[$key] = $item;
-                        }
-
-                        foreach ($incoming as $item) {
-                            $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-
-                            if (!isset($indexed[$key])) {
-                                // Data baru
-                                $item['date_time'] = $currentDateTime;
-                                $item['is_active'] = true;
-                                $item['history']   = [];
-                            } else {
-                                $existingItem  = $indexed[$key];
-                                $isChanged     = false;
-                                $changedFields = [];
-
-                                // 1. Cek field sederhana
-                                $fieldsToCheck = [
-                                    'ph', 'dhl', 'suhu', 'is_pengawetan', 'is_uji_insitu',
-                                    'deskripsi_titik', 'is_pencucian_wadah', 'is_blanko_pencucian',
-                                    'cara_pengambilan_sampel', 'waktu_diambil_pelanggan',
-                                    'deskripsi_blanko_pencucian', 'tanggal_diambil_oleh_pihak_pelanggan'
-                                ];
-
-                                foreach ($fieldsToCheck as $field) {
-                                    $newValue = $item[$field] ?? null;
-                                    $oldValue = $existingItem[$field] ?? null;
-                                    if ($newValue != $oldValue) {
-                                        $isChanged = true;
-                                        $changedFields[$field] = [
-                                            'old' => $oldValue,
-                                            'new' => $newValue,
-                                        ];
-                                    }
-                                }
-
-                                // 2. Cek jenis_wadah jika ada
-                                if (isset($item['jenis_wadah'])) {
-                                    $newWadah = $item['jenis_wadah'] ?? [];
-                                    $oldWadah = $existingItem['jenis_wadah'] ?? [];
-                                    if (!is_array($newWadah)) $newWadah = (array) $newWadah;
-                                    if (!is_array($oldWadah)) $oldWadah = (array) $oldWadah;
-                                    sort($newWadah);
-                                    sort($oldWadah);
-                                    if (json_encode($newWadah) !== json_encode($oldWadah)) {
-                                        $isChanged = true;
-                                        $changedFields['jenis_wadah'] = [
-                                            'old' => $existingItem['jenis_wadah'] ?? [],
-                                            'new' => $item['jenis_wadah'] ?? [],
-                                        ];
-                                    }
-                                }
-
-                                // Ambil history lama
-                                $oldHistory = $existingItem['history'] ?? [];
-                                if (!is_array($oldHistory)) $oldHistory = [];
-
-                                if ($isChanged) {
-                                    $oldHistory[] = [
-                                        'changed_at'     => $currentDateTime,
-                                        'changed_fields' => $changedFields,
-                                    ];
-                                    $item['date_time'] = $currentDateTime;
-                                } else {
-                                    $item['date_time'] = $existingItem['date_time'];
-                                }
-
-                                $item['history']   = $oldHistory;
-                                $item['is_active'] = $existingItem['is_active'] ?? true;
-                            }
-
-                            $indexed[$key] = $item;
-                        }
-
-                        $merged = array_values($indexed);
-
-                    } else {
-                        // existing kosong — data pertama kali masuk
-                        foreach ($incoming as &$item) {
+                        if (!isset($indexed[$key])) {
                             $item['date_time'] = $currentDateTime;
                             $item['is_active'] = true;
                             $item['history']   = [];
+                        } else {
+                            $existingItem  = $indexed[$key];
+                            $isChanged     = false;
+                            $changedFields = [];
+
+                            $fieldsToCheck = [
+                                'ph', 'dhl', 'suhu', 'is_pengawetan', 'is_uji_insitu',
+                                'deskripsi_titik', 'is_pencucian_wadah', 'is_blanko_pencucian',
+                                'cara_pengambilan_sampel', 'waktu_diambil_pelanggan',
+                                'deskripsi_blanko_pencucian', 'tanggal_diambil_oleh_pihak_pelanggan'
+                            ];
+
+                            foreach ($fieldsToCheck as $field) {
+                                $newValue = $item[$field] ?? null;
+                                $oldValue = $existingItem[$field] ?? null;
+                                if ($newValue != $oldValue) {
+                                    $isChanged = true;
+                                    $changedFields[$field] = [
+                                        'old' => $oldValue,
+                                        'new' => $newValue,
+                                    ];
+                                }
+                            }
+
+                            if (isset($item['jenis_wadah'])) {
+                                $newWadah = $item['jenis_wadah'] ?? [];
+                                $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                                if (!is_array($newWadah)) $newWadah = (array) $newWadah;
+                                if (!is_array($oldWadah)) $oldWadah = (array) $oldWadah;
+                                sort($newWadah);
+                                sort($oldWadah);
+                                if (json_encode($newWadah) !== json_encode($oldWadah)) {
+                                    $isChanged = true;
+                                    $changedFields['jenis_wadah'] = [
+                                        'old' => $existingItem['jenis_wadah'] ?? [],
+                                        'new' => $item['jenis_wadah'] ?? [],
+                                    ];
+                                }
+                            }
+
+                            $oldHistory = $existingItem['history'] ?? [];
+                            if (!is_array($oldHistory)) $oldHistory = [];
+
+                            if ($isChanged) {
+                                $oldHistory[] = [
+                                    'changed_at'     => $currentDateTime,
+                                    'changed_fields' => $changedFields,
+                                ];
+                                $item['date_time'] = $currentDateTime;
+                            } else {
+                                $item['date_time'] = $existingItem['date_time'];
+                            }
+
+                            $item['history']   = $oldHistory;
+                            $item['is_active'] = $existingItem['is_active'] ?? true;
                         }
-                        unset($item);
-                        $merged = $incoming;
+
+                        $indexed[$key] = $item;
                     }
 
-                    // Simpan hasil
-                    if ($request->idSampelDiantar != null) {
-                        SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
-                            ->where('periode', $request->periode)
-                            ->update([
-                                'eksternal_data'                      => json_encode($merged),
-                                'petugas_pengambilan_sampel'          => $request->sampler,
-                                'update_at'                           => $currentDateTime,
-                                'is_ukur_suhu'                        => $request->is_ukur_suhu,
-                                'tanggal_diambil_oleh_pihak_pelanggan'=> $request->tanggal_diambil_oleh_pihak_pelanggan,
-                                'tujuan_pengujian'                    => json_encode($request->tujuan_pengujian),
-                                'waktu_diambil_pelanggan'             => $request->waktu_diambil_pelanggan,
-                                'nama_sertifikat'                     => $request->nama_sertifikat,
-                                'metode_standar'                      => $request->metode_standar,
-                                'sampler'                             => $request->sampler,
-                                'cara_pengambilan_sample'             => $request->cara_pengambilan_sample,
-                            ]);
-                    } else {
-                        $dataCreate = [
-                            'id_header'                           => $dataSave->id,
-                            'eksternal_data'                      => json_encode($merged),
-                            'petugas_pengambilan_sampel'          => $request->sampler,
-                            'is_ukur_suhu'                        => $request->is_ukur_suhu,
-                            'tanggal_diambil_oleh_pihak_pelanggan'=> $request->tanggal_diambil_oleh_pihak_pelanggan,
-                            'tujuan_pengujian'                    => json_encode($request->tujuan_pengujian),
-                            'waktu_diambil_pelanggan'             => $request->waktu_diambil_pelanggan,
-                            'nama_sertifikat'                     => $request->nama_sertifikat,
-                            'metode_standar'                      => $request->metode_standar,
-                            'sampler'                             => $request->sampler,
-                            'cara_pengambilan_sample'             => $request->cara_pengambilan_sample,
-                            'created_at'                          => $currentDateTime,
-                            'created_by'                          => 'start Eksternal',
-                        ];
-                        SampelDiantarDetail::create($dataCreate);
+                    $merged = array_values($indexed);
+                } else {
+                    foreach ($incoming as &$item) {
+                        $item['date_time'] = $currentDateTime;
+                        $item['is_active'] = true;
+                        $item['history']   = [];
                     }
+                    unset($item);
+                    $merged = $incoming;
                 }
 
-                // Bersihkan dan index by no_sampel dulu — 0 query
+                $savePayload = [
+                    'eksternal_data'                       => json_encode($merged),
+                    'petugas_pengambilan_sampel'           => $request->sampler,
+                    'update_at'                            => $currentDateTime,
+                    'is_ukur_suhu'                         => $request->is_ukur_suhu,
+                    'tanggal_diambil_oleh_pihak_pelanggan' => $request->tanggal_diambil_oleh_pihak_pelanggan,
+                    'tujuan_pengujian'                     => json_encode($request->tujuan_pengujian),
+                    'waktu_diambil_pelanggan'              => $request->waktu_diambil_pelanggan,
+                    'nama_sertifikat'                      => $request->nama_sertifikat,
+                    'metode_standar'                       => $request->metode_standar,
+                    'sampler'                              => $request->sampler,
+                    'cara_pengambilan_sample'              => $request->cara_pengambilan_sample,
+                    'periode'                              => $periode,
+                ];
+
+                if ($isExistingDetail) {
+                    $affected = SampelDiantarDetail::where('id', $dataSave->id)->update($savePayload);
+                    Log::info('[PortalSd][saveStep] Update detail eksternal', [
+                        'trace_id' => $traceId,
+                        'detail_id' => $dataSave->id,
+                        'id_header' => $headerId,
+                        'periode' => $periode,
+                        'affected_rows' => $affected,
+                    ]);
+                    if ($affected < 1) {
+                        return response()->json([
+                            'error' => true,
+                            'message' => 'Update data eksternal tidak mengenai baris manapun.',
+                            'trace_id' => $traceId,
+                        ], 500);
+                    }
+                } else {
+                    if (!$headerId) {
+                        Log::error('[PortalSd][saveStep] Header/detail eksternal null sebelum create', [
+                            'trace_id' => $traceId,
+                            'idSampelDiantar' => $request->idSampelDiantar,
+                            'periode' => $periode,
+                        ]);
+                        return response()->json([
+                            'error' => true,
+                            'message' => 'Gagal menyimpan data eksternal: header sampel diantar tidak ditemukan.',
+                            'trace_id' => $traceId,
+                        ], 500);
+                    }
+
+                    $dataSave = SampelDiantarDetail::create(array_merge($savePayload, [
+                        'id_header'  => $headerId,
+                        'created_at' => $currentDateTime,
+                        'created_by' => 'start Eksternal',
+                    ]));
+
+                    Log::info('[PortalSd][saveStep] Create detail eksternal', [
+                        'trace_id' => $traceId,
+                        'detail_id' => $dataSave->id,
+                        'id_header' => $headerId,
+                        'periode' => $periode,
+                    ]);
+                }
+
                 $tanggalTerimaMap = collect($request->tanggal_terima ?? [])
                     ->filter(fn($item) => !empty($item['no_sampel']) && !empty($item['tanggal_terima']))
                     ->keyBy('no_sampel');
 
                 if ($tanggalTerimaMap->isNotEmpty()) {
-                    // 1 query: ambil semua no_sampel yang masih null sekaligus
                     $perluDiupdate = OrderDetail::whereIn('no_sampel', $tanggalTerimaMap->keys())
                         ->whereNull('tanggal_terima')
                         ->pluck('no_sampel');
 
-                    // Loop hanya untuk yang benar-benar perlu diupdate
                     if ($perluDiupdate->isNotEmpty()) {
                         foreach ($perluDiupdate as $noSampel) {
                             OrderDetail::where('no_sampel', $noSampel)
@@ -765,25 +845,49 @@ class PortalSdController extends Controller
                         }
                     }
                 }
-                
+
+                Log::info('[PortalSd][saveStep] External success', [
+                    'trace_id' => $traceId,
+                    'sampeldiantarid' => $headerId,
+                    'detail_id' => $dataSave->id ?? null,
+                    'periode' => $periode,
+                    'action' => $isExistingDetail ? 'update' : 'create',
+                ]);
 
                 return response()->json([
-                    'sampeldiantarid' => $dataSave->id,
-                    'periode'         => $request->periode,
+                    'sampeldiantarid' => $headerId,
+                    'periode'         => $periode,
+                    'trace_id'        => $traceId,
                 ], 200);
             }
+
+            Log::warning('[PortalSd][saveStep] Mode tidak dikenali', [
+                'trace_id' => $traceId,
+                'mode' => $request->mode,
+            ]);
+
+            return response()->json([
+                'error' => true,
+                'message' => 'Mode saveStep tidak dikenali: ' . (string) $request->mode,
+                'trace_id' => $traceId,
+            ], 422);
         } catch (\Exception $ex) {
-            \Log::error('saveStep ERROR', [
+            Log::error('[PortalSd][saveStep] ERROR', [
+                'trace_id' => $traceId,
                 'message' => $ex->getMessage(),
                 'line'    => $ex->getLine(),
                 'file'    => $ex->getFile(),
-                'request' => $request->all(),
+                'mode' => $request->mode,
+                'idSampelDiantar' => $request->idSampelDiantar,
+                'periode' => $request->periode,
+                'request' => $request->except(['trace_id']),
             ]);
             return response()->json([
                 'error' => true,
                 'message' => $ex->getMessage(),
-                'line' =>$ex->getLine(),
-                'file' => $ex->getFile()
+                'line' => $ex->getLine(),
+                'file' => $ex->getFile(),
+                'trace_id' => $traceId,
             ], 500);
         }
     }
@@ -904,7 +1008,16 @@ class PortalSdController extends Controller
 
                 }
                 $sampelDiantarID = SampelDiantar::with(['detail' => function ($q) use ($request) {
-                    $q->where('periode', $request->periode);
+                    $periode = $this->normalizePeriode($request->periode);
+                    if ($periode === null) {
+                        $q->where(function ($qq) {
+                            $qq->whereNull('periode')
+                                ->orWhere('periode', '')
+                                ->orWhere('periode', 'null');
+                        });
+                    } else {
+                        $q->where('periode', $periode);
+                    }
                 }])
                 ->where('no_quotation', $request->no_document)
                 ->where('no_order', $request->no_order ?: null)
@@ -970,6 +1083,34 @@ class PortalSdController extends Controller
         return response()->json($formatData, 200);
     }
 
+    private function storeSignatureFiles(Request $request): array
+    {
+        $path = public_path('dokumen/sd');
+        if (!File::exists($path)) {
+            File::makeDirectory($path, 0777, true, true);
+        }
+
+        $save = function ($base64, $prefix) use ($path) {
+            if (empty($base64) || strpos($base64, 'data:image') !== 0) {
+                return null;
+            }
+            @list($type, $data) = explode(';', $base64);
+            @list(, $data) = explode(',', $data);
+            $binary = base64_decode($data);
+            if ($binary === false) {
+                return null;
+            }
+            $fileName = $prefix . time() . '.png';
+            file_put_contents($path . DIRECTORY_SEPARATOR . $fileName, $binary);
+            return $fileName;
+        };
+
+        return [
+            'pengirim' => $save($request->base64ttd_1, 'signature_pengirim_'),
+            'penerima' => $save($request->base64ttd_2, 'signature_penerima_'),
+        ];
+    }
+
     public function chekSD(Request $request)
     {
         if ($request->status_quotation == 'kontrak') {
@@ -1004,25 +1145,32 @@ class PortalSdController extends Controller
     {
         try {
             $mode = $request->mode;
+            $periode = $this->normalizePeriode($request->periode);
+            $noOrder = ($request->no_order === 'undefined' || $request->no_order === '')
+                ? null
+                : $request->no_order;
 
-            // 1. Ambil Data Induk
-            $sampelDiantar = SampelDiantar::with(['detail' => function ($q) use ($request) {
-                if ($request->periode && $request->periode !== 'null') {
-                    $q->where('periode', $request->periode);
-                } else {
-                    $q->whereNull('periode');
-                }
-            }])
-            ->where('no_quotation', $request->no_document)
-            ->where('periode_kontrak', $request->periode)
-            ->first();
+            $sampelDiantar = $this->findSampelDiantarHeader($request->no_document, $periode, $noOrder);
 
-            // 2. Cek Mode Terima
             if ($mode === 'terima') {
-                if ($sampelDiantar && $sampelDiantar->nama_pengantar_sampel != null) {
-                    return response()->json(['status' => true], 200);
-                }
-                return response()->json(['status' => false], 200);
+                $isValid = $this->isPenerimaanComplete($sampelDiantar);
+                Log::info('[PortalSd][chekStepSd] terima', [
+                    'no_document' => $request->no_document,
+                    'periode' => $periode,
+                    'header_id' => $sampelDiantar->id ?? null,
+                    'nama_pengantar' => $sampelDiantar->nama_pengantar_sampel ?? null,
+                    'no_hp_pengantar' => $sampelDiantar->no_hp_pengantar ?? null,
+                    'suhu' => $sampelDiantar->suhu ?? null,
+                    'ttd_pengirim' => $sampelDiantar->ttd_pengirim ?? null,
+                    'status' => $isValid,
+                ]);
+                return response()->json([
+                    'status' => $isValid,
+                    'message' => $isValid
+                        ? 'Penerimaan sudah lengkap.'
+                        : 'Penerimaan belum lengkap. Lengkapi tanda terima sampel terlebih dahulu.',
+                    'mode_checked' => $mode,
+                ], 200);
             }
 
             // 3. Validasi Keberadaan Data
@@ -1036,10 +1184,12 @@ class PortalSdController extends Controller
             // 4. Ambil Detail Spesifik
             $detailForPeriod = null;
             if ($sampelDiantar->detail->isNotEmpty()) {
-                $requestedPeriode = ($request->periode === 'null' || !$request->periode) ? null : $request->periode;
-                $detailForPeriod  = $sampelDiantar->detail->first(function ($item) use ($requestedPeriode) {
-                    return $item->periode == $requestedPeriode;
+                $detailForPeriod  = $sampelDiantar->detail->first(function ($item) use ($periode) {
+                    return $this->normalizePeriode($item->periode) === $periode;
                 });
+                if (!$detailForPeriod) {
+                    $detailForPeriod = $sampelDiantar->detail->first();
+                }
             }
 
             if (!$detailForPeriod) {
@@ -1050,12 +1200,17 @@ class PortalSdController extends Controller
             }
 
             // 5. Ambil Data Referensi dari OrderDetail
-            $orderDetails = OrderDetail::where('kategori_1', 'SD')
-                ->where('no_order', ($request->no_order == 'undefined') ? null : $request->no_order)
-                ->where('no_quotation', $request->no_document)
+            $orderQuery = OrderDetail::where('kategori_1', 'SD')
                 ->where('is_active', true)
-                ->where('periode', ($request->periode === 'null' || !$request->periode) ? null : $request->periode)
-                ->get(['no_sampel', 'kategori_3']);
+                ->where('periode', $periode);
+
+            if ($noOrder) {
+                $orderQuery->where('no_order', $noOrder);
+            } else {
+                $orderQuery->where('no_quotation', $request->no_document);
+            }
+
+            $orderDetails = $orderQuery->get(['no_sampel', 'kategori_3']);
 
             if ($orderDetails->isEmpty()) {
                 $type = explode('/', $request->no_document);
@@ -1076,10 +1231,12 @@ class PortalSdController extends Controller
                             $pendukung = json_decode($detail->data_pendukung_sampling, true) ?? [];
 
                             foreach ($pendukung as $periodeKey => $periodeData) {
-                                $periode      = $periodeData['periode_kontrak'] ?? null;
+                                $periodeKontrak = $periodeData['periode_kontrak'] ?? null;
                                 $dataSampling = $periodeData['data_sampling'] ?? [];
 
-                                if ($periode != $request->periode) continue;
+                                if ($this->normalizePeriode($periodeKontrak) !== $periode) {
+                                    continue;
+                                }
 
                                 foreach ($dataSampling as $item) {
                                     $jumlahTitik   = (int) ($item['jumlah_titik'] ?? 1);
@@ -1097,7 +1254,7 @@ class PortalSdController extends Controller
                                                 'persiapan'    => json_encode([
                                                     ['volume' => $item['volume'] ?? 0]
                                                 ]),
-                                                'periode' => $periode,
+                                                'periode' => $periodeKontrak,
                                                 'tanggal_sampling'=>null,
                                                 'no_order'=>null,
                                                 'nama_perusahaan'=> $dataQt->nama_perusahaan,
@@ -1147,82 +1304,52 @@ class PortalSdController extends Controller
             }
 
             $targetCount        = $orderDetails->count();
-            $orderSampelNumbers = $orderDetails->pluck('no_sampel')->toArray();
-            $orderKategoriRaw   = $orderDetails->pluck('kategori_3')->toArray();
-            $cleanedKategori    = array_map(fn($item) => explode('-', $item, 2)[1] ?? $item, $orderKategoriRaw);
-            $normalizedKategori = array_map(fn($item) => strtolower(trim($item)), $cleanedKategori);
+            $orderSampelNumbers = $orderDetails->pluck('no_sampel')->filter()->values()->toArray();
 
-            $dataField       = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
-            $jsonData        = json_decode($detailForPeriod->$dataField ?? '[]', true);
-            $jsonDataModified = false;
+            $dataField = $mode === 'internal_data' ? 'internal_data' : 'eksternal_data';
+            $filledSampel = $this->collectActiveNoSampel($detailForPeriod->$dataField ?? '[]');
+            $currentActiveCount = $this->countMatchedSamples($filledSampel, $orderSampelNumbers);
 
-            foreach ($jsonData as &$item) {
-                if (!isset($item['no_sampel'])) continue;
-                $notInSampel   = !in_array($item['no_sampel'], $orderSampelNumbers);
-                $jenisSampel   = strtolower(trim($item['jenis_sampel'] ?? ''));
-                $notInKategori = !in_array($jenisSampel, $normalizedKategori);
-                if ($notInSampel || $notInKategori) {
-                    if (($item['is_active'] ?? true) !== false) {
-                        $item['is_active'] = false;
-                        $jsonDataModified  = true;
-                    }
-                }
-            }
-            unset($item);
+            $isValid = false;
+            $message = '';
 
-            if ($jsonDataModified) {
-                $detailForPeriod->update([$dataField => json_encode($jsonData)]);
-                $detailForPeriod->$dataField = json_encode($jsonData);
-            }
-
-            $countActiveInJson = function ($jsonStr) {
-                $data  = json_decode($jsonStr ?? '[]', true);
-                $count = 0;
-                foreach ($data as $d) {
-                    if (!isset($d['is_active']) || $d['is_active'] === true) {
-                        $count++;
-                    }
-                }
-                return $count;
-            };
-
-            $isValid            = false;
-            $message            = '';
-            $currentActiveCount = $countActiveInJson($detailForPeriod->$dataField);
-
-            if ($mode === 'internal_data') {
-                if (empty($jsonData) || count($jsonData) === 0) {
-                    $isValid = false;
-                    $message = 'Data Internal belum diisi sama sekali.';
-                } else {
-                    $isValid = ($currentActiveCount === $targetCount);
-                    $message = $isValid ? 'Validasi Internal Berhasil.' : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
-                }
+            if ($targetCount < 1) {
+                $isValid = false;
+                $message = 'Daftar no_sampel belum bisa ditentukan, step ini belum bisa dianggap selesai.';
+            } elseif ($mode === 'internal_data') {
+                $isValid = ($currentActiveCount === $targetCount);
+                $message = $isValid
+                    ? 'Validasi Internal Berhasil.'
+                    : "Data Internal belum lengkap ($currentActiveCount dari $targetCount).";
             } elseif ($mode === 'eksternal_data') {
-                $internalData  = json_decode($detailForPeriod->internal_data ?? '[]', true);
-                $internalCount = $countActiveInJson($detailForPeriod->internal_data);
+                $internalFilled = $this->collectActiveNoSampel($detailForPeriod->internal_data ?? '[]');
+                $internalCount = $this->countMatchedSamples($internalFilled, $orderSampelNumbers);
 
-                if (empty($internalData) || count($internalData) === 0) {
-                    $isValid = false;
-                    $message = 'Data Internal belum diisi. Selesaikan Internal Data terlebih dahulu.';
-                } elseif ($internalCount !== $targetCount) {
+                if ($internalCount !== $targetCount) {
                     $isValid = false;
                     $message = "Data Internal belum lengkap ($internalCount dari $targetCount). Selesaikan Internal Data terlebih dahulu.";
                 } else {
-                    if (empty($jsonData) || count($jsonData) === 0) {
-                        $isValid = false;
-                        $message = 'Data Eksternal belum diisi sama sekali.';
-                    } else {
-                        $isValid = ($currentActiveCount === $targetCount);
-                        $message = $isValid ? 'Validasi Eksternal Berhasil.' : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
-                    }
+                    $isValid = ($currentActiveCount === $targetCount);
+                    $message = $isValid
+                        ? 'Validasi Eksternal Berhasil.'
+                        : "Data Eksternal belum lengkap ($currentActiveCount dari $targetCount).";
                 }
             }
 
-            if (($detailForPeriod->is_finished ?? 0) == 1) {
-                $isValid = true;
-                $message = 'Data sudah selesai (Finished).';
-            }
+            Log::info('[PortalSd][chekStepSd] result', [
+                'mode' => $mode,
+                'no_document' => $request->no_document,
+                'no_order' => $noOrder,
+                'periode' => $periode,
+                'header_id' => $sampelDiantar->id ?? null,
+                'detail_id' => $detailForPeriod->id ?? null,
+                'target_count' => $targetCount,
+                'filled_count' => $currentActiveCount,
+                'expected_samples' => $orderSampelNumbers,
+                'filled_samples' => $filledSampel,
+                'status' => $isValid,
+                'message' => $message,
+            ]);
 
             return response()->json([
                 'status'       => $isValid,
@@ -1249,6 +1376,143 @@ class PortalSdController extends Controller
         }
     }
 
-    
+    private function findSampelDiantarHeader($noDocument, $periode, $noOrder = null)
+    {
+        $withDetail = function ($q) use ($periode) {
+            if ($periode === null) {
+                $q->where(function ($qq) {
+                    $qq->whereNull('periode')
+                        ->orWhere('periode', '')
+                        ->orWhere('periode', 'null');
+                });
+            } else {
+                $q->where('periode', $periode);
+            }
+        };
+
+        $query = SampelDiantar::with(['detail' => $withDetail])
+            ->where('no_quotation', $noDocument);
+
+        if ($periode === null) {
+            $query->where(function ($q) {
+                $q->whereNull('periode_kontrak')
+                    ->orWhere('periode_kontrak', '')
+                    ->orWhere('periode_kontrak', 'null');
+            });
+        } else {
+            $query->where('periode_kontrak', $periode);
+        }
+
+        $header = $query->first();
+        if ($header) {
+            return $header;
+        }
+
+        $fallback = SampelDiantar::with(['detail' => $withDetail])
+            ->where('no_quotation', $noDocument);
+
+        if ($noOrder) {
+            $fallback->where('no_order', $noOrder);
+        }
+
+        return $fallback->first();
+    }
+
+    private function normalizePengantarName($value): ?string
+    {
+        $pengantar = trim((string) ($value ?? ''));
+        if ($pengantar === '' || $pengantar === '-' || strcasecmp($pengantar, 'null') === 0) {
+            return null;
+        }
+
+        return $pengantar;
+    }
+
+    private function isPenerimaanComplete($header): bool
+    {
+        if (!$header) {
+            return false;
+        }
+
+        $pengantar = trim((string) ($header->nama_pengantar_sampel ?? ''));
+        $hasRealPengantar = $pengantar !== ''
+            && $pengantar !== '-'
+            && strcasecmp($pengantar, 'null') !== 0;
+
+        $hasTtd = !empty($header->ttd_pengirim) || !empty($header->ttd_penerima);
+        $hasPenerima = trim((string) ($header->nama_penerima ?? '')) !== '';
+        $hasHp = trim((string) ($header->no_hp_pengantar ?? '')) !== '';
+        $hasSuhu = trim((string) ($header->suhu ?? '')) !== '';
+
+        // Header stub dari eksternal/internal (nama "-") belum berarti penerimaan selesai.
+        // Setelah form penerimaan disimpan, no HP / suhu / TTD / penerima terisi.
+        return $hasRealPengantar || $hasTtd || $hasPenerima || $hasHp || $hasSuhu;
+    }
+
+    private function collectActiveNoSampel($jsonStr): array
+    {
+        $data = json_decode($jsonStr ?? '[]', true);
+        if (!is_array($data)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($data as $item) {
+            if (empty($item['no_sampel'])) {
+                continue;
+            }
+            $active = !isset($item['is_active'])
+                || $item['is_active'] === true
+                || $item['is_active'] === 1
+                || $item['is_active'] === '1';
+            if ($active) {
+                $out[] = $item['no_sampel'];
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    private function countMatchedSamples(array $filled, array $expected): int
+    {
+        $matched = 0;
+        $used = [];
+        foreach ($expected as $exp) {
+            foreach ($filled as $idx => $item) {
+                if (isset($used[$idx])) {
+                    continue;
+                }
+                if ($this->noSampelEquals($exp, $item)) {
+                    $matched++;
+                    $used[$idx] = true;
+                    break;
+                }
+            }
+        }
+
+        return $matched;
+    }
+
+    private function noSampelEquals($left, $right): bool
+    {
+        $a = strtolower(trim((string) $left));
+        $b = strtolower(trim((string) $right));
+        if ($a === '' || $b === '') {
+            return false;
+        }
+        if ($a === $b) {
+            return true;
+        }
+
+        $partsA = explode('/', $a);
+        $partsB = explode('/', $b);
+        if (count($partsA) === 2 && count($partsB) === 2 && $partsA[1] === $partsB[1]) {
+            return strpos($partsA[0], '****') !== false
+                || strpos($partsB[0], '****') !== false
+                || $partsA[0] === $partsB[0];
+        }
+
+        return false;
+    }
 
 }

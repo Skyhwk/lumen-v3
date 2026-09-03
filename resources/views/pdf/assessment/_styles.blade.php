@@ -50,6 +50,7 @@
     .section-title {
         font-size: 10pt;
         font-weight: bold;
+        text-align: center;
         margin: 12px 0 8px;
         padding-bottom: 3px;
         border-bottom: 1px solid #666;
@@ -84,22 +85,19 @@
         text-align: left;
     }
 
-    .qa-list { margin-top: 6px; }
-    .qa-item {
-        
-        padding: 8px 10px;
-        margin-bottom: 8px;
-        page-break-inside: avoid;
+    .qa-grid {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 6px;
     }
+
     .qa-item-header {
-        font-size: 9pt;
+        font-size: 8.5pt;
         font-weight: bold;
-        margin-bottom: 5px;
+        margin: 0 0 3px;
     }
-    .qa-line { margin-bottom: 4px; font-size: 9pt; }
+    .qa-line { margin: 0 0 3px; font-size: 8.5pt; }
     .qa-prefix {
-        display: inline-block;
-        min-width: 18px;
         font-weight: bold;
     }
     .qa-key-note {

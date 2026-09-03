@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
 use App\Services\GenerateAssessmentDocumentService;
+use App\Services\CandidateDocumentAttachmentService;
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
@@ -1099,17 +1100,33 @@ class PersonnelRequestController extends Controller
                     );
                 }
 
-                // kirim email ke HRD (developer akan mengisi email asli nanti)
-                $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
- 
-                $subject = "Permohonan Persetujuan Kandidat - " . $recruitment->nama_lengkap;
+                $service = app(GenerateAssessmentDocumentService::class);
+                $documentService = app(CandidateDocumentAttachmentService::class);
+                $assessmentData = $service->tryGenerateTempAttachments((int) $recruitment->id);
+                $assessmentAttachments = $service->mapDocumentsToAttachmentLabels(
+                    $assessmentData['documents'] ?? []
+                );
+                $candidateDocumentAttachments = $documentService->listAttachmentLabels((int) $recruitment->id);
+                $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments((int) $recruitment->id);
+
+                $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
+                    $recruitment,
+                    $pr,
+                    $interview,
+                    $request->decision,
+                    $assessmentAttachments,
+                    $candidateDocumentAttachments
+                );
+                $subject = 'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap;
                 $targetEmail = trim((string) env('EMAIL_DIREKTUR_IBU'));
-                
-                SendEmail::where('to', $targetEmail)
-                            ->where('subject', $subject)
-                            ->where('body', $emailContent)
-                            ->noReply()
-                            ->send();
+
+                $this->sendHasilInterviewUserApprovalEmail(
+                    $targetEmail,
+                    $subject,
+                    $emailContent,
+                    $assessmentData,
+                    $candidateDocumentSendAttachments
+                );
 
                 app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
             } else {
@@ -1173,6 +1190,55 @@ class PersonnelRequestController extends Controller
         }
     }
 
+    private function sendHasilInterviewUserApprovalEmail(
+        string $targetEmail,
+        string $subject,
+        string $emailContent,
+        array $assessmentData = [],
+        array $candidateDocumentAttachments = []
+    ): array {
+        if ($targetEmail === '') {
+            throw new \RuntimeException('target_email atau EMAIL_DIREKTUR_IBU belum diisi');
+        }
+
+        $service = app(GenerateAssessmentDocumentService::class);
+        $documents = $assessmentData['documents'] ?? [];
+        $attachments = array_merge(
+            $service->buildSendEmailAttachments($documents),
+            $candidateDocumentAttachments
+        );
+        $assessmentLabels = $service->mapDocumentsToAttachmentLabels($documents);
+
+        try {
+            $emailQuery = SendEmail::where('to', $targetEmail)
+                ->where('subject', $subject)
+                ->where('body', $emailContent)
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $emailQuery->send();
+
+            return [
+                'sent' => true,
+                'assessment_attachment_count' => count($assessmentLabels),
+                'assessment_attachments' => array_map(function ($label) {
+                    return $label['name'] ?? '';
+                }, $assessmentLabels),
+                'candidate_document_attachment_count' => count($candidateDocumentAttachments),
+                'candidate_document_attachments' => array_map(function ($attachment) {
+                    return $attachment['name'] ?? '';
+                }, $candidateDocumentAttachments),
+                'assessment_failed_sessions' => $assessmentData['failed_sessions'] ?? [],
+                'assessment_skipped_reason' => $assessmentData['skipped_reason'] ?? null,
+            ];
+        } finally {
+            $service->cleanupDocuments($documents);
+        }
+    }
+
     /**
      * Testing endpoint: preview / kirim email Permohonan Persetujuan Kandidat.
      * Load data dari DB berdasarkan new_recruitment_id (mirror submitUserDecision approve).
@@ -1224,11 +1290,34 @@ class PersonnelRequestController extends Controller
         }
 
         try {
+            $service = app(GenerateAssessmentDocumentService::class);
+            $documentService = app(CandidateDocumentAttachmentService::class);
+            $assessmentData = ['documents' => [], 'failed_sessions' => [], 'skipped_reason' => null];
+            $assessmentAttachments = [];
+            $candidateDocumentAttachments = [];
+            $candidateDocumentSendAttachments = [];
+
+            if ($decision === 'approve') {
+                $candidateDocumentAttachments = $documentService->listAttachmentLabels($recruitmentId);
+
+                if ($send) {
+                    $assessmentData = $service->tryGenerateTempAttachments($recruitmentId);
+                    $assessmentAttachments = $service->mapDocumentsToAttachmentLabels(
+                        $assessmentData['documents'] ?? []
+                    );
+                    $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments($recruitmentId);
+                } else {
+                    $assessmentAttachments = $service->listAttachmentLabels($recruitmentId);
+                }
+            }
+
             $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
                 $recruitment,
                 $pr,
                 $interview,
-                $decision
+                $decision,
+                $assessmentAttachments,
+                $candidateDocumentAttachments
             );
 
             $subject = 'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap;
@@ -1260,6 +1349,21 @@ class PersonnelRequestController extends Controller
                 'picture' => $recruitment->picture,
             ];
 
+            if ($decision === 'approve' && !$send) {
+                $meta = array_merge($meta, [
+                    'assessment_attachment_count' => count($assessmentAttachments),
+                    'assessment_attachments' => array_map(function ($label) {
+                        return $label['name'] ?? '';
+                    }, $assessmentAttachments),
+                    'candidate_document_attachment_count' => count($candidateDocumentAttachments),
+                    'candidate_document_attachments' => array_map(function ($label) {
+                        return $label['name'] ?? '';
+                    }, $candidateDocumentAttachments),
+                    'assessment_failed_sessions' => $assessmentData['failed_sessions'] ?? [],
+                    'assessment_skipped_reason' => $assessmentData['skipped_reason'] ?? null,
+                ]);
+            }
+
             if ($send) {
                 if ($targetEmail === '') {
                     return response()->json([
@@ -1268,13 +1372,24 @@ class PersonnelRequestController extends Controller
                     ], 422);
                 }
 
-                SendEmail::where('to', $targetEmail)
-                    ->where('subject', $subject)
-                    ->where('body', $emailContent)
-                    ->noReply()
-                    ->send();
+                if ($decision === 'approve') {
+                    $sendResult = $this->sendHasilInterviewUserApprovalEmail(
+                        $targetEmail,
+                        $subject,
+                        $emailContent,
+                        $assessmentData,
+                        $candidateDocumentSendAttachments
+                    );
+                    $meta = array_merge($meta, $sendResult);
+                } else {
+                    SendEmail::where('to', $targetEmail)
+                        ->where('subject', $subject)
+                        ->where('body', $emailContent)
+                        ->noReply()
+                        ->send();
 
-                $meta['sent'] = true;
+                    $meta['sent'] = true;
+                }
             }
 
             if ($format === 'html') {
