@@ -1532,8 +1532,23 @@ class GenerateMessageAtsEmail
     public static function bodyEmailCompleteProfileCandidate($data)
     {
         $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
-        $linkProfile = htmlspecialchars($data->link_complete_profile ?? ('https://apps.intilab.com/candidate-profile?id=' . ($data->id ?? '')));
+        $isReminder  = !empty($data->reminder_without_link);
+        $linkProfile = $isReminder ? null : htmlspecialchars($data->link_complete_profile ?? ('https://apps.intilab.com/candidate-profile?id=' . ($data->id ?? '')));
         $greeting    = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
+        $intro       = $isReminder
+            ? "Kami mengingatkan bahwa kelengkapan data diri untuk proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong> belum diselesaikan. Mohon segera melengkapinya sesuai undangan yang telah kami kirimkan sebelumnya."
+            : "Sehubungan dengan proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami memohon kesediaan Anda untuk <strong>melengkapi data diri</strong> serta mengunggah berkas pendukung yang dibutuhkan melalui tautan di bawah ini:";
+        $actionHtml = $isReminder ? '' : "
+                        <!-- CTA Button -->
+                        <div style='text-align: center; margin: 28px 0;'>
+                            <a href='{$linkProfile}' target='_blank' style='background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 6px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);'>
+                                Lengkapi Data Diri
+                            </a>
+                        </div>
+                        <p style='font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px;'>
+                            Atau akses tautan berikut melalui peramban (browser) Anda:<br>
+                            <a href='{$linkProfile}' target='_blank' style='color: #2563eb; word-break: break-all;'>{$linkProfile}</a>
+                        </p>";
 
         return "
         <!DOCTYPE html>
@@ -1553,7 +1568,7 @@ class GenerateMessageAtsEmail
                         {$greeting}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Sehubungan dengan proses rekrutmen posisi <strong>{$posisi}</strong> di <strong>PT Inti Surya Laboratorium</strong>, kami memohon kesediaan Anda untuk <strong>melengkapi data diri</strong> serta mengunggah berkas pendukung yang dibutuhkan melalui tautan di bawah ini:
+                            {$intro}
                         </p>
 
                         <!-- Instruction Checklist Box -->
@@ -1569,16 +1584,7 @@ class GenerateMessageAtsEmail
                             </ul>
                         </div>
 
-                        <!-- CTA Button -->
-                        <div style='text-align: center; margin: 28px 0;'>
-                            <a href='{$linkProfile}' target='_blank' style='background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 6px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);'>
-                                Lengkapi Data Diri
-                            </a>
-                        </div>
-                        <p style='font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px;'>
-                            Atau akses tautan berikut melalui peramban (browser) Anda:<br>
-                            <a href='{$linkProfile}' target='_blank' style='color: #2563eb; word-break: break-all;'>{$linkProfile}</a>
-                        </p>
+                        {$actionHtml}
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Kelengkapan data ini diperlukan untuk pembaruan data rekrutmen dan mendukung kelancaran proses selanjutnya.
