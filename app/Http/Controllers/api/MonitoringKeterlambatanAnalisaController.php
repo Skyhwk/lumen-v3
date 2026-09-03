@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\MasterKategori;
 use App\Models\LogAnalisa;
+use App\Models\RekapLiburKalender;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -103,6 +104,32 @@ class MonitoringKeterlambatanAnalisaController extends Controller
         try {
             $kategori = $request->kategori ?: '1-Air';
             $tanggal = $request->tanggal ?: Carbon::today()->format('Y-m-d');
+            $tahun = (int) Carbon::parse($tanggal)->year;
+            $kalenderLengkap = array_merge(
+                $this->getKalenderHariKerja($tahun - 1),
+                $this->getKalenderHariKerja($tahun)
+            );
+            sort($kalenderLengkap);
+            $tanggalSebelumnya = $this->getHariKerjaSebelumnya($tanggal, $kalenderLengkap);
+
+            $persentaseSebelumnya = LogAnalisa::where('kategori_2', $kategori)
+                ->where('tanggal_jadwal', $tanggalSebelumnya)
+                ->where('is_active', true)
+                ->select(
+                    'id_parameter',
+                    DB::raw('COUNT(*) as total'),
+                    DB::raw('SUM(CASE WHEN input_analisa IS NULL THEN 1 ELSE 0 END) as total_belum')
+                )
+                ->groupBy('id_parameter')
+                ->get()
+                ->mapWithKeys(function ($item) {
+                    $total = (int) $item->total;
+                    $persentase = $total > 0
+                        ? round(((int) $item->total_belum / $total) * 100, 2)
+                        : 0;
+
+                    return [$item->id_parameter => $persentase];
+                });
 
             $data = LogAnalisa::where('kategori_2', $kategori)
                 ->where('tanggal_jadwal', $tanggal)
@@ -116,14 +143,16 @@ class MonitoringKeterlambatanAnalisaController extends Controller
                 )
                 ->groupBy('id_parameter', 'nama_parameter')
                 ->get()
-                ->map(function ($item) {
+                ->map(function ($item) use ($persentaseSebelumnya) {
                     $total = (int) $item->total;
                     $persentase = $total > 0
                         ? round(((int) $item->total_belum / $total) * 100, 2)
                         : 0;
 
+                    $persentaseSebelum = $persentaseSebelumnya->get($item->id_parameter, 0);
+
                     $item->persentase = $persentase;
-                    $item->indikator = $persentase >= 50 ? 'naik' : 'turun';
+                    $item->indikator = $persentase > $persentaseSebelum ? 'naik' : 'turun';
 
                     return $item;
                 })
@@ -201,5 +230,40 @@ class MonitoringKeterlambatanAnalisaController extends Controller
             'data' => $data,
             'message' => 'Data kategori berhasil diambil',
         ]);
+    }
+
+    private function getKalenderHariKerja(int $tahun): array
+    {
+        $dbKalender = RekapLiburKalender::where('tahun', $tahun)
+            ->where('is_active', 1)
+            ->first();
+
+        if (!$dbKalender) {
+            return [];
+        }
+
+        $kalenderBulan = json_decode($dbKalender->tanggal, true);
+        if (!is_array($kalenderBulan)) {
+            return [];
+        }
+
+        $kalenderLengkap = [];
+        foreach ($kalenderBulan as $dates) {
+            if (is_array($dates)) {
+                $kalenderLengkap = array_merge($kalenderLengkap, $dates);
+            }
+        }
+
+        return $kalenderLengkap;
+    }
+
+    private function getHariKerjaSebelumnya(string $tanggal, array $kalenderLengkap): string
+    {
+        $index = array_search($tanggal, $kalenderLengkap);
+        if ($index !== false && $index > 0) {
+            return $kalenderLengkap[$index - 1];
+        }
+
+        return Carbon::parse($tanggal)->subWeekdays(1)->format('Y-m-d');
     }
 }
