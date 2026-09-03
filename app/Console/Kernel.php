@@ -62,16 +62,6 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('recruitment:send-kept-management-reminders')
-            ->dailyAt('08:00')
-            ->timezone('Asia/Jakarta')
-            ->withoutOverlapping();
-
-        $schedule->command('recruitment:send-candidate-action-reminders')
-            ->dailyAt('09:00')
-            ->timezone('Asia/Jakarta')
-            ->withoutOverlapping();
-
         // Manual dulu per kategori. Nanti aktifkan jika sudah siap otomatis jam 11 malam:
         // $schedule->command('collect:monitor-keterlambatan-analisa')
         //     ->dailyAt('23:00')
