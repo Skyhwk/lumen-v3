@@ -401,6 +401,9 @@ class PersonnelRequesthrdController extends Controller
                     'published_at' => $personnelRequest->published_at,
                     'published_by' => $personnelRequest->published_by,
                     'total_pelamar' => (int) ($personnelRequest->total_pelamar ?? $candidates->count()),
+                    'is_approve' => (int) $personnelRequest->is_approve,
+                    'is_reject' => (int) $personnelRequest->is_reject,
+                    'is_publish' => (int) $personnelRequest->is_publish,
                 ],
                 'summary' => [
                     'total_pelamar' => $candidates->count(),
