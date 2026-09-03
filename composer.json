@@ -14,7 +14,6 @@
         "bluerhinos/phpmqtt": "^1.0",
         "cache/redis-adapter": "^1.2",
         "cache/simple-cache-bridge": "^1.2",
-        "doctrine/dbal": "^3.10",
         "eleirbag89/telegrambotphp": "^1.4",
         "endroid/qr-code": "^4.6",
         "google/auth": "^1.37",
