@@ -3047,10 +3047,7 @@ class FixingController extends Controller
 
         try {
             $hasReceivedSample = OrderDetail::where('no_order', $no_order)
-                ->where('is_active', true)
                 ->whereNotNull('tanggal_terima')
-                ->where('tanggal_terima', '!=', '')
-                ->where('tanggal_terima', '!=', '0000-00-00')
                 ->exists();
 
             if ($hasReceivedSample) {
