@@ -377,14 +377,16 @@ class ReadyOrderController extends Controller
                                 ->where('is_active', true)
                                 ->first();
                             if ($orderHeader) {
-                                // Cek apakah ada OrderDetail aktif
-                                $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
-                                    ->where('is_active', true)
-                                    ->exists();
+                                $sampelSudahDiterima = OrderDetail::where('no_order', $dataLama->no_order)
+                                    ->whereNotNull('tanggal_terima')
+                                    ->where('tanggal_terima', '!=', '')
+                                    ->pluck('no_sampel');
 
-                                if ($adaOrderDetailAktif) {
+                                if ($sampelSudahDiterima->isNotEmpty()) {
                                     return response()->json([
-                                        'message' => "Penawaran ini tidak dapat dilakukan order untuk invoicing, karena sudah memiliki data lab.",
+                                        'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
+                                            . $sampelSudahDiterima->implode(', ')
+                                            . ' sudah memiliki tanggal terima.',
                                         'status'  => 403
                                     ], 403);
                                 }
@@ -408,14 +410,16 @@ class ReadyOrderController extends Controller
                                 ->where('is_active', true)
                                 ->first();
                             if ($orderHeader) {
-                                // Cek apakah ada OrderDetail aktif
-                                $adaOrderDetailAktif = OrderDetail::where('no_order', $dataLama->no_order)
-                                    ->where('is_active', true)
-                                    ->exists();
+                                $sampelSudahDiterima = OrderDetail::where('no_order', $dataLama->no_order)
+                                    ->whereNotNull('tanggal_terima')
+                                    ->where('tanggal_terima', '!=', '')
+                                    ->pluck('no_sampel');
 
-                                if ($adaOrderDetailAktif) {
+                                if ($sampelSudahDiterima->isNotEmpty()) {
                                     return response()->json([
-                                        'message' => "Penawaran ini tidak dapat dilakukan order untuk invoicing, karena sudah memiliki data lab.",
+                                        'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
+                                            . $sampelSudahDiterima->implode(', ')
+                                            . ' sudah memiliki tanggal terima.',
                                         'status'  => 403
                                     ], 403);
                                 }
@@ -503,7 +507,29 @@ class ReadyOrderController extends Controller
             }
             // dd($no_order);
             if ($data_lama != null && $data_lama->no_order != null) {
+                $orderDetails = OrderDetail::where('no_order', $no_order)
+                    ->lockForUpdate()
+                    ->get();
+                $sampelSudahDiterima = $orderDetails->filter(function ($detail) {
+                    return $detail->tanggal_terima !== null && trim((string) $detail->tanggal_terima) !== '';
+                })->pluck('no_sampel');
+
+                if ($sampelSudahDiterima->isNotEmpty()) {
+                    DB::rollback();
+                    return response()->json([
+                        'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
+                            . $sampelSudahDiterima->implode(', ')
+                            . ' sudah memiliki tanggal terima.',
+                        'status' => 403,
+                    ], 403);
+                }
+
+                $noSampel = $orderDetails->pluck('no_sampel')->filter()->values();
                 OrderDetail::where('no_order', $no_order)->where('is_active', 1)->update(['is_active' => 0]);
+                if ($noSampel->isNotEmpty()) {
+                    Ftc::whereIn('no_sample', $noSampel)->update(['is_active' => 0]);
+                    FtcT::whereIn('no_sample', $noSampel)->update(['is_active' => 0]);
+                }
 
                 $data = OrderHeader::where('no_order', $no_order)->where('is_active', 1)->first();
                 $data->no_document = $dataQuotation->no_document;
