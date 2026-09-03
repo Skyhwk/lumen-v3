@@ -30,6 +30,7 @@ class PersonnelRequesthrdController extends Controller
             $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
                 ->withCount('newRecruitments as total_pelamar')
                 ->where('is_active',1)
+                ->where('is_completed', $request->completed ?? 0)
                 ->orderBy('id', 'desc');
 
             if ($request->has('year') && !empty($request->year)) {
@@ -119,6 +120,38 @@ class PersonnelRequesthrdController extends Controller
                         $q->where('is_approve', 0)->where('is_rejected', 0);
                     }
                 })
+                ->filterColumn('tanggal_dibutuhkan', function ($q, $keyword) {
+                    $keyword = trim($keyword);
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('tanggal_dibutuhkan', 'like', "%{$keyword}%")
+                            ->orWhereRaw("DATE_FORMAT(tanggal_dibutuhkan, '%d-%m-%Y') LIKE ?", ["%{$keyword}%"])
+                            ->orWhereRaw("DATE_FORMAT(tanggal_dibutuhkan, '%d/%m/%Y') LIKE ?", ["%{$keyword}%"])
+                            ->orWhereRaw("DATE_FORMAT(tanggal_dibutuhkan, '%d %b %Y') LIKE ?", ["%{$keyword}%"])
+                            ->orWhereRaw("DATE_FORMAT(tanggal_dibutuhkan, '%d %M %Y') LIKE ?", ["%{$keyword}%"]);
+
+                        $monthsMap = [
+                            'januari' => '01', 'jan' => '01',
+                            'februari' => '02', 'feb' => '02',
+                            'maret' => '03', 'mar' => '03',
+                            'april' => '04', 'apr' => '04',
+                            'mei' => '05',
+                            'juni' => '06', 'jun' => '06',
+                            'juli' => '07', 'jul' => '07',
+                            'agustus' => '08', 'agu' => '08', 'ags' => '08',
+                            'september' => '09', 'sep' => '09',
+                            'oktober' => '10', 'okt' => '10',
+                            'november' => '11', 'nov' => '11',
+                            'desember' => '12', 'des' => '12'
+                        ];
+
+                        $lowerKey = strtolower($keyword);
+                        foreach ($monthsMap as $name => $monthNum) {
+                            if (strpos($name, $lowerKey) !== false || strpos($lowerKey, $name) !== false) {
+                                $sub->orWhereRaw("DATE_FORMAT(tanggal_dibutuhkan, '%m') = ?", [$monthNum]);
+                            }
+                        }
+                    });
+                })
                 ->filterColumn('request_by', function ($q, $keyword) {
                     $q->where('created_by', 'like', "%{$keyword}%");
                 })
@@ -127,7 +160,6 @@ class PersonnelRequesthrdController extends Controller
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],501);
         }
     }
-
 
     /**
      * Get detail of a personal request
@@ -369,6 +401,9 @@ class PersonnelRequesthrdController extends Controller
                     'published_at' => $personnelRequest->published_at,
                     'published_by' => $personnelRequest->published_by,
                     'total_pelamar' => (int) ($personnelRequest->total_pelamar ?? $candidates->count()),
+                    'is_approve' => (int) $personnelRequest->is_approve,
+                    'is_reject' => (int) $personnelRequest->is_reject,
+                    'is_publish' => (int) $personnelRequest->is_publish,
                 ],
                 'summary' => [
                     'total_pelamar' => $candidates->count(),

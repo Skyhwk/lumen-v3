@@ -321,7 +321,7 @@ class AtsHiredCandidatesController extends Controller
                     'data' => $result,
                 ]);
             });
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Terdapat kesalahan: ' . $e->getMessage(),
@@ -442,7 +442,7 @@ class AtsHiredCandidatesController extends Controller
             'date_birth' => $birthDate,
             'gender' => $recruitment->jenis_kelamin,
             'religion' => optional($profile)->agama,
-            'marital_status' => optional($profile)->status_pernikahan,
+            'marital_status' => $this->normalizeMaritalStatus(optional($profile)->status_pernikahan) ?: optional($profile)->status_pernikahan,
             'status_nikah' => optional($profile)->status_pernikahan,
             'status_pernikahan' => optional($profile)->status_pernikahan,
             'marital_date' => '',
@@ -472,7 +472,7 @@ class AtsHiredCandidatesController extends Controller
         $costCenter = $this->resolveDepartmentCostCenter($pr);
 
         $employee = [
-            'nik' => $nikKtp,
+            'nik' => '',
             'email' => '',
             'email_pribadi' => $recruitment->email,
             'estatus' => 'Training',
@@ -493,8 +493,8 @@ class AtsHiredCandidatesController extends Controller
         $medicalData = [
             'tinggi_badan' => optional($medical)->tinggi_badan,
             'berat_badan' => optional($medical)->berat_badan,
-            'keterangan_mata' => optional($medical)->mata,
-            'mata' => optional($medical)->mata,
+            'keterangan_mata' => $this->normalizeKeteranganMata(optional($medical)->mata),
+            'mata' => $this->normalizeKeteranganMata(optional($medical)->mata),
             'golongan_darah' => optional($medical)->golongan_darah,
             'penyakit_bawaan_lahir' => optional($medical)->penyakit_bawaan_lahir,
             'penyakit_kronis' => optional($medical)->penyakit_kronis,
@@ -541,7 +541,7 @@ class AtsHiredCandidatesController extends Controller
             'salary_user' => optional($offer)->gaji_pokok ?? optional($recruitment->salaryOffer)->final_sallary ?? '',
             'tinggi_badan' => optional($medical)->tinggi_badan,
             'berat_badan' => optional($medical)->berat_badan,
-            'mata' => optional($medical)->mata,
+            'mata' => $this->normalizeKeteranganMata(optional($medical)->mata) ?? '',
             'golongan_darah' => optional($medical)->golongan_darah,
             'pendidikan' => json_encode($educationRows),
             'sertifikat' => '[]',
@@ -595,8 +595,17 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->tempat_lahir = data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir;
         $karyawan->tanggal_lahir = data_get($request, 'personal.date_birth') ?: $recruitment->tanggal_lahir;
         $karyawan->jenis_kelamin = data_get($request, 'personal.gender') ?: $recruitment->jenis_kelamin;
-        $karyawan->agama = data_get($request, 'personal.religion') ?: optional($profile)->agama;
-        $karyawan->status_pernikahan = data_get($request, 'personal.marital_status') ?: optional($profile)->status_pernikahan;
+        $karyawan->agama = $this->resolvePersonalField($request, [
+            'personal.religion',
+            'personal.agama',
+        ], optional($profile)->agama);
+        $karyawan->status_pernikahan = $this->normalizeMaritalStatus(
+            $this->resolvePersonalField($request, [
+                'personal.marital_status',
+                'personal.status_pernikahan',
+                'personal.status_nikah',
+            ])
+        ) ?: optional($profile)->status_pernikahan;
         $karyawan->tempat_nikah = data_get($request, 'personal.marital_place') ?: null;
         $karyawan->tgl_nikah = data_get($request, 'personal.marital_date') ?: null;
         $karyawan->shio = $shioElemen['shio'] ?? null;
@@ -623,11 +632,6 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->kota = data_get($request, 'contact.city');
         $karyawan->no_telpon = data_get($request, 'contact.phone') ?: $recruitment->no_telepon;
         $karyawan->kode_pos = data_get($request, 'contact.postal_code');
-        $karyawan->no_bpjs_kes = data_get($request, 'payroll.no_bpjs_ks') ?: optional($profile)->no_bpjs_ks;
-        $karyawan->no_bpjs_tk = data_get($request, 'payroll.no_bpjs_tk') ?: optional($profile)->no_bpjs_tk;
-        $karyawan->no_npwp = optional($profile)->no_npwp;
-        $karyawan->npwp = optional($profile)->no_npwp;
-        $karyawan->no_kk = optional($profile)->no_kk;
         $karyawan->privilage_cabang = json_encode($privBranches);
         $karyawan->image = $imageName;
         $karyawan->is_active = 1;
@@ -652,7 +656,7 @@ class AtsHiredCandidatesController extends Controller
             $medis->penyakit_bawaan_lahir = data_get($request, 'medical.penyakit_bawaan_lahir');
             $medis->penyakit_kronis = data_get($request, 'medical.penyakit_kronis');
             $medis->riwayat_kecelakaan = data_get($request, 'medical.riwayat_kecelakaan');
-            $medis->keterangan_mata = data_get($request, 'medical.keterangan_mata');
+            $medis->keterangan_mata = $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata'));
             $medis->save();
             $savedCounts['medical'] = 1;
         }
@@ -773,7 +777,7 @@ class AtsHiredCandidatesController extends Controller
             $payrollCounts['master_sallary'] = 1;
         }
 
-        if ($bpjsKes > 0) {
+        if ($bpjsKes > 0 || !empty($noBpjsKs)) {
             $this->upsertPayroll('bpjs_kesehatan', $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'no_bpjs' => $noBpjsKs,
@@ -786,7 +790,7 @@ class AtsHiredCandidatesController extends Controller
             $payrollCounts['bpjs_kesehatan'] = 1;
         }
 
-        if ($bpjsTk > 0) {
+        if ($bpjsTk > 0 || !empty($noBpjsTk)) {
             $this->upsertPayroll('bpjs_tk', $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'no_bpjs_tk' => $noBpjsTk,
@@ -1190,6 +1194,75 @@ class AtsHiredCandidatesController extends Controller
         return false;
     }
 
+    private function normalizeKeteranganMata($value): ?string
+    {
+        $normalized = strtolower(trim((string) $value));
+        if ($normalized === '' || in_array($normalized, ['normal', 'true', 'null'], true)) {
+            return null;
+        }
+
+        $aliases = [
+            'minus' => 'Rabun Jauh/Minus',
+            'rabun jauh/minus' => 'Rabun Jauh/Minus',
+            'plus' => 'Rabun Dekat/Plus',
+            'rabun dekat/plus' => 'Rabun Dekat/Plus',
+        ];
+
+        $mapped = $aliases[$normalized] ?? trim((string) $value);
+        $allowed = [
+            'Rabun Jauh/Minus',
+            'Rabun Dekat/Plus',
+            'Buta Warna Partial',
+            'Katarak',
+            'Presbiopia',
+            'Glaukoma',
+            'Retinopati Diabetik',
+        ];
+
+        return in_array($mapped, $allowed, true) ? $mapped : null;
+    }
+
+    private function resolvePersonalField(Request $request, array $keys, $fallback = null)
+    {
+        foreach ($keys as $key) {
+            $value = trim((string) data_get($request, $key, ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $fallback;
+    }
+
+    private function normalizeMaritalStatus($value): ?string
+    {
+        $normalized = strtolower(trim((string) $value));
+        if ($normalized === '') {
+            return null;
+        }
+
+        $aliases = [
+            'menikah' => 'Married',
+            'married' => 'Married',
+            'belum menikah' => 'Single',
+            'single' => 'Single',
+            'cerai' => 'Divorced',
+            'divorced' => 'Divorced',
+            'cerai mati' => 'Death Divorce',
+            'death divorced' => 'Death Divorce',
+            'death divorce' => 'Death Divorce',
+        ];
+
+        if (isset($aliases[$normalized])) {
+            return $aliases[$normalized];
+        }
+
+        $trimmed = trim((string) $value);
+        $allowed = ['Single', 'Married', 'Divorced', 'Death Divorce'];
+
+        return in_array($trimmed, $allowed, true) ? $trimmed : null;
+    }
+
     private function nullableDate($value)
     {
         $formatted = $this->formatDateInput($value);
@@ -1198,16 +1271,16 @@ class AtsHiredCandidatesController extends Controller
 
     private function resolveEffectiveMonth($payrollMonth, $startDate, Carbon $fallback)
     {
-        $source = $payrollMonth ?: $startDate;
+        $source = trim((string) ($payrollMonth ?: $startDate));
 
         try {
-            if (preg_match('/^\d{4}-\d{2}$/', trim((string) $source))) {
-                return Carbon::parse($source . '-01')->startOfMonth()->toDateString();
+            if (preg_match('/^\d{4}-\d{2}$/', $source)) {
+                return $source;
             }
 
-            return Carbon::parse($source)->startOfMonth()->toDateString();
+            return Carbon::parse($source)->startOfMonth()->format('Y-m');
         } catch (\Exception $e) {
-            return $fallback->copy()->startOfMonth()->toDateString();
+            return $fallback->copy()->startOfMonth()->format('Y-m');
         }
     }
 
