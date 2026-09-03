@@ -43,14 +43,10 @@ class SendCandidateActionReminders extends Command
             return 1;
         }
 
-        $token = 'dummy-token-assessment';
-        $baseUrl = 'http://127.0.0.1:8000';
-        $assessmentUrl = $baseUrl . '/public/recruitment/assessment/' . $token;
-        $profileUrl = $baseUrl . '/public/recruitment/complete-profile/' . $token;
         $assessmentBody = view('Email.recruitment-assessment-invitation', [
             'nama_lengkap' => 'Harold (Dummy Test)',
             'posisi_dilamar' => 'System Analyst',
-            'assessment_url' => $assessmentUrl,
+            'reminder_without_link' => true,
         ])->render();
 
         SendEmail::where('to', $email)
@@ -67,7 +63,7 @@ class SendCandidateActionReminders extends Command
             'jenis_kelamin' => 'Male',
             'posisi_di_lamar' => 'System Analyst',
             'nama_jabatan' => 'System Analyst',
-            'link_complete_profile' => $profileUrl,
+            'reminder_without_link' => true,
         ]);
 
         SendEmail::where('to', $email)
@@ -114,8 +110,6 @@ class SendCandidateActionReminders extends Command
                     }
 
                     try {
-                        $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                            . '/public/recruitment/assessment/' . rawurlencode($candidate->token);
                         $position = $candidate->personnelRequest->divisi_alias
                             ?? $candidate->personnelRequest->posisi
                             ?? $candidate->posisi_dilamar
@@ -123,7 +117,7 @@ class SendCandidateActionReminders extends Command
                         $body = view('Email.recruitment-assessment-invitation', [
                             'nama_lengkap' => $candidate->nama_lengkap,
                             'posisi_dilamar' => $position,
-                            'assessment_url' => $assessmentUrl,
+                            'reminder_without_link' => true,
                         ])->render();
 
                         SendEmail::where('to', $candidate->email)
@@ -190,8 +184,6 @@ class SendCandidateActionReminders extends Command
                     }
 
                     try {
-                        $profileUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                            . '/public/recruitment/complete-profile/' . rawurlencode($candidate->token);
                         $position = $candidate->personnelRequest->divisi_alias
                             ?? $candidate->personnelRequest->posisi
                             ?? $candidate->posisi_dilamar
@@ -202,7 +194,7 @@ class SendCandidateActionReminders extends Command
                             'jenis_kelamin' => $candidate->jenis_kelamin,
                             'posisi_di_lamar' => $position,
                             'nama_jabatan' => $position,
-                            'link_complete_profile' => $profileUrl,
+                            'reminder_without_link' => true,
                         ]);
 
                         SendEmail::where('to', $candidate->email)
