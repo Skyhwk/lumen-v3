@@ -369,31 +369,6 @@ class ReadyOrderController extends Controller
         try {
             if ($request->status_quotation == 'kontrak') {
                 $dataQuotation = QuotationKontrakH::where('no_document', $request->no_document)->where('is_active', true)->first();
-                if ($request->is_generate_data_lab === 0 || $dataQuotation->status_sampling == 'SAR') {
-                    if ($dataQuotation->data_lama && $dataQuotation->data_lama != null) {
-                        $dataLama = json_decode($dataQuotation->data_lama);
-                        if (isset($dataLama->no_order) && $dataLama->no_order != null) {
-                            $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
-                                ->where('is_active', true)
-                                ->first();
-                            if ($orderHeader) {
-                                $sampelSudahDiterima = OrderDetail::where('no_order', $dataLama->no_order)
-                                    ->whereNotNull('tanggal_terima')
-                                    ->where('tanggal_terima', '!=', '')
-                                    ->pluck('no_sampel');
-
-                                if ($sampelSudahDiterima->isNotEmpty()) {
-                                    return response()->json([
-                                        'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
-                                            . $sampelSudahDiterima->implode(', ')
-                                            . ' sudah memiliki tanggal terima.',
-                                        'status'  => 403
-                                    ], 403);
-                                }
-                            }
-                        }
-                    }
-                }
                 $prosess = self::generateOrderKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
@@ -402,31 +377,6 @@ class ReadyOrderController extends Controller
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
-                if ($request->is_generate_data_lab === 0 || $dataQuotation->status_sampling == 'SAR') {
-                    if ($dataQuotation->data_lama && $dataQuotation->data_lama != null) {
-                        $dataLama = json_decode($dataQuotation->data_lama);
-                        if (isset($dataLama->no_order) && $dataLama->no_order != null) {
-                            $orderHeader = OrderHeader::where('no_order', $dataLama->no_order)
-                                ->where('is_active', true)
-                                ->first();
-                            if ($orderHeader) {
-                                $sampelSudahDiterima = OrderDetail::where('no_order', $dataLama->no_order)
-                                    ->whereNotNull('tanggal_terima')
-                                    ->where('tanggal_terima', '!=', '')
-                                    ->pluck('no_sampel');
-
-                                if ($sampelSudahDiterima->isNotEmpty()) {
-                                    return response()->json([
-                                        'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
-                                            . $sampelSudahDiterima->implode(', ')
-                                            . ' sudah memiliki tanggal terima.',
-                                        'status'  => 403
-                                    ], 403);
-                                }
-                            }
-                        }
-                    }
-                }
                 $prosess = self::generateOrderNonKontrak($request);
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
@@ -491,7 +441,12 @@ class ReadyOrderController extends Controller
         return $result;
     }
 
-    public function orderNonPengujian($dataQuotation, $no_order, $request)
+    public function reOrderNonPengujian($dataQuotation, $no_order, $request)
+    {
+        return self::orderNonPengujian($dataQuotation, $no_order, $request, true);
+    }
+
+    public function orderNonPengujian($dataQuotation, $no_order, $request, $isReorder = false)
     {
         DB::beginTransaction();
         try {
@@ -507,28 +462,32 @@ class ReadyOrderController extends Controller
             }
             // dd($no_order);
             if ($data_lama != null && $data_lama->no_order != null) {
-                $orderDetails = OrderDetail::where('no_order', $no_order)
-                    ->lockForUpdate()
-                    ->get();
-                $sampelSudahDiterima = $orderDetails->filter(function ($detail) {
-                    return $detail->tanggal_terima !== null && trim((string) $detail->tanggal_terima) !== '';
-                })->pluck('no_sampel');
+                if ($isReorder && $request->is_generate_data_lab == 0) {
+                    $orderDetails = OrderDetail::where('no_order', $no_order)
+                        ->lockForUpdate()
+                        ->get();
+                    $sampelSudahDiterima = $orderDetails->filter(function ($detail) {
+                        return $detail->tanggal_terima !== null && trim((string) $detail->tanggal_terima) !== '';
+                    })->pluck('no_sampel');
 
-                if ($sampelSudahDiterima->isNotEmpty()) {
-                    DB::rollback();
-                    return response()->json([
-                        'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
-                            . $sampelSudahDiterima->implode(', ')
-                            . ' sudah memiliki tanggal terima.',
-                        'status' => 403,
-                    ], 403);
-                }
+                    if ($sampelSudahDiterima->isNotEmpty()) {
+                        DB::rollback();
+                        return response()->json([
+                            'message' => 'Penawaran tidak dapat diproses menjadi invoicing karena sampel '
+                                . $sampelSudahDiterima->implode(', ')
+                                . ' sudah memiliki tanggal terima.',
+                            'status' => 403,
+                        ], 403);
+                    }
 
-                $noSampel = $orderDetails->pluck('no_sampel')->filter()->values();
-                OrderDetail::where('no_order', $no_order)->where('is_active', 1)->update(['is_active' => 0]);
-                if ($noSampel->isNotEmpty()) {
-                    Ftc::whereIn('no_sample', $noSampel)->update(['is_active' => 0]);
-                    FtcT::whereIn('no_sample', $noSampel)->update(['is_active' => 0]);
+                    $noSampel = $orderDetails->pluck('no_sampel')->filter()->values();
+                    OrderDetail::where('no_order', $no_order)->where('is_active', 1)->update(['is_active' => 0]);
+                    if ($noSampel->isNotEmpty()) {
+                        Ftc::whereIn('no_sample', $noSampel)->update(['is_active' => 0]);
+                        FtcT::whereIn('no_sample', $noSampel)->update(['is_active' => 0]);
+                    }
+                } else {
+                    OrderDetail::where('no_order', $no_order)->where('is_active', 1)->update(['is_active' => 0]);
                 }
 
                 $data = OrderHeader::where('no_order', $no_order)->where('is_active', 1)->first();
@@ -748,7 +707,14 @@ class ReadyOrderController extends Controller
             }
 
             $no_order = $id_pelanggan . $y . $no_urut;
+            $data_lama = $dataQuotation->data_lama != null
+                ? json_decode($dataQuotation->data_lama)
+                : null;
+
             if ($request->is_generate_data_lab == 0 || $dataQuotation->status_sampling == 'SAR') {
+                if ($data_lama != null && isset($data_lama->no_order) && $data_lama->no_order != null) {
+                    return self::reOrderNonPengujian($dataQuotation, $data_lama->no_order, $request);
+                }
                 return self::orderNonPengujian($dataQuotation, $no_order, $request);
             } else {
                 if (count(json_decode($dataQuotation->data_pendukung_sampling)) == 0) {
@@ -797,11 +763,6 @@ class ReadyOrderController extends Controller
                                 'status' => 401
                             ], 401);
                         }
-                    }
-
-                    $data_lama = null;
-                    if ($dataQuotation->data_lama != null) {
-                        $data_lama = json_decode($dataQuotation->data_lama);
                     }
 
                     if ($data_lama != null && $data_lama->no_order != null) {
@@ -863,8 +824,14 @@ class ReadyOrderController extends Controller
             }
 
             $no_order = $id_pelanggan . $y . $no_urut;
+            $data_lama = $dataQuotation->data_lama != null
+                ? json_decode($dataQuotation->data_lama)
+                : null;
 
             if ($request->is_generate_data_lab == 0 || $dataQuotation->status_sampling == 'SAR') {
+                if ($data_lama != null && isset($data_lama->no_order) && $data_lama->no_order != null) {
+                    return self::reOrderNonPengujian($dataQuotation, $data_lama->no_order, $request);
+                }
                 return self::orderNonPengujian($dataQuotation, $no_order, $request);
             } else {
                 if (count(json_decode($dataQuotation->data_pendukung_sampling)) == 0) {
@@ -965,11 +932,6 @@ class ReadyOrderController extends Controller
                             'status' => 401
                         ], 401);
                     }
-                }
-
-                $data_lama = null;
-                if ($dataQuotation->data_lama != null) {
-                    $data_lama = json_decode($dataQuotation->data_lama);
                 }
 
                 if ($data_lama != null && $data_lama->no_order != null) {
