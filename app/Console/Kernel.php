@@ -65,12 +65,6 @@ class Kernel extends ConsoleKernel
             ->dailyAt('08:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping();
-
-        // Manual dulu per kategori. Nanti aktifkan jika sudah siap otomatis jam 11 malam:
-        // $schedule->command('collect:monitor-keterlambatan-analisa')
-        //     ->dailyAt('23:00')
-        //     ->timezone('Asia/Jakarta')
-        //     ->withoutOverlapping();
     }
 
     protected function commands()
