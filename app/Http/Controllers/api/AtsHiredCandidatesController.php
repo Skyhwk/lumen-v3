@@ -116,7 +116,7 @@ class AtsHiredCandidatesController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'salaryOffer', 'candidateDataOffer', 'candidateProfile'])
             ->where(function ($q) {
-                $q->whereRaw('LOWER(status) IN (?, ?)', ['hired', 'training']);
+                $q->whereRaw('LOWER(status) IN (?)', ['hired']);
             })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
@@ -646,17 +646,31 @@ class AtsHiredCandidatesController extends Controller
             'languages' => 0,
         ];
 
-        if ($this->hasMedicalPayload($request)) {
+        $medicalData = [
+            'tinggi_badan' => $this->parseDecimalNullable(data_get($request, 'medical.tinggi_badan')),
+            'berat_badan' => $this->parseDecimalNullable(data_get($request, 'medical.berat_badan')),
+            'rate_mata' => trim((string) data_get($request, 'medical.rate_mata')) ?: null,
+            'golongan_darah' => trim((string) data_get($request, 'medical.golongan_darah')) ?: null,
+            'penyakit_bawaan_lahir' => trim((string) data_get($request, 'medical.penyakit_bawaan_lahir')) ?: null,
+            'penyakit_kronis' => trim((string) data_get($request, 'medical.penyakit_kronis')) ?: null,
+            'riwayat_kecelakaan' => trim((string) data_get($request, 'medical.riwayat_kecelakaan')) ?: null,
+            'keterangan_mata' => $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata')),
+        ];
+
+        if (collect($medicalData)->filter(function ($v) { return $v !== null && $v !== ''; })->isNotEmpty()) {
             $medis = new MedicalCheckup();
             $medis->karyawan_id = $karyawan->id;
-            $medis->tinggi_badan = data_get($request, 'medical.tinggi_badan');
-            $medis->berat_badan = data_get($request, 'medical.berat_badan');
-            $medis->rate_mata = data_get($request, 'medical.rate_mata');
-            $medis->golongan_darah = data_get($request, 'medical.golongan_darah');
-            $medis->penyakit_bawaan_lahir = data_get($request, 'medical.penyakit_bawaan_lahir');
-            $medis->penyakit_kronis = data_get($request, 'medical.penyakit_kronis');
-            $medis->riwayat_kecelakaan = data_get($request, 'medical.riwayat_kecelakaan');
-            $medis->keterangan_mata = $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata'));
+            $medis->tinggi_badan = $medicalData['tinggi_badan'];
+            $medis->berat_badan = $medicalData['berat_badan'];
+            $medis->rate_mata = $medicalData['rate_mata'];
+            $medis->golongan_darah = $medicalData['golongan_darah'];
+            $medis->penyakit_bawaan_lahir = $medicalData['penyakit_bawaan_lahir'];
+            $medis->penyakit_kronis = $medicalData['penyakit_kronis'];
+            $medis->riwayat_kecelakaan = $medicalData['riwayat_kecelakaan'];
+            $medis->keterangan_mata = $medicalData['keterangan_mata'];
+            $medis->created_by = $this->karyawan;
+            $medis->created_at = $timestamp;
+            $medis->is_active = 1;
             $medis->save();
             $savedCounts['medical'] = 1;
         }
@@ -1084,6 +1098,20 @@ class AtsHiredCandidatesController extends Controller
         return (float) preg_replace('/[^\d.-]/', '', (string) $value);
     }
 
+    private function parseDecimalNullable($value): ?float
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        $cleaned = trim(preg_replace('/[^\d.-]/', '', (string) $value));
+        if ($cleaned === '' || !is_numeric($cleaned)) {
+            return null;
+        }
+
+        return (float) $cleaned;
+    }
+
     private function normalizeRequestArray($value)
     {
         if (is_array($value)) {
@@ -1182,7 +1210,6 @@ class AtsHiredCandidatesController extends Controller
             'medical.penyakit_bawaan_lahir',
             'medical.penyakit_kronis',
             'medical.riwayat_kecelakaan',
-            'medical.keterangan_mata',
         ];
 
         foreach ($fields as $field) {
@@ -1191,7 +1218,7 @@ class AtsHiredCandidatesController extends Controller
             }
         }
 
-        return false;
+        return $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata')) !== null;
     }
 
     private function normalizeKeteranganMata($value): ?string
