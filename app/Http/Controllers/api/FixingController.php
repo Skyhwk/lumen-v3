@@ -3052,7 +3052,7 @@ class FixingController extends Controller
 
             if ($hasReceivedSample) {
                 return response()->json([
-                    'message' => 'Proses dibatalkan: Order ' . $no_order . ' sudah memiliki tanggal terima.',
+                    'message' => 'Order tidak dapat di-deactive karena telah dilakukan sampling.',
                 ], 422);
             }
 
