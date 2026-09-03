@@ -242,12 +242,24 @@ class RecruitmentController extends Controller{
         try {
             $namaLengkap = trim((string) $request->input('nama_lengkap'));
             $email = strtolower(trim((string) $request->input('email')));
-            $noTelepon = trim((string) $request->input('no_telepon'));
-            $noTeleponNormalized = preg_replace('/\D+/', '', $noTelepon);
+            $noTelepon = preg_replace('/\D+/', '', (string) $request->input('no_telepon'));
 
-            if ($namaLengkap === '' || $email === '' || $noTeleponNormalized === '') {
+            if (strpos($noTelepon, '62') === 0) {
+                $noTelepon = '0' . ltrim(substr($noTelepon, 2), '0');
+            } elseif ($noTelepon !== '' && strpos($noTelepon, '0') !== 0) {
+                $noTelepon = '0' . $noTelepon;
+            }
+
+            if ($namaLengkap === '' || $email === '' || $noTelepon === '') {
                 return response()->json([
                     'message' => 'Nama lengkap, email, dan nomor telepon wajib diisi.',
+                    'status' => false,
+                ], 422);
+            }
+
+            if (!preg_match('/^08\d{8,11}$/', $noTelepon)) {
+                return response()->json([
+                    'message' => 'Format nomor telepon tidak valid. Gunakan nomor Indonesia dengan format 08xxxxxxxxxx.',
                     'status' => false,
                 ], 422);
             }
@@ -319,7 +331,13 @@ class RecruitmentController extends Controller{
             $existingApplications = DB::table('new_recruitment')
                 ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
                 ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
-                ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = ?", [$noTeleponNormalized])
+                ->whereRaw("CASE
+                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
+                        THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
+                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
+                        THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+                    ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
+                END = ?", [$noTelepon])
                 ->orderByDesc('id')
                 ->get();
 
