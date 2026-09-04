@@ -3024,15 +3024,12 @@ class FixingController extends Controller
 
         try {
             $hasReceivedSample = OrderDetail::where('no_order', $no_order)
-                ->where('is_active', true)
                 ->whereNotNull('tanggal_terima')
-                ->where('tanggal_terima', '!=', '')
-                ->where('tanggal_terima', '!=', '0000-00-00')
                 ->exists();
 
             if ($hasReceivedSample) {
                 return response()->json([
-                    'message' => 'Proses dibatalkan: Order ' . $no_order . ' sudah memiliki tanggal terima.',
+                    'message' => 'Order tidak dapat di-deactive karena telah dilakukan sampling.',
                 ], 422);
             }
 
