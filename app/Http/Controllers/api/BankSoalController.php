@@ -177,6 +177,7 @@ class BankSoalController extends Controller
 
         if ($categoryScope === 'manager') {
             $assignedManager = trim((string) $request->input('assigned_manager', ''));
+            $data['question_count'] = 0;
             if ($data['name'] === '') {
                 $this->fail('Nama kategori wajib diisi.');
             }
@@ -219,6 +220,9 @@ class BankSoalController extends Controller
                 $this->fail('Kategori untuk manager ini sudah ada.');
             }
             $data['assigned_manager'] = $assignedManager !== '' ? $assignedManager : null;
+        }
+        if ($this->isManagerCategory($category)) {
+            $data['question_count'] = 0;
         }
 
         $category->update($data);
