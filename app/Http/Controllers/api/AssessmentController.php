@@ -11,10 +11,11 @@ use App\Services\GetBawahan;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
 use App\Services\AtsNotificationService;
-use App\Services\UserAssessmentCategoryService;
 
 class AssessmentController extends Controller
 {
+    private const ASSESSMENT_LINK_VALID_DAYS = 6;
+
     public function overview(Request $request)
     {
         $recruitment = $this->recruitment($request->token);
@@ -46,12 +47,13 @@ class AssessmentController extends Controller
         }
         $nextPendingSession = $sessions->firstWhere('status', 'pending');
         $canStart = $nextPendingSession ? $this->sessionIsReady($nextPendingSession) : false;
-        $userConfig = $this->userAssessmentConfig($recruitment);
+        $userConfigs = $this->userAssessmentConfigs($recruitment);
+        $userConfig = $userConfigs->first();
         $personnelRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
 
         return response()->json([
             'status' => $status,
-            'expires_at' => Carbon::parse($recruitment->created_at)->addDays(2),
+            'expires_at' => $this->assessmentAvailableAt($recruitment)->addDays(self::ASSESSMENT_LINK_VALID_DAYS),
             'categories' => $categories,
             'can_start' => $canStart,
             'start_blocked_reason' => $canStart ? null : $this->sessionStartBlockReason($nextPendingSession),
@@ -187,18 +189,30 @@ class AssessmentController extends Controller
             DB::table('new_recruitment')->where('id', $recruitment->id)->lockForUpdate()->first();
             $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitment->id)->lockForUpdate()->first();
             if ($attempt) {
+                $availableAt = $this->assessmentAvailableAt($recruitment);
+                $expectedExpiresAt = $availableAt->copy()->addDays(self::ASSESSMENT_LINK_VALID_DAYS);
+                if (!$attempt->token_expires_at || !Carbon::parse($attempt->token_expires_at)->equalTo($expectedExpiresAt)) {
+                    DB::table('assessment_attempts')->where('id', $attempt->id)->update([
+                        'token_created_at' => $availableAt,
+                        'token_expires_at' => $expectedExpiresAt,
+                        'updated_at' => Carbon::now(),
+                    ]);
+                    $attempt->token_created_at = $availableAt->toDateTimeString();
+                    $attempt->token_expires_at = $expectedExpiresAt->toDateTimeString();
+                }
+
                 $hasStartedSession = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->whereNotNull('started_at')->exists();
                 $sessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->orderBy('session_order')->get();
                 $expectedSessions = $this->sessionDefinitions($recruitment);
                 $sessionDefinitions = $sessions->map(function ($session) {
                     return $this->sessionDefinitionFromSession($session);
                 })->all();
-                if (!$hasStartedSession && $sessionDefinitions !== $expectedSessions) {
+                if (!$hasStartedSession && $this->normalizedSessionDefinitions($sessionDefinitions) !== $this->normalizedSessionDefinitions($expectedSessions)) {
                     DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->delete();
                     $this->createSessions($attempt->id, Carbon::now(), $recruitment);
                 } else {
                     $pendingSessions = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->get();
-                    $userConfig = $this->userAssessmentConfig($recruitment);
+                    $userConfigs = $this->userAssessmentConfigs($recruitment)->keyBy('question_category_id');
 
                     $hasDeletedInformasiPendukung = false;
                     foreach ($pendingSessions as $session) {
@@ -209,6 +223,7 @@ class AssessmentController extends Controller
                         }
 
                         if (($session->category_name ?? '') === 'Assessment User') {
+                            $userConfig = $userConfigs->get((int) $session->question_category_id);
                             if (!$userConfig) {
                                 DB::table('assessment_sessions')->where('id', $session->id)->delete();
                                 continue;
@@ -265,13 +280,18 @@ class AssessmentController extends Controller
                         }
                     }
 
-                    if ($userConfig && !$hasStartedSession) {
-                        $hasUserSession = DB::table('assessment_sessions')
-                            ->where('assessment_attempt_id', $attempt->id)
-                            ->where('category_name', 'Assessment User')
-                            ->exists();
+                    if ($userConfigs->isNotEmpty() && !$hasStartedSession) {
+                        foreach ($userConfigs as $userConfig) {
+                            $hasUserSession = DB::table('assessment_sessions')
+                                ->where('assessment_attempt_id', $attempt->id)
+                                ->where('category_name', 'Assessment User')
+                                ->where('question_category_id', $userConfig->question_category_id)
+                                ->exists();
 
-                        if (!$hasUserSession) {
+                            if ($hasUserSession) {
+                                continue;
+                            }
+
                             $items = $this->userSessionQuestions($userConfig);
 
                             $nextOrder = (int) DB::table('assessment_sessions')
@@ -280,7 +300,7 @@ class AssessmentController extends Controller
 
                             DB::table('assessment_sessions')->insert([
                                 'assessment_attempt_id' => $attempt->id,
-                                'question_category_id' => null,
+                                'question_category_id' => $userConfig->question_category_id,
                                 'session_order' => $nextOrder + 1,
                                 'category_name' => 'Assessment User',
                                 'question_count' => $userConfig->question_count,
@@ -302,8 +322,8 @@ class AssessmentController extends Controller
             $attemptId = DB::table('assessment_attempts')->insertGetId([
                 'recruitment_id' => $recruitment->id,
                 'token' => $recruitment->token,
-                'token_created_at' => $recruitment->created_at,
-                'token_expires_at' => Carbon::parse($recruitment->created_at)->addDays(2),
+                'token_created_at' => $this->assessmentAvailableAt($recruitment),
+                'token_expires_at' => $this->assessmentAvailableAt($recruitment)->addDays(self::ASSESSMENT_LINK_VALID_DAYS),
                 'started_at' => $now,
                 'status' => 'in_progress',
                 'created_at' => $now,
@@ -319,26 +339,64 @@ class AssessmentController extends Controller
     private function createSessions($attemptId, $now, $recruitment)
     {
         $categories = $this->assessmentCategories()->get();
-        foreach ($categories as $index => $category) {
-            $items = $this->sessionQuestions($category);
-            DB::table('assessment_sessions')->insert(['assessment_attempt_id' => $attemptId, 'question_category_id' => $category->id, 'session_order' => $index + 1, 'category_name' => $category->name, 'question_count' => $category->question_count, 'duration_minutes' => $category->duration_minutes, 'questions_json' => json_encode($items), 'answers_json' => json_encode(new \stdClass()), 'result_json' => null, 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now]);
+        $mandatoryNames = ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'];
+        $mandatoryCategories = $categories->filter(function ($category) use ($mandatoryNames) {
+            return in_array(strtoupper(trim($category->name)), $mandatoryNames, true);
+        })->sortBy(function ($category) {
+            return strtoupper(trim($category->name)) === 'DISC' ? 1 : 2;
+        })->values();
+
+        $randomSessions = $categories->reject(function ($category) use ($mandatoryNames) {
+            return in_array(strtoupper(trim($category->name)), $mandatoryNames, true);
+        })->map(fn ($category) => ['type' => 'category', 'data' => $category]);
+
+        $randomSessions = $randomSessions->concat(
+            $this->userAssessmentConfigs($recruitment)->map(fn ($config) => ['type' => 'user', 'data' => $config])
+        )->shuffle()->values();
+
+        $sessionOrder = 1;
+        foreach ($mandatoryCategories as $category) {
+            $this->insertCategorySession($attemptId, $sessionOrder++, $category, $now);
         }
 
-        $userConfig = $this->userAssessmentConfig($recruitment);
-        if (!$userConfig) {
-            return;
+        foreach ($randomSessions as $definition) {
+            if ($definition['type'] === 'user') {
+                $this->insertUserSession($attemptId, $sessionOrder++, $definition['data'], $now);
+                continue;
+            }
+
+            $this->insertCategorySession($attemptId, $sessionOrder++, $definition['data'], $now);
         }
+    }
 
-        $items = $this->userSessionQuestions($userConfig);
-
+    private function insertCategorySession($attemptId, $sessionOrder, $category, $now): void
+    {
         DB::table('assessment_sessions')->insert([
             'assessment_attempt_id' => $attemptId,
-            'question_category_id' => null,
-            'session_order' => $categories->count() + 1,
+            'question_category_id' => $category->id,
+            'session_order' => $sessionOrder,
+            'category_name' => $category->name,
+            'question_count' => $category->question_count,
+            'duration_minutes' => $category->duration_minutes,
+            'questions_json' => json_encode($this->sessionQuestions($category)),
+            'answers_json' => json_encode(new \stdClass()),
+            'result_json' => null,
+            'status' => 'pending',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    private function insertUserSession($attemptId, $sessionOrder, $config, $now): void
+    {
+        DB::table('assessment_sessions')->insert([
+            'assessment_attempt_id' => $attemptId,
+            'question_category_id' => $config->question_category_id,
+            'session_order' => $sessionOrder,
             'category_name' => 'Assessment User',
-            'question_count' => $userConfig->question_count,
-            'duration_minutes' => $userConfig->duration_minutes,
-            'questions_json' => json_encode($items),
+            'question_count' => $config->question_count,
+            'duration_minutes' => $config->duration_minutes,
+            'questions_json' => json_encode($this->userSessionQuestions($config)),
             'answers_json' => json_encode(new \stdClass()),
             'result_json' => null,
             'status' => 'pending',
@@ -353,8 +411,7 @@ class AssessmentController extends Controller
             return $this->sessionDefinitionFromCategory($category);
         })->all();
 
-        $userConfig = $this->userAssessmentConfig($recruitment);
-        if ($userConfig) {
+        foreach ($this->userAssessmentConfigs($recruitment) as $userConfig) {
             $definitions[] = $this->userSessionDefinition($userConfig);
         }
 
@@ -372,50 +429,75 @@ class AssessmentController extends Controller
         ];
     }
 
-    private function userAssessmentConfig($recruitment)
+    private function userAssessmentConfigs($recruitment)
     {
         $personnelRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
         if (!$personnelRequest || (int) ($personnelRequest->use_user_assessment ?? 0) !== 1 || empty($personnelRequest->created_by)) {
-            return null;
+            return collect();
         }
 
-        $questionCategoryId = !empty($personnelRequest->assesment_question_category)
-            ? (int) $personnelRequest->assesment_question_category
-            : null;
+        $categoryConfigs = $this->assessmentQuestionCategoryConfigs($personnelRequest->assesment_question_category ?? null);
 
-        $questionCount = (int) ($personnelRequest->user_assessment_question_count ?? 0);
-        $hasTimeLimit = (int) ($personnelRequest->user_assessment_has_time_limit ?? 0) === 1;
-        $durationMinutes = $hasTimeLimit ? (int) ($personnelRequest->user_assessment_duration_minutes ?? 0) : 0;
+        if (empty($categoryConfigs)) {
+            throw new \RuntimeException('Kategori soal test user belum dipilih.');
+        }
 
-        if ($questionCount >= 1) {
+        $questionCategoryIds = collect($categoryConfigs)->pluck('id')->all();
+        $categories = DB::table('question_categories')
+            ->whereIn('id', $questionCategoryIds)
+            ->where('is_active', 1)
+            ->get()
+            ->keyBy('id');
+
+        return collect($categoryConfigs)->map(function ($config) use ($categories, $personnelRequest) {
+            $questionCategoryId = (int) $config['id'];
+            $category = $categories->get($questionCategoryId);
+            if (!$category) {
+                throw new \RuntimeException('Kategori soal test user ID ' . $questionCategoryId . ' tidak aktif atau tidak ditemukan.');
+            }
+
+            $questionCount = (int) ($config['question_count'] ?? 0);
+            $hasTimeLimit = filter_var($config['has_time_limit'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $durationMinutes = $hasTimeLimit ? (int) ($config['duration_minutes'] ?? 0) : 0;
+
+            if ($questionCount < 1) {
+                throw new \RuntimeException('Konfigurasi jumlah soal kategori ' . $category->name . ' belum diisi.');
+            }
+
             if ($hasTimeLimit && $durationMinutes < 1) {
-                throw new \RuntimeException('Konfigurasi durasi test user pada kategori bank soal belum diisi.');
+                throw new \RuntimeException('Konfigurasi durasi kategori ' . $category->name . ' belum diisi.');
             }
 
             return (object) [
-                'owner_karyawan' => $personnelRequest->created_by,
+                'owner_karyawan' => $category->owner_karyawan ?? $personnelRequest->created_by,
                 'question_count' => $questionCount,
                 'duration_minutes' => $durationMinutes,
                 'has_time_limit' => $hasTimeLimit,
-                'question_category_id' => $questionCategoryId,
+                'question_category_id' => (int) $category->id,
             ];
+        })->values();
+    }
+
+    private function assessmentQuestionCategoryConfigs($value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = json_last_error() === JSON_ERROR_NONE ? $decoded : $value;
         }
 
-        $service = app(UserAssessmentCategoryService::class);
-        $ownerCategory = $service->findOwnerCategory((string) $personnelRequest->created_by);
-        $categoryConfig = $service->toConfigObject($ownerCategory);
-
-        if ($categoryConfig && (int) $categoryConfig->question_count >= 1) {
-            return (object) [
-                'owner_karyawan' => $personnelRequest->created_by,
-                'question_count' => (int) $categoryConfig->question_count,
-                'duration_minutes' => (int) $categoryConfig->duration_minutes,
-                'has_time_limit' => (bool) $categoryConfig->has_time_limit,
-                'question_category_id' => $questionCategoryId ?: ($ownerCategory ? (int) $ownerCategory->id : null),
-            ];
-        }
-
-        throw new \RuntimeException('Konfigurasi jumlah soal test user pada kategori bank soal belum diisi.');
+        return collect(is_array($value) ? $value : [$value])
+            ->filter(fn ($config) => is_array($config) && (int) ($config['id'] ?? 0) > 0)
+            ->map(function ($config) {
+                return [
+                    'id' => (int) $config['id'],
+                    'has_time_limit' => $config['has_time_limit'] ?? false,
+                    'question_count' => (int) ($config['question_count'] ?? 0),
+                    'duration_minutes' => (int) ($config['duration_minutes'] ?? 0),
+                ];
+            })
+            ->unique('id')
+            ->values()
+            ->all();
     }
 
     private function managerHierarchyNamesForKaryawan(string $karyawanName): array
@@ -607,10 +689,24 @@ class AssessmentController extends Controller
     private function recruitment($token, $lock = false)
     {
         $row = $this->findRecruitmentByToken($token, $lock);
-        if (!$row || Carbon::now()->greaterThanOrEqualTo(Carbon::parse($row->created_at)->addDays(2))) {
+        if (!$row || Carbon::now()->greaterThanOrEqualTo($this->assessmentAvailableAt($row)->addDays(self::ASSESSMENT_LINK_VALID_DAYS))) {
             return null;
         }
         return $row;
+    }
+
+    private function assessmentAvailableAt($recruitment): Carbon
+    {
+        $history = json_decode($recruitment->meta_history ?? '[]', true);
+        if (is_array($history)) {
+            for ($index = count($history) - 1; $index >= 0; $index--) {
+                if (($history[$index]['status'] ?? null) === 'assessment' && !empty($history[$index]['at'])) {
+                    return Carbon::parse($history[$index]['at']);
+                }
+            }
+        }
+
+        return Carbon::parse($recruitment->created_at);
     }
 
     private function expiredLinkResponse($message = 'Link assessment tidak valid atau sudah kedaluwarsa.')
@@ -987,6 +1083,7 @@ class AssessmentController extends Controller
             (int) $category->question_count,
             (int) $category->duration_minutes,
             $this->categoryHasTimeLimit($category),
+            (int) $category->id,
         ];
     }
 
@@ -997,7 +1094,19 @@ class AssessmentController extends Controller
             (int) $session->question_count,
             (int) $session->duration_minutes,
             $this->sessionHasTimeLimit($session),
+            (int) ($session->question_category_id ?? 0),
         ];
+    }
+
+    private function normalizedSessionDefinitions(array $definitions): array
+    {
+        $normalized = array_map(function ($definition) {
+            return json_encode($definition);
+        }, $definitions);
+
+        sort($normalized);
+
+        return $normalized;
     }
 
     private function categoryHasTimeLimit($category)
@@ -1011,16 +1120,16 @@ class AssessmentController extends Controller
 
     private function sessionHasTimeLimit($session)
     {
+        if (($session->category_name ?? '') === 'Assessment User') {
+            return (int) ($session->duration_minutes ?? 0) > 0;
+        }
+
         $category = $session->question_category_id
             ? DB::table('question_categories')->where('id', $session->question_category_id)->first()
             : null;
 
         if ($category) {
             return $this->categoryHasTimeLimit($category);
-        }
-
-        if (($session->category_name ?? '') === 'Assessment User') {
-            return (int) ($session->duration_minutes ?? 0) > 0;
         }
 
         return (int) ($session->duration_minutes ?? 0) > 0;
