@@ -909,7 +909,7 @@ class RequestQuotationController extends Controller
                 // $data->discount_air = null;
                 $data->total_discount_promo = 0;
                 $data->discount_promo = null;
-                $data->kode_promo = null;
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -1850,7 +1850,7 @@ class RequestQuotationController extends Controller
                 // $data->discount_air = null;
                 $data->total_discount_promo = 0;
                 $data->discount_promo = null;
-                $data->kode_promo = null;
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -2686,7 +2686,7 @@ class RequestQuotationController extends Controller
                         'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
                     ]) : null;
                 }else{
-                    $dataH->kode_promo = null;
+                    $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
                     $dataH->discount_promo = null;
                 }
 
@@ -3313,7 +3313,7 @@ class RequestQuotationController extends Controller
                         // $data->discount_air = null;
                         $dataD->total_discount_promo = 0;
                         $dataD->discount_promo = null;
-                        $dataD->kode_promo = null;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -4232,7 +4232,7 @@ class RequestQuotationController extends Controller
                         'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
                     ]) : null;
                 }else {
-                    $dataH->kode_promo = null;
+                    $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
                     $dataH->discount_promo = null;
                 }
                 // END PROMO DISCOUNT
@@ -4816,7 +4816,7 @@ class RequestQuotationController extends Controller
                         // $data->discount_air = null;
                         $dataD->total_discount_promo = 0;
                         $dataD->discount_promo = null;
-                        $dataD->kode_promo = null;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
