@@ -278,8 +278,14 @@ class InternalMailService
         $imapFolder = $this->resolveImapFolder($folder);
         $dirAttachments = public_path('email/' . $this->storageKey() . '/attachments');
 
-        if (!is_dir($dirAttachments)) {
-            mkdir($dirAttachments, 0775, true);
+        if (!is_dir($dirAttachments) && !@mkdir($dirAttachments, 0775, true) && !is_dir($dirAttachments)) {
+            throw new \RuntimeException('Folder lampiran email tidak dapat dibuat.');
+        }
+
+        if (!is_writable($dirAttachments)) {
+            throw new \RuntimeException(
+                'Folder lampiran email tidak dapat ditulis. Periksa permission public/email untuk user web server (www-data).'
+            );
         }
 
         $mailbox = new Mailbox(
@@ -366,9 +372,14 @@ class InternalMailService
 
     private function buildAttachmentPublicUrl(string $fileName): string
     {
-        $base = rtrim(env('APP_URL', request()->root()), '/');
         $relative = '/email/' . $this->storageKey() . '/attachments/' . rawurlencode($fileName);
+        $base = rtrim((string) env('APP_URL_PATH', ''), '/');
 
+        if ($base !== '') {
+            return $base . $relative;
+        }
+
+        $base = rtrim(env('APP_URL', request()->root()), '/');
         if (substr($base, -7) === '/public') {
             return $base . $relative;
         }

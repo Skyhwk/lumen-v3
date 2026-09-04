@@ -308,6 +308,8 @@ trait BuildsCandidateAssessmentPreview
                 'line' => $line,
                 'title' => $titles[$line] ?? ('Grafik ' . $line),
                 'pattern' => $pattern['pattern'] ?? 'Pattern tidak tersedia',
+                'type' => $pattern['type'] ?? null,
+                'scores' => $this->normalizeDiscScores($profile['scores'] ?? []),
                 'behaviours' => $behaviourRaw !== ''
                     ? array_values(array_filter(array_map('trim', explode(',', $behaviourRaw))))
                     : [],
@@ -327,7 +329,49 @@ trait BuildsCandidateAssessmentPreview
             'jobs' => $jobsRaw !== ''
                 ? array_values(array_filter(array_map('trim', explode(',', $jobsRaw))))
                 : [],
+            'score_scale' => $this->discScoreScale(),
         ];
+    }
+
+    /** Upper bound of the d/i/s/c values stored in disc_rules; the chart axis runs -8..+8. */
+    protected function discScoreScale(): int
+    {
+        return 8;
+    }
+
+    protected function normalizeDiscScores($scores): array
+    {
+        $scores = is_array($scores) ? $scores : (array) $scores;
+        $scale = $this->discScoreScale();
+
+        $dimensions = [
+            'D' => 'Dominance',
+            'I' => 'Influence',
+            'S' => 'Steadiness',
+            'C' => 'Compliance',
+        ];
+
+        $normalized = [];
+
+        foreach ($dimensions as $key => $label) {
+            $raw = $scores[strtolower($key)] ?? $scores[$key] ?? null;
+
+            if ($raw === null || $raw === '' || !is_numeric($raw)) {
+                continue;
+            }
+
+            $value = round((float) $raw, 1);
+            $clamped = max(-$scale, min($scale, $value));
+
+            $normalized[] = [
+                'key' => $key,
+                'label' => $label,
+                'value' => $value,
+                'percent' => round(abs($clamped) / $scale * 100, 2),
+            ];
+        }
+
+        return $normalized;
     }
 
     protected function buildPapiDetail(array $result)
