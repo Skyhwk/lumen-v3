@@ -16,10 +16,6 @@ class ArsipBasController extends Controller
                 ->whereNotNull('filename_bas')
                 ->where('filename_bas', '!=', '');
 
-            if ($request->filled('tanggal_jadwal')) {
-                $query->whereDate('tanggal_tugas', $request->tanggal_jadwal);
-            }
-
             return Datatables::of($query)
                 ->addColumn('nomor_quotation', fn ($row) => $row->no_quotation)
                 ->addColumn('jadwal', fn ($row) => $row->tanggal_tugas)
