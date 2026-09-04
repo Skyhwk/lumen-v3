@@ -776,7 +776,7 @@ class GenerateMessageAtsEmail
                                     <span style='color: #475569;'>PT Inti Surya Laboratorium</span>
                                     <div style='margin-top: 14px; font-size: 11px; color: #94a3b8; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 12px;'>
                                         Ruko Icon Business Park Blok O No. 5-6, BSD City, Kec. Cisauk, Tangerang Selatan, Banten 15345<br>
-                                        Pesan ini dikirimkan secara otomatis oleh Sistem ATS PT Inti Surya Laboratorium. Mohon menjaga kerahasiaan isi dokumen penawaran ini.
+                                        Pesan ini dikirimkan secara otomatis oleh Sistem ATS PT Inti Surya Laboratorium.
                                     </div>
                                 </td>
                             </tr>
