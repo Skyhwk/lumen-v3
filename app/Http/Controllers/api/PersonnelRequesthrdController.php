@@ -28,7 +28,9 @@ class PersonnelRequesthrdController extends Controller
     {
         try {
             $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
-                ->withCount('newRecruitments as total_pelamar')
+                ->withCount(['newRecruitments as total_pelamar' => function ($query) {
+                    $this->constrainCountedApplicants($query);
+                }])
                 ->where('is_active',1)
                 ->where('is_completed', $request->completed ?? 0)
                 ->orderBy('id', 'desc');
@@ -90,7 +92,9 @@ class PersonnelRequesthrdController extends Controller
                         return;
                     }
 
-                    $q->has('newRecruitments', '=', (int) $keyword);
+                    $q->whereHas('newRecruitments', function ($sub) {
+                        $this->constrainCountedApplicants($sub);
+                    }, '=', (int) $keyword);
                 })
                 ->filterColumn('no_request', function ($q, $keyword) {
                     $q->where('no_request', 'like', "%{$keyword}%");
@@ -413,7 +417,7 @@ class PersonnelRequesthrdController extends Controller
                     'profile_completion' => (int) ($statusCounts['profile_completion'] ?? 0),
                     'interview_user' => (int) ($statusCounts['interview_user'] ?? 0),
                     'management_decision' => (int) ($statusCounts['management_decision'] ?? 0),
-                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
+                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0) + ($statusCounts['approved'] ?? 0)),
                     'hired' => (int) ($statusCounts['hired'] ?? 0),
                     'rejected' => (int) ($statusCounts['rejected'] ?? 0),
                 ],
@@ -613,5 +617,12 @@ class PersonnelRequesthrdController extends Controller
                 'message' => 'Gagal transfer kandidat: ' . $th->getMessage(),
             ], 500);
         }
+    }
+
+    private function constrainCountedApplicants($query)
+    {
+        $query->where('is_active', 1)
+            ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
+            ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) <> 'assessment'");
     }
 }

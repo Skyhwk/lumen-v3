@@ -92,7 +92,7 @@ class PersonnelRequestController extends Controller
                     'profile_completion' => (int) ($statusCounts['profile_completion'] ?? 0),
                     'interview_user' => (int) ($statusCounts['interview_user'] ?? 0),
                     'management_decision' => (int) ($statusCounts['management_decision'] ?? 0),
-                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
+                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0) + ($statusCounts['approved'] ?? 0)),
                     'hired' => (int) ($statusCounts['hired'] ?? 0),
                     'rejected' => (int) ($statusCounts['rejected'] ?? 0),
                 ],
