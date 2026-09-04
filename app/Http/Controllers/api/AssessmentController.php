@@ -50,11 +50,6 @@ class AssessmentController extends Controller
         $userConfigs = $this->userAssessmentConfigs($recruitment);
         $userConfig = $userConfigs->first();
         $personnelRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
-        $totalQuestionCount = array_sum(array_map(fn ($config) => (int) $config->question_count, $userConfigs));
-        $hasAnyTimeLimit = collect($userConfigs)->contains(fn ($config) => (bool) $config->has_time_limit);
-        $maxDuration = collect($userConfigs)
-            ->filter(fn ($config) => (bool) $config->has_time_limit)
-            ->max(fn ($config) => (int) $config->duration_minutes);
 
         return response()->json([
             'status' => $status,
@@ -63,21 +58,12 @@ class AssessmentController extends Controller
             'can_start' => $canStart,
             'start_blocked_reason' => $canStart ? null : $this->sessionStartBlockReason($nextPendingSession),
             'preview_questions' => $this->previewQuestions($attempt->id, 3),
-            'has_user_assessment' => !empty($userConfigs),
+            'has_user_assessment' => $userConfig !== null,
             'personnel_request_no' => $personnelRequest->no_request ?? null,
-            'user_assessment' => !empty($userConfigs) ? [
-                'question_count' => (int) $totalQuestionCount,
-                'duration_minutes' => $hasAnyTimeLimit ? (int) ($maxDuration ?: 0) : 0,
-                'has_time_limit' => $hasAnyTimeLimit,
-                'categories' => array_map(function ($config) {
-                    return [
-                        'id' => (int) $config->question_category_id,
-                        'name' => (string) $config->category_name,
-                        'question_count' => (int) $config->question_count,
-                        'duration_minutes' => (int) $config->duration_minutes,
-                        'has_time_limit' => (bool) $config->has_time_limit,
-                    ];
-                }, $userConfigs),
+            'user_assessment' => $userConfig ? [
+                'question_count' => (int) $userConfig->question_count,
+                'duration_minutes' => (int) $userConfig->duration_minutes,
+                'has_time_limit' => (bool) $userConfig->has_time_limit,
             ] : null,
         ]);
     }
@@ -247,25 +233,16 @@ class AssessmentController extends Controller
                                 || !$this->sessionIsReady($session);
 
                             if ($needsUserSessionRefresh) {
-                                $items = $this->userSessionQuestions($matchedUserConfig);
+                                $items = $this->userSessionQuestions($userConfig);
 
                                 DB::table('assessment_sessions')->where('id', $session->id)->update([
-                                    'question_category_id' => $matchedUserConfig->question_category_id,
-                                    'category_name' => $matchedUserConfig->category_name,
-                                    'question_count' => $matchedUserConfig->question_count,
-                                    'duration_minutes' => $matchedUserConfig->duration_minutes,
+                                    'question_count' => $userConfig->question_count,
+                                    'duration_minutes' => $userConfig->duration_minutes,
                                     'questions_json' => json_encode($items),
                                     'updated_at' => Carbon::now(),
                                 ]);
                             }
 
-                            continue;
-                        }
-
-                        if (($session->category_name ?? '') === 'Assessment User'
-                            || in_array((int) ($session->question_category_id ?? 0), $userCategoryIds, true)
-                            || $this->isManagerScopeCategoryId((int) ($session->question_category_id ?? 0))) {
-                            DB::table('assessment_sessions')->where('id', $session->id)->delete();
                             continue;
                         }
 
@@ -325,7 +302,7 @@ class AssessmentController extends Controller
                                 'assessment_attempt_id' => $attempt->id,
                                 'question_category_id' => $userConfig->question_category_id,
                                 'session_order' => $nextOrder + 1,
-                                'category_name' => $userConfig->category_name,
+                                'category_name' => 'Assessment User',
                                 'question_count' => $userConfig->question_count,
                                 'duration_minutes' => $userConfig->duration_minutes,
                                 'questions_json' => json_encode($items),
@@ -444,7 +421,7 @@ class AssessmentController extends Controller
     private function userSessionDefinition($userConfig)
     {
         return [
-            $userConfig->category_name ?? 'Assessment User',
+            'Assessment User',
             (int) $userConfig->question_count,
             (int) $userConfig->duration_minutes,
             (bool) $userConfig->has_time_limit,
@@ -574,9 +551,7 @@ class AssessmentController extends Controller
             ->where('is_active', 1)
             ->where('question_type', 'single_choice');
 
-        if (!empty($config->question_category_ids)) {
-            $query->whereIn('question_category_id', $config->question_category_ids);
-        } elseif (!empty($config->question_category_id)) {
+        if (!empty($config->question_category_id)) {
             $query->where('question_category_id', (int) $config->question_category_id);
         } else {
             $accessibleCategoryIds = $this->accessibleManagerCategoryIdsForHierarchy($hierarchyNames, $rootKaryawan);
@@ -1114,7 +1089,7 @@ class AssessmentController extends Controller
 
     private function sessionDefinitionFromSession($session)
     {
-        $definition = [
+        return [
             $session->category_name,
             (int) $session->question_count,
             (int) $session->duration_minutes,
