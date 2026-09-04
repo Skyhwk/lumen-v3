@@ -94,29 +94,7 @@ class NonaktifKaryawanService
             return;
         }
 
-        $currentBankDataCount = MasterPelanggan::whereNull('sales_id')->where('is_active', true)->count();
-        $remainingQuota = max(0, self::QUOTA_BANK_DATA - $currentBankDataCount); // Pake max 0 biar ga negatif
-
-        if ($remainingQuota > 0) {
-            $noOrderQuery = MasterPelanggan::where([
-                'sales_id' => $this->karyawan->id,
-                'is_active' => true
-            ])->whereDoesntHave('order_customer');
-
-            $totalCount = $noOrderQuery->count();
-
-            if ($totalCount > 0) {
-                $limitToBankData = min($totalCount, $remainingQuota);
-
-                if ($limitToBankData > 0) {
-                    $idsToBankData = $noOrderQuery->limit($limitToBankData)->pluck('id_pelanggan')->toArray();
-
-                    if (!empty($idsToBankData)) $this->releaseCustomersToBankData($idsToBankData);
-                }
-            }
-        }
-
-        // sisanya didistribusikan ke sales/CRO lain
+        // 3. Sisanya (pelanggan yang punya order) didistribusikan ke sales/CRO lain
         $this->distributeRemainingCustomers($salesStaffs, $croStaffs);
     }
 
