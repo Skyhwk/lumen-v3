@@ -316,7 +316,7 @@ class SalaryApprovalController extends Controller
         return '<!doctype html><html><body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;color:#344256">'
             . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f9"><tr><td align="center" style="padding:24px 16px">'
             . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff;border:1px solid #dfe5ec;border-radius:6px;overflow:hidden">'
-            . '<tr><td style="padding:18px 20px;background:#1f2b3d;color:#fff"><div style="font-size:15px;font-weight:700">PT INTI SURYA LABORATORIUM</div><div style="margin-top:3px;font-size:11px;color:#b9c7d8">HRD &amp; Talent Acquisition Division</div></td></tr>'
+            . '<tr><td style="padding:18px 20px;background:#1f2b3d;color:#fff"><div style="font-size:15px;font-weight:700">PT INTI SURYA LABORATORIUM</div><div style="margin-top:3px;font-size:11px;color:#b9c7d8">HRD Division</div></td></tr>'
             . '<tr><td style="padding:28px 22px 26px"><p style="margin:0 0 16px;font-size:13px;line-height:20px">Yth. ' . $salutation . ' <strong>' . $name . '</strong>,</p>'
             . '<p style="margin:0 0 16px;font-size:13px;line-height:21px">Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi <strong>' . $position . '</strong>.</p>'
             . '<p style="margin:0 0 16px;font-size:13px;line-height:21px">Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.</p>'

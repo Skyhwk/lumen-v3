@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class SendCandidateActionReminders extends Command
 {
-    protected $signature = 'recruitment:send-candidate-action-reminders {--test-email= : Kirim dua email dummy hanya ke alamat ini}';
+    protected $signature = 'candidatereminder {--test-email= : Kirim dua email dummy hanya ke alamat ini}';
 
     protected $description = 'Kirim reminder assessment dan kelengkapan data kandidat';
 
