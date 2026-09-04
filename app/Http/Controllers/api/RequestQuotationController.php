@@ -124,6 +124,58 @@ class RequestQuotationController extends Controller
         ], 200);
     }
 
+    public function checkInvoicingEligibility(Request $request)
+    {
+        $noOrder = trim((string) $request->no_order);
+        if ($noOrder === '') {
+            return response()->json([
+                'status' => true,
+                'message' => 'Quotation dapat diubah menjadi invoicing.',
+            ], 200);
+        }
+
+        $message = $this->invoicingTransitionError($noOrder);
+        if ($message) {
+            return response()->json([
+                'status' => false,
+                'message' => $message,
+            ], 403);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Quotation dapat diubah menjadi invoicing.',
+        ], 200);
+    }
+
+    private function invoicingTransitionError(string $noOrder): ?string
+    {
+        $receivedSamples = OrderDetail::where('no_order', $noOrder)
+            ->whereNotNull('tanggal_terima')
+            ->where('tanggal_terima', '!=', '')
+            ->pluck('no_sampel');
+
+        if ($receivedSamples->isEmpty()) {
+            return null;
+        }
+
+        return 'Quotation tidak dapat diubah menjadi invoicing karena sampel '
+            . $receivedSamples->implode(', ')
+            . ' sudah memiliki tanggal terima.';
+    }
+
+    private function validateInvoicingTransition($quotation, $requestedGenerateDataLab): ?string
+    {
+        if ((int) ($quotation->is_generate_data_lab ?? 0) !== 1 || (int) $requestedGenerateDataLab !== 0) {
+            return null;
+        }
+
+        $dataLama = json_decode($quotation->data_lama ?: 'null');
+        $noOrder = trim((string) ($dataLama->no_order ?? ''));
+
+        return $noOrder !== '' ? $this->invoicingTransitionError($noOrder) : null;
+    }
+
     public function approve(Request $request)
     {
         DB::beginTransaction();
@@ -572,6 +624,12 @@ class RequestQuotationController extends Controller
             $data = QuotationNonKontrak::where('is_active', true)
                 ->where('id', $payload->informasi_pelanggan->id)
                 ->first();
+
+            $invoicingError = $this->validateInvoicingTransition($data, $payload->data_wilayah->is_generate_data_lab);
+            if ($invoicingError) {
+                DB::rollback();
+                return response()->json(['message' => $invoicingError], 403);
+            }
 
             //data customer order     -------------------------------------------------------> save ke master customer parrent
             $data->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
@@ -1509,6 +1567,12 @@ class RequestQuotationController extends Controller
             $dataOld = QuotationNonKontrak::where('is_active', true)
                 ->where('no_document', $payload->informasi_pelanggan->no_document)
                 ->first();
+
+            $invoicingError = $this->validateInvoicingTransition($dataOld, $payload->data_wilayah->is_generate_data_lab);
+            if ($invoicingError) {
+                DB::rollback();
+                return response()->json(['message' => $invoicingError], 403);
+            }
 
             $data = new QuotationNonKontrak;
             // dd($dataOld);
@@ -2605,6 +2669,12 @@ class RequestQuotationController extends Controller
                 $dataH = QuotationKontrakH::where('is_active', true)
                     ->where('id', $informasi_pelanggan->id)
                     ->first();
+
+                $invoicingError = $this->validateInvoicingTransition($dataH, $data_wilayah->is_generate_data_lab);
+                if ($invoicingError) {
+                    DB::rollback();
+                    return response()->json(['message' => $invoicingError], 403);
+                }
 
                 $dataH->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
                 $dataH->tanggal_penawaran = $informasi_pelanggan->tgl_penawaran;
@@ -4015,6 +4085,12 @@ class RequestQuotationController extends Controller
                 $dataOld = QuotationKontrakH::where('is_active', true)
                     ->where('no_document', $informasi_pelanggan->no_document)
                     ->first();
+
+                $invoicingError = $this->validateInvoicingTransition($dataOld, $data_wilayah->is_generate_data_lab);
+                if ($invoicingError) {
+                    DB::rollback();
+                    return response()->json(['message' => $invoicingError], 403);
+                }
 
                 if (isset($payload->informasi_pelanggan->new_no_document) && $payload->informasi_pelanggan->new_no_document != null) {
 
