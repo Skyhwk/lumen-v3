@@ -41,7 +41,7 @@ class AtsInterviewHrdController extends Controller
                 if ($mode === 'today') {
                     $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
                         $sub->whereDate('tgl_interview', '=', $todayStr);
-                    });
+                    })->where('is_rejected_kandidat', 0);
                 } else {
                     $q->where(function ($sub) use ($todayStr) {
                         $sub->whereHas('hrdInterview', function ($sub2) use ($todayStr) {
@@ -520,6 +520,9 @@ class AtsInterviewHrdController extends Controller
             'rejected_by' => $user,
             'rejected_at' => Carbon::now(),
             'alasan_reject' => $reason,
+            'is_rejected_kandidat' => 1,
+            'is_rejected_kandidat_by' => $user,
+            'is_rejected_kandidat_at' => Carbon::now(),
         ]);
 
         RecruitmentInterview::where('new_recruitment_id', $applicant->id)
@@ -544,25 +547,25 @@ class AtsInterviewHrdController extends Controller
                 'hrd_name' => $user,
             ];
 
-            if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
-                SendEmail::where('to', $applicant->email)
-                    ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
-                    ->where('body', $bodyEmail)
-                    ->where('karyawan', $user)
-                    ->noReply()
-                    ->replyToAtsHrd()
-                    ->send();
-            }
+            // if (!empty($applicant->email)) {
+            //     $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
+            //     SendEmail::where('to', $applicant->email)
+            //         ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
+            //         ->where('body', $bodyEmail)
+            //         ->where('karyawan', $user)
+            //         ->noReply()
+            //         ->replyToAtsHrd()
+            //         ->send();
+            // }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
-            if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
-                $waMessage = $waObj->RejectedCandidateSelection();
+            // $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            // if (!empty($phone)) {
+            //     $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+            //     $waMessage = $waObj->RejectedCandidateSelection();
 
-                $sendWa = new SendWhatsapp($phone, $waMessage);
-                $sendWa->send();
-            }
+            //     $sendWa = new SendWhatsapp($phone, $waMessage);
+            //     $sendWa->send();
+            // }
         } catch (\Exception $e) {
             // Silence exception
         }
