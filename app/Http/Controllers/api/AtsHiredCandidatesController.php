@@ -116,7 +116,7 @@ class AtsHiredCandidatesController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'salaryOffer', 'candidateDataOffer', 'candidateProfile'])
             ->where(function ($q) {
-                $q->whereRaw('LOWER(status) IN (?, ?)', ['hired', 'training']);
+                $q->whereRaw('LOWER(status) IN (?)', ['hired']);
             })
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
