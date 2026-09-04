@@ -40,7 +40,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 !$request->filled('year') && !$request->filled('from') && !$request->filled('to') && $request->date,
                 fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
             )
-            ->orderBy('tanggal_sampling');
+            ->orderBy('tanggal_sampling', 'asc');
         $data = $data->get();
 		$data = \App\Services\WsFinalApprovalService::appendProgressAndFilter($data, $request);
         if ($request->filled('year')) {
