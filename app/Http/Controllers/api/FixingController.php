@@ -3004,4 +3004,110 @@ class FixingController extends Controller
             return null;
         }
     }
+
+    public function deactiveOrder(Request $request)
+    {
+        $no_order = $request->no_order;
+        $deactive_type = $request->deactive_type;
+
+        if ($no_order == null || $no_order == '') {
+            return response()->json([
+                'message' => 'Nomor order tidak boleh kosong.',
+            ], 400);
+        }
+
+        if ($deactive_type == null || $deactive_type == '') {
+            return response()->json([
+                'message' => 'Tipe deactive tidak boleh kosong.',
+            ], 400);
+        }
+
+        try {
+            $hasReceivedSample = OrderDetail::where('no_order', $no_order)
+                ->whereNotNull('tanggal_terima')
+                ->exists();
+
+            if ($hasReceivedSample) {
+                return response()->json([
+                    'message' => 'Order tidak dapat di-deactive karena telah dilakukan sampling.',
+                ], 422);
+            }
+
+            // Ambil daftar no_sampel dan no_quotation terkait order ini untuk relasi tabel turunan
+            $sampleNumbers = OrderDetail::where('no_order', $no_order)
+                ->pluck('no_sampel')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $quotationNumbers = OrderDetail::where('no_order', $no_order)
+                ->pluck('no_quotation')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $orderHeader = OrderHeader::where('no_order', $no_order)->first();
+            if ($orderHeader) {
+                if (!empty($orderHeader->no_quotation)) {
+                    $quotationNumbers[] = $orderHeader->no_quotation;
+                }
+                if (!empty($orderHeader->no_document)) {
+                    $quotationNumbers[] = $orderHeader->no_document;
+                }
+            }
+            $quotationNumbers = array_values(array_unique(array_filter($quotationNumbers)));
+
+            DB::beginTransaction();
+
+            // 2. Deactive order_header (jika deactive_type adalah 'all')
+            if ($deactive_type === 'all') {
+                OrderHeader::where('no_order', $no_order)->update(['is_active' => false]);
+            }
+
+            // 3. Deactive order_detail
+            OrderDetail::where('no_order', $no_order)->update(['is_active' => false]);
+
+            // 4. Deactive t_ftc
+            if (!empty($sampleNumbers) && Schema::hasColumn('t_ftc', 'no_sample')) {
+                DB::table('t_ftc')->whereIn('no_sample', $sampleNumbers)->update(['is_active' => false]);
+            }
+
+            // 5. Deactive t_ftc_t
+            if (!empty($sampleNumbers) && Schema::hasColumn('t_ftc_t', 'no_sample')) {
+                DB::table('t_ftc_t')->whereIn('no_sample', $sampleNumbers)->update(['is_active' => false]);
+            }
+
+            // 6. Deactive sampling_plan
+            if (!empty($quotationNumbers)) {
+                DB::table('sampling_plan')
+                    ->where(function ($q) use ($quotationNumbers) {
+                        $q->whereIn('no_quotation', $quotationNumbers);
+                        if (Schema::hasColumn('sampling_plan', 'no_document')) {
+                            $q->orWhereIn('no_document', $quotationNumbers);
+                        }
+                    })
+                    ->update(['is_active' => false]);
+            }
+
+            // 7. Deactive jadwal
+            if (!empty($quotationNumbers) && Schema::hasColumn('jadwal', 'no_quotation')) {
+                DB::table('jadwal')->whereIn('no_quotation', $quotationNumbers)->update(['is_active' => false]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Order ' . $no_order . ' berhasil di-deactive' . ($deactive_type === 'all' ? ' (Semua data termasuk Header)' : ' (Tanpa Header)') . '.',
+            ], 200);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
