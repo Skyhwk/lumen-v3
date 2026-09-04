@@ -32,6 +32,7 @@ class AtsInterviewHrdController extends Controller
 
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where('is_active', 1)
+            ->where('is_rejected_kandidat', 0)
             ->where(function ($q) {
                 $q->where('status', 'interview_hrd')
                   ->orWhereHas('hrdInterview');
@@ -41,7 +42,7 @@ class AtsInterviewHrdController extends Controller
                 if ($mode === 'today') {
                     $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
                         $sub->whereDate('tgl_interview', '=', $todayStr);
-                    })->where('is_rejected_kandidat', 0);
+                    });
                 } else {
                     $q->where(function ($sub) use ($todayStr) {
                         $sub->whereHas('hrdInterview', function ($sub2) use ($todayStr) {
