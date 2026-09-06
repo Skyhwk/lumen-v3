@@ -312,26 +312,21 @@ trait BuildsCandidateAssessmentPreview
         }
 
         $profiles = [];
-        $primaryPattern = null;
 
         foreach ($profilesSource as $profile) {
             $line = (int) ($profile['line'] ?? 0);
             $pattern = is_array($profile['pattern'] ?? null) ? $profile['pattern'] : [];
 
-            if (($line === 1 || empty($primaryPattern)) && !empty($pattern)) {
-                $primaryPattern = $pattern;
-            }
-
             $behaviourRaw = trim((string) ($pattern['behaviour'] ?? ''));
-            $scoreMap = $this->normalizeDiscScores($profile['scores'] ?? []);
             $profiles[] = [
                 'line' => $line,
                 'title' => $titles[$line] ?? ('Grafik ' . $line),
                 'pattern' => $pattern['pattern'] ?? 'Pattern tidak tersedia',
+                'type' => $pattern['type'] ?? null,
+                'scores' => $this->normalizeDiscScores($profile['scores'] ?? []),
                 'behaviours' => $behaviourRaw !== ''
                     ? array_values(array_filter(array_map('trim', explode(',', $behaviourRaw))))
                     : [],
-                'scores' => $scoreMap,
             ];
         }
 
@@ -339,14 +334,10 @@ trait BuildsCandidateAssessmentPreview
             return ($a['line'] ?? 0) <=> ($b['line'] ?? 0);
         });
 
+        $primaryPattern = $this->resolveDiscPrimaryPattern($profilesSource);
         $description = trim((string) ($primaryPattern['description'] ?? ''));
         $jobsRaw = trim((string) ($primaryPattern['jobs'] ?? ''));
-        $scale = 8;
-        foreach ($profiles as $profile) {
-            foreach (['d', 'i', 's', 'c'] as $letter) {
-                $scale = max($scale, (int) ceil(abs((float) ($profile['scores'][$letter] ?? 0))));
-            }
-        }
+        $scoreScale = $this->discScoreScale();
 
         return [
             'profiles' => $profiles,
@@ -354,35 +345,69 @@ trait BuildsCandidateAssessmentPreview
             'jobs' => $jobsRaw !== ''
                 ? array_values(array_filter(array_map('trim', explode(',', $jobsRaw))))
                 : [],
-            'scale' => $scale,
+            'score_scale' => $scoreScale,
+            'scale' => $scoreScale,
         ];
     }
 
-    protected function normalizeDiscScores($scores)
+    /** Upper bound of the d/i/s/c values stored in disc_rules; the chart axis runs -8..+8. */
+    protected function discScoreScale(): int
     {
-        if (!is_array($scores)) {
-            return ['d' => 0, 'i' => 0, 's' => 0, 'c' => 0];
+        return 8;
+    }
+
+    protected function resolveDiscPrimaryPattern(array $profilesSource): array
+    {
+        foreach ([3, 1] as $preferredLine) {
+            foreach ($profilesSource as $profile) {
+                $line = (int) ($profile['line'] ?? 0);
+                if ($line !== $preferredLine) {
+                    continue;
+                }
+
+                $pattern = is_array($profile['pattern'] ?? null) ? $profile['pattern'] : [];
+                if (!empty($pattern)) {
+                    return $pattern;
+                }
+            }
         }
 
-        $pick = function ($letter) use ($scores) {
-            $lower = strtolower($letter);
-            $upper = strtoupper($letter);
-            if (isset($scores[$lower]) && $scores[$lower] !== '' && $scores[$lower] !== null) {
-                return (float) $scores[$lower];
-            }
-            if (isset($scores[$upper]) && $scores[$upper] !== '' && $scores[$upper] !== null) {
-                return (float) $scores[$upper];
-            }
+        return [];
+    }
 
-            return 0.0;
-        };
+    protected function normalizeDiscScores($scores): array
+    {
+        $scores = is_array($scores) ? $scores : (array) $scores;
+        $scale = $this->discScoreScale();
 
-        return [
-            'd' => $pick('d'),
-            'i' => $pick('i'),
-            's' => $pick('s'),
-            'c' => $pick('c'),
+        $dimensions = [
+            'D' => 'Dominance',
+            'I' => 'Influence',
+            'S' => 'Steadiness',
+            'C' => 'Compliance',
         ];
+
+        $normalized = [];
+
+        foreach ($dimensions as $key => $label) {
+            $raw = $scores[strtolower($key)] ?? $scores[$key] ?? null;
+
+            if ($raw === null || $raw === '' || !is_numeric($raw)) {
+                continue;
+            }
+
+            $value = round((float) $raw, 1);
+            $clamped = max(-$scale, min($scale, $value));
+
+            $normalized[] = [
+                'key' => $key,
+                'label' => $label,
+                'value' => $value,
+                'percent' => round(abs($clamped) / $scale * 100, 2),
+            ];
+        }
+
+        return $normalized;
     }
 
     protected function buildQuestionReview($session, array $result)
