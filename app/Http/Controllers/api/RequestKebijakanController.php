@@ -23,6 +23,10 @@ class RequestKebijakanController extends Controller
 
     private const KATEGORI_LABELS = RequestKebijakanWorkflowService::KATEGORI_LABELS;
 
+    private const TUJUAN_KEBIJAKAN_BARU_PREFIX = 'Memberikan ketentuan mengenai ';
+
+    private const RUANG_LINGKUP_KEBIJAKAN_BARU_PREFIX = 'Ketetapan ini mengatur tentang ';
+
     private const ALLOWED_REQUESTER_GRADES = RequestKebijakanWorkflowService::APPROVER_GRADES;
 
     public function initialize(Request $request)
@@ -67,6 +71,7 @@ class RequestKebijakanController extends Controller
             ->addColumn('display_status', fn ($row) => $this->resolveDisplayStatus($row))
             ->addColumn('display_kategori', fn ($row) => $this->resolveKategoriLabel($row->kategori))
             ->addColumn('can_delete', fn ($row) => $this->canDelete($row, $employee))
+            ->addColumn('can_update', fn ($row) => $this->canUpdate($row, $employee))
             ->addColumn('void_reason', fn ($row) => $this->resolveVoidReason($row))
             ->filterColumn('no_request', fn ($q, $keyword) => $q->where('no_request', 'like', "%{$keyword}%"))
             ->filterColumn('display_kategori', function ($q, $keyword) {
@@ -110,6 +115,7 @@ class RequestKebijakanController extends Controller
                 'display_status' => $this->resolveDisplayStatus($record),
                 'pipeline' => RequestKebijakanWorkflowService::buildPipeline($record),
                 'can_delete' => $this->canDelete($record, $employee),
+                'can_update' => $this->canUpdate($record, $employee),
             ],
             'message' => 'Detail request kebijakan berhasil diambil',
         ], 200);
@@ -148,6 +154,50 @@ class RequestKebijakanController extends Controller
                     'no_request' => $record->no_request,
                 ],
             ], 201);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    public function update(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $this->ensureCanRequestKebijakan($employee);
+
+        $record = RequestKebijakan::findOrFail($request->id);
+
+        $this->ensureCanAccess($record, $employee);
+
+        if (!$this->canUpdate($record, $employee)) {
+            return response()->json([
+                'message' => 'Request hanya dapat diubah jika belum disetujui',
+            ], 422);
+        }
+
+        $validated = $this->validatePayload($request);
+
+        DB::beginTransaction();
+        try {
+            $record->update([
+                'kategori' => $validated['kategori'],
+                'judul' => $validated['judul'],
+                'tujuan' => $validated['tujuan'],
+                'ruang_lingkup' => $validated['ruang_lingkup'],
+                'definisi' => $validated['definisi'],
+                'isi_ketetapan' => $validated['isi_ketetapan'],
+                'catatan' => $validated['catatan'],
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Request kebijakan berhasil diperbarui',
+                'data' => [
+                    'id' => $record->id,
+                    'no_request' => $record->no_request,
+                ],
+            ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 500);
@@ -211,11 +261,11 @@ class RequestKebijakanController extends Controller
             abort(422, 'Judul wajib diisi');
         }
 
-        if ($this->isEmptyHtml($tujuan)) {
+        if ($this->isOnlyDefaultPrefix($tujuan, self::TUJUAN_KEBIJAKAN_BARU_PREFIX)) {
             abort(422, 'Tujuan wajib diisi');
         }
 
-        if ($this->isEmptyHtml($ruangLingkup)) {
+        if ($this->isOnlyDefaultPrefix($ruangLingkup, self::RUANG_LINGKUP_KEBIJAKAN_BARU_PREFIX)) {
             abort(422, 'Ruang lingkup wajib diisi');
         }
 
@@ -247,6 +297,17 @@ class RequestKebijakanController extends Controller
         $text = trim(strip_tags(html_entity_decode($value)));
 
         return $text === '';
+    }
+
+    private function isOnlyDefaultPrefix(?string $value, string $prefix): bool
+    {
+        if ($this->isEmptyHtml($value)) {
+            return true;
+        }
+
+        $text = trim(strip_tags(html_entity_decode($value)));
+
+        return $text === trim($prefix);
     }
 
     private function applyPendingScope($query)
@@ -339,6 +400,11 @@ class RequestKebijakanController extends Controller
     }
 
     private function canDelete(RequestKebijakan $record, $employee): bool
+    {
+        return $this->canUpdate($record, $employee);
+    }
+
+    private function canUpdate(RequestKebijakan $record, $employee): bool
     {
         return $record->is_active
             && $record->status === 'waiting_approval'

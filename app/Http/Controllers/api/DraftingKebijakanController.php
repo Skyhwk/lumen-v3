@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DraftingKebijakan;
 use App\Models\RequestKebijakan;
 use App\Services\RequestKebijakanWorkflowService;
+use App\Services\RenderKebijakanDocumentPdf;
 use Carbon\Carbon;
 use DataTables;
 use Illuminate\Http\Request;
@@ -151,11 +152,18 @@ class DraftingKebijakanController extends Controller
         $record = RequestKebijakan::with('drafting')->findOrFail($request->id);
 
         $judul = trim((string) $request->input('judul', ''));
+        $divisiBagian = trim((string) $request->input('divisi_bagian', ''));
+
+        if ($divisiBagian === '') {
+            return response()->json(['message' => 'Divisi / bagian wajib diisi'], 422);
+        }
+
         if ($judul === '') {
             return response()->json(['message' => 'Judul draft wajib diisi'], 422);
         }
 
         $draftPayload = [
+            'divisi_bagian' => $divisiBagian,
             'judul' => $judul,
             'tujuan' => (string) $request->input('tujuan', ''),
             'ruang_lingkup' => (string) $request->input('ruang_lingkup', ''),
@@ -215,6 +223,22 @@ class DraftingKebijakanController extends Controller
 
             return response()->json(['message' => $th->getMessage()], 500);
         }
+    }
+
+    public function previewPdf(Request $request)
+    {
+        $record = RequestKebijakan::with('drafting')->findOrFail($request->id);
+
+        if (!$record->drafting) {
+            return response()->json(['message' => 'Draft kebijakan belum tersedia'], 404);
+        }
+
+        $pdfString = app(RenderKebijakanDocumentPdf::class)->renderFromDraft($record->drafting);
+
+        return response()->json([
+            'data' => base64_encode($pdfString),
+            'message' => 'PDF berhasil dibuat',
+        ], 200);
     }
 
     public function submitDraft(Request $request)
