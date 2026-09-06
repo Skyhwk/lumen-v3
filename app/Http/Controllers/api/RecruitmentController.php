@@ -29,6 +29,8 @@ use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\PublicRecruitmentJobListService;
+use App\Services\PersonnelRequestImageService;
+use App\Services\RecruitmentApplicationDraftService;
 use App\Services\UserAssessmentCategoryService;
 use Carbon\Carbon;
 
@@ -476,6 +478,12 @@ class RecruitmentController extends Controller{
             }
 
             DB::commit();
+
+            app(RecruitmentApplicationDraftService::class)->deleteByContact(
+                $email,
+                $noTelepon,
+                $request->input('draft_token')
+            );
 
             app(AtsNotificationService::class)->newApplicantSubmitted(
                 (object) ['nama_lengkap' => $namaLengkap],
@@ -1440,6 +1448,7 @@ class RecruitmentController extends Controller{
                     'prioritas',
                     'divisi_alias',
                     'grade_master_karyawan',
+                    'personnel_requests.gambar',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
@@ -1447,6 +1456,11 @@ class RecruitmentController extends Controller{
 
             $data = app(PublicRecruitmentJobListService::class)
                 ->filterDuplicatePositions($data);
+
+            $imageService = app(PersonnelRequestImageService::class);
+            $data->each(function ($job) use ($imageService) {
+                $imageService->appendToJob($job);
+            });
 
             $data->each->makeHidden(['id', 'created_at', 'divisi', 'lokasi_penempatan_cabang']);
 
@@ -1482,6 +1496,7 @@ class RecruitmentController extends Controller{
                     'divisi_alias',
                     'grade_master_karyawan',
                     'personnel_requests.created_by',
+                    'personnel_requests.gambar',
                     'use_user_assessment',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
@@ -1492,6 +1507,7 @@ class RecruitmentController extends Controller{
                 return response()->json(['message' => 'Data job tidak ditemukan.'], 404);
             }
 
+            app(PersonnelRequestImageService::class)->appendToJob($data);
             app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
             $data->makeHidden(['divisi', 'lokasi_penempatan_cabang', 'created_by']);
 
@@ -1499,6 +1515,48 @@ class RecruitmentController extends Controller{
         } catch (\Exception $th) {
             return response()->json([
                 'message' => 'Gagal mengambil data job list.',
+            ], 500);
+        }
+    }
+
+    public function saveApplicationDraft(Request $request)
+    {
+        try {
+            $draft = app(RecruitmentApplicationDraftService::class)->save($request->all());
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Draft berhasil disimpan.',
+                'data' => $draft,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal menyimpan draft lamaran.',
+            ], 500);
+        }
+    }
+
+    public function getApplicationDraft(Request $request)
+    {
+        try {
+            $draft = app(RecruitmentApplicationDraftService::class)->get($request->all());
+
+            if (!$draft) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Draft tidak ditemukan.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'data' => $draft,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal mengambil draft lamaran.',
             ], 500);
         }
     }

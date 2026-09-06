@@ -48,6 +48,7 @@ class PersonnelRequest extends Model
         'rejected_by',
         'divisi_alias',
         'requirement',
+        'gambar',
         'minimum_matching',
         'is_publish',
         'publish_by',
