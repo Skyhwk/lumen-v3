@@ -55,10 +55,10 @@
     <tr>
         <!-- <td style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#888;padding:3px 2px;font-size:10px;">TANGGAL CETAK</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#333;padding:3px 2px;font-size:9px;"> -->
-        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">TANGGAL CETAK</td>
+        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">TANGGAL KETETAPAN</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">
-            @if(!empty($meta['tanggal_cetak']))
-                {{ app(\App\Services\RenderKebijakanDocumentPdf::class)->formatIndonesianDate($meta['tanggal_cetak']) }}
+            @if(!empty($meta['tanggal_ketetapan']))
+                {{ app(\App\Services\RenderKebijakanDocumentPdf::class)->formatIndonesianDate($meta['tanggal_ketetapan']) }}
             @else
                 -
             @endif
@@ -75,8 +75,8 @@
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">{{ $meta['terbitan'] ?? '-' }}</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">REVISI</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">{{ $meta['revisian'] ?? '-' }}</td>
-        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">CETAKAN</td>
-        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">{{ $meta['cetakan'] ?? '-' }}</td>
+        <!-- <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">CETAKAN</td>
+        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">{{ $meta['cetakan'] ?? '-' }}</td> -->
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">HALAMAN</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">{PAGENO} / {nbpg}</td>
     </tr>
