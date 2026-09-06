@@ -312,15 +312,10 @@ trait BuildsCandidateAssessmentPreview
         }
 
         $profiles = [];
-        $primaryPattern = null;
 
         foreach ($profilesSource as $profile) {
             $line = (int) ($profile['line'] ?? 0);
             $pattern = is_array($profile['pattern'] ?? null) ? $profile['pattern'] : [];
-
-            if (($line === 1 || empty($primaryPattern)) && !empty($pattern)) {
-                $primaryPattern = $pattern;
-            }
 
             $behaviourRaw = trim((string) ($pattern['behaviour'] ?? ''));
             $profiles[] = [
@@ -339,6 +334,7 @@ trait BuildsCandidateAssessmentPreview
             return ($a['line'] ?? 0) <=> ($b['line'] ?? 0);
         });
 
+        $primaryPattern = $this->resolveDiscPrimaryPattern($profilesSource);
         $description = trim((string) ($primaryPattern['description'] ?? ''));
         $jobsRaw = trim((string) ($primaryPattern['jobs'] ?? ''));
         $scoreScale = $this->discScoreScale();
@@ -358,6 +354,25 @@ trait BuildsCandidateAssessmentPreview
     protected function discScoreScale(): int
     {
         return 8;
+    }
+
+    protected function resolveDiscPrimaryPattern(array $profilesSource): array
+    {
+        foreach ([3, 1] as $preferredLine) {
+            foreach ($profilesSource as $profile) {
+                $line = (int) ($profile['line'] ?? 0);
+                if ($line !== $preferredLine) {
+                    continue;
+                }
+
+                $pattern = is_array($profile['pattern'] ?? null) ? $profile['pattern'] : [];
+                if (!empty($pattern)) {
+                    return $pattern;
+                }
+            }
+        }
+
+        return [];
     }
 
     protected function normalizeDiscScores($scores): array

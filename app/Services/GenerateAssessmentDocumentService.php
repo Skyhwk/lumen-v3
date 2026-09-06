@@ -173,6 +173,24 @@ class GenerateAssessmentDocumentService
         }
     }
 
+    public function prepareDirectorEmailAttachments(int $recruitmentId): array
+    {
+        $documentService = app(CandidateDocumentAttachmentService::class);
+        $assessmentData = $this->tryGenerateTempAttachments($recruitmentId);
+        $documents = $assessmentData['documents'] ?? [];
+
+        return [
+            'assessment_data' => $assessmentData,
+            'documents' => $documents,
+            'attachments' => array_merge(
+                $this->buildSendEmailAttachments($documents),
+                $documentService->buildSendEmailAttachments($recruitmentId)
+            ),
+            'assessment_labels' => $this->mapDocumentsToAttachmentLabels($documents),
+            'candidate_document_labels' => $documentService->listAttachmentLabels($recruitmentId),
+        ];
+    }
+
     private function loadRecruitmentContext(int $recruitmentId): array
     {
         $candidate = NewRecruitment::find($recruitmentId);

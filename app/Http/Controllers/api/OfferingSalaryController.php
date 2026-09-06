@@ -29,7 +29,6 @@ use App\Services\GenerateMessageWhatsapp;
 use App\Services\SendWhatsapp;
 use App\Services\SendEmail;
 use App\Services\GenerateAssessmentDocumentService;
-use App\Services\CandidateDocumentAttachmentService;
 use App\Helpers\ShioElemenHelper;
 
 class OfferingSalaryController extends Controller
@@ -223,6 +222,8 @@ class OfferingSalaryController extends Controller
         $linkreject = env('RECRUITMENT_API') . "/thankrejectSalary/" . $rejectencrypt;
 
         DB::beginTransaction();
+        $assessmentService = app(GenerateAssessmentDocumentService::class);
+        $documents = [];
         try {
             $link_btn = (object) [
                 'approve' => $linkapprove,
@@ -232,13 +233,26 @@ class OfferingSalaryController extends Controller
             $bodi = GenerateMessageHRD::bodyEmailKeepApproveKandidat($data, $link_btn, 'Bapak Boss');
             $subject = 'Kandidat Offering Salary ' . $data->nama_lengkap;
 
-            $email = SendEmail::where('to', env('EMAIL_DIREKTUR_BAPAK'))
+            $attachments = [];
+            $recruitmentId = $this->resolveAtsRecruitmentId($data);
+            if ($recruitmentId) {
+                $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments($recruitmentId);
+                $documents = $attachmentBundle['documents'] ?? [];
+                $attachments = $attachmentBundle['attachments'] ?? [];
+            }
+
+            $emailQuery = SendEmail::where('to', env('EMAIL_DIREKTUR_BAPAK'))
                 ->where('subject', $subject)
                 ->where('body', $bodi)
                 ->where('karyawan', $this->karyawan)
                 ->where('bcc', ['dedi@intilab.com'])
-                ->noReply()
-                ->send();
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $email = $emailQuery->send();
 
             if ($email) {
                 DataKandidat::where('id', $request->id_kandidat)
@@ -266,6 +280,8 @@ class OfferingSalaryController extends Controller
                 'line' => $e->getLine(),
                 'file' => $e->getFile(),
             ], 500);
+        } finally {
+            $assessmentService->cleanupDocuments($documents);
         }
     }
 
@@ -301,12 +317,9 @@ class OfferingSalaryController extends Controller
                 $attachments = [];
                 $recruitmentId = $this->resolveAtsRecruitmentId($data);
                 if ($recruitmentId) {
-                    $assessmentData = $assessmentService->tryGenerateTempAttachments($recruitmentId);
-                    $documents = $assessmentData['documents'] ?? [];
-                    $attachments = array_merge(
-                        $assessmentService->buildSendEmailAttachments($documents),
-                        app(CandidateDocumentAttachmentService::class)->buildSendEmailAttachments($recruitmentId)
-                    );
+                    $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments($recruitmentId);
+                    $documents = $attachmentBundle['documents'] ?? [];
+                    $attachments = $attachmentBundle['attachments'] ?? [];
                 }
 
                 // ============================== BEGIN EMAIL PAK BOSS ===================
