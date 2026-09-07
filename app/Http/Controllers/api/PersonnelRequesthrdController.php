@@ -11,11 +11,13 @@ use Exception;
 
 use App\Models\PersonnelRequest;
 use App\Models\NewRecruitment;
+use App\Models\MasterDivisi;
 use App\Services\HrdAssessmentReadinessService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentStatusService;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
+use Illuminate\Support\Facades\Schema;
 
 class PersonnelRequesthrdController extends Controller
 {
@@ -280,6 +282,23 @@ class PersonnelRequesthrdController extends Controller
     }
 
     /**
+     * List active divisions for publish alias select.
+     */
+    public function getDivisi()
+    {
+        $divisi = MasterDivisi::active()
+            ->select('id', 'nama_divisi')
+            ->orderBy('nama_divisi')
+            ->get()
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'text' => $row->nama_divisi,
+            ]);
+
+        return response()->json($divisi, 200);
+    }
+
+    /**
      * Publish personal request
      */
     public function publish(Request $request)
@@ -334,20 +353,44 @@ class PersonnelRequesthrdController extends Controller
                 $updateData['divisi_alias_id'] = $category->id;
             }
 
+            if (Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
+                $updateData['divisi_alias_id'] = $resolvedAlias['id'];
+            }
+
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
 
             app(AtsNotificationService::class)->personnelRequestPublished($data);
 
-        return response()->json([
-            'status' => 'success',
-            'message' => "Personnel request {$data->no_request} berhasil dipublikasikan.",
-        ], 200);
+            return response()->json([
+                'status' => 'success',
+                'message' => "Personnel request {$data->no_request} berhasil dipublikasikan.",
+            ], 200);
         } catch (Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Gagal mempublikasikan request: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function resolveDivisiAlias($divisiAliasId, string $divisiAlias): ?array
+    {
+        $query = MasterDivisi::active();
+
+        if ($divisiAliasId !== null && $divisiAliasId !== '') {
+            $divisi = (clone $query)->where('id', (int) $divisiAliasId)->first();
+        } else {
+            $divisi = $query->where('nama_divisi', $divisiAlias)->first();
+        }
+
+        if (!$divisi) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $divisi->id,
+            'nama' => $divisi->nama_divisi,
+        ];
     }
 
     /**
@@ -409,6 +452,7 @@ class PersonnelRequesthrdController extends Controller
                     'divisi' => optional($personnelRequest->masterDivisi)->nama_divisi ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
                     'jumlah_personal' => (int) $personnelRequest->jumlah_personal,
                     'divisi_alias' => $personnelRequest->divisi_alias,
+                    'divisi_alias_id' => $personnelRequest->divisi_alias_id,
                     'grade_master_karyawan' => $personnelRequest->grade_master_karyawan,
                     'minimum_matching' => $personnelRequest->minimum_matching,
                     'published_at' => $personnelRequest->published_at,
