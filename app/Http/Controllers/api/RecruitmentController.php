@@ -332,14 +332,16 @@ class RecruitmentController extends Controller{
             // walaupun lowongan yang dipilih berbeda.
             $existingApplications = DB::table('new_recruitment')
                 ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
-                ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
-                ->whereRaw("CASE
-                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
-                        THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
-                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
-                        THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
-                    ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
-                END = ?", [$noTelepon])
+                ->where(function ($query) use ($email, $noTelepon) {
+                    $query->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                        ->orWhereRaw("CASE
+                            WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
+                                THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
+                            WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
+                                THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+                            ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
+                        END = ?", [$noTelepon]);
+                })
                 ->orderByDesc('id')
                 ->get();
 
@@ -364,9 +366,11 @@ class RecruitmentController extends Controller{
                 $history = is_array($history) ? $history : [];
                 $lastHistory = !empty($history) ? end($history) : [];
                 $lastHistoryStatus = strtolower((string) ($lastHistory['status'] ?? ''));
-                $isRejected = $lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false;
+                $applicationStatus = strtolower(trim((string) $existingApplication->status));
+                $isRejected = $applicationStatus === 'rejected'
+                    || ($lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false);
 
-                if (!$isRejected && in_array(strtolower((string) $existingApplication->status), $activeRecruitmentStatuses, true)) {
+                if (!$isRejected && in_array($applicationStatus, $activeRecruitmentStatuses, true)) {
                     return response()->json([
                         'message' => 'Anda masih mengikuti proses rekrutmen pada pendaftaran sebelumnya. Anda belum dapat mendaftar untuk posisi lain sampai proses tersebut selesai.',
                         'status' => false,
