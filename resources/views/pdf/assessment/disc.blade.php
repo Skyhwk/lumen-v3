@@ -118,51 +118,78 @@
 <pagebreak />
 
 @php
+    usort($chartProfiles, function ($a, $b) {
+        return ((int) ($a['line'] ?? 0)) <=> ((int) ($b['line'] ?? 0));
+    });
+
     $situationLabels = [
         1 => 'Saat tampil di muka umum / wawancara',
         2 => 'Saat mendapat tekanan',
         3 => 'Kepribadian kerja yang lebih menetap',
     ];
 
+    $formatScore = function ($value) {
+        $n = (float) $value;
+        $rounded = abs($n - round($n)) < 0.05 ? (int) round($n) : round($n, 1);
+        return $rounded > 0 ? '+' . $rounded : (string) $rounded;
+    };
+
+    $patternLabel = function ($profile) {
+        $raw = trim((string) ($profile['pattern'] ?? ''));
+        if ($raw === '' || strcasecmp($raw, 'pattern tidak tersedia') === 0) {
+            return 'PATTERN TIDAK TERSEDIA';
+        }
+        return strtoupper($raw);
+    };
+
     $decisionRows = [];
     foreach ($chartProfiles as $profile) {
         $line = (int) ($profile['line'] ?? 0);
         $dominant = null;
-        $dominantAbs = -1;
+        $bestClamped = null;
         $scale = max(1, (float) $scoreScale);
 
         foreach ($profile['scores'] as $score) {
+            if (!is_array($score)) {
+                continue;
+            }
+
             $value = (float) ($score['value'] ?? 0);
             $clamped = max(-$scale, min($scale, $value));
-            if (abs($clamped) > $dominantAbs) {
-                $dominantAbs = abs($clamped);
-                $mapped = max(0, min(100, (int) round(($clamped + $scale) / (2 * $scale) * 100)));
-                if ($mapped >= 75) {
-                    $level = 'Sangat tinggi';
-                } elseif ($mapped >= 63) {
-                    $level = 'Tinggi';
-                } elseif ($mapped > 37) {
-                    $level = 'Seimbang';
-                } elseif ($mapped > 25) {
-                    $level = 'Rendah';
-                } else {
-                    $level = 'Sangat rendah';
-                }
-                $dominant = [
-                    'key' => $score['key'] ?? '',
-                    'label' => $score['label'] ?? '',
-                    'mapped' => $mapped,
-                    'level' => $level,
-                    'direction' => $clamped >= 0 ? 'tinggi' : 'rendah',
-                ];
+
+            if ($bestClamped !== null && $clamped <= $bestClamped) {
+                continue;
             }
+
+            $bestClamped = $clamped;
+            $mapped = max(0, min(100, (int) round(($clamped + $scale) / (2 * $scale) * 100)));
+            if ($mapped >= 75) {
+                $level = 'Sangat tinggi';
+            } elseif ($mapped >= 63) {
+                $level = 'Tinggi';
+            } elseif ($mapped > 37) {
+                $level = 'Seimbang';
+            } elseif ($mapped > 25) {
+                $level = 'Rendah';
+            } else {
+                $level = 'Sangat rendah';
+            }
+
+            $dominant = [
+                'key' => $score['key'] ?? '',
+                'label' => $score['label'] ?? '',
+                'mapped' => $mapped,
+                'level' => $level,
+                'value' => $clamped,
+                'above_neutral' => $clamped > 0,
+            ];
         }
 
         $decisionRows[] = [
             'line' => $line,
             'tag' => $lineTags[$line] ?? ('Grafik ' . $line),
             'situation' => $situationLabels[$line] ?? '',
-            'pattern' => $profile['pattern'] ?? '-',
+            'pattern' => $patternLabel($profile),
             'dominant' => $dominant,
         ];
     }
@@ -178,9 +205,36 @@
         <td class="info-label">Nama Kandidat</td>
         <td class="info-value">: {{ $candidate_name }}</td>
     </tr>
+</table>
+
+<table class="guide-box">
     <tr>
-        <td class="info-label">Cara baca</td>
-        <td class="info-value">: Pita biru di tengah = netral (Segmen 4). Titik di atas pita = menonjol. Titik di bawah pita = tidak menonjol. Bentuk garis D-I-S-C adalah profil kandidat.</td>
+        <td>
+            <div class="guide-title">Panduan Membaca hasil DISC</div>
+            <p>
+                Grafik 3 merupakan grafik utama yang digunakan dalam pengambilan keputusan.
+                Grafik 1 dan Grafik 2 hanya digunakan sebagai informasi pendukung mengenai sikap pada situasi yang berbeda.
+            </p>
+            <ol>
+                <li>Lihat pita biru di tengah sebagai area netral.</li>
+                <li>Titik di atas pita menunjukan kecenderungan sifat yang lebih menonjol.</li>
+                <li>Titik di bawah pita menunjukan kecenderungan sifat yang kurang menonjol.</li>
+                <li>Faktor D,I,S, atau C dengan titik tertinggi merupakan faktor kecenderungan yang paling dominan.</li>
+                <li>Nama pola di atas grafik merupakan ringkasan gaya perilaku.</li>
+                <li>PATTERN TIDAK TERSEDIA berarti kombinasi titik tidak memiliki nama pola baku. Hasil test tetap dapat di gunakan.</li>
+            </ol>
+            <p>
+                <strong>Grafik 1</strong> = sikap saat tampil atau wawancara.
+                <strong>Grafik 2</strong> = sikap saat tertekan.
+                <strong>Grafik 3</strong> = gaya kerja yang menetap, dipakai untuk keputusan.
+            </p>
+            <p>
+                <strong>D</strong> tegas.
+                <strong>I</strong> komunikatif.
+                <strong>S</strong> tenang dan stabil.
+                <strong>C</strong> teliti dan patuh aturan.
+            </p>
+        </td>
     </tr>
 </table>
 
@@ -209,6 +263,9 @@
             <td>
                 @if($row['dominant'])
                     <strong>{{ $row['dominant']['key'] }}</strong> {{ $row['dominant']['label'] }}
+                    @if(empty($row['dominant']['above_neutral']))
+                        <div class="decision-sub">titik tertinggi, masih di bawah garis netral</div>
+                    @endif
                 @else
                     -
                 @endif
@@ -217,6 +274,7 @@
                 @if($row['dominant'])
                     <strong>{{ $row['dominant']['mapped'] }}%</strong>
                     <div class="decision-sub">{{ $row['dominant']['level'] }}</div>
+                    <div class="decision-sub">skor {{ $formatScore($row['dominant']['value']) }}</div>
                 @else
                     -
                 @endif
@@ -226,9 +284,7 @@
 </table>
 
 <p class="chart-page-note">
-    Grafik 3 (kiri, paling relevan untuk keputusan masuk) = kepribadian kerja yang menetap.
-    Grafik 1 = kesan di muka umum. Grafik 2 = reaksi saat tertekan.
-    Posisi titik memakai skor D/I/S/C dari rule DISC kami (bukan angka mentah soal).
+    Ringkasan: buka Grafik 3, lihat huruf yang titiknya paling atas, lalu baca nama polanya.
 </p>
 
 @if(!empty($disc_detail['chart_image']))
@@ -249,7 +305,7 @@
                                     <span class="chart-primary-badge">Utama untuk keputusan</span>
                                 @endif
                             </td>
-                            <td class="chart-head-tag">{{ $profile['pattern'] ?? '-' }}</td>
+                            <td class="chart-head-tag">{{ $patternLabel($profile) }}</td>
                         </tr>
                     </table>
                 </td>

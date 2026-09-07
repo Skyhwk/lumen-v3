@@ -431,4 +431,38 @@
         border: 0.5px solid #c4c4c4;
         text-align: center;
     }
+
+    .guide-box {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0 0 10px;
+    }
+
+    .guide-box td {
+        border: 0.6px solid #8c8c8c;
+        background-color: #f7f7f7;
+        padding: 7px 9px;
+        font-size: 8pt;
+        color: #222;
+        line-height: 1.45;
+    }
+
+    .guide-title {
+        font-size: 8.5pt;
+        font-weight: bold;
+        margin: 0 0 5px;
+    }
+
+    .guide-box p {
+        margin: 0 0 5px;
+    }
+
+    .guide-box ol {
+        margin: 0 0 6px 16px;
+        padding: 0;
+    }
+
+    .guide-box li {
+        margin: 0 0 2px;
+    }
 </style>
