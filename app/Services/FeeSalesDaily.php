@@ -61,13 +61,13 @@ class FeeSalesDaily
             $start = Carbon::create(2026)->startOfYear();
             $end = Carbon::now()->endOfMonth();
             $periodRange = CarbonPeriod::create($start, '1 month', $end);
-
+            
             foreach ($periodRange as $index => $period) {
                 $year = $period->year;
                 $month = $period->format('m');
                 $period = $period->format('Y-m');
                 $monthStr = self::INDO_MONTHS[$month];
-
+                
                 if($period < Carbon::now()->format('Y-m')) {
                     // ambil dari MasterFeeSales
                     $dataSource = MasterFeeSales::where(['period' => $period, 'is_active' => true])->get();

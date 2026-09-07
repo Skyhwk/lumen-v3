@@ -27,7 +27,28 @@
             <td style="padding:12px 18px;font-size:14px;color:#0f172a;font-weight:600;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $value }}</td>
         </tr>
     @endforeach
+    @if(!empty($photoUrl))
+        <tr>
+            <td style="padding:12px 18px;width:38%;font-size:13px;color:#64748b;border-top:1px solid #dbeafe;vertical-align:middle;">Foto Kandidat</td>
+            <td style="padding:12px 18px;border-top:1px solid #dbeafe;vertical-align:middle;">
+                <img src="{{ $photoUrl }}" alt="Foto Kandidat" width="96" height="96" style="display:block;width:96px;height:96px;border-radius:16px;object-fit:cover;border:3px solid #dbeafe;">
+            </td>
+        </tr>
+    @endif
 </table>
+
+
+
+@if(!empty($aiMatchingReason))
+    <div style="background-color:#f5f3ff;border:1px solid #ddd6fe;padding:14px;border-radius:8px;margin-bottom:20px;">
+        <h3 style="margin:0 0 8px 0;font-size:13px;color:#5b21b6;text-transform:uppercase;letter-spacing:0.05em;">
+            <strong>AI Matching Review</strong>
+        </h3>
+        <div style="margin:0;font-size:13px;color:#475569;line-height:1.6;">
+            {!! nl2br(e($aiMatchingReason)) !!}
+        </div>
+    </div>
+@endif
 
 <!-- Review HRD -->
 <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 14px; border-radius: 8px; margin-bottom: 14px;">

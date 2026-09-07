@@ -48,22 +48,8 @@ class RenderSamplingPlan
     public function save()
     {
         try {
-            $sampling = '';
             $data = $this->data;
-
-            if ($data->status_sampling == 'SAR') {
-                $sampling = 'SAMPLING ANTI RIBET';
-            } else if ($data->status_sampling == 'S24') {
-                $sampling = 'SAMPLING 24 JAM';
-            } else if ($data->status_sampling == 'SD') {
-                $sampling = 'SAMPLING DATANG';
-            } else if ($data->status_sampling == 'SP') {
-                $sampling = 'SAMPLE PICKUP';
-            }else if ($data->status_sampling == 'RS') {
-                $sampling = 'RE-SAMPLING';
-            } else {
-                $sampling = 'SAMPLING';
-            }
+            $sampling = $this->mapStatusSamplingLabel($data->status_sampling);
 
             if ($data->konsultan != '') {
                 $perusahaan = strtoupper($data->konsultan) . ' ( ' . $data->nama_perusahaan . ' ) ';
@@ -512,25 +498,14 @@ class RenderSamplingPlan
     {
 
         try {
-            $sampling = '';
             $data = $this->data;
             $periode = $this->periode;
             // dd($data->sampling->where('periode_kontrak', $periode)->toArray());
             // dd($data->detail->toArray());
 
-            if ($data->status_sampling == 'SAR') {
-                $sampling = 'SAMPLING ANTI RIBET';
-            } else if ($data->status_sampling == 'S24') {
-                $sampling = 'SAMPLING 24 JAM';
-            } else if ($data->status_sampling == 'SD') {
-                $sampling = 'SAMPLING DATANG';
-            } else if ($data->status_sampling == 'SP') {
-                $sampling = 'SAMPLE PICKUP';
-            } else if ($data->status_sampling == 'RS') {
-                $sampling = 'RE-SAMPLING';
-            } else {
-                $sampling = 'SAMPLING';
-            }
+            // Kontrak: status_sampling ada di QuotationKontrakD per periode.
+            // Header hanya terisi jika semua periode sama; selain itu null → label selalu "SAMPLING".
+            $sampling = $this->mapStatusSamplingLabel($this->resolveKontrakStatusSampling($data, $periode));
 
             if ($data->konsultan != '') {
                 $perusahaan = strtoupper($data->konsultan) . ' ( ' . $data->nama_perusahaan . ' ) ';
@@ -1024,6 +999,43 @@ class RenderSamplingPlan
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
             ], 500);
+        }
+    }
+
+    private function resolveKontrakStatusSampling($data, $periode)
+    {
+        if ($periode && $data && $data->detail) {
+            $periodeKey = substr((string) $periode, 0, 7);
+            $detail = $data->detail->first(function ($d) use ($periode, $periodeKey) {
+                $detailPeriode = (string) $d->periode_kontrak;
+
+                return $detailPeriode === (string) $periode
+                    || substr($detailPeriode, 0, 7) === $periodeKey;
+            });
+
+            if ($detail && $detail->status_sampling !== null && $detail->status_sampling !== '') {
+                return $detail->status_sampling;
+            }
+        }
+
+        return $data->status_sampling ?? null;
+    }
+
+    private function mapStatusSamplingLabel($statusSampling)
+    {
+        switch (strtoupper(trim((string) $statusSampling))) {
+            case 'SAR':
+                return 'SAMPLING ANTI RIBET';
+            case 'S24':
+                return 'SAMPLING 24 JAM';
+            case 'SD':
+                return 'SAMPLING DATANG';
+            case 'SP':
+                return 'SAMPLE PICKUP';
+            case 'RS':
+                return 'RE-SAMPLING';
+            default:
+                return 'SAMPLING';
         }
     }
 

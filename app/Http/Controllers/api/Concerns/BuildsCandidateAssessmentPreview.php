@@ -91,6 +91,18 @@ trait BuildsCandidateAssessmentPreview
             $answered = $this->countAnsweredQuestions($session->answers_json);
             $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
             $questionCount = count($questions) ?: (int) $session->question_count;
+            $result = json_decode($session->result_json ?: '[]', true) ?: [];
+            $hasCorrectAnswers = array_key_exists('correct_answers', $result);
+            $correctAnswers = $hasCorrectAnswers ? (int) $result['correct_answers'] : null;
+            $score = isset($result['score']) ? (float) $result['score'] : null;
+            $resultTotal = (int) ($result['total_questions'] ?? 0);
+            $displayTotal = $resultTotal > 0 ? $resultTotal : $questionCount;
+            $scorePercent = null;
+            if ($score !== null) {
+                $scorePercent = (int) round($score);
+            } elseif ($hasCorrectAnswers && $displayTotal > 0) {
+                $scorePercent = (int) round(($correctAnswers / $displayTotal) * 100);
+            }
 
             $totalAnswered += $answered;
             $totalQuestions += $questionCount;
@@ -100,8 +112,12 @@ trait BuildsCandidateAssessmentPreview
                 'order' => (int) $session->session_order,
                 'name' => $session->category_name,
                 'status' => $session->status,
+                'engine' => $result['engine'] ?? null,
                 'answered' => $answered,
-                'total' => $questionCount,
+                'correct_answers' => $correctAnswers,
+                'score' => $score,
+                'score_percent' => $scorePercent,
+                'total' => $displayTotal,
                 'progress_percent' => $questionCount > 0 ? round(($answered / $questionCount) * 100) : 0,
                 'has_result' => !empty($session->result_json),
                 'started_at' => $session->started_at,
@@ -258,6 +274,8 @@ trait BuildsCandidateAssessmentPreview
                 : 'Hasil tes tersedia';
         }
 
+        $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick';
+
         return [
             'engine' => $engine,
             'summary_text' => $summaryText,
@@ -265,6 +283,7 @@ trait BuildsCandidateAssessmentPreview
             'scored_at' => $result['scored_at'] ?? $session->completed_at,
             'disc_detail' => $engine === 'disc' ? $this->buildDiscDetail($result) : null,
             'papi_detail' => $engine === 'papi_kostick' ? $this->buildPapiDetail($result) : null,
+            'question_review' => $isPersonalityEngine ? [] : $this->buildQuestionReview($session, $result),
         ];
     }
 
@@ -293,21 +312,18 @@ trait BuildsCandidateAssessmentPreview
         }
 
         $profiles = [];
-        $primaryPattern = null;
 
         foreach ($profilesSource as $profile) {
             $line = (int) ($profile['line'] ?? 0);
             $pattern = is_array($profile['pattern'] ?? null) ? $profile['pattern'] : [];
-
-            if (($line === 1 || empty($primaryPattern)) && !empty($pattern)) {
-                $primaryPattern = $pattern;
-            }
 
             $behaviourRaw = trim((string) ($pattern['behaviour'] ?? ''));
             $profiles[] = [
                 'line' => $line,
                 'title' => $titles[$line] ?? ('Grafik ' . $line),
                 'pattern' => $pattern['pattern'] ?? 'Pattern tidak tersedia',
+                'type' => $pattern['type'] ?? null,
+                'scores' => $this->normalizeDiscScores($profile['scores'] ?? []),
                 'behaviours' => $behaviourRaw !== ''
                     ? array_values(array_filter(array_map('trim', explode(',', $behaviourRaw))))
                     : [],
@@ -318,8 +334,10 @@ trait BuildsCandidateAssessmentPreview
             return ($a['line'] ?? 0) <=> ($b['line'] ?? 0);
         });
 
+        $primaryPattern = $this->resolveDiscPrimaryPattern($profilesSource);
         $description = trim((string) ($primaryPattern['description'] ?? ''));
         $jobsRaw = trim((string) ($primaryPattern['jobs'] ?? ''));
+        $scoreScale = $this->discScoreScale();
 
         return [
             'profiles' => $profiles,
@@ -327,7 +345,179 @@ trait BuildsCandidateAssessmentPreview
             'jobs' => $jobsRaw !== ''
                 ? array_values(array_filter(array_map('trim', explode(',', $jobsRaw))))
                 : [],
+            'score_scale' => $scoreScale,
+            'scale' => $scoreScale,
         ];
+    }
+
+    /** Upper bound of the d/i/s/c values stored in disc_rules; the chart axis runs -8..+8. */
+    protected function discScoreScale(): int
+    {
+        return 8;
+    }
+
+    protected function resolveDiscPrimaryPattern(array $profilesSource): array
+    {
+        foreach ([3, 1] as $preferredLine) {
+            foreach ($profilesSource as $profile) {
+                $line = (int) ($profile['line'] ?? 0);
+                if ($line !== $preferredLine) {
+                    continue;
+                }
+
+                $pattern = is_array($profile['pattern'] ?? null) ? $profile['pattern'] : [];
+                if (!empty($pattern)) {
+                    return $pattern;
+                }
+            }
+        }
+
+        return [];
+    }
+
+    protected function normalizeDiscScores($scores): array
+    {
+        $scores = is_array($scores) ? $scores : (array) $scores;
+        $scale = $this->discScoreScale();
+
+        $dimensions = [
+            'D' => 'Dominance',
+            'I' => 'Influence',
+            'S' => 'Steadiness',
+            'C' => 'Compliance',
+        ];
+
+        $normalized = [];
+
+        foreach ($dimensions as $key => $label) {
+            $raw = $scores[strtolower($key)] ?? $scores[$key] ?? null;
+
+            if ($raw === null || $raw === '' || !is_numeric($raw)) {
+                continue;
+            }
+
+            $value = round((float) $raw, 1);
+            $clamped = max(-$scale, min($scale, $value));
+
+            $normalized[] = [
+                'key' => $key,
+                'label' => $label,
+                'value' => $value,
+                'percent' => round(abs($clamped) / $scale * 100, 2),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    protected function buildQuestionReview($session, array $result)
+    {
+        $categoryName = strtoupper(trim((string) ($session->category_name ?? '')));
+        if ($categoryName === 'DISC' || in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
+            return [];
+        }
+
+        $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+        if (empty($questions)) {
+            return [];
+        }
+
+        $answers = json_decode($session->answers_json ?: '{}', true) ?: [];
+        $scaleDetails = [];
+        foreach ($result['scale_details'] ?? $result['details'] ?? [] as $detail) {
+            $detailId = (string) ($detail['question_id'] ?? '');
+            if ($detailId !== '') {
+                $scaleDetails[$detailId] = $detail;
+            }
+        }
+
+        $items = [];
+        foreach ($questions as $index => $question) {
+            $questionId = (string) ($question['id'] ?? '');
+            $type = (string) ($question['type'] ?? '');
+            $isScale = $type === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
+            $options = is_array($question['options'] ?? null) ? $question['options'] : [];
+            $optionsById = [];
+            foreach ($options as $option) {
+                $optionsById[(string) ($option['id'] ?? '')] = $option;
+            }
+
+            $rawAnswer = $questionId !== '' && array_key_exists($questionId, $answers)
+                ? $answers[$questionId]
+                : null;
+            $givenIds = $this->normalizeAnswerIds($rawAnswer);
+            $unanswered = $rawAnswer === null || $rawAnswer === '' || $givenIds === [];
+
+            $answerTexts = [];
+            foreach ($givenIds as $givenId) {
+                $option = $optionsById[$givenId] ?? null;
+                if ($option) {
+                    $answerTexts[] = trim((string) ($option['text'] ?? $option['label'] ?? $givenId));
+                } else {
+                    $answerTexts[] = (string) $givenId;
+                }
+            }
+
+            if ($isScale && isset($scaleDetails[$questionId]['value'])) {
+                $answerTexts = [(string) $scaleDetails[$questionId]['value']];
+                $unanswered = false;
+            }
+
+            $keyIds = $this->normalizeAnswerIds($question['answer_key'] ?? []);
+            $keyTexts = [];
+            foreach ($keyIds as $keyId) {
+                $option = $optionsById[$keyId] ?? null;
+                $keyTexts[] = $option
+                    ? trim((string) ($option['text'] ?? $option['label'] ?? $keyId))
+                    : (string) $keyId;
+            }
+
+            $isCorrect = null;
+            if (!$isScale) {
+                $givenSorted = $givenIds;
+                $keySorted = $keyIds;
+                sort($givenSorted);
+                sort($keySorted);
+                $isCorrect = !$unanswered && !empty($keySorted) && $givenSorted === $keySorted;
+            }
+
+            $images = $question['image'] ?? [];
+            if (!is_array($images)) {
+                $images = $images ? [$images] : [];
+            }
+
+            $items[] = [
+                'no' => (int) ($question['order'] ?? ($index + 1)),
+                'text' => trim((string) ($question['text'] ?? '')),
+                'type' => $type,
+                'is_scale' => $isScale,
+                'images' => array_values(array_filter($images)),
+                'answer_text' => $unanswered ? 'Tidak dijawab' : implode(', ', $answerTexts),
+                'is_correct' => $isCorrect,
+                'answer_key_text' => ($isCorrect === false && !empty($keyTexts)) ? implode(', ', $keyTexts) : null,
+                'unanswered' => $unanswered,
+            ];
+        }
+
+        return $items;
+    }
+
+    protected function normalizeAnswerIds($value)
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $items = is_array($value) ? $value : [$value];
+        $normalized = [];
+        foreach ($items as $item) {
+            if ($item === null || $item === '') {
+                continue;
+            }
+            $normalized[] = (string) $item;
+        }
+
+        return array_values($normalized);
     }
 
     protected function buildPapiDetail(array $result)

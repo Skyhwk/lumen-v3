@@ -51,7 +51,7 @@
 
 <p style="margin:16px 0 0 0;font-size:14px;line-height:1.8;color:#475569;">
     Hormat kami,<br>
-    <strong style="color:#1e40af;">HRD & Talent Acquisition Division</strong><br>
+    <strong style="color:#1e40af;">HRD Division</strong><br>
     PT Inti Surya Laboratorium
 </p>
 

@@ -228,7 +228,7 @@ class FeeSalesMonthly
                     'nama_perusahaan' => $quotation->nama_perusahaan,
                     'periode' => $quotation->periode,
                     'kategori_3' => json_encode(optional($quotation->orderHeader)->orderDetail ? $quotation->orderHeader->orderDetail->pluck('kategori_3')->toArray() : []),
-                    'no_invoice' => $quotation->no_invoice,
+                    'no_invoice' => preg_replace('/\s*\(Lunas\)\s*/i', '', $quotation->no_invoice),
                     'is_lunas' => $quotation->is_lunas,
                     'total_revenue' => $quotation->total_revenue,
                 ])->values()->toArray());

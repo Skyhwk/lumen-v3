@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
 use App\Services\SallaryOfferService;
+use App\Services\GenerateAssessmentDocumentService;
+use App\Services\CandidateDocumentAttachmentService;
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
@@ -92,7 +94,7 @@ class PersonnelRequestController extends Controller
                     'profile_completion' => (int) ($statusCounts['profile_completion'] ?? 0),
                     'interview_user' => (int) ($statusCounts['interview_user'] ?? 0),
                     'management_decision' => (int) ($statusCounts['management_decision'] ?? 0),
-                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0)),
+                    'salary_offer' => (int) (($statusCounts['internal_sallary_offer'] ?? 0) + ($statusCounts['salary_offer'] ?? 0) + ($statusCounts['sallary_offer'] ?? 0) + ($statusCounts['approved'] ?? 0)),
                     'hired' => (int) ($statusCounts['hired'] ?? 0),
                     'rejected' => (int) ($statusCounts['rejected'] ?? 0),
                 ],
@@ -124,6 +126,101 @@ class PersonnelRequestController extends Controller
         }
 
         return (int) $value;
+    }
+
+    private function normalizeAssessmentCategoryConfigs($value): array
+    {
+        if ($value === '' || $value === null) {
+            return [];
+        }
+
+        $raw = is_string($value) ? json_decode($value, true) : $value;
+        if (!is_array($raw)) {
+            if (is_numeric($raw)) {
+                $raw = [(int) $raw];
+            } else {
+                return [];
+            }
+        }
+
+        $configs = [];
+        foreach ($raw as $item) {
+            if (is_array($item) && isset($item['id'])) {
+                $hasTimeLimit = $this->parseFormBoolean($item['has_time_limit'] ?? false);
+                $configs[] = [
+                    'id' => (int) $item['id'],
+                    'name' => trim((string) ($item['name'] ?? '')),
+                    'question_count' => max(1, (int) ($item['question_count'] ?? 1)),
+                    'duration_minutes' => $hasTimeLimit ? max(1, (int) ($item['duration_minutes'] ?? 30)) : 0,
+                    'has_time_limit' => $hasTimeLimit,
+                ];
+            } elseif (is_numeric($item)) {
+                $configs[] = [
+                    'id' => (int) $item,
+                    'name' => '',
+                    'question_count' => 10,
+                    'duration_minutes' => 0,
+                    'has_time_limit' => false,
+                ];
+            }
+        }
+
+        return $configs;
+    }
+
+    private function enrichAssessmentCategoryConfigs(array $configs): array
+    {
+        foreach ($configs as &$config) {
+            $category = \App\Models\QuestionCategory::find($config['id']);
+            if ($category && $config['name'] === '') {
+                $config['name'] = (string) $category->name;
+            }
+
+            if (!$config['has_time_limit']) {
+                $config['duration_minutes'] = 0;
+            }
+        }
+        unset($config);
+
+        return $configs;
+    }
+
+    private function legacyUserAssessmentFieldsFromConfigs(array $configs): array
+    {
+        if (empty($configs)) {
+            return [
+                'user_assessment_question_count' => null,
+                'user_assessment_has_time_limit' => false,
+                'user_assessment_duration_minutes' => null,
+            ];
+        }
+
+        $totalQuestions = array_sum(array_column($configs, 'question_count'));
+        $hasTimeLimit = collect($configs)->contains(fn ($config) => !empty($config['has_time_limit']));
+        $maxDuration = collect($configs)
+            ->filter(fn ($config) => !empty($config['has_time_limit']))
+            ->max('duration_minutes');
+
+        return [
+            'user_assessment_question_count' => (int) $totalQuestions,
+            'user_assessment_has_time_limit' => $hasTimeLimit,
+            'user_assessment_duration_minutes' => $hasTimeLimit ? (int) ($maxDuration ?: 0) : null,
+        ];
+    }
+
+    private function normalizeAssessmentCategoryIds($value): array
+    {
+        return array_values(array_unique(array_map(
+            fn ($config) => (int) $config['id'],
+            $this->normalizeAssessmentCategoryConfigs($value)
+        )));
+    }
+
+    private function assessmentCategoryPayload($value): ?array
+    {
+        $configs = $this->normalizeAssessmentCategoryConfigs($value);
+
+        return empty($configs) ? null : $this->enrichAssessmentCategoryConfigs($configs);
     }
 
     private function ownedPersonnelRequestQuery()
@@ -220,56 +317,62 @@ class PersonnelRequestController extends Controller
             return;
         }
 
-        $questionCount = (int) $request->input('user_assessment_question_count');
-        $hasTimeLimit = $this->parseFormBoolean($request->input('user_assessment_has_time_limit'), false);
-        $durationMinutes = $hasTimeLimit ? (int) $request->input('user_assessment_duration_minutes') : null;
-
-        if ($questionCount < 1) {
-            abort(422, 'Jumlah soal test user wajib diisi minimal 1.');
-        }
-
-        $categoryId = $request->input('assesment_question_category');
-        if (!$categoryId) {
+        $configs = $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category'));
+        if (empty($configs)) {
             abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
         }
 
         $hierarchyNames = $this->managerHierarchyNames();
-        $category = \App\Models\QuestionCategory::where('id', $categoryId)
-            ->where(function ($query) use ($hierarchyNames) {
-                $query->whereIn('owner_karyawan', $hierarchyNames)
-                      ->orWhereIn('assigned_manager', $hierarchyNames);
-            })
-            ->first();
-            
-        if (!$category) {
-            abort(422, 'Kategori soal tidak valid atau Anda tidak memiliki akses.');
+
+        foreach ($configs as $config) {
+            $categoryId = (int) $config['id'];
+            $questionCount = (int) $config['question_count'];
+            $hasTimeLimit = !empty($config['has_time_limit']);
+            $durationMinutes = $hasTimeLimit ? (int) ($config['duration_minutes'] ?? 0) : 0;
+
+            if ($questionCount < 1) {
+                abort(422, 'Jumlah soal test user wajib diisi minimal 1.');
+            }
+
+            $category = \App\Models\QuestionCategory::where('id', $categoryId)
+                ->where(function ($query) use ($hierarchyNames) {
+                    $query->whereIn('owner_karyawan', $hierarchyNames)
+                          ->orWhereIn('assigned_manager', $hierarchyNames);
+                })
+                ->first();
+
+            if (!$category) {
+                abort(422, 'Kategori soal tidak valid atau Anda tidak memiliki akses.');
+            }
+
+            $availableQuestions = Question::query()
+                ->where('question_category_id', $categoryId)
+                ->where('question_scope', 'manager')
+                ->where('status', 'active')
+                ->where('is_active', 1)
+                ->where('question_type', 'single_choice')
+                ->count();
+
+            if ($availableQuestions < 1) {
+                abort(422, 'Bank Soal User Anda belum memiliki soal aktif. Silakan tambahkan soal terlebih dahulu.');
+            }
+
+            if ($questionCount > $availableQuestions) {
+                $label = $config['name'] ?: $category->name;
+                abort(422, 'Jumlah soal kategori "' . $label . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+            }
+
+            if ($hasTimeLimit && $durationMinutes < 1) {
+                $label = $config['name'] ?: $category->name;
+                abort(422, 'Durasi test user kategori "' . $label . '" wajib diisi minimal 1 menit apabila batas waktu aktif.');
+            }
+
+            $category->update([
+                'question_count' => $questionCount,
+                'has_time_limit' => $hasTimeLimit,
+                'duration_minutes' => $hasTimeLimit ? $durationMinutes : 0,
+            ]);
         }
-
-        $availableQuestions = Question::query()
-            ->where('question_category_id', $categoryId)
-            ->where('question_scope', 'manager')
-            ->where('status', 'active')
-            ->where('is_active', 1)
-            ->where('question_type', 'single_choice')
-            ->count();
-
-        if ($availableQuestions < 1) {
-            abort(422, 'Bank Soal User Anda belum memiliki soal aktif. Silakan tambahkan soal terlebih dahulu.');
-        }
-
-        if ($questionCount > $availableQuestions) {
-            abort(422, 'Jumlah soal test user tidak boleh melebihi total soal tersedia (' . $availableQuestions . ' soal).');
-        }
-
-        if ($hasTimeLimit && $durationMinutes < 1) {
-            abort(422, 'Durasi test user wajib diisi minimal 1 menit apabila batas waktu aktif.');
-        }
-
-        $category->update([
-            'question_count' => $questionCount,
-            'has_time_limit' => $hasTimeLimit,
-            'duration_minutes' => $hasTimeLimit ? $durationMinutes : 0,
-        ]);
     }
 
     public function getUserAssessmentCategoryConfig()
@@ -472,6 +575,8 @@ class PersonnelRequestController extends Controller
 
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
+            $assessmentCategoryConfigs = $this->assessmentCategoryPayload($request->assesment_question_category) ?? [];
+            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs($assessmentCategoryConfigs);
 
             // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
             // Menggunakan helper agar logic impersonasi lebih tersentralisasi
@@ -495,7 +600,7 @@ class PersonnelRequestController extends Controller
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'minimum_matching'          => $this->nullableInt($request->minimum_matching),
-                'assesment_question_category'=> $this->nullableInt($request->assesment_question_category),
+                'assesment_question_category'=> $assessmentCategoryConfigs ?: null,
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
@@ -503,9 +608,9 @@ class PersonnelRequestController extends Controller
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
                 'use_user_assessment'       => $useUserAssessment,
-                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
-                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
-                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
+                'user_assessment_question_count' => $useUserAssessment ? $legacyAssessmentFields['user_assessment_question_count'] : null,
+                'user_assessment_has_time_limit' => $useUserAssessment ? $legacyAssessmentFields['user_assessment_has_time_limit'] : false,
+                'user_assessment_duration_minutes' => $useUserAssessment ? $legacyAssessmentFields['user_assessment_duration_minutes'] : null,
                 'created_by'                => $createdBy,
             ]);
 
@@ -547,6 +652,8 @@ class PersonnelRequestController extends Controller
 
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
+            $assessmentCategoryConfigs = $this->assessmentCategoryPayload($request->assesment_question_category) ?? [];
+            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs($assessmentCategoryConfigs);
 
             $data->update([
                 'request_type'              => $request->request_type,
@@ -565,7 +672,7 @@ class PersonnelRequestController extends Controller
                 'pengalaman_kerja'          => $this->nullableValue($request->pengalaman_kerja),
                 'usia_maksimum'             => $this->nullableInt($request->usia_maksimum),
                 'minimum_matching'          => $this->nullableInt($request->minimum_matching),
-                'assesment_question_category'=> $this->nullableInt($request->assesment_question_category),
+                'assesment_question_category'=> $assessmentCategoryConfigs ?: null,
                 'gender'                    => $request->gender,
                 'skill_wajib'               => $this->nullableValue($request->skill_wajib),
                 'sertifikasi'               => $this->nullableValue($request->sertifikasi),
@@ -573,9 +680,9 @@ class PersonnelRequestController extends Controller
                 'prioritas'                 => $request->prioritas,
                 'max_salary'                => $this->nullableValue($request->max_salary),
                 'use_user_assessment'       => $useUserAssessment,
-                'user_assessment_question_count' => $useUserAssessment ? (int) $request->user_assessment_question_count : null,
-                'user_assessment_has_time_limit' => $useUserAssessment ? $this->parseFormBoolean($request->user_assessment_has_time_limit, false) : false,
-                'user_assessment_duration_minutes' => $useUserAssessment && $this->parseFormBoolean($request->user_assessment_has_time_limit, false) ? (int) $request->user_assessment_duration_minutes : null,
+                'user_assessment_question_count' => $useUserAssessment ? $legacyAssessmentFields['user_assessment_question_count'] : null,
+                'user_assessment_has_time_limit' => $useUserAssessment ? $legacyAssessmentFields['user_assessment_has_time_limit'] : false,
+                'user_assessment_duration_minutes' => $useUserAssessment ? $legacyAssessmentFields['user_assessment_duration_minutes'] : null,
                 'updated_by'                => $this->getEffectiveKaryawanName(),
             ]);
 
@@ -992,20 +1099,6 @@ class PersonnelRequestController extends Controller
                         $this->karyawan
                     );
                 }
-
-                // kirim email ke HRD (developer akan mengisi email asli nanti)
-                $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $request->decision);
- 
-                $subject = "Permohonan Persetujuan Kandidat - " . $recruitment->nama_lengkap;
-                $targetEmail = trim((string) env('EMAIL_DIREKTUR_IBU'));
-                
-                SendEmail::where('to', $targetEmail)
-                            ->where('subject', $subject)
-                            ->where('body', $emailContent)
-                            ->noReply()
-                            ->send();
-
-                app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
             } else {
                 $rejectReason = trim((string) ($request->input('alasan_reject') ?? $interview->catatan_interview ?? ''));
                 if ($rejectReason === '') {
@@ -1060,10 +1153,120 @@ class PersonnelRequestController extends Controller
             }
 
             DB::commit();
-            return response()->json(['message' => 'Keputusan berhasil disimpan!']);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
+        }
+
+        if ($request->decision === 'approve') {
+            try {
+                $this->dispatchHasilInterviewUserApprovalEmail(
+                    $recruitment,
+                    $pr,
+                    $interview,
+                    $request->decision
+                );
+            } catch (\Throwable $th) {
+                Log::error('Gagal mengirim email persetujuan kandidat: ' . $th->getMessage(), [
+                    'new_recruitment_id' => $recruitment->id ?? null,
+                    'line' => $th->getLine(),
+                    'file' => $th->getFile(),
+                ]);
+            }
+
+            try {
+                app(AtsNotificationService::class)->userInterviewApproved($recruitment, $pr);
+            } catch (\Throwable $th) {
+                Log::error('Gagal mengirim notifikasi persetujuan interview user: ' . $th->getMessage(), [
+                    'new_recruitment_id' => $recruitment->id ?? null,
+                ]);
+            }
+        }
+
+        return response()->json(['message' => 'Keputusan berhasil disimpan!']);
+    }
+
+    private function dispatchHasilInterviewUserApprovalEmail(
+        $recruitment,
+        $pr,
+        $interview,
+        string $decision,
+        $targetEmail = null
+    ): array {
+        $service = app(GenerateAssessmentDocumentService::class);
+        $documentService = app(CandidateDocumentAttachmentService::class);
+
+        $assessmentData = $service->tryGenerateTempAttachments((int) $recruitment->id);
+        $assessmentAttachments = $service->mapDocumentsToAttachmentLabels(
+            $assessmentData['documents'] ?? []
+        );
+        $candidateDocumentAttachments = $documentService->listAttachmentLabels((int) $recruitment->id);
+        $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments((int) $recruitment->id);
+
+        $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
+            $recruitment,
+            $pr,
+            $interview,
+            $decision,
+            $assessmentAttachments,
+            $candidateDocumentAttachments
+        );
+
+        return $this->sendHasilInterviewUserApprovalEmail(
+            trim((string) ($targetEmail ?: env('EMAIL_DIREKTUR_IBU'))),
+            'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap,
+            $emailContent,
+            $assessmentData,
+            $candidateDocumentSendAttachments
+        );
+    }
+
+    private function sendHasilInterviewUserApprovalEmail(
+        string $targetEmail,
+        string $subject,
+        string $emailContent,
+        array $assessmentData = [],
+        array $candidateDocumentAttachments = []
+    ): array {
+        if ($targetEmail === '') {
+            throw new \RuntimeException('target_email atau EMAIL_DIREKTUR_IBU belum diisi');
+        }
+
+        $service = app(GenerateAssessmentDocumentService::class);
+        $documents = $assessmentData['documents'] ?? [];
+        $attachments = array_merge(
+            $service->buildSendEmailAttachments($documents),
+            $candidateDocumentAttachments
+        );
+        $assessmentLabels = $service->mapDocumentsToAttachmentLabels($documents);
+
+        try {
+            $emailQuery = SendEmail::where('to', $targetEmail)
+                ->where('subject', $subject)
+                ->where('body', $emailContent)
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $emailQuery->send();
+
+            return [
+                'sent' => true,
+                'assessment_attachment_count' => count($assessmentLabels),
+                'assessment_attachments' => array_map(function ($label) {
+                    return $label['name'] ?? '';
+                }, $assessmentLabels),
+                'candidate_document_attachment_count' => count($candidateDocumentAttachments),
+                'candidate_document_attachments' => array_map(function ($attachment) {
+                    return $attachment['name'] ?? '';
+                }, $candidateDocumentAttachments),
+                'assessment_failed_sessions' => $assessmentData['failed_sessions'] ?? [],
+                'assessment_skipped_reason' => $assessmentData['skipped_reason'] ?? null,
+            ];
+        } finally {
+            $service->cleanupDocuments($documents);
         }
     }
 
@@ -1118,11 +1321,34 @@ class PersonnelRequestController extends Controller
         }
 
         try {
+            $service = app(GenerateAssessmentDocumentService::class);
+            $documentService = app(CandidateDocumentAttachmentService::class);
+            $assessmentData = ['documents' => [], 'failed_sessions' => [], 'skipped_reason' => null];
+            $assessmentAttachments = [];
+            $candidateDocumentAttachments = [];
+            $candidateDocumentSendAttachments = [];
+
+            if ($decision === 'approve') {
+                $candidateDocumentAttachments = $documentService->listAttachmentLabels($recruitmentId);
+
+                if ($send) {
+                    $assessmentData = $service->tryGenerateTempAttachments($recruitmentId);
+                    $assessmentAttachments = $service->mapDocumentsToAttachmentLabels(
+                        $assessmentData['documents'] ?? []
+                    );
+                    $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments($recruitmentId);
+                } else {
+                    $assessmentAttachments = $service->listAttachmentLabels($recruitmentId);
+                }
+            }
+
             $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
                 $recruitment,
                 $pr,
                 $interview,
-                $decision
+                $decision,
+                $assessmentAttachments,
+                $candidateDocumentAttachments
             );
 
             $subject = 'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap;
@@ -1154,6 +1380,21 @@ class PersonnelRequestController extends Controller
                 'picture' => $recruitment->picture,
             ];
 
+            if ($decision === 'approve' && !$send) {
+                $meta = array_merge($meta, [
+                    'assessment_attachment_count' => count($assessmentAttachments),
+                    'assessment_attachments' => array_map(function ($label) {
+                        return $label['name'] ?? '';
+                    }, $assessmentAttachments),
+                    'candidate_document_attachment_count' => count($candidateDocumentAttachments),
+                    'candidate_document_attachments' => array_map(function ($label) {
+                        return $label['name'] ?? '';
+                    }, $candidateDocumentAttachments),
+                    'assessment_failed_sessions' => $assessmentData['failed_sessions'] ?? [],
+                    'assessment_skipped_reason' => $assessmentData['skipped_reason'] ?? null,
+                ]);
+            }
+
             if ($send) {
                 if ($targetEmail === '') {
                     return response()->json([
@@ -1162,13 +1403,24 @@ class PersonnelRequestController extends Controller
                     ], 422);
                 }
 
-                SendEmail::where('to', $targetEmail)
-                    ->where('subject', $subject)
-                    ->where('body', $emailContent)
-                    ->noReply()
-                    ->send();
+                if ($decision === 'approve') {
+                    $sendResult = $this->sendHasilInterviewUserApprovalEmail(
+                        $targetEmail,
+                        $subject,
+                        $emailContent,
+                        $assessmentData,
+                        $candidateDocumentSendAttachments
+                    );
+                    $meta = array_merge($meta, $sendResult);
+                } else {
+                    SendEmail::where('to', $targetEmail)
+                        ->where('subject', $subject)
+                        ->where('body', $emailContent)
+                        ->noReply()
+                        ->send();
 
-                $meta['sent'] = true;
+                    $meta['sent'] = true;
+                }
             }
 
             if ($format === 'html') {
@@ -1188,4 +1440,37 @@ class PersonnelRequestController extends Controller
             ], 500);
         }
     }
+
+    public function generateDocumentAssessment(Request $request)
+    {
+        $recruitmentId = (int) ($request->input('new_recruitment_id') ?: $request->input('recruitment_id') ?: $request->input('id'));
+        if ($recruitmentId <= 0) {
+            return response()->json(['message' => 'Parameter new_recruitment_id wajib diisi'], 400);
+        }
+
+        try {
+            $service = app(GenerateAssessmentDocumentService::class);
+            $data = $service->generateForRecruitment($recruitmentId);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Dokumen assessment berhasil dibuat.',
+                'data' => $data,
+            ], 200);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $th) {
+            Log::error('PersonnelRequestController@generateDocumentAssessment: ' . $th->getMessage(), [
+                'recruitment_id' => $recruitmentId,
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ]);
+
+            return response()->json([
+                'message' => 'Gagal membuat dokumen assessment.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
 }
