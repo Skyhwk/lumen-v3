@@ -212,8 +212,8 @@
         <td>
             <div class="guide-title">Panduan Membaca hasil DISC</div>
             <p>
-                Yang dipakai untuk memutuskan hanya Grafik 3.
-                Grafik 1 dan Grafik 2 tidak dipakai untuk keputusan; keduanya hanya menunjukkan sikap di situasi lain.
+                Grafik 3 merupakan grafik utama yang digunakan dalam pengambilan keputusan.
+                Grafik 1 dan Grafik 2 hanya digunakan sebagai informasi pendukung mengenai sikap pada situasi yang berbeda.
             </p>
             <ol>
                 <li>Lihat pita biru di tengah sebagai area netral.</li>
