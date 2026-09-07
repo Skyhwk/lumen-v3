@@ -31,7 +31,7 @@ class MasterKaryawanController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['medical', 'user'])->where('is_active', true);
+        $data = MasterKaryawan::with(['medical', 'user', 'pengalaman_kerja', 'pendidikan_karyawan', 'sertifikat_karyawan', 'kontak_darurat'])->where('is_active', true);
         return Datatables::of($data)->addColumn('personal', function ($row) {
             $shioElemen = ShioElemenHelper::resolve($row->tanggal_lahir, $row->shio, $row->elemen);
             return [

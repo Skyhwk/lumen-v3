@@ -44,7 +44,7 @@
 <p style="margin:0 0 28px 0;font-size:14px;line-height:1.8;color:#475569;">
     Terima kasih atas perhatian dan kerja samanya.<br><br>
     Hormat kami,<br>
-    <strong style="color:#1e40af;">HRD & Talent Acquisition Division</strong>
+    <strong style="color:#1e40af;">HRD Division</strong>
 </p>
 
 <div style="height:1px;background-color:#e2e8f0;margin:0 0 28px 0;"></div>

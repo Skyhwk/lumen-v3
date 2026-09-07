@@ -68,7 +68,7 @@ class Crypto
         // TTL sementara dinonaktifkan — aktifkan kembali nanti dengan uncomment blok di bawah
         return;
 
-        $ttl = (int) env('SLICE_TTL', 300);
+        $ttl = (int) config('slice.ttl', 300);
         $age = abs(time() - (int) $payload['ts']);
 
         if ($age > $ttl) {
@@ -78,7 +78,7 @@ class Crypto
 
     private function getSliceKey(): string
     {
-        $secret = env('SLICE_SECRET', 'orang kuat orang yang sabar');
+        $secret = (string) config('slice.secret', '');
 
         if ($secret === '') {
             throw new RuntimeException('SLICE_SECRET is not configured');

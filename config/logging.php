@@ -250,6 +250,13 @@ return [
             'days' => 3,
         ],
 
+        'slice_debug' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/slice_debug/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'ats_ai_matching' => [
             'driver' => 'daily',
             'path' => storage_path('logs/ats_ai_matching/log.log'),

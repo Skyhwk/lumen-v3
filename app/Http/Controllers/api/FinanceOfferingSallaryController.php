@@ -8,6 +8,7 @@ use App\Models\CandidateDataOffers;
 use App\Models\NewRecruitment;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateToken;
+use App\Services\GenerateAssessmentDocumentService;
 use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
@@ -312,14 +313,26 @@ class FinanceOfferingSallaryController extends Controller
             return false;
         }
 
+        $assessmentService = app(GenerateAssessmentDocumentService::class);
+        $documents = [];
+
         try {
+            $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments((int) $applicant->id);
+            $documents = $attachmentBundle['documents'] ?? [];
+            $attachments = $attachmentBundle['attachments'] ?? [];
+
             $buttons = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $applicant->token_approval);
-            SendEmail::where('to', $targetEmail)
+            $emailQuery = SendEmail::where('to', $targetEmail)
                 ->where('subject', 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat'))
                 ->where('body', GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $buttons))
                 ->where('karyawan', $sender)
-                ->noReply()
-                ->send();
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $emailQuery->send();
 
             SallaryOfferService::upsertActive((int) $applicant->id, ['email_sent_at' => Carbon::now()], $sender);
             return true;
@@ -329,6 +342,8 @@ class FinanceOfferingSallaryController extends Controller
                 'message' => $exception->getMessage(),
             ]);
             return false;
+        } finally {
+            $assessmentService->cleanupDocuments($documents);
         }
     }
 
@@ -424,16 +439,33 @@ class FinanceOfferingSallaryController extends Controller
                     ], 422);
                 }
 
-                SendEmail::where('to', $targetEmail)
-                    ->where('subject', $subject)
-                    ->where('body', $emailContent)
-                    ->where('karyawan', $sender)
-                    ->noReply()
-                    ->send();
+                $assessmentService = app(GenerateAssessmentDocumentService::class);
+                $documents = [];
+                try {
+                    $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments((int) $applicant->id);
+                    $documents = $attachmentBundle['documents'] ?? [];
+                    $attachments = $attachmentBundle['attachments'] ?? [];
 
-                SallaryOfferService::upsertActive((int) $applicant->id, ['email_sent_at' => Carbon::now()], $sender);
+                    $emailQuery = SendEmail::where('to', $targetEmail)
+                        ->where('subject', $subject)
+                        ->where('body', $emailContent)
+                        ->where('karyawan', $sender)
+                        ->noReply();
 
-                $meta['sent'] = true;
+                    if (!empty($attachments)) {
+                        $emailQuery->where('attachment', $attachments);
+                    }
+
+                    $emailQuery->send();
+
+                    SallaryOfferService::upsertActive((int) $applicant->id, ['email_sent_at' => Carbon::now()], $sender);
+
+                    $meta['sent'] = true;
+                    $meta['assessment_attachment_count'] = count($attachmentBundle['assessment_labels'] ?? []);
+                    $meta['candidate_document_attachment_count'] = count($attachmentBundle['candidate_document_labels'] ?? []);
+                } finally {
+                    $assessmentService->cleanupDocuments($documents);
+                }
             }
 
             if ($format === 'html') {

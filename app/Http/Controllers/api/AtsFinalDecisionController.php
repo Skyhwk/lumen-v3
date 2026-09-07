@@ -11,6 +11,8 @@ use App\Models\RecruitmentInterview;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\GenerateToken;
+use App\Services\CandidateDocumentAttachmentService;
+use App\Services\GenerateAssessmentDocumentService;
 use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
@@ -1127,15 +1129,26 @@ class AtsFinalDecisionController extends Controller
         $targetEmail = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
         $user = $this->karyawan;
 
+        $assessmentService = app(GenerateAssessmentDocumentService::class);
+        $documents = [];
+
         try {
             $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $btn);
+            $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments((int) $applicant->id);
+            $documents = $attachmentBundle['documents'] ?? [];
+            $attachments = $attachmentBundle['attachments'] ?? [];
 
-            SendEmail::where('to', $targetEmail)
+            $emailQuery = SendEmail::where('to', $targetEmail)
                 ->where('subject', 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat'))
                 ->where('body', $bodyEmail)
                 ->where('karyawan', $user)
-                ->noReply()
-                ->send();
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $emailQuery->send();
 
             SallaryOfferService::upsertActive(
                 (int) $applicant->id,
@@ -1146,12 +1159,16 @@ class AtsFinalDecisionController extends Controller
             return response()->json([
                 'status'  => 200,
                 'message' => 'Offering salary approval email sent successfully to ' . $targetEmail,
+                'assessment_attachment_count' => count($attachmentBundle['assessment_labels'] ?? []),
+                'candidate_document_attachment_count' => count($attachmentBundle['candidate_document_labels'] ?? []),
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => 500,
                 'message' => 'Failed to send email: ' . $e->getMessage(),
             ], 500);
+        } finally {
+            $assessmentService->cleanupDocuments($documents);
         }
     }
 
@@ -1205,6 +1222,10 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
+        $assessmentService = app(GenerateAssessmentDocumentService::class);
+        $documentService = app(CandidateDocumentAttachmentService::class);
+        $documents = [];
+
         try {
             $tokenService = new GenerateToken();
             $tokenKey = $pr->id . $applicant->nama_lengkap . 'approval' . str_replace('.', '', microtime(true));
@@ -1216,30 +1237,51 @@ class AtsFinalDecisionController extends Controller
                 'rejected_decision'        => false,
             ]);
 
+            $assessmentData = $assessmentService->tryGenerateTempAttachments((int) $applicant->id);
+            $documents = $assessmentData['documents'] ?? [];
+            $assessmentAttachments = $assessmentService->mapDocumentsToAttachmentLabels($documents);
+            $candidateDocumentAttachments = $documentService->listAttachmentLabels((int) $applicant->id);
+            $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments((int) $applicant->id);
+
             $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
                 $applicant,
                 $pr,
                 $interview,
-                'approve'
+                'approve',
+                $assessmentAttachments,
+                $candidateDocumentAttachments
             );
 
             $subject = 'Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
+            $attachments = array_merge(
+                $assessmentService->buildSendEmailAttachments($documents),
+                $candidateDocumentSendAttachments
+            );
 
-            SendEmail::where('to', $targetEmail)
+            $emailQuery = SendEmail::where('to', $targetEmail)
                 ->where('subject', $subject)
                 ->where('body', $emailContent)
-                ->noReply()
-                ->send();
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $emailQuery->send();
 
             return response()->json([
                 'status'  => 200,
                 'message' => 'Email permohonan persetujuan kandidat berhasil dikirim ulang.',
+                'assessment_attachment_count' => count($assessmentAttachments),
+                'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => 500,
                 'message' => 'Gagal mengirim email: ' . $e->getMessage(),
             ], 500);
+        } finally {
+            $assessmentService->cleanupDocuments($documents);
         }
     }
 

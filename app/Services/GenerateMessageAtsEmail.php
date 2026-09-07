@@ -625,6 +625,22 @@ class GenerateMessageAtsEmail
         return $photoUrl ?: '';
     }
 
+    private static function resolveAiMatchingReason($recruitment): ?string
+    {
+        if (!empty($recruitment->ai_matching_reason)) {
+            return trim((string) $recruitment->ai_matching_reason);
+        }
+
+        if (!empty($recruitment->ai_matching_response)) {
+            $parsed = json_decode($recruitment->ai_matching_response, true);
+            if (is_array($parsed) && !empty($parsed['reason'])) {
+                return trim((string) $parsed['reason']);
+            }
+        }
+
+        return null;
+    }
+
     private static function letterIssueLocation(): string
     {
         return 'Tangerang Selatan';
@@ -776,7 +792,7 @@ class GenerateMessageAtsEmail
                                     <span style='color: #475569;'>PT Inti Surya Laboratorium</span>
                                     <div style='margin-top: 14px; font-size: 11px; color: #94a3b8; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 12px;'>
                                         Ruko Icon Business Park Blok O No. 5-6, BSD City, Kec. Cisauk, Tangerang Selatan, Banten 15345<br>
-                                        Pesan ini dikirimkan secara otomatis oleh Sistem ATS PT Inti Surya Laboratorium. Mohon menjaga kerahasiaan isi dokumen penawaran ini.
+                                        Pesan ini dikirimkan secara otomatis oleh Sistem ATS PT Inti Surya Laboratorium.
                                     </div>
                                 </td>
                             </tr>
@@ -1687,8 +1703,14 @@ class GenerateMessageAtsEmail
     /**
      * Email notifikasi hasil interview user ke HRD
      */
-    static function bodyEmailHasilInterviewUser($recruitment, $pr, $interview, $decision)
-    {  
+    static function bodyEmailHasilInterviewUser(
+        $recruitment,
+        $pr,
+        $interview,
+        $decision,
+        array $assessmentAttachments = [],
+        array $candidateDocumentAttachments = []
+    ) {
         try {
             //code...
            
@@ -1823,6 +1845,16 @@ class GenerateMessageAtsEmail
                 ->where('is_active', 1)
                 ->orderBy('id', 'desc')
                 ->first();
+
+            if (empty($assessmentAttachments)) {
+                $assessmentAttachments = app(GenerateAssessmentDocumentService::class)
+                    ->listAttachmentLabels((int) $recruitment->id);
+            }
+
+            if (empty($candidateDocumentAttachments)) {
+                $candidateDocumentAttachments = app(CandidateDocumentAttachmentService::class)
+                    ->listAttachmentLabels((int) $recruitment->id);
+            }
     
             return view('TemplateEmail.ats.hasil-interview-user', [
                 'recruitment' => $recruitment,
@@ -1832,6 +1864,10 @@ class GenerateMessageAtsEmail
                 'decision' => $decision,
                 'candidateInfo' => $candidateInfo,
                 'contact' => $contact,
+                'photoUrl' => $photoUrl,
+                'aiMatchingReason' => self::resolveAiMatchingReason($recruitment),
+                'assessmentAttachments' => $assessmentAttachments,
+                'candidateDocumentAttachments' => $candidateDocumentAttachments,
                 'cv' => $cv,
                 'btn' => self::directorDecisionButtons($recruitment),
             ])->render();
