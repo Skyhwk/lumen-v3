@@ -210,9 +210,9 @@
 <table class="guide-box">
     <tr>
         <td>
-            <div class="guide-title">Panduan baca untuk keputusan rekrutmen</div>
+            <div class="guide-title">Panduan cara membaca untuk hasil DISC</div>
             <p>
-                Yang dipakai untuk memutuskan kandidat hanya <strong>Grafik 3</strong>.
+                Yang dipakai untuk memutuskan hanya Grafik 3.
                 Grafik 1 dan Grafik 2 tidak dipakai untuk keputusan; keduanya hanya menunjukkan sikap di situasi lain.
             </p>
             <ol>
