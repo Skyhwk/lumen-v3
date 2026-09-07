@@ -152,7 +152,7 @@ class RequestQuotationController extends Controller
     {
         $receivedSamples = OrderDetail::where('no_order', $noOrder)
             ->whereNotNull('tanggal_terima')
-            ->where('tanggal_terima', '!=', '')
+            ->where('tanggal_terima', '!=', '0000-00-00')
             ->pluck('no_sampel');
 
         if ($receivedSamples->isEmpty()) {
