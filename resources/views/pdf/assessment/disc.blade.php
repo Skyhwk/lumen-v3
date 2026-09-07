@@ -210,17 +210,18 @@
 <table class="guide-box">
     <tr>
         <td>
-            <div class="guide-title">Panduan cara membaca untuk hasil DISC</div>
+            <div class="guide-title">Panduan Membaca hasil DISC</div>
             <p>
                 Yang dipakai untuk memutuskan hanya Grafik 3.
                 Grafik 1 dan Grafik 2 tidak dipakai untuk keputusan; keduanya hanya menunjukkan sikap di situasi lain.
             </p>
             <ol>
-                <li>Lihat pita biru di tengah. Itu garis netral.</li>
-                <li>Titik di atas pita artinya sifat itu muncul. Titik di bawah pita artinya sifat itu tidak muncul.</li>
-                <li>Huruf D, I, S, atau C yang titiknya paling atas adalah sifat terkuat di grafik itu.</li>
-                <li>Nama di atas grafik, misalnya LOGICAL THINKER, adalah ringkasan gaya tersebut.</li>
-                <li>Tulisan PATTERN TIDAK TERSEDIA artinya kombinasi titiknya tidak punya nama pola baku. Tes tetap valid.</li>
+                <li>Lihat pita biru di tengah sebagai area netral.</li>
+                <li>Titik di atas pita menunjukan kecenderungan sifat yang lebih menonjol.</li>
+                <li>Titik di bawah pita menunjukan kecenderungan sifat yang kurang menonjol.</li>
+                <li>Faktor D,I,S, atau C dengan titik tertinggi merupakan faktor kecenderungan yang paling dominan.</li>
+                <li>Nama pola di atas grafik merupakan ringkasan gaya perilaku.</li>
+                <li>PATTERN TIDAK TERSEDIA berarti kombinasi titik tidak memiliki nama pola baku. Hasil test tetap dapat di gunakan.</li>
             </ol>
             <p>
                 <strong>Grafik 1</strong> = sikap saat tampil atau wawancara.
