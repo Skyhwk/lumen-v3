@@ -261,6 +261,8 @@ class DraftUlkController extends Controller
         // Bersihkan duplikasi dan karakter aneh
         $parameterAllowed = array_unique(array_filter($parameterAllowed));
 
+        DB::statement('SET SESSION group_concat_max_len = 1000000');
+
         // 3. Eksekusi Query
         $data = OrderDetail::selectRaw('
             max(id) as id,
@@ -324,7 +326,14 @@ class DraftUlkController extends Controller
             $minDate = null;
             $maxDate = null;
             if ($lapangan->isNotEmpty()) {
-                $minDate = $item->tanggal_tugas;
+                $tanggalTugas = $item->tanggal_tugas;
+                if ($tanggalTugas && strpos($tanggalTugas, ',') !== false) {
+                    $list = array_filter(explode(',', $tanggalTugas));
+                    sort($list);
+                    $minDate = $list[0];
+                } else {
+                    $minDate = $tanggalTugas;
+                }
                 $maxDate = $lapangan->max('created_at');
             }
 

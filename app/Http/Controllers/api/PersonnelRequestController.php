@@ -249,9 +249,9 @@ class PersonnelRequestController extends Controller
     {
         return NewRecruitment::query()
             ->where('id', $newRecruitmentId)
-            ->whereHas('personnelRequest', function ($query) {
-                $query->where('created_by', $this->karyawan);
-            })
+            // ->whereHas('personnelRequest', function ($query) {
+            //     $query->where('created_by', $this->karyawan);
+            // })
             ->first();
     }
 
