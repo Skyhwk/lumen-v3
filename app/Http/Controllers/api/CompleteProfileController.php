@@ -225,6 +225,13 @@ class CompleteProfileController extends Controller
             }
         }
 
+        foreach (['no_bpjs_ks' => 'Nomor BPJS Kesehatan', 'no_bpjs_tk' => 'Nomor BPJS Ketenagakerjaan'] as $field => $label) {
+            $value = trim((string) $request->input($field));
+            if ($value !== '' && !preg_match('/^\d+$/', $value)) {
+                $errors[$field] = [$label . ' hanya boleh berisi angka.'];
+            }
+        }
+
         $duplicateEmergencyContactErrors = $this->validateEmergencyContacts($request);
         if (!empty($duplicateEmergencyContactErrors)) {
             $errors = array_merge($errors, $duplicateEmergencyContactErrors);

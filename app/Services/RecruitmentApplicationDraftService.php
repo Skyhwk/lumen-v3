@@ -121,28 +121,48 @@ class RecruitmentApplicationDraftService
             return null;
         }
 
-        $query = DB::table('recruitment_application_drafts');
-
         if ($draftToken !== '') {
-            $query->where('draft_token', $draftToken);
+            $query = DB::table('recruitment_application_drafts')->where('draft_token', $draftToken);
+            if ($noRequest !== '') {
+                $query->where('no_request', $noRequest);
+            }
+            $row = $query->first();
         } else {
-            $query->where(function ($builder) use ($email, $phone) {
-                if ($email) {
-                    $builder->orWhereRaw('LOWER(TRIM(email)) = ?', [$email]);
-                }
-                if ($phone) {
-                    $builder->orWhere('no_telepon', $phone);
-                }
+            // Keep the email and phone lookup separate so MySQL can use the
+            // corresponding composite index without sorting the entire draft table.
+            $candidates = [];
+            if ($email) {
+                $candidates[] = $this->latestDraftByContact('email', $email, $noRequest);
+            }
+            if ($phone) {
+                $candidates[] = $this->latestDraftByContact('no_telepon', $phone, $noRequest);
+            }
+
+            $candidates = array_values(array_filter($candidates));
+            usort($candidates, function ($left, $right) {
+                return strcmp((string) $right->last_activity_at, (string) $left->last_activity_at);
             });
+            $row = $candidates[0] ?? null;
         }
 
+        return $row ? $this->formatDraft($row) : null;
+    }
+
+    private function latestDraftByContact(string $column, string $value, string $noRequest)
+    {
+        $index = $column === 'email'
+            ? 'recruitment_drafts_request_email_activity_idx'
+            : 'recruitment_drafts_request_phone_activity_idx';
+        $table = $noRequest !== ''
+            ? DB::raw("recruitment_application_drafts FORCE INDEX ({$index})")
+            : 'recruitment_application_drafts';
+
+        $query = DB::table($table)->where($column, $value);
         if ($noRequest !== '') {
             $query->where('no_request', $noRequest);
         }
 
-        $row = $query->orderByDesc('last_activity_at')->first();
-
-        return $row ? $this->formatDraft($row) : null;
+        return $query->orderByDesc('last_activity_at')->first();
     }
 
     public function deleteByContact(?string $email, ?string $phone, ?string $draftToken = null): void

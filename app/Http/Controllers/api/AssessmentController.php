@@ -983,19 +983,39 @@ class AssessmentController extends Controller
             })
             ->groupBy('request.id', 'request.posisi', 'request.jumlah_personal');
         $this->scopePersonnelRequestsToAlias($availableRequests, $category, 'request');
-        $distinctOpenPositions = $availableRequests->havingRaw('request.jumlah_personal > COUNT(hired.id)')->get(['request.posisi'])->pluck('posisi')->unique()->count();
-        if ($distinctOpenPositions < 2) return null;
+        $openPositionIds = $availableRequests
+            ->havingRaw('request.jumlah_personal > COUNT(hired.id)')
+            ->get(['request.posisi'])
+            ->pluck('posisi')
+            ->filter()
+            ->map(fn ($positionId) => (int) $positionId)
+            ->unique()
+            ->values();
+        if ($openPositionIds->count() < 2) return null;
 
-        return DB::table('recruitment_general_question_categories')
+        $questionCategory = DB::table('recruitment_general_question_categories')
             ->where('jobpost_category_id', $category->id)
             ->where('grade', $request->grade_master_karyawan)
             ->where('is_active', 1)->first();
+        if (!$questionCategory) return null;
+
+        // Only use questions that can direct the candidate to at least one
+        // personnel request that is currently open in this alias and grade.
+        $questionCategory->open_position_ids = $openPositionIds->all();
+
+        return $questionCategory;
     }
 
     private function generalRecruitmentQuestions($category): array
     {
         return DB::table('recruitment_general_questions')
             ->where('category_id', $category->id)->where('is_active', 1)->where('status', 'active')
+            ->whereExists(function ($query) use ($category) {
+                $query->select(DB::raw(1))
+                    ->from('recruitment_general_question_options as question_option')
+                    ->whereColumn('question_option.question_id', 'recruitment_general_questions.id')
+                    ->whereIn('question_option.position_id', $category->open_position_ids ?? []);
+            })
             ->inRandomOrder()->limit((int) $category->question_count)->get()->values()->map(function ($question, $index) {
                 $options = DB::table('recruitment_general_question_options')
                     ->where('question_id', $question->id)->orderBy('option_order')->get()

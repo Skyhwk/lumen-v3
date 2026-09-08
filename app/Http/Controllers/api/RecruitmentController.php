@@ -328,68 +328,12 @@ class RecruitmentController extends Controller{
                 ], 404);
             }
 
-            // Satu kandidat hanya dapat mengikuti satu proses rekrutmen pada satu waktu,
-            // walaupun lowongan yang dipilih berbeda.
-            $existingApplications = DB::table('new_recruitment')
-                ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
-                ->where(function ($query) use ($email, $noTelepon) {
-                    $query->whereRaw('LOWER(TRIM(email)) = ?', [$email])
-                        ->orWhereRaw("CASE
-                            WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
-                                THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
-                            WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
-                                THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
-                            ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
-                        END = ?", [$noTelepon]);
-                })
-                ->orderByDesc('id')
-                ->get();
-
-            $activeRecruitmentStatuses = [
-                'assessment',
-                'screening',
-                'approved',
-                'interview_hrd',
-                'profile_completion',
-                'interview_user',
-                'management_decision',
-                'internal_sallary_offer',
-                'salary_offer',
-            ];
-
-            foreach ($existingApplications as $existingApplication) {
-                if ((int) ($existingApplication->is_active ?? 1) === 0) {
-                    continue;
-                }
-
-                $history = json_decode($existingApplication->meta_history ?: '[]', true);
-                $history = is_array($history) ? $history : [];
-                $lastHistory = !empty($history) ? end($history) : [];
-                $lastHistoryStatus = strtolower((string) ($lastHistory['status'] ?? ''));
-                $applicationStatus = strtolower(trim((string) $existingApplication->status));
-                $isRejected = $applicationStatus === 'rejected'
-                    || ($lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false);
-
-                if (!$isRejected && in_array($applicationStatus, $activeRecruitmentStatuses, true)) {
-                    return response()->json([
-                        'message' => 'Anda masih mengikuti proses rekrutmen pada pendaftaran sebelumnya. Anda belum dapat mendaftar untuk posisi lain sampai proses tersebut selesai.',
-                        'status' => false,
-                    ], 409);
-                }
-
-                if (!$isRejected) {
-                    continue;
-                }
-
-                $rejectedAt = $lastHistory['at'] ?? $existingApplication->rejected_at ?? $existingApplication->updated_at ?? $existingApplication->created_at;
-                $reapplyAt = Carbon::parse($rejectedAt)->addMonths(3);
-
-                if (Carbon::now()->lt($reapplyAt)) {
-                    return response()->json([
-                        'message' => 'Pendaftaran sebelumnya belum dapat diajukan kembali. Anda dapat mendaftar lagi setelah ' . $reapplyAt->format('d/m/Y') . '.',
-                        'status' => false,
-                    ], 409);
-                }
+            if ($blocker = $this->findNewRecruitmentApplicationBlocker($email, $noTelepon)) {
+                return response()->json([
+                    'message' => $blocker['message'],
+                    'status' => false,
+                    'reapply_at' => $blocker['reapply_at'] ?? null,
+                ], 409);
             }
 
             $picture = $request->input('picture', $request->input('foto_selfie'));
@@ -525,6 +469,109 @@ class RecruitmentController extends Controller{
             'posisi_dilamar' => 'Programmer',
             'assessment_url' => $assessmentUrl,
         ]));
+    }
+
+    public function checkApplicationEligibility(Request $request)
+    {
+        $namaLengkap = trim((string) $request->input('nama_lengkap'));
+        $email = strtolower(trim((string) $request->input('email')));
+        $noTelepon = preg_replace('/\D+/', '', (string) $request->input('no_telepon'));
+
+        if (strpos($noTelepon, '62') === 0) {
+            $noTelepon = '0' . ltrim(substr($noTelepon, 2), '0');
+        } elseif ($noTelepon !== '' && strpos($noTelepon, '0') !== 0) {
+            $noTelepon = '0' . $noTelepon;
+        }
+
+        if ($namaLengkap === '' || $email === '' || $noTelepon === '') {
+            return response()->json([
+                'status' => false,
+                'message' => 'Nama lengkap, email, dan nomor telepon wajib diisi.',
+            ], 422);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^08\d{8,11}$/', $noTelepon)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Email atau nomor telepon tidak valid.',
+            ], 422);
+        }
+
+        if ($blocker = $this->findNewRecruitmentApplicationBlocker($email, $noTelepon)) {
+            return response()->json([
+                'status' => false,
+                'message' => $blocker['message'],
+                'reapply_at' => $blocker['reapply_at'] ?? null,
+            ], 409);
+        }
+
+        $draft = app(RecruitmentApplicationDraftService::class)->get([
+            'email' => $email,
+            'no_telepon' => $noTelepon,
+            'no_request' => $request->input('no_request'),
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Kandidat dapat melanjutkan pendaftaran.',
+            'data' => ['draft' => $draft],
+        ]);
+    }
+
+    private function findNewRecruitmentApplicationBlocker(string $email, string $noTelepon): ?array
+    {
+        $existingApplications = DB::table('new_recruitment')
+            ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
+            ->where(function ($query) use ($email, $noTelepon) {
+                $query->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                    ->orWhereRaw("CASE
+                        WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
+                            THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
+                        WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
+                            THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+                        ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
+                    END = ?", [$noTelepon]);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        $activeRecruitmentStatuses = [
+            'assessment', 'screening', 'approved', 'interview_hrd', 'profile_completion',
+            'interview_user', 'management_decision', 'internal_sallary_offer', 'salary_offer',
+        ];
+
+        foreach ($existingApplications as $existingApplication) {
+            if ((int) ($existingApplication->is_active ?? 1) === 0) {
+                continue;
+            }
+
+            $history = json_decode($existingApplication->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $lastHistory = !empty($history) ? end($history) : [];
+            $lastHistoryStatus = strtolower((string) ($lastHistory['status'] ?? ''));
+            $applicationStatus = strtolower(trim((string) $existingApplication->status));
+            $isRejected = $applicationStatus === 'rejected'
+                || ($lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false);
+
+            if (!$isRejected && in_array($applicationStatus, $activeRecruitmentStatuses, true)) {
+                return ['message' => 'Anda masih mengikuti proses rekrutmen pada pendaftaran sebelumnya. Anda belum dapat mendaftar untuk posisi lain sampai proses tersebut selesai.'];
+            }
+
+            if (!$isRejected) {
+                continue;
+            }
+
+            $rejectedAt = $lastHistory['at'] ?? $existingApplication->rejected_at ?? $existingApplication->updated_at ?? $existingApplication->created_at;
+            $reapplyAt = Carbon::parse($rejectedAt)->addMonths(3);
+            if (Carbon::now()->lt($reapplyAt)) {
+                return [
+                    'message' => 'Pendaftaran sebelumnya belum dapat diajukan kembali. Anda dapat mendaftar lagi setelah ' . $reapplyAt->format('d/m/Y') . '.',
+                    'reapply_at' => $reapplyAt->toDateTimeString(),
+                ];
+            }
+        }
+
+        return null;
     }
 
     private function assessmentInvitationEmail(array $data)
