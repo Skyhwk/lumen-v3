@@ -49,6 +49,7 @@ class PersonnelRequest extends Model
         'divisi_alias',
         'divisi_alias_id',
         'requirement',
+        'gambar',
         'minimum_matching',
         'is_publish',
         'publish_by',
