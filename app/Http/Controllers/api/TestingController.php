@@ -4,8 +4,9 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{
-    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,LhpsAdverseOdorHeader,LhpsAirHeader,LhpsEmisiCHeader,LhpsEmisiHeader,LhpsEmisiIsokinetikHeader,LhpsErgonomiHeader,LhpsGetaranHeader,LhpsHygieneSanitasiHeader,LhpsIklimHeader,LhpsKebisinganHeader,LhpsKebisinganPersonalHeader,LhpsLingHeader,LhpsMedanLMHeader,LhpsMicrobiologiHeader,LhpsPadatanHeader,LhpsPencahayaanHeader,LhpsSinarUVHeader,LhpsSwabTesHeader,RekapLiburKalender
+    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,LhpsAdverseOdorHeader,LhpsAirHeader,LhpsEmisiCHeader,LhpsEmisiHeader,LhpsEmisiIsokinetikHeader,LhpsErgonomiHeader,LhpsGetaranHeader,LhpsHygieneSanitasiHeader,LhpsIklimHeader,LhpsKebisinganHeader,LhpsKebisinganPersonalHeader,LhpsLingHeader,LhpsMedanLMHeader,LhpsMicrobiologiHeader,LhpsPadatanHeader,LhpsPencahayaanHeader,LhpsSinarUVHeader,LhpsSwabTesHeader,RekapLiburKalender,LinkLhp
 };
+use App\Jobs\CombineLHPJob;
 use App\Services\{
     CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService
 };
@@ -6925,6 +6926,147 @@ class TestingController extends Controller
         $skppGenerator->testRendersuratKeterangan($request->no_order, $request->periode);
 
         return response()->json(['message' => 'SKPP has been generated successfully'], 200);
+    }
+
+    /**
+     * Recombine LHP — menjalankan ulang CombineLHPJob / CombineLHPService
+     * (sama seperti saat approve di DraftUdaraAmbientController / DraftAirController).
+     *
+     * Body:
+     * - no_lhp (required)
+     * - file_lhp, no_order, periode (optional, auto-resolve dari header/order detail)
+     * - sync: true = jalankan langsung (default), false = dispatch queue
+     * - karyawan (optional)
+     */
+    public function recombineLhp(Request $request)
+    {
+        try {
+            $noLhp = trim((string) ($request->no_lhp ?? ''));
+            if ($noLhp === '') {
+                return response()->json([
+                    'message' => 'no_lhp wajib diisi',
+                    'status' => false,
+                ], 422);
+            }
+
+            $cekDetail = OrderDetail::where('cfr', $noLhp)
+                ->where('is_active', true)
+                ->first();
+
+            $header = $this->resolveLhpHeaderForRecombine($noLhp);
+
+            $noOrder = trim((string) ($request->no_order ?? ''));
+            if ($noOrder === '') {
+                $noOrder = trim((string) ($header->no_order ?? ($cekDetail->no_order ?? '')));
+            }
+
+            $fileLhp = trim((string) ($request->file_lhp ?? ''));
+            if ($fileLhp === '') {
+                $fileLhp = trim((string) ($header->file_lhp ?? ''));
+            }
+
+            $periode = $request->has('periode')
+                ? $request->periode
+                : ($cekDetail->periode ?? null);
+
+            $karyawan = trim((string) ($request->karyawan ?? $this->karyawan ?? 'TestingController'));
+
+            if ($noOrder === '' || $fileLhp === '') {
+                return response()->json([
+                    'message' => 'no_order atau file_lhp tidak ditemukan. Lengkapi manual via request body.',
+                    'status' => false,
+                    'data' => [
+                        'no_lhp' => $noLhp,
+                        'no_order' => $noOrder ?: null,
+                        'file_lhp' => $fileLhp ?: null,
+                        'header_found' => $header !== null,
+                        'order_detail_found' => $cekDetail !== null,
+                    ],
+                ], 422);
+            }
+
+            $cekLink = LinkLhp::where('no_order', $noOrder);
+            if ($periode) {
+                $cekLink = $cekLink->where('periode', $periode);
+            }
+            $cekLink = $cekLink->first();
+
+            if (!$cekLink) {
+                return response()->json([
+                    'message' => 'Link LHP tidak ditemukan untuk order/periode ini',
+                    'status' => false,
+                    'data' => [
+                        'no_order' => $noOrder,
+                        'periode' => $periode,
+                    ],
+                ], 404);
+            }
+
+            $sync = filter_var($request->input('sync', true), FILTER_VALIDATE_BOOLEAN);
+
+            if ($sync) {
+                (new CombineLHPService())->combine($noLhp, $fileLhp, $noOrder, $karyawan, $periode);
+                $mode = 'sync';
+            } else {
+                $job = new CombineLHPJob($noLhp, $fileLhp, $noOrder, $karyawan, $periode);
+                $this->dispatch($job);
+                $mode = 'queue';
+            }
+
+            return response()->json([
+                'message' => 'Recombine LHP berhasil dijalankan (' . $mode . ')',
+                'status' => true,
+                'data' => [
+                    'no_lhp' => $noLhp,
+                    'file_lhp' => $fileLhp,
+                    'no_order' => $noOrder,
+                    'periode' => $periode,
+                    'karyawan' => $karyawan,
+                    'mode' => $mode,
+                    'link_lhp_id' => $cekLink->id,
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'status' => false,
+            ], 500);
+        }
+    }
+
+    private function resolveLhpHeaderForRecombine(string $noLhp): ?object
+    {
+        $models = [
+            LhpsAirHeader::class,
+            LhpsLingHeader::class,
+            LhpsPadatanHeader::class,
+            LhpsAdverseOdorHeader::class,
+            LhpsEmisiHeader::class,
+            LhpsEmisiCHeader::class,
+            LhpsEmisiIsokinetikHeader::class,
+            LhpsErgonomiHeader::class,
+            LhpsGetaranHeader::class,
+            LhpsHygieneSanitasiHeader::class,
+            LhpsIklimHeader::class,
+            LhpsKebisinganHeader::class,
+            LhpsKebisinganPersonalHeader::class,
+            LhpsMedanLMHeader::class,
+            LhpsMicrobiologiHeader::class,
+            LhpsPencahayaanHeader::class,
+            LhpsSinarUVHeader::class,
+            LhpsSwabTesHeader::class,
+        ];
+
+        foreach ($models as $model) {
+            $row = $model::where('no_lhp', $noLhp)->where('is_active', true)->first();
+            if ($row && !empty($row->file_lhp) && !empty($row->no_order)) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     public function generateCoc(Request $request)

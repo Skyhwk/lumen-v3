@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * Classic DISC profile graphs (Graph III / I / II) from disc_rules scores.
+ * Classic DISC profile graphs in Graph I / II / III order from disc_rules scores.
  * Dots are plotted on the -scale..+scale axis already stored on each profile.
  */
 class DiscProfileChartRenderer
@@ -52,14 +52,12 @@ class DiscProfileChartRenderer
         $gap = 18;
         $left = 16;
         $usable = $width - 32;
-        $w3 = (int) round($usable * 0.40);
-        $w1 = (int) round($usable * 0.30);
-        $w2 = $usable - $w3 - $w1 - ($gap * 2);
+        $panelW = (int) floor(($usable - ($gap * 2)) / 3);
 
         $panels = [
-            ['line' => 3, 'x' => $left, 'w' => $w3, 'title' => 'Grafik 3 (Change)', 'caption' => 'Kepribadian kerja yang lebih menetap'],
-            ['line' => 1, 'x' => $left + $w3 + $gap, 'w' => $w1, 'title' => 'Grafik 1 (Most)', 'caption' => 'Saat tampil di muka umum / wawancara'],
-            ['line' => 2, 'x' => $left + $w3 + $w1 + ($gap * 2), 'w' => $w2, 'title' => 'Grafik 2 (Least)', 'caption' => 'Saat mendapat tekanan'],
+            ['line' => 1, 'x' => $left, 'w' => $panelW, 'title' => 'Grafik 1 (Most)', 'caption' => 'Saat tampil di muka umum / wawancara'],
+            ['line' => 2, 'x' => $left + $panelW + $gap, 'w' => $panelW, 'title' => 'Grafik 2 (Least)', 'caption' => 'Saat mendapat tekanan'],
+            ['line' => 3, 'x' => $left + ($panelW * 2) + ($gap * 2), 'w' => $usable - ($panelW * 2) - ($gap * 2), 'title' => 'Grafik 3 (Change) UTAMA', 'caption' => 'Kepribadian kerja yang lebih menetap'],
         ];
 
         foreach ($panels as $panel) {
@@ -116,8 +114,8 @@ class DiscProfileChartRenderer
             $this->text($im, $c['white'], $x + $w - 10, $y + 10, strtoupper($pattern), 9, true, 'right');
         }
 
-        $leftGutter = 36;
-        $rightGutter = 28;
+        $leftGutter = 44;
+        $rightGutter = 32;
         $plotX = $x + $leftGutter;
         $plotW = $w - $leftGutter - $rightGutter;
         $colW = $plotW / 4.0;
@@ -145,14 +143,14 @@ class DiscProfileChartRenderer
         $this->text($im, $c['axis'], $x + 6, $plotTop - 2, 'INTENSITAS', 7, false);
         $this->text($im, $c['axis'], $x + $w - 6, $plotTop - 2, 'SEGMEN', 7, false, 'right');
 
-        $intensityMarks = [8, 6, 4, 2, 0, -2, -4, -6, -8];
+        $intensityMarks = [];
+        for ($mark = (int) $scale; $mark >= (int) -$scale; $mark--) {
+            $intensityMarks[] = $mark;
+        }
         foreach ($intensityMarks as $mark) {
-            if (abs($mark) > $scale) {
-                continue;
-            }
             $yy = $this->valueToY($mark, $scale, $plotTop, $plotH);
             $label = $mark > 0 ? '+' . $mark : (string) $mark;
-            $this->text($im, $c['ink'], $x + 6, $yy - 6, $label, 8, false);
+            $this->text($im, $mark === 0 ? $c['blue'] : $c['ink'], $x + 6, $yy - 6, $label, 8, $mark === 0);
         }
 
         for ($seg = 7; $seg >= 1; $seg--) {
@@ -164,14 +162,24 @@ class DiscProfileChartRenderer
         $points = [];
         $scoresByKey = [];
         foreach ($profile['scores'] ?? [] as $score) {
-            $scoresByKey[strtoupper((string) ($score['key'] ?? ''))] = (float) ($score['value'] ?? 0);
+            if (is_array($score)) {
+                $scoresByKey[strtoupper((string) ($score['key'] ?? ''))] = (float) ($score['value'] ?? 0);
+                continue;
+            }
+        }
+        if ($scoresByKey === [] && is_array($profile['scores'] ?? null)) {
+            foreach ($profile['scores'] as $key => $value) {
+                if (is_numeric($value)) {
+                    $scoresByKey[strtoupper((string) $key)] = (float) $value;
+                }
+            }
         }
 
         foreach ($keys as $i => $key) {
             $value = $scoresByKey[$key] ?? 0.0;
             $px = (int) round($plotX + ($i + 0.5) * $colW);
             $py = $this->valueToY($value, $scale, $plotTop, $plotH);
-            $points[] = [$px, $py];
+            $points[] = [$px, $py, $value];
         }
 
         if (function_exists('imageantialias')) {
@@ -186,10 +194,18 @@ class DiscProfileChartRenderer
         foreach ($points as $point) {
             imagefilledellipse($im, $point[0], $point[1], 16, 16, $c['ink']);
             imageellipse($im, $point[0], $point[1], 16, 16, $c['white']);
+            $scoreLabel = $point[2] > 0 ? '+' . $this->formatScore($point[2]) : $this->formatScore($point[2]);
+            $this->text($im, $c['ink'], $point[0] + 10, $point[1] - 16, $scoreLabel, 8, true);
         }
 
         imagefilledrectangle($im, $x, $y + $h - $footerH, $x + $w, $y + $h, $c['blue']);
         $this->text($im, $c['white'], $x + (int) ($w / 2), $y + $h - 30, $caption, 9, false, 'center');
+    }
+
+    private function formatScore(float $value): string
+    {
+        $rounded = abs($value - round($value)) < 0.05 ? (string) (int) round($value) : number_format($value, 1, '.', '');
+        return $rounded;
     }
 
     private function valueToY(float $value, float $scale, int $plotTop, int $plotH): int
