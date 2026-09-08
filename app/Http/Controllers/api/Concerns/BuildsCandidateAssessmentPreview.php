@@ -41,9 +41,36 @@ trait BuildsCandidateAssessmentPreview
         }));
     }
 
+    protected function isHiddenAssessmentSession($session): bool
+    {
+        $name = strtolower(trim((string) ($session->category_name ?? $session->name ?? '')));
+        if ($name === 'pertanyaan umum rekrutmen') {
+            return true;
+        }
+
+        $engine = strtolower(trim((string) ($session->engine ?? '')));
+        if ($engine === 'recruitment_general') {
+            return true;
+        }
+
+        $resultJson = $session->result_json ?? null;
+        if (is_string($resultJson) && $resultJson !== '') {
+            $result = json_decode($resultJson, true) ?: [];
+            if (strtolower((string) ($result['engine'] ?? '')) === 'recruitment_general') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     protected function assessmentInProgressSummary($sessions)
     {
         foreach ($sessions as $session) {
+            if ($this->isHiddenAssessmentSession($session)) {
+                continue;
+            }
+
             if ($session->status === 'in_progress') {
                 $answered = $this->countAnsweredQuestions($session->answers_json);
                 $total = (int) $session->question_count;
@@ -88,6 +115,10 @@ trait BuildsCandidateAssessmentPreview
         $totalQuestions = 0;
 
         foreach ($sessions as $session) {
+            if ($this->isHiddenAssessmentSession($session)) {
+                continue;
+            }
+
             $answered = $this->countAnsweredQuestions($session->answers_json);
             $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
             $questionCount = count($questions) ?: (int) $session->question_count;
@@ -413,7 +444,11 @@ trait BuildsCandidateAssessmentPreview
     protected function buildQuestionReview($session, array $result)
     {
         $categoryName = strtoupper(trim((string) ($session->category_name ?? '')));
-        if ($categoryName === 'DISC' || in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
+        if (
+            $this->isHiddenAssessmentSession($session)
+            || $categoryName === 'DISC'
+            || in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)
+        ) {
             return [];
         }
 
@@ -774,6 +809,10 @@ trait BuildsCandidateAssessmentPreview
 
         if (!$session) {
             return response()->json(['message' => 'Sesi assessment tidak ditemukan'], 404);
+        }
+
+        if ($this->isHiddenAssessmentSession($session)) {
+            return response()->json(['message' => 'Sesi assessment tidak ditampilkan'], 404);
         }
 
         if (empty($session->result_json)) {
