@@ -296,32 +296,16 @@ class SendEmail
             }
 
             if (!empty($this->attachments)) {
-                $usedNames = [];
                 foreach ($this->attachments as $attachment) {
-                    if (is_array($attachment) && (isset($attachment['full_path']) || isset($attachment['path']))) {
-                        $fullPath = $attachment['full_path'] ?? null;
-                        if (!$fullPath || !is_file($fullPath)) {
-                            $relative = ltrim((string) ($attachment['path'] ?? ''), '/');
-                            $fullPath = $relative !== '' ? base_path('public/' . $relative) : null;
-                        }
-                        if (!$fullPath || !is_file($fullPath) || filesize($fullPath) < 1) {
-                            \Log::error('Attachment not found: ' . ($fullPath ?: json_encode($attachment)));
+                    if(isset($attachment['path'])) {
+                        $fullPath = public_path($attachment['path']);
+                        if (!file_exists($fullPath)) {
+                            \Log::error("Attachment not found: " . $fullPath);
                             continue;
                         }
 
-                        $name = trim((string) ($attachment['name'] ?? basename($fullPath)));
-                        if ($name === '') {
-                            $name = basename($fullPath);
-                        }
-                        if (isset($usedNames[$name])) {
-                            $usedNames[$name]++;
-                            $name = pathinfo($name, PATHINFO_FILENAME) . '_' . $usedNames[$name] . '.' . (pathinfo($name, PATHINFO_EXTENSION) ?: 'pdf');
-                        } else {
-                            $usedNames[$name] = 1;
-                        }
-
-                        $mail->addAttachment($fullPath, $name);
-                    } elseif (is_string($attachment) && is_file($attachment)) {
+                        $mail->addAttachment($fullPath, $attachment['name']);
+                    } else {
                         $mail->addAttachment($attachment);
                     }
                 }
