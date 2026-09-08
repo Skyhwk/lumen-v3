@@ -12,6 +12,7 @@ use App\Models\SamplerTrackingSession;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class SamplerTrackingService
 {
@@ -593,6 +594,7 @@ class SamplerTrackingService
                 ->firstOrFail();
 
             $eventType = $payload['event_type'];
+            $this->ensureEventSequence($member, $eventType);
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
             $members = SamplerTrackingMember::where('sampler_tracking_session_id', $member->sampler_tracking_session_id)
@@ -644,6 +646,86 @@ class SamplerTrackingService
 
             return collect($events);
         });
+    }
+
+    /**
+     * Only one sampling stop may be in progress for a sampler. The route
+     * sequence follows a saved route override when one exists, otherwise the
+     * scheduled order. This is enforced server-side so every Apps FDL screen
+     * follows the same rule.
+     */
+    protected function ensureEventSequence(SamplerTrackingMember $member, string $eventType): void
+    {
+        if (!$member->session || !in_array($eventType, ['checkin', 'return'], true)) {
+            return;
+        }
+
+        $sessions = $this->listByDate(
+            $member->session->tanggal_sampling,
+            $member->sampler_id,
+            $member->sampler_name
+        )->values();
+        $currentIndex = $sessions->search(function ($session) use ($member) {
+            return (int) $session->id === (int) $member->sampler_tracking_session_id;
+        });
+        if ($currentIndex === false) {
+            return;
+        }
+
+        if ($eventType === 'checkin') {
+            if ($currentIndex === 0) {
+                if (!$this->memberHasTrackingEvent($member->id, 'departure')) {
+                    throw ValidationException::withMessages([
+                        'event_type' => ['Berangkat sampling harus dilakukan sebelum check in lokasi pertama.'],
+                    ]);
+                }
+                return;
+            }
+
+            $previousSession = $sessions->get($currentIndex - 1);
+            $previousMember = $this->sessionMemberForSampler($previousSession, $member);
+            if (!$previousMember || !$this->memberHasTrackingEvent($previousMember->id, 'checkout')) {
+                throw ValidationException::withMessages([
+                    'event_type' => ['Selesaikan check out lokasi sebelumnya terlebih dahulu sebelum check in lokasi ini.'],
+                ]);
+            }
+            return;
+        }
+
+        $unfinishedSessions = $sessions->filter(function ($session) use ($member) {
+            $sessionMember = $this->sessionMemberForSampler($session, $member);
+            return !$sessionMember || !$this->memberHasTrackingEvent($sessionMember->id, 'checkout');
+        });
+        if ($unfinishedSessions->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Semua lokasi sampling harus check out terlebih dahulu sebelum pulang.'],
+            ]);
+        }
+    }
+
+    protected function sessionMemberForSampler($session, SamplerTrackingMember $member)
+    {
+        if (!$session) {
+            return null;
+        }
+
+        return SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)
+            ->where('is_active', true)
+            ->where(function ($query) use ($member) {
+                if ($member->sampler_id) {
+                    $query->where('sampler_id', $member->sampler_id);
+                    return;
+                }
+                $query->where('sampler_name', $member->sampler_name);
+            })
+            ->first();
+    }
+
+    protected function memberHasTrackingEvent($memberId, string $eventType): bool
+    {
+        return SamplerTrackingEvent::where('sampler_tracking_member_id', $memberId)
+            ->where('event_type', $eventType)
+            ->exists();
     }
 
     protected function normalizeCoordinate($value)
