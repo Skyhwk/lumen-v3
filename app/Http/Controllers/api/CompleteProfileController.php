@@ -225,7 +225,13 @@ class CompleteProfileController extends Controller
             }
         }
 
-        foreach (['no_bpjs_ks' => 'Nomor BPJS Kesehatan', 'no_bpjs_tk' => 'Nomor BPJS Ketenagakerjaan'] as $field => $label) {
+        foreach ([
+            'nik_ktp' => 'NIK KTP',
+            'no_kk' => 'Nomor KK',
+            'no_npwp' => 'Nomor NPWP',
+            'no_bpjs_ks' => 'Nomor BPJS Kesehatan',
+            'no_bpjs_tk' => 'Nomor BPJS Ketenagakerjaan',
+        ] as $field => $label) {
             $value = trim((string) $request->input($field));
             if ($value !== '' && !preg_match('/^\d+$/', $value)) {
                 $errors[$field] = [$label . ' hanya boleh berisi angka.'];
