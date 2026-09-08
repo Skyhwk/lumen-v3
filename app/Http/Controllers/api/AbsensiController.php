@@ -87,7 +87,7 @@ class AbsensiController extends Controller
         if ($request->id_jabatan) {
             $data->where('id_jabatan', $request->id_jabatan);
         } else if ($request->departement && $request->departement !== 'all') {
-            $data->where('id_department', $request->departement);
+            $data->where('id_department', (int) $request->departement);
         }
 
         $data = $data->get();
@@ -129,20 +129,24 @@ class AbsensiController extends Controller
 
 
             $tanggal = $request->tanggal;
-            // $cekKaryawan = MasterKaryawan::on($db)->where('id_department', $request->departement)
-            $cekKaryawan = MasterKaryawan::where('id_department', $request->departement)
-                ->where('is_active', true)
-                ->get();
-            
+            $data = [];
+
+            $cekKaryawan = MasterKaryawan::where('is_active', true)
+                ->whereIn('id_cabang', $this->privilageCabang);
+
+            if ($request->departement && $request->departement !== 'all') {
+                $cekKaryawan->where('id_department', $request->departement);
+            }
+
+            $cekKaryawan = $cekKaryawan->get();
 
             if (!$cekKaryawan->isEmpty()) {
 
                 foreach ($cekKaryawan as $key => $value) {
                     $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $value->id)->first();
 
-                    $shift = 'SHREGULAR';
                     if ($cekShift != null) {
-                        $init = self::compareshift($value->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $value->nik, $value->nama_lengkap);
+                        $init = self::compareshift($value->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $value->nik_karyawan, $value->nama_lengkap);
                         $data[] = $init;
                     } else {
                         $gen = Absensi::select(
@@ -207,81 +211,39 @@ class AbsensiController extends Controller
             ], 200);
 
         } else if ($request->mode == 'monthly') {
-            $nilai = explode("-", $request->tanggal);
-            $month = $nilai[1];
-            $year = $nilai[0];
-            $lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-            $data = [];
-
-
-            for ($i = 1; $i <= $lastDay; $i++) {
-                $num = sprintf("%02d", $i);
-                $tanggal = $year . '-' . $month . '-' . $num;
-
-                $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $request->id)->first();
-                // dd
-                $cekKaryawan = MasterKaryawan::where('id', $request->id)->first();
-
-                if ($cekShift != null && $cekShift != 'null') {
-                    $init = self::compareshift($request->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $cekKaryawan->nik_karyawan, $cekKaryawan->nama_lengkap);
-
-                    $data[] = $init;
-                } else {
-                    $gen = Absensi::select(
-                        'absensi.karyawan_id',
-                        'master_karyawan.nik_karyawan',
-                        'master_karyawan.nama_lengkap',
-                        'absensi.tanggal',
-                        \DB::raw("CASE WHEN MIN(jam) <= '14:00:00' THEN MIN(jam) ELSE '' END as masuk"),
-                        \DB::raw("CASE WHEN MAX(jam) > '14:00:00' THEN MAX(jam) ELSE '' END as keluar")
-                    )
-                        ->where('absensi.karyawan_id', $request->id)
-                        ->where('absensi.tanggal', $tanggal)
-                        ->join('master_karyawan', 'absensi.karyawan_id', '=', 'master_karyawan.id')
-                        ->groupBy('absensi.tanggal', 'absensi.karyawan_id')
-                        ->first();
-
-                    if ($gen != null) {
-                        if ($gen->masuk < '08:00:00') {
-                            $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'));
-                            $masuk = '+' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                        } else {
-                            $selisih_masuk = \date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk));
-                            $masuk = '-' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                        }
-
-                        $total_jam_kerja = '';
-                        if ($gen->keluar != '') {
-                            $kerja = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar));
-                            $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm';
-                        }
-
-                        $data[] = [
-                            'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
-                            'karyawan_id' => $gen->karyawan_id,
-                            'tanggal' => $gen->tanggal,
-                            'hari' => self::hari($gen->tanggal),
-                            'masuk' => $gen->masuk,
-                            'keluar' => $gen->keluar,
-                            'selisih' => $masuk,
-                            'jam_kerja' => $total_jam_kerja,
-                            'shift' => 'SHREGULAR'
-                        ];
-                    } else {
-                        $data[] = [
-                            'nama' => $cekKaryawan->nik_karyawan . ' - ' . $cekKaryawan->nama_lengkap,
-                            'karyawan_id' => $cekKaryawan->id,
-                            'tanggal' => $tanggal,
-                            'hari' => self::hari($tanggal),
-                            'masuk' => '',
-                            'keluar' => '',
-                            'selisih' => '',
-                            'jam_kerja' => '',
-                            'shift' => ''
-                        ];
-                    }
-                }
+            $periode = self::parseBulanAbsensi($request->bulan, $request->tanggal);
+            if ($periode === null) {
+                return response()->json([
+                    'message' => 'Format bulan tidak valid. Gunakan format YYYY-MM.'
+                ], 422);
             }
+
+            if (!$request->id) {
+                return response()->json([
+                    'message' => 'Karyawan belum dipilih.'
+                ], 422);
+            }
+
+            $cekKaryawan = MasterKaryawan::where('id', $request->id)->first();
+            if ($cekKaryawan === null) {
+                return response()->json([
+                    'message' => 'Data karyawan tidak ditemukan.'
+                ], 404);
+            }
+
+            $month = $periode['month'];
+            $year = $periode['year'];
+            $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $month, (int) $year);
+
+            $data = self::buildMonthlyAbsensiData(
+                $cekKaryawan->id,
+                $year,
+                $month,
+                $lastDay,
+                $cekKaryawan->nik_karyawan,
+                $cekKaryawan->nama_lengkap
+            );
+
             return response()->json([
                 'data' => $data
             ], 200);
@@ -510,49 +472,7 @@ class AbsensiController extends Controller
         if ($request->export == 'single') {
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
-
-            $sheet->mergeCells('A1:A2');
-            $sheet->getStyle('A1:A2')->getAlignment()->setVertical('center');
-            $sheet->getStyle('A1:A2')->getAlignment()->setHorizontal('center');
-            $sheet->getColumnDimension('A')->setWidth(6);
-            $sheet->mergeCells('B1:B2');
-            $sheet->getStyle('B1:B2')->getAlignment()->setVertical('center');
-            $sheet->getStyle('B1:B2')->getAlignment()->setHorizontal('center');
-            $sheet->getColumnDimension('B')->setWidth(35);
-            $sheet->mergeCells('C1:C2');
-            $sheet->getStyle('C1:C2')->getAlignment()->setVertical('center');
-            $sheet->getStyle('C1:C2')->getAlignment()->setHorizontal('center');
-            $sheet->getColumnDimension('C')->setWidth(13);
-            $sheet->mergeCells('D1:D2');
-            $sheet->getStyle('D1:D2')->getAlignment()->setVertical('center');
-            $sheet->getStyle('D1:D2')->getAlignment()->setHorizontal('center');
-            $sheet->getColumnDimension('D')->setWidth(10);
-            $sheet->mergeCells('E1:F1');
-            $sheet->getStyle('E:F')->getAlignment()->setHorizontal('center');
-            $sheet->mergeCells('G1:I1');
-            $sheet->getStyle('G:I')->getAlignment()->setHorizontal('center');
-            $sheet->getColumnDimension('I')->setWidth(25);
-
-            $sheet->getStyle('A1:I1')
-                ->getBorders()
-                ->getAllBorders()
-                ->setBorderStyle(Border::BORDER_THIN);
-            $sheet->getStyle('A2:I2')
-                ->getBorders()
-                ->getAllBorders()
-                ->setBorderStyle(Border::BORDER_THIN);
-
-            $sheet->setCellValue('A1', 'No');
-            $sheet->setCellValue('B1', 'Nama Karyawan');
-            $sheet->setCellValue('C1', 'Tanggal');
-            $sheet->setCellValue('D1', 'Hari');
-            $sheet->setCellValue('E1', 'Absensi');
-            $sheet->setCellValue('E2', 'Masuk');
-            $sheet->setCellValue('F2', 'Keluar');
-            $sheet->setCellValue('G1', 'Record');
-            $sheet->setCellValue('G2', ' + / -');
-            $sheet->setCellValue('H2', 'Jam Kerja');
-            $sheet->setCellValue('I2', 'Shift');
+            self::setupAbsensiExportSheet($sheet);
 
             $data = [];
             $tanggal = $request->tanggal;
@@ -562,10 +482,17 @@ class AbsensiController extends Controller
                 ->whereIn('master_karyawan.id_cabang', $this->privilageCabang)
                 ->where('master_karyawan.is_active', true)
                 ->get();
+
+            if ($cekKaryawan->isEmpty()) {
+                return response()->json(['message' => 'Data karyawan tidak ditemukan.'], 404);
+            }
+
             $deptCode = $cekKaryawan[0]->kode_divisi;
+            $dept = $cekKaryawan[0]->nama_divisi;
+            $data = [];
+            $tanggal = $request->tanggal;
 
             foreach ($cekKaryawan as $value) {
-                $dept = $value->nama_divisi;
                 $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $value->id)->first();
 
                 if ($cekShift) {
@@ -618,90 +545,31 @@ class AbsensiController extends Controller
                 }
             }
 
-            // Fill data into the sheet
-            $u = 3;
-            foreach ($data as $row) {
-                $sheet->setCellValue('A' . $u, ($u - 2))
-                    ->setCellValue('B' . $u, $row['nama'])
-                    ->setCellValue('C' . $u, $row['tanggal'])
-                    ->setCellValue('D' . $u, $row['hari'])
-                    ->setCellValue('E' . $u, $row['masuk'])
-                    ->setCellValue('F' . $u, $row['keluar'])
-                    ->setCellValue('G' . $u, $row['selisih'])
-                    ->setCellValue('H' . $u, $row['jam_kerja'])
-                    ->setCellValue('I' . $u, $row['shift']);
-                $u++;
-            }
-
-            $sheet->getStyle('A3:I' . ($u - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            self::writeAbsensiExportRows($sheet, $data);
             $sheet->setTitle($this->sanitizeSheetTitle($sheet, $dept, $spreadsheet));
 
-            $path = \public_path() . '/absensi/';
+            $path = self::getAbsensiExportPath();
             $writer = new Xlsx($spreadsheet);
             $fileName = 'Daily-Absensi_' . $deptCode . '_' . $request->tanggal . '.xlsx';
             $writer->save($path . $fileName);
 
             return response()->json(['data' => $fileName], 200);
         } else {
-            $cekUser = MasterDivisi::where('is_active', true)->get();
+            $cekUser = MasterDivisi::where('is_active', true)->orderBy('nama_divisi')->get();
 
             $spreadsheet = new Spreadsheet();
             $i = 0;
             foreach ($cekUser as $key => $val) {
-                $spreadsheet->createSheet();
+                if ($i > 0) {
+                    $spreadsheet->createSheet();
+                }
                 $sheet = $spreadsheet->getSheet($i);
-                $sheet->mergeCells('A1:A2');
-                $sheet->getStyle('A1:A2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('A1:A2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('A')->setWidth(6);
-                $sheet->mergeCells('B1:B2');
-                $sheet->getStyle('B1:B2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('B1:B2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('B')->setWidth(35);
-                $sheet->mergeCells('C1:C2');
-                $sheet->getStyle('C1:C2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('C1:C2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('C')->setWidth(13);
-                $sheet->mergeCells('D1:D2');
-                $sheet->getStyle('D1:D2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('D1:D2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('D')->setWidth(10);
-                $sheet->mergeCells('E1:F1');
-                $sheet->getStyle('E:F')->getAlignment()->setHorizontal('center');
-                $sheet->mergeCells('G1:I1');
-                $sheet->getStyle('G:I')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('I')->setWidth(25);
-
-
-                $sheet->getStyle('A1:I1')
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-                $sheet->getStyle('A2:I2')
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-
-                $sheet->setCellValue('A1', 'No');
-                $sheet->setCellValue('B1', 'Nama Karyawan');
-                $sheet->setCellValue('C1', 'Tanggal');
-                $sheet->setCellValue('D1', 'Hari');
-                $sheet->setCellValue('E1', 'Absensi');
-                $sheet->setCellValue('E2', 'Masuk');
-                $sheet->setCellValue('F2', 'Keluar');
-                $sheet->setCellValue('G1', 'Record');
-                $sheet->setCellValue('G2', ' + / -');
-                $sheet->setCellValue('H2', 'Jam Kerja');
-                $sheet->setCellValue('I2', 'Shift');
+                self::setupAbsensiExportSheet($sheet);
 
                 $data = [];
-                $cekKaryawan = MasterKaryawan::join('master_divisi', function ($join) {
-                    $join->on('master_karyawan.id_department', '=', 'master_divisi.id')
-                        ->on('master_divisi.is_active', '=', DB::raw(true));
-                })->select('master_karyawan.id', 'master_karyawan.nik_karyawan', 'master_karyawan.nama_lengkap', 'master_divisi.nama_divisi')->where('master_karyawan.id_department', $val->id)->whereIn('master_karyawan.id_cabang', $this->privilageCabang)->where('master_karyawan.is_active', true)->get();
+                $cekKaryawan = self::getExportKaryawanByDepartment($val->id);
                 $tanggal = $request->tanggal;
                 foreach ($cekKaryawan as $keys => $value) {
-                    $dept = $value->nama_divisi;
                     $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $value->id)->first();
 
                     if ($cekShift != null) {
@@ -759,30 +627,13 @@ class AbsensiController extends Controller
                     }
                 }
 
-
-                $u = 3;
-                foreach ($data as $row) {
-                    $sheet->setCellValue('A' . $u, ($u - 2));
-                    $sheet->setCellValue('B' . $u, $row['nama']);
-                    $sheet->setCellValue('C' . $u, $row['tanggal']);
-                    $sheet->setCellValue('D' . $u, $row['hari']);
-                    $sheet->setCellValue('E' . $u, $row['masuk']);
-                    $sheet->setCellValue('F' . $u, $row['keluar']);
-                    $sheet->setCellValue('G' . $u, $row['selisih']);
-                    $sheet->setCellValue('H' . $u, $row['jam_kerja']);
-                    $sheet->setCellValue('I' . $u, $row['shift']);
-                    $u++;
-                }
-                $sheet->getStyle('A3:I' . ($u - 1))
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-
+                self::writeAbsensiExportRows($sheet, $data);
                 $sheet->setTitle($this->sanitizeSheetTitle($sheet, $val->nama_divisi, $spreadsheet));
                 $i++;
             }
 
-            $path = \public_path() . '/absensi/';
+            $spreadsheet->setActiveSheetIndex(0);
+            $path = self::getAbsensiExportPath();
             $writer = new Xlsx($spreadsheet);
             $fileName = 'Daily-Absensi_ALL_' . $request->tanggal . '.xlsx';
             $writer->save($path . $fileName);
@@ -793,488 +644,538 @@ class AbsensiController extends Controller
         }
     }
     // Tested - Clear
+    private function getAbsensiExportPath()
+    {
+        $path = \public_path() . DIRECTORY_SEPARATOR . 'absensi' . DIRECTORY_SEPARATOR;
+        if (!is_dir($path)) {
+            mkdir($path, 0755, true);
+        }
+
+        return $path;
+    }
+
+    private function parseBulanAbsensi($bulan, $tanggal = null)
+    {
+        $value = $bulan ?: $tanggal;
+        if (empty($value)) {
+            return null;
+        }
+
+        $parts = explode('-', $value);
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        return [
+            'year' => $parts[0],
+            'month' => $parts[1],
+        ];
+    }
+
+    private function getMonthlyDateRange($year, $month, $lastDay)
+    {
+        $monthPadded = str_pad($month, 2, '0', STR_PAD_LEFT);
+        $startDate = $year . '-' . $monthPadded . '-01';
+        $endDate = $year . '-' . $monthPadded . '-' . sprintf('%02d', $lastDay);
+        $nextDate = date('Y-m-d', strtotime($endDate . ' +1 day'));
+
+        return compact('startDate', 'endDate', 'nextDate', 'monthPadded');
+    }
+
+    private function fetchMonthlyShiftIndex(array $karyawanIds, $startDate, $endDate)
+    {
+        if (empty($karyawanIds)) {
+            return [];
+        }
+
+        $rows = ShiftKaryawan::whereIn('karyawan_id', $karyawanIds)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->get();
+
+        $index = [];
+        foreach ($rows as $row) {
+            $index[$row->karyawan_id][$row->tanggal] = $row;
+        }
+
+        return $index;
+    }
+
+    private function fetchMonthlyPunchIndex(array $karyawanIds, $startDate, $endDate)
+    {
+        if (empty($karyawanIds)) {
+            return [];
+        }
+
+        $rows = Absensi::select(
+            'karyawan_id',
+            'tanggal',
+            \DB::raw('MIN(jam) as min_jam'),
+            \DB::raw('MAX(jam) as max_jam')
+        )
+            ->whereIn('karyawan_id', $karyawanIds)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->groupBy('karyawan_id', 'tanggal')
+            ->get();
+
+        $index = [];
+        foreach ($rows as $row) {
+            $index[$row->karyawan_id][$row->tanggal] = $row;
+        }
+
+        return $index;
+    }
+
+    private function getMonthlyPunch($punchIndex, $karyawanId, $tanggal)
+    {
+        return isset($punchIndex[$karyawanId][$tanggal]) ? $punchIndex[$karyawanId][$tanggal] : null;
+    }
+
+    private function calcSelisihMasuk($tanggal, $masuk, $checkin = '08:00:00')
+    {
+        if ($masuk === '' || $masuk === null) {
+            return '';
+        }
+
+        $checkinTime = DATE('H:i:s', strtotime($checkin));
+        if ($masuk < $checkinTime) {
+            $selisih = \date_diff(date_create($tanggal . ' ' . $masuk), date_create($tanggal . ' ' . $checkinTime));
+            return '+' . (int) ((($selisih->h * 3600) + ($selisih->i * 60) + $selisih->s) / 60) . 'm';
+        }
+
+        $selisih = \date_diff(date_create($tanggal . ' ' . $checkinTime), date_create($tanggal . ' ' . $masuk));
+        return '-' . (int) ((($selisih->h * 3600) + ($selisih->i * 60) + $selisih->s) / 60) . 'm';
+    }
+
+    private function calcJamKerja($tanggal, $masuk, $keluar)
+    {
+        if ($masuk === '' || $keluar === '') {
+            return '';
+        }
+
+        $kerja = \date_diff(date_create($tanggal . ' ' . $masuk), date_create($tanggal . ' ' . $keluar));
+        return $kerja->h . 'h ' . $kerja->i . 'm';
+    }
+
+    private function extractMasukKeluarByThreshold($minJam, $maxJam, $threshold)
+    {
+        $masuk = ($minJam && $minJam <= $threshold) ? $minJam : '';
+        $keluar = ($maxJam && $maxJam > $threshold) ? $maxJam : '';
+
+        return [$masuk, $keluar];
+    }
+
+    private function parseAbsensiRowIdentity($row)
+    {
+        if (isset($row['nik']) && isset($row['nama_lengkap'])) {
+            return [$row['nik'], $row['nama_lengkap']];
+        }
+
+        if (isset($row['nama']) && strpos($row['nama'], ' - ') !== false) {
+            $parts = explode(' - ', $row['nama'], 2);
+            return [$parts[0], $parts[1]];
+        }
+
+        return ['', isset($row['nama']) ? $row['nama'] : ''];
+    }
+
+    private function buildEmptyMonthlyRow($nikKaryawan, $namaLengkap, $tanggal, $shift = '')
+    {
+        return [
+            'nik' => $nikKaryawan,
+            'nama_lengkap' => $namaLengkap,
+            'nama' => $nikKaryawan . ' - ' . $namaLengkap,
+            'tanggal' => $tanggal,
+            'hari' => self::hari($tanggal),
+            'masuk' => '',
+            'keluar' => '',
+            'selisih' => '',
+            'jam_kerja' => '',
+            'shift' => $shift,
+        ];
+    }
+
+    private function buildMonthlyRow($nikKaryawan, $namaLengkap, $tanggal, $masuk, $keluar, $shift, $checkin = '08:00:00')
+    {
+        $selisih = self::calcSelisihMasuk($tanggal, $masuk, $checkin);
+        $jamKerja = self::calcJamKerja($tanggal, $masuk, $keluar);
+
+        return [
+            'nik' => $nikKaryawan,
+            'nama_lengkap' => $namaLengkap,
+            'nama' => $nikKaryawan . ' - ' . $namaLengkap,
+            'tanggal' => $tanggal,
+            'hari' => self::hari($tanggal),
+            'masuk' => $masuk,
+            'keluar' => $keluar,
+            'selisih' => $selisih,
+            'jam_kerja' => $jamKerja,
+            'shift' => $shift,
+        ];
+    }
+
+    private function resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex)
+    {
+        $shiftRow = isset($shiftIndex[$karyawan->id][$tanggal]) ? $shiftIndex[$karyawan->id][$tanggal] : null;
+        $punch = self::getMonthlyPunch($punchIndex, $karyawan->id, $tanggal);
+        $nextDate = date('Y-m-d', strtotime($tanggal . ' +1 day'));
+        $nextPunch = self::getMonthlyPunch($punchIndex, $karyawan->id, $nextDate);
+
+        if ($shiftRow && $shiftRow->shift === 'off') {
+            return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'OFF');
+        }
+
+        $checkin = ($shiftRow && $shiftRow->time_in) ? $shiftRow->time_in : '08:00:00';
+        $shiftName = ($shiftRow && $shiftRow->shift) ? $shiftRow->shift : 'SHREGULAR';
+
+        if ($shiftRow && $shiftRow->shift === '24jam') {
+            $masuk = ($punch && $punch->min_jam) ? $punch->min_jam : '';
+            $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
+            if ($masuk === '' && $keluar === '') {
+                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, '24JAM');
+            }
+
+            return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, '24JAM', $checkin);
+        }
+
+        if ($shiftRow && $shiftRow->shift === 'SHSECURITY2') {
+            $masuk = ($punch && $punch->max_jam) ? $punch->max_jam : '';
+            $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
+            if ($masuk !== '' && $masuk <= '14:00:00') {
+                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2');
+            }
+            if ($masuk === '' && $keluar === '') {
+                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2');
+            }
+
+            return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHSECURITY2', $checkin);
+        }
+
+        if ($shiftRow && $shiftRow->shift === 'SHOB2') {
+            $masuk = ($punch && $punch->min_jam) ? $punch->min_jam : '';
+            $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
+            if ($masuk === '' && $keluar === '') {
+                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHOB2');
+            }
+
+            return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHOB2', $checkin);
+        }
+
+        if ($shiftRow) {
+            $threshold = DATE('H:i:s', strtotime($checkin . '+4 hours'));
+            list($masuk, $keluar) = self::extractMasukKeluarByThreshold(
+                $punch ? $punch->min_jam : null,
+                $punch ? $punch->max_jam : null,
+                $threshold
+            );
+
+            if ($masuk === '' && $keluar === '') {
+                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftName);
+            }
+
+            $row = self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, $shiftName, $checkin);
+            if ($masuk === '') {
+                $row['selisih'] = '';
+                $row['jam_kerja'] = '';
+            }
+
+            return $row;
+        }
+
+        list($masuk, $keluar) = self::extractMasukKeluarByThreshold(
+            $punch ? $punch->min_jam : null,
+            $punch ? $punch->max_jam : null,
+            '14:00:00'
+        );
+
+        if ($masuk === '' && $keluar === '') {
+            return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, '');
+        }
+
+        return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHREGULAR');
+    }
+
+    private function buildMonthlyAbsensiData($karyawanId, $year, $month, $lastDay, $nikKaryawan, $namaLengkap)
+    {
+        $karyawan = (object) [
+            'id' => $karyawanId,
+            'nik_karyawan' => $nikKaryawan,
+            'nama_lengkap' => $namaLengkap,
+        ];
+
+        return self::buildMonthlyAbsensiDataForKaryawans(collect([$karyawan]), $year, $month, $lastDay);
+    }
+
+    private function buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $month, $lastDay)
+    {
+        if ($karyawans->isEmpty()) {
+            return [];
+        }
+
+        $dates = self::getMonthlyDateRange($year, $month, $lastDay);
+        $karyawanIds = $karyawans->pluck('id')->all();
+
+        $shiftIndex = self::fetchMonthlyShiftIndex($karyawanIds, $dates['startDate'], $dates['endDate']);
+        $punchIndex = self::fetchMonthlyPunchIndex($karyawanIds, $dates['startDate'], $dates['nextDate']);
+
+        $data = [];
+        foreach ($karyawans as $karyawan) {
+            for ($a = 1; $a <= $lastDay; $a++) {
+                $tanggal = $year . '-' . $dates['monthPadded'] . '-' . sprintf('%02d', $a);
+                $data[] = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex);
+            }
+        }
+
+        return $data;
+    }
+
+    private function setupAbsensiExportSheet($sheet)
+    {
+        $sheet->mergeCells('A1:A2');
+        $sheet->getStyle('A1:A2')->getAlignment()->setVertical('center');
+        $sheet->getStyle('A1:A2')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('A')->setWidth(6);
+        $sheet->mergeCells('B1:B2');
+        $sheet->getStyle('B1:B2')->getAlignment()->setVertical('center');
+        $sheet->getStyle('B1:B2')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('B')->setWidth(14);
+        $sheet->mergeCells('C1:C2');
+        $sheet->getStyle('C1:C2')->getAlignment()->setVertical('center');
+        $sheet->getStyle('C1:C2')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('C')->setWidth(30);
+        $sheet->mergeCells('D1:D2');
+        $sheet->getStyle('D1:D2')->getAlignment()->setVertical('center');
+        $sheet->getStyle('D1:D2')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('D')->setWidth(13);
+        $sheet->mergeCells('E1:E2');
+        $sheet->getStyle('E1:E2')->getAlignment()->setVertical('center');
+        $sheet->getStyle('E1:E2')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('E')->setWidth(10);
+        $sheet->mergeCells('F1:G1');
+        $sheet->getStyle('F:G')->getAlignment()->setHorizontal('center');
+        $sheet->mergeCells('H1:J1');
+        $sheet->getStyle('H:J')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('J')->setWidth(18);
+
+        $sheet->getStyle('A1:J1')
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle('A2:J2')
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
+
+        $sheet->setCellValue('A1', 'No');
+        $sheet->setCellValue('B1', 'NIK');
+        $sheet->setCellValue('C1', 'Nama Karyawan');
+        $sheet->setCellValue('D1', 'Tanggal');
+        $sheet->setCellValue('E1', 'Hari');
+        $sheet->setCellValue('F1', 'Absensi');
+        $sheet->setCellValue('F2', 'Masuk');
+        $sheet->setCellValue('G2', 'Keluar');
+        $sheet->setCellValue('H1', 'Record');
+        $sheet->setCellValue('H2', ' + / -');
+        $sheet->setCellValue('I2', 'Jam Kerja');
+        $sheet->setCellValue('J2', 'Shift');
+    }
+
+    private function writeAbsensiExportRows($sheet, $data)
+    {
+        $u = 3;
+        foreach ($data as $row) {
+            list($nik, $nama) = self::parseAbsensiRowIdentity($row);
+            $sheet->setCellValue('A' . $u, ($u - 2));
+            $sheet->setCellValue('B' . $u, $nik);
+            $sheet->setCellValue('C' . $u, $nama);
+            $sheet->setCellValue('D' . $u, $row['tanggal']);
+            $sheet->setCellValue('E' . $u, $row['hari']);
+            $sheet->setCellValue('F' . $u, $row['masuk']);
+            $sheet->setCellValue('G' . $u, $row['keluar']);
+            $sheet->setCellValue('H' . $u, $row['selisih']);
+            $sheet->setCellValue('I' . $u, $row['jam_kerja']);
+            $sheet->setCellValue('J' . $u, $row['shift']);
+            $u++;
+        }
+
+        if ($u > 3) {
+            $sheet->getStyle('A3:J' . ($u - 1))
+                ->getBorders()
+                ->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN);
+        }
+
+        return $u;
+    }
+
+    private function getExportKaryawanByDepartment($deptId)
+    {
+        return MasterKaryawan::leftJoin('master_divisi', 'master_karyawan.id_department', '=', 'master_divisi.id')
+            ->select(
+                'master_karyawan.id',
+                'master_karyawan.nik_karyawan',
+                'master_karyawan.nama_lengkap',
+                'master_karyawan.id_department',
+                'master_divisi.kode_divisi',
+                'master_divisi.nama_divisi'
+            )
+            ->where('master_karyawan.id_department', (int) $deptId)
+            ->whereIn('master_karyawan.id_cabang', $this->privilageCabang)
+            ->where('master_karyawan.is_active', true)
+            ->orderBy('master_karyawan.nama_lengkap')
+            ->get();
+    }
+
+    private function getMonthlyKaryawanQuery($deptId = null)
+    {
+        $query = MasterKaryawan::leftJoin('master_divisi', 'master_karyawan.id_department', '=', 'master_divisi.id')
+            ->select(
+                'master_karyawan.id',
+                'master_karyawan.nik_karyawan',
+                'master_karyawan.nama_lengkap',
+                'master_karyawan.id_department',
+                'master_divisi.kode_divisi',
+                'master_divisi.nama_divisi'
+            )
+            ->whereIn('master_karyawan.id_cabang', $this->privilageCabang)
+            ->where('master_karyawan.is_active', true);
+
+        if ($deptId && $deptId !== 'all') {
+            $query->where('master_karyawan.id_department', (int) $deptId);
+        }
+
+        return $query;
+    }
+
+    private function exportMonthlyAllDepartments($year, $month, $lastDay, $path)
+    {
+        $divisis = MasterDivisi::where('is_active', true)->orderBy('nama_divisi')->get();
+        if ($divisis->isEmpty()) {
+            return null;
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $i = 0;
+
+        foreach ($divisis as $divisi) {
+            $karyawans = self::getExportKaryawanByDepartment($divisi->id);
+
+            if ($i > 0) {
+                $spreadsheet->createSheet();
+            }
+
+            $sheet = $spreadsheet->getSheet($i);
+            self::setupAbsensiExportSheet($sheet);
+
+            $data = $karyawans->isEmpty()
+                ? []
+                : self::buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $month, $lastDay);
+            self::writeAbsensiExportRows($sheet, $data);
+            $sheet->setTitle($this->sanitizeSheetTitle($sheet, $divisi->nama_divisi, $spreadsheet));
+
+            $i++;
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+        $fileName = 'Monthly-Absensi_ALL_' . $year . '-' . $month . '.xlsx';
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($path . $fileName);
+
+        return $fileName;
+    }
+
     public function exportAbsenMonthly(Request $request)
     {
         try {
+            $periode = self::parseBulanAbsensi($request->bulan, $request->tanggal);
+            if ($periode === null) {
+                return response()->json([
+                    'message' => 'Format bulan tidak valid. Gunakan format YYYY-MM.'
+                ], 422);
+            }
+
+            $year = $periode['year'];
+            $month = $periode['month'];
+            $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $month, (int) $year);
+            $deptId = $request->id_department ?: $request->idDivisi;
+            $path = self::getAbsensiExportPath();
+
             if ($request->export == 'single') {
-                $cekUser = MasterKaryawan::where('id', $request->id_karyawan)->where('is_active', true)->first();
+                if (!$request->id_karyawan && ($deptId === 'all' || $deptId === null || $deptId === '')) {
+                    $fileName = self::exportMonthlyAllDepartments($year, $month, $lastDay, $path);
+                    if ($fileName === null) {
+                        return response()->json([
+                            'message' => 'Data karyawan tidak ditemukan.'
+                        ], 404);
+                    }
+
+                    return response()->json([
+                        'data' => $fileName
+                    ], 200);
+                }
+
                 $spreadsheet = new Spreadsheet();
                 $sheet = $spreadsheet->getActiveSheet();
-    
-                $sheet->mergeCells('A1:A2');
-                $sheet->getStyle('A1:A2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('A1:A2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('A')->setWidth(6);
-                $sheet->mergeCells('B1:B2');
-                $sheet->getStyle('B1:B2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('B1:B2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('B')->setWidth(35);
-                $sheet->mergeCells('C1:C2');
-                $sheet->getStyle('C1:C2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('C1:C2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('C')->setWidth(13);
-                $sheet->mergeCells('D1:D2');
-                $sheet->getStyle('D1:D2')->getAlignment()->setVertical('center');
-                $sheet->getStyle('D1:D2')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('D')->setWidth(10);
-                $sheet->mergeCells('E1:F1');
-                $sheet->getStyle('E:F')->getAlignment()->setHorizontal('center');
-                $sheet->mergeCells('G1:I1');
-                $sheet->getStyle('G:I')->getAlignment()->setHorizontal('center');
-                $sheet->getColumnDimension('I')->setWidth(25);
-    
-                $sheet->getStyle('A1:I1')
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-                $sheet->getStyle('A2:I2')
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-    
-                $sheet->setCellValue('A1', 'No');
-                $sheet->setCellValue('B1', 'Nama Karyawan');
-                $sheet->setCellValue('C1', 'Tanggal');
-                $sheet->setCellValue('D1', 'Hari');
-                $sheet->setCellValue('E1', 'Absensi');
-                $sheet->setCellValue('E2', 'Masuk');
-                $sheet->setCellValue('F2', 'Keluar');
-                $sheet->setCellValue('G1', 'Record');
-                $sheet->setCellValue('G2', ' + / -');
-                $sheet->setCellValue('H2', 'Jam Kerja');
-                $sheet->setCellValue('I2', 'Shift');
-    
-    
-                $nilai = explode("-", $request->bulan);
-                // dd($nilai);
-                $month = $nilai[1];
-                $year = $nilai[0];
-                $lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                $data = [];
+                self::setupAbsensiExportSheet($sheet);
 
-                for ($a = 1; $a <= $lastDay; $a++) {
-                    $split = sprintf("%02d", $a);
-                    $tanggal = $year.'-'.$month.'-'.$split;
-    
-                    $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $request->id_karyawan)->first();
+                if ($request->id_karyawan) {
                     $cekKaryawan = MasterKaryawan::where('id', $request->id_karyawan)->where('is_active', true)->first();
-    
-                    $shift = 'Pagi';
-                    if ($cekShift != null) {
-                        $init = self::compareshift($request->id_karyawan, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $cekKaryawan->nik_karyawan, $cekKaryawan->nama_lengkap);
-                        $data[] = $init;
-                    } else {
-    
-                        $gen = Absensi::select(
-                            'master_karyawan.nik_karyawan',
-                            'master_karyawan.nama_lengkap',
-                            'absensi.tanggal',
-                            \DB::raw("CASE WHEN MIN(jam) <= '14:00:00' THEN MIN(jam) ELSE '' END as masuk"),
-                            \DB::raw("CASE WHEN MAX(jam) > '14:00:00' THEN MAX(jam) ELSE '' END as keluar")
-                        )
-                            ->where('absensi.karyawan_id', $request->id_karyawan)
-                            ->where('absensi.tanggal', $tanggal)
-                            ->join('master_karyawan', 'absensi.karyawan_id', '=', 'master_karyawan.id')
-                            ->groupBy('absensi.tanggal', 'absensi.karyawan_id')
-                            ->first();
-                        if ($gen != null) {
-                            if ($gen->masuk < '08:00:00') {
-                                $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'));
-                                $masuk = '+' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                            } else {
-                                $selisih_masuk = \date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk));
-                                $masuk = '-' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                            }
-    
-                            $total_jam_kerja = '';
-                            if ($gen->keluar != '') {
-                                $kerja = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar));
-                                $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm';
-                            }
-                            $data[] = [
-                                'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
-                                'tanggal' => $gen->tanggal,
-                                'hari' => self::hari($gen->tanggal),
-                                'masuk' => $gen->masuk,
-                                'keluar' => $gen->keluar,
-                                'selisih' => $masuk,
-                                'jam_kerja' => $total_jam_kerja,
-                                'shift' => 'SHREGULAR'
-                            ];
-                        } else {
-                            $data[] = [
-                                'nama' => $cekKaryawan->nik_karyawan . ' - ' . $cekKaryawan->nama_lengkap,
-                                'tanggal' => $tanggal,
-                                'hari' => self::hari($tanggal),
-                                'masuk' => '',
-                                'keluar' => '',
-                                'selisih' => '',
-                                'jam_kerja' => '',
-                                'shift' => ''
-                            ];
-                        }
+                    if ($cekKaryawan === null) {
+                        return response()->json([
+                            'message' => 'Data karyawan tidak ditemukan.'
+                        ], 404);
                     }
+
+                    $data = self::buildMonthlyAbsensiData(
+                        $cekKaryawan->id,
+                        $year,
+                        $month,
+                        $lastDay,
+                        $cekKaryawan->nik_karyawan,
+                        $cekKaryawan->nama_lengkap
+                    );
+                    self::writeAbsensiExportRows($sheet, $data);
+                    $sheet->setTitle($this->sanitizeSheetTitle($sheet, $cekKaryawan->nama_lengkap, $spreadsheet));
+                    $fileName = 'Monthly-Absensi_' . $cekKaryawan->nik_karyawan . '_' . $year . '-' . $month . '.xlsx';
+                } else {
+                    $karyawans = self::getMonthlyKaryawanQuery($deptId)->get();
+                    if ($karyawans->isEmpty()) {
+                        return response()->json([
+                            'message' => 'Data karyawan tidak ditemukan.'
+                        ], 404);
+                    }
+
+                    $data = self::buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $month, $lastDay);
+                    self::writeAbsensiExportRows($sheet, $data);
+
+                    $deptName = $karyawans[0]->nama_divisi ?: 'Departemen';
+                    $deptCode = $karyawans[0]->kode_divisi ?: 'DEPT';
+                    $sheet->setTitle($this->sanitizeSheetTitle($sheet, $deptName, $spreadsheet));
+                    $fileName = 'Monthly-Absensi_' . $deptCode . '_' . $year . '-' . $month . '.xlsx';
                 }
-    
-                $u = 3;
-                foreach ($data as $row) {
-                    $sheet->setCellValue('A' . $u, ($u - 2));
-                    $sheet->setCellValue('B' . $u, $row['nama']);
-                    $sheet->setCellValue('C' . $u, $row['tanggal']);
-                    $sheet->setCellValue('D' . $u, $row['hari']);
-                    $sheet->setCellValue('E' . $u, $row['masuk']);
-                    $sheet->setCellValue('F' . $u, $row['keluar']);
-                    $sheet->setCellValue('G' . $u, $row['selisih']);
-                    $sheet->setCellValue('H' . $u, $row['jam_kerja']);
-                    $sheet->setCellValue('I' . $u, $row['shift']);
-                    $u++;
-                }
-    
-                $sheet->getStyle('A3:I' . ($u - 1))
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-    
-                $sheet->setTitle($this->sanitizeSheetTitle($sheet, $cekKaryawan->nama_lengkap, $spreadsheet));
-                $path = \public_path() . '/absensi/';
-    
+
                 $writer = new Xlsx($spreadsheet);
-                $fileName = 'Monthly-Absensi_' . $cekKaryawan->nik_karyawan . '_' .$request->bulan . '.xlsx';
-                // $fileName = $cekKaryawan->nama_lengkap.'-'.$request->bulan.'.xlsx';
                 $writer->save($path . $fileName);
-    
-                return response()->json([
-                    'data' => $fileName
-                ], 200);
-    
-            } else {
-                
-                // $dept = MasterDivisi::where('id', $request->id_department)
-                //     ->where('is_active', true)->first();
-    
-                // $karyawan = MasterKaryawan::where('id_department', $request->id_department)
-                //     ->where('is_active', true)->get();
-                // $shiftKaryawan = [];
-                
-                // foreach ($karyawan as $key => $val) {
-                //     dd($val);
-                //     $nilai = explode("-", DATE('Y-m', \strtotime($request->tanggal)));
-                //     $month = $nilai[1];
-                //     $year = $nilai[0];
-                //     $lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                //     $data = [];
-                //     for ($a = 1; $a <= $lastDay; $a++) {
-                //         $split = sprintf("%02d", $a);
-                //         $tanggal = $year . '-' . $month . '-' . $split;
-    
-                //         $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $val->id)->first();
-    
-                //         $shift = 'Pagi';
-                //         if ($cekShift != null) {
-                //             $init = self::compareshift($val->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $val->nik_karyawan, $val->nama_lengkap);
-    
-                //             $data[] = $init;
-                //         } else {
-                //             $gen = Absensi::select(
-                //                 'master_karyawan.nik_karyawan',
-                //                 'master_karyawan.nama_lengkap',
-                //                 'absensi.tanggal',
-                //                 \DB::raw("CASE WHEN MIN(jam) <= '14:00:00' THEN MIN(jam) ELSE '' END as masuk"),
-                //                 \DB::raw("CASE WHEN MAX(jam) > '14:00:00' THEN MAX(jam) ELSE '' END as keluar")
-                //             )
-                //                 ->where('absensi.karyawan_id', $val->id)
-                //                 ->where('absensi.tanggal', $tanggal)
-                //                 ->join('master_karyawan', 'absensi.karyawan_id', '=', 'master_karyawan.id')
-                //                 ->groupBy('absensi.tanggal', 'absensi.karyawan_id')
-                //                 ->first();
-    
-                //             if ($gen != null) {
-                //                 if ($gen->masuk < '08:00:00') {
-                //                     $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'));
-                //                     $masuk = '+' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                //                 } else {
-                //                     $selisih_masuk = \date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk));
-                //                     $masuk = '-' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                //                 }
-    
-                //                 $total_jam_kerja = '';
-                //                 if ($gen->keluar != '') {
-                //                     $kerja = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar));
-                //                     $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm';
-                //                 }
-                //                 $data[] = [
-                //                     'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
-                //                     'tanggal' => $gen->tanggal,
-                //                     'hari' => self::hari($gen->tanggal),
-                //                     'masuk' => $gen->masuk,
-                //                     'keluar' => $gen->keluar,
-                //                     'selisih' => $masuk,
-                //                     'jam_kerja' => $total_jam_kerja,
-                //                     'shift' => 'SHREGULAR'
-                //                 ];
-                //             } else {
-                //                 $data[] = [
-                //                     'nama' => $val->nik_karyawan . ' - ' . $val->nama_lengkap,
-                //                     'tanggal' => $tanggal,
-                //                     'hari' => self::hari($tanggal),
-                //                     'masuk' => '',
-                //                     'keluar' => '',
-                //                     'selisih' => '',
-                //                     'jam_kerja' => '',
-                //                     'shift' => ''
-                //                 ];
-                //             }
-                //         }
-                //     }
-                //     dd($data);
-                //     $shiftKaryawan[$val->id] = $data;
-                //     // $data = [];
-                // }
-                // dd($shiftKaryawan);
-                // $spreadsheet = new Spreadsheet();
-                // $spreadsheet->createSheet();
-                // $sheet = $spreadsheet->getSheet(0);
-    
-                // $i = 1;
-                // foreach ($shiftKaryawan as $key => $val) {
-                //     $sheet->mergeCells('A' . ($i) . ':A' . ($i + 1));
-                //     $sheet->getStyle('A' . ($i) . ':A' . ($i + 1))->getAlignment()->setVertical('center');
-                //     $sheet->getStyle('A' . ($i) . ':A' . ($i + 1))->getAlignment()->setHorizontal('center');
-                //     $sheet->getColumnDimension('A')->setWidth(6);
-                //     $sheet->mergeCells('B' . ($i) . ':B' . ($i + 1));
-                //     $sheet->getStyle('B' . ($i) . ':B' . ($i + 1))->getAlignment()->setVertical('center');
-                //     $sheet->getStyle('B' . ($i) . ':B' . ($i + 1))->getAlignment()->setHorizontal('center');
-                //     $sheet->getColumnDimension('B')->setWidth(35);
-                //     $sheet->mergeCells('C' . ($i) . ':C' . ($i + 1));
-                //     $sheet->getStyle('C' . ($i) . ':C' . ($i + 1))->getAlignment()->setVertical('center');
-                //     $sheet->getStyle('C' . ($i) . ':C' . ($i + 1))->getAlignment()->setHorizontal('center');
-                //     $sheet->getColumnDimension('C')->setWidth(13);
-                //     $sheet->mergeCells('D' . ($i) . ':D' . ($i + 1));
-                //     $sheet->getStyle('D' . ($i) . ':D' . ($i + 1))->getAlignment()->setVertical('center');
-                //     $sheet->getStyle('D' . ($i) . ':D' . ($i + 1))->getAlignment()->setHorizontal('center');
-                //     $sheet->getColumnDimension('D')->setWidth(10);
-                //     $sheet->mergeCells('E' . ($i) . ':F' . ($i));
-                //     $sheet->getStyle('E:F')->getAlignment()->setHorizontal('center');
-                //     $sheet->mergeCells('G' . ($i) . ':I' . ($i));
-                //     $sheet->getStyle('G:I')->getAlignment()->setHorizontal('center');
-                //     $sheet->getColumnDimension('I')->setWidth(25);
-    
-                //     $sheet->getStyle('A' . ($i) . ':I' . ($i))
-                //         ->getBorders()
-                //         ->getAllBorders()
-                //         ->setBorderStyle(Border::BORDER_THIN);
-                //     $sheet->getStyle('A' . ($i + 1) . ':I' . ($i + 1))
-                //         ->getBorders()
-                //         ->getAllBorders()
-                //         ->setBorderStyle(Border::BORDER_THIN);
-    
-                //     $sheet->setCellValue('A' . ($i), 'No');
-                //     $sheet->setCellValue('B' . ($i), 'Nama Karyawan');
-                //     $sheet->setCellValue('C' . ($i), 'Tanggal');
-                //     $sheet->setCellValue('D' . ($i), 'Hari');
-                //     $sheet->setCellValue('E' . ($i), 'Absensi');
-                //     $sheet->setCellValue('E' . ($i + 1), 'Masuk');
-                //     $sheet->setCellValue('F' . ($i + 1), 'Keluar');
-                //     $sheet->setCellValue('G' . ($i), 'Record');
-                //     $sheet->setCellValue('G' . ($i + 1), ' + / -');
-                //     $sheet->setCellValue('H' . ($i + 1), 'Jam Kerja');
-                //     $sheet->setCellValue('I' . ($i + 1), 'Shift');
-    
-                //     $u = $i + 2;
-                //     $num = 1;
-                //     foreach ($val as $row) {
-                //         $sheet->setCellValue('A' . $u, $num);
-                //         $sheet->setCellValue('B' . $u, $row['nama']);
-                //         $sheet->setCellValue('C' . $u, $row['tanggal']);
-                //         $sheet->setCellValue('D' . $u, $row['hari']);
-                //         $sheet->setCellValue('E' . $u, $row['masuk']);
-                //         $sheet->setCellValue('F' . $u, $row['keluar']);
-                //         $sheet->setCellValue('G' . $u, $row['selisih']);
-                //         $sheet->setCellValue('H' . $u, $row['jam_kerja']);
-                //         $sheet->setCellValue('I' . $u, $row['shift']);
-                //         $u++;
-                //         $num++;
-                //     }
-    
-                //     $sheet->getStyle('A' . ($i + 2) . ':I' . ($u - 1))
-                //         ->getBorders()
-                //         ->getAllBorders()
-                //         ->setBorderStyle(Border::BORDER_THIN);
-    
-                //     $i = $u + 2;
-                // }
-                // $sheet->setTitle($dept->nama_divisi);
-    
-                // $path = \public_path() . "/absensi/";
-                // $fileName = 'Monthly-Absensi_' . $dept->kode_divisi . '_' . DATE('Y-m', \strtotime($request->tanggal)) . '.xlsx';
-                // $writer = new Xlsx($spreadsheet);
-                // $writer->save($path . $fileName);
-    
-                // return response()->json([
-                //     'data' => $fileName
-                // ], 200);
-
-                $cekUser = MasterKaryawan::whereIn('id_cabang', $this->privilages)->where('active', 0)->get();
-
-                $spreadsheet = new Spreadsheet();
-                $i = 0;
-                foreach($cekUser as $key => $val){
-                    $spreadsheet->createSheet();
-                    $sheet = $spreadsheet->getSheet($i);
-                    $sheet->mergeCells('A1:A2');
-                    $sheet->getStyle('A1:A2')->getAlignment()->setVertical('center');
-                    $sheet->getStyle('A1:A2')->getAlignment()->setHorizontal('center');
-                    $sheet->getColumnDimension('A')->setWidth(6);
-                    $sheet->mergeCells('B1:B2');
-                    $sheet->getStyle('B1:B2')->getAlignment()->setVertical('center');
-                    $sheet->getStyle('B1:B2')->getAlignment()->setHorizontal('center');
-                    $sheet->getColumnDimension('B')->setWidth(35);
-                    $sheet->mergeCells('C1:C2');
-                    $sheet->getStyle('C1:C2')->getAlignment()->setVertical('center');
-                    $sheet->getStyle('C1:C2')->getAlignment()->setHorizontal('center');
-                    $sheet->getColumnDimension('C')->setWidth(13);
-                    $sheet->mergeCells('D1:D2');
-                    $sheet->getStyle('D1:D2')->getAlignment()->setVertical('center');
-                    $sheet->getStyle('D1:D2')->getAlignment()->setHorizontal('center');
-                    $sheet->getColumnDimension('D')->setWidth(10);
-                    $sheet->mergeCells('E1:F1');
-                    $sheet->getStyle('E:F')->getAlignment()->setHorizontal('center');
-                    $sheet->mergeCells('G1:I1');
-                    $sheet->getStyle('G:I')->getAlignment()->setHorizontal('center');
-                    $sheet->getColumnDimension('I')->setWidth(25);
-
-
-                    $sheet->getStyle('A1:I1')
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-                    $sheet->getStyle('A2:I2')
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-
-                    $sheet->setCellValue('A1', 'No');
-                    $sheet->setCellValue('B1', 'Nama Karyawan');
-                    $sheet->setCellValue('C1', 'Tanggal');
-                    $sheet->setCellValue('D1', 'Hari');
-                    $sheet->setCellValue('E1', 'Absensi');
-                    $sheet->setCellValue('E2', 'Masuk');
-                    $sheet->setCellValue('F2', 'Keluar');
-                    $sheet->setCellValue('G1', 'Record');
-                    $sheet->setCellValue('G2', ' + / -');
-                    $sheet->setCellValue('H2', 'Jam Kerja');
-                    $sheet->setCellValue('I2', 'Shift');
-
-
-                    $nilai = explode("-", $request->bulan);
-                    $month = $nilai[0];
-                    $year = $nilai[1];
-                    $lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                    $data = [];
-                    
-                    for($a=1; $a<=$lastDay; $a++){
-                        $split = sprintf("%02d", $a);
-                        $tanggal = $year.'-'.$month.'-'.$split;
-
-                        $cekShift = DB::table('shift_karyawan')->where('tanggal', $tanggal)->where('userid', $val->id)->first();
-                        $cekKaryawan = DB::table('users')->where('id', $val->id)->first();
-                        
-                        $shift = 'Pagi';
-                        if($cekShift!=null){
-                            $init = self::compareshift($val->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $cekKaryawan->nik, $cekKaryawan->nama_lengkap);
-
-                            $data[] =$init;
-                        } else {
-                            
-                            // $date = DATE('Y-m-d', strtotime($tanggal));
-                            
-                            $gen = Checkinout::select(
-                                'nik',
-                                'nama_lengkap',
-                                'tanggal',
-                                \DB::raw("CASE WHEN MIN(jam) <= '14:00:00' THEN MIN(jam) ELSE '' END as masuk"),
-                                \DB::raw("CASE WHEN MAX(jam) > '14:00:00' THEN MAX(jam) ELSE '' END as keluar")
-                                )
-                                ->where('userid', $val->id)
-                                ->where('tanggal', $tanggal)
-                                ->join('users', 'check_in_out.userid', '=', 'users.id')
-                                ->groupBy('tanggal', 'userid')
-                                ->first();
-                            if($gen != null){
-                                if($gen->masuk < '08:00:00'){
-                                    $selisih_masuk = \date_diff(date_create($gen->tanggal.' '.$gen->masuk), date_create($gen->tanggal.' 08:00:00'));
-                                    $masuk = '+'.(int)((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60).'m';
-                                } else {
-                                    $selisih_masuk = \date_diff(date_create($gen->tanggal.' 08:00:00'), date_create($gen->tanggal.' '.$gen->masuk));
-                                    $masuk = '-'.(int)((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60).'m';
-                                }
-
-                                $total_jam_kerja = '';
-                                    if($gen->keluar != ''){
-                                        $kerja = \date_diff(date_create($gen->tanggal.' '.$gen->masuk), date_create($gen->tanggal.' '.$gen->keluar));
-                                            $total_jam_kerja = $kerja->h .'h '.$kerja->i .'m';
-                                    }
-                                $data[] = [
-                                    'nama' => $gen->nik. ' - ' .$gen->nama_lengkap,
-                                    'tanggal' => $gen->tanggal,
-                                    'hari' => self::hari($gen->tanggal),
-                                    'masuk' => $gen->masuk,
-                                    'keluar' => $gen->keluar,
-                                    'selisih' => $masuk,
-                                    'jam_kerja' => $total_jam_kerja,
-                                    'shift' => 'SHREGULAR'
-                                ];
-                            } else {
-                                $data[] = [
-                                    'nama' => $cekKaryawan->nik. ' - ' .$cekKaryawan->nama_lengkap,
-                                    'tanggal' => $tanggal,
-                                    'hari' => self::hari($tanggal),
-                                    'masuk' => '',
-                                    'keluar' => '',
-                                    'selisih' => '',
-                                    'jam_kerja' => '',
-                                    'shift' => ''
-                                ];
-                            }
-                        }
-                    }
-                    
-                    $u = 3;
-                    foreach($data as $row){
-                        $sheet->setCellValue('A'.$u, ($u - 2));
-                        $sheet->setCellValue('B'.$u, $row['nama']);
-                        $sheet->setCellValue('C'.$u, $row['tanggal']);
-                        $sheet->setCellValue('D'.$u, $row['hari']);
-                        $sheet->setCellValue('E'.$u, $row['masuk']);
-                        $sheet->setCellValue('F'.$u, $row['keluar']);
-                        $sheet->setCellValue('G'.$u, $row['selisih']);
-                        $sheet->setCellValue('H'.$u, $row['jam_kerja']); 
-                        $sheet->setCellValue('I'.$u, $row['shift']); 
-                        $u++;
-                    }
-                    
-                    $sheet->getStyle('A3:I'.($u - 1))
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-                    
-                    $sheet->setTitle($this->sanitizeSheetTitle($sheet, $val->nama_lengkap, $spreadsheet));
-                    $i++;
-                }
-                    
-                $path = \public_path()."/absensi/";
-                $fileName = 'Absensi Karyawan Periode '. $request->bulan .'.xlsx';
-                $writer = new Xlsx($spreadsheet);
-                $writer->save($fileName);
 
                 return response()->json([
                     'data' => $fileName
                 ], 200);
             }
+
+            $fileName = self::exportMonthlyAllDepartments($year, $month, $lastDay, $path);
+            if ($fileName === null) {
+                return response()->json([
+                    'message' => 'Data karyawan tidak ditemukan.'
+                ], 404);
+            }
+
+            return response()->json([
+                'data' => $fileName
+            ], 200);
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'message' => $th->getMessage()
+            ], 500);
         }
-        
     }
     
     private function sanitizeSheetTitle($sheet, $title, $spreadsheet)
