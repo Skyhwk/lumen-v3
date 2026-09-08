@@ -28,13 +28,14 @@ class CandidateDocumentAttachmentService
                 continue;
             }
 
-            $fullPath = public_path($relativePath);
+            $fullPath = base_path('public/' . $relativePath);
             if (!is_file($fullPath)) {
                 continue;
             }
 
             $attachments[] = [
                 'path' => $relativePath,
+                'full_path' => $fullPath,
                 'name' => $this->buildAttachmentName($doc),
             ];
         }
