@@ -11,7 +11,6 @@ use Exception;
 
 use App\Models\PersonnelRequest;
 use App\Models\NewRecruitment;
-use App\Models\MasterDivisi;
 use App\Services\HrdAssessmentReadinessService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
@@ -282,37 +281,20 @@ class PersonnelRequesthrdController extends Controller
     }
 
     /**
-     * List active divisions for publish alias select.
-     */
-    public function getDivisi()
-    {
-        $divisi = MasterDivisi::active()
-            ->select('id', 'nama_divisi')
-            ->orderBy('nama_divisi')
-            ->get()
-            ->map(fn ($row) => [
-                'id' => (int) $row->id,
-                'text' => $row->nama_divisi,
-            ]);
-
-        return response()->json($divisi, 200);
-    }
-
-    /**
      * Publish personal request
      */
     public function publish(Request $request)
     {
         $id = $request->input('id');
-        $jobpostCategoryId = (int) $request->input('jobpost_category_id');
+        $divisiAliasId = (int) ($request->input('divisi_alias_id') ?: $request->input('jobpost_category_id'));
         $requirement = trim((string) $request->input('requirement', ''));
 
         if (!$id) {
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
         }
 
-        if ($jobpostCategoryId < 1) {
-            return response()->json(['message' => 'Jobpost Category wajib dipilih.'], 422);
+        if ($divisiAliasId < 1) {
+            return response()->json(['message' => 'Division alias wajib dipilih.'], 422);
         }
 
         if ($requirement === '' || strip_tags($requirement) === '') {
@@ -323,12 +305,15 @@ class PersonnelRequesthrdController extends Controller
         if (!$data) {
             return response()->json(['message' => 'Data tidak ditemukan'], 404);
         }
-        $category = DB::table('jobpost_categories as category')
-            ->join('jobpost_category_mappings as map', 'map.jobpost_category_id', '=', 'category.id')
-            ->where('category.id', $jobpostCategoryId)->where('category.is_active', 1)
-            ->where('map.division_id', $data->divisi)->where('map.position_id', $data->posisi)->where('map.grade', $data->grade_master_karyawan)
-            ->select('category.id', 'category.name')->first();
-        if (!$category) return response()->json(['message' => 'Jobpost Category tidak sesuai dengan divisi, jabatan, dan grade personnel request.'], 422);
+
+        $category = DB::table('jobpost_categories')
+            ->where('id', $divisiAliasId)
+            ->where('is_active', 1)
+            ->first(['id', 'name']);
+
+        if (!$category) {
+            return response()->json(['message' => 'Division alias tidak ditemukan di Jobpost Category.'], 422);
+        }
 
         $readiness = app(HrdAssessmentReadinessService::class)->check();
         if (!$readiness['ready']) {
@@ -343,18 +328,18 @@ class PersonnelRequesthrdController extends Controller
             $updateData = [
                 'is_publish' => 1,
                 'divisi_alias' => $category->name,
-                'jobpost_category_id' => $category->id,
                 'published_at' => Carbon::now(),
                 'published_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
                 'requirement' => $requirement,
             ];
-            if (\Illuminate\Support\Facades\Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
-                $updateData['divisi_alias_id'] = $category->id;
-            }
 
             if (Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
-                $updateData['divisi_alias_id'] = $resolvedAlias['id'];
+                $updateData['divisi_alias_id'] = (int) $category->id;
+            }
+
+            if (Schema::hasColumn('personnel_requests', 'jobpost_category_id')) {
+                $updateData['jobpost_category_id'] = (int) $category->id;
             }
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
@@ -371,26 +356,6 @@ class PersonnelRequesthrdController extends Controller
                 'message' => 'Gagal mempublikasikan request: ' . $e->getMessage(),
             ], 500);
         }
-    }
-
-    private function resolveDivisiAlias($divisiAliasId, string $divisiAlias): ?array
-    {
-        $query = MasterDivisi::active();
-
-        if ($divisiAliasId !== null && $divisiAliasId !== '') {
-            $divisi = (clone $query)->where('id', (int) $divisiAliasId)->first();
-        } else {
-            $divisi = $query->where('nama_divisi', $divisiAlias)->first();
-        }
-
-        if (!$divisi) {
-            return null;
-        }
-
-        return [
-            'id' => (int) $divisi->id,
-            'nama' => $divisi->nama_divisi,
-        ];
     }
 
     /**
