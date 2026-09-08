@@ -93,13 +93,23 @@ class JobpostCategoryController extends Controller
         return response()->json(['success' => true, 'message' => 'Jobpost Category berhasil dinonaktifkan.']);
     }
 
+    public function aliasOptions()
+    {
+        if (!Schema::hasTable('jobpost_categories')) {
+            abort(response()->json(['message' => 'Tabel Jobpost Category belum tersedia.'], 503));
+        }
+
+        $rows = DB::table('jobpost_categories')
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id', 'name as text']);
+
+        return response()->json(['success' => true, 'data' => $rows]);
+    }
+
     public function publishOptions(Request $request)
     {
-        $this->ensureTables();
-        $row = DB::table('personnel_requests as request')->join('jobpost_category_mappings as map', function ($join) {
-            $join->on('map.division_id', '=', 'request.divisi')->on('map.position_id', '=', 'request.posisi')->on('map.grade', '=', 'request.grade_master_karyawan');
-        })->join('jobpost_categories as category', 'category.id', '=', 'map.jobpost_category_id')->where('request.id', (int) $request->input('personnel_request_id'))->where('category.is_active', 1)->get(['category.id', 'category.name as text']);
-        return response()->json(['success' => true, 'data' => $row]);
+        return $this->aliasOptions();
     }
 
     private function ids($value): array { if (is_string($value)) $value = json_decode($value, true) ?: []; return is_array($value) ? $value : []; }

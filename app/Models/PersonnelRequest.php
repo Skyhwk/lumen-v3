@@ -48,6 +48,7 @@ class PersonnelRequest extends Model
         'rejected_by',
         'divisi_alias',
         'divisi_alias_id',
+        'jobpost_category_id',
         'requirement',
         'gambar',
         'minimum_matching',
@@ -81,7 +82,12 @@ class PersonnelRequest extends Model
 
     public function masterDivisiAlias()
     {
-        return $this->belongsTo(MasterDivisi::class, 'divisi_alias_id', 'id');
+        return $this->belongsTo(JobpostCategory::class, 'divisi_alias_id', 'id');
+    }
+
+    public function jobpostCategory()
+    {
+        return $this->belongsTo(JobpostCategory::class, 'jobpost_category_id', 'id');
     }
 
     public function masterJabatan()
