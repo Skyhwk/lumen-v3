@@ -1002,6 +1002,18 @@ class AssessmentController extends Controller
         // Only use questions that can direct the candidate to at least one
         // personnel request that is currently open in this alias and grade.
         $questionCategory->open_position_ids = $openPositionIds->all();
+        $hasEligibleQuestion = DB::table('recruitment_general_questions')
+            ->where('category_id', $questionCategory->id)
+            ->where('is_active', 1)
+            ->where('status', 'active')
+            ->whereExists(function ($query) use ($questionCategory) {
+                $query->select(DB::raw(1))
+                    ->from('recruitment_general_question_options as question_option')
+                    ->whereColumn('question_option.question_id', 'recruitment_general_questions.id')
+                    ->whereIn('question_option.position_id', $questionCategory->open_position_ids);
+            })
+            ->exists();
+        if (!$hasEligibleQuestion) return null;
 
         return $questionCategory;
     }
