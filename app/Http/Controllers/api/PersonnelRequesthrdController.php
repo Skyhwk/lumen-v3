@@ -285,15 +285,15 @@ class PersonnelRequesthrdController extends Controller
     public function publish(Request $request)
     {
         $id = $request->input('id');
-        $divisiAlias = trim((string) $request->input('divisi_alias', ''));
+        $jobpostCategoryId = (int) $request->input('jobpost_category_id');
         $requirement = trim((string) $request->input('requirement', ''));
 
         if (!$id) {
             return response()->json(['message' => 'ID request tidak ditemukan'], 400);
         }
 
-        if ($divisiAlias === '') {
-            return response()->json(['message' => 'Division alias wajib diisi.'], 422);
+        if ($jobpostCategoryId < 1) {
+            return response()->json(['message' => 'Jobpost Category wajib dipilih.'], 422);
         }
 
         if ($requirement === '' || strip_tags($requirement) === '') {
@@ -304,6 +304,12 @@ class PersonnelRequesthrdController extends Controller
         if (!$data) {
             return response()->json(['message' => 'Data tidak ditemukan'], 404);
         }
+        $category = DB::table('jobpost_categories as category')
+            ->join('jobpost_category_mappings as map', 'map.jobpost_category_id', '=', 'category.id')
+            ->where('category.id', $jobpostCategoryId)->where('category.is_active', 1)
+            ->where('map.division_id', $data->divisi)->where('map.position_id', $data->posisi)->where('map.grade', $data->grade_master_karyawan)
+            ->select('category.id', 'category.name')->first();
+        if (!$category) return response()->json(['message' => 'Jobpost Category tidak sesuai dengan divisi, jabatan, dan grade personnel request.'], 422);
 
         $readiness = app(HrdAssessmentReadinessService::class)->check();
         if (!$readiness['ready']) {
@@ -317,13 +323,16 @@ class PersonnelRequesthrdController extends Controller
         try {
             $updateData = [
                 'is_publish' => 1,
-                'divisi_alias' => $divisiAlias,
+                'divisi_alias' => $category->name,
+                'jobpost_category_id' => $category->id,
                 'published_at' => Carbon::now(),
                 'published_by' => $this->karyawan,
                 'updated_at' => Carbon::now(),
-                'divisi_alias' => $divisiAlias,
                 'requirement' => $requirement,
             ];
+            if (\Illuminate\Support\Facades\Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
+                $updateData['divisi_alias_id'] = $category->id;
+            }
 
             DB::table('personnel_requests')->where('id', $id)->update($updateData);
 
