@@ -26,7 +26,8 @@ class SendCandidateActionReminders extends Command
 
         $assessmentSent = $this->sendAssessmentReminders();
         $profileSent = $this->sendProfileReminders();
-        $failed = $assessmentSent['failed'] + $profileSent['failed'];
+        $deliverySent = $this->sendPendingAssessmentDeliveries();
+        $failed = $assessmentSent['failed'] + $profileSent['failed'] + $deliverySent['failed'];
 
         $this->info(
             "Reminder assessment terkirim: {$assessmentSent['sent']}; "
@@ -34,6 +35,42 @@ class SendCandidateActionReminders extends Command
         );
 
         return $failed > 0 ? 1 : 0;
+    }
+
+    private function sendPendingAssessmentDeliveries(): array
+    {
+        $sent = 0; $failed = 0; $now = Carbon::now('Asia/Jakarta');
+        NewRecruitment::query()->with('personnelRequest')->where('status', 'assessment')->where('is_active', 1)
+            ->whereNotNull('email')->whereNull('assessment_invitation_sent_at')->orderBy('id')
+            ->chunkById(100, function ($candidates) use ($now, &$sent, &$failed) {
+                foreach ($candidates as $candidate) {
+                    $choiceMissing = empty($candidate->assessment_delivery_choice)
+                        && Carbon::parse($candidate->created_at)->addMinutes(30)->lte($now);
+                    $resumeNeeded = $candidate->assessment_delivery_choice === 'now'
+                        && $this->hasPausedAssessment($candidate->id, $now);
+                    if (!$choiceMissing && !$resumeNeeded) continue;
+                    try {
+                        $position = $candidate->personnelRequest->divisi_alias ?? $candidate->personnelRequest->posisi ?? $candidate->posisi_dilamar ?? 'Posisi yang dilamar';
+                        $url = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/') . '/public/recruitment/assessment/' . rawurlencode($candidate->token);
+                        SendEmail::where('to', $candidate->email)->where('subject', 'Undangan Career Assessment - PT Inti Surya Laboratorium')
+                            ->where('body', view('Email.recruitment-assessment-invitation', ['nama_lengkap' => $candidate->nama_lengkap, 'posisi_dilamar' => $position, 'assessment_url' => $url])->render())
+                            ->where('karyawan', 'Recruitment System')->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
+                        DB::table('new_recruitment')->where('id', $candidate->id)->update(['assessment_invitation_sent_at' => $now, 'assessment_resume_reminder_sent_at' => $resumeNeeded ? $now : null, 'updated_at' => $now]);
+                        $sent++;
+                    } catch (\Throwable $exception) { $failed++; Log::warning('Pending assessment delivery failed', ['recruitment_id' => $candidate->id, 'message' => $exception->getMessage()]); }
+                }
+            });
+        return compact('sent', 'failed');
+    }
+
+    private function hasPausedAssessment($recruitmentId, Carbon $now): bool
+    {
+        $attempt = DB::table('assessment_attempts')->where('recruitment_id', $recruitmentId)->first();
+        if (!$attempt) return false;
+        $completed = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'completed')->exists();
+        $pending = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->where('status', 'pending')->exists();
+        $lastActivity = DB::table('assessment_sessions')->where('assessment_attempt_id', $attempt->id)->max('updated_at');
+        return $completed && $pending && $lastActivity && Carbon::parse($lastActivity)->addMinutes(30)->lte($now);
     }
 
     private function sendTestEmails(string $email): int
