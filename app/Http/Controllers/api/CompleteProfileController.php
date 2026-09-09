@@ -225,6 +225,23 @@ class CompleteProfileController extends Controller
             }
         }
 
+        foreach ([
+            'nik_ktp' => 'NIK KTP',
+            'no_kk' => 'Nomor KK',
+            'no_npwp' => 'Nomor NPWP',
+            'no_bpjs_ks' => 'Nomor BPJS Kesehatan',
+            'no_bpjs_tk' => 'Nomor BPJS Ketenagakerjaan',
+            'kode_pos_ktp' => 'Kode pos KTP',
+            'kode_pos_domisili' => 'Kode pos domisili',
+            'no_telepon_darurat' => 'Nomor telepon kontak darurat 1',
+            'no_telepon_darurat_2' => 'Nomor telepon kontak darurat 2',
+        ] as $field => $label) {
+            $value = trim((string) $request->input($field));
+            if ($value !== '' && !preg_match('/^\d+$/', $value)) {
+                $errors[$field] = [$label . ' hanya boleh berisi angka.'];
+            }
+        }
+
         $duplicateEmergencyContactErrors = $this->validateEmergencyContacts($request);
         if (!empty($duplicateEmergencyContactErrors)) {
             $errors = array_merge($errors, $duplicateEmergencyContactErrors);

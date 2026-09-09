@@ -29,6 +29,8 @@ use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\PublicRecruitmentJobListService;
+use App\Services\PersonnelRequestImageService;
+use App\Services\RecruitmentApplicationDraftService;
 use App\Services\UserAssessmentCategoryService;
 use Carbon\Carbon;
 
@@ -326,64 +328,12 @@ class RecruitmentController extends Controller{
                 ], 404);
             }
 
-            // Satu kandidat hanya dapat mengikuti satu proses rekrutmen pada satu waktu,
-            // walaupun lowongan yang dipilih berbeda.
-            $existingApplications = DB::table('new_recruitment')
-                ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
-                ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
-                ->whereRaw("CASE
-                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
-                        THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
-                    WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
-                        THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
-                    ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
-                END = ?", [$noTelepon])
-                ->orderByDesc('id')
-                ->get();
-
-            $activeRecruitmentStatuses = [
-                'assessment',
-                'screening',
-                'approved',
-                'interview_hrd',
-                'profile_completion',
-                'interview_user',
-                'management_decision',
-                'internal_sallary_offer',
-                'salary_offer',
-            ];
-
-            foreach ($existingApplications as $existingApplication) {
-                if ((int) ($existingApplication->is_active ?? 1) === 0) {
-                    continue;
-                }
-
-                $history = json_decode($existingApplication->meta_history ?: '[]', true);
-                $history = is_array($history) ? $history : [];
-                $lastHistory = !empty($history) ? end($history) : [];
-                $lastHistoryStatus = strtolower((string) ($lastHistory['status'] ?? ''));
-                $isRejected = $lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false;
-
-                if (!$isRejected && in_array(strtolower((string) $existingApplication->status), $activeRecruitmentStatuses, true)) {
-                    return response()->json([
-                        'message' => 'Anda masih mengikuti proses rekrutmen pada pendaftaran sebelumnya. Anda belum dapat mendaftar untuk posisi lain sampai proses tersebut selesai.',
-                        'status' => false,
-                    ], 409);
-                }
-
-                if (!$isRejected) {
-                    continue;
-                }
-
-                $rejectedAt = $lastHistory['at'] ?? $existingApplication->rejected_at ?? $existingApplication->updated_at ?? $existingApplication->created_at;
-                $reapplyAt = Carbon::parse($rejectedAt)->addMonths(3);
-
-                if (Carbon::now()->lt($reapplyAt)) {
-                    return response()->json([
-                        'message' => 'Pendaftaran sebelumnya belum dapat diajukan kembali. Anda dapat mendaftar lagi setelah ' . $reapplyAt->format('d/m/Y') . '.',
-                        'status' => false,
-                    ], 409);
-                }
+            if ($blocker = $this->findNewRecruitmentApplicationBlocker($email, $noTelepon)) {
+                return response()->json([
+                    'message' => $blocker['message'],
+                    'status' => false,
+                    'reapply_at' => $blocker['reapply_at'] ?? null,
+                ], 409);
             }
 
             $picture = $request->input('picture', $request->input('foto_selfie'));
@@ -441,41 +391,13 @@ class RecruitmentController extends Controller{
             ]);
             (new RecruitmentStatusService())->update($id, 'assessment');
 
-            $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                . '/public/recruitment/assessment/' . rawurlencode($token);
-            $emailBody = $this->assessmentInvitationEmail([
-                'nama_lengkap' => $namaLengkap,
-                'posisi_dilamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
-                'assessment_url' => $assessmentUrl,
-            ]);
-
-            SendEmail::where('to', $email)
-                ->where('subject', 'Undangan Career Assessment - PT Inti Surya Laboratorium')
-                ->where('body', $emailBody)
-                ->where('cc', [])
-                ->where('bcc', [])
-                ->where('karyawan', 'Recruitment System')
-                ->noReply('PT Inti Surya Laboratorium')
-                ->replyToAtsHrd()
-                ->send();
-
-            try {
-                $whatsappData = (object) [
-                    'nama_lengkap' => $namaLengkap,
-                    'jenis_kelamin' => $request->jenis_kelamin,
-                    'posisi_di_lamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
-                    'assessment_url' => $assessmentUrl,
-                ];
-                $whatsappMessage = (new GenerateMessageAtsWhatsapp($whatsappData))->Assessment();
-                (new SendWhatsapp($noTelepon, $whatsappMessage))->send();
-            } catch (\Throwable $whatsappException) {
-                \Log::warning('Recruitment assessment WhatsApp failed', [
-                    'phone' => $noTelepon,
-                    'message' => $whatsappException->getMessage(),
-                ]);
-            }
-
             DB::commit();
+
+            app(RecruitmentApplicationDraftService::class)->deleteByContact(
+                $email,
+                $noTelepon,
+                $request->input('draft_token')
+            );
 
             app(AtsNotificationService::class)->newApplicantSubmitted(
                 (object) ['nama_lengkap' => $namaLengkap],
@@ -487,6 +409,7 @@ class RecruitmentController extends Controller{
                 'status'=> true,
                 'data' => [
                     'id' => $id,
+                    'token' => $token,
                 ],
             ], 200);
         } catch (\Throwable $th) {
@@ -513,6 +436,141 @@ class RecruitmentController extends Controller{
             'posisi_dilamar' => 'Programmer',
             'assessment_url' => $assessmentUrl,
         ]));
+    }
+
+    public function assessmentPreference(Request $request)
+    {
+        $this->validate($request, [
+            'token' => 'required|string',
+            'choice' => 'required|in:now,later',
+        ]);
+
+        $candidate = DB::table('new_recruitment')->where('token', $request->token)->first();
+        if (!$candidate || !$candidate->is_active) {
+            return response()->json(['status' => false, 'message' => 'Data pendaftaran tidak ditemukan.'], 404);
+        }
+
+        $now = Carbon::now('Asia/Jakarta');
+        DB::table('new_recruitment')->where('id', $candidate->id)->update([
+            'assessment_delivery_choice' => $request->choice,
+            'assessment_delivery_chosen_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        if ($request->choice === 'later' && empty($candidate->assessment_invitation_sent_at)) {
+            $position = DB::table('personnel_requests')->where('id', $candidate->personnel_request_id)->value('divisi_alias') ?: ($candidate->posisi_dilamar ?: 'Posisi yang dilamar');
+            $url = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/') . '/public/recruitment/assessment/' . rawurlencode($candidate->token);
+            SendEmail::where('to', $candidate->email)
+                ->where('subject', 'Undangan Career Assessment - PT Inti Surya Laboratorium')
+                ->where('body', $this->assessmentInvitationEmail(['nama_lengkap' => $candidate->nama_lengkap, 'posisi_dilamar' => $position, 'assessment_url' => $url]))
+                ->where('karyawan', 'Recruitment System')->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
+            DB::table('new_recruitment')->where('id', $candidate->id)->update(['assessment_invitation_sent_at' => $now, 'updated_at' => $now]);
+        }
+
+        return response()->json(['status' => true, 'assessment_url' => rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/') . '/public/recruitment/assessment/' . rawurlencode($candidate->token)]);
+    }
+
+    public function checkApplicationEligibility(Request $request)
+    {
+        $namaLengkap = trim((string) $request->input('nama_lengkap'));
+        $email = strtolower(trim((string) $request->input('email')));
+        $noTelepon = preg_replace('/\D+/', '', (string) $request->input('no_telepon'));
+
+        if (strpos($noTelepon, '62') === 0) {
+            $noTelepon = '0' . ltrim(substr($noTelepon, 2), '0');
+        } elseif ($noTelepon !== '' && strpos($noTelepon, '0') !== 0) {
+            $noTelepon = '0' . $noTelepon;
+        }
+
+        if ($namaLengkap === '' || $email === '' || $noTelepon === '') {
+            return response()->json([
+                'status' => false,
+                'message' => 'Nama lengkap, email, dan nomor telepon wajib diisi.',
+            ], 422);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^08\d{8,11}$/', $noTelepon)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Email atau nomor telepon tidak valid.',
+            ], 422);
+        }
+
+        if ($blocker = $this->findNewRecruitmentApplicationBlocker($email, $noTelepon)) {
+            return response()->json([
+                'status' => false,
+                'message' => $blocker['message'],
+                'reapply_at' => $blocker['reapply_at'] ?? null,
+            ], 409);
+        }
+
+        $draft = app(RecruitmentApplicationDraftService::class)->get([
+            'email' => $email,
+            'no_telepon' => $noTelepon,
+            'no_request' => $request->input('no_request'),
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Kandidat dapat melanjutkan pendaftaran.',
+            'data' => ['draft' => $draft],
+        ]);
+    }
+
+    private function findNewRecruitmentApplicationBlocker(string $email, string $noTelepon): ?array
+    {
+        $existingApplications = DB::table('new_recruitment')
+            ->select(['id', 'status', 'is_active', 'meta_history', 'rejected_at', 'created_at', 'updated_at'])
+            ->where(function ($query) use ($email, $noTelepon) {
+                $query->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                    ->orWhereRaw("CASE
+                        WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '62%'
+                            THEN CONCAT('0', TRIM(LEADING '0' FROM SUBSTRING(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 3)))
+                        WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE '0%'
+                            THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+                        ELSE CONCAT('0', REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(no_telepon, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''))
+                    END = ?", [$noTelepon]);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        $activeRecruitmentStatuses = [
+            'assessment', 'screening', 'approved', 'interview_hrd', 'profile_completion',
+            'interview_user', 'management_decision', 'internal_sallary_offer', 'salary_offer',
+        ];
+
+        foreach ($existingApplications as $existingApplication) {
+            if ((int) ($existingApplication->is_active ?? 1) === 0) {
+                continue;
+            }
+
+            $history = json_decode($existingApplication->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $lastHistory = !empty($history) ? end($history) : [];
+            $lastHistoryStatus = strtolower((string) ($lastHistory['status'] ?? ''));
+            $applicationStatus = strtolower(trim((string) $existingApplication->status));
+            $isRejected = $applicationStatus === 'rejected'
+                || ($lastHistoryStatus !== '' && strpos($lastHistoryStatus, 'rejected') !== false);
+
+            if (!$isRejected && in_array($applicationStatus, $activeRecruitmentStatuses, true)) {
+                return ['message' => 'Anda masih mengikuti proses rekrutmen pada pendaftaran sebelumnya. Anda belum dapat mendaftar untuk posisi lain sampai proses tersebut selesai.'];
+            }
+
+            if (!$isRejected) {
+                continue;
+            }
+
+            $rejectedAt = $lastHistory['at'] ?? $existingApplication->rejected_at ?? $existingApplication->updated_at ?? $existingApplication->created_at;
+            $reapplyAt = Carbon::parse($rejectedAt)->addMonths(3);
+            if (Carbon::now()->lt($reapplyAt)) {
+                return [
+                    'message' => 'Pendaftaran sebelumnya belum dapat diajukan kembali. Anda dapat mendaftar lagi setelah ' . $reapplyAt->format('d/m/Y') . '.',
+                    'reapply_at' => $reapplyAt->toDateTimeString(),
+                ];
+            }
+        }
+
+        return null;
     }
 
     private function assessmentInvitationEmail(array $data)
@@ -1440,6 +1498,7 @@ class RecruitmentController extends Controller{
                     'prioritas',
                     'divisi_alias',
                     'grade_master_karyawan',
+                    'personnel_requests.gambar',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
                 ])
@@ -1447,6 +1506,11 @@ class RecruitmentController extends Controller{
 
             $data = app(PublicRecruitmentJobListService::class)
                 ->filterDuplicatePositions($data);
+
+            $imageService = app(PersonnelRequestImageService::class);
+            $data->each(function ($job) use ($imageService) {
+                $imageService->appendToJob($job);
+            });
 
             $data->each->makeHidden(['id', 'created_at', 'divisi', 'lokasi_penempatan_cabang']);
 
@@ -1482,6 +1546,7 @@ class RecruitmentController extends Controller{
                     'divisi_alias',
                     'grade_master_karyawan',
                     'personnel_requests.created_by',
+                    'personnel_requests.gambar',
                     'use_user_assessment',
                     'md.nama_divisi as divisi_name',
                     'mc.nama_cabang as placement',
@@ -1492,6 +1557,7 @@ class RecruitmentController extends Controller{
                 return response()->json(['message' => 'Data job tidak ditemukan.'], 404);
             }
 
+            app(PersonnelRequestImageService::class)->appendToJob($data);
             app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
             $data->makeHidden(['divisi', 'lokasi_penempatan_cabang', 'created_by']);
 
@@ -1499,6 +1565,48 @@ class RecruitmentController extends Controller{
         } catch (\Exception $th) {
             return response()->json([
                 'message' => 'Gagal mengambil data job list.',
+            ], 500);
+        }
+    }
+
+    public function saveApplicationDraft(Request $request)
+    {
+        try {
+            $draft = app(RecruitmentApplicationDraftService::class)->save($request->all());
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Draft berhasil disimpan.',
+                'data' => $draft,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal menyimpan draft lamaran.',
+            ], 500);
+        }
+    }
+
+    public function getApplicationDraft(Request $request)
+    {
+        try {
+            $draft = app(RecruitmentApplicationDraftService::class)->get($request->all());
+
+            if (!$draft) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Draft tidak ditemukan.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'data' => $draft,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal mengambil draft lamaran.',
             ], 500);
         }
     }
