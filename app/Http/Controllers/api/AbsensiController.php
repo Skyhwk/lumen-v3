@@ -259,7 +259,7 @@ class AbsensiController extends Controller
         $tanggalKey = date('Y-m-d', strtotime($tanggal));
         $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
 
-        if (!empty($workingDayIndex) && !isset($workingDayIndex[$tanggalKey])) {
+        if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
             return $this->buildLiburAbsensiRow($nik_karyawan, $nama_lengkap, $tanggalKey);
         }
 
@@ -848,6 +848,24 @@ class AbsensiController extends Controller
         ];
     }
 
+    private function isWeekendDate($tanggal)
+    {
+        if (empty($tanggal)) {
+            return false;
+        }
+
+        return (int) date('N', strtotime($tanggal)) >= 6;
+    }
+
+    private function shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)
+    {
+        if (empty($workingDayIndex) || isset($workingDayIndex[$tanggalKey])) {
+            return false;
+        }
+
+        return !self::isWeekendDate($tanggalKey);
+    }
+
     private function applyCalendarLiburShift($row)
     {
         if (empty($row['tanggal'])) {
@@ -857,7 +875,7 @@ class AbsensiController extends Controller
         $tanggalKey = date('Y-m-d', strtotime($row['tanggal']));
         $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
 
-        if (!empty($workingDayIndex) && !isset($workingDayIndex[$tanggalKey])) {
+        if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
             $row['shift'] = 'Libur';
             $row['masuk'] = '';
             $row['keluar'] = '';
@@ -911,7 +929,7 @@ class AbsensiController extends Controller
             $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
         }
 
-        if (!empty($workingDayIndex) && !isset($workingDayIndex[$tanggalKey])) {
+        if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
             return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggalKey, 'Libur');
         }
 
@@ -1188,6 +1206,10 @@ class AbsensiController extends Controller
 
     private function isWeekendAbsensiRow($absensiRow)
     {
+        if (!empty($absensiRow['tanggal'])) {
+            return self::isWeekendDate($absensiRow['tanggal']);
+        }
+
         $hari = isset($absensiRow['hari']) ? strtolower(trim($absensiRow['hari'])) : '';
 
         return in_array($hari, ['sabtu', 'minggu'], true);
