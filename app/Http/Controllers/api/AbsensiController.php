@@ -9,6 +9,7 @@ use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
 use App\Models\ShiftKaryawan;
+use App\Models\RekapLiburKalender;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +22,8 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class AbsensiController extends Controller
 {
+    private $workingDayIndexCache = [];
+
     // Tested - Clear 
     public function hari($tanggal)
     {
@@ -179,7 +182,7 @@ class AbsensiController extends Controller
                                 $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm'; // Calculate working hours
                             }
 
-                            $data[] = [
+                            $data[] = $this->applyCalendarLiburShift([
                                 'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
                                 'tanggal' => $gen->tanggal,
                                 'hari' => self::hari($gen->tanggal),
@@ -188,9 +191,9 @@ class AbsensiController extends Controller
                                 'selisih' => $masuk,
                                 'jam_kerja' => $total_jam_kerja,
                                 'shift' => 'SHREGULAR'
-                            ];
+                            ]);
                         } else {
-                            $data[] = [
+                            $data[] = $this->applyCalendarLiburShift([
                                 'nama' => $value->nik_karyawan . ' - ' . $value->nama_lengkap,
                                 'tanggal' => $tanggal,
                                 'hari' => self::hari($tanggal),
@@ -199,7 +202,7 @@ class AbsensiController extends Controller
                                 'selisih' => '',
                                 'jam_kerja' => '',
                                 'shift' => ''
-                            ];
+                            ]);
                         }
                     }
                 }
@@ -253,6 +256,12 @@ class AbsensiController extends Controller
     public function compareshift($id, $tanggal, $shift, $checkin = '08:00:00', $checkout = '17:00:00', $nik_karyawan, $nama_lengkap)
     {
         $db = ($tanggal != null && $tanggal != '') ? DATE('Y', \strtotime($tanggal)) : $this->db;
+        $tanggalKey = date('Y-m-d', strtotime($tanggal));
+        $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
+
+        if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
+            return $this->buildLiburAbsensiRow($nik_karyawan, $nama_lengkap, $tanggalKey);
+        }
 
         if ($shift == '24jam') {
             $plus = DATE('Y-m-d', strtotime($tanggal . '+1day'));
@@ -520,7 +529,7 @@ class AbsensiController extends Controller
                             ? \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar))->h . 'h ' . \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar))->i . 'm'
                             : '';
 
-                        $data[] = [
+                        $data[] = $this->applyCalendarLiburShift([
                             'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
                             'tanggal' => $gen->tanggal,
                             'hari' => self::hari($gen->tanggal),
@@ -529,9 +538,9 @@ class AbsensiController extends Controller
                             'selisih' => $masuk,
                             'jam_kerja' => $total_jam_kerja,
                             'shift' => 'SHREGULAR'
-                        ];
+                        ]);
                     } else {
-                        $data[] = [
+                        $data[] = $this->applyCalendarLiburShift([
                             'nama' => $value->nik_karyawan . ' - ' . $value->nama_lengkap,
                             'tanggal' => $tanggal,
                             'hari' => self::hari($tanggal),
@@ -540,7 +549,7 @@ class AbsensiController extends Controller
                             'selisih' => '',
                             'jam_kerja' => '',
                             'shift' => ''
-                        ];
+                        ]);
                     }
                 }
             }
@@ -602,7 +611,7 @@ class AbsensiController extends Controller
                                 $kerja = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar));
                                 $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm';
                             }
-                            $data[] = [
+                            $data[] = $this->applyCalendarLiburShift([
                                 'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
                                 'tanggal' => $gen->tanggal,
                                 'hari' => self::hari($gen->tanggal),
@@ -611,9 +620,9 @@ class AbsensiController extends Controller
                                 'selisih' => $masuk,
                                 'jam_kerja' => $total_jam_kerja,
                                 'shift' => 'SHREGULAR'
-                            ];
+                            ]);
                         } else {
-                            $data[] = [
+                            $data[] = $this->applyCalendarLiburShift([
                                 'nama' => $value->nik_karyawan . ' - ' . $value->nama_lengkap,
                                 'tanggal' => $tanggal,
                                 'hari' => self::hari($tanggal),
@@ -622,7 +631,7 @@ class AbsensiController extends Controller
                                 'selisih' => '',
                                 'jam_kerja' => '',
                                 'shift' => ''
-                            ];
+                            ]);
                         }
                     }
                 }
@@ -778,6 +787,105 @@ class AbsensiController extends Controller
         return ['', isset($row['nama']) ? $row['nama'] : ''];
     }
 
+    private function fetchWorkingDayIndex($year)
+    {
+        $year = (string) $year;
+
+        if (isset($this->workingDayIndexCache[$year])) {
+            return $this->workingDayIndexCache[$year];
+        }
+
+        $record = RekapLiburKalender::where('tahun', $year)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$record || empty($record->tanggal)) {
+            $this->workingDayIndexCache[$year] = [];
+
+            return $this->workingDayIndexCache[$year];
+        }
+
+        $decoded = json_decode($record->tanggal, true);
+        if (!is_array($decoded)) {
+            $this->workingDayIndexCache[$year] = [];
+
+            return $this->workingDayIndexCache[$year];
+        }
+
+        $index = [];
+        foreach ($decoded as $dates) {
+            if (!is_array($dates)) {
+                continue;
+            }
+
+            foreach ($dates as $date) {
+                if (empty($date)) {
+                    continue;
+                }
+
+                $index[date('Y-m-d', strtotime($date))] = true;
+            }
+        }
+
+        $this->workingDayIndexCache[$year] = $index;
+
+        return $this->workingDayIndexCache[$year];
+    }
+
+    private function buildLiburAbsensiRow($nikKaryawan, $namaLengkap, $tanggal)
+    {
+        $tanggalKey = date('Y-m-d', strtotime($tanggal));
+
+        return [
+            'nama' => $nikKaryawan . ' - ' . $namaLengkap,
+            'tanggal' => $tanggalKey,
+            'hari' => self::hari($tanggalKey),
+            'masuk' => '',
+            'keluar' => '',
+            'selisih' => '',
+            'jam_kerja' => '',
+            'shift' => 'Libur',
+        ];
+    }
+
+    private function isWeekendDate($tanggal)
+    {
+        if (empty($tanggal)) {
+            return false;
+        }
+
+        return (int) date('N', strtotime($tanggal)) >= 6;
+    }
+
+    private function shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)
+    {
+        if (empty($workingDayIndex) || isset($workingDayIndex[$tanggalKey])) {
+            return false;
+        }
+
+        return !self::isWeekendDate($tanggalKey);
+    }
+
+    private function applyCalendarLiburShift($row)
+    {
+        if (empty($row['tanggal'])) {
+            return $row;
+        }
+
+        $tanggalKey = date('Y-m-d', strtotime($row['tanggal']));
+        $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
+
+        if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
+            $row['shift'] = 'Libur';
+            $row['masuk'] = '';
+            $row['keluar'] = '';
+            $row['selisih'] = '';
+            $row['jam_kerja'] = '';
+        }
+
+        return $row;
+    }
+
     private function buildEmptyMonthlyRow($nikKaryawan, $namaLengkap, $tanggal, $shift = '')
     {
         return [
@@ -813,8 +921,18 @@ class AbsensiController extends Controller
         ];
     }
 
-    private function resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex)
+    private function resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex = null)
     {
+        $tanggalKey = date('Y-m-d', strtotime($tanggal));
+
+        if ($workingDayIndex === null) {
+            $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
+        }
+
+        if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
+            return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggalKey, 'Libur');
+        }
+
         $shiftRow = isset($shiftIndex[$karyawan->id][$tanggal]) ? $shiftIndex[$karyawan->id][$tanggal] : null;
         $punch = self::getMonthlyPunch($punchIndex, $karyawan->id, $tanggal);
         $nextDate = date('Y-m-d', strtotime($tanggal . ' +1 day'));
@@ -916,12 +1034,13 @@ class AbsensiController extends Controller
 
         $shiftIndex = self::fetchMonthlyShiftIndex($karyawanIds, $dates['startDate'], $dates['endDate']);
         $punchIndex = self::fetchMonthlyPunchIndex($karyawanIds, $dates['startDate'], $dates['nextDate']);
+        $workingDayIndex = $this->fetchWorkingDayIndex($year);
 
         $data = [];
         foreach ($karyawans as $karyawan) {
             for ($a = 1; $a <= $lastDay; $a++) {
                 $tanggal = $year . '-' . $dates['monthPadded'] . '-' . sprintf('%02d', $a);
-                $data[] = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex);
+                $data[] = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex);
             }
         }
 
@@ -1007,6 +1126,212 @@ class AbsensiController extends Controller
         return $u;
     }
 
+    private function parsePrivilageCabang($privilageCabang)
+    {
+        if ($privilageCabang === null || $privilageCabang === '') {
+            return [];
+        }
+
+        if (is_array($privilageCabang)) {
+            return array_values(array_map('strval', $privilageCabang));
+        }
+
+        if (is_numeric($privilageCabang)) {
+            return [(string) $privilageCabang];
+        }
+
+        if (!is_string($privilageCabang)) {
+            return [];
+        }
+
+        $decoded = json_decode($privilageCabang, true);
+        if (is_array($decoded)) {
+            return array_values(array_map('strval', $decoded));
+        }
+
+        $trimmed = trim($privilageCabang);
+        if ($trimmed !== '' && $trimmed[0] === '[') {
+            return [];
+        }
+
+        $parts = preg_split('/\s*,\s*/', trim($trimmed, '[]" '));
+        $parts = array_filter($parts, function ($part) {
+            return $part !== '';
+        });
+
+        return array_values(array_map('strval', $parts));
+    }
+
+    private function isHeadOfficeFullPrivilege($privileges)
+    {
+        $normalized = array_values(array_unique(array_map('strval', $privileges)));
+        sort($normalized);
+
+        return $normalized === ['1', '4', '5'];
+    }
+
+    private function isBranchSupervisorDepartment($divisi)
+    {
+        if (!$divisi || !isset($divisi->nama_divisi)) {
+            return false;
+        }
+
+        $namaDivisi = strtolower(trim($divisi->nama_divisi));
+
+        return strpos($namaDivisi, 'branch') !== false && strpos($namaDivisi, 'supervisor') !== false;
+    }
+
+    private function isBranchSupervisorExportEligible($privilageCabang)
+    {
+        $privileges = self::parsePrivilageCabang($privilageCabang);
+
+        if (empty($privileges) || self::isHeadOfficeFullPrivilege($privileges)) {
+            return false;
+        }
+
+        $supervisorBranches = array_intersect($privileges, ['4', '5']);
+        if (empty($supervisorBranches)) {
+            return false;
+        }
+
+        $userBranches = array_map('strval', (array) $this->privilageCabang);
+        $visibleBranches = array_intersect(['4', '5'], $userBranches);
+
+        if (empty($visibleBranches)) {
+            $visibleBranches = ['4', '5'];
+        }
+
+        return !empty(array_intersect($supervisorBranches, $visibleBranches));
+    }
+
+    private function isWeekendAbsensiRow($absensiRow)
+    {
+        if (!empty($absensiRow['tanggal'])) {
+            return self::isWeekendDate($absensiRow['tanggal']);
+        }
+
+        $hari = isset($absensiRow['hari']) ? strtolower(trim($absensiRow['hari'])) : '';
+
+        return in_array($hari, ['sabtu', 'minggu'], true);
+    }
+
+    private function groupAbsensiDataByKaryawan($data)
+    {
+        $grouped = [];
+
+        foreach ($data as $row) {
+            list($nik, $nama) = self::parseAbsensiRowIdentity($row);
+            $key = $nik . '|' . $nama;
+
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'nik' => $nik,
+                    'nama' => $nama,
+                    'rows' => [],
+                ];
+            }
+
+            $grouped[$key]['rows'][] = $row;
+        }
+
+        return array_values($grouped);
+    }
+
+    private function writeAbsensiExportGroupedByKaryawan($sheet, $data, $branchLabel = null)
+    {
+        $sheet->getColumnDimension('A')->setWidth(3);
+        $sheet->getColumnDimension('B')->setWidth(16);
+        $sheet->getColumnDimension('C')->setWidth(14);
+        $sheet->getColumnDimension('D')->setWidth(12);
+        $sheet->getColumnDimension('E')->setWidth(12);
+        $sheet->getColumnDimension('F')->setWidth(10);
+        $sheet->getColumnDimension('G')->setWidth(12);
+        $sheet->getColumnDimension('H')->setWidth(18);
+
+        $row = 1;
+
+        if ($branchLabel) {
+            $sheet->setCellValue('B' . $row, 'Cabang');
+            $sheet->setCellValue('C' . $row, $branchLabel);
+            $sheet->getStyle('B' . $row . ':C' . $row)->getFont()->setBold(true);
+            $row += 2;
+        }
+
+        $groups = self::groupAbsensiDataByKaryawan($data);
+        if (empty($groups)) {
+            return $row;
+        }
+
+        foreach ($groups as $index => $group) {
+            if ($index > 0) {
+                $row++;
+            }
+
+            $nikRow = $row;
+            $sheet->setCellValue('B' . $row, 'NIK Karyawan');
+            $sheet->setCellValue('C' . $row, $group['nik']);
+            $sheet->getStyle('B' . $nikRow . ':C' . $nikRow)->getFont()->setBold(true);
+            $row++;
+
+            $namaRow = $row;
+            $sheet->setCellValue('B' . $row, 'Nama Karyawan');
+            $sheet->setCellValue('C' . $row, $group['nama']);
+            $sheet->getStyle('B' . $namaRow . ':C' . $namaRow)->getFont()->setBold(true);
+            $row++;
+
+            $headerRow = $row;
+            $sheet->setCellValue('B' . $row, 'Tanggal');
+            $sheet->setCellValue('C' . $row, 'Hari');
+            $sheet->setCellValue('D' . $row, 'Masuk');
+            $sheet->setCellValue('E' . $row, 'Keluar');
+            $sheet->setCellValue('F' . $row, '+ / -');
+            $sheet->setCellValue('G' . $row, 'Jam Kerja');
+            $sheet->setCellValue('H' . $row, 'Shift');
+
+            $sheet->getStyle('B' . $headerRow . ':H' . $headerRow)
+                ->getFont()
+                ->setBold(true);
+            $sheet->getStyle('B' . $headerRow . ':H' . $headerRow)
+                ->getAlignment()
+                ->setHorizontal('center');
+            $sheet->getStyle('B' . $headerRow . ':H' . $headerRow)
+                ->getBorders()
+                ->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN);
+
+            $row++;
+            $dataStart = $row;
+
+            foreach ($group['rows'] as $absensiRow) {
+                $sheet->setCellValue('B' . $row, isset($absensiRow['tanggal']) ? $absensiRow['tanggal'] : '');
+                $sheet->setCellValue('C' . $row, isset($absensiRow['hari']) ? $absensiRow['hari'] : '');
+                $sheet->setCellValue('D' . $row, isset($absensiRow['masuk']) ? $absensiRow['masuk'] : '');
+                $sheet->setCellValue('E' . $row, isset($absensiRow['keluar']) ? $absensiRow['keluar'] : '');
+                $sheet->setCellValue('F' . $row, isset($absensiRow['selisih']) ? $absensiRow['selisih'] : '');
+                $sheet->setCellValue('G' . $row, isset($absensiRow['jam_kerja']) ? $absensiRow['jam_kerja'] : '');
+                $sheet->setCellValue('H' . $row, isset($absensiRow['shift']) ? $absensiRow['shift'] : '');
+
+                if (self::isWeekendAbsensiRow($absensiRow)) {
+                    $sheet->getStyle('B' . $row . ':C' . $row)
+                        ->getFont()
+                        ->getColor()
+                        ->setARGB('FFFF0000');
+                }
+
+                $row++;
+            }
+
+            if ($row > $dataStart) {
+                $sheet->getStyle('B' . $dataStart . ':H' . ($row - 1))
+                    ->getBorders()
+                    ->getAllBorders()
+                    ->setBorderStyle(Border::BORDER_THIN);
+            }
+        }
+
+        return $row;
+    }
+
     private function getExportKaryawanByDepartment($deptId)
     {
         return MasterKaryawan::leftJoin('master_divisi', 'master_karyawan.id_department', '=', 'master_divisi.id')
@@ -1015,6 +1340,7 @@ class AbsensiController extends Controller
                 'master_karyawan.nik_karyawan',
                 'master_karyawan.nama_lengkap',
                 'master_karyawan.id_department',
+                'master_karyawan.privilage_cabang',
                 'master_divisi.kode_divisi',
                 'master_divisi.nama_divisi'
             )
@@ -1023,6 +1349,71 @@ class AbsensiController extends Controller
             ->where('master_karyawan.is_active', true)
             ->orderBy('master_karyawan.nama_lengkap')
             ->get();
+    }
+
+    private function getBranchSupervisorExportKaryawans()
+    {
+        return MasterKaryawan::leftJoin('master_divisi', 'master_karyawan.id_department', '=', 'master_divisi.id')
+            ->select(
+                'master_karyawan.id',
+                'master_karyawan.nik_karyawan',
+                'master_karyawan.nama_lengkap',
+                'master_karyawan.id_department',
+                'master_karyawan.privilage_cabang',
+                'master_karyawan.id_cabang',
+                'master_divisi.kode_divisi',
+                'master_divisi.nama_divisi'
+            )
+            ->where('master_karyawan.is_active', true)
+            ->whereNotNull('master_karyawan.privilage_cabang')
+            ->where('master_karyawan.privilage_cabang', '!=', '')
+            ->orderBy('master_karyawan.nama_lengkap')
+            ->get()
+            ->filter(function ($karyawan) {
+                return self::isBranchSupervisorExportEligible($karyawan->privilage_cabang);
+            })
+            ->values();
+    }
+
+    private function getBranchSupervisorBranchMap()
+    {
+        return [
+            '4' => 'Karawang',
+            '5' => 'Pemalang',
+        ];
+    }
+
+    private function filterBranchSupervisorKaryawansByBranch($karyawans, $branchId)
+    {
+        $branchId = (string) $branchId;
+
+        return $karyawans->filter(function ($karyawan) use ($branchId) {
+            $privileges = self::parsePrivilageCabang($karyawan->privilage_cabang);
+
+            return in_array($branchId, $privileges, true);
+        })->values();
+    }
+
+    private function appendBranchSupervisorMonthlySheets($spreadsheet, &$sheetIndex, $year, $month, $lastDay)
+    {
+        $allSupervisors = self::getBranchSupervisorExportKaryawans();
+
+        foreach (self::getBranchSupervisorBranchMap() as $branchId => $branchName) {
+            if ($sheetIndex > 0) {
+                $spreadsheet->createSheet();
+            }
+
+            $sheet = $spreadsheet->getSheet($sheetIndex);
+            $karyawans = self::filterBranchSupervisorKaryawansByBranch($allSupervisors, $branchId);
+            $data = $karyawans->isEmpty()
+                ? []
+                : self::buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $month, $lastDay);
+
+            self::writeAbsensiExportGroupedByKaryawan($sheet, $data, $branchName);
+            $sheet->setTitle($this->sanitizeSheetTitle($sheet, 'Branch Sup ' . $branchName, $spreadsheet));
+
+            $sheetIndex++;
+        }
     }
 
     private function getMonthlyKaryawanQuery($deptId = null)
@@ -1057,6 +1448,11 @@ class AbsensiController extends Controller
         $i = 0;
 
         foreach ($divisis as $divisi) {
+            if (self::isBranchSupervisorDepartment($divisi)) {
+                self::appendBranchSupervisorMonthlySheets($spreadsheet, $i, $year, $month, $lastDay);
+                continue;
+            }
+
             $karyawans = self::getExportKaryawanByDepartment($divisi->id);
 
             if ($i > 0) {
@@ -1064,12 +1460,11 @@ class AbsensiController extends Controller
             }
 
             $sheet = $spreadsheet->getSheet($i);
-            self::setupAbsensiExportSheet($sheet);
 
             $data = $karyawans->isEmpty()
                 ? []
                 : self::buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $month, $lastDay);
-            self::writeAbsensiExportRows($sheet, $data);
+            self::writeAbsensiExportGroupedByKaryawan($sheet, $data);
             $sheet->setTitle($this->sanitizeSheetTitle($sheet, $divisi->nama_divisi, $spreadsheet));
 
             $i++;
@@ -1137,7 +1532,26 @@ class AbsensiController extends Controller
                     $sheet->setTitle($this->sanitizeSheetTitle($sheet, $cekKaryawan->nama_lengkap, $spreadsheet));
                     $fileName = 'Monthly-Absensi_' . $cekKaryawan->nik_karyawan . '_' . $year . '-' . $month . '.xlsx';
                 } else {
-                    $karyawans = self::getMonthlyKaryawanQuery($deptId)->get();
+                    $divisi = MasterDivisi::where('id', (int) $deptId)->where('is_active', true)->first();
+
+                    if ($divisi && self::isBranchSupervisorDepartment($divisi)) {
+                        $spreadsheet = new Spreadsheet();
+                        $sheetIndex = 0;
+                        self::appendBranchSupervisorMonthlySheets($spreadsheet, $sheetIndex, $year, $month, $lastDay);
+                        $spreadsheet->setActiveSheetIndex(0);
+                        $fileName = 'Monthly-Absensi_BranchSupervisor_' . $year . '-' . $month . '.xlsx';
+                        $writer = new Xlsx($spreadsheet);
+                        $writer->save($path . $fileName);
+
+                        return response()->json([
+                            'data' => $fileName
+                        ], 200);
+                    }
+
+                    $karyawans = $divisi
+                        ? self::getExportKaryawanByDepartment($divisi->id)
+                        : self::getMonthlyKaryawanQuery($deptId)->get();
+
                     if ($karyawans->isEmpty()) {
                         return response()->json([
                             'message' => 'Data karyawan tidak ditemukan.'

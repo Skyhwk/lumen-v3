@@ -244,7 +244,9 @@ class SamplerTrackingService
     }
     public function listByDate($date = null, $samplerId = null, $samplerName = null)
     {
-        $date = $this->today();
+        $date = !empty($date)
+            ? Carbon::parse($date)->toDateString()
+            : $this->today();
         $hasSamplerFilter = !empty($samplerId) || !empty($samplerName);
         $memberFilter = function ($query) use ($samplerId, $samplerName) {
             if ($samplerId) {
@@ -292,7 +294,7 @@ class SamplerTrackingService
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
-        $date = $this->today();
+        $date = $request->input('tanggal') ?: $this->today();
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
         $recordsTotal = $rows->count();
 
@@ -520,15 +522,13 @@ class SamplerTrackingService
 
     protected function resolveEffectiveDuration($personalDuration, $defaultDuration)
     {
-        if (is_numeric($personalDuration) && (int) $personalDuration > 0) {
+        // Nilai 0 adalah durasi personal yang sah (sesaat), bukan nilai kosong.
+        // Ini yang memungkinkan anggota tim punya durasi berbeda dari durasi tim.
+        if ($personalDuration !== null && trim((string) $personalDuration) !== '') {
             return $personalDuration;
         }
 
-        if (is_numeric($defaultDuration) && (int) $defaultDuration > 0) {
-            return $defaultDuration;
-        }
-
-        return $this->firstFilledValue([$personalDuration, $defaultDuration]);
+        return $defaultDuration;
     }
     protected function firstFilledValue(array $values)
     {

@@ -3079,21 +3079,28 @@ class FixingController extends Controller
                 DB::table('t_ftc_t')->whereIn('no_sample', $sampleNumbers)->update(['is_active' => false]);
             }
 
+            $rawDoc = $orderHeader->no_document;
+
+            // Buang akhiran R1, R2, dll (kalo ada)
+            $baseDoc = !empty($rawDoc) ? preg_replace('/R\d+$/', '', $rawDoc) : null;
+
             // 6. Deactive sampling_plan
-            if (!empty($quotationNumbers)) {
+            if (!empty($baseDoc)) {
                 DB::table('sampling_plan')
-                    ->where(function ($q) use ($quotationNumbers) {
-                        $q->whereIn('no_quotation', $quotationNumbers);
+                    ->where(function ($q) use ($baseDoc) {
+                        $q->where('no_quotation', 'LIKE', $baseDoc . '%');
                         if (Schema::hasColumn('sampling_plan', 'no_document')) {
-                            $q->orWhereIn('no_document', $quotationNumbers);
+                            $q->orWhere('no_document', 'LIKE', $baseDoc . '%');
                         }
                     })
                     ->update(['is_active' => false]);
             }
 
             // 7. Deactive jadwal
-            if (!empty($quotationNumbers) && Schema::hasColumn('jadwal', 'no_quotation')) {
-                DB::table('jadwal')->whereIn('no_quotation', $quotationNumbers)->update(['is_active' => false]);
+            if (!empty($baseDoc) && Schema::hasColumn('jadwal', 'no_quotation')) {
+                DB::table('jadwal')
+                    ->where('no_quotation', 'LIKE', $baseDoc . '%')
+                    ->update(['is_active' => false]);
             }
 
             DB::commit();

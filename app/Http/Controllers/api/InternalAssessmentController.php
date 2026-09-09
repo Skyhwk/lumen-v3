@@ -124,6 +124,11 @@ class InternalAssessmentController extends Controller
     {
         $attempt = $this->authorizedAttempt($request);
 
+        $assessment = DB::table('assessment_internal')->where('id', $attempt->assessment_internal_id)->first();
+        if ($assessment && (bool) ($assessment->is_completed_profile ?? false) && !$attempt->profile_completed_at) {
+            return response()->json($this->statePayload($attempt->id), 409);
+        }
+
         if (!$attempt->consent_at && !(bool) $request->consent) {
             return response()->json(['message' => 'Persetujuan monitoring assessment wajib diberikan.'], 422);
         }
@@ -266,13 +271,6 @@ class InternalAssessmentController extends Controller
         if (!$assessment || !(bool) ($assessment->is_completed_profile ?? false)) {
             return response()->json(['message' => 'Sesi kelengkapan profil tidak tersedia.'], 404);
         }
-        if (DB::table('assessment_internal_sessions')
-            ->where('assessment_internal_attempt_id', $attempt->id)
-            ->whereNotIn('status', ['completed', 'expired'])
-            ->exists()) {
-            return response()->json(['message' => 'Selesaikan seluruh sesi assessment terlebih dahulu.'], 409);
-        }
-
         $employee = DB::table('master_karyawan')->whereRaw('LOWER(email) = ?', [strtolower($attempt->email)])->first();
         if (!$employee) {
             return response()->json(['message' => 'Data karyawan tidak ditemukan.'], 404);
@@ -470,7 +468,7 @@ class InternalAssessmentController extends Controller
         $query = DB::table('questions')
             ->where('question_category_id', $category->id)
             ->where('is_active', 1)
-            ->whereIn('question_type', ['single_choice', 'multiple_choice', 'scale']);
+            ->whereIn('question_type', ['single_choice', 'multiple_choice', 'scale', 'text']);
         if ($questionCount > 0) {
             $query->limit($questionCount);
         }
@@ -484,13 +482,30 @@ class InternalAssessmentController extends Controller
                     return [
                         'id' => (string) $option->id,
                         'text' => $option->option_text,
+                        'image' => $option->option_image
+                            ? rtrim(env('APP_URL'), '/') . '/file/' . ltrim($option->option_image, '/')
+                            : null,
                         'is_correct' => (bool) $option->is_correct,
                     ];
                 })->all();
 
+            $answerKey = $question->question_type === 'text'
+                ? collect($options)->where('is_correct', true)->pluck('text')->values()->all()
+                : collect($options)->where('is_correct', true)->pluck('id')->values()->all();
+
+            if ($question->question_type === 'text') {
+                $options = [];
+            }
+
             if ($question->question_type === 'scale') {
                 $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
                 $options = $scale ? ScaleScoringService::buildScaleOptions($scale) : [];
+                $options = collect($options)->map(function ($option) {
+                    if (trim((string) ($option['label'] ?? '')) !== '') {
+                        $option['text'] = $option['label'];
+                    }
+                    return $option;
+                })->all();
                 $values = collect($options)->pluck('value');
                 $scaleMin = $values->isNotEmpty() ? (float) $values->min() : 0;
                 $scaleMax = $values->isNotEmpty() ? (float) $values->max() : 0;
@@ -502,9 +517,15 @@ class InternalAssessmentController extends Controller
                 'order' => $questionIndex + 1,
                 'type' => $question->question_type,
                 'text' => $question->question_text,
-                'image' => json_decode($question->question_image ?: '[]', true) ?: [],
+                'image' => collect(json_decode($question->question_image ?: '[]', true) ?: [])
+                    ->map(function ($image) {
+                        if (preg_match('/^https?:\/\//i', (string) $image)) {
+                            return $image;
+                        }
+                        return rtrim(env('APP_URL'), '/') . '/file/' . ltrim((string) $image, '/');
+                    })->values()->all(),
                 'options' => $options,
-                'answer_key' => collect($options)->where('is_correct', true)->pluck('id')->values()->all(),
+                'answer_key' => $answerKey,
                 'scoring_type' => $question->scoring_type,
             ];
 
@@ -583,33 +604,48 @@ class InternalAssessmentController extends Controller
             return ['status' => 'waiting_data', 'message' => 'Data soal assessment belum tersedia.'];
         }
 
-        $sessionNavigation = $sessions->map(function ($item) {
+        $assessment = DB::table('assessment_internal')->where('id', $attempt->assessment_internal_id)->first();
+        $requiresProfile = $assessment && (bool) ($assessment->is_completed_profile ?? false);
+        $sessionOrderOffset = $requiresProfile ? 1 : 0;
+
+        $sessionNavigation = $sessions->map(function ($item) use ($sessionOrderOffset) {
             return [
-                'order' => (int) $item->session_order,
+                'order' => (int) $item->session_order + $sessionOrderOffset,
                 'name' => $item->category_name,
                 'status' => $item->status,
             ];
         })->values()->all();
 
-        $assessment = DB::table('assessment_internal')->where('id', $attempt->assessment_internal_id)->first();
-        $requiresProfile = $assessment && (bool) ($assessment->is_completed_profile ?? false);
-        $profileOrder = ((int) $sessions->max('session_order')) + 1;
         if ($requiresProfile) {
-            $sessionNavigation[] = [
-                'order' => $profileOrder,
-                'name' => 'Kelengkapan Profil',
+            array_unshift($sessionNavigation, [
+                'order' => 1,
+                'name' => 'KELENGKAPAN PROFIL',
                 'status' => $attempt->profile_completed_at ? 'completed' : 'pending',
+            ]);
+        }
+
+        if ($requiresProfile && !$attempt->profile_completed_at) {
+            $sessionNavigation[0]['status'] = 'in_progress';
+            return [
+                'status' => 'profile_required',
+                'sessions' => $sessionNavigation,
+                'session' => ['order' => 1, 'name' => 'KELENGKAPAN PROFIL'],
+                'profile' => $this->employeeProfile($attempt->email),
             ];
         }
 
         if (!$attempt->consent_at) {
-            $first = $sessions->first();
+            $first = $sessions->firstWhere('status', 'in_progress')
+                ?: $sessions->firstWhere('status', 'pending');
+            if (!$first) {
+                return ['status' => 'ready_to_complete', 'sessions' => $sessionNavigation];
+            }
             $firstQuestions = json_decode($first->questions_json ?: '[]', true) ?: [];
             return [
                 'status' => 'ready',
                 'sessions' => $sessionNavigation,
                 'session' => [
-                    'order' => (int) $first->session_order,
+                    'order' => (int) $first->session_order + $sessionOrderOffset,
                     'name' => $first->category_name,
                     'duration_minutes' => $first->duration_minutes,
                     'question_count' => count($firstQuestions),
@@ -627,7 +663,7 @@ class InternalAssessmentController extends Controller
                     'status' => 'waiting',
                     'sessions' => $sessionNavigation,
                     'session' => [
-                        'order' => (int) $pending->session_order,
+                        'order' => (int) $pending->session_order + $sessionOrderOffset,
                         'name' => $pending->category_name,
                         'duration_minutes' => $pending->duration_minutes,
                         'question_count' => count($pendingQuestions),
@@ -635,15 +671,6 @@ class InternalAssessmentController extends Controller
                             return in_array($item->status, ['completed', 'expired'], true);
                         }),
                     ],
-                ];
-            }
-            if ($requiresProfile && !$attempt->profile_completed_at) {
-                $sessionNavigation[count($sessionNavigation) - 1]['status'] = 'in_progress';
-                return [
-                    'status' => 'profile_required',
-                    'sessions' => $sessionNavigation,
-                    'session' => ['order' => $profileOrder, 'name' => 'Kelengkapan Profil'],
-                    'profile' => $this->employeeProfile($attempt->email),
                 ];
             }
             return ['status' => 'ready_to_complete', 'sessions' => $sessionNavigation];
@@ -683,7 +710,7 @@ class InternalAssessmentController extends Controller
             'sessions' => $sessionNavigation,
             'session' => [
                 'id' => $session->id,
-                'order' => $session->session_order,
+                'order' => (int) $session->session_order + $sessionOrderOffset,
                 'name' => $session->category_name,
                 'duration_minutes' => $session->duration_minutes,
                 'expires_at' => $session->expires_at,
@@ -742,6 +769,10 @@ class InternalAssessmentController extends Controller
             $answered++;
             $given = is_array($answer) ? array_values($answer) : [$answer];
             $key = array_values($question['answer_key'] ?? []);
+            if (($question['type'] ?? '') === 'text') {
+                $given = array_map(fn ($value) => mb_strtolower(trim((string) $value)), $given);
+                $key = array_map(fn ($value) => mb_strtolower(trim((string) $value)), $key);
+            }
             sort($given);
             sort($key);
             if ($key && $given === $key) {
