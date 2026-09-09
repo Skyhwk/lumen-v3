@@ -145,7 +145,7 @@ class AssessmentInternalController extends Controller
             ])
                 ->where('is_active', true)
                 ->where(function ($builder) {
-                    $builder->where('category_scope', 'hr')->orWhereNull('category_scope');
+                    $builder->whereIn('category_scope', ['hr', 'default'])->orWhereNull('category_scope');
                 })
                 ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
                 ->orderBy('name')
@@ -183,7 +183,7 @@ class AssessmentInternalController extends Controller
                     'id' => (int) $item['id'],
                     'question_count' => $isMandatory
                         ? (int) ($item['question_count'] ?? 0)
-                        : max(30, (int) ($item['question_count'] ?? 30)),
+                        : max(1, (int) ($item['question_count'] ?? 1)),
                     'duration_minutes' => max(1, (int) ($item['duration_minutes'] ?? 15)),
                     'has_time_limit' => filter_var($item['has_time_limit'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 ];
