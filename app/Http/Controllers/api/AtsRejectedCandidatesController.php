@@ -97,6 +97,8 @@ class AtsRejectedCandidatesController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where('is_rejected_kandidat', 1)
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->orderBy('is_rejected_kandidat_at', 'desc')
             ->orderBy('id', 'desc');
 

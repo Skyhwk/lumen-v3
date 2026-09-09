@@ -110,6 +110,8 @@ class AtsInterviewUserController extends Controller
 
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
             ->where('is_active', 1)
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->whereIn('status', ['interview_user', 'profile_completion'])
             ->where(function ($q) use ($mode) {
                 if ($mode === 'scheduled') {
@@ -437,6 +439,8 @@ class AtsInterviewUserController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'sallaryOffer'])
             ->where('status', 'internal_sallary_offer')
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
