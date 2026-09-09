@@ -391,40 +391,6 @@ class RecruitmentController extends Controller{
             ]);
             (new RecruitmentStatusService())->update($id, 'assessment');
 
-            $assessmentUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/')
-                . '/public/recruitment/assessment/' . rawurlencode($token);
-            $emailBody = $this->assessmentInvitationEmail([
-                'nama_lengkap' => $namaLengkap,
-                'posisi_dilamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
-                'assessment_url' => $assessmentUrl,
-            ]);
-
-            SendEmail::where('to', $email)
-                ->where('subject', 'Undangan Career Assessment - PT Inti Surya Laboratorium')
-                ->where('body', $emailBody)
-                ->where('cc', [])
-                ->where('bcc', [])
-                ->where('karyawan', 'Recruitment System')
-                ->noReply('PT Inti Surya Laboratorium')
-                ->replyToAtsHrd()
-                ->send();
-
-            try {
-                $whatsappData = (object) [
-                    'nama_lengkap' => $namaLengkap,
-                    'jenis_kelamin' => $request->jenis_kelamin,
-                    'posisi_di_lamar' => $personnelRequest->divisi_alias ?? $personnelRequest->posisi ?? 'Posisi yang dilamar',
-                    'assessment_url' => $assessmentUrl,
-                ];
-                $whatsappMessage = (new GenerateMessageAtsWhatsapp($whatsappData))->Assessment();
-                (new SendWhatsapp($noTelepon, $whatsappMessage))->send();
-            } catch (\Throwable $whatsappException) {
-                \Log::warning('Recruitment assessment WhatsApp failed', [
-                    'phone' => $noTelepon,
-                    'message' => $whatsappException->getMessage(),
-                ]);
-            }
-
             DB::commit();
 
             app(RecruitmentApplicationDraftService::class)->deleteByContact(
@@ -443,6 +409,7 @@ class RecruitmentController extends Controller{
                 'status'=> true,
                 'data' => [
                     'id' => $id,
+                    'token' => $token,
                 ],
             ], 200);
         } catch (\Throwable $th) {
@@ -469,6 +436,38 @@ class RecruitmentController extends Controller{
             'posisi_dilamar' => 'Programmer',
             'assessment_url' => $assessmentUrl,
         ]));
+    }
+
+    public function assessmentPreference(Request $request)
+    {
+        $this->validate($request, [
+            'token' => 'required|string',
+            'choice' => 'required|in:now,later',
+        ]);
+
+        $candidate = DB::table('new_recruitment')->where('token', $request->token)->first();
+        if (!$candidate || !$candidate->is_active) {
+            return response()->json(['status' => false, 'message' => 'Data pendaftaran tidak ditemukan.'], 404);
+        }
+
+        $now = Carbon::now('Asia/Jakarta');
+        DB::table('new_recruitment')->where('id', $candidate->id)->update([
+            'assessment_delivery_choice' => $request->choice,
+            'assessment_delivery_chosen_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        if ($request->choice === 'later' && empty($candidate->assessment_invitation_sent_at)) {
+            $position = DB::table('personnel_requests')->where('id', $candidate->personnel_request_id)->value('divisi_alias') ?: ($candidate->posisi_dilamar ?: 'Posisi yang dilamar');
+            $url = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/') . '/public/recruitment/assessment/' . rawurlencode($candidate->token);
+            SendEmail::where('to', $candidate->email)
+                ->where('subject', 'Undangan Career Assessment - PT Inti Surya Laboratorium')
+                ->where('body', $this->assessmentInvitationEmail(['nama_lengkap' => $candidate->nama_lengkap, 'posisi_dilamar' => $position, 'assessment_url' => $url]))
+                ->where('karyawan', 'Recruitment System')->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
+            DB::table('new_recruitment')->where('id', $candidate->id)->update(['assessment_invitation_sent_at' => $now, 'updated_at' => $now]);
+        }
+
+        return response()->json(['status' => true, 'assessment_url' => rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/') . '/public/recruitment/assessment/' . rawurlencode($candidate->token)]);
     }
 
     public function checkApplicationEligibility(Request $request)
