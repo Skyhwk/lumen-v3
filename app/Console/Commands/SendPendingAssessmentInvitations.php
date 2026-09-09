@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class SendPendingAssessmentInvitations extends Command
 {
-    protected $signature = 'recruitment:send-pending-assessment-invitations';
+    protected $signature = 'pendingassessmentinvitations';
 
     protected $description = 'Kirim undangan assessment untuk kandidat yang memilih nanti atau berhenti di tengah assessment';
 
