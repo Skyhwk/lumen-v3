@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\mobile;
 
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackingController
 {
     public function index(Request $request)
     {
         $data = $this->service->listByDate(
-            $request->tanggal,
+            Carbon::now('Asia/Jakarta')->toDateString(),
             null,
             $this->karyawan
         );
