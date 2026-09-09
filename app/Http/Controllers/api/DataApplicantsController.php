@@ -548,7 +548,7 @@ class DataApplicantsController extends Controller
 
         // ── Position & score ──
         $posisiName = $this->resolvePositionName($applicant);
-        $score      = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: 85);
+        $score      = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: '-');
         $photoDataUri = app(RecruitmentPictureService::class)->toDataUri($applicant->picture ?? null);
         $nameParts = preg_split('/\s+/', trim((string) $namaLengkap));
         $initials = '';
