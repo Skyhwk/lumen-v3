@@ -52,6 +52,7 @@ class Kernel extends ConsoleKernel
         Commands\TestCsTicketGeneratorCommand::class,
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
+        Commands\SendPendingAssessmentInvitations::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         // Commands\LhpBackfillCommand::class,
@@ -62,7 +63,7 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('candidatereminder')
+        $schedule->command('recruitment:send-pending-assessment-invitations')
             ->everyFiveMinutes()
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping();
