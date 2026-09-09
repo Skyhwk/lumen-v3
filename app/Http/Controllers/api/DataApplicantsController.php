@@ -955,7 +955,7 @@ class DataApplicantsController extends Controller
                     </td>
                     <td class='score-cell'>
                         <div class='meta-badge'>
-                            ATS MATCH
+                            ATS MATCH <br>
                             <span class='score-number'>{$score}%</span>
                         </div>
                     </td>
