@@ -338,6 +338,7 @@ class AssessmentController extends Controller
 
     private function createSessions($attemptId, $now, $recruitment)
     {
+        $generalCategory = $this->generalRecruitmentCategory($recruitment);
         $categories = $this->assessmentCategories()->get();
         $mandatoryNames = ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'];
         $mandatoryCategories = $categories->filter(function ($category) use ($mandatoryNames) {
@@ -355,6 +356,10 @@ class AssessmentController extends Controller
         )->shuffle()->values();
 
         $sessionOrder = 1;
+        if ($generalCategory) {
+            $this->insertGeneralRecruitmentSession($attemptId, $sessionOrder++, $generalCategory, $now);
+        }
+
         foreach ($mandatoryCategories as $category) {
             $this->insertCategorySession($attemptId, $sessionOrder++, $category, $now);
         }
@@ -405,11 +410,33 @@ class AssessmentController extends Controller
         ]);
     }
 
+    private function insertGeneralRecruitmentSession($attemptId, $sessionOrder, $category, $now): void
+    {
+        DB::table('assessment_sessions')->insert([
+            'assessment_attempt_id' => $attemptId,
+            'question_category_id' => null,
+            'session_order' => $sessionOrder,
+            'category_name' => 'Pertanyaan Umum Rekrutmen',
+            'question_count' => (int) $category->question_count,
+            'duration_minutes' => 0,
+            'questions_json' => json_encode($this->generalRecruitmentQuestions($category)),
+            'answers_json' => json_encode(new \stdClass()),
+            'result_json' => null,
+            'status' => 'pending',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
     private function sessionDefinitions($recruitment)
     {
         $definitions = $this->assessmentCategories()->get()->map(function ($category) {
             return $this->sessionDefinitionFromCategory($category);
         })->all();
+
+        if ($generalCategory = $this->generalRecruitmentCategory($recruitment)) {
+            array_unshift($definitions, ['Pertanyaan Umum Rekrutmen', (int) $generalCategory->question_count, 0, false, 0]);
+        }
 
         foreach ($this->userAssessmentConfigs($recruitment) as $userConfig) {
             $definitions[] = $this->userSessionDefinition($userConfig);
@@ -805,6 +832,7 @@ class AssessmentController extends Controller
         if (!$session) {
             if (($attempt->status ?? null) !== 'completed') {
                 $completedAt = Carbon::now();
+                $this->applyGeneralRecruitmentResult($attempt->id, $attempt->recruitment_id, $completedAt);
                 DB::table('assessment_attempts')->where('id', $attempt->id)->update([
                     'status' => 'completed',
                     'completed_at' => $completedAt,
@@ -862,6 +890,9 @@ class AssessmentController extends Controller
     private function scoreSession($session, array $answers)
     {
         $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
+        if (($session->category_name ?? '') === 'Pertanyaan Umum Rekrutmen') {
+            return $this->scoreGeneralRecruitment($questions, $answers);
+        }
         if (strtoupper($session->category_name) === 'DISC') {
             return $this->scoreDisc($questions, $answers);
         }
@@ -927,6 +958,166 @@ class AssessmentController extends Controller
 
         $totalQuestions = count($questions);
         return ['engine' => 'question_bank', 'answered' => $answered, 'total_questions' => $totalQuestions, 'correct_answers' => $correct, 'score' => $totalQuestions ? round(($correct / $totalQuestions) * 100, 2) : 0];
+    }
+
+    private function generalRecruitmentCategory($recruitment)
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('recruitment_general_question_categories')
+            || !\Illuminate\Support\Facades\Schema::hasTable('recruitment_general_questions')
+            || !\Illuminate\Support\Facades\Schema::hasTable('recruitment_general_question_options')) {
+            return null;
+        }
+
+        $request = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
+        $category = $this->resolveRecruitmentGeneralJobpostCategory($request);
+        if (!$request || !$category || trim((string) $request->grade_master_karyawan) === '') return null;
+
+        $availableRequests = DB::table('personnel_requests as request')
+            ->leftJoin('new_recruitment as hired', function ($join) {
+                $join->on('hired.personnel_request_id', '=', 'request.id')->where('hired.status', 'hired');
+            })
+            ->where('request.grade_master_karyawan', $request->grade_master_karyawan)
+            ->where('request.is_active', 1)
+            ->when(\Illuminate\Support\Facades\Schema::hasColumn('personnel_requests', 'is_completed'), function ($query) {
+                $query->where(function ($q) { $q->whereNull('request.is_completed')->orWhere('request.is_completed', '!=', 1); });
+            })
+            ->groupBy('request.id', 'request.posisi', 'request.jumlah_personal');
+        $this->scopePersonnelRequestsToAlias($availableRequests, $category, 'request');
+        $openPositionIds = $availableRequests
+            ->havingRaw('request.jumlah_personal > COUNT(hired.id)')
+            ->get(['request.posisi'])
+            ->pluck('posisi')
+            ->filter()
+            ->map(fn ($positionId) => (int) $positionId)
+            ->unique()
+            ->values();
+        if ($openPositionIds->count() < 2) return null;
+
+        $questionCategory = DB::table('recruitment_general_question_categories')
+            ->where('jobpost_category_id', $category->id)
+            ->where('grade', $request->grade_master_karyawan)
+            ->where('is_active', 1)->first();
+        if (!$questionCategory) return null;
+
+        // Only use questions that can direct the candidate to at least one
+        // personnel request that is currently open in this alias and grade.
+        $questionCategory->open_position_ids = $openPositionIds->all();
+        $hasEligibleQuestion = DB::table('recruitment_general_questions')
+            ->where('category_id', $questionCategory->id)
+            ->where('is_active', 1)
+            ->where('status', 'active')
+            ->whereExists(function ($query) use ($questionCategory) {
+                $query->select(DB::raw(1))
+                    ->from('recruitment_general_question_options as question_option')
+                    ->whereColumn('question_option.question_id', 'recruitment_general_questions.id')
+                    ->whereIn('question_option.position_id', $questionCategory->open_position_ids);
+            })
+            ->exists();
+        if (!$hasEligibleQuestion) return null;
+
+        return $questionCategory;
+    }
+
+    private function generalRecruitmentQuestions($category): array
+    {
+        return DB::table('recruitment_general_questions')
+            ->where('category_id', $category->id)->where('is_active', 1)->where('status', 'active')
+            ->whereExists(function ($query) use ($category) {
+                $query->select(DB::raw(1))
+                    ->from('recruitment_general_question_options as question_option')
+                    ->whereColumn('question_option.question_id', 'recruitment_general_questions.id')
+                    ->whereIn('question_option.position_id', $category->open_position_ids ?? []);
+            })
+            ->inRandomOrder()->limit((int) $category->question_count)->get()->values()->map(function ($question, $index) {
+                $options = DB::table('recruitment_general_question_options')
+                    ->where('question_id', $question->id)->orderBy('option_order')->get()
+                    ->map(fn ($option) => ['id' => (string) $option->id, 'text' => $option->option_text, 'position_id' => (int) $option->position_id])->all();
+                return ['id' => 'recruitment_general_' . $question->id, 'source' => 'recruitment_general', 'order' => $index + 1, 'type' => 'single_choice', 'text' => $question->question_text, 'options' => $options];
+            })->all();
+    }
+
+    private function scoreGeneralRecruitment(array $questions, array $answers): array
+    {
+        $scores = [];
+        foreach ($questions as $question) {
+            $answer = $answers[$question['id']] ?? null;
+            $choice = is_array($answer) ? reset($answer) : $answer;
+            $option = collect($question['options'] ?? [])->firstWhere('id', (string) $choice);
+            if ($option && !empty($option['position_id'])) $scores[(int) $option['position_id']] = ($scores[(int) $option['position_id']] ?? 0) + 1;
+        }
+        arsort($scores);
+        $positions = empty($scores) ? collect() : DB::table('master_jabatan')->whereIn('id', array_keys($scores))->get(['id', 'nama_jabatan'])->keyBy('id');
+        $ranking = collect($scores)->map(function ($score, $positionId) use ($positions) {
+            return ['position_id' => (int) $positionId, 'position_name' => $positions[$positionId]->nama_jabatan ?? null, 'score' => $score];
+        })->values()->all();
+        $topScore = $ranking[0]['score'] ?? null;
+        $isTie = $topScore !== null && collect($ranking)->where('score', $topScore)->count() > 1;
+        return ['engine' => 'recruitment_general', 'answered' => array_sum($scores), 'total_questions' => count($questions), 'ranking' => $ranking, 'is_top_score_tied' => $isTie];
+    }
+
+    private function applyGeneralRecruitmentResult(int $attemptId, int $recruitmentId, Carbon $at): void
+    {
+        $session = DB::table('assessment_sessions')->where('assessment_attempt_id', $attemptId)->where('category_name', 'Pertanyaan Umum Rekrutmen')->first();
+        if (!$session) return;
+        $result = json_decode($session->result_json ?: '{}', true) ?: [];
+        if (($result['engine'] ?? null) !== 'recruitment_general' || !empty($result['is_top_score_tied'])) return;
+        $ranking = $result['ranking'] ?? [];
+        if (empty($ranking)) return;
+
+        DB::transaction(function () use ($recruitmentId, $ranking, $at) {
+            $recruitment = DB::table('new_recruitment')->where('id', $recruitmentId)->lockForUpdate()->first();
+            if (!$recruitment) return;
+            $sourceRequest = DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first();
+            $category = $this->resolveRecruitmentGeneralJobpostCategory($sourceRequest);
+            if (!$sourceRequest || !$category) return;
+            $target = null;
+            foreach ($ranking as $rank) {
+                $candidates = DB::table('personnel_requests as request')
+                    ->leftJoin('new_recruitment as hired', function ($join) { $join->on('hired.personnel_request_id', '=', 'request.id')->where('hired.status', 'hired'); })
+                    ->where('request.grade_master_karyawan', $sourceRequest->grade_master_karyawan)
+                    ->where('request.posisi', (int) ($rank['position_id'] ?? 0))->where('request.is_active', 1)
+                    ->when(\Illuminate\Support\Facades\Schema::hasColumn('personnel_requests', 'is_completed'), function ($query) { $query->where(function ($q) { $q->whereNull('request.is_completed')->orWhere('request.is_completed', '!=', 1); }); })
+                    ->groupBy('request.id', 'request.jumlah_personal')
+                    ->select('request.id', 'request.jumlah_personal', DB::raw('COUNT(hired.id) as hired_count'))
+                    ->havingRaw('request.jumlah_personal > COUNT(hired.id)')
+                    ->orderByRaw('(request.jumlah_personal - COUNT(hired.id)) DESC')->orderBy('request.id');
+                $this->scopePersonnelRequestsToAlias($candidates, $category, 'request');
+                $candidates = $candidates->get();
+                if ($candidates->isNotEmpty()) { $target = $candidates->first(); break; }
+            }
+            if (!$target || (int) $target->id === (int) $recruitment->personnel_request_id) return;
+            $history = json_decode($recruitment->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $history[] = ['status' => 'personnel_request_changed_by_general_recruitment', 'at' => $at->toDateTimeString(), 'from_personnel_request_id' => (int) $recruitment->personnel_request_id, 'to_personnel_request_id' => (int) $target->id, 'ranking' => $ranking];
+            DB::table('new_recruitment')->where('id', $recruitment->id)->update(['personnel_request_id' => $target->id, 'meta_history' => json_encode($history), 'updated_at' => $at]);
+        });
+    }
+
+    private function resolveRecruitmentGeneralJobpostCategory($request)
+    {
+        if (!$request || !\Illuminate\Support\Facades\Schema::hasTable('jobpost_categories')) return null;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
+            if ($request->divisi_alias_id !== null) {
+                return DB::table('jobpost_categories')->where('id', (int) $request->divisi_alias_id)->where('is_active', 1)->first(['id', 'name']);
+            }
+        }
+        $name = trim((string) ($request->divisi_alias ?? ''));
+        return $name === '' ? null : DB::table('jobpost_categories')->where('name', $name)->where('is_active', 1)->first(['id', 'name']);
+    }
+
+    private function scopePersonnelRequestsToAlias($query, $category, string $tableAlias = 'request'): void
+    {
+        $prefix = $tableAlias ? $tableAlias . '.' : '';
+        if (\Illuminate\Support\Facades\Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
+            $query->where(function ($scope) use ($prefix, $category) {
+                $scope->where($prefix . 'divisi_alias_id', $category->id)
+                    ->orWhere(function ($fallback) use ($prefix, $category) {
+                        $fallback->whereNull($prefix . 'divisi_alias_id')->where($prefix . 'divisi_alias', $category->name);
+                    });
+            });
+            return;
+        }
+        $query->where($prefix . 'divisi_alias', $category->name);
     }
 
     private function scorePapi(array $questions, array $answers)

@@ -20,19 +20,20 @@ class GenerateAssessmentDocumentService
     {
         $context = $this->loadRecruitmentContext($recruitmentId);
 
-        $outputDir = $persist
-            ? base_path('public/' . self::OUTPUT_DIR)
-            : base_path('public/' . self::TEMP_DIR);
+        $batchId = str_replace('.', '', uniqid('send_', true));
+        $relativeDir = $persist ? self::OUTPUT_DIR : self::TEMP_DIR . '/' . $batchId;
+        $outputDir = base_path('public/' . $relativeDir);
 
-        if (!is_dir($outputDir)) {
-            @mkdir($outputDir, 0775, true);
+        if (!is_dir($outputDir) && !@mkdir($outputDir, 0775, true) && !is_dir($outputDir)) {
+            throw new \RuntimeException('Gagal membuat folder lampiran assessment.');
         }
 
         $documents = [];
         $failedSessions = [];
+        $batchDir = $persist ? null : $outputDir;
 
         foreach ($context['sessions'] as $session) {
-            if (empty($session->result_json)) {
+            if (empty($session->result_json) || $this->isHiddenAssessmentSession($session)) {
                 continue;
             }
 
@@ -46,7 +47,8 @@ class GenerateAssessmentDocumentService
                     $engine,
                     $context['candidate_name'],
                     $outputDir,
-                    $persist
+                    $relativeDir,
+                    $batchDir
                 );
 
                 if ($document) {
@@ -77,6 +79,7 @@ class GenerateAssessmentDocumentService
             'attempt_id' => (int) $context['attempt']->id,
             'candidate_name' => $context['candidate_name'],
             'persisted' => $persist,
+            'batch_dir' => $batchDir,
             'documents' => $documents,
             'failed_sessions' => $failedSessions,
         ];
@@ -96,6 +99,7 @@ class GenerateAssessmentDocumentService
                 'recruitment_id' => $recruitmentId,
                 'candidate_name' => null,
                 'persisted' => false,
+                'batch_dir' => null,
                 'documents' => [],
                 'failed_sessions' => [],
                 'skipped_reason' => $e->getMessage(),
@@ -108,13 +112,23 @@ class GenerateAssessmentDocumentService
         $attachments = [];
 
         foreach ($documents as $document) {
-            if (empty($document['path'])) {
+            $fullPath = $document['full_path'] ?? null;
+            if (!$fullPath && !empty($document['path'])) {
+                $fullPath = base_path('public/' . ltrim($document['path'], '/'));
+            }
+
+            if (!$fullPath || !is_file($fullPath) || filesize($fullPath) < 1) {
+                Log::warning('Assessment attachment skipped because file is missing', [
+                    'path' => $document['path'] ?? null,
+                    'full_path' => $fullPath,
+                ]);
                 continue;
             }
 
             $attachments[] = [
-                'path' => $document['path'],
-                'name' => $document['attachment_name'] ?? ($document['filename'] ?? basename($document['path'])),
+                'path' => $document['path'] ?? null,
+                'full_path' => $fullPath,
+                'name' => $document['attachment_name'] ?? ($document['filename'] ?? basename($fullPath)),
             ];
         }
 
@@ -145,13 +159,17 @@ class GenerateAssessmentDocumentService
         $labels = [];
 
         foreach ($context['sessions'] as $session) {
-            if (empty($session->result_json)) {
+            if (empty($session->result_json) || $this->isHiddenAssessmentSession($session)) {
                 continue;
             }
 
             $categoryName = trim((string) ($session->category_name ?? 'Assessment'));
             $labels[] = [
-                'name' => $this->buildAttachmentDisplayName($context['candidate_name'], $categoryName),
+                'name' => $this->buildAttachmentDisplayName(
+                    $context['candidate_name'],
+                    $categoryName,
+                    (int) $session->session_order
+                ),
             ];
         }
 
@@ -160,16 +178,26 @@ class GenerateAssessmentDocumentService
 
     public function cleanupDocuments(array $documents): void
     {
+        $batchDirs = [];
+
         foreach ($documents as $document) {
             $fullPath = $document['full_path'] ?? null;
 
             if (!$fullPath && !empty($document['path'])) {
-                $fullPath = public_path($document['path']);
+                $fullPath = base_path('public/' . ltrim($document['path'], '/'));
             }
 
             if ($fullPath && is_file($fullPath)) {
                 @unlink($fullPath);
             }
+
+            if (!empty($document['batch_dir'])) {
+                $batchDirs[$document['batch_dir']] = true;
+            }
+        }
+
+        foreach (array_keys($batchDirs) as $batchDir) {
+            $this->removeDirectory($batchDir);
         }
     }
 
@@ -209,7 +237,7 @@ class GenerateAssessmentDocumentService
 
         $sessions = DB::table('assessment_sessions')
             ->where('assessment_attempt_id', $attempt->id)
-            ->where('status', 'completed')
+            // ->where('status', 'completed')
             ->orderBy('session_order')
             ->get();
 
@@ -231,18 +259,24 @@ class GenerateAssessmentDocumentService
         string $engine,
         string $candidateName,
         string $outputDir,
-        bool $persist
+        string $relativeDir,
+        ?string $batchDir
     ): ?array {
         $categoryName = trim((string) ($session->category_name ?? 'Assessment'));
         $viewData = $this->buildViewData($session, $result, $engine, $candidateName, $categoryName);
         $viewName = $this->resolveViewName($engine);
 
-        $attachmentName = $this->buildAttachmentDisplayName($candidateName, $categoryName);
-        $filename = $persist
-            ? $this->buildPdfFilename($candidateName, $categoryName)
-            : uniqid('assessment_', true) . '_' . $attachmentName;
-        $relativeDir = $persist ? self::OUTPUT_DIR : self::TEMP_DIR;
+        $attachmentName = $this->buildAttachmentDisplayName(
+            $candidateName,
+            $categoryName,
+            (int) $session->session_order
+        );
+        $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', uniqid('assessment_', true) . '_' . $attachmentName);
         $fullPath = rtrim($outputDir, '/') . '/' . $filename;
+        $mpdfTemp = rtrim($outputDir, '/') . '/mpdf_' . (int) $session->id . '_' . str_replace('.', '', uniqid('', true));
+        if (!is_dir($mpdfTemp) && !@mkdir($mpdfTemp, 0775, true) && !is_dir($mpdfTemp)) {
+            throw new \RuntimeException('Gagal membuat folder sementara mPDF.');
+        }
 
         $html = view($viewName, $viewData)->render();
 
@@ -253,6 +287,7 @@ class GenerateAssessmentDocumentService
             'margin_right' => 4,
             'margin_top' => 4,
             'margin_bottom' => 4,
+            'tempDir' => $mpdfTemp,
         ]);
 
         $chartFiles = $viewData['disc_chart_files'] ?? [];
@@ -267,14 +302,17 @@ class GenerateAssessmentDocumentService
             $mpdf->WriteHTML($html);
             $mpdf->Output($fullPath, Destination::FILE);
         } finally {
+            unset($mpdf);
             foreach ($chartFiles as $chartFile) {
                 if (is_string($chartFile) && is_file($chartFile)) {
                     @unlink($chartFile);
                 }
             }
+            $this->removeDirectory($mpdfTemp);
         }
 
-        if (!is_file($fullPath)) {
+        clearstatcache(true, $fullPath);
+        if (!is_file($fullPath) || filesize($fullPath) < 1) {
             return null;
         }
 
@@ -287,7 +325,8 @@ class GenerateAssessmentDocumentService
             'attachment_name' => $attachmentName,
             'path' => $relativeDir . '/' . $filename,
             'full_path' => $fullPath,
-            'url' => $persist ? $this->buildPublicUrl($filename) : null,
+            'batch_dir' => $batchDir,
+            'url' => strpos($relativeDir, self::OUTPUT_DIR) === 0 ? $this->buildPublicUrl($filename) : null,
             'scored_at' => $result['scored_at'] ?? $session->completed_at,
         ];
     }
@@ -439,13 +478,44 @@ class GenerateAssessmentDocumentService
         );
     }
 
-    private function buildAttachmentDisplayName(string $candidateName, string $categoryName): string
+    private function buildAttachmentDisplayName(string $candidateName, string $categoryName, int $sessionOrder = 0): string
     {
+        $order = $sessionOrder > 0 ? sprintf('%02d_', $sessionOrder) : '';
+
         return sprintf(
-            '%s_%s.pdf',
+            '%s%s_%s.pdf',
+            $order,
             $this->sanitizeFilenamePart($categoryName),
             $this->sanitizeFilenamePart($candidateName)
         );
+    }
+
+    private function removeDirectory(string $directory): void
+    {
+        if ($directory === '' || !is_dir($directory)) {
+            return;
+        }
+
+        $items = scandir($directory);
+        if ($items === false) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $path = $directory . DIRECTORY_SEPARATOR . $item;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+                continue;
+            }
+
+            @unlink($path);
+        }
+
+        @rmdir($directory);
     }
 
     private function sanitizeFilenamePart(string $value): string
