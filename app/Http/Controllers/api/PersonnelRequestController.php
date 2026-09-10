@@ -392,7 +392,7 @@ class PersonnelRequestController extends Controller
     }
 
     /**
-     * Request dianggap selesai jika jumlah pelamar >= kebutuhan dan jumlah hired >= kebutuhan.
+     * Request dianggap selesai jika jumlah hired sudah memenuhi kebutuhan.
      */
     private function isPersonnelRequestFulfilled($row): bool
     {
@@ -401,10 +401,9 @@ class PersonnelRequestController extends Controller
             return false;
         }
 
-        $totalPelamar = (int) ($row->total_pelamar ?? 0);
         $totalHired = (int) ($row->total_hired ?? 0);
 
-        return $totalPelamar >= $required && $totalHired >= $required;
+        return $totalHired >= $required;
     }
 
     private function applyCompletionFilter($query, ?string $filter)
@@ -470,7 +469,9 @@ class PersonnelRequestController extends Controller
                     $q->select('id', 'personnel_request_id', 'status');
                 }
             ])->withCount([
-                'newRecruitments as total_pelamar',
+                'newRecruitments as total_pelamar' => function ($query) {
+                    $this->constrainCountedApplicants($query);
+                },
                 'newRecruitments as total_hired' => function ($query) {
                     $query->where('status', 'hired');
                 },
@@ -1471,6 +1472,13 @@ class PersonnelRequestController extends Controller
                 'error' => $th->getMessage(),
             ], 500);
         }
+    }
+
+    private function constrainCountedApplicants($query)
+    {
+        $query->where('is_active', 1)
+            ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
+            ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) NOT IN ('assessment', 'hired', 'training')");
     }
 
 }
