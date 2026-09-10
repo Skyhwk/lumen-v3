@@ -118,6 +118,8 @@ class AtsHiredCandidatesController extends Controller
             ->where(function ($q) {
                 $q->whereRaw('LOWER(status) IN (?)', ['hired']);
             })
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
