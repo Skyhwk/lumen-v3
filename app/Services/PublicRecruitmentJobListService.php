@@ -138,20 +138,19 @@ class PublicRecruitmentJobListService
             return $primary;
         }
 
-        $alternates = $sorted->filter(fn ($job) => (int) $job->id !== (int) $primary->id);
+        return $this->pickJobWithLeastCandidates($sorted, $countsByRequestId);
+    }
 
-        $idleAlternate = $alternates->first(
-            fn ($job) => ($countsByRequestId[(int) $job->id]['total'] ?? 0) === 0
-        );
-        if ($idleAlternate) {
-            return $idleAlternate;
-        }
-
-        $alternate = $alternates
-            ->sortByDesc(fn ($job) => $job->created_at ?? $job->id ?? 0)
+    private function pickJobWithLeastCandidates(Collection $jobs, array $countsByRequestId): object
+    {
+        return $jobs
+            ->sortBy(function ($job) use ($countsByRequestId) {
+                return [
+                    $countsByRequestId[(int) $job->id]['total'] ?? 0,
+                    $job->created_at ?? $job->id ?? 0,
+                ];
+            })
             ->first();
-
-        return $alternate ?? $primary;
     }
 
     private function hasAnyQuotaFulfilled(array $counts): bool
