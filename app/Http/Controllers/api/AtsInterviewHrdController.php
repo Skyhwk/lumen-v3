@@ -34,6 +34,8 @@ class AtsInterviewHrdController extends Controller
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where('is_active', 1)
             ->where('is_rejected_kandidat', 0)
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->where(function ($q) {
                 $q->where('status', 'interview_hrd')
                   ->orWhereHas('hrdInterview');

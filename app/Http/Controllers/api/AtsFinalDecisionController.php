@@ -317,6 +317,8 @@ class AtsFinalDecisionController extends Controller
             NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile']),
             $listType
         )
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)

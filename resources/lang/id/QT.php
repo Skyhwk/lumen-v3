@@ -84,6 +84,7 @@ return [
             '8' => "Optimal perhari 1 (satu) tim sampling (2 orang) bisa mengerjakan 6 titik udara (Ambient / Lingkungan Kerja).",
             '9' => "Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan.",
             '10' => "Biaya sudah termasuk :costs.",
+            '11' => "Laboratorium menjunjung tinggi prinsip independensi, ketidakberpihakan, objektivitas, dan pengelolaan terhadap potensi konflik kepentingan dalam seluruh kegiatan pengujian, sesuai dengan kebijakan dan prosedur yang berlaku.",
         ],
     ],
     'tax' => [

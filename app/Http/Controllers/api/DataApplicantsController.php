@@ -36,6 +36,8 @@ class DataApplicantsController extends Controller
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where('status', 'screening')
             ->where('is_active', 1)
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
@@ -390,6 +392,41 @@ class DataApplicantsController extends Controller
         return response()->json([
             'status' => 200,
             'message' => 'Applicant has been rejected.',
+            'data' => $applicant,
+        ], 200);
+    }
+
+    /**
+     * Keep candidate by setting personnel_request_id to NULL
+     */
+    public function keepCandidate(Request $request, $id = null)
+    {
+        $candidateId = $id ?? $request->input('id');
+
+        if (!$candidateId) {
+            return response()->json([
+                'status' => 400,
+                'message' => 'ID kandidat tidak ditemukan',
+            ], 400);
+        }
+
+        $applicant = NewRecruitment::find($candidateId);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Data kandidat tidak ditemukan',
+            ], 404);
+        }
+
+        $applicant->update([
+            'personnel_request_id' => null,
+            'is_keep' => 1,
+        ]);
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Kandidat berhasil di-keep dan personnel request ID berhasil diubah menjadi NULL',
             'data' => $applicant,
         ], 200);
     }
