@@ -637,10 +637,107 @@ class PersonnelRequesthrdController extends Controller
         }
     }
 
+    /**
+     * Global recruitment pipeline counts for on-process published requests.
+     * Applied is counted separately and is not part of the displayed steps.
+     */
+    public function pipelineOverview()
+    {
+        try {
+            $steps = [
+                'assessment' => 0,
+                'screening' => 0,
+                'interview_hrd' => 0,
+                'profile_completion' => 0,
+                'interview_user' => 0,
+                'management_decision' => 0,
+                'salary_offer' => 0,
+                'hired' => 0,
+            ];
+
+            $salaryStatuses = ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'];
+
+            $query = DB::table('new_recruitment as nr')
+                ->join('personnel_requests as pr', 'pr.id', '=', 'nr.personnel_request_id')
+                ->where('nr.is_active', 1)
+                ->whereRaw('COALESCE(nr.is_rejected_kandidat, 0) = 0')
+                ->where('pr.is_active', 1)
+                ->where('pr.is_publish', 1)
+                ->where('pr.is_completed', 0)
+                ->where(function ($q) {
+                    $q->where('pr.is_reject', 0)->orWhereNull('pr.is_reject');
+                });
+
+            if (Schema::hasColumn('new_recruitment', 'reject_interview_user_at')) {
+                $query->where(function ($q) {
+                    $q->whereNull('nr.reject_interview_user_at')
+                        ->orWhereRaw("TRIM(COALESCE(nr.reject_interview_user_at, '')) = ''");
+                });
+            }
+
+            $rows = $query
+                ->selectRaw("LOWER(TRIM(COALESCE(nr.status, ''))) as status, COUNT(*) as total")
+                ->groupBy(DB::raw("LOWER(TRIM(COALESCE(nr.status, '')))"))
+                ->get();
+
+            $applied = 0;
+            $rejected = 0;
+
+            foreach ($rows as $row) {
+                $status = (string) ($row->status ?? '');
+                $count = (int) ($row->total ?? 0);
+
+                if ($status === '' || $status === 'applied') {
+                    $applied += $count;
+                    continue;
+                }
+
+                if ($status === 'rejected') {
+                    $rejected += $count;
+                    continue;
+                }
+
+                if (array_key_exists($status, $steps)) {
+                    $steps[$status] += $count;
+                    continue;
+                }
+
+                if (in_array($status, $salaryStatuses, true)) {
+                    $steps['salary_offer'] += $count;
+                }
+            }
+
+            $openRequests = PersonnelRequest::query()
+                ->where('is_active', 1)
+                ->where('is_publish', 1)
+                ->where('is_completed', 0)
+                ->where(function ($q) {
+                    $q->where('is_reject', 0)->orWhereNull('is_reject');
+                })
+                ->count();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'open_requests' => (int) $openRequests,
+                    'total' => array_sum($steps),
+                    'applied' => $applied,
+                    'rejected' => $rejected,
+                    'steps' => $steps,
+                ],
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal memuat ringkasan pipeline: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     private function constrainCountedApplicants($query)
     {
         $query->where('is_active', 1)
             ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
-            ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) <> 'assessment'");
+            ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) NOT IN ('assessment', 'hired', 'training')");
     }
 }
