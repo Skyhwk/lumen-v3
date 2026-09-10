@@ -643,7 +643,7 @@ class PersonnelRequesthrdController extends Controller
      * Assessment counts candidates who already started the test (row exists in
      * assessment_attempts), whether in progress or completed.
      */
-    public function pipelineOverview()
+    public function pipelineOverview(Request $request)
     {
         try {
             $steps = [
@@ -660,7 +660,7 @@ class PersonnelRequesthrdController extends Controller
 
             $salaryStatuses = ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'];
 
-            $rows = $this->pipelineCandidateQuery()
+            $rows = $this->pipelineCandidateQuery($request)
                 ->selectRaw("LOWER(TRIM(COALESCE(nr.status, ''))) as status, COUNT(*) as total")
                 ->groupBy(DB::raw("LOWER(TRIM(COALESCE(nr.status, '')))"))
                 ->get();
@@ -707,7 +707,7 @@ class PersonnelRequesthrdController extends Controller
             }
 
             if (Schema::hasTable('assessment_attempts')) {
-                $steps['assessment'] = (int) $this->pipelineCandidateQuery()
+                $steps['assessment'] = (int) $this->pipelineCandidateQuery($request)
                     ->whereExists(function ($sub) {
                         $sub->select(DB::raw(1))
                             ->from('assessment_attempts as aa')
@@ -724,6 +724,12 @@ class PersonnelRequesthrdController extends Controller
                 ->where('is_completed', 0)
                 ->where(function ($q) {
                     $q->where('is_reject', 0)->orWhereNull('is_reject');
+                })
+                ->when($request->filled('year'), function ($q) use ($request) {
+                    return $q->where(function ($sub) use ($request) {
+                        $sub->whereYear('created_at', $request->year)
+                            ->orWhereNull('created_at');
+                    });
                 })
                 ->count();
 
@@ -761,7 +767,7 @@ class PersonnelRequesthrdController extends Controller
                 ], 422);
             }
 
-            $rows = $this->applyPipelineStepFilter($this->pipelineCandidateQuery(), $step)
+            $rows = $this->applyPipelineStepFilter($this->pipelineCandidateQuery($request), $step)
                 ->leftJoin('master_jabatan as mj', 'mj.id', '=', 'pr.posisi')
                 ->select(
                     'nr.id',
@@ -843,7 +849,7 @@ class PersonnelRequesthrdController extends Controller
         return $query->whereRaw("LOWER(TRIM(COALESCE(nr.status, ''))) IN ({$placeholders})", $statuses);
     }
 
-    private function pipelineCandidateQuery()
+    private function pipelineCandidateQuery($request = null)
     {
         $query = DB::table('new_recruitment as nr')
             ->join('personnel_requests as pr', 'pr.id', '=', 'nr.personnel_request_id')
@@ -852,6 +858,13 @@ class PersonnelRequesthrdController extends Controller
             ->where(function ($q) {
                 $q->where('pr.is_reject', 0)->orWhereNull('pr.is_reject');
             });
+
+        if ($request && $request->filled('year')) {
+            $query->where(function ($q) use ($request) {
+                $q->whereYear('nr.created_at', $request->year)
+                    ->orWhereNull('nr.created_at');
+            });
+        }
 
         return $query;
     }
