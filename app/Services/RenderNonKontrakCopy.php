@@ -1082,6 +1082,8 @@ class RenderNonKontrakCopy
                                 $v = __('QT.terms_conditions.general.8');
                             } else if (preg_match('/^Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan\.?$/i', $v)) {
                                 $v = __('QT.terms_conditions.general.9');
+                            } else if (preg_match('/^Laboratorium menjunjung tinggi prinsip independensi, ketidakberpihakan, objektivitas, dan pengelolaan terhadap potensi konflik kepentingan dalam seluruh kegiatan pengujian sesuai dengan kebijakan dan prosedur yang berlaku\.?$/i', $v)) {
+                                $v = __('QT.terms_conditions.general.11');
                             } else if (preg_match('/^Biaya sudah termasuk (.+)$/i', $v, $matches)) {
                                 $text = $matches[1];
                                 if ($lang != 'id') {
