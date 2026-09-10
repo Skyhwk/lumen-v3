@@ -548,7 +548,7 @@ class DataApplicantsController extends Controller
 
         // ── Position & score ──
         $posisiName = $this->resolvePositionName($applicant);
-        $score      = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: 85);
+        $score      = $applicant->nilai_kecocokan ?: ($applicant->matching_score ?: '-');
         $photoDataUri = app(RecruitmentPictureService::class)->toDataUri($applicant->picture ?? null);
         $nameParts = preg_split('/\s+/', trim((string) $namaLengkap));
         $initials = '';
@@ -955,7 +955,7 @@ class DataApplicantsController extends Controller
                     </td>
                     <td class='score-cell'>
                         <div class='meta-badge'>
-                            ATS MATCH
+                            ATS MATCH <br>
                             <span class='score-number'>{$score}%</span>
                         </div>
                     </td>

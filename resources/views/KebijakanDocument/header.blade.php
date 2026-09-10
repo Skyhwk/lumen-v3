@@ -42,13 +42,13 @@
         <!-- <td style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#888;padding:0 10px;font-size:11px;">NO. DOKUMEN</td>
         <td colspan="9" style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#888;padding:4px 6px;font-size:15px;">{{ strtoupper($meta['header_dokumen'] ?? '-') }}</td> -->
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:0 10px;font-size:11px;">NO. DOKUMEN</td>
-        <td colspan="9" style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#000;padding:4px 6px;font-size:16px;">{{ strtoupper($meta['header_dokumen'] ?? '-') }}</td>
+        <td colspan="7" style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#000;padding:4px 6px;font-size:16px;">{{ strtoupper($meta['header_dokumen'] ?? '-') }}</td>
     </tr>
     <tr>
         <!-- <td style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#888;padding:6px 4px;font-size:12px;">{{ $meta['no_dokumen'] ?? '-' }}</td>
         <td colspan="9" style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#888;padding:6px 8px;font-size:19px;"> -->
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:6px 4px;font-size:11px;">{{ $meta['no_dokumen'] ?? '-' }}</td>
-        <td colspan="9" style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#000;padding:6px 8px;font-size:19px;">
+        <td colspan="7" style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#000;padding:6px 8px;font-size:19px;">
             {{ strtoupper($meta['sub_header_dokumen'] ?? '-') }}
         </td>
     </tr>

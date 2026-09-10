@@ -26,8 +26,8 @@ class RenderKebijakanDocumentPdf
 
     private const MARGIN_FOOTER = 8;
 
-    /** 1px dalam mm (25.4 / 96) */
-    private const PAGE_BORDER_WIDTH = 0.2646;
+    /** Sama dengan border tabel header: 0.25pt = 0.0882 mm */
+    private const PAGE_BORDER_WIDTH = 0.0882;
 
     /** Jarak garis atas frame di atas baris pertama isi dokumen (mm) */
     private const FRAME_TOP_GAP = 1.5;
