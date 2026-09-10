@@ -128,6 +128,8 @@ $router->get('/mobile/print-termal', 'mobile\PrintTermalController@createPrintJo
 $router->get('/cs-tickets/{file}', 'CsTicketAssetController@show');
 $router->get('/cs_tickets/conversation/{file}', 'CsTicketAssetController@show');
 
+$router->get('/r/{key}', 'external\RedirectLinkHandler@redirect');
+$router->get('/redirect/{key}', 'external\RedirectLinkHandler@redirect');
 
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);
