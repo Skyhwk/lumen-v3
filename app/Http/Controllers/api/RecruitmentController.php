@@ -32,6 +32,7 @@ use App\Services\PublicRecruitmentJobListService;
 use App\Services\PersonnelRequestImageService;
 use App\Services\RecruitmentApplicationDraftService;
 use App\Services\UserAssessmentCategoryService;
+use App\Services\PendingAssessmentInvitationService;
 use Carbon\Carbon;
 
 
@@ -468,6 +469,14 @@ class RecruitmentController extends Controller{
         }
 
         return response()->json(['status' => true, 'assessment_url' => rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/') . '/public/recruitment/assessment/' . rawurlencode($candidate->token)]);
+    }
+
+    public function sendPendingAssessmentInvitations(Request $request)
+    {
+        return response()->json([
+            'status' => true,
+            'data' => app(PendingAssessmentInvitationService::class)->send(),
+        ]);
     }
 
     public function checkApplicationEligibility(Request $request)
