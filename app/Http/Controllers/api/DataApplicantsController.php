@@ -21,6 +21,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Mpdf\Output\Destination;
 
 class DataApplicantsController extends Controller
@@ -75,7 +76,7 @@ class DataApplicantsController extends Controller
                 });
             })
             ->filterColumn('status', function ($q, $keyword) {
-                $q->where('status', 'like', "%{$keyword}%");
+                $q->where('new_recruitment.status', 'like', "%{$keyword}%");
             })
             ->addColumn('usia', function ($row) {
                 $birthYear = $this->extractBirthYear($row);
@@ -87,15 +88,22 @@ class DataApplicantsController extends Controller
             })
             ->filterColumn('usia', function ($q, $keyword) {
                 $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
-                if (!empty($cleanDigits)) {
-                    $targetYear = Carbon::now()->year - (int) $cleanDigits;
-                    $q->where(function ($sub) use ($targetYear, $cleanDigits) {
-                        $sub->whereYear('tanggal_lahir', $targetYear)
-                            ->orWhere('tempat_tanggal_lahir', 'like', "%{$cleanDigits}%");
-                    });
-                } else {
-                    $q->where('tempat_tanggal_lahir', 'like', "%{$keyword}%");
-                }
+                $q->where(function ($sub) use ($keyword, $cleanDigits) {
+                    if ($cleanDigits !== '') {
+                        $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                        if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                            $sub->whereYear('tanggal_lahir', $targetYear);
+                        }
+                        foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                            if ($this->newRecruitmentHasColumn($column)) {
+                                $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                            }
+                        }
+                        return;
+                    }
+
+                    $this->whereAnyExistingLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+                });
             })
             ->editColumn('shio', function ($row) {
                 $birthDate = $row->tanggal_lahir ?? $this->getTtlString($row);
@@ -108,19 +116,20 @@ class DataApplicantsController extends Controller
                 return $shio ?: ($elemen ?: '-');
             })
             ->filterColumn('shio', function ($q, $keyword) {
-                $q->where(function ($sub) use ($keyword) {
-                    $sub->where('shio', 'like', "%{$keyword}%")
-                        ->orWhere('elemen', 'like', "%{$keyword}%")
-                        ->orWhere('tempat_tanggal_lahir', 'like', "%{$keyword}%")
-                        ->orWhere('tanggal_lahir', 'like', "%{$keyword}%");
-                });
+                $this->whereAnyExistingLike($q, [
+                    'shio',
+                    'elemen',
+                    'tempat_tanggal_lahir',
+                    'tempat_lahir',
+                    'tanggal_lahir',
+                ], $keyword);
             })
             ->editColumn('nilai_kecocokan', function ($row) {
                 if ($row->nilai_kecocokan !== null && $row->nilai_kecocokan !== '') {
                     return (float) $row->nilai_kecocokan;
                 }
 
-                if ($row->matching_score !== null && $row->matching_score !== '') {
+                if ($this->newRecruitmentHasColumn('matching_score') && $row->matching_score !== null && $row->matching_score !== '') {
                     return (float) $row->matching_score;
                 }
 
@@ -130,14 +139,20 @@ class DataApplicantsController extends Controller
                 $minimum = optional($row->personalRequest)->minimum_matching;
                 return $minimum !== null && $minimum !== '' ? (float) $minimum : null;
             })
+            ->filterColumn('minimum_matching', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                $needle = $cleanVal !== '' ? $cleanVal : $keyword;
+                $q->whereHas('personalRequest', function ($sub) use ($needle) {
+                    $sub->where('minimum_matching', 'like', "%{$needle}%");
+                });
+            })
             ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
                 $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
-                if (!empty($cleanVal)) {
-                    $q->where(function ($sub) use ($cleanVal) {
-                        $sub->where('nilai_kecocokan', 'like', "%{$cleanVal}%")
-                            ->orWhere('matching_score', 'like', "%{$cleanVal}%");
-                    });
+                if ($cleanVal === '' || $cleanVal === null) {
+                    return;
                 }
+
+                $this->whereAnyExistingLike($q, ['nilai_kecocokan', 'matching_score'], $cleanVal);
             })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'assessment';
@@ -1099,6 +1114,44 @@ class DataApplicantsController extends Controller
 
         $mpdf->WriteHTML($html);
         return $mpdf->Output("CV_ATS_{$namaLengkap}.pdf", Destination::INLINE);
+    }
+
+    private function newRecruitmentHasColumn($column)
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = Schema::hasTable('new_recruitment')
+                ? array_flip(Schema::getColumnListing('new_recruitment'))
+                : [];
+        }
+
+        return isset($columns[$column]);
+    }
+
+    private function whereAnyExistingLike($query, array $columns, $keyword)
+    {
+        $query->where(function ($sub) use ($columns, $keyword) {
+            $applied = false;
+
+            foreach ($columns as $column) {
+                if (!$this->newRecruitmentHasColumn($column)) {
+                    continue;
+                }
+
+                if (!$applied) {
+                    $sub->where($column, 'like', "%{$keyword}%");
+                    $applied = true;
+                    continue;
+                }
+
+                $sub->orWhere($column, 'like', "%{$keyword}%");
+            }
+
+            if (!$applied) {
+                $sub->whereRaw('1 = 0');
+            }
+        });
     }
 
     /**
