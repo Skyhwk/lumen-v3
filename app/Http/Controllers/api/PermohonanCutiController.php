@@ -87,7 +87,7 @@ class PermohonanCutiController extends Controller
         $dt = $this->applyDatatablesFilter($dt);
 
         return $dt->addColumn('can_approve', function ($row) {
-                $isAtasan = ($this->grade === 'MANAGER');
+                $isAtasan = ($this->grade === 'MANAGER') || ($this->grade === 'SENIOR MANAGER');
                 $isBukanDiriSendiri = ($row->employee_id != $this->user_id);
                 $belumDiApprove = is_null($row->approved_atasan_by);
 
@@ -240,7 +240,7 @@ class PermohonanCutiController extends Controller
      */
     public function approveAtasan(Request $request)
     {
-        if ($this->grade !== 'MANAGER') {
+        if ($this->grade !== 'MANAGER' || $this->grade !== 'SENIOR MANAGER') {
             return response()->json([
                 'success' => false,
                 'message' => 'Hanya level Manager yang berhak menyetujui permohonan cuti'
@@ -293,7 +293,7 @@ class PermohonanCutiController extends Controller
      */
     public function rejectAtasan(Request $request)
     {
-        if ($this->grade !== 'MANAGER') {
+        if ($this->grade !== 'MANAGER' || $this->grade !== 'SENIOR MANAGER') {
             return response()->json([
                 'success' => false,
                 'message' => 'Hanya level Manager yang berhak menolak permohonan cuti'
@@ -408,7 +408,7 @@ class PermohonanCutiController extends Controller
             }
 
             $noDocument = str_replace('.', '/', microtime(true));
-            $status = ($this->grade === 'MANAGER' || $this->grade === 'DIREKTUR') ? 'Approved Atasan' : 'Pending';
+            $status = ($this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER') ? 'Approved Atasan' : 'Pending';
 
             $leave = LeaveRequest::on('intilab_apps')->create([
                 'employee_id' => $this->user_id,
