@@ -56,6 +56,7 @@ class SaldoFeeSalesController extends Controller
 
     public function getSaldoFeeSales(Request $request)
     {
+        $period = Carbon::now();
         $saldoFeeSales = SaldoFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])->latest()->first();
         if (!$saldoFeeSales) return response()->json(['message' => 'Saldo Fee Sales not found'], 404);
 
@@ -64,7 +65,8 @@ class SaldoFeeSalesController extends Controller
         if ($limitWithdraw) {
             $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
                 ->whereIn('status', ['Pending', 'Approved'])
-                // ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
+                ->whereYear('created_at', $period->year)
+                ->whereMonth('created_at', $period->month)
                 ->sum('amount');
             $limit = $limitWithdraw->limit - $usedLimit;
         }
@@ -140,11 +142,12 @@ class SaldoFeeSalesController extends Controller
 
         $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->sales_id, 'is_active' => true])
             ->whereIn('status', ['Pending', 'Approved'])
-            // ->where(fn($q) => $q->whereYear('created_at', $timestamp->year)->whereMonth('created_at', $timestamp->month))
+            ->whereYear('created_at', $timestamp->year)
+            ->whereMonth('created_at', $timestamp->month)
             ->sum('amount');
         $limit = $limitWithdraw->limit - $usedLimit;
 
-        if ($request->amount > $limit) return response()->json(['message' => 'Permintaan anda melebihi batas penarikan pada periode ini'], 400);
+        if ($request->amount > $limit) return response()->json(['message' => 'Permintaan anda melebihi batas penarikan bulan ini'], 400);
 
         $withdrawalFeeSales = new WithdrawalFeeSales();
 
