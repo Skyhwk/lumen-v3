@@ -599,7 +599,10 @@ class SamplerTrackingService
 
             $members = SamplerTrackingMember::where('sampler_tracking_session_id', $member->sampler_tracking_session_id)
                 ->where('is_active', true)
-                ->when($eventType === 'checkout', function ($query) use ($member) {
+                // Anggota dengan durasi lebih pendek dapat menyelesaikan
+                // aktivitasnya sendiri. Checkout dan Pulang tidak boleh
+                // menutup anggota tim yang masih punya durasi lanjutan.
+                ->when(in_array($eventType, ['checkout', 'return'], true), function ($query) use ($member) {
                     $query->where('effective_duration', $member->effective_duration);
                 })
                 ->get();
