@@ -359,6 +359,42 @@ class PersonnelRequesthrdController extends Controller
     }
 
     /**
+     * Take down / unpublish personal request
+     */
+    public function takeDown(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID request tidak ditemukan'], 400);
+        }
+
+        $data = DB::table('personnel_requests')->where('id', $id)->first();
+        if (!$data) {
+            return response()->json(['message' => 'Data tidak ditemukan'], 404);
+        }
+
+        try {
+            $updateData = [
+                'is_publish' => 0,
+                'updated_by' => $this->karyawan,
+                'updated_at' => Carbon::now(),
+            ];
+
+            DB::table('personnel_requests')->where('id', $id)->update($updateData);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Personnel request {$data->no_request} berhasil di-take down.",
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal melakukan take down request: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Preview candidates and process progress for published request
      */
     public function candidatePreview(Request $request)
