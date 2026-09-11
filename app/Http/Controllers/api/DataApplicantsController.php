@@ -420,8 +420,7 @@ class DataApplicantsController extends Controller
         }
 
         $applicant->update([
-            'personnel_request_id' => null,
-            'is_keep' => 1,
+            'personnel_request_id' => null
         ]);
 
         return response()->json([
