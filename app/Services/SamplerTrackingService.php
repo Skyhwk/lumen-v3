@@ -36,6 +36,8 @@ class SamplerTrackingService
             ->whereDate('tanggal', $date)
             ->get();
 
+        $jadwals = $this->trackingJadwals($jadwals);
+
         return $this->syncJadwalRows($jadwals, $date, true);
     }
 
@@ -47,6 +49,8 @@ class SamplerTrackingService
         $jadwals = Jadwal::where('is_active', true)
             ->whereDate('tanggal', $date)
             ->get();
+
+        $jadwals = $this->trackingJadwals($jadwals);
 
         $groups = $jadwals->groupBy(function ($row) {
             return $this->makeTeamKey($row);
@@ -131,11 +135,15 @@ class SamplerTrackingService
             })
             ->get();
 
+        $jadwals = $this->trackingJadwals($jadwals);
+
         return $this->syncJadwalRows($jadwals, $date, false);
     }
 
     protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false)
     {
+        $jadwals = $this->trackingJadwals($jadwals);
+
         if ($jadwals->isEmpty()) {
             return collect();
         }
@@ -265,6 +273,14 @@ class SamplerTrackingService
             'activeMembers.events.triggeredBy',
         ])
             ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereNotNull('no_quotation')
+                    ->where('no_quotation', '!=', '')
+                    ->orWhere(function ($sessionQuery) {
+                        $sessionQuery->whereNotNull('id_sampling')
+                            ->where('id_sampling', '!=', '');
+                    });
+            })
             ->whereHas('activeMembers', $memberFilter)
             ->where(function ($query) use ($date, $hasSamplerFilter, $memberFilter) {
                 $query->whereDate('tanggal_sampling', $date);
@@ -518,6 +534,19 @@ class SamplerTrackingService
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * Tracking hanya untuk jadwal sampling yang memiliki referensi sumber.
+     * Baris operasional seperti cuti atau lanjut 24 jam tidak boleh membentuk
+     * session karena field kunci samplingnya kosong dan bisa tergabung salah.
+     */
+    protected function trackingJadwals($jadwals)
+    {
+        return collect($jadwals)->filter(function ($row) {
+            return ($row->id_sampling !== null && $row->id_sampling !== '')
+                || ($row->no_quotation !== null && trim((string) $row->no_quotation) !== '');
+        })->values();
     }
 
     protected function resolveEffectiveDuration($personalDuration, $defaultDuration)
