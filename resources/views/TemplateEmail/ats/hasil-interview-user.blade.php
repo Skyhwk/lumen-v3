@@ -29,9 +29,8 @@
     @endforeach
     @if(!empty($photoUrl))
         <tr>
-            <td style="padding:12px 18px;width:38%;font-size:13px;color:#64748b;border-top:1px solid #dbeafe;vertical-align:middle;">Foto Kandidat</td>
-            <td style="padding:12px 18px;border-top:1px solid #dbeafe;vertical-align:middle;">
-                <img src="{{ $photoUrl }}" alt="Foto Kandidat" width="96" height="96" style="display:block;width:96px;height:96px;border-radius:16px;object-fit:cover;border:3px solid #dbeafe;">
+            <td colspan="2" align="center" style="padding:0;border-top:1px solid #dbeafe;text-align:center; padding:12px 18px 10px 18px;">
+                <img src="{{ $photoUrl }}" alt="Foto Kandidat" width="176" style="display:block;margin:0 auto;width:100%;max-width:100%;height:auto;border:0;-ms-interpolation-mode:bicubic;">
             </td>
         </tr>
     @endif
