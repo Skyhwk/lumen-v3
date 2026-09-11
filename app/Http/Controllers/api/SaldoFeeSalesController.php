@@ -64,7 +64,7 @@ class SaldoFeeSalesController extends Controller
         $limitWithdraw = LimitWithdraw::where(['user_id' => $request->salesId, 'is_active' => true])->latest()->first();
         if ($limitWithdraw) {
             $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->salesId, 'is_active' => true])
-                ->whereIn('status', ['Pending', 'Approved'])
+                ->whereIn('status', ['Pending', 'Approved', 'Transfered'])
                 ->whereYear('created_at', $period->year)
                 ->whereMonth('created_at', $period->month)
                 ->sum('amount');
@@ -141,7 +141,7 @@ class SaldoFeeSalesController extends Controller
         if (!$limitWithdraw) return response()->json(['message' => 'Limit penarikan belum diatur'], 404);
 
         $usedLimit = WithdrawalFeeSales::where(['sales_id' => $request->sales_id, 'is_active' => true])
-            ->whereIn('status', ['Pending', 'Approved'])
+            ->whereIn('status', ['Pending', 'Approved', 'Transfered'])
             ->whereYear('created_at', $timestamp->year)
             ->whereMonth('created_at', $timestamp->month)
             ->sum('amount');
