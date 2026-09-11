@@ -1193,7 +1193,7 @@ class DataApplicantsController extends Controller
     /**
      * Helper to resolve TTL string
      */
-    private function getTtlString($row)
+    protected function getTtlString($row)
     {
         if (!empty($row->tempat_tanggal_lahir)) {
             return $row->tempat_tanggal_lahir;
@@ -1207,7 +1207,7 @@ class DataApplicantsController extends Controller
     /**
      * Helper to extract birth year
      */
-    private function extractBirthYear($row)
+    protected function extractBirthYear($row)
     {
         $ttl = is_string($row) ? $row : $this->getTtlString($row);
 
@@ -1250,7 +1250,7 @@ class DataApplicantsController extends Controller
     /**
      * Helper to resolve applicant position title safely in PHP 7.4
      */
-    private function resolvePositionName($applicant)
+    protected function resolvePositionName($applicant)
     {
         if (!$applicant) {
             return 'Applied Position';
