@@ -518,10 +518,84 @@ class PersonnelRequestController extends Controller
                     }
                     return 'pr_published';
                 })
-                ->filterColumn('no_request', fn($q, $k) => $q->where('no_request', 'like', "%{$k}%"))
-                ->filterColumn('request_type', fn($q, $k) => $q->where('request_type', 'like', "%{$k}%"))
-                ->filterColumn('prioritas', fn($q, $k) => $q->where('prioritas', 'like', "%{$k}%"))
-                ->filterColumn('tanggal_dibutuhkan', fn($q, $k) => $q->where('tanggal_dibutuhkan', 'like', "%{$k}%"))
+                ->filterColumn('no_request', fn($q, $k) => $q->where('personnel_requests.no_request', 'like', "%{$k}%"))
+                ->filterColumn('request_type', fn($q, $k) => $q->where('personnel_requests.request_type', 'like', "%{$k}%"))
+                ->filterColumn('prioritas', fn($q, $k) => $q->where('personnel_requests.prioritas', 'like', "%{$k}%"))
+                ->filterColumn('tanggal_dibutuhkan', fn($q, $k) => $q->where('personnel_requests.tanggal_dibutuhkan', 'like', "%{$k}%"))
+                ->filterColumn('created_by', fn($q, $k) => $q->where('personnel_requests.created_by', 'like', "%{$k}%"))
+                ->filterColumn('created_at', fn($q, $k) => $q->where('personnel_requests.created_at', 'like', "%{$k}%"))
+                ->filterColumn('posisi', function ($q, $keyword) {
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('personnel_requests.posisi', 'like', "%{$keyword}%")
+                            ->orWhere('personnel_requests.divisi', 'like', "%{$keyword}%")
+                            ->orWhereHas('detailPosisi', function ($posisi) use ($keyword) {
+                                $posisi->where('nama_jabatan', 'like', "%{$keyword}%");
+                            })
+                            ->orWhereHas('detailDivisi', function ($divisi) use ($keyword) {
+                                $divisi->where('nama_divisi', 'like', "%{$keyword}%");
+                            });
+                    });
+                })
+                ->filterColumn('highest_status', function ($q, $keyword) {
+                    $keyword = strtolower(trim($keyword));
+                    if ($keyword === '') {
+                        return;
+                    }
+
+                    $isCancelled = strpos('cancelled', $keyword) !== false
+                        || strpos('canceled', $keyword) !== false
+                        || strpos('reject', $keyword) !== false
+                        || strpos('pr_rejected', $keyword) !== false;
+                    $isApproval = strpos('pending hr approval', $keyword) !== false
+                        || strpos('approval', $keyword) !== false
+                        || strpos('pr_pending_approval', $keyword) !== false;
+                    $isPendingPublish = strpos('pending publish', $keyword) !== false
+                        || strpos('pr_pending_publish', $keyword) !== false;
+                    $isPublished = strpos('published', $keyword) !== false
+                        || strpos('pr_published', $keyword) !== false;
+
+                    if (!$isCancelled && !$isApproval && !$isPendingPublish && !$isPublished) {
+                        $q->whereRaw('1 = 0');
+                        return;
+                    }
+
+                    $q->where(function ($sub) use ($isCancelled, $isApproval, $isPendingPublish, $isPublished) {
+                        if ($isCancelled) {
+                            $sub->orWhere('personnel_requests.is_reject', 1);
+                        }
+                        if ($isApproval) {
+                            $sub->orWhere(function ($pending) {
+                                $pending->where('personnel_requests.is_approve', 0)
+                                    ->where(function ($reject) {
+                                        $reject->whereNull('personnel_requests.is_reject')
+                                            ->orWhere('personnel_requests.is_reject', '!=', 1);
+                                    });
+                            });
+                        }
+                        if ($isPendingPublish) {
+                            $sub->orWhere(function ($pending) {
+                                $pending->where('personnel_requests.is_approve', 1)
+                                    ->where(function ($publish) {
+                                        $publish->whereNull('personnel_requests.is_publish')
+                                            ->orWhere('personnel_requests.is_publish', 0);
+                                    })
+                                    ->where(function ($reject) {
+                                        $reject->whereNull('personnel_requests.is_reject')
+                                            ->orWhere('personnel_requests.is_reject', '!=', 1);
+                                    });
+                            });
+                        }
+                        if ($isPublished) {
+                            $sub->orWhere(function ($published) {
+                                $published->where('personnel_requests.is_publish', 1)
+                                    ->where(function ($reject) {
+                                        $reject->whereNull('personnel_requests.is_reject')
+                                            ->orWhere('personnel_requests.is_reject', '!=', 1);
+                                    });
+                            });
+                        }
+                    });
+                })
                 ->make(true);
         } catch (\Throwable $th) {
             //throw $th;
