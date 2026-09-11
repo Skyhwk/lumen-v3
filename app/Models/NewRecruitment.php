@@ -92,6 +92,14 @@ class NewRecruitment extends Model
     {
         return $this->belongsTo(MasterJabatan::class, 'bagian_di_lamar', 'id');
     }
+
+    /**
+     * posisi_dilamar sering menyimpan ID master_jabatan (dari personnel request).
+     */
+    public function appliedPositionJabatan()
+    {
+        return $this->belongsTo(MasterJabatan::class, 'posisi_dilamar', 'id');
+    }
     public function candidateProfile()
     {
         return $this->hasOne(CandidateProfile::class, 'new_recruitment_id');

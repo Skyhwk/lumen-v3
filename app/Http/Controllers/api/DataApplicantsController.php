@@ -163,8 +163,14 @@ class DataApplicantsController extends Controller
             return response()->json(['message' => 'ID kandidat tidak ditemukan'], 400);
         }
 
-        $candidate = NewRecruitment::with(['personalRequest.masterJabatan', 'personalRequest.masterDivisi', 'hrdInterview', 'userInterview'])
-            ->find($id);
+        $candidate = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'personalRequest.masterDivisi',
+            'appliedPositionJabatan',
+            'masterJabatan',
+            'hrdInterview',
+            'userInterview',
+        ])->find($id);
 
         if (!$candidate) {
             return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
@@ -1199,28 +1205,6 @@ class DataApplicantsController extends Controller
      */
     protected function resolvePositionName($applicant)
     {
-        if (!$applicant) {
-            return 'Applied Position';
-        }
-
-        $pos = null;
-        $pr = $applicant->personalRequest ?? null;
-
-        if ($pr) {
-            $masterJabatan = $pr->masterJabatan ?? null;
-            if ($masterJabatan && !empty($masterJabatan->nama_jabatan)) {
-                $pos = $masterJabatan->nama_jabatan;
-            } elseif (!empty($pr->posisi_name)) {
-                $pos = $pr->posisi_name;
-            } elseif (!empty($pr->posisi) && !is_numeric($pr->posisi)) {
-                $pos = $pr->posisi;
-            }
-        }
-
-        if (!$pos && !empty($applicant->posisi_dilamar) && !is_numeric($applicant->posisi_dilamar)) {
-            $pos = $applicant->posisi_dilamar;
-        }
-
-        return $pos ?: 'Applied Position';
+        return $this->resolveAppliedPositionLabel($applicant);
     }
 }

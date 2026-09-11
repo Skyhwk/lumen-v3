@@ -194,7 +194,7 @@ class BankDataCandidatController extends DataApplicantsController
      */
     public function index(Request $request)
     {
-        $query = NewRecruitment::with(['hrdInterview', 'userInterview'])
+        $query = NewRecruitment::with(['hrdInterview', 'userInterview', 'appliedPositionJabatan', 'masterJabatan'])
             ->where('is_active', 1)
             ->where(function ($q) {
                 $q->whereNull('personnel_request_id')
@@ -216,7 +216,15 @@ class BankDataCandidatController extends DataApplicantsController
                 return $this->resolvePositionName($row);
             })
             ->filterColumn('posisi_dilamar', function ($q, $keyword) {
-                $q->where('posisi_dilamar', 'like', "%{$keyword}%");
+                $q->where(function ($sub) use ($keyword) {
+                    $sub->where('posisi_dilamar', 'like', "%{$keyword}%")
+                        ->orWhereHas('appliedPositionJabatan', function ($j) use ($keyword) {
+                            $j->where('nama_jabatan', 'like', "%{$keyword}%");
+                        })
+                        ->orWhereHas('masterJabatan', function ($j) use ($keyword) {
+                            $j->where('nama_jabatan', 'like', "%{$keyword}%");
+                        });
+                });
             })
             ->filterColumn('status', function ($q, $keyword) {
                 $q->where('status', 'like', "%{$keyword}%");
