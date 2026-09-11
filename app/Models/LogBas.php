@@ -30,7 +30,8 @@ class LogBas extends Model
         'no_bas',
         'filename_bas',
         'data_bas',
-        'no_sampel'
+        'no_sampel',
+        'is_completed',
     ];
 
     protected $casts = [

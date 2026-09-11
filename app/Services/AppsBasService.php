@@ -1406,180 +1406,8 @@ class AppsBasService
 
                     // Insert ke log_bas
                     try {
-                        // 1. Ambil jadwal
-                        $jadwals = \App\Models\Jadwal::where('no_quotation', $persiapanHeader->no_quotation)
-                            ->where('tanggal', $persiapanHeader->tanggal_sampling)
-                            ->where('is_active', true)
-                            ->get();
-                            
-                        $jadwal = $jadwals->sortByDesc(function ($j) {
-                            return $j->updated_at ?? $j->created_at;
-                        })->first();
-                        
-                        // Kumpulkan sampler unik dari seluruh jadwal di hari tersebut
-                        $allSamplers = [];
-                        $allKategori = [];
-                        foreach ($jadwals as $j) {
-                            if ($j->sampler && !in_array($j->sampler, $allSamplers)) {
-                                $allSamplers[] = $j->sampler;
-                            }
-                            
-                            $kat = $j->kategori;
-                            if (is_string($kat)) {
-                                $decoded = json_decode($kat, true);
-                                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                                    $allKategori = array_merge($allKategori, $decoded);
-                                }
-                            } elseif (is_array($kat)) {
-                                $allKategori = array_merge($allKategori, $kat);
-                            }
-                        }
-                        $samplerString = !empty($allSamplers) ? implode(',', $allSamplers) : null;
-                        
-                        $kategori = !empty($allKategori) ? array_values(array_unique($allKategori)) : null;
-
-                        $durasiMap = [
-                            '0' => 'Sesaat',
-                            '1' => '8 Jam',
-                            '2' => '1x24 Jam',
-                            '3' => '2x24 Jam',
-                            '4' => '3x24 Jam',
-                            '5' => '4x24 Jam',
-                            '6' => '5x24 Jam',
-                            '7' => '6x24 Jam',
-                            '8' => '7x24 Jam',
-                            '9' => '8x24 Jam',
-                        ];
-                        
-                        $durasiString = null;
-                        if ($jadwal && isset($jadwal->durasi) && isset($durasiMap[(string)$jadwal->durasi])) {
-                            $durasiString = $durasiMap[(string)$jadwal->durasi];
-                        }
-
-                        // 2. Ambil sales penanggung jawab
-                        $salesPenanggungJawab = null;
-                        if (strpos($persiapanHeader->no_quotation, 'ISL/QTC/') !== false) {
-                            $qtc = \App\Models\QuotationKontrakH::where('no_document', $persiapanHeader->no_quotation)->with('sales')->first();
-                            $salesPenanggungJawab = $qtc && $qtc->sales ? $qtc->sales->nama_lengkap : null;
-                        } else {
-                            $qt = \App\Models\QuotationNonKontrak::where('no_document', $persiapanHeader->no_quotation)->with('sales')->first();
-                            $salesPenanggungJawab = $qt && $qt->sales ? $qt->sales->nama_lengkap : null;
-                        }
-
-                        // 3. Ekstrak data bas
-                        $detailBas = null;
-                        $details = json_decode($persiapanHeader->detail_bas_documents, true) ?? [];
-                        foreach ($details as $detail) {
-                            if (isset($detail['filename']) && in_array($detail['filename'], $attachments)) {
-                                $detailBas = $detail;
-                                break;
-                            }
-                        }
-
-                        $dataBas = null;
-                        $noSampelAll = [];
-                        $noSampelWithOrder = [];
-                        if ($detailBas) {
-                            $noSampelAll = $detailBas['no_sampel'] ?? [];
-                            
-                            $noSampelWithOrder = array_map(function($s) use ($persiapanHeader) {
-                                return $persiapanHeader->no_order . '/' . $s;
-                            }, $noSampelAll);
-
-                            $noSampelTidakSelesai = \App\Models\SampelTidakSelesai::whereIn('no_sampel', $noSampelWithOrder)
-                                ->select('no_sampel', 'keterangan', 'status', 'alasan')
-                                ->get();
-                                
-                            $noSampelSelesaiWithOrder = array_diff($noSampelWithOrder, $noSampelTidakSelesai->pluck('no_sampel')->toArray());
-
-                            $dataBas = [
-                                'no_sampel_tidak_selesai' => $noSampelTidakSelesai->toArray(),
-                                'no_sampel_selesai' => array_values($noSampelSelesaiWithOrder),
-                                'catatan' => $detailBas['catatan'] ?? null,
-                                'informasi_teknis' => $detailBas['informasi_teknis'] ?? null,
-                                'submit' => $detailBas['bysubmit'] ?? null,
-                                'tanda_tangan' => $detailBas['tanda_tangan'] ?? null
-                            ];
-                        }
-
-                        // 4. Ekstrak filename_cs
-                        $filenameCs = null;
-                        $csDocs = json_decode($persiapanHeader->detail_cs_documents, true) ?? [];
-                        if (!empty($csDocs)) {
-                            $filenameCs = $csDocs[0]['filename_cs'] ?? null;
-                        }
-
-                        // 5. Kategori sudah diproses di atas
-
-                        // 6. Cek STPS File
-                        $noStps = str_replace('ISL/PS/', 'ISL/STPS/', $persiapanHeader->no_document);
-                        $filenameStps = str_replace('/', '-', $noStps) . '.pdf';
-                        $pathStps = public_path('stps/' . $filenameStps);
-
-                        if (!file_exists($pathStps)) {
-                            $filenameStps = null;
-                        }
-
-                        $payload = [
-                            'periode' => $persiapanHeader->periode,
-                            'no_quotation' => $persiapanHeader->no_quotation,
-                            'no_order' => $persiapanHeader->no_order,
-                            'sales_penanggung_jawab' => $salesPenanggungJawab,
-                            'tanggal_tugas' => $persiapanHeader->tanggal_sampling,
-                            'durasi' => $durasiString,
-                            'sampler' => $samplerString ?: $persiapanHeader->sampler_jadwal,
-                            'kategori' => $kategori,
-                            'admin_jadwal' => $jadwal ? (!empty($jadwal->updated_by) ? $jadwal->updated_by : $jadwal->created_by) : null,
-                            'tanggal_dijadwalkan' => $jadwal ? (!empty($jadwal->updated_at) ? $jadwal->updated_at : $jadwal->created_at) : null,
-                            'admin_persiapan' => $persiapanHeader->created_by,
-                            'tanggal_persiapan' => $persiapanHeader->created_at,
-                            'no_persiapan' => $persiapanHeader->no_document,
-                            'filename_persiapan' => $persiapanHeader->filename,
-                            'no_stps' => $noStps,
-                            'filename_stps' => $filenameStps,
-                            'no_cs' => str_replace('ISL/PS/', 'ISL/CS/', $persiapanHeader->no_document),
-                            'filename_cs' => $filenameCs,
-                            'no_bas' => str_replace('ISL/PS/', 'ISL/BAS/', $persiapanHeader->no_document),
-                            'filename_bas' => $detailBas['filename'] ?? null,
-                            'data_bas' => $dataBas,
-                            'no_sampel' => !empty($noSampelWithOrder) ? $noSampelWithOrder : null,
-                        ];
-
-                        // 8. Hitung batas waktu pencatatan (Deadline)
-                        $daysToAdd = 0;
-                        if ($jadwal && isset($jadwal->durasi)) {
-                            $durasiVal = (int) $jadwal->durasi;
-                            if ($durasiVal >= 2 && $durasiVal <= 9) {
-                                $daysToAdd = $durasiVal - 1; // 2 => 1x24 Jam, 3 => 2x24 Jam, dst.
-                            }
-                        }
-                        
-                        $tanggalSamplingStart = \Carbon\Carbon::parse($persiapanHeader->tanggal_sampling)->startOfDay();
-                        $deadline = $tanggalSamplingStart->copy()->addDays($daysToAdd)->endOfDay();
-                        $now = \Carbon\Carbon::now();
-
-                        $logMessage = null;
-                        if ($now->lessThan($tanggalSamplingStart)) {
-                            $logMessage = 'waktu mendahului';
-                        } elseif ($now->greaterThan($deadline)) {
-                            $logMessage = 'email lewat batas waktu';
-                        }
-                       
-                        if ($logMessage) {
-                            // Jika keliru (telat atau terlalu cepat), catat di log channel 'sampling'
-                            $samplerName = $payload['sampler'] ?? 'Unknown Sampler';
-                            \Illuminate\Support\Facades\Log::channel('sampling')->info("emailbas - [$logMessage] - Sampler: $samplerName - " . json_encode($payload));
-                        } else {
-                            // Jika sesuai (tidak telat & tidak terlalu cepat), insert atau update ke database
-                            \App\Models\LogBas::updateOrCreate(
-                                [
-                                    'no_order' => $payload['no_order'],
-                                    'no_bas' => $payload['no_bas']
-                                ],
-                                $payload
-                            );
-                        }
-
+                        $preview = $this->previewLogBas($persiapanHeader, is_array($attachments) ? $attachments : []);
+                        $this->persistLogBas($preview);
                     } catch (\Exception $exLog) {
                         \Illuminate\Support\Facades\Log::error('Failed to insert log_bas: ' . $exLog->getMessage());
                     }
@@ -1611,6 +1439,324 @@ class AppsBasService
                 'message' => 'Gagal mengirim email: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    public function previewLogBas($persiapanHeader, $attachments = [])
+    {
+        $attachments = is_array($attachments) ? $attachments : [];
+
+        $decodeJadwalKategori = function ($kat) {
+            if (is_string($kat)) {
+                $decoded = json_decode($kat, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    return $decoded;
+                }
+                return [];
+            }
+            return is_array($kat) ? $kat : [];
+        };
+
+        $kategoriSampleCode = function ($kategoriItem) {
+            $parts = explode('/', (string) $kategoriItem);
+            $tail = trim(end($parts));
+            $parts = explode(' - ', $tail);
+            return trim(end($parts));
+        };
+
+        $detailBas = null;
+        $details = json_decode($persiapanHeader->detail_bas_documents, true);
+        if (!is_array($details)) {
+            $details = [];
+        }
+        foreach ($details as $detail) {
+            if (!is_array($detail) || empty($detail['filename'])) {
+                continue;
+            }
+            if (in_array($detail['filename'], $attachments)) {
+                $detailBas = $detail;
+                break;
+            }
+        }
+        if (!$detailBas) {
+            $validDetails = array_values(array_filter($details, function ($detail) {
+                return is_array($detail);
+            }));
+            if (count($validDetails) === 1) {
+                $detailBas = $validDetails[0];
+            }
+        }
+
+        $dataBas = null;
+        $noSampelAll = [];
+        $noSampelWithOrder = [];
+        if ($detailBas) {
+            $noSampelAll = is_array($detailBas['no_sampel'] ?? null) ? $detailBas['no_sampel'] : [];
+
+            $noSampelWithOrder = array_map(function ($s) use ($persiapanHeader) {
+                return $persiapanHeader->no_order . '/' . $s;
+            }, $noSampelAll);
+
+            $noSampelTidakSelesai = \App\Models\SampelTidakSelesai::whereIn('no_sampel', $noSampelWithOrder)
+                ->select('no_sampel', 'keterangan', 'status', 'alasan')
+                ->get();
+
+            $noSampelSelesaiWithOrder = array_diff($noSampelWithOrder, $noSampelTidakSelesai->pluck('no_sampel')->toArray());
+
+            $dataBas = [
+                'no_sampel_tidak_selesai' => $noSampelTidakSelesai->toArray(),
+                'no_sampel_selesai' => array_values($noSampelSelesaiWithOrder),
+                'catatan' => $detailBas['catatan'] ?? null,
+                'informasi_teknis' => $detailBas['informasi_teknis'] ?? null,
+                'submit' => $detailBas['bysubmit'] ?? null,
+                'tanda_tangan' => $detailBas['tanda_tangan'] ?? null,
+            ];
+        }
+
+        if (empty($noSampelAll)) {
+            $headerSamples = json_decode($persiapanHeader->no_sampel, true);
+            if (!is_array($headerSamples)) {
+                $headerSamples = [];
+            }
+            $noSampelAll = array_values(array_filter(array_map(function ($s) {
+                $parts = explode('/', (string) $s);
+                return trim(end($parts));
+            }, $headerSamples)));
+            $noSampelWithOrder = array_map(function ($s) use ($persiapanHeader) {
+                return $persiapanHeader->no_order . '/' . $s;
+            }, $noSampelAll);
+        }
+
+        $sampleCodes = array_values(array_filter(array_map(function ($s) use ($kategoriSampleCode) {
+            return $kategoriSampleCode($s);
+        }, $noSampelAll)));
+
+        $jadwals = \App\Models\Jadwal::where('no_quotation', $persiapanHeader->no_quotation)
+            ->where('tanggal', $persiapanHeader->tanggal_sampling)
+            ->where('is_active', true)
+            ->get();
+
+        $matchingJadwals = $jadwals->filter(function ($j) use ($decodeJadwalKategori, $kategoriSampleCode, $sampleCodes) {
+            if (empty($sampleCodes)) {
+                return true;
+            }
+            foreach ($decodeJadwalKategori($j->kategori) as $item) {
+                if (in_array($kategoriSampleCode($item), $sampleCodes, true)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        $jadwalSource = $matchingJadwals->isNotEmpty() ? $matchingJadwals : $jadwals;
+        $jadwal = $jadwalSource->sortByDesc(function ($j) {
+            return $j->updated_at ?? $j->created_at;
+        })->first();
+
+        $allKategori = [];
+        $allSamplers = [];
+        foreach ($jadwalSource as $j) {
+            if ($j->sampler && !in_array($j->sampler, $allSamplers)) {
+                $allSamplers[] = $j->sampler;
+            }
+            $allKategori = array_merge($allKategori, $decodeJadwalKategori($j->kategori));
+        }
+
+        $kategori = [];
+        if (!empty($sampleCodes)) {
+            foreach ($sampleCodes as $code) {
+                foreach ($allKategori as $item) {
+                    if ($item === null || $item === '') {
+                        continue;
+                    }
+                    if ($kategoriSampleCode($item) === $code && !in_array($item, $kategori, true)) {
+                        $kategori[] = $item;
+                        break;
+                    }
+                }
+            }
+        } else {
+            $kategori = array_values(array_unique(array_filter($allKategori)));
+        }
+        $kategori = !empty($kategori) ? array_values($kategori) : null;
+
+        $ttdSamplers = [];
+        if ($detailBas && !empty($detailBas['tanda_tangan']) && is_array($detailBas['tanda_tangan'])) {
+            foreach ($detailBas['tanda_tangan'] as $ttd) {
+                if (($ttd['role'] ?? '') !== 'sampler') {
+                    continue;
+                }
+                $nama = trim((string) ($ttd['nama'] ?? ''));
+                if ($nama !== '' && !in_array($nama, $ttdSamplers, true)) {
+                    $ttdSamplers[] = $nama;
+                }
+            }
+        }
+
+        if (!empty($persiapanHeader->sampler_jadwal)) {
+            $samplerString = $persiapanHeader->sampler_jadwal;
+        } elseif (!empty($ttdSamplers)) {
+            $samplerString = implode(',', $ttdSamplers);
+        } elseif (!empty($allSamplers)) {
+            $samplerString = implode(',', $allSamplers);
+        } else {
+            $samplerString = null;
+        }
+
+        $durasiMap = [
+            '0' => 'Sesaat',
+            '1' => '8 Jam',
+            '2' => '1x24 Jam',
+            '3' => '2x24 Jam',
+            '4' => '3x24 Jam',
+            '5' => '4x24 Jam',
+            '6' => '5x24 Jam',
+            '7' => '6x24 Jam',
+            '8' => '7x24 Jam',
+            '9' => '8x24 Jam',
+        ];
+
+        $durasiString = null;
+        if ($jadwal && isset($jadwal->durasi) && isset($durasiMap[(string) $jadwal->durasi])) {
+            $durasiString = $durasiMap[(string) $jadwal->durasi];
+        }
+
+        $salesPenanggungJawab = null;
+        if (strpos($persiapanHeader->no_quotation, 'ISL/QTC/') !== false) {
+            $qtc = \App\Models\QuotationKontrakH::where('no_document', $persiapanHeader->no_quotation)->with('sales')->first();
+            $salesPenanggungJawab = $qtc && $qtc->sales ? $qtc->sales->nama_lengkap : null;
+        } else {
+            $qt = \App\Models\QuotationNonKontrak::where('no_document', $persiapanHeader->no_quotation)->with('sales')->first();
+            $salesPenanggungJawab = $qt && $qt->sales ? $qt->sales->nama_lengkap : null;
+        }
+
+        $filenameCs = null;
+        $csDocs = json_decode($persiapanHeader->detail_cs_documents, true);
+        if (is_array($csDocs)) {
+            $firstCs = isset($csDocs[0]) && is_array($csDocs[0]) ? $csDocs[0] : (isset($csDocs['filename_cs']) ? $csDocs : null);
+            if (is_array($firstCs)) {
+                $filenameCs = $firstCs['filename_cs'] ?? null;
+            }
+        }
+
+        $noStps = str_replace('ISL/PS/', 'ISL/STPS/', $persiapanHeader->no_document);
+        $filenameStps = str_replace('/', '-', $noStps) . '.pdf';
+        $pathStps = public_path('stps/' . $filenameStps);
+        if (!file_exists($pathStps)) {
+            $filenameStps = null;
+        }
+
+        $payload = [
+            'periode' => $persiapanHeader->periode,
+            'no_quotation' => $persiapanHeader->no_quotation,
+            'no_order' => $persiapanHeader->no_order,
+            'sales_penanggung_jawab' => $salesPenanggungJawab,
+            'tanggal_tugas' => $persiapanHeader->tanggal_sampling,
+            'durasi' => $durasiString,
+            'sampler' => $samplerString,
+            'kategori' => $kategori,
+            'admin_jadwal' => $jadwal ? (!empty($jadwal->updated_by) ? $jadwal->updated_by : $jadwal->created_by) : null,
+            'tanggal_dijadwalkan' => $jadwal ? (!empty($jadwal->updated_at) ? $jadwal->updated_at : $jadwal->created_at) : null,
+            'admin_persiapan' => $persiapanHeader->created_by,
+            'tanggal_persiapan' => $persiapanHeader->created_at,
+            'no_persiapan' => $persiapanHeader->no_document,
+            'filename_persiapan' => $persiapanHeader->filename,
+            'no_stps' => $noStps,
+            'filename_stps' => $filenameStps,
+            'no_cs' => str_replace('ISL/PS/', 'ISL/CS/', $persiapanHeader->no_document),
+            'filename_cs' => $filenameCs,
+            'no_bas' => str_replace('ISL/PS/', 'ISL/BAS/', $persiapanHeader->no_document),
+            'filename_bas' => $detailBas ? ($detailBas['filename'] ?? null) : null,
+            'data_bas' => $dataBas,
+            'no_sampel' => !empty($noSampelWithOrder) ? $noSampelWithOrder : null,
+            'is_completed' => (int) ($persiapanHeader->is_completed ?? 0),
+        ];
+
+        $daysToAdd = 0;
+        if ($jadwal && isset($jadwal->durasi)) {
+            $durasiVal = (int) $jadwal->durasi;
+            if ($durasiVal >= 2 && $durasiVal <= 9) {
+                $daysToAdd = $durasiVal - 1;
+            }
+        }
+
+        $tanggalSamplingStart = \Carbon\Carbon::parse($persiapanHeader->tanggal_sampling)->startOfDay();
+        $deadline = $tanggalSamplingStart->copy()->addDays($daysToAdd)->endOfDay();
+        $now = \Carbon\Carbon::now();
+
+        $logMessage = null;
+        if ($now->lessThan($tanggalSamplingStart)) {
+            $logMessage = 'waktu mendahului';
+        } elseif ($now->greaterThan($deadline)) {
+            $logMessage = 'email lewat batas waktu';
+        }
+
+        $kategoriCodes = array_values(array_filter(array_map($kategoriSampleCode, $kategori ?? [])));
+        $missingKategori = array_values(array_diff($sampleCodes, $kategoriCodes));
+        $extraKategori = array_values(array_diff($kategoriCodes, $sampleCodes));
+
+        return [
+            'payload' => $payload,
+            'window' => [
+                'log_message' => $logMessage,
+                'tanggal_sampling_start' => $tanggalSamplingStart->toDateTimeString(),
+                'deadline' => $deadline->toDateTimeString(),
+                'now' => $now->toDateTimeString(),
+                'target' => $logMessage ? 'sampling_channel' : 'log_bas',
+            ],
+            'kelayakan' => [
+                'kategori_count' => count($kategori ?? []),
+                'no_sampel_count' => count($noSampelWithOrder),
+                'count_match' => count($kategori ?? []) === count($noSampelWithOrder),
+                'kategori_codes' => $kategoriCodes,
+                'no_sampel_codes' => $sampleCodes,
+                'missing_kategori_for_sampel' => $missingKategori,
+                'extra_kategori' => $extraKategori,
+                'sampler_source' => !empty($persiapanHeader->sampler_jadwal) ? 'persiapan.sampler_jadwal' : (!empty($ttdSamplers) ? 'tanda_tangan' : 'jadwal'),
+            ],
+            'persiapan' => [
+                'id' => $persiapanHeader->id,
+                'no_document' => $persiapanHeader->no_document,
+                'sampler_jadwal' => $persiapanHeader->sampler_jadwal,
+                'filename_bas' => $payload['filename_bas'],
+            ],
+        ];
+    }
+
+    public function persistLogBas(array $preview)
+    {
+        $payload = $preview['payload'] ?? null;
+        if (empty($payload)) {
+            return [
+                'saved' => false,
+                'target' => null,
+                'reason' => 'payload kosong',
+            ];
+        }
+
+        $logMessage = $preview['window']['log_message'] ?? null;
+        if ($logMessage) {
+            $samplerName = $payload['sampler'] ?? 'Unknown Sampler';
+            \Illuminate\Support\Facades\Log::channel('sampling')->info("emailbas - [$logMessage] - Sampler: $samplerName - " . json_encode($payload));
+            return [
+                'saved' => false,
+                'target' => 'sampling_channel',
+                'log_message' => $logMessage,
+            ];
+        }
+
+        $row = \App\Models\LogBas::updateOrCreate(
+            [
+                'no_order' => $payload['no_order'] ?? null,
+                'no_bas' => $payload['no_bas'] ?? null,
+            ],
+            $payload
+        );
+
+        return [
+            'saved' => true,
+            'target' => 'log_bas',
+            'id' => $row ? $row->id : null,
+        ];
     }
 
     public function preview(Request $request)
