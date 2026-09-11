@@ -291,7 +291,7 @@ class SamplerTrackingService
                             ->whereHas('activeMembers', function ($memberQuery) use ($date, $memberFilter) {
                                 $memberFilter($memberQuery);
                                 $memberQuery->whereRaw(
-                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(NULLIF(sampler_tracking_members.effective_duration, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.durasi_personal, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.duration, ''), '0'), 0) AS SIGNED) - 1, 0) DAY) >= ?",
+                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(sampler_tracking_members.effective_duration, ''), NULLIF(sampler_tracking_members.durasi_personal, ''), NULLIF(sampler_tracking_members.duration, ''), 0) AS SIGNED) - 1, 0) DAY) >= ?",
                                     [$date]
                                 );
                                 $memberQuery->whereDoesntHave('events', function ($eventQuery) {
