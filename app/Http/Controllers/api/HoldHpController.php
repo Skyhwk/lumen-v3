@@ -113,11 +113,13 @@ class HoldHpController extends Controller
             return response()->json(['message' => 'Tidak ada data order Tersebut', 'status' => '404'], 404);
         }
         HoldHp::updateOrCreate(
-            ['no_order' => $request->order],
+            [
+                'no_order' => $request->order,
+                'periode' => $request->periode ?? null,
+            ],
             [
                 'keterangan' => $request->keterangan,
                 'is_hold' => 1,
-                'periode' => $request->periode ?? null,
                 'hold_by' => $this->karyawan,
                 'hold_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]
