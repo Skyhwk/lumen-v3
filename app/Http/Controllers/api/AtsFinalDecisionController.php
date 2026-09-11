@@ -21,6 +21,7 @@ use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 
 class AtsFinalDecisionController extends Controller
@@ -103,6 +104,88 @@ class AtsFinalDecisionController extends Controller
         }
 
         return $pos ?: '-';
+    }
+
+    private function newRecruitmentHasColumn($column)
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = Schema::hasTable('new_recruitment')
+                ? array_flip(Schema::getColumnListing('new_recruitment'))
+                : [];
+        }
+
+        return isset($columns[$column]);
+    }
+
+    private function whereAnyExistingLike($query, array $columns, $keyword)
+    {
+        $query->where(function ($sub) use ($columns, $keyword) {
+            $applied = false;
+
+            foreach ($columns as $column) {
+                if (!$this->newRecruitmentHasColumn($column)) {
+                    continue;
+                }
+
+                if (!$applied) {
+                    $sub->where($column, 'like', "%{$keyword}%");
+                    $applied = true;
+                    continue;
+                }
+
+                $sub->orWhere($column, 'like', "%{$keyword}%");
+            }
+
+            if (!$applied) {
+                $sub->whereRaw('1 = 0');
+            }
+        });
+    }
+
+    private function filterUsiaColumn($q, $keyword)
+    {
+        $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+        $q->where(function ($sub) use ($keyword, $cleanDigits) {
+            if ($cleanDigits !== '') {
+                $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                    $sub->whereYear('tanggal_lahir', $targetYear);
+                }
+                foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                    if ($this->newRecruitmentHasColumn($column)) {
+                        $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                    }
+                }
+                return;
+            }
+
+            $this->whereAnyExistingLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+        });
+    }
+
+    private function formatMatchingScore($row)
+    {
+        $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== ''
+            ? $row->nilai_kecocokan
+            : ($this->newRecruitmentHasColumn('matching_score') ? ($row->matching_score ?? null) : null);
+
+        if ($score === null || $score === '') {
+            return '-';
+        }
+
+        return $score . '%';
+    }
+
+    private function filterMatchingScoreColumn($q, $keyword)
+    {
+        $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+        if ($cleanVal === '' || $cleanVal === null) {
+            return;
+        }
+
+        $this->whereAnyExistingLike($q, ['nilai_kecocokan', 'matching_score'], $cleanVal);
     }
 
     private function scopeFinalDecisionBase($query)
@@ -260,8 +343,27 @@ class AtsFinalDecisionController extends Controller
             ->addColumn('expected_salary', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_hrd ?? $row->ekspetasi_gaji ?? 0;
             })
+            ->filterColumn('expected_salary', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                $needle = $cleanVal !== '' ? $cleanVal : $keyword;
+                $q->where(function ($sub) use ($needle) {
+                    if ($this->newRecruitmentHasColumn('ekspetasi_gaji')) {
+                        $sub->where('ekspetasi_gaji', 'like', "%{$needle}%");
+                    }
+                    $sub->orWhereHas('sallaryOffer', function ($so) use ($needle) {
+                        $so->where('sallary_offer_hrd', 'like', "%{$needle}%");
+                    });
+                });
+            })
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
+            })
+            ->filterColumn('sallary_offer_direktur', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                $needle = $cleanVal !== '' ? $cleanVal : $keyword;
+                $q->whereHas('sallaryOffer', function ($so) use ($needle) {
+                    $so->where('sallary_offer_direktur', 'like', "%{$needle}%");
+                });
             })
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
@@ -482,6 +584,16 @@ class AtsFinalDecisionController extends Controller
                     'email_sent_at' => $emailSentAt,
                 ];
             })
+            ->filterColumn('offering_status', function ($q, $keyword) {
+                $q->where(function ($sub) use ($keyword) {
+                    $sub->where('status', 'like', "%{$keyword}%")
+                        ->orWhere('meta_history', 'like', "%{$keyword}%")
+                        ->orWhereHas('sallaryOffer', function ($offer) use ($keyword) {
+                            $offer->where('email_sent_at', 'like', "%{$keyword}%")
+                                ->orWhere('sallary_offer_direktur', 'like', "%{$keyword}%");
+                        });
+                });
+            })
             ->addColumn('finance_reject_reason', function ($row) {
                 return \App\Services\RecruitmentStatusService::getFinanceRejectReason($row);
             })
@@ -576,6 +688,9 @@ class AtsFinalDecisionController extends Controller
                 }
                 return '-';
             })
+            ->filterColumn('usia', function ($q, $keyword) {
+                $this->filterUsiaColumn($q, $keyword);
+            })
             ->editColumn('shio', function ($row) {
                 $birthDate  = $row->tanggal_lahir ?? $this->getTtlString($row);
                 $shioElemen = ShioElemenHelper::resolve($birthDate, $row->shio, $row->elemen);
@@ -586,11 +701,23 @@ class AtsFinalDecisionController extends Controller
                 }
                 return $shio ?: ($elemen ?: '-');
             })
+            ->filterColumn('shio', function ($q, $keyword) {
+                $this->whereAnyExistingLike($q, [
+                    'shio',
+                    'elemen',
+                    'tempat_tanggal_lahir',
+                    'tempat_lahir',
+                    'tanggal_lahir',
+                ], $keyword);
+            })
             ->editColumn('nilai_kecocokan', function ($row) {
-                $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== ''
-                    ? $row->nilai_kecocokan
-                    : ($row->matching_score ?? rand(75, 98));
-                return $score . '%';
+                return $this->formatMatchingScore($row);
+            })
+            ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
+                $this->filterMatchingScoreColumn($q, $keyword);
+            })
+            ->filterColumn('status', function ($q, $keyword) {
+                $q->where('new_recruitment.status', 'like', "%{$keyword}%");
             })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'management_decision';
