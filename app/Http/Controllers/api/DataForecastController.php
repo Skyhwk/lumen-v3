@@ -3,44 +3,26 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ForecastSP;
+use App\Models\MasterKaryawan;
 use App\Services\GetBawahan;
 use Datatables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class DataForecastController extends Controller
 {
-
-    private $managerIds;
-    private $teamLookup;
-    private $emptyOrder;
-
-    public function __construct()
-    {
-        $this->managerIds = [19, 41, 14];
-    }
+    private array $salesPosition = [148, 24]; // 148 : CRO, 24 : SO
+    private array $managerIds    = [890];
+    private array $emptyOrder;
 
     public function index(Request $request)
     {
         $tahun            = (int) $request->year;
         $this->emptyOrder = $this->getEmptyOrder();
 
-        $allMembers   = $this->getAllTeamMembers();
-        $allMemberIds = collect($allMembers)->pluck('id')->unique()->toArray();
-
-        $this->teamLookup = $this->buildTeamLookupMap($allMembers);
-
         $forecastPerSales = $this->getForecastPerSales($tahun);
-
-        $resignedMemberIds = array_diff(array_keys($forecastPerSales), $allMemberIds);
-
-        if (! empty($resignedMemberIds)) {
-            $resignedMembers = $this->getResignedMembersWithTeam($resignedMemberIds);
-            $allMembers      = array_merge($allMembers, $resignedMembers);
-        }
-
-        $teamsData = $this->processTeamData($allMembers, $forecastPerSales);
+        $allMembers       = $this->getAllTeamMembers($forecastPerSales);
+        $teamsData        = $this->processTeamData($allMembers, $forecastPerSales);
 
         $allteam_total_periode = $this->emptyOrder;
 
@@ -49,15 +31,17 @@ class DataForecastController extends Controller
             $teamTotalStaff = $this->emptyOrder;
 
             foreach (['staff', 'supervisor', 'manager'] as $grade) {
-                if (! empty($teamData[$grade])) {
-                    foreach ($teamData[$grade] as &$member) {
-                        foreach ($member['order'] as $month => $amount) {
-                            $teamTotal[$month]             += $amount;
-                            $allteam_total_periode[$month] += $amount;
+                if (empty($teamData[$grade])) {
+                    continue;
+                }
 
-                            if ($grade === 'staff') {
-                                $teamTotalStaff[$month] += $amount;
-                            }
+                foreach ($teamData[$grade] as $member) {
+                    foreach ($member['order'] as $month => $amount) {
+                        $teamTotal[$month]             += $amount;
+                        $allteam_total_periode[$month] += $amount;
+
+                        if ($grade === 'staff') {
+                            $teamTotalStaff[$month] += $amount;
                         }
                     }
                 }
@@ -81,11 +65,9 @@ class DataForecastController extends Controller
 
     public function indexData(Request $request)
     {
-        // Menggunakan query() agar efisien
         $data = ForecastSP::with('pelanggan')
-        ->whereYear('tanggal_sampling_min', $request->year);
+            ->whereYear('tanggal_sampling_min', $request->year);
 
-        // Paksa order ke kolom yang PASTI ADA, misalnya tanggal_sampling_min
         return Datatables::of($data)
             ->addColumn('nama_perusahaan', function ($row) {
                 return $row->pelanggan ? $row->pelanggan->nama_pelanggan : '-';
@@ -98,28 +80,24 @@ class DataForecastController extends Controller
             ->make(true);
     }
 
-    private function getForecastPerSales(int $tahun)
+    private function getForecastPerSales(int $tahun): array
     {
-        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun)->get();
-
+        $forecasts  = ForecastSP::whereYear('tanggal_sampling_min', $tahun)->get();
         $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
-
-        $result = [];
+        $result     = [];
 
         foreach ($forecasts as $forecast) {
-            $sid = $forecast->sales_id;
+            $sid = (int) $forecast->sales_id;
 
-            if (! isset($result[$sid])) {
+            if (!isset($result[$sid])) {
                 $result[$sid] = $this->emptyOrder;
             }
 
-            // $bulan = $monthNames[intval(explode('-', $forecast->tanggal_sampling_min)[1])];
-            $bulanNumber = Carbon::parse($forecast->tanggal_sampling_min)->format('n');
-            $bulan       = $monthNames[$bulanNumber];
+            $bulanNumber = (int) Carbon::parse($forecast->tanggal_sampling_min)->format('n');
+            $bulan       = $monthNames[$bulanNumber] ?? null;
 
-            // anti undefined index
-            if (! isset($result[$sid][$bulan])) {
-                $result[$sid][$bulan] = 0;
+            if ($bulan === null) {
+                continue;
             }
 
             $result[$sid][$bulan] += $forecast->revenue_forecast;
@@ -128,7 +106,7 @@ class DataForecastController extends Controller
         return $result;
     }
 
-    private function getEmptyOrder()
+    private function getEmptyOrder(): array
     {
         return [
             'Jan' => 0, 'Feb' => 0, 'Mar' => 0,
@@ -138,150 +116,408 @@ class DataForecastController extends Controller
         ];
     }
 
-    private function getTeams()
+    private function processTeamData(array $allMembers, array $forecastPerSales): array
     {
-        $teams    = [];
-        $addedIds = [];
+        $teamsData = [];
 
-        foreach ($this->managerIds as $manager) {
-            $team = GetBawahan::on('id', $manager)
-                ->all()
-                ->filter(function ($item) use (&$addedIds) {
-                    if (in_array($item->id, $addedIds)) {
-                        return false;
-                    }
-                    $addedIds[] = $item->id;
-                    return true;
-                })
-                ->map(function ($item) {
-                    return [
-                        'id'              => $item->id,
-                        'nama_lengkap'    => $item->nama_lengkap,
-                        'grade'           => $item->grade,
-                        'is_active'       => $item->is_active,
-                        'atasan_langsung' => $item->atasan_langsung,
-                        'image'           => $item->image,
-                    ];
-                })
-                ->values();
+        foreach ($allMembers as $member) {
+            $teamIndex = $member['team_index'];
+            $bucket    = $this->gradeBucket($member['grade']);
 
-            $teams[] = $team;
+            if (!isset($teamsData[$teamIndex])) {
+                $teamsData[$teamIndex] = [
+                    'staff'      => [],
+                    'supervisor' => [],
+                    'manager'    => [],
+                    'team_name'  => $member['team_name'] ?? ('Tim ' . ($teamIndex + 1)),
+                ];
+            }
+
+            $order = $forecastPerSales[$member['id']] ?? $this->emptyOrder;
+
+            $memberData = array_merge($member['data'], [
+                'order'         => $order,
+                'total_order'   => array_sum($order),
+                'is_resigned'   => (bool) ($member['is_resigned'] ?? false),
+                'position'      => $member['position'] ?? null,
+                'superior_name' => $member['superior_name'] ?? null,
+            ]);
+
+            $teamsData[$teamIndex][$bucket][] = $memberData;
         }
 
-        return $teams;
+        ksort($teamsData);
+
+        return $teamsData;
     }
 
-    private function getAllTeamMembers()
+    private function gradeBucket(string $grade): string
     {
-        $teams      = $this->getTeams();
-        $allMembers = [];
+        $grade = strtolower($grade);
 
-        foreach ($teams as $teamIndex => $team) {
-            foreach ($team as $member) {
-                $allMembers[] = [
-                    'id'         => $member['id'],
-                    'team_index' => $teamIndex,
-                    'grade'      => strtolower($member['grade']),
-                    'data'       => $member,
-                ];
+        if ($grade === 'manager') {
+            return 'manager';
+        }
+
+        if ($grade === 'supervisor') {
+            return 'supervisor';
+        }
+
+        return 'staff';
+    }
+
+    // =========================================================================
+    // TEAM HELPERS — selaras ViewPerSalesController
+    // =========================================================================
+    private function salesExecutiveIds(): array
+    {
+        return array_values(array_filter(array_map(
+            'intval',
+            array_map('trim', explode(',', (string) env('SALES_EXECUTIVE', '41')))
+        )));
+    }
+
+    private function getAllTeamMembers(array $forecastPerSales): array
+    {
+        $allMembers = [];
+        $addedIds   = [];
+
+        foreach ($this->getSalesExecutiveMembers() as $index => $member) {
+            $member['team_index'] = -1 - $index;
+            $allMembers[]         = $member;
+            $addedIds[]           = $member['id'];
+        }
+
+        foreach ($this->managerIds as $teamIndex => $managerId) {
+            $pool = GetBawahan::on('id', $managerId)->all()->keyBy('id');
+            if ($pool->isEmpty()) {
+                continue;
+            }
+
+            $visibleLeaves = $this->salesLeaves($pool)->filter(
+                fn($staff) => $this->shouldShowMember(
+                    $staff,
+                    $forecastPerSales[(int) $staff->id] ?? $this->emptyOrder
+                )
+            );
+
+            if ($visibleLeaves->isEmpty()) {
+                continue;
+            }
+
+            $includedIds = $this->collectIncludedMemberIds($pool, $visibleLeaves);
+            if (empty($includedIds)) {
+                continue;
+            }
+
+            $includedSet = array_flip($includedIds);
+            $branches    = $this->orderMembersByBranch($pool, $includedIds);
+
+            foreach ($branches as $branchIndex => $branch) {
+                foreach ($branch['members'] as $item) {
+                    if (in_array($item->id, $addedIds, true)) {
+                        continue;
+                    }
+
+                    $addedIds[]   = $item->id;
+                    $allMembers[] = $this->mapMemberRow(
+                        $item,
+                        ($teamIndex * 100) + $branchIndex,
+                        $branch['team_name'],
+                        null,
+                        $pool,
+                        $includedSet
+                    );
+                }
             }
         }
 
         return $allMembers;
     }
 
-    // OPTIMASI: Build lookup map untuk team index
-    private function buildTeamLookupMap($allMembers)
+    private function getSalesExecutiveMembers(): array
     {
-        $lookup = [];
-
-        foreach ($allMembers as $member) {
-            $lookup[$member['id']] = $member['team_index'];
+        $ids = $this->salesExecutiveIds();
+        if (empty($ids)) {
+            return [];
         }
 
-        foreach ($this->managerIds as $index => $managerId) {
-            $lookup[$managerId] = $index;
-        }
-
-        return $lookup;
+        return MasterKaryawan::whereIn('id', $ids)
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(fn($item) => $this->mapMemberRow($item, -1, 'Sales Executive', 'manager'))
+            ->values()
+            ->all();
     }
 
-    // OPTIMASI: Process team data dalam satu loop
-    private function processTeamData($allMembers, $bulkDPP)
-    {
-
-        $teamsData = [];
-
-        foreach ($allMembers as $member) {
-            $teamIndex  = $member['team_index'];
-            $grade      = $member['grade'];
-            $memberId   = $member['id'];
-            $isResigned = $member['is_resigned'] ?? false;
-
-            if (! isset($teamsData[$teamIndex])) {
-                $teamsData[$teamIndex] = [
-                    'staff'      => [],
-                    'supervisor' => [],
-                    'manager'    => [],
-                ];
-            }
-
-            $memberData                = $member['data'];
-            $memberData['order']       = $bulkDPP[$memberId] ?? $this->emptyOrder;
-            $memberData['total_order'] = array_sum($memberData['order']);
-            $memberData['is_resigned'] = $isResigned;
-
-            if ($memberData['total_order'] > 0 || in_array($grade, ['manager', 'supervisor'])) {
-                $teamsData[$teamIndex][$grade][] = $memberData;
-            }
-
-        }
-
-        return $teamsData;
+    private function mapMemberRow(
+        $item,
+        int $teamIndex,
+        string $teamName,
+        ?string $gradeOverride = null,
+        $pool = null,
+        array $includedSet = []
+    ): array {
+        return [
+            'id'            => $item->id,
+            'team_index'    => $teamIndex,
+            'team_name'     => $teamName,
+            'grade'         => $gradeOverride ?? $this->normalizeGradeForDisplay($item),
+            'jabatan'       => $item->id_jabatan,
+            'position'      => $this->positionLabel($item),
+            'superior_name' => $pool ? $this->resolveSuperiorName($item, $pool, $includedSet) : null,
+            'is_resigned'   => $this->isResignedSalesStaff($item),
+            'data'          => [
+                'id'              => $item->id,
+                'nama_lengkap'    => $item->nama_lengkap,
+                'grade'           => $item->grade,
+                'is_active'       => $item->is_active,
+                'atasan_langsung' => $item->atasan_langsung,
+                'image'           => $item->image,
+                'id_jabatan'      => $item->id_jabatan,
+            ],
+        ];
     }
 
-    private function getResignedMembersWithTeam($resignedMemberIds)
+    private function normalizeGradeForDisplay($member): string
     {
+        $grade = strtoupper(trim((string) ($member->grade ?? '')));
 
-        $resignedUsers = DB::table('master_karyawan')
-            ->select('id', 'nama_lengkap', 'grade', 'atasan_langsung', 'image')
-            ->whereIn('id', $resignedMemberIds)
-            ->get();
+        if ($grade === 'MANAGER') {
+            return 'manager';
+        }
 
-        $resignedMembers = [];
+        if ($grade === 'SUPERVISOR') {
+            return 'supervisor';
+        }
 
-        foreach ($resignedUsers as $user) {
-            // Gunakan lookup map yang sudah dibuat
-            $atasanList = json_decode($user->atasan_langsung, true) ?? [];
+        return 'sales';
+    }
 
-            $teamIndex = 0;
+    private function positionLabel($member): string
+    {
+        $jabatan = (int) $member->id_jabatan;
 
-            foreach ($atasanList as $atasanId) {
-                $atasanId = (int) $atasanId;
+        if ($jabatan === 24) {
+            return 'SO';
+        }
 
-                if (isset($this->teamLookup[$atasanId])) {
-                    $teamIndex = $this->teamLookup[$atasanId];
-                    break;
+        if ($jabatan === 148) {
+            return 'CRO';
+        }
+
+        if (in_array((int) $member->id, $this->salesExecutiveIds(), true)) {
+            return 'Sales Executive';
+        }
+
+        $grade = strtoupper(trim((string) ($member->grade ?? '')));
+
+        if ($grade === 'MANAGER') {
+            return 'Manager';
+        }
+
+        if ($grade === 'SUPERVISOR') {
+            return 'Supervisor';
+        }
+
+        return 'Staff';
+    }
+
+    private function resolveSuperiorName($member, $pool, array $includedSet): ?string
+    {
+        $superiorId = $this->findIncludedAncestorId($member, $pool, $includedSet);
+
+        if ($superiorId === null || !$pool->has($superiorId)) {
+            return null;
+        }
+
+        return $pool->get($superiorId)->nama_lengkap;
+    }
+
+    private function salesLeaves($pool)
+    {
+        return $pool->filter(
+            fn($item) => in_array((int) $item->id_jabatan, $this->salesPosition, true)
+        );
+    }
+
+    /** Aktif selalu tampil. Resign hanya jika ada forecast di tahun berjalan. */
+    private function shouldShowMember($member, array $forecastOrder): bool
+    {
+        if ($this->isActiveMember($member)) {
+            return true;
+        }
+
+        return $this->hasForecastActivity($forecastOrder);
+    }
+
+    private function isActiveMember($member): bool
+    {
+        return (int) ($member->is_active ?? 0) === 1;
+    }
+
+    private function isResignedSalesStaff($member): bool
+    {
+        return in_array((int) $member->id_jabatan, $this->salesPosition, true)
+            && !$this->isActiveMember($member);
+    }
+
+    private function hasForecastActivity(array $forecastOrder): bool
+    {
+        return array_sum($forecastOrder) > 0;
+    }
+
+    private function collectIncludedMemberIds($pool, $visibleLeaves): array
+    {
+        $included = [];
+
+        foreach ($visibleLeaves as $staff) {
+            $this->walkUpAncestors((int) $staff->id, $pool, $included);
+        }
+
+        return array_keys($included);
+    }
+
+    private function walkUpAncestors(int $memberId, $pool, array &$included): void
+    {
+        $queue   = [$memberId];
+        $visited = [];
+
+        while (!empty($queue)) {
+            $currentId = array_shift($queue);
+
+            if (isset($visited[$currentId])) {
+                continue;
+            }
+
+            $visited[$currentId] = true;
+
+            if (!$pool->has($currentId)) {
+                continue;
+            }
+
+            $member = $pool->get($currentId);
+
+            if ($this->isSeniorManager($member)) {
+                continue;
+            }
+
+            $isSalesStaff = in_array((int) $member->id_jabatan, $this->salesPosition, true);
+
+            if ($isSalesStaff || $this->isActiveMember($member)) {
+                $included[$currentId] = true;
+            }
+
+            foreach ($this->parseAtasanIds($member->atasan_langsung ?? '[]') as $atasanId) {
+                if ($pool->has($atasanId)) {
+                    $queue[] = $atasanId;
                 }
             }
+        }
+    }
 
-            $resignedMembers[] = [
-                'id'          => $user->id,
-                'team_index'  => $teamIndex,
-                'grade'       => strtolower($user->grade ?? 'staff'),
-                'is_resigned' => true,
-                'data'        => [
-                    'id'              => $user->id,
-                    'nama_lengkap'    => $user->nama_lengkap,
-                    'grade'           => $user->grade,
-                    'is_active'       => 0,
-                    'atasan_langsung' => $user->atasan_langsung,
-                    'image'           => $user->image,
-                ],
+    private function orderMembersByBranch($pool, array $includedIds): array
+    {
+        $includedSet = array_flip($includedIds);
+        $roots       = [];
+
+        foreach ($includedIds as $id) {
+            if ($this->findIncludedAncestorId($pool->get($id), $pool, $includedSet) === null) {
+                $roots[] = $id;
+            }
+        }
+
+        usort(
+            $roots,
+            fn($a, $b) => strcmp($pool->get($a)->nama_lengkap, $pool->get($b)->nama_lengkap)
+        );
+
+        $branches = [];
+
+        foreach ($roots as $rootId) {
+            $members = [];
+            $visited = [];
+            $this->appendMemberSubtree((int) $rootId, $pool, $includedSet, $visited, $members);
+
+            $branches[] = [
+                'team_name' => $pool->get($rootId)->nama_lengkap,
+                'members'   => $members,
             ];
         }
 
-        return $resignedMembers;
+        return $branches;
     }
 
+    private function appendMemberSubtree(
+        int $parentId,
+        $pool,
+        array $includedSet,
+        array &$visited,
+        array &$ordered
+    ): void {
+        if (isset($visited[$parentId]) || !isset($includedSet[$parentId])) {
+            return;
+        }
+
+        $visited[$parentId] = true;
+        $ordered[]          = $pool->get($parentId);
+
+        $children = $pool
+            ->filter(function ($item) use ($parentId, $pool, $includedSet) {
+                if (!isset($includedSet[$item->id])) {
+                    return false;
+                }
+
+                return $this->findIncludedAncestorId($item, $pool, $includedSet) === $parentId;
+            })
+            ->sortBy('nama_lengkap');
+
+        foreach ($children as $child) {
+            $this->appendMemberSubtree((int) $child->id, $pool, $includedSet, $visited, $ordered);
+        }
+    }
+
+    private function findIncludedAncestorId($member, $pool, array $includedSet): ?int
+    {
+        $queue   = $this->parseAtasanIds($member->atasan_langsung ?? '[]');
+        $visited = [];
+
+        while (!empty($queue)) {
+            $atasanId = array_shift($queue);
+
+            if (isset($visited[$atasanId])) {
+                continue;
+            }
+
+            $visited[$atasanId] = true;
+
+            if (isset($includedSet[$atasanId])) {
+                return $atasanId;
+            }
+
+            if (!$pool->has($atasanId)) {
+                continue;
+            }
+
+            foreach ($this->parseAtasanIds($pool->get($atasanId)->atasan_langsung ?? '[]') as $nextId) {
+                $queue[] = $nextId;
+            }
+        }
+
+        return null;
+    }
+
+    private function parseAtasanIds($atasanLangsung): array
+    {
+        $decoded = is_array($atasanLangsung)
+            ? $atasanLangsung
+            : (json_decode($atasanLangsung ?? '[]', true) ?? []);
+
+        return array_values(array_filter(array_map('intval', $decoded)));
+    }
+
+    private function isSeniorManager($member): bool
+    {
+        return strtoupper(trim((string) ($member->grade ?? ''))) === 'SENIOR MANAGER';
+    }
 }

@@ -56,13 +56,15 @@ class ViewPerSalesController extends Controller
             // 3. Build result — metric sudah dihitung di metricsMap
             $result = array_map(
                 fn($member) => [
-                    'sales_id'    => $member['id'],
-                    'sales_name'  => $member['name'],
-                    'team'        => $member['team_name'],
-                    'grade'       => $member['grade'],
-                    'jabatan'     => $member['jabatan'],
-                    'is_resigned' => (bool) ($member['is_resigned'] ?? false),
-                    'data'        => $metricsMap[$member['id']] ?? $this->emptyMetrics(),
+                    'sales_id'      => $member['id'],
+                    'sales_name'    => $member['name'],
+                    'team'          => $member['team_name'],
+                    'grade'         => $member['grade'],
+                    'jabatan'       => $member['jabatan'],
+                    'position'      => $member['position'],
+                    'superior_name' => $member['superior_name'],
+                    'is_resigned'   => (bool) ($member['is_resigned'] ?? false),
+                    'data'          => $metricsMap[$member['id']] ?? $this->emptyMetrics(),
                 ],
                 $members
             );
@@ -276,15 +278,7 @@ class ViewPerSalesController extends Controller
         return MasterKaryawan::whereIn('id', $ids)
             ->orderBy('nama_lengkap')
             ->get()
-            ->map(fn($item) => [
-                'id'          => $item->id,
-                'name'        => $item->nama_lengkap,
-                'team_index'  => -1,
-                'team_name'   => 'Sales Executive',
-                'grade'       => 'manager',
-                'jabatan'     => $item->id_jabatan,
-                'is_resigned' => $this->isResignedSalesStaff($item),
-            ])
+            ->map(fn($item) => $this->mapTeamMemberRow($item, 'Sales Executive', -1))
             ->values()
             ->all();
     }
@@ -316,32 +310,104 @@ class ViewPerSalesController extends Controller
                 continue;
             }
 
-            $includedIds = $this->collectIncludedMemberIds($pool, $visibleLeaves);
-            if (empty($includedIds)) {
-                continue;
-            }
+            $includedIds   = $this->collectIncludedMemberIds($pool, $visibleLeaves);
+            $includedSet   = array_flip($includedIds);
+            $branchTeams   = $this->orderMembersByBranch($pool, $includedIds);
 
-            $orderedMembers = $this->orderMembersHierarchy($pool, $includedIds);
+            foreach ($branchTeams as $branchIndex => $branch) {
+                foreach ($branch['members'] as $item) {
+                    if (in_array($item->id, $addedIds, true)) {
+                        continue;
+                    }
 
-            foreach ($orderedMembers as $item) {
-                if (in_array($item->id, $addedIds, true)) {
-                    continue;
+                    $addedIds[]   = $item->id;
+                    $allMembers[] = $this->mapTeamMemberRow(
+                        $item,
+                        $branch['team_name'],
+                        ($teamIndex * 100) + $branchIndex,
+                        $pool,
+                        $includedSet
+                    );
                 }
-
-                $addedIds[] = $item->id;
-                $allMembers[] = [
-                    'id'          => $item->id,
-                    'name'        => $item->nama_lengkap,
-                    'team_index'  => $teamIndex,
-                    'team_name'   => 'Tim ' . ($teamIndex + 1),
-                    'grade'       => strtolower($item->grade),
-                    'jabatan'     => $item->id_jabatan,
-                    'is_resigned' => $this->isResignedSalesStaff($item),
-                ];
             }
         }
 
         return $allMembers;
+    }
+
+    private function mapTeamMemberRow(
+        $item,
+        string $teamName,
+        int $teamIndex,
+        $pool = null,
+        array $includedSet = []
+    ): array {
+        return [
+            'id'            => $item->id,
+            'name'          => $item->nama_lengkap,
+            'team_index'    => $teamIndex,
+            'team_name'     => $teamName,
+            'grade'         => $this->normalizeGradeForDisplay($item),
+            'jabatan'       => $item->id_jabatan,
+            'position'      => $this->positionLabel($item),
+            'superior_name' => $pool ? $this->resolveSuperiorName($item, $pool, $includedSet) : null,
+            'is_resigned'   => $this->isResignedSalesStaff($item),
+        ];
+    }
+
+    private function normalizeGradeForDisplay($member): string
+    {
+        $grade = strtoupper(trim((string) ($member->grade ?? '')));
+
+        if ($grade === 'MANAGER') {
+            return 'manager';
+        }
+
+        if ($grade === 'SUPERVISOR') {
+            return 'supervisor';
+        }
+
+        return 'sales';
+    }
+
+    private function positionLabel($member): string
+    {
+        $jabatan = (int) $member->id_jabatan;
+
+        if ($jabatan === 24) {
+            return 'SO';
+        }
+
+        if ($jabatan === 148) {
+            return 'CRO';
+        }
+
+        if (in_array($member->id, $this->salesExecutiveIds(), true)) {
+            return 'Sales Executive';
+        }
+
+        $grade = strtoupper(trim((string) ($member->grade ?? '')));
+
+        if ($grade === 'MANAGER') {
+            return 'Manager';
+        }
+
+        if ($grade === 'SUPERVISOR') {
+            return 'Supervisor';
+        }
+
+        return 'Staff';
+    }
+
+    private function resolveSuperiorName($member, $pool, array $includedSet): ?string
+    {
+        $superiorId = $this->findIncludedAncestorId($member, $pool, $includedSet);
+
+        if ($superiorId === null || !$pool->has($superiorId)) {
+            return null;
+        }
+
+        return $pool->get($superiorId)->nama_lengkap;
     }
 
     private function buildMetricsMap(
@@ -477,8 +543,11 @@ class ViewPerSalesController extends Controller
         }
     }
 
-    /** Urutkan member DFS per cabang: Manager → Supervisor → Staff */
-    private function orderMembersHierarchy($pool, array $includedIds): array
+    /**
+     * Pisah per cabang akar (manager/supervisor tanpa atasan aktif).
+     * Tiap cabang = satu tim terpisah di frontend.
+     */
+    private function orderMembersByBranch($pool, array $includedIds): array
     {
         $includedSet = array_flip($includedIds);
         $roots       = [];
@@ -494,14 +563,20 @@ class ViewPerSalesController extends Controller
             fn($a, $b) => strcmp($pool->get($a)->nama_lengkap, $pool->get($b)->nama_lengkap)
         );
 
-        $ordered = [];
-        $visited = [];
+        $branches = [];
 
         foreach ($roots as $rootId) {
-            $this->appendMemberSubtree((int) $rootId, $pool, $includedSet, $visited, $ordered);
+            $members = [];
+            $visited = [];
+            $this->appendMemberSubtree((int) $rootId, $pool, $includedSet, $visited, $members);
+
+            $branches[] = [
+                'team_name' => $pool->get($rootId)->nama_lengkap,
+                'members'   => $members,
+            ];
         }
 
-        return $ordered;
+        return $branches;
     }
 
     private function appendMemberSubtree(
