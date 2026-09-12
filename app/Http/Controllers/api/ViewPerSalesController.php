@@ -11,7 +11,7 @@ use Carbon\Carbon;
 
 Carbon::setLocale('id');
 
-use App\Models\{QuotationKontrakH, QuotationNonKontrak, DailyQsd, MasterTargetSales};
+use App\Models\{QuotationKontrakH, QuotationNonKontrak, DailyQsd, MasterKaryawan, MasterTargetSales};
 
 class ViewPerSalesController extends Controller
 {
@@ -21,7 +21,8 @@ class ViewPerSalesController extends Controller
         9 => 'september',10 => 'oktober', 11 => 'november', 12 => 'desember',
     ];
 
-    private array $managerIds = [19, 41, 14];
+    private array $salesPosition = [148, 24]; // 148 : CRO, 24 : SO
+    private array $managerIds = [890];
     private array $categoryStr;
 
     public function __construct()
@@ -44,22 +45,24 @@ class ViewPerSalesController extends Controller
             $startOfMonth   = $now->copy()->startOfMonth();
             $tahun          = $request->input('tahun', $currentYear);
             
-            // 1. Ambil seluruh member tim (flat array)
-            $members   = $this->getAllTeamMembers();                    // [{id, name, team_name, grade, ...}]
-            $salesIds  = array_column($members, 'id');                 // [1, 2, 3, ...]
+            // 1. Kumpulkan kandidat + bulk metrics untuk cek visibility
+            $candidateIds = $this->collectCandidateIds();
+            $bulkData     = $this->fetchAllBulkData($candidateIds, $currentYear, $currentMonth, $currentPeriode, $tahun);
+            $metricsMap   = $this->buildMetricsMap($candidateIds, $currentMonth, $currentPeriode, $tahun, $bulkData);
 
-            // 2. Ambil SEMUA data sekaligus (bulk — hanya N query total, bukan N × query)
-            $bulkData  = $this->fetchAllBulkData($salesIds, $currentYear, $currentMonth, $currentPeriode, $tahun);
+            // 2. Filter: aktif selalu tampil; resign/non-aktif hanya jika ada jualan/order
+            $members = $this->getAllTeamMembers($metricsMap);
 
-            // 3. Build result — hitung metric dari collection in-memory (0 query tambahan)
+            // 3. Build result — metric sudah dihitung di metricsMap
             $result = array_map(
                 fn($member) => [
-                    'sales_id'   => $member['id'],
-                    'sales_name' => $member['name'],
-                    'team'       => $member['team_name'],
-                    'grade'      => $member['grade'],
-                    'jabatan'      => $member['jabatan'],
-                    'data'       => $this->buildMetrics($member['id'], $currentMonth, $currentPeriode, $tahun, $bulkData),
+                    'sales_id'    => $member['id'],
+                    'sales_name'  => $member['name'],
+                    'team'        => $member['team_name'],
+                    'grade'       => $member['grade'],
+                    'jabatan'     => $member['jabatan'],
+                    'is_resigned' => (bool) ($member['is_resigned'] ?? false),
+                    'data'        => $metricsMap[$member['id']] ?? $this->emptyMetrics(),
                 ],
                 $members
             );
@@ -230,38 +233,348 @@ class ViewPerSalesController extends Controller
     // =========================================================================
     // TEAM HELPERS
     // =========================================================================
-    private function getAllTeamMembers(): array
+    private function salesExecutiveIds(): array
+    {
+        return array_values(array_filter(array_map(
+            'intval',
+            array_map('trim', explode(',', (string) env('SALES_EXECUTIVE', '41')))
+        )));
+    }
+
+    private function collectCandidateIds(): array
+    {
+        $candidateIds = [];
+
+        foreach ($this->salesExecutiveIds() as $executiveId) {
+            $candidateIds[$executiveId] = $executiveId;
+        }
+
+        foreach ($this->managerIds as $managerId) {
+            $pool = GetBawahan::on('id', $managerId)->all()->keyBy('id');
+            if ($pool->isEmpty()) {
+                continue;
+            }
+
+            foreach ($this->collectIncludedMemberIds($pool, $this->salesLeaves($pool)) as $id) {
+                $candidateIds[$id] = $id;
+            }
+        }
+
+        return array_values($candidateIds);
+    }
+
+    /**
+     * Sales Executive: selalu tampil, grade manager (tanpa bawahan), punya data penjualan sendiri.
+     */
+    private function getSalesExecutiveMembers(): array
+    {
+        $ids = $this->salesExecutiveIds();
+        if (empty($ids)) {
+            return [];
+        }
+
+        return MasterKaryawan::whereIn('id', $ids)
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(fn($item) => [
+                'id'          => $item->id,
+                'name'        => $item->nama_lengkap,
+                'team_index'  => -1,
+                'team_name'   => 'Sales Executive',
+                'grade'       => 'manager',
+                'jabatan'     => $item->id_jabatan,
+                'is_resigned' => $this->isResignedSalesStaff($item),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function getAllTeamMembers(array $metricsMap): array
     {
         $allMembers = [];
         $addedIds   = [];
 
-        foreach ($this->managerIds as $teamIndex => $managerId) {
-            $members = GetBawahan::on('id', $managerId)
-                ->all()
-                ->filter(function ($item) use (&$addedIds) {
-                    // 2. Cek apakah ID sudah pernah ditambahkan (duplikasi)
-                    if (in_array($item->id, $addedIds)) {
-                        return false;
-                    }
-                    // Simpan ID agar tidak duplikat dan loloskan filter
-                    $addedIds[] = $item->id;
-                    return true;
-                });
+        foreach ($this->getSalesExecutiveMembers() as $member) {
+            $allMembers[] = $member;
+            $addedIds[]   = $member['id'];
+        }
 
-            foreach ($members as $item) {
-                $skipJabatan = [23];
-                if(in_array($item->id_jabatan, $skipJabatan)) continue;
+        foreach ($this->managerIds as $teamIndex => $managerId) {
+            $pool = GetBawahan::on('id', $managerId)->all()->keyBy('id');
+            if ($pool->isEmpty()) {
+                continue;
+            }
+
+            $visibleLeaves = $this->salesLeaves($pool)->filter(
+                fn($staff) => $this->shouldShowMember(
+                    $staff,
+                    $metricsMap[(int) $staff->id] ?? $this->emptyMetrics()
+                )
+            );
+
+            if ($visibleLeaves->isEmpty()) {
+                continue;
+            }
+
+            $includedIds = $this->collectIncludedMemberIds($pool, $visibleLeaves);
+            if (empty($includedIds)) {
+                continue;
+            }
+
+            $orderedMembers = $this->orderMembersHierarchy($pool, $includedIds);
+
+            foreach ($orderedMembers as $item) {
+                if (in_array($item->id, $addedIds, true)) {
+                    continue;
+                }
+
+                $addedIds[] = $item->id;
                 $allMembers[] = [
-                    'id'         => $item->id,
-                    'name'       => $item->nama_lengkap,
-                    'team_index' => $teamIndex,
-                    'team_name'  => 'Tim ' . ($teamIndex + 1),
-                    'grade'      => strtolower($item->grade),
-                    'jabatan'    => $item->id_jabatan
+                    'id'          => $item->id,
+                    'name'        => $item->nama_lengkap,
+                    'team_index'  => $teamIndex,
+                    'team_name'   => 'Tim ' . ($teamIndex + 1),
+                    'grade'       => strtolower($item->grade),
+                    'jabatan'     => $item->id_jabatan,
+                    'is_resigned' => $this->isResignedSalesStaff($item),
                 ];
             }
         }
 
         return $allMembers;
+    }
+
+    private function buildMetricsMap(
+        array $ids,
+        int $currentMonth,
+        string $currentPeriode,
+        int $tahun,
+        array $bulkData
+    ): array {
+        $map = [];
+
+        foreach ($ids as $id) {
+            $map[(int) $id] = $this->buildMetrics((int) $id, $currentMonth, $currentPeriode, $tahun, $bulkData);
+        }
+
+        return $map;
+    }
+
+    private function salesLeaves($pool)
+    {
+        return $pool->filter(
+            fn($item) => in_array((int) $item->id_jabatan, $this->salesPosition, true)
+        );
+    }
+
+    /**
+     * Aktif selalu tampil. Non-aktif/resign hanya jika ada nilai jualan atau order di periode ini.
+     */
+    private function shouldShowMember($member, array $metrics): bool
+    {
+        if ($this->isActiveMember($member)) {
+            return true;
+        }
+
+        return $this->hasSalesActivity($metrics);
+    }
+
+    private function isActiveMember($member): bool
+    {
+        return (int) ($member->is_active ?? 0) === 1;
+    }
+
+    /** SO/CRO non-aktif — ditandai resign di frontend (table-danger). */
+    private function isResignedSalesStaff($member): bool
+    {
+        return in_array((int) $member->id_jabatan, $this->salesPosition, true)
+            && !$this->isActiveMember($member);
+    }
+
+    private function hasSalesActivity(array $metrics): bool
+    {
+        return ($metrics['revenue'] ?? 0) > 0
+            || ($metrics['all_qt_new'] ?? 0) > 0
+            || ($metrics['all_qt_exist'] ?? 0) > 0
+            || ($metrics['amount_qt_new'] ?? 0) > 0
+            || ($metrics['amount_qt_exist'] ?? 0) > 0
+            || ($metrics['order_new'] ?? 0) > 0
+            || ($metrics['order_existing'] ?? 0) > 0
+            || ($metrics['order_kontrak'] ?? 0) > 0
+            || ($metrics['order_non_kontrak'] ?? 0) > 0;
+    }
+
+    private function emptyMetrics(): array
+    {
+        return [
+            'new_customers'     => 0,
+            'exist_customers'   => 0,
+            'all_qt_new'        => 0,
+            'all_qt_exist'      => 0,
+            'amount_qt_new'     => 0,
+            'amount_qt_exist'   => 0,
+            'revenue'           => 0,
+            'target_amount'     => 0,
+            'target_kategori'   => '0/0',
+            'order_new'         => 0,
+            'order_existing'    => 0,
+            'order_kontrak'     => 0,
+            'order_non_kontrak' => 0,
+        ];
+    }
+
+    /**
+     * Kumpulkan SO/CRO (visibleLeaves) + seluruh atasan dalam pool.
+     * Senior Manager tidak ikut — hanya dipakai sebagai root GetBawahan.
+     */
+    private function collectIncludedMemberIds($pool, $visibleLeaves): array
+    {
+        $included = [];
+
+        foreach ($visibleLeaves as $staff) {
+            $this->walkUpAncestors((int) $staff->id, $pool, $included);
+        }
+
+        return array_keys($included);
+    }
+
+    private function walkUpAncestors(int $memberId, $pool, array &$included): void
+    {
+        $queue   = [$memberId];
+        $visited = [];
+
+        while (!empty($queue)) {
+            $currentId = array_shift($queue);
+
+            if (isset($visited[$currentId])) {
+                continue;
+            }
+
+            $visited[$currentId] = true;
+
+            if (!$pool->has($currentId)) {
+                continue;
+            }
+
+            $member = $pool->get($currentId);
+
+            if ($this->isSeniorManager($member)) {
+                continue;
+            }
+
+            $isSalesStaff = in_array((int) $member->id_jabatan, $this->salesPosition, true);
+
+            // Staff: sudah difilter di visibleLeaves. Atasan: wajib masih aktif.
+            if ($isSalesStaff || $this->isActiveMember($member)) {
+                $included[$currentId] = true;
+            }
+
+            foreach ($this->parseAtasanIds($member->atasan_langsung ?? '[]') as $atasanId) {
+                if ($pool->has($atasanId)) {
+                    $queue[] = $atasanId;
+                }
+            }
+        }
+    }
+
+    /** Urutkan member DFS per cabang: Manager → Supervisor → Staff */
+    private function orderMembersHierarchy($pool, array $includedIds): array
+    {
+        $includedSet = array_flip($includedIds);
+        $roots       = [];
+
+        foreach ($includedIds as $id) {
+            if ($this->findIncludedAncestorId($pool->get($id), $pool, $includedSet) === null) {
+                $roots[] = $id;
+            }
+        }
+
+        usort(
+            $roots,
+            fn($a, $b) => strcmp($pool->get($a)->nama_lengkap, $pool->get($b)->nama_lengkap)
+        );
+
+        $ordered = [];
+        $visited = [];
+
+        foreach ($roots as $rootId) {
+            $this->appendMemberSubtree((int) $rootId, $pool, $includedSet, $visited, $ordered);
+        }
+
+        return $ordered;
+    }
+
+    private function appendMemberSubtree(
+        int $parentId,
+        $pool,
+        array $includedSet,
+        array &$visited,
+        array &$ordered
+    ): void {
+        if (isset($visited[$parentId]) || !isset($includedSet[$parentId])) {
+            return;
+        }
+
+        $visited[$parentId] = true;
+        $ordered[]          = $pool->get($parentId);
+
+        $children = $pool
+            ->filter(function ($item) use ($parentId, $pool, $includedSet) {
+                if (!isset($includedSet[$item->id])) {
+                    return false;
+                }
+
+                return $this->findIncludedAncestorId($item, $pool, $includedSet) === $parentId;
+            })
+            ->sortBy('nama_lengkap');
+
+        foreach ($children as $child) {
+            $this->appendMemberSubtree((int) $child->id, $pool, $includedSet, $visited, $ordered);
+        }
+    }
+
+    /** Cari atasan terdekat yang ikut ditampilkan (lewati atasan resign/non-aktif). */
+    private function findIncludedAncestorId($member, $pool, array $includedSet): ?int
+    {
+        $queue   = $this->parseAtasanIds($member->atasan_langsung ?? '[]');
+        $visited = [];
+
+        while (!empty($queue)) {
+            $atasanId = array_shift($queue);
+
+            if (isset($visited[$atasanId])) {
+                continue;
+            }
+
+            $visited[$atasanId] = true;
+
+            if (isset($includedSet[$atasanId])) {
+                return $atasanId;
+            }
+
+            if (!$pool->has($atasanId)) {
+                continue;
+            }
+
+            foreach ($this->parseAtasanIds($pool->get($atasanId)->atasan_langsung ?? '[]') as $nextId) {
+                $queue[] = $nextId;
+            }
+        }
+
+        return null;
+    }
+
+    private function parseAtasanIds($atasanLangsung): array
+    {
+        $decoded = is_array($atasanLangsung)
+            ? $atasanLangsung
+            : (json_decode($atasanLangsung ?? '[]', true) ?? []);
+
+        return array_values(array_filter(array_map('intval', $decoded)));
+    }
+
+    private function isSeniorManager($member): bool
+    {
+        return strtoupper(trim((string) ($member->grade ?? ''))) === 'SENIOR MANAGER';
     }
 }
