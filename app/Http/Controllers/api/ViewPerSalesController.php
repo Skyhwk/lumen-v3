@@ -383,7 +383,7 @@ class ViewPerSalesController extends Controller
         }
 
         if (in_array($member->id, $this->salesExecutiveIds(), true)) {
-            return 'Sales Executive';
+            return 'SE';
         }
 
         $grade = strtoupper(trim((string) ($member->grade ?? '')));

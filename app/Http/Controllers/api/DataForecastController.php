@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\ForecastSP;
 use App\Models\MasterKaryawan;
+use App\Services\ForecastSpAggregate;
 use App\Services\GetBawahan;
 use Datatables;
 use Illuminate\Http\Request;
@@ -66,7 +67,8 @@ class DataForecastController extends Controller
     public function indexData(Request $request)
     {
         $data = ForecastSP::with('pelanggan')
-            ->whereYear('tanggal_sampling_min', $request->year);
+            ->whereYear('tanggal_sampling_min', $request->year)
+            ->whereNotIn('pelanggan_ID', ForecastSpAggregate::EXCLUDE_CUSTOMERS);
 
         return Datatables::of($data)
             ->addColumn('nama_perusahaan', function ($row) {
@@ -82,7 +84,9 @@ class DataForecastController extends Controller
 
     private function getForecastPerSales(int $tahun): array
     {
-        $forecasts  = ForecastSP::whereYear('tanggal_sampling_min', $tahun)->get();
+        $forecasts  = ForecastSP::whereYear('tanggal_sampling_min', $tahun)
+            ->whereNotIn('pelanggan_ID', ForecastSpAggregate::EXCLUDE_CUSTOMERS)
+            ->get();
         $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
         $result     = [];
 
@@ -307,7 +311,7 @@ class DataForecastController extends Controller
         }
 
         if (in_array((int) $member->id, $this->salesExecutiveIds(), true)) {
-            return 'Sales Executive';
+            return 'SE';
         }
 
         $grade = strtoupper(trim((string) ($member->grade ?? '')));

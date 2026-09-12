@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SalesKpi;
+use App\Services\ForecastSpAggregate;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -14,8 +15,6 @@ use App\Models\{
 
 class SalesKpiMonthly
 {
-    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01', 'TPTT01', 'SEMX01'];
-
     public static function run(): void
     {
         $now = Carbon::now();
@@ -43,6 +42,11 @@ class SalesKpiMonthly
                         ->distinct()
                         ->pluck('sales_id')
                         ->toArray();
+
+                $getAllSales = array_values(array_unique(array_merge(
+                    $getAllSales,
+                    ForecastSpAggregate::salesIdsWithForecastInYear((int) $year)
+                )));
                 
                 // Log::info('Month List: ' . json_encode($monthList));
                 foreach ($monthList as $periodeBulan) {
@@ -92,7 +96,7 @@ class SalesKpiMonthly
 
                     $quotationData = DB::table('daily_qsd as d')
                         ->whereIn('d.sales_id', $getAllSales)
-                        ->whereNotIn('d.pelanggan_ID', self::EXCLUDE_CUSTOMERS)
+                        ->whereNotIn('d.pelanggan_ID', ForecastSpAggregate::EXCLUDE_CUSTOMERS)
                         ->whereYear('d.tanggal_kelompok', '=', explode('-', $periodeBulan)[0])
                         ->whereMonth('d.tanggal_kelompok', '=', explode('-', $periodeBulan)[1])
                         ->selectRaw("
@@ -123,7 +127,7 @@ class SalesKpiMonthly
 
                     $forecastData = DB::table('forecast_sp as f')
                         ->whereIn('f.sales_id', $getAllSales)
-                        ->whereNotIn('f.pelanggan_ID', self::EXCLUDE_CUSTOMERS)
+                        ->whereNotIn('f.pelanggan_ID', ForecastSpAggregate::EXCLUDE_CUSTOMERS)
                         ->whereYear('f.tanggal_sampling_min', '=', explode('-', $periodeBulan)[0])
                         ->whereMonth('f.tanggal_sampling_min', '=', explode('-', $periodeBulan)[1])
                         ->selectRaw("

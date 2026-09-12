@@ -8,7 +8,8 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SalesKpi;
 use App\Models\TargetSales;
 use App\Models\SamplingPlan;
-use App\Services\GetBawahanAll;
+use App\Services\ForecastSpAggregate;
+use App\Services\SalesTeamHierarchyService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -97,37 +98,12 @@ class DashboardSmsController extends Controller
 
     public function getSales(Request $request)
     {
-        $karyawan_id = 890;
-        $bawahanIds  = GetBawahanAll::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
-
-        $data = MasterKaryawan::where('is_active', true)
-            ->where(function ($query) {
-                $query->where('id', '14')
-                    ->orWhere('jabatan', 'like', '%Manager%');
-            })
-        // ->where('jabatan', 'like', '%Manager%')
-            ->where('id', '!=', $karyawan_id)
-            ->whereIn('id', $bawahanIds)
-            ->orderBy('jabatan', 'asc')
-            ->select('id', 'nama_lengkap', 'jabatan')
-            ->get();
-
-        // dd($managers);
-
-        foreach ($data as $mgr) {
-            $mgr->bawahan = MasterKaryawan::where('is_active', true)
-                ->whereIn('id', GetBawahanAll::where('id', $mgr->id)->get()->pluck('id')->toArray())
-                ->where('id', '!=', $mgr->id)
-                ->whereIn('id_jabatan', [21, 24, 148])
-                ->select('id', 'nama_lengkap', 'jabatan')
-                ->orderBy('jabatan', 'asc')
-                ->get()
-                ->values();
-        }
+        $payload = app(SalesTeamHierarchyService::class)->getSelectPayload();
 
         return response()->json([
-            'sales'   => $data,
-            'message' => 'Sales data retrieved successfully',
+            'executives' => $payload['executives'],
+            'branches'   => $payload['branches'],
+            'message'    => 'Sales data retrieved successfully',
         ], 200);
     }
 
@@ -342,50 +318,9 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
-                $table = SalesKpi::leftJoin('master_karyawan', 'sales_kpi_monthly.karyawan_id', '=', 'master_karyawan.id')
-                    ->where('periode', $periode)
-                    ->where(function ($query) {
-                        $query->where('qty_qt_order_kontrak_exist', '!=', 0)
-                            ->orWhere('qty_qt_order_kontrak_new', '!=', 0)
-                            ->orWhere('qty_qt_order_nonkontrak_exist', '!=', 0)
-                            ->orWhere('qty_qt_order_nonkontrak_new', '!=', 0)
-                            ->orWhere('amount_bysampling_order_nonkontrak_new', '!=', 0)
-                            ->orWhere('amount_bysampling_order_nonkontrak_exist', '!=', 0)
-                            ->orWhere('amount_bysampling_order_kontrak_new', '!=', 0)
-                            ->orWhere('amount_bysampling_order_kontrak_exist', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_nonkontrak_new', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_nonkontrak_exist', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_kontrak_new', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_kontrak_exist', '!=', 0);
-                    })
-                    ->select(
-                        'sales_kpi_monthly.*',
-                        'master_karyawan.nama_lengkap',
-                        'master_karyawan.is_active as karyawan_active',
-                        // Revenue non-SP total (nonkontrak, new + exist)
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_exist,0)
-                            ) as amount_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.amount_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_exist,0)
-                            ) as amount_non_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_exist,0)
-                            ) as revenue_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_exist,0)
-                            ) as revenue_non_sp
-                        '),
-                         \DB::raw('
-                            (IFNULL(sales_kpi_monthly.revenue_forecast_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_forecast_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_forecast_kontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_forecast_kontrak_new,0)
-                            ) as revenue_forecast
-                        ')
-                    )
-                    ->orderBy('revenue_sp', 'desc')
-                    ->get();
+                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode);
+                $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 $years = [
                     $tahun - 1,
@@ -445,7 +380,8 @@ class DashboardSmsController extends Controller
                 ], 200);
 
             } else if (strpos($request->mode, "team") !== false) {
-                $bawahanIds = GetBawahanAll::where('id', str_replace('team_', '', $request->karyawan_id))->get()->pluck('id')->unique()->values()->toArray();
+                $teamRootId = (int) str_replace('team_', '', $request->karyawan_id);
+                $bawahanIds = app(SalesTeamHierarchyService::class)->resolveDescendantIds($teamRootId);
 
                 $tahun = explode('-', $periode)[0];
 
@@ -548,51 +484,9 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
-                $table = SalesKpi::leftJoin('master_karyawan', 'sales_kpi_monthly.karyawan_id', '=', 'master_karyawan.id')
-                    ->where('periode', $periode)
-                    ->where(function ($query) {
-                        $query->where('qty_qt_order_kontrak_exist', '!=', 0)
-                            ->orWhere('qty_qt_order_kontrak_new', '!=', 0)
-                            ->orWhere('qty_qt_order_nonkontrak_exist', '!=', 0)
-                            ->orWhere('qty_qt_order_nonkontrak_new', '!=', 0)
-                            ->orWhere('amount_bysampling_order_nonkontrak_new', '!=', 0)
-                            ->orWhere('amount_bysampling_order_nonkontrak_exist', '!=', 0)
-                            ->orWhere('amount_bysampling_order_kontrak_new', '!=', 0)
-                            ->orWhere('amount_bysampling_order_kontrak_exist', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_nonkontrak_new', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_nonkontrak_exist', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_kontrak_new', '!=', 0)
-                            ->orWhere('revenue_bysampling_order_kontrak_exist', '!=', 0);
-                    })
-                    ->whereIn('karyawan_id', $bawahanIds)
-                    ->select(
-                        'sales_kpi_monthly.*',
-                        'master_karyawan.nama_lengkap',
-                        'master_karyawan.is_active as karyawan_active',
-                        // Revenue non-SP total (nonkontrak, new + exist)
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_exist,0)
-                            ) as amount_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.amount_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_exist,0)
-                            ) as amount_non_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_exist,0)
-                            ) as revenue_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_exist,0)
-                            ) as revenue_non_sp
-                        '),
-                        \DB::raw('
-                            (IFNULL(sales_kpi_monthly.revenue_forecast_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_forecast_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_forecast_kontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_forecast_kontrak_new,0)
-                            ) as revenue_forecast
-                        ')
-                    )
-                    ->orderBy('revenue_sp', 'desc')
-                    ->get();
+                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, [$teamRootId]);
+                $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
                     'heading'  => $return,
@@ -603,7 +497,45 @@ class DashboardSmsController extends Controller
                 ], 200);
 
             } else {
-                $cek = SalesKpi::where('karyawan_id', $request->karyawan_id)->where('periode', $periode)->first();
+                $karyawanId = (int) $request->karyawan_id;
+                $hierarchy  = app(SalesTeamHierarchyService::class);
+                $member     = MasterKaryawan::find($karyawanId);
+                $scopeIds   = ($member && $hierarchy->isSalesStaff($member))
+                    ? [$karyawanId]
+                    : $hierarchy->resolveDescendantIds($karyawanId);
+
+                $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
+
+                $cek = $isSalesStaff
+                    ? SalesKpi::where('karyawan_id', $karyawanId)->where('periode', $periode)->first()
+                    : \DB::table('sales_kpi_monthly')
+                        ->selectRaw("
+                            SUM(dfus_call) as dfus_call,
+                            SUM(duration) as duration,
+                            SUM(qty_qt_nonkontrak_new) as qty_qt_nonkontrak_new,
+                            SUM(qty_qt_nonkontrak_exist) as qty_qt_nonkontrak_exist,
+                            SUM(qty_qt_kontrak_new) as qty_qt_kontrak_new,
+                            SUM(qty_qt_kontrak_exist) as qty_qt_kontrak_exist,
+                            SUM(qty_qt_order_nonkontrak_new) as qty_qt_order_nonkontrak_new,
+                            SUM(qty_qt_order_nonkontrak_exist) as qty_qt_order_nonkontrak_exist,
+                            SUM(qty_qt_order_kontrak_new) as qty_qt_order_kontrak_new,
+                            SUM(qty_qt_order_kontrak_exist) as qty_qt_order_kontrak_exist,
+                            SUM(amount_order_nonkontrak_new) as amount_order_nonkontrak_new,
+                            SUM(amount_order_nonkontrak_exist) as amount_order_nonkontrak_exist,
+                            SUM(amount_order_kontrak_new) as amount_order_kontrak_new,
+                            SUM(amount_order_kontrak_exist) as amount_order_kontrak_exist,
+                            SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
+                            SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
+                            SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
+                            SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist,
+                            SUM(revenue_forecast_nonkontrak_new) as revenue_forecast_nonkontrak_new,
+                            SUM(revenue_forecast_nonkontrak_exist) as revenue_forecast_nonkontrak_exist,
+                            SUM(revenue_forecast_kontrak_new) as revenue_forecast_kontrak_new,
+                            SUM(revenue_forecast_kontrak_exist) as revenue_forecast_kontrak_exist
+                        ")
+                        ->where('periode', $periode)
+                        ->whereIn('karyawan_id', $scopeIds)
+                        ->first();
 
                 $return = [
                     ["title" => "DFUS Contacted", "value" => (($cek->dfus_call ?? 0) . " Calls"), "color" => "primary", "info" => (function ($d) {$d = (int) ($d ?? 0);if ($d >= 3600) {$h = floor($d / 3600); $m = floor(($d % 3600) / 60);return "{$h} Hours\n{$m} Minutes";} else { $m = floor($d / 60); $s = $d % 60;return "{$m} Minutes\n{$s} Seconds";}})($cek->duration ?? 0)],
@@ -617,12 +549,22 @@ class DashboardSmsController extends Controller
                 ];
 
                 $tahun  = explode('-', $periode)[0];
-                $allKpi = SalesKpi::where('karyawan_id', $request->karyawan_id)
-                    ->where('periode', 'like', $tahun . '-%')
-                    ->get()
-                    ->keyBy(function ($item) {
-                        return $item->periode;
-                    });
+                $allKpiQuery = SalesKpi::where('periode', 'like', $tahun . '-%');
+
+                if (!$isSalesStaff) {
+                    $allKpiQuery->whereIn('karyawan_id', $scopeIds)
+                        ->selectRaw('periode,
+                            SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
+                            SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
+                            SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
+                            SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
+                        ')
+                        ->groupBy('periode');
+                } else {
+                    $allKpiQuery->where('karyawan_id', $karyawanId);
+                }
+
+                $allKpi = $allKpiQuery->get()->keyBy(fn($item) => $item->periode);
 
                 $chart = [];
                 foreach ($months as $mnthName => $mnthNum) {
@@ -643,14 +585,20 @@ class DashboardSmsController extends Controller
                     ];
                 }
 
-                $sumall = SalesKpi::where('karyawan_id', $request->karyawan_id)
-                    ->where('periode', $periode)
+                $sumallQuery = SalesKpi::where('periode', $periode)
                     ->selectRaw('SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
                         SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
                         SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
                         SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
-                    ')
-                    ->first();
+                    ');
+
+                if (!$isSalesStaff) {
+                    $sumallQuery->whereIn('karyawan_id', $scopeIds);
+                } else {
+                    $sumallQuery->where('karyawan_id', $karyawanId);
+                }
+
+                $sumall = $sumallQuery->first();
 
                 $piechart = [
                     'value' => $sumall->revenue_order_nonkontrak_new + $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_new + $sumall->revenue_order_kontrak_exist,
@@ -658,10 +606,16 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
+                [$hierarchyRows, $hierarchyIds] = $isSalesStaff
+                    ? $this->prepareHierarchyRows($periode, null, [$karyawanId])
+                    : $this->prepareHierarchyRows($periode, [$karyawanId]);
+                $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
+
                 return response()->json([
                     'heading'  => $return,
-                    'table'    => null,
-                    'rankings' => $this->buildDailyQsdRankings($periode, [$request->karyawan_id]),
+                    'table'    => $table,
+                    'rankings' => $this->buildDailyQsdRankings($periode, $scopeIds),
                     'chart'    => $chart,
                     'piechart' => $piechart,
                 ], 200);
@@ -755,15 +709,16 @@ class DashboardSmsController extends Controller
             }
             $salesIds = null;
 
-            if ($request->mode === 'team') {
-                $salesIds = GetBawahanAll::where('id', str_replace('team_', '', $request->karyawan_id))
-                    ->get()
-                    ->pluck('id')
-                    ->unique()
-                    ->values()
-                    ->toArray();
+            $hierarchy = app(SalesTeamHierarchyService::class);
+
+            if ($request->mode === 'team' && $request->karyawan_id) {
+                $salesIds = $hierarchy->resolveDescendantIds((int) str_replace('team_', '', $request->karyawan_id));
             } elseif ($request->mode === 'single' && $request->karyawan_id) {
-                $salesIds = [$request->karyawan_id];
+                $karyawanId = (int) $request->karyawan_id;
+                $member     = MasterKaryawan::find($karyawanId);
+                $salesIds   = ($member && $hierarchy->isSalesStaff($member))
+                    ? [$karyawanId]
+                    : $hierarchy->resolveDescendantIds($karyawanId);
             }
 
             return response()->json([
@@ -895,6 +850,191 @@ class DashboardSmsController extends Controller
             'top_customers' => $topCustomers,
             'top_consultants' => $topConsultants,
             'top_regions' => $topRegions,
+        ];
+    }
+
+    private function prepareHierarchyRows(
+        string $periode,
+        ?array $scopeRootIds = null,
+        ?array $scopeMemberIds = null
+    ): array {
+        $service         = app(SalesTeamHierarchyService::class);
+        $activeKpiMap    = array_flip($this->karyawanIdsWithKpiActivity($periode));
+        $forecastSpMap   = ForecastSpAggregate::mapBySalesForPeriode($periode);
+
+        $shouldShowStaff = function ($member) use ($service, $activeKpiMap, $forecastSpMap) {
+            if ((int) ($member->is_active ?? 0) === 1) {
+                return true;
+            }
+
+            if (!$service->isSalesStaff($member)) {
+                return false;
+            }
+
+            $memberId = (int) $member->id;
+
+            if (isset($activeKpiMap[$memberId])) {
+                return true;
+            }
+
+            return ($forecastSpMap[$memberId]['revenue_forecast'] ?? 0) > 0;
+        };
+
+        $hierarchyRows = $service->buildTableRows($shouldShowStaff, $scopeRootIds, $scopeMemberIds);
+        $hierarchyIds  = array_column($hierarchyRows, 'karyawan_id');
+
+        return [$hierarchyRows, $hierarchyIds];
+    }
+
+    private function applyForecastHeading(array $heading, string $periode, array $salesIds, $cek): array
+    {
+        $forecast = ForecastSpAggregate::totalsForPeriode(
+            $periode,
+            empty($salesIds) ? null : $salesIds
+        );
+
+        $forecastTotal = $forecast['revenue_forecast'];
+        $forecastExist = $forecast['revenue_forecast_nonkontrak_exist'] + $forecast['revenue_forecast_kontrak_exist'];
+        $forecastNew   = $forecast['revenue_forecast_nonkontrak_new'] + $forecast['revenue_forecast_kontrak_new'];
+        $revenueTotal  =
+            ($cek->revenue_order_nonkontrak_new ?? 0) +
+            ($cek->revenue_order_nonkontrak_exist ?? 0) +
+            ($cek->revenue_order_kontrak_new ?? 0) +
+            ($cek->revenue_order_kontrak_exist ?? 0);
+        $revenueExist  = ($cek->revenue_order_nonkontrak_exist ?? 0) + ($cek->revenue_order_kontrak_exist ?? 0);
+        $revenueNew    = ($cek->revenue_order_nonkontrak_new ?? 0) + ($cek->revenue_order_kontrak_new ?? 0);
+
+        foreach ($heading as &$item) {
+            if ($item['title'] === 'Forecast') {
+                $item['value'] = 'Rp ' . number_format($forecastTotal, 0, ',', '.');
+                $item['info']  = 'Exist : Rp ' . number_format($forecastExist, 0, ',', '.')
+                    . " \nNew : Rp " . number_format($forecastNew, 0, ',', '.');
+            }
+
+            if ($item['title'] === 'Total Revenue + Forecast') {
+                $item['value'] = 'Rp ' . number_format($forecastTotal + $revenueTotal, 0, ',', '.');
+                $item['info']  = 'Exist : Rp ' . number_format($forecastExist + $revenueExist, 0, ',', '.')
+                    . " \nNew : Rp " . number_format($forecastNew + $revenueNew, 0, ',', '.');
+            }
+        }
+        unset($item);
+
+        return $heading;
+    }
+
+    private function karyawanIdsWithKpiActivity(string $periode): array
+    {
+        return SalesKpi::where('periode', $periode)
+            ->where(function ($query) {
+                $query->where('dfus_call', '!=', 0)
+                    ->orWhere('duration', '!=', 0)
+                    ->orWhere('qty_qt_order_kontrak_exist', '!=', 0)
+                    ->orWhere('qty_qt_order_kontrak_new', '!=', 0)
+                    ->orWhere('qty_qt_order_nonkontrak_exist', '!=', 0)
+                    ->orWhere('qty_qt_order_nonkontrak_new', '!=', 0)
+                    ->orWhere('qty_qt_kontrak_exist', '!=', 0)
+                    ->orWhere('qty_qt_kontrak_new', '!=', 0)
+                    ->orWhere('qty_qt_nonkontrak_exist', '!=', 0)
+                    ->orWhere('qty_qt_nonkontrak_new', '!=', 0)
+                    ->orWhere('amount_bysampling_order_nonkontrak_new', '!=', 0)
+                    ->orWhere('amount_bysampling_order_nonkontrak_exist', '!=', 0)
+                    ->orWhere('amount_bysampling_order_kontrak_new', '!=', 0)
+                    ->orWhere('amount_bysampling_order_kontrak_exist', '!=', 0)
+                    ->orWhere('revenue_bysampling_order_nonkontrak_new', '!=', 0)
+                    ->orWhere('revenue_bysampling_order_nonkontrak_exist', '!=', 0)
+                    ->orWhere('revenue_bysampling_order_kontrak_new', '!=', 0)
+                    ->orWhere('revenue_bysampling_order_kontrak_exist', '!=', 0)
+                    ->orWhere('amount_order_nonkontrak_new', '!=', 0)
+                    ->orWhere('amount_order_nonkontrak_exist', '!=', 0)
+                    ->orWhere('amount_order_kontrak_new', '!=', 0)
+                    ->orWhere('amount_order_kontrak_exist', '!=', 0)
+                    ->orWhere('revenue_order_nonkontrak_new', '!=', 0)
+                    ->orWhere('revenue_order_nonkontrak_exist', '!=', 0)
+                    ->orWhere('revenue_order_kontrak_new', '!=', 0)
+                    ->orWhere('revenue_order_kontrak_exist', '!=', 0)
+                    ->orWhere('revenue_forecast_nonkontrak_new', '!=', 0)
+                    ->orWhere('revenue_forecast_nonkontrak_exist', '!=', 0)
+                    ->orWhere('revenue_forecast_kontrak_new', '!=', 0)
+                    ->orWhere('revenue_forecast_kontrak_exist', '!=', 0);
+            })
+            ->pluck('karyawan_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function mergeHierarchyWithKpi(string $periode, array $hierarchyRows): array
+    {
+        if (empty($hierarchyRows)) {
+            return [];
+        }
+
+        $ids = array_column($hierarchyRows, 'karyawan_id');
+
+        $kpiMap = SalesKpi::leftJoin('master_karyawan', 'sales_kpi_monthly.karyawan_id', '=', 'master_karyawan.id')
+            ->where('sales_kpi_monthly.periode', $periode)
+            ->whereIn('sales_kpi_monthly.karyawan_id', $ids)
+            ->select(
+                'sales_kpi_monthly.*',
+                \DB::raw('
+                    (IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_exist,0)
+                    ) as amount_sp
+                '),
+                \DB::raw('
+                    (IFNULL(sales_kpi_monthly.amount_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_exist,0)
+                    ) as amount_non_sp
+                '),
+                \DB::raw('
+                    (IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_exist,0)
+                    ) as revenue_sp
+                '),
+                \DB::raw('
+                    (IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_exist,0)
+                    ) as revenue_non_sp
+                '),
+                \DB::raw('
+                    (IFNULL(sales_kpi_monthly.revenue_forecast_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_forecast_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_forecast_kontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_forecast_kontrak_new,0)
+                    ) as revenue_forecast
+                ')
+            )
+            ->get()
+            ->keyBy('karyawan_id');
+
+        $rows = [];
+
+        $forecastSpMap = ForecastSpAggregate::mapBySalesForPeriode($periode, $ids);
+
+        foreach ($hierarchyRows as $row) {
+            $kpi         = $kpiMap->get($row['karyawan_id']);
+            $merged      = array_merge($this->emptyKpiRow(), $row, $kpi ? $kpi->toArray() : []);
+            $forecastSp  = $forecastSpMap[(int) $row['karyawan_id']] ?? null;
+
+            if ($forecastSp !== null) {
+                $merged = array_merge($merged, $forecastSp);
+            }
+
+            $rows[] = $merged;
+        }
+
+        return $rows;
+    }
+
+    private function emptyKpiRow(): array
+    {
+        return [
+            'dfus_call'                    => 0,
+            'duration'                     => 0,
+            'qty_qt_kontrak_exist'         => 0,
+            'qty_qt_kontrak_new'           => 0,
+            'qty_qt_nonkontrak_exist'      => 0,
+            'qty_qt_nonkontrak_new'        => 0,
+            'qty_qt_order_kontrak_exist'   => 0,
+            'qty_qt_order_kontrak_new'     => 0,
+            'qty_qt_order_nonkontrak_exist'=> 0,
+            'qty_qt_order_nonkontrak_new'  => 0,
+            'amount_non_sp'                => 0,
+            'revenue_non_sp'               => 0,
+            'revenue_forecast'             => 0,
         ];
     }
 
