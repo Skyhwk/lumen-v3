@@ -66,6 +66,15 @@ class CfrDetails
 
             unset($value);
 
+            $resolver = new ResolveLhpFile();
+            foreach ($dataOrderDetails as &$cfrItem) {
+                $cfrItem['file_lhp'] = $resolver->byCfr(
+                    $noOrder,
+                    $cfrItem['cfr'],
+                    $cfrItem['no_sampel'][0] ?? ($cfrItem['sampelNumbers'][0] ?? null)
+                );
+            }
+            unset($cfrItem);
 
             return $dataOrderDetails;
         } catch (\Throwable $th) {
