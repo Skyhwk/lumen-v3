@@ -3,12 +3,15 @@
 namespace App\Services;
 
 use App\Models\DraftingKebijakan;
+use App\Models\KebijakanDokumen;
+use App\Models\QrDocument;
+use App\Models\RequestKebijakan;
 use Carbon\Carbon;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\File;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\HTMLParserMode;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class RenderKebijakanDocumentPdf
 {
@@ -87,7 +90,7 @@ class RenderKebijakanDocumentPdf
             ])->render();
 
             $htmlFooter = view('KebijakanDocument.footer', [
-                'qrPath' => $this->generateQrImage($normalizedMeta['qr_value'], $tempImageDir),
+                'qrPath' => $this->resolveQrImageForPdf($normalizedMeta['qr_file'] ?? null, $tempImageDir),
             ])->render();
 
             $defaultConfig = (new ConfigVariables())->getDefaults();
@@ -150,6 +153,53 @@ class RenderKebijakanDocumentPdf
         );
     }
 
+    public function renderForRequest(RequestKebijakan $record): string
+    {
+        $record->loadMissing('drafting');
+
+        if (!$record->drafting) {
+            throw new \RuntimeException('Draft kebijakan tidak ditemukan');
+        }
+
+        $dokumen = KebijakanDokumen::query()
+            ->where('request_kebijakan_id', $record->id)
+            ->where('is_active', true)
+            ->whereNotNull('qr_file')
+            ->whereIn('status', ['pending_director', 'active', 'returned_to_legal'])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($dokumen) {
+            return $this->renderFromDokumen($dokumen);
+        }
+
+        return $this->renderFromDraft($record->drafting);
+    }
+
+    public function renderFromDokumen(KebijakanDokumen $dokumen): string
+    {
+        $dokumen = KebijakanDokumenQrService::ensureQrReady($dokumen);
+        $draft = $dokumen->drafting ?? DraftingKebijakan::find($dokumen->drafting_kebijakan_id);
+
+        if (!$draft) {
+            throw new \RuntimeException('Draft kebijakan tidak ditemukan');
+        }
+
+        return $this->render(
+            $this->buildMetaFromPayload([
+                'doc_type_title' => self::DEFAULT_DOC_TYPE,
+                'header_dokumen' => $draft->divisi_bagian,
+                'no_dokumen' => $dokumen->no_dokumen,
+                'sub_header_dokumen' => $dokumen->judul ?? $draft->judul,
+                'tanggal_terbitan' => $dokumen->tanggal_pengesahan,
+                'terbitan' => $dokumen->cetakan,
+                'revisian' => $dokumen->revisian,
+                'qr_file' => $dokumen->qr_file,
+            ]),
+            $this->buildSectionsFromDraft($draft)
+        );
+    }
+
     public function renderFromPayload(array $payload): string
     {
         return $this->render(
@@ -189,11 +239,10 @@ class RenderKebijakanDocumentPdf
             'header_dokumen' => $payload['header_dokumen'] ?? $payload['divisi_bagian'] ?? '-',
             'no_dokumen' => $payload['no_dokumen'] ?? '-',
             'sub_header_dokumen' => $payload['sub_header_dokumen'] ?? $payload['judul'] ?? '-',
-            'tanggal_cetak' => $payload['tanggal_cetak'] ?? null,
-            'terbitan' => $payload['terbitan'] ?? null,
+            'tanggal_terbitan' => $payload['tanggal_terbitan'] ?? $payload['tanggal_pengesahan'] ?? $payload['tanggal_cetak'] ?? null,
+            'terbitan' => $payload['terbitan'] ?? $payload['cetakan'] ?? null,
             'revisian' => $payload['revisian'] ?? $payload['revisi'] ?? null,
-            'cetakan' => $payload['cetakan'] ?? null,
-            'qr_value' => $payload['qr_value'] ?? null,
+            'qr_file' => $payload['qr_file'] ?? null,
         ]);
     }
 
@@ -232,33 +281,48 @@ class RenderKebijakanDocumentPdf
             'header_dokumen' => trim((string) ($meta['header_dokumen'] ?? '-')) ?: '-',
             'no_dokumen' => trim((string) ($meta['no_dokumen'] ?? '-')) ?: '-',
             'sub_header_dokumen' => trim((string) ($meta['sub_header_dokumen'] ?? '-')) ?: '-',
-            'tanggal_cetak' => $meta['tanggal_cetak'] ?? null,
-            'terbitan' => $meta['terbitan'] ?? null,
+            'tanggal_terbitan' => $meta['tanggal_terbitan'] ?? $meta['tanggal_pengesahan'] ?? $meta['tanggal_cetak'] ?? null,
+            'terbitan' => $meta['terbitan'] ?? $meta['cetakan'] ?? null,
             'revisian' => $meta['revisian'] ?? null,
-            'cetakan' => $meta['cetakan'] ?? null,
-            'qr_value' => trim((string) ($meta['qr_value'] ?? '')) ?: null,
+            'qr_file' => trim((string) ($meta['qr_file'] ?? '')) ?: null,
         ];
     }
 
     /**
      * QR verifikasi dicetak di kotak kanan bawah setiap halaman.
-     * Mengembalikan null jika nilai QR belum tersedia atau gagal dibuat.
+     * mPDF lebih stabil dengan PNG yang digenerate dari kode_qr qr_documents.
      */
-    private function generateQrImage(?string $value, string $tempDir): ?string
+    private function resolveQrImageForPdf(?string $qrFile, string $tempDir): ?string
     {
-        if (!$value) {
+        if (!$qrFile) {
             return null;
         }
 
-        $filePath = $tempDir . DIRECTORY_SEPARATOR . uniqid('qr_', true) . '.png';
+        $qrRecord = QrDocument::query()
+            ->where('file', $qrFile)
+            ->where('type_document', GenerateQrDocumentKebijakan::TYPE_DOCUMENT)
+            ->first();
 
-        try {
-            QrCode::format('png')->size(400)->margin(0)->generate($value, $filePath);
-        } catch (\Throwable $th) {
-            return null;
+        if ($qrRecord && !empty($qrRecord->kode_qr)) {
+            $pngPath = $tempDir . DIRECTORY_SEPARATOR . uniqid('qr_', true) . '.png';
+
+            try {
+                QrCode::format('png')
+                    ->size(400)
+                    ->margin(0)
+                    ->generate('https://www.intilab.com/validation/' . $qrRecord->kode_qr, $pngPath);
+
+                if (file_exists($pngPath)) {
+                    return str_replace('\\', '/', $pngPath);
+                }
+            } catch (\Throwable $th) {
+                // fallback ke SVG jika konversi PNG gagal
+            }
         }
 
-        return file_exists($filePath) ? str_replace('\\', '/', $filePath) : null;
+        $svgPath = public_path('qr_documents/' . $qrFile . '.svg');
+
+        return file_exists($svgPath) ? str_replace('\\', '/', $svgPath) : null;
     }
 
     private function normalizeSections(array $sections, string $tempImageDir): array
