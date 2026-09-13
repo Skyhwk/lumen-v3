@@ -13,6 +13,7 @@ use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Services\ProfileHierarchyService;
 use App\Services\ProfileAttendanceService;
+use App\Services\ProfileEmployeeDetailService;
 use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 
@@ -90,6 +91,21 @@ class ProfileController extends Controller
         return response()->json([
             'message' => 'ok',
             'data'    => $result,
+        ]);
+    }
+
+    public function getDetail(Request $request)
+    {
+        $service = new ProfileEmployeeDetailService();
+        $data    = $service->build((int) $this->user_id);
+
+        if (!$data) {
+            return response()->json(['message' => 'Data karyawan tidak ditemukan'], 404);
+        }
+
+        return response()->json([
+            'message' => 'ok',
+            'data'    => $data,
         ]);
     }
 
