@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\MasterKaryawan;
+use Illuminate\Support\Collection;
 
 class ProfileHierarchyService
 {
@@ -31,8 +32,7 @@ class ProfileHierarchyService
         }
 
         $ancestorChain = $this->walkUpChain($employee);
-        $descendants   = $this->buildDescendantTree($employee->id, $userId);
-        $tree          = $this->mergeChainAndSubtree($employee, $ancestorChain, $descendants, $userId);
+        $tree          = $this->mergeChainAndSubtree($employee, $ancestorChain, $userId);
 
         return [
             'focus_id'   => $userId,
@@ -92,6 +92,71 @@ class ProfileHierarchyService
     }
 
     /**
+     * Rekan sejajar: grade sama + atasan langsung utama sama.
+     */
+    private function getPeerColleagues(MasterKaryawan $employee, MasterKaryawan $superior): Collection
+    {
+        $employeeGrade = $this->normalizeGrade($employee->grade);
+        $superiorId    = (int) $superior->id;
+
+        return MasterKaryawan::whereJsonContains('atasan_langsung', (string) $superiorId)
+            ->where('is_active', 1)
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->filter(function ($peer) use ($employeeGrade, $superiorId) {
+                if ($this->normalizeGrade($peer->grade) !== $employeeGrade) {
+                    return false;
+                }
+
+                $peerSuperior = $this->pickPrimarySuperior($peer);
+
+                return $peerSuperior && (int) $peerSuperior->id === $superiorId;
+            })
+            ->values();
+    }
+
+    /**
+     * STAFF melihat rekan STAFF di bawah atasan langsung yang sama.
+     */
+    private function shouldShowPeerColleagues(MasterKaryawan $employee): bool
+    {
+        return $this->normalizeGrade($employee->grade) === 'STAFF';
+    }
+
+    /**
+     * Node level user fokus. Untuk STAFF bisa lebih dari satu (sejajar).
+     *
+     * @return array<int, array>
+     */
+    private function buildFocusLevelNodes(MasterKaryawan $employee, int $focusUserId): array
+    {
+        $descendants = $this->buildDescendantTree($employee->id, $focusUserId);
+
+        if (!$this->shouldShowPeerColleagues($employee)) {
+            return [$this->toNode($employee, $descendants, $focusUserId)];
+        }
+
+        $superior = $this->pickPrimarySuperior($employee);
+        if (!$superior) {
+            return [$this->toNode($employee, $descendants, $focusUserId)];
+        }
+
+        $peers = $this->getPeerColleagues($employee, $superior);
+        if ($peers->count() <= 1) {
+            return [$this->toNode($employee, $descendants, $focusUserId)];
+        }
+
+        return $peers
+            ->map(fn ($peer) => $this->toNode(
+                $peer,
+                $this->buildDescendantTree($peer->id, $focusUserId),
+                $focusUserId
+            ))
+            ->values()
+            ->all();
+    }
+
+    /**
      * Bangun subtree bawahan rekursif (hanya karyawan aktif).
      */
     private function buildDescendantTree(int $rootId, int $focusUserId): array
@@ -115,17 +180,34 @@ class ProfileHierarchyService
     }
 
     /**
-     * Gabungkan rantai atasan (garis lurus ke atas) + subtree bawahan user fokus.
+     * Gabungkan rantai atasan (garis lurus ke atas) + level fokus (bisa sejajar untuk STAFF).
      */
     private function mergeChainAndSubtree(
         MasterKaryawan $employee,
         array $ancestorChain,
-        array $descendants,
         int $focusUserId
     ): array {
-        $node = $this->toNode($employee, $descendants, $focusUserId);
+        $focusLevelNodes = $this->buildFocusLevelNodes($employee, $focusUserId);
 
-        foreach ($ancestorChain as $superior) {
+        if (count($focusLevelNodes) === 1) {
+            $node = $focusLevelNodes[0];
+
+            foreach ($ancestorChain as $superior) {
+                $node = $this->toNode($superior, [$node], $focusUserId);
+            }
+
+            return $node;
+        }
+
+        if (empty($ancestorChain)) {
+            return $focusLevelNodes[0];
+        }
+
+        $remainingChain  = $ancestorChain;
+        $immediateBoss   = array_shift($remainingChain);
+        $node            = $this->toNode($immediateBoss, $focusLevelNodes, $focusUserId);
+
+        foreach ($remainingChain as $superior) {
             $node = $this->toNode($superior, [$node], $focusUserId);
         }
 
