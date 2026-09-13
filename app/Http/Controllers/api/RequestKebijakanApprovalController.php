@@ -155,6 +155,6 @@ class RequestKebijakanApprovalController extends Controller
     private function getAccessDeniedMessage(): string
     {
         return 'Maaf, Anda tidak memiliki otorisasi untuk melakukan approval request kebijakan. '
-            . 'Fitur ini hanya tersedia bagi karyawan dengan grade Manager, Senior Manager, Executive, dan Director.';
+            . 'Fitur ini hanya tersedia bagi karyawan dengan grade Manager, Senior Manager, dan Director.';
     }
 }
