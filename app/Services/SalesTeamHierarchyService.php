@@ -27,6 +27,7 @@ class SalesTeamHierarchyService
     public function getSelectPayload(): array
     {
         $executives = MasterKaryawan::whereIn('id', $this->salesExecutiveIds())
+            ->where('is_active', 1)
             ->orderBy('nama_lengkap')
             ->get(['id', 'nama_lengkap', 'jabatan', 'grade'])
             ->map(fn($item) => [
@@ -45,7 +46,16 @@ class SalesTeamHierarchyService
                 continue;
             }
 
-            $includedIds = $this->collectIncludedMemberIds($pool, $this->salesLeaves($pool));
+            $activeLeaves = $this->salesLeaves($pool)->filter(
+                fn($item) => $this->isActiveMember($item)
+            );
+
+            if ($activeLeaves->isEmpty()) {
+                continue;
+            }
+
+            $includedIds = $this->collectIncludedMemberIds($pool, $activeLeaves);
+
             foreach ($this->orderMembersByBranch($pool, $includedIds) as $branch) {
                 $root = $branch['members'][0] ?? null;
                 if (!$root) {
@@ -60,6 +70,10 @@ class SalesTeamHierarchyService
                         continue;
                     }
 
+                    if (!$this->isSalesStaff($item) || !$this->isActiveMember($item)) {
+                        continue;
+                    }
+
                     $members[] = [
                         'id'            => $item->id,
                         'nama_lengkap'  => $item->nama_lengkap,
@@ -67,6 +81,10 @@ class SalesTeamHierarchyService
                         'position'      => $this->positionLabel($item),
                         'superior_name' => $this->resolveSuperiorName($item, $pool, $includedSet),
                     ];
+                }
+
+                if (empty($members)) {
+                    continue;
                 }
 
                 $branches[] = [
@@ -101,6 +119,10 @@ class SalesTeamHierarchyService
         $memberScope = $scopeMemberIds !== null ? array_flip($scopeMemberIds) : null;
 
         foreach ($this->salesExecutiveIds() as $executiveId) {
+            if ($scopeRootIds !== null) {
+                continue;
+            }
+
             if ($memberScope !== null && !isset($memberScope[$executiveId])) {
                 continue;
             }

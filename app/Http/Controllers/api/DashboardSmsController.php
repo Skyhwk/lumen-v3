@@ -497,16 +497,19 @@ class DashboardSmsController extends Controller
                 ], 200);
 
             } else {
-                $karyawanId = (int) $request->karyawan_id;
-                $hierarchy  = app(SalesTeamHierarchyService::class);
-                $member     = MasterKaryawan::find($karyawanId);
-                $scopeIds   = ($member && $hierarchy->isSalesStaff($member))
-                    ? [$karyawanId]
-                    : $hierarchy->resolveDescendantIds($karyawanId);
-
+                $karyawanId  = (int) $request->karyawan_id;
+                $hierarchy   = app(SalesTeamHierarchyService::class);
+                $member      = MasterKaryawan::find($karyawanId);
+                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
                 $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
 
-                $cek = $isSalesStaff
+                if ($isExecutive || $isSalesStaff) {
+                    $scopeIds = [$karyawanId];
+                } else {
+                    $scopeIds = $hierarchy->resolveDescendantIds($karyawanId);
+                }
+
+                $cek = ($isSalesStaff || $isExecutive)
                     ? SalesKpi::where('karyawan_id', $karyawanId)->where('periode', $periode)->first()
                     : \DB::table('sales_kpi_monthly')
                         ->selectRaw("
@@ -606,7 +609,7 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
-                [$hierarchyRows, $hierarchyIds] = $isSalesStaff
+                [$hierarchyRows, $hierarchyIds] = ($isSalesStaff || $isExecutive)
                     ? $this->prepareHierarchyRows($periode, null, [$karyawanId])
                     : $this->prepareHierarchyRows($periode, [$karyawanId]);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
@@ -714,9 +717,11 @@ class DashboardSmsController extends Controller
             if ($request->mode === 'team' && $request->karyawan_id) {
                 $salesIds = $hierarchy->resolveDescendantIds((int) str_replace('team_', '', $request->karyawan_id));
             } elseif ($request->mode === 'single' && $request->karyawan_id) {
-                $karyawanId = (int) $request->karyawan_id;
-                $member     = MasterKaryawan::find($karyawanId);
-                $salesIds   = ($member && $hierarchy->isSalesStaff($member))
+                $karyawanId  = (int) $request->karyawan_id;
+                $member      = MasterKaryawan::find($karyawanId);
+                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
+
+                $salesIds = ($isExecutive || ($member && $hierarchy->isSalesStaff($member)))
                     ? [$karyawanId]
                     : $hierarchy->resolveDescendantIds($karyawanId);
             }
