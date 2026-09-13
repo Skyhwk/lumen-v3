@@ -11,7 +11,10 @@ use App\Models\User;
 use App\Models\UserToken;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\ProfileHierarchyService;
+use App\Services\ProfileAttendanceService;
 use Illuminate\Support\Facades\Hash;
+use InvalidArgumentException;
 
 
 class ProfileController extends Controller
@@ -79,5 +82,31 @@ class ProfileController extends Controller
         return response()->json([$leaderboard]);
     }
 
+    public function getOrgChart(Request $request)
+    {
+        $service = new ProfileHierarchyService();
+        $result  = $service->buildOrgChart((int) $this->user_id);
 
+        return response()->json([
+            'message' => 'ok',
+            'data'    => $result,
+        ]);
+    }
+
+    public function getAttendance(Request $request)
+    {
+        try {
+            $service = new ProfileAttendanceService();
+            $result  = $service->build((int) $this->user_id, $request->input('month'));
+
+            return response()->json([
+                'message' => 'ok',
+                'data'    => $result,
+            ]);
+        } catch (InvalidArgumentException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
 }
