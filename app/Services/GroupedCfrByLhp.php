@@ -181,6 +181,8 @@ class GroupedCfrByLhp
 
                 $stepsByCFR['activeStep'] = $this->detectActiveStepByGroup($mappedDetails);
 
+                $orderDetailsArray = $mappedDetails->toArray();
+
                 return [
                     'cfr' => $itemGroup->first()->cfr,
                     'periode' => $itemGroup->first()->periode,
@@ -188,7 +190,8 @@ class GroupedCfrByLhp
                     'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
                     'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
                     'total_no_sampel' => $itemGroup->count(),
-                    'order_details' => $mappedDetails->toArray(),
+                    'order_details' => $orderDetailsArray,
+                    'file_lhp' => (new ResolveLhpFile())->fromOrderDetails($orderDetailsArray),
                     'steps' => $stepsByCFR
                 ];
             }))->flatten(1)->values();

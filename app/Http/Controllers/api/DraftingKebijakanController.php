@@ -5,6 +5,8 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\DraftingKebijakan;
 use App\Models\RequestKebijakan;
+use App\Services\RequestKebijakanNotificationService;
+use App\Services\RequestKebijakanVerifierService;
 use App\Services\RequestKebijakanWorkflowService;
 use App\Services\RenderKebijakanDocumentPdf;
 use Carbon\Carbon;
@@ -52,6 +54,16 @@ class DraftingKebijakanController extends Controller
             ->addColumn('display_kategori', fn ($row) => RequestKebijakanWorkflowService::resolveKategoriLabel($row->kategori))
             ->addColumn('draft_status', fn ($row) => optional($row->drafting)->status)
             ->addColumn('has_draft', fn ($row) => !!$row->drafting)
+            ->addColumn('has_review_rejection', fn ($row) => !empty(optional($row->drafting)->review_rejected_note))
+            ->addColumn('review_rejected_by', fn ($row) => optional($row->drafting)->review_rejected_by)
+            ->addColumn('review_rejected_at', fn ($row) => optional($row->drafting)->review_rejected_at)
+            ->addColumn('review_rejected_note', fn ($row) => optional($row->drafting)->review_rejected_note)
+            ->addColumn('review_rejected_source', fn ($row) => optional($row->drafting)->review_rejected_source)
+            ->addColumn('review_reject_used_user_note', fn ($row) => (bool) optional($row->drafting)->review_reject_used_user_note)
+            ->addColumn('review_reject_source_label', fn ($row) => RequestKebijakanWorkflowService::resolveReviewRejectSourceLabel(optional($row->drafting)->review_rejected_source))
+            ->addColumn('user_review_rejected_by', fn ($row) => $row->user_review_rejected_by)
+            ->addColumn('user_review_rejected_at', fn ($row) => $row->user_review_rejected_at)
+            ->addColumn('user_review_rejected_note', fn ($row) => $row->user_review_rejected_note)
             ->filterColumn('no_request', fn ($q, $keyword) => $q->where('no_request', 'like', "%{$keyword}%"))
             ->filterColumn('judul', fn ($q, $keyword) => $q->where('judul', 'like', "%{$keyword}%"))
             ->filterColumn('display_kategori', function ($q, $keyword) {
@@ -260,18 +272,52 @@ class DraftingKebijakanController extends Controller
                 'status' => 'submitted',
                 'submitted_by' => $employee->nama_lengkap,
                 'submitted_at' => Carbon::now(),
+                'review_rejected_by' => null,
+                'review_rejected_at' => null,
+                'review_rejected_note' => null,
+                'review_rejected_source' => null,
+                'review_reject_used_user_note' => false,
                 'updated_by' => $employee->nama_lengkap,
                 'updated_at' => Carbon::now(),
             ]);
 
-            $record->update([
-                'status' => 'completed',
-            ]);
+            $hasVerifiers = RequestKebijakanVerifierService::hasVerifiers($record);
+            $reopenedRejected = false;
+
+            if ($hasVerifiers) {
+                $reopenedRejected = RequestKebijakanVerifierService::reopenRejectedAfterLegalResubmit($record);
+            }
+
+            if ($hasVerifiers && ($reopenedRejected || RequestKebijakanVerifierService::hasPendingVerifiers($record))) {
+                $record->update([
+                    'status' => 'pending_user_review',
+                    'user_review_rejected_by' => null,
+                    'user_review_rejected_at' => null,
+                    'user_review_rejected_note' => null,
+                    'user_reviewed_by' => null,
+                    'user_reviewed_at' => null,
+                ]);
+            } else {
+                $record->update([
+                    'status' => 'completed',
+                    'forwarded_to_user_by' => null,
+                    'forwarded_to_user_at' => null,
+                    'user_reviewed_by' => null,
+                    'user_reviewed_at' => null,
+                    'user_review_rejected_by' => null,
+                    'user_review_rejected_at' => null,
+                    'user_review_rejected_note' => null,
+                ]);
+
+                RequestKebijakanNotificationService::draftSubmitted($record->fresh(), $employee);
+            }
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Draft kebijakan berhasil diajukan. Tahap review berikutnya akan segera tersedia.',
+                'message' => $hasVerifiers && RequestKebijakanVerifierService::hasPendingVerifiers($record->fresh())
+                    ? 'Draft kebijakan berhasil diajukan ulang. Menunggu verifikasi reviewer yang ditolak.'
+                    : 'Draft kebijakan berhasil diajukan. Tahap review berikutnya akan segera tersedia.',
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();

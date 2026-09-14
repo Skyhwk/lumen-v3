@@ -84,6 +84,7 @@ return [
             '8' => "Optimally, 1 (one) sampling team (2 people) can work on 6 air points (Ambient / Work Environment) per day.",
             '9' => "The time period for document production is 2-3 months, and the customer is obligated to complete the documents before sampling is carried out.",
             '10' => "Costs include :costs.",
+            '11' => "The laboratory upholds the principles of independence, impartiality, objectivity, and management of potential conflicts of interest in all testing activities in accordance with applicable policies and procedures.",
         ],
     ],
     'tax' => [

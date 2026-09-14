@@ -711,7 +711,7 @@ trait BuildsCandidateAssessmentPreview
             'alasan_reject' => $candidate->alasan_reject,
             'nilai_kecocokan' => $matchingScore,
             'ai_matching_reason' => $this->resolveMatchingReason($candidate),
-            'posisi_dilamar' => $candidate->posisi_dilamar,
+            'posisi_dilamar' => $this->resolveAppliedPositionLabel($candidate),
             'applied_at' => $candidate->created_at,
             'updated_at' => $candidate->updated_at,
             'meta_history' => $this->decodeMetaHistory($candidate->meta_history),
@@ -846,5 +846,46 @@ trait BuildsCandidateAssessmentPreview
                 'has_result' => true,
             ], $summary),
         ], 200);
+    }
+
+    protected function resolveAppliedPositionLabel($applicant)
+    {
+        if (!$applicant) {
+            return 'Applied Position';
+        }
+
+        $pos = null;
+        $personnelRequest = $applicant->personalRequest ?? $applicant->personnelRequest ?? null;
+
+        if ($personnelRequest) {
+            $masterJabatan = $personnelRequest->masterJabatan ?? null;
+            if ($masterJabatan && !empty($masterJabatan->nama_jabatan)) {
+                $pos = $masterJabatan->nama_jabatan;
+            } elseif (!empty($personnelRequest->posisi_name)) {
+                $pos = $personnelRequest->posisi_name;
+            } elseif (!empty($personnelRequest->posisi) && !is_numeric($personnelRequest->posisi)) {
+                $pos = $personnelRequest->posisi;
+            }
+        }
+
+        if (!$pos) {
+            $appliedJabatan = $applicant->appliedPositionJabatan ?? null;
+            if ($appliedJabatan && !empty($appliedJabatan->nama_jabatan)) {
+                $pos = $appliedJabatan->nama_jabatan;
+            }
+        }
+
+        if (!$pos) {
+            $bagianJabatan = $applicant->masterJabatan ?? null;
+            if ($bagianJabatan && !empty($bagianJabatan->nama_jabatan)) {
+                $pos = $bagianJabatan->nama_jabatan;
+            }
+        }
+
+        if (!$pos && !empty($applicant->posisi_dilamar) && !is_numeric($applicant->posisi_dilamar)) {
+            $pos = $applicant->posisi_dilamar;
+        }
+
+        return $pos ?: 'Applied Position';
     }
 }

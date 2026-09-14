@@ -97,6 +97,8 @@ class AtsArchivedCandidatesController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->where('status', 'training')
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)

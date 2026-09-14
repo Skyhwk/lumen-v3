@@ -191,12 +191,18 @@ class FdlKebisinganController extends Controller
                 }
             }
 
-            // Gunakan firstOrNew untuk menghindari duplikasi, update kalau sudah ada, buat baru kalau tidak ada
-            $dataHeader = KebisinganHeader::firstOrNew([
-                'no_sampel'    => $no_sample,
-                'id_parameter' => $param->id,
-            ]);
+            $dataHeader = KebisinganHeader::where('no_sampel', $no_sample)
+                ->where('id_parameter', $param->id)
+                ->where('is_active', true)
+                ->first();
 
+            if (!$dataHeader) {
+                $dataHeader = new KebisinganHeader();
+                $dataHeader->created_by = $this->karyawan;
+            }
+
+            $dataHeader->no_sampel        = $no_sample;
+            $dataHeader->id_parameter     = $param->id;
             $dataHeader->parameter        = $param->nama_lab;
             $dataHeader->min              = $nilaiMin;
             $dataHeader->max              = $nilaiMax;
@@ -208,20 +214,27 @@ class FdlKebisinganController extends Controller
             $dataHeader->leq_lm           = $calculate['leqLM'] ?? null;
             $dataHeader->leq              = $calculate['jumlah_leq'] ?? null;
             $dataHeader->is_approved      = true;
+            $dataHeader->is_active        = true;
             $dataHeader->approved_by      = $this->karyawan;
             $dataHeader->approved_at      = Carbon::now();
-            $dataHeader->created_by       = $this->karyawan;
             $dataHeader->save();
 
-            // Sama logikanya untuk WS, cari yang sudah ada (berdasar no_sampel dan header_id), jika tidak ada buat baru
-            $ws = WsValueUdara::firstOrNew([
-                'no_sampel' => $no_sample,
-                'id_kebisingan_header' => $dataHeader->id,
-            ]);
-            $ws->id_po   = $po->id;
-            $ws->hasil1  = $calculate['hasil'] ?? null;
-            $ws->hasil2  = $calculate['hasil2'] ?? null;
-            $ws->satuan  = $calculate['satuan'] ?? null;
+            $ws = WsValueUdara::where('no_sampel', $no_sample)
+                ->where('id_kebisingan_header', $dataHeader->id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$ws) {
+                $ws = new WsValueUdara();
+            }
+
+            $ws->no_sampel            = $no_sample;
+            $ws->id_kebisingan_header = $dataHeader->id;
+            $ws->id_po                = $po->id;
+            $ws->hasil1               = $calculate['hasil'] ?? null;
+            $ws->hasil2               = $calculate['hasil2'] ?? null;
+            $ws->satuan               = $calculate['satuan'] ?? null;
+            $ws->is_active            = true;
             $ws->save();
 
             // ==== Update status Approve ====

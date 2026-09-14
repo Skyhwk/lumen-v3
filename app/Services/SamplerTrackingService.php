@@ -275,7 +275,7 @@ class SamplerTrackingService
                             ->whereHas('activeMembers', function ($memberQuery) use ($date, $memberFilter) {
                                 $memberFilter($memberQuery);
                                 $memberQuery->whereRaw(
-                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(NULLIF(sampler_tracking_members.effective_duration, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.durasi_personal, ''), '0'), NULLIF(NULLIF(sampler_tracking_members.duration, ''), '0'), 0) AS SIGNED) - 1, 0) DAY) >= ?",
+                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(sampler_tracking_members.effective_duration, ''), NULLIF(sampler_tracking_members.durasi_personal, ''), NULLIF(sampler_tracking_members.duration, ''), 0) AS SIGNED) - 1, 0) DAY) >= ?",
                                     [$date]
                                 );
                                 $memberQuery->whereDoesntHave('events', function ($eventQuery) {
@@ -599,7 +599,10 @@ class SamplerTrackingService
 
             $members = SamplerTrackingMember::where('sampler_tracking_session_id', $member->sampler_tracking_session_id)
                 ->where('is_active', true)
-                ->when($eventType === 'checkout', function ($query) use ($member) {
+                // Anggota dengan durasi lebih pendek dapat menyelesaikan
+                // aktivitasnya sendiri. Checkout dan Pulang tidak boleh
+                // menutup anggota tim yang masih punya durasi lanjutan.
+                ->when(in_array($eventType, ['checkout', 'return'], true), function ($query) use ($member) {
                     $query->where('effective_duration', $member->effective_duration);
                 })
                 ->get();

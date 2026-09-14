@@ -1638,4 +1638,30 @@ class AbsensiController extends Controller
             "end" => date('N', $dt) == 7 ? date('Y-m-d', $dt) : date('Y-m-d', strtotime('next sunday', $dt))
         );
     }
+
+    public function getMonthlyAttendance(int $karyawanId, string $month): array
+    {
+        $periode = self::parseBulanAbsensi($month, null);
+        if ($periode === null) {
+            return [];
+        }
+
+        $karyawan = MasterKaryawan::where('id', $karyawanId)->first();
+        if ($karyawan === null) {
+            return [];
+        }
+
+        $monthNum = $periode['month'];
+        $year     = $periode['year'];
+        $lastDay  = cal_days_in_month(CAL_GREGORIAN, (int) $monthNum, (int) $year);
+
+        return self::buildMonthlyAbsensiData(
+            $karyawan->id,
+            $year,
+            $monthNum,
+            $lastDay,
+            $karyawan->nik_karyawan,
+            $karyawan->nama_lengkap
+        );
+    }
 }

@@ -15,6 +15,7 @@ use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 
 class AtsInterviewUserController extends Controller
@@ -99,6 +100,44 @@ class AtsInterviewUserController extends Controller
         return $pos ?: '-';
     }
 
+    private function newRecruitmentHasColumn($column)
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = Schema::hasTable('new_recruitment')
+                ? array_flip(Schema::getColumnListing('new_recruitment'))
+                : [];
+        }
+
+        return isset($columns[$column]);
+    }
+
+    private function whereAnyExistingLike($query, array $columns, $keyword)
+    {
+        $query->where(function ($sub) use ($columns, $keyword) {
+            $applied = false;
+
+            foreach ($columns as $column) {
+                if (!$this->newRecruitmentHasColumn($column)) {
+                    continue;
+                }
+
+                if (!$applied) {
+                    $sub->where($column, 'like', "%{$keyword}%");
+                    $applied = true;
+                    continue;
+                }
+
+                $sub->orWhere($column, 'like', "%{$keyword}%");
+            }
+
+            if (!$applied) {
+                $sub->whereRaw('1 = 0');
+            }
+        });
+    }
+
     // ─── Index — DataTables list of interview_user candidates ─────────────────
 
     /**
@@ -110,7 +149,9 @@ class AtsInterviewUserController extends Controller
 
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
             ->where('is_active', 1)
-            ->whereIn('status', ['interview_user', 'profile_completion'])
+            ->whereIn('status', ['interview_user'])
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->where(function ($q) use ($mode) {
                 if ($mode === 'scheduled') {
                     // Candidates with an active User Interview schedule set
@@ -233,6 +274,25 @@ class AtsInterviewUserController extends Controller
                 }
                 return '-';
             })
+            ->filterColumn('usia', function ($q, $keyword) {
+                $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+                $q->where(function ($sub) use ($keyword, $cleanDigits) {
+                    if ($cleanDigits !== '') {
+                        $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                        if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                            $sub->whereYear('tanggal_lahir', $targetYear);
+                        }
+                        foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                            if ($this->newRecruitmentHasColumn($column)) {
+                                $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                            }
+                        }
+                        return;
+                    }
+
+                    $this->whereAnyExistingLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+                });
+            })
             ->editColumn('shio', function ($row) {
                 $birthDate   = $row->tanggal_lahir ?? $this->getTtlString($row);
                 $shioElemen  = ShioElemenHelper::resolve($birthDate, $row->shio, $row->elemen);
@@ -243,11 +303,36 @@ class AtsInterviewUserController extends Controller
                 }
                 return $shio ?: ($elemen ?: '-');
             })
+            ->filterColumn('shio', function ($q, $keyword) {
+                $this->whereAnyExistingLike($q, [
+                    'shio',
+                    'elemen',
+                    'tempat_tanggal_lahir',
+                    'tempat_lahir',
+                    'tanggal_lahir',
+                ], $keyword);
+            })
             ->editColumn('nilai_kecocokan', function ($row) {
                 $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== ''
                     ? $row->nilai_kecocokan
-                    : ($row->matching_score ?? rand(70, 95));
+                    : ($this->newRecruitmentHasColumn('matching_score') ? ($row->matching_score ?? null) : null);
+
+                if ($score === null || $score === '') {
+                    return '-';
+                }
+
                 return $score . '%';
+            })
+            ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                if ($cleanVal === '' || $cleanVal === null) {
+                    return;
+                }
+
+                $this->whereAnyExistingLike($q, ['nilai_kecocokan', 'matching_score'], $cleanVal);
+            })
+            ->filterColumn('status', function ($q, $keyword) {
+                $q->where('new_recruitment.status', 'like', "%{$keyword}%");
             })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'interview_user';
@@ -437,6 +522,8 @@ class AtsInterviewUserController extends Controller
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'sallaryOffer'])
             ->where('status', 'internal_sallary_offer')
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
             ->when($request->filled('year'), function ($q) use ($request) {
                 return $q->where(function ($sub) use ($request) {
                     $sub->whereYear('created_at', $request->year)
@@ -504,6 +591,25 @@ class AtsInterviewUserController extends Controller
                 }
                 return '-';
             })
+            ->filterColumn('usia', function ($q, $keyword) {
+                $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+                $q->where(function ($sub) use ($keyword, $cleanDigits) {
+                    if ($cleanDigits !== '') {
+                        $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                        if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                            $sub->whereYear('tanggal_lahir', $targetYear);
+                        }
+                        foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                            if ($this->newRecruitmentHasColumn($column)) {
+                                $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                            }
+                        }
+                        return;
+                    }
+
+                    $this->whereAnyExistingLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+                });
+            })
             ->editColumn('shio', function ($row) {
                 $birthDate   = $row->tanggal_lahir ?? $this->getTtlString($row);
                 $shioElemen  = ShioElemenHelper::resolve($birthDate, $row->shio, $row->elemen);
@@ -514,11 +620,36 @@ class AtsInterviewUserController extends Controller
                 }
                 return $shio ?: ($elemen ?: '-');
             })
+            ->filterColumn('shio', function ($q, $keyword) {
+                $this->whereAnyExistingLike($q, [
+                    'shio',
+                    'elemen',
+                    'tempat_tanggal_lahir',
+                    'tempat_lahir',
+                    'tanggal_lahir',
+                ], $keyword);
+            })
             ->editColumn('nilai_kecocokan', function ($row) {
                 $score = $row->nilai_kecocokan !== null && $row->nilai_kecocokan !== ''
                     ? $row->nilai_kecocokan
-                    : ($row->matching_score ?? rand(70, 95));
+                    : ($this->newRecruitmentHasColumn('matching_score') ? ($row->matching_score ?? null) : null);
+
+                if ($score === null || $score === '') {
+                    return '-';
+                }
+
                 return $score . '%';
+            })
+            ->filterColumn('nilai_kecocokan', function ($q, $keyword) {
+                $cleanVal = preg_replace('/[^0-9.]/', '', $keyword);
+                if ($cleanVal === '' || $cleanVal === null) {
+                    return;
+                }
+
+                $this->whereAnyExistingLike($q, ['nilai_kecocokan', 'matching_score'], $cleanVal);
+            })
+            ->filterColumn('status', function ($q, $keyword) {
+                $q->where('new_recruitment.status', 'like', "%{$keyword}%");
             })
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'interview_user';

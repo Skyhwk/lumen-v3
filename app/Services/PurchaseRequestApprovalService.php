@@ -8,8 +8,6 @@ use App\Models\PurchaseRequest;
 class PurchaseRequestApprovalService
 {
     private const EXCLUDED_NAMES = [
-        'Siti Nur Faidhah',
-        'Reiko Nishio Yana Gita Sinaga',
     ];
 
     private const DIRECTOR_IDS = [1];
@@ -19,6 +17,10 @@ class PurchaseRequestApprovalService
         $managerChain = self::resolveManagerApprovalChain($employee);
         if (!empty($managerChain)) {
             return ['mode' => 'chain', 'chain' => $managerChain];
+        }
+
+        if (strtoupper(trim((string) $employee->grade)) === 'STAFF') {
+            return ['mode' => 'blocked', 'chain' => [], 'message' => 'Manager approver belum terkonfigurasi.'];
         }
 
         // Manager puncak (tidak punya atasan manager lagi) & supervisor → auto-approve
@@ -64,24 +66,17 @@ class PurchaseRequestApprovalService
 
     /**
      * Bangun rantai approval manager berurutan (manager terdekat → manager puncak).
-     * Membaca hierarki dari GetAtasan, berjalan naik via atasan_langsung,
+     * Berjalan naik via atasan_langsung, melewati non-manager,
      * berhenti di manager puncak — tidak sampai direktur.
      */
     public static function resolveManagerApprovalChain(MasterKaryawan $employee): array
     {
-        $hierarchy = GetAtasan::where('id', $employee->id)->get();
-        $hierarchyLookup = $hierarchy
-            ->pluck('id')
-            ->map(fn($id) => (int) $id)
-            ->flip()
-            ->all();
-
         $chain = [];
-        $visited = [];
+        $visited = [(int) $employee->id];
         $current = $employee;
 
         for ($depth = 0; $depth < 15; $depth++) {
-            $candidates = self::getManagerCandidatesFromAtasan($current, (int) $employee->id, $hierarchyLookup);
+            $candidates = self::getManagerCandidatesFromAtasan($current, $visited);
             if (empty($candidates)) {
                 break;
             }
@@ -107,30 +102,37 @@ class PurchaseRequestApprovalService
 
     private static function getManagerCandidatesFromAtasan(
         MasterKaryawan $current,
-        int $employeeId,
-        array $hierarchyLookup
+        array $visited
     ): array {
-        $atasanIds = json_decode($current->atasan_langsung ?? '[]', true) ?? [];
-        $candidates = [];
-
-        foreach (array_map('intval', $atasanIds) as $atasanId) {
-            if ($atasanId === $employeeId || self::isDirectorId($atasanId)) {
-                continue;
+        $frontier = [$current];
+        // Cari manager terdekat per tingkat; non-manager hanya jalur penelusuran.
+        for ($depth = 0; $depth < 15 && !empty($frontier); $depth++) {
+            $candidates = [];
+            $nextLevel = [];
+            foreach ($frontier as $node) {
+                $atasanIds = json_decode($node->atasan_langsung ?? '[]', true) ?? [];
+                foreach (array_map('intval', $atasanIds) as $atasanId) {
+                    if (in_array($atasanId, $visited, true) || self::isDirectorId($atasanId)) {
+                        continue;
+                    }
+                    $visited[] = $atasanId;
+                    $person = MasterKaryawan::where('id', $atasanId)->where('is_active', 1)->first();
+                    if (!$person || self::isExcludedPerson($person) || self::isDirector($person)) {
+                        continue;
+                    }
+                    if (self::isManagerGrade($person)) {
+                        $candidates[] = $person;
+                    } else {
+                        $nextLevel[] = $person;
+                    }
+                }
             }
-
-            if (!isset($hierarchyLookup[$atasanId])) {
-                continue;
+            if (!empty($candidates)) {
+                return $candidates;
             }
-
-            $person = MasterKaryawan::where('id', $atasanId)->where('is_active', 1)->first();
-            if (!$person || self::isExcludedPerson($person) || !self::isManagerGrade($person) || self::isDirector($person)) {
-                continue;
-            }
-
-            $candidates[] = $person;
+            $frontier = $nextLevel;
         }
-
-        return $candidates;
+        return [];
     }
 
     /**

@@ -313,6 +313,11 @@ class PurchaseRequestsController extends Controller
             if ($blockMessage) {
                 return response()->json(['message' => $blockMessage], 422);
             }
+            $employee = $request->attributes->get('user')->karyawan;
+            $plan = PurchaseRequestApprovalService::buildApprovalPlan($employee);
+            if ($plan['mode'] === 'blocked') {
+                return response()->json(['message' => $plan['message']], 422);
+            }
         }
 
         if ($isUpdateMode) {
@@ -366,7 +371,7 @@ class PurchaseRequestsController extends Controller
             $purchaseRequest->items()->create($itemData);
 
             $employee = $request->attributes->get('user')->karyawan;
-            $this->applyInitialApproval($purchaseRequest, $employee);
+            $this->applyInitialApproval($purchaseRequest, $employee, $plan);
         }
 
         return response()->json(['message' => "Permintaan pembelian barang berhasil " . ($isUpdateMode ? 'diupdate' : 'diajukan')], 201);
@@ -405,6 +410,11 @@ class PurchaseRequestsController extends Controller
     public function reopen(Request $request)
     {
         $purchaseRequest = PurchaseRequest::findOrFail($request->id);
+        $creator = MasterKaryawan::where('nama_lengkap', $purchaseRequest->created_by)->where('is_active', 1)->first();
+        $plan = $creator ? PurchaseRequestApprovalService::buildApprovalPlan($creator) : null;
+        if ($plan && $plan['mode'] === 'blocked') {
+            return response()->json(['message' => $plan['message']], 422);
+        }
         $purchaseRequest->status = 'Reopened';
         $purchaseRequest->rejection_note = null;
         $purchaseRequest->rejected_by = null;
@@ -431,10 +441,7 @@ class PurchaseRequestsController extends Controller
         ]);
 
         $employee = $request->attributes->get('user')->karyawan;
-        $creator = MasterKaryawan::where('nama_lengkap', $purchaseRequest->created_by)->where('is_active', 1)->first();
-
         if ($creator) {
-            $plan = PurchaseRequestApprovalService::buildApprovalPlan($creator);
             PurchaseRequestApprovalService::initializeApprovalState($purchaseRequest, $plan);
             $purchaseRequest->save();
             $this->notifyNextApprover($purchaseRequest, $employee->nama_lengkap, true);
@@ -866,10 +873,8 @@ class PurchaseRequestsController extends Controller
         return $prefix . str_pad($nextNumber, $padLength, '0', STR_PAD_LEFT);
     }
 
-    private function applyInitialApproval(PurchaseRequest $purchaseRequest, $employee): void
+    private function applyInitialApproval(PurchaseRequest $purchaseRequest, $employee, array $plan): void
     {
-        $plan = PurchaseRequestApprovalService::buildApprovalPlan($employee);
-
         if ($plan['mode'] === 'auto') {
             $purchaseRequest->status = 'Approved';
             $purchaseRequest->approved_by = $employee->nama_lengkap;
