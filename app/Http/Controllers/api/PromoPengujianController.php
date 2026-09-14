@@ -16,10 +16,8 @@ use App\Models\Parameter;
 class PromoPengujianController extends Controller {
     public function index(Request $request) {
         $query = DB::table('promo_pengujian')
-            ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi', 'status')
-            ->when($request->filled('status'), function ($q) use ($request) {
-                $q->where('status', $request->status);
-            })
+            ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi')
+            ->where('status', 'aktif')
             ->when($request->filled('metode'), function ($q) use ($request) {
                 $q->where('metode', $request->metode);
             })
@@ -34,9 +32,6 @@ class PromoPengujianController extends Controller {
             })
             ->filterColumn('metode', function ($q, $keyword) {
                 $q->where('metode', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('status', function ($q, $keyword) {
-                $q->where('status', 'like', "%{$keyword}%");
             })
             ->make(true);
     }
@@ -192,7 +187,7 @@ class PromoPengujianController extends Controller {
             'metode'       => $metode,
             'nama_diskon'  => $namaDiskon,
             'konfigurasi'  => json_encode($konfigurasi),
-            'status'       => $request->input('status', 'draft'),
+            'status'       => 'aktif',
             'created_by'   => $this->karyawan,
             'created_at'   => Carbon::now(),
             'updated_at'   => Carbon::now(),
@@ -222,7 +217,6 @@ class PromoPengujianController extends Controller {
         $kodePromo = $request->input('kode_promo', $data->kode_promo);
         $metode = $request->input('metode', $data->metode);
         $namaDiskon = $request->input('nama_diskon', $data->nama_diskon);
-        $status = $request->input('status', $data->status);
 
         $konfigurasi = json_decode($data->konfigurasi, true) ?? [];
 
@@ -363,7 +357,6 @@ class PromoPengujianController extends Controller {
             'metode'       => $metode,
             'nama_diskon'  => $namaDiskon,
             'konfigurasi'  => json_encode($konfigurasi),
-            'status'       => $status,
             'updated_by'   => $this->karyawan,
             'updated_at'   => Carbon::now(),
         ]);
@@ -422,6 +415,32 @@ class PromoPengujianController extends Controller {
     public function detail(Request $request)
     {
         return $this->show($request);
+    }
+
+    public function delete(Request $request)
+    {
+        try {
+            $id = $request->input('id');
+            $data = DB::table('promo_pengujian')->where('id', $id)->first();
+            if (!$data) {
+                return response()->json([
+                    'message' => 'Data promo pengujian tidak ditemukan'
+                ], 404);
+            }
+
+            DB::table('promo_pengujian')->where('id', $id)->update([
+                'status' => 'nonaktif',
+            ]);
+
+            return response()->json([
+                'message' => 'Data promo pengujian berhasil dihapus'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal menghapus data promo pengujian: ' . $e->getMessage(),
+                'status'  => '500',
+            ], 401);
+        }
     }
 
     public function getKategori(Request $request)
@@ -500,57 +519,6 @@ class PromoPengujianController extends Controller {
     {
         $data = MasterRegulasi::with(['bakumutu'])->where('is_active', true)->get();
         return response()->json($data);
-    }
-
-    public function updateStatus(Request $request)
-    {
-        $id = $request->input('id');
-        $status = $request->input('status');
-
-        if (empty($id)) {
-            return response()->json([
-                'message' => 'ID promo pengujian tidak ditemukan'
-            ], 422);
-        }
-
-        if (empty($status)) {
-            return response()->json([
-                'message' => 'Status tidak boleh kosong'
-            ], 422);
-        }
-
-        $promo = DB::table('promo_pengujian')->where('id', $id)->first();
-        if (!$promo) {
-            return response()->json([
-                'message' => 'Data promo pengujian tidak ditemukan'
-            ], 404);
-        }
-
-        if ($status === 'aktif' && $promo->metode !== 'labeling') {
-            $konfigurasi = json_decode($promo->konfigurasi, true);
-            $isEmpty = empty($konfigurasi);
-            if (!$isEmpty && is_array($konfigurasi) && count($konfigurasi) === 1 && isset($konfigurasi['data_pendukung_sampling'])) {
-                $isEmpty = empty($konfigurasi['data_pendukung_sampling']);
-            }
-            if ($isEmpty) {
-                return response()->json([
-                    'message' => 'Konfigurasi promo masih kosong. Silakan lengkapi konfigurasi terlebih dahulu.'
-                ], 422);
-            }
-        }
-
-        DB::table('promo_pengujian')->where('id', $id)->update([
-            'status'     => $status,
-            'updated_by' => $this->karyawan,
-            'updated_at' => Carbon::now(),
-        ]);
-
-        $statusText = $status === 'aktif' ? 'diaktifkan' : 'dinonaktifkan';
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => "Promo pengujian {$promo->kode_promo} berhasil {$statusText}",
-        ], 200);
     }
 }
 
