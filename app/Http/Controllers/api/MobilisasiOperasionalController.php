@@ -40,8 +40,7 @@ class MobilisasiOperasionalController extends Controller
             'durasi',
             'id_cabang',
             'wilayah',
-            DB::raw('group_concat(sampler) as sampler'),
-            DB::raw('MAX(kendaraan) as kendaraan')
+            DB::raw('group_concat(sampler) as sampler')
         )
         ->groupBy(
             'parsial', 'no_quotation', 'periode', 'nama_perusahaan',
@@ -50,7 +49,6 @@ class MobilisasiOperasionalController extends Controller
         ->whereNotNull('no_quotation')
         ->where('is_active', true)
         ->where('tanggal', $request->tanggal)
-        ->orderByRaw('MAX(kendaraan) ASC')
         ->orderBy('jam_mulai')
         ->get()
         ->map(function ($item) {
@@ -88,7 +86,6 @@ class MobilisasiOperasionalController extends Controller
                 ->values();
 
             return [
-                'kendaraan'       => $item->kendaraan,
                 'jadwal_mobil'    => $jadwalMobilData,
                 'no_quotation'    => $item->no_quotation,
                 'nama_perusahaan' => $item->nama_perusahaan,
