@@ -13,6 +13,7 @@ use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 class MobilisasiOperasionalController extends Controller
 {
+    // ini adalah function untuk mengambil data dari API
     public function index(Request $request)
     {
         $data = Jadwal::with([
