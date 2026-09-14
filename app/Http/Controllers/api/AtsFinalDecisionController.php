@@ -295,36 +295,93 @@ class AtsFinalDecisionController extends Controller
         });
     }
 
-    private function applyFinalDecisionListScope($query, ?string $listType)
+    private function applyFinalDecisionListScope($query, ?string $listType = null, ?string $stageTab = null)
     {
-        if ($listType === 'rejected') {
+        $stageTab = $stageTab ?: ($listType === 'rejected' ? 'rejected' : null);
+
+        if ($stageTab === 'rejected') {
             return $this->scopeRejectedFinalDecisionCandidates($query);
         }
 
-        return $this->scopeFinalDecisionCandidates($query);
+        $query = $this->scopeFinalDecisionCandidates($query);
+
+        if ($stageTab === 'management_decision') {
+            return $query->where('status', 'management_decision');
+        }
+
+        if ($stageTab === 'salary_offer') {
+            return $query->whereIn('status', ['internal_sallary_offer', 'salary_offer']);
+        }
+
+        if ($stageTab === 'finance_review') {
+            return $query->where('status', 'finance_review');
+        }
+
+        return $query;
+    }
+
+    private function buildFinalDecisionTabQuery(?string $stageTab, $year = null)
+    {
+        $query = $this->applyFinalDecisionListScope(NewRecruitment::query(), null, $stageTab)
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '');
+
+        if ($year) {
+            $query->where(function ($sub) use ($year) {
+                $sub->whereYear('created_at', $year)
+                    ->orWhereNull('created_at');
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * Get tab counts per Final Decision stage status
+     */
+    public function counts(Request $request)
+    {
+        $year = $request->input('year');
+
+        return response()->json([
+            'data' => [
+                'counts' => [
+                    'management_decision' => $this->buildFinalDecisionTabQuery('management_decision', $year)->count(),
+                    'salary_offer' => $this->buildFinalDecisionTabQuery('salary_offer', $year)->count(),
+                    'finance_review' => $this->buildFinalDecisionTabQuery('finance_review', $year)->count(),
+                    'rejected' => $this->buildFinalDecisionTabQuery('rejected', $year)->count(),
+                ],
+            ],
+            'message' => 'Final Decision tab counts retrieved successfully',
+        ], 200);
     }
 
     // ─── Index — DataTables list of management_decision candidates ───────────
 
     /**
-     * List candidates with status = management_decision (or final_decision)
+     * List candidates grouped by stage_tab:
+     * management_decision | salary_offer | finance_review | rejected
+     * Legacy: list_type = active | rejected
      */
     public function index(Request $request)
     {
-        $listType = $request->input('list_type', 'active');
+        $listType = $request->input('list_type');
+        $stageTab = $request->input('stage_tab');
 
-        $query = $this->applyFinalDecisionListScope(
-            NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile']),
-            $listType
-        )
-            ->whereNotNull('personnel_request_id')
-            ->where('personnel_request_id', '!=', '')
-            ->when($request->filled('year'), function ($q) use ($request) {
-                return $q->where(function ($sub) use ($request) {
-                    $sub->whereYear('created_at', $request->year)
-                        ->orWhereNull('created_at');
-                });
-            })
+        if (!$stageTab && $listType === 'rejected') {
+            $stageTab = 'rejected';
+        }
+
+        if (!$stageTab && $listType === 'active') {
+            $stageTab = 'management_decision';
+        }
+
+        if (!$stageTab) {
+            $stageTab = 'management_decision';
+        }
+
+        $query = $this->buildFinalDecisionTabQuery($stageTab, $request->filled('year') ? $request->year : null)
+            ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile'])
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)

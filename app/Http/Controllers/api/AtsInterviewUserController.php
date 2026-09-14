@@ -100,6 +100,67 @@ class AtsInterviewUserController extends Controller
         return $pos ?: '-';
     }
 
+    private function buildUserInterviewQuery($mode, $year = null, $todayStr = null)
+    {
+        $todayStr = $todayStr ?: Carbon::today()->toDateString();
+
+        return NewRecruitment::query()
+            ->where('is_active', 1)
+            ->whereIn('status', ['interview_user'])
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
+            ->where(function ($q) use ($mode, $todayStr) {
+                if ($mode === 'today') {
+                    $q->whereHas('userInterview', function ($ui) use ($todayStr) {
+                        $ui->whereNotNull('tgl_interview')
+                            ->where('is_active', 1)
+                            ->whereDate('tgl_interview', '=', $todayStr);
+                    });
+                    return;
+                }
+
+                if ($mode === 'upcoming') {
+                    $q->where(function ($sub) use ($todayStr) {
+                        $sub->whereDoesntHave('userInterview', function ($ui) {
+                            $ui->whereNotNull('tgl_interview')->where('is_active', 1);
+                        })->orWhereHas('userInterview', function ($ui) use ($todayStr) {
+                            $ui->whereNotNull('tgl_interview')
+                                ->where('is_active', 1)
+                                ->whereDate('tgl_interview', '>', $todayStr);
+                        });
+                    });
+                    return;
+                }
+
+                if ($mode === 'past') {
+                    $q->whereHas('userInterview', function ($ui) use ($todayStr) {
+                        $ui->whereNotNull('tgl_interview')
+                            ->where('is_active', 1)
+                            ->whereDate('tgl_interview', '<', $todayStr);
+                    });
+                    return;
+                }
+
+                if ($mode === 'scheduled') {
+                    $q->whereHas('userInterview', function ($ui) {
+                        $ui->whereNotNull('tgl_interview')->where('is_active', 1);
+                    });
+                    return;
+                }
+
+                // Legacy mode: unscheduled
+                $q->whereDoesntHave('userInterview', function ($ui) {
+                    $ui->whereNotNull('tgl_interview')->where('is_active', 1);
+                });
+            })
+            ->when($year, function ($q) use ($year) {
+                return $q->where(function ($sub) use ($year) {
+                    $sub->whereYear('created_at', $year)
+                        ->orWhereNull('created_at');
+                });
+            });
+    }
+
     private function newRecruitmentHasColumn($column)
     {
         static $columns = null;
@@ -138,39 +199,40 @@ class AtsInterviewUserController extends Controller
         });
     }
 
+    /**
+     * Get tab counts for User Interview schedule (today / upcoming / past)
+     */
+    public function counts(Request $request)
+    {
+        $year = $request->input('year');
+        $todayStr = Carbon::today()->toDateString();
+
+        return response()->json([
+            'data' => [
+                'counts' => [
+                    'today' => $this->buildUserInterviewQuery('today', $year, $todayStr)->count(),
+                    'upcoming' => $this->buildUserInterviewQuery('upcoming', $year, $todayStr)->count(),
+                    'past' => $this->buildUserInterviewQuery('past', $year, $todayStr)->count(),
+                ],
+            ],
+            'message' => 'User Interview tab counts retrieved successfully',
+        ], 200);
+    }
+
     // ─── Index — DataTables list of interview_user candidates ─────────────────
 
     /**
-     * List candidates with status = interview_user, grouped by today / upcoming-past
+     * List candidates with status = interview_user
+     * mode = 'today' | 'upcoming' | 'past' (legacy: 'scheduled' | 'unscheduled')
      */
     public function index(Request $request)
     {
-        $mode = $request->input('mode', 'scheduled');
+        $mode = $request->input('mode', 'today');
+        $todayStr = Carbon::today()->toDateString();
+        $year = $request->filled('year') ? $request->year : null;
 
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
-            ->where('is_active', 1)
-            ->whereIn('status', ['interview_user'])
-            ->whereNotNull('personnel_request_id')
-            ->where('personnel_request_id', '!=', '')
-            ->where(function ($q) use ($mode) {
-                if ($mode === 'scheduled') {
-                    // Candidates with an active User Interview schedule set
-                    $q->whereHas('userInterview', function ($ui) {
-                        $ui->whereNotNull('tgl_interview')->where('is_active', 1);
-                    });
-                } else {
-                    // mode = 'unscheduled' (pending User Interview schedule creation)
-                    $q->whereDoesntHave('userInterview', function ($ui) {
-                        $ui->whereNotNull('tgl_interview')->where('is_active', 1);
-                    });
-                }
-            })
-            ->when($request->filled('year'), function ($q) use ($request) {
-                return $q->where(function ($sub) use ($request) {
-                    $sub->whereYear('created_at', $request->year)
-                        ->orWhereNull('created_at');
-                });
-            })
+        $query = $this->buildUserInterviewQuery($mode, $year, $todayStr)
+            ->with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)
