@@ -75,7 +75,7 @@ class PromoPengujianController extends Controller {
                 'dasar_diskon' => $dasarDiskon,
                 'persentase'   => is_numeric($persentase) ? +$persentase : $persentase,
             ];
-        } else if ($metode === 'paket_pengujian' || ($metode === 'pengujian_gratis')) {
+        } else if ($metode === 'paket_pengujian' || ($metode === 'pengujian_free_pengujian')) {
             if (empty($kodePromo)) {
                 return response()->json([
                     'message' => 'Kode promo tidak boleh kosong'
@@ -99,7 +99,7 @@ class PromoPengujianController extends Controller {
             }
             $konfigurasi = [];
         } 
-        // else if ($metode === 'pengujian_gratis') {
+        // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
         //     if (is_string($pemicu)) {
         //         $pemicu = json_decode($pemicu, true);
@@ -246,7 +246,7 @@ class PromoPengujianController extends Controller {
                 'dasar_diskon' => $dasarDiskon,
                 'persentase'   => is_numeric($persentase) ? +$persentase : $persentase,
             ];
-        } else if ($metode === 'paket_pengujian' || $metode === 'pengujian_gratis') {
+        } else if ($metode === 'paket_pengujian' || $metode === 'pengujian_free_pengujian') {
             if (empty($kodePromo)) {
                 return response()->json([
                     'message' => 'Kode promo tidak boleh kosong'
@@ -266,7 +266,7 @@ class PromoPengujianController extends Controller {
             }
             $konfigurasi = [];
         } 
-        // else if ($metode === 'pengujian_gratis') {
+        // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
         //     if (is_string($pemicu)) {
         //         $pemicu = json_decode($pemicu, true);
