@@ -529,6 +529,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
 
+            $newJadwalIds = [];
             if ($lama == $baru) { //tidak ada perubhan jumlah sampler
                 $dbInsertLastId = null;
                 Jadwal::whereIn('id', $dataUpdate->batch_id)
@@ -574,6 +575,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($datajad);
+                    $newJadwalIds[] = $dbInsertLastId;
                     $noqt = $val->no_quotation;
                 }
                 // perindahan indukMainJadwal
@@ -629,6 +631,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
+                    $newJadwalIds[] = $dbInsertLastId;
                 }
                 // perindahan indukMainJadwal
                 /* casenya:
@@ -800,6 +803,8 @@ class JadwalServices
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
+            $this->syncMobilisasiOperasional((array) ($dataUpdate->batch_id ?? []), $newJadwalIds ?? []);
+
             DB::commit();
             return true;
         } catch (Exception $ex) {
@@ -810,6 +815,7 @@ class JadwalServices
 
     // tinggal di test
     public function updateJadwalSPKategori()
+}
     {
         
         $dataUpdate = $this->updateJadwalKategori;
@@ -916,6 +922,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
 
+            $newJadwalIds = [];
             if ($lama == $baru) { // tidak ada perubahan jumlah sampler
                 foreach ($data as $key => $val) {
                     $sampler = explode(',', $dir[$i]);
@@ -949,6 +956,7 @@ class JadwalServices
                     $val->id_cabang = $dataUpdate->id_cabang;
                     $val->durasi_personal = $dataUpdate->durasi_personal[$key] ?? null;
                     $val->save();
+                    $newJadwalIds[] = $val->id;
 
                     $noqt = $val->no_quotation;
                 }
@@ -1003,6 +1011,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
+                    $newJadwalIds[] = $dbInsertLastId;
                 }
                 // perindahan indukMainJadwal
                 /* casenya:
@@ -1107,11 +1116,25 @@ class JadwalServices
                 DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+
+            $this->syncMobilisasiOperasional((array) ($dataUpdate->batch_id ?? []), $newJadwalIds ?? []);
+
             DB::commit();
             return true;
         } catch (Exception $ex) {
             DB::rollback();
             throw new Exception($ex->getMessage(), 401);
+        }
+    }
+
+    protected function syncMobilisasiOperasional(array $oldIds, array $newIds)
+    {
+        try {
+            $service = app(MobilisasiOperasionalService::class);
+            $service->remapAfterJadwalReplace($oldIds, $newIds);
+            $service->syncSnapshots($newIds ?: $oldIds);
+        } catch (\Throwable $e) {
+            Log::channel('sampling')->warning('Gagal sync MO setelah update jadwal: ' . $e->getMessage());
         }
     }
 

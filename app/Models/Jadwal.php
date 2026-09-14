@@ -57,4 +57,10 @@ class Jadwal extends Sector
     {
         return $this->belongsTo(JadwalMobil::class, 'kendaraan', 'plat_mobil');
     }
+
+    public function mobilisasiDetail()
+    {
+        return $this->hasOne(MobilisasiOperasionalDetail::class, 'id_jadwal', 'id')
+            ->where('is_active', true);
+    }
 }
