@@ -9,8 +9,12 @@ use App\Services\MasterSallaryNikSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Yajra\Datatables\Datatables;
 
@@ -156,6 +160,122 @@ class MasterSallaryController extends Controller
         $data = $query->orderBy('created_at', 'desc');
 
         return Datatables::of($data)->make(true);
+    }
+
+    public function exportExcel(Request $request)
+    {
+        if (strtoupper(trim((string) ($this->grade ?? ''))) !== 'MANAGER') {
+            return response()->json([
+                'message' => 'Export hanya dapat dilakukan oleh user dengan grade MANAGER',
+            ], 403);
+        }
+
+        Carbon::setLocale('id');
+
+        $data = MasterSallary::select(
+                'master_sallary.*',
+                'master_divisi.nama_divisi',
+                DB::raw('(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) as total_gaji')
+            )
+            ->leftJoin('master_karyawan', function ($join) {
+                $join->on('master_sallary.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
+                    ->where('master_karyawan.is_active', true);
+            })
+            ->leftJoin('master_divisi', function ($join) {
+                $join->on('master_karyawan.id_department', '=', 'master_divisi.id')
+                    ->where('master_divisi.is_active', true);
+            })
+            ->where('master_sallary.is_active', true)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('master_karyawan as mk_current')
+                    ->whereColumn('mk_current.nik_karyawan', 'master_sallary.nik_karyawan')
+                    ->where('mk_current.is_active', true);
+            })
+            ->orderBy('master_sallary.karyawan', 'asc')
+            ->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Master Salary');
+
+        $sheet->mergeCells('A1:J1');
+        $sheet->setCellValue('A1', 'Master Salary');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        $headers = [
+            'No',
+            'NIK',
+            'Karyawan',
+            'Divisi',
+            'Gaji Pokok',
+            'Tunjangan Kerja',
+            'Total Gaji',
+            'Bulan Efektif',
+            'Created By',
+            'Created At',
+        ];
+        $sheet->fromArray($headers, null, 'A3');
+        $sheet->getStyle('A3:J3')->getFont()->setBold(true);
+        $sheet->getStyle('A3:J3')->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFCCCCCC');
+
+        $rowIdx = 4;
+        $no = 1;
+
+        foreach ($data as $row) {
+            $bulanEfektif = $row->bulan_efektif
+                ? Carbon::parse($row->bulan_efektif . '-01')->translatedFormat('F Y')
+                : '-';
+            $createdAt = $row->created_at
+                ? Carbon::parse($row->created_at)->format('d/m/Y H:i:s')
+                : '-';
+
+            $sheet->setCellValue("A{$rowIdx}", $no++);
+            $sheet->setCellValueExplicit("B{$rowIdx}", (string) ($row->nik_karyawan ?? '-'), DataType::TYPE_STRING);
+            $sheet->setCellValue("C{$rowIdx}", $row->karyawan ?? '-');
+            $sheet->setCellValue("D{$rowIdx}", $row->nama_divisi ?? '-');
+            $sheet->setCellValue("E{$rowIdx}", (float) ($row->gaji_pokok ?? 0));
+            $sheet->setCellValue("F{$rowIdx}", (float) ($row->tunjangan_kerja ?? 0));
+            $sheet->setCellValue("G{$rowIdx}", (float) ($row->total_gaji ?? 0));
+            $sheet->setCellValue("H{$rowIdx}", $bulanEfektif);
+            $sheet->setCellValue("I{$rowIdx}", $row->created_by ?? '-');
+            $sheet->setCellValue("J{$rowIdx}", $createdAt);
+
+            foreach (['E', 'F', 'G'] as $col) {
+                $sheet->getStyle("{$col}{$rowIdx}")
+                    ->getNumberFormat()
+                    ->setFormatCode('#,##0.00');
+            }
+
+            $rowIdx++;
+        }
+
+        foreach (range('A', 'J') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $lastRow = max($rowIdx - 1, 3);
+        $sheet->getStyle("A3:J{$lastRow}")->applyFromArray([
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['argb' => 'FF000000'],
+                ],
+            ],
+        ]);
+
+        $fileName = 'Master_Salary_' . date('Y-m-d_His') . '.xlsx';
+        $writer = new Xlsx($spreadsheet);
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $fileName . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer->save('php://output');
+        exit;
     }
 
     /**

@@ -100,6 +100,71 @@ class AtsInterviewUserController extends Controller
         return $pos ?: '-';
     }
 
+    private function applyPreparedUserInterviewScope($ui)
+    {
+        $ui->whereNotNull('tgl_interview')
+            ->where('is_active', 1)
+            ->where(function ($sub) {
+                $sub->where(function ($q) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(jenis_interview, ''))) = 'online'")
+                        ->whereNotNull('link_gmeet')
+                        ->where('link_gmeet', '!=', '');
+                })->orWhere(function ($q) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(jenis_interview, ''))) = 'offline'")
+                        ->whereNotNull('ruangan_interview')
+                        ->where('ruangan_interview', '!=', '')
+                        ->where('ruangan_interview', '!=', '<p></p>')
+                        ->whereRaw("TRIM(REPLACE(REPLACE(REPLACE(ruangan_interview, '<p>', ''), '</p>', ''), '&nbsp;', '')) != ''");
+                })->orWhere(function ($q) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(jenis_interview, ''))) NOT IN ('online', 'offline')")
+                        ->where(function ($either) {
+                            $either->where(function ($l) {
+                                $l->whereNotNull('link_gmeet')->where('link_gmeet', '!=', '');
+                            })->orWhere(function ($r) {
+                                $r->whereNotNull('ruangan_interview')
+                                    ->where('ruangan_interview', '!=', '')
+                                    ->where('ruangan_interview', '!=', '<p></p>')
+                                    ->whereRaw("TRIM(REPLACE(REPLACE(REPLACE(ruangan_interview, '<p>', ''), '</p>', ''), '&nbsp;', '')) != ''");
+                            });
+                        });
+                });
+            });
+    }
+
+    private function applyUnpreparedUserInterviewScope($ui)
+    {
+        $ui->whereNotNull('tgl_interview')
+            ->where('is_active', 1)
+            ->where(function ($sub) {
+                $sub->where(function ($q) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(jenis_interview, ''))) = 'online'")
+                        ->where(function ($link) {
+                            $link->whereNull('link_gmeet')->orWhere('link_gmeet', '=', '');
+                        });
+                })->orWhere(function ($q) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(jenis_interview, ''))) = 'offline'")
+                        ->where(function ($room) {
+                            $room->whereNull('ruangan_interview')
+                                ->orWhere('ruangan_interview', '=', '')
+                                ->orWhere('ruangan_interview', '=', '<p></p>')
+                                ->orWhereRaw("TRIM(REPLACE(REPLACE(REPLACE(ruangan_interview, '<p>', ''), '</p>', ''), '&nbsp;', '')) = ''");
+                        });
+                })->orWhere(function ($q) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(jenis_interview, ''))) NOT IN ('online', 'offline')")
+                        ->where(function ($missing) {
+                            $missing->where(function ($l) {
+                                $l->whereNull('link_gmeet')->orWhere('link_gmeet', '=', '');
+                            })->where(function ($r) {
+                                $r->whereNull('ruangan_interview')
+                                    ->orWhere('ruangan_interview', '=', '')
+                                    ->orWhere('ruangan_interview', '=', '<p></p>')
+                                    ->orWhereRaw("TRIM(REPLACE(REPLACE(REPLACE(ruangan_interview, '<p>', ''), '</p>', ''), '&nbsp;', '')) = ''");
+                            });
+                        });
+                });
+            });
+    }
+
     private function buildUserInterviewQuery($mode, $year = null, $todayStr = null)
     {
         $todayStr = $todayStr ?: Carbon::today()->toDateString();
@@ -110,33 +175,40 @@ class AtsInterviewUserController extends Controller
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '')
             ->where(function ($q) use ($mode, $todayStr) {
+                if ($mode === 'waiting_scheduling') {
+                    $q->whereDoesntHave('userInterview', function ($ui) {
+                        $ui->whereNotNull('tgl_interview')->where('is_active', 1);
+                    });
+                    return;
+                }
+
+                if ($mode === 'waiting_input') {
+                    $q->whereHas('userInterview', function ($ui) {
+                        $this->applyUnpreparedUserInterviewScope($ui);
+                    });
+                    return;
+                }
+
                 if ($mode === 'today') {
                     $q->whereHas('userInterview', function ($ui) use ($todayStr) {
-                        $ui->whereNotNull('tgl_interview')
-                            ->where('is_active', 1)
-                            ->whereDate('tgl_interview', '=', $todayStr);
+                        $this->applyPreparedUserInterviewScope($ui);
+                        $ui->whereDate('tgl_interview', '=', $todayStr);
                     });
                     return;
                 }
 
                 if ($mode === 'upcoming') {
-                    $q->where(function ($sub) use ($todayStr) {
-                        $sub->whereDoesntHave('userInterview', function ($ui) {
-                            $ui->whereNotNull('tgl_interview')->where('is_active', 1);
-                        })->orWhereHas('userInterview', function ($ui) use ($todayStr) {
-                            $ui->whereNotNull('tgl_interview')
-                                ->where('is_active', 1)
-                                ->whereDate('tgl_interview', '>', $todayStr);
-                        });
+                    $q->whereHas('userInterview', function ($ui) use ($todayStr) {
+                        $this->applyPreparedUserInterviewScope($ui);
+                        $ui->whereDate('tgl_interview', '>', $todayStr);
                     });
                     return;
                 }
 
                 if ($mode === 'past') {
                     $q->whereHas('userInterview', function ($ui) use ($todayStr) {
-                        $ui->whereNotNull('tgl_interview')
-                            ->where('is_active', 1)
-                            ->whereDate('tgl_interview', '<', $todayStr);
+                        $this->applyPreparedUserInterviewScope($ui);
+                        $ui->whereDate('tgl_interview', '<', $todayStr);
                     });
                     return;
                 }
@@ -200,7 +272,7 @@ class AtsInterviewUserController extends Controller
     }
 
     /**
-     * Get tab counts for User Interview schedule (today / upcoming / past)
+     * Get tab counts for User Interview schedule tabs
      */
     public function counts(Request $request)
     {
@@ -210,6 +282,8 @@ class AtsInterviewUserController extends Controller
         return response()->json([
             'data' => [
                 'counts' => [
+                    'waiting_input' => $this->buildUserInterviewQuery('waiting_input', $year, $todayStr)->count(),
+                    'waiting_scheduling' => $this->buildUserInterviewQuery('waiting_scheduling', $year, $todayStr)->count(),
                     'today' => $this->buildUserInterviewQuery('today', $year, $todayStr)->count(),
                     'upcoming' => $this->buildUserInterviewQuery('upcoming', $year, $todayStr)->count(),
                     'past' => $this->buildUserInterviewQuery('past', $year, $todayStr)->count(),
@@ -223,11 +297,12 @@ class AtsInterviewUserController extends Controller
 
     /**
      * List candidates with status = interview_user
-     * mode = 'today' | 'upcoming' | 'past' (legacy: 'scheduled' | 'unscheduled')
+     * mode = waiting_input | waiting_scheduling | today | upcoming | past
+     * Legacy: scheduled | unscheduled
      */
     public function index(Request $request)
     {
-        $mode = $request->input('mode', 'today');
+        $mode = $request->input('mode', 'waiting_input');
         $todayStr = Carbon::today()->toDateString();
         $year = $request->filled('year') ? $request->year : null;
 
@@ -265,6 +340,14 @@ class AtsInterviewUserController extends Controller
                             $j->where('nama_jabatan', 'like', "%{$keyword}%");
                         });
                 });
+            })
+            ->addColumn('waktu_melamar', function ($row) {
+                return $row->created_at ?: '-';
+            })
+            ->filterColumn('waktu_melamar', function ($q, $keyword) {
+                if ($this->newRecruitmentHasColumn('created_at')) {
+                    $q->where('created_at', 'like', "%{$keyword}%");
+                }
             })
             ->addColumn('jadwal_interview', function ($row) {
                 $ui = $row->userInterview;
