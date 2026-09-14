@@ -295,7 +295,7 @@ class AtsFinalDecisionController extends Controller
         });
     }
 
-    private function applyFinalDecisionListScope($query, ?string $listType = null, ?string $stageTab = null)
+    private function applyFinalDecisionListScope($query, ?string $listType = null, ?string $stageTab = null, $year = null)
     {
         $stageTab = $stageTab ?: ($listType === 'rejected' ? 'rejected' : null);
 
@@ -303,26 +303,45 @@ class AtsFinalDecisionController extends Controller
             return $this->scopeRejectedFinalDecisionCandidates($query);
         }
 
-        $query = $this->scopeFinalDecisionCandidates($query);
-
-        if ($stageTab === 'management_decision') {
-            return $query->where('status', 'management_decision');
+        if (!$stageTab) {
+            return $this->scopeFinalDecisionCandidates($query);
         }
 
-        if ($stageTab === 'salary_offer') {
-            return $query->whereIn('status', ['internal_sallary_offer', 'salary_offer']);
+        $ids = $this->resolveFinalDecisionStageTabIds($stageTab, $year);
+
+        return $this->scopeFinalDecisionCandidates($query)
+            ->whereIn('new_recruitment.id', $ids ?: [-1]);
+    }
+
+    private function resolveFinalDecisionStageTabIds(string $stageTab, $year = null): array
+    {
+        if ($stageTab === 'rejected') {
+            return $this->buildFinalDecisionTabQuery('rejected', $year)->pluck('id')->all();
         }
 
-        if ($stageTab === 'finance_review') {
-            return $query->where('status', 'finance_review');
-        }
+        $candidates = $this->scopeFinalDecisionCandidates(NewRecruitment::query())
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
+            ->when($year, function ($q) use ($year) {
+                return $q->where(function ($sub) use ($year) {
+                    $sub->whereYear('created_at', $year)
+                        ->orWhereNull('created_at');
+                });
+            })
+            ->get();
 
-        return $query;
+        return $candidates
+            ->filter(function ($row) use ($stageTab) {
+                return RecruitmentStatusService::matchesFinalDecisionStageTab($row, $stageTab);
+            })
+            ->pluck('id')
+            ->values()
+            ->all();
     }
 
     private function buildFinalDecisionTabQuery(?string $stageTab, $year = null)
     {
-        $query = $this->applyFinalDecisionListScope(NewRecruitment::query(), null, $stageTab)
+        $query = $this->applyFinalDecisionListScope(NewRecruitment::query(), null, $stageTab, $year)
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '');
 
@@ -342,15 +361,37 @@ class AtsFinalDecisionController extends Controller
     public function counts(Request $request)
     {
         $year = $request->input('year');
+        $counts = [
+            'management_decision' => 0,
+            'salary_offer' => 0,
+            'waiting_approval' => 0,
+            'finance_review' => 0,
+            'waiting_approval_salary' => 0,
+            'rejected' => $this->buildFinalDecisionTabQuery('rejected', $year)->count(),
+        ];
+
+        $candidates = $this->scopeFinalDecisionCandidates(NewRecruitment::query())
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
+            ->when($year, function ($q) use ($year) {
+                return $q->where(function ($sub) use ($year) {
+                    $sub->whereYear('created_at', $year)
+                        ->orWhereNull('created_at');
+                });
+            })
+            ->get();
+
+        foreach ($candidates as $row) {
+            foreach (['management_decision', 'salary_offer', 'waiting_approval', 'finance_review', 'waiting_approval_salary'] as $tab) {
+                if (RecruitmentStatusService::matchesFinalDecisionStageTab($row, $tab)) {
+                    $counts[$tab]++;
+                }
+            }
+        }
 
         return response()->json([
             'data' => [
-                'counts' => [
-                    'management_decision' => $this->buildFinalDecisionTabQuery('management_decision', $year)->count(),
-                    'salary_offer' => $this->buildFinalDecisionTabQuery('salary_offer', $year)->count(),
-                    'finance_review' => $this->buildFinalDecisionTabQuery('finance_review', $year)->count(),
-                    'rejected' => $this->buildFinalDecisionTabQuery('rejected', $year)->count(),
-                ],
+                'counts' => $counts,
             ],
             'message' => 'Final Decision tab counts retrieved successfully',
         ], 200);
@@ -360,7 +401,8 @@ class AtsFinalDecisionController extends Controller
 
     /**
      * List candidates grouped by stage_tab:
-     * management_decision | salary_offer | finance_review | rejected
+     * management_decision | salary_offer | waiting_approval | finance_review
+     * | waiting_approval_salary | rejected
      * Legacy: list_type = active | rejected
      */
     public function index(Request $request)
