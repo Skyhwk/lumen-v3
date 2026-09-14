@@ -36,22 +36,22 @@ class DataKandidatController extends Controller
     public function index(Request $request)
     {
         // dd($request->all());
-        $searchYear = isset($request->search) ? date('Y', strtotime($request->search)) : date('Y');
+        // $searchYear = isset($request->search) ? date('Y', strtotime($request->search)) : date('Y');
 
-        $data = DataKandidat::select(
-            'cabang.*',
-            'posision.*',
-            'recruitment.*'
-        )
-            ->leftJoin('master_jabatan as posision', 'recruitment.bagian_di_lamar', '=', 'posision.id')
-            ->leftJoin('master_cabang as cabang', 'recruitment.id_cabang', '=', 'cabang.id')
-            ->whereIn('recruitment.id_cabang', $this->privilageCabang)
-            ->where('recruitment.is_active', true)
-            ->where('recruitment.flag', 0)
-            ->where('recruitment.status', 'KANDIDAT')
-            // ->whereYear('recruitment.created_at', $searchYear)
-            ->distinct()
-            ->get();
+        // $data = DataKandidat::select(
+        //     'cabang.*',
+        //     'posision.*',
+        //     'recruitment.*'
+        // )
+        //     ->leftJoin('master_jabatan as posision', 'recruitment.bagian_di_lamar', '=', 'posision.id')
+        //     ->leftJoin('master_cabang as cabang', 'recruitment.id_cabang', '=', 'cabang.id')
+        //     ->whereIn('recruitment.id_cabang', $this->privilageCabang)
+        //     ->where('recruitment.is_active', true)
+        //     ->where('recruitment.flag', 0)
+        //     ->where('recruitment.status', 'KANDIDAT')
+        //     ->whereYear('recruitment.created_at', $searchYear)
+        //     ->distinct()
+        //     ->get();
 
         $data = DataKandidat::with([
             'cabang:id,nama_cabang',
