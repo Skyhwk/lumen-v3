@@ -5,6 +5,10 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\RequestKebijakan;
 use App\Services\GetBawahan;
+use App\Services\KaryawanProfileService;
+use App\Services\RenderKebijakanDocumentPdf;
+use App\Services\RequestKebijakanNotificationService;
+use App\Services\RequestKebijakanVerifierService;
 use App\Services\RequestKebijakanWorkflowService;
 use Carbon\Carbon;
 use DataTables;
@@ -32,17 +36,38 @@ class RequestKebijakanController extends Controller
     public function initialize(Request $request)
     {
         $employee = $request->attributes->get('user')->karyawan;
+
+        if ($employee) {
+            $employee->loadMissing('jabatan');
+        }
+
         $canRequest = $this->canRequestKebijakan($employee);
 
         return response()->json([
             'data' => [
-                'employee' => $employee,
+                'employee' => $employee ? array_merge($employee->toArray(), [
+                    'jabatan_label' => KaryawanProfileService::resolveJabatan($employee),
+                ]) : null,
                 'can_request' => $canRequest,
                 'access_message' => $canRequest ? null : $this->getAccessDeniedMessage(),
+                'counts' => $canRequest ? RequestKebijakanWorkflowService::getRequesterTabCounts($employee) : [],
             ],
             'message' => $canRequest
                 ? 'Request kebijakan initialized successfully'
                 : $this->getAccessDeniedMessage(),
+        ], 200);
+    }
+
+    public function counts(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $this->ensureCanRequestKebijakan($employee);
+
+        return response()->json([
+            'data' => [
+                'counts' => RequestKebijakanWorkflowService::getRequesterTabCounts($employee),
+            ],
+            'message' => 'Tab counts retrieved successfully',
         ], 200);
     }
 
@@ -54,13 +79,19 @@ class RequestKebijakanController extends Controller
         $scope = $request->input('scope', 'pending');
         
         $query = RequestKebijakan::query()
-            ->with(['requester.jabatan', 'requester.divisi'])
+            ->with(['requester.jabatan', 'requester.divisi', 'drafting'])
             ->orderByDesc('request_at');
 
-        $query = $this->applyEmployeeScope($query, $employee);
+        if ($scope === 'user_review') {
+            $query = RequestKebijakanVerifierService::buildUserReviewScopeQuery($query, $employee);
+        } else {
+            $query = $this->applyEmployeeScope($query, $employee);
+        }
 
         if ($scope === 'void') {
             $query = $this->applyVoidScope($query);
+        } elseif ($scope === 'user_review') {
+            // scoped above
         } elseif ($scope === 'completed') {
             $query = $this->applyCompletedScope($query);
         } else {
@@ -68,10 +99,13 @@ class RequestKebijakanController extends Controller
         }
 
         return DataTables::of($query)
-            ->addColumn('display_status', fn ($row) => $this->resolveDisplayStatus($row))
+            ->addColumn('display_status', fn ($row) => RequestKebijakanWorkflowService::resolveDisplayStatus($row))
             ->addColumn('display_kategori', fn ($row) => $this->resolveKategoriLabel($row->kategori))
             ->addColumn('can_delete', fn ($row) => $this->canDelete($row, $employee))
             ->addColumn('can_update', fn ($row) => $this->canUpdate($row, $employee))
+            ->addColumn('can_user_review', fn ($row) => RequestKebijakanWorkflowService::canUserReviewRequest($row, $employee))
+            ->addColumn('verification_progress', fn ($row) => RequestKebijakanVerifierService::getVerificationProgress($row))
+            ->addColumn('forwarded_to_user_at', fn ($row) => $row->forwarded_to_user_at)
             ->addColumn('void_reason', fn ($row) => $this->resolveVoidReason($row))
             ->filterColumn('no_request', fn ($q, $keyword) => $q->where('no_request', 'like', "%{$keyword}%"))
             ->filterColumn('display_kategori', function ($q, $keyword) {
@@ -112,7 +146,7 @@ class RequestKebijakanController extends Controller
         return response()->json([
             'data' => [
                 'request_kebijakan' => $record,
-                'display_status' => $this->resolveDisplayStatus($record),
+                'display_status' => RequestKebijakanWorkflowService::resolveDisplayStatus($record),
                 'pipeline' => RequestKebijakanWorkflowService::buildPipeline($record),
                 'can_delete' => $this->canDelete($record, $employee),
                 'can_update' => $this->canUpdate($record, $employee),
@@ -146,6 +180,8 @@ class RequestKebijakanController extends Controller
             ]);
 
             DB::commit();
+
+            RequestKebijakanNotificationService::requestSubmitted($record);
 
             return response()->json([
                 'message' => 'Request kebijakan berhasil dibuat',
@@ -238,6 +274,105 @@ class RequestKebijakanController extends Controller
         }
     }
 
+    public function previewPdf(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $this->ensureCanRequestKebijakan($employee);
+
+        $record = RequestKebijakan::with('drafting')->findOrFail($request->id);
+        $this->ensureCanAccess($record, $employee);
+
+        if (
+            !$record->drafting
+            || $record->drafting->status !== 'submitted'
+            || !in_array($record->status, ['completed', 'pending_user_review'], true)
+        ) {
+            return response()->json(['message' => 'Draft kebijakan belum tersedia untuk review'], 404);
+        }
+
+        $pdfString = app(RenderKebijakanDocumentPdf::class)->renderFromDraft($record->drafting);
+
+        return response()->json([
+            'data' => base64_encode($pdfString),
+            'message' => 'PDF berhasil dibuat',
+        ], 200);
+    }
+
+    public function processUserReview(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $this->ensureCanRequestKebijakan($employee);
+
+        $action = $request->input('action');
+        $record = RequestKebijakan::with('drafting')->findOrFail($request->input('data.parent_id'));
+
+        $this->ensureCanAccess($record, $employee);
+
+        if (!RequestKebijakanWorkflowService::canUserReviewRequest($record, $employee)) {
+            return response()->json(['message' => 'Request tidak dapat diverifikasi pada tahap ini'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            if (in_array($action, ['verify_draft', 'approve_user_review'], true)) {
+                $verificationDate = $request->input('data.verification_date');
+
+                if (RequestKebijakanVerifierService::hasVerifiers($record)) {
+                    RequestKebijakanVerifierService::verify($record, $employee, $verificationDate);
+                } else {
+                    $record->update([
+                        'status' => 'pending_legal_final',
+                        'user_reviewed_by' => $employee->nama_lengkap,
+                        'user_reviewed_at' => Carbon::now(),
+                    ]);
+
+                    RequestKebijakanNotificationService::allVerifiersCompletedPendingLegalFinal($record->fresh());
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'message' => 'Draft kebijakan berhasil diverifikasi',
+                ], 200);
+            }
+
+            if (in_array($action, ['reject_verifier_review', 'reject_user_review'], true)) {
+                $reason = trim((string) ($request->input('data.reason') ?? ''));
+
+                if ($reason === '' || trim(strip_tags($reason)) === '') {
+                    return response()->json(['message' => 'Alasan penolakan verifikasi wajib diisi'], 422);
+                }
+
+                if (RequestKebijakanVerifierService::hasVerifiers($record)) {
+                    RequestKebijakanVerifierService::reject($record, $employee, $reason);
+                } else {
+                    $record->update([
+                        'status' => 'pending_user_reject_review',
+                        'user_review_rejected_by' => $employee->nama_lengkap,
+                        'user_review_rejected_at' => Carbon::now(),
+                        'user_review_rejected_note' => $reason,
+                    ]);
+
+                    RequestKebijakanNotificationService::userReviewRejectedPendingApproval($record->fresh(), $employee);
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'message' => 'Penolakan verifikasi berhasil dicatat',
+                ], 200);
+            }
+
+            DB::rollBack();
+
+            return response()->json(['message' => 'Aksi tidak valid'], 422);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
     private function validatePayload(Request $request): array
     {
         $kategori = strtolower(trim((string) $request->input('kategori', 'new')));
@@ -312,16 +447,34 @@ class RequestKebijakanController extends Controller
 
     private function applyPendingScope($query)
     {
-        return $query
-            ->where('is_active', true)
-            ->whereIn('status', ['waiting_approval', 'approved', 'on_process']);
+        return $query->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereIn('status', [
+                    'waiting_approval',
+                    'approved',
+                    'on_process',
+                    'pending_user_review',
+                    'pending_user_reject_review',
+                    'pending_legal_final',
+                    'pending_director_approval',
+                ])
+                    ->orWhere(function ($sub) {
+                        $sub->where('status', 'completed')
+                            ->whereNull('forwarded_to_user_at')
+                            ->whereNull('user_reviewed_at')
+                            ->whereHas('drafting', function ($draft) {
+                                $draft->where('is_active', true)->where('status', 'submitted');
+                            });
+                    });
+            });
     }
+
 
     private function applyCompletedScope($query)
     {
-        return $query
-            ->where('is_active', true)
-            ->where('status', 'completed');
+        return $query->where('is_active', true)
+            ->where('status', 'completed')
+            ->whereHas('activeKebijakanDokumen');
     }
 
     private function applyVoidScope($query)
@@ -379,6 +532,10 @@ class RequestKebijakanController extends Controller
 
     private function ensureCanAccess(RequestKebijakan $record, $employee): void
     {
+        if (RequestKebijakanVerifierService::isAssignedVerifier($record, $employee)) {
+            return;
+        }
+
         $grade = $this->normalizeGrade($employee->grade ?? '');
 
         if (in_array($grade, ['EXECUTIVE', 'DIRECTOR'], true)) {

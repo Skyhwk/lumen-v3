@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Services\GetBawahan;
 use App\Services\CfrDetails;
+use App\Services\ResolveLhpFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Datatables;
@@ -26,6 +27,33 @@ class StatusOrderController extends Controller
         $groupedData = (new CfrDetails($orderHeader, $request->periode))->get();
         
         return response()->json(['groupedCFRs' => $groupedData], 200);
+    }
+
+    public function viewLhp(Request $request)
+    {
+        $orderHeader = OrderHeader::find($request->id_order_header);
+
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Order tidak ditemukan'], 404);
+        }
+
+        $fileLhp = (new ResolveLhpFile())->byCfr(
+            $orderHeader->no_order,
+            $request->cfr,
+            $request->no_sampel ?? null
+        );
+
+        if (!$fileLhp) {
+            return response()->json(['message' => 'Dokumen LHP belum tersedia'], 404);
+        }
+
+        $filePath = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
+
+        if (!file_exists($filePath)) {
+            return response()->json(['message' => 'File LHP tidak ditemukan'], 404);
+        }
+
+        return response()->json(['file_lhp' => $fileLhp], 200);
     }
     //==== masak
     public function index(Request $request)

@@ -145,19 +145,10 @@ class TicketProgrammingConversationService
         $formatted['is_own'] = false;
 
         $payload = [
-            'title' => 'Ticket Programming',
-            'message' => 'New Conversation on Ticket #' . $ticket->nomor_ticket,
-            'url' => '/request/ticket-programming',
             'type' => 'ticket_programming_conversation',
             'ticket_id' => $ticket->id,
             'conversation' => $formatted,
         ];
-
-        Notification::whereIn('id', $participantIds)
-            ->title('Ticket Programming')
-            ->message('New Conversation on Ticket #' . $ticket->nomor_ticket)
-            ->url('/request/ticket-programming')
-            ->send();
 
         $job = new SendTicketProgrammingConversationJob([
             'data' => $payload,
@@ -179,20 +170,11 @@ class TicketProgrammingConversationService
             ->get(['id']);
 
         $payload = [
-            'title' => 'Ticket Programming',
-            'message' => 'Conversation closed on Ticket #' . $ticket->nomor_ticket,
-            'url' => '/request/ticket-programming',
             'type' => 'ticket_programming_conversation_closed',
             'ticket_id' => $ticket->id,
             'status' => $ticket->status,
             'closed_by' => $closedBy,
         ];
-
-        Notification::whereIn('id', $participantIds)
-            ->title('Ticket Programming')
-            ->message('Conversation ditutup pada Ticket #' . $ticket->nomor_ticket . ' oleh ' . $closedBy)
-            ->url('/request/ticket-programming')
-            ->send();
 
         $job = new SendTicketProgrammingConversationJob([
             'data' => $payload,

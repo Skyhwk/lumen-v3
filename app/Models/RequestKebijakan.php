@@ -19,4 +19,29 @@ class RequestKebijakan extends Sector
     {
         return $this->hasOne(DraftingKebijakan::class, 'request_kebijakan_id');
     }
+
+    public function verifiers()
+    {
+        return $this->hasMany(RequestKebijakanVerifier::class, 'request_kebijakan_id')
+            ->where('is_active', true);
+    }
+
+    public function allVerifiers()
+    {
+        return $this->hasMany(RequestKebijakanVerifier::class, 'request_kebijakan_id');
+    }
+
+    public function kebijakanDokumen()
+    {
+        return $this->hasOne(KebijakanDokumen::class, 'request_kebijakan_id')
+            ->where('is_active', true)
+            ->whereIn('status', ['pending_director', 'returned_to_legal']);
+    }
+
+    public function activeKebijakanDokumen()
+    {
+        return $this->hasOne(KebijakanDokumen::class, 'request_kebijakan_id')
+            ->where('is_active', true)
+            ->where('status', 'active');
+    }
 }

@@ -55,10 +55,10 @@
     <tr>
         <!-- <td style="border:0.25pt solid #000;text-align:center;font-weight:bold;color:#888;padding:3px 2px;font-size:10px;">TANGGAL CETAK</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#333;padding:3px 2px;font-size:9px;"> -->
-        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">TANGGAL KETETAPAN</td>
+        <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">TANGGAL TERBITAN</td>
         <td style="border:0.25pt solid #000;text-align:center;color:#000;padding:3px 2px;font-size:11px;">
-            @if(!empty($meta['tanggal_ketetapan']))
-                {{ app(\App\Services\RenderKebijakanDocumentPdf::class)->formatIndonesianDate($meta['tanggal_ketetapan']) }}
+            @if(!empty($meta['tanggal_terbitan']))
+                {{ app(\App\Services\RenderKebijakanDocumentPdf::class)->formatIndonesianDate($meta['tanggal_terbitan']) }}
             @else
                 -
             @endif
