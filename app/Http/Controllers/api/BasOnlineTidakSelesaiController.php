@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\api;
+namespace App\Http/Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -19,8 +19,8 @@ class BasOnlineTidakSelesaiController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = DB::table('persiapan_sampel_header as psh')
-                ->join('sampel_tidak_selesai as sts', 'psh.id', '=', 'sts.id_persiapan')
+            $query = DB::table('sampel_tidak_selesai as sts')
+                ->leftJoin('persiapan_sampel_header as psh', 'psh.id', '=', 'sts.id_persiapan')
                 ->select([
                     'psh.no_quotation as no_qt',
                     'sts.no_order',
@@ -28,12 +28,17 @@ class BasOnlineTidakSelesaiController extends Controller
                     'psh.tanggal_sampling',
                     'psh.sampler_jadwal',
                     'psh.detail_bas_documents',
-                    DB::raw("GROUP_CONCAT(CONCAT(sts.no_sampel, ' (', sts.keterangan, ')') SEPARATOR ', ') AS nosampel_tidak_selesai")
+                    DB::raw("GROUP_CONCAT(CONCAT(sts.no_sampel, ' (', COALESCE(NULLIF(sts.keterangan, ''), sts.alasan, '-'), ')') SEPARATOR ', ') AS nosampel_tidak_selesai")
                 ])
-                ->where('sts.alasan', '!=', 'Sample di pick up')
-                ->where('psh.is_active', 1);
+                ->where(function ($q) {
+                    $q->whereNull('sts.alasan')
+                        ->orWhere('sts.alasan', '!=', 'Sample di pick up');
+                })
+                ->where(function ($q) {
+                    $q->where('psh.is_active', 1)
+                        ->orWhereNull('sts.id_persiapan');
+                });
 
-            // Filter berdasarkan range tanggal (dari frontend)
             if ($request->has('periode_awal') && $request->has('periode_akhir')) {
                 $query->whereBetween('psh.tanggal_sampling', [
                     $request->periode_awal,
@@ -67,10 +72,9 @@ class BasOnlineTidakSelesaiController extends Controller
                 ->filterColumn('sampler_jadwal', function ($query, $keyword) {
                     $query->where('psh.sampler_jadwal', 'like', "%{$keyword}%");
                 })
-                // Parse JSON, ambil filename dari elemen terakhir (dokumen BAS terbaru)
                 ->addColumn('latest_bas_filename', function ($row) {
                     if (empty($row->detail_bas_documents)) {
-                        return null; // null = BAS belum pernah dibuat/diupload
+                        return null;
                     }
                     $docs = json_decode($row->detail_bas_documents, true);
                     if (!is_array($docs) || count($docs) === 0) {

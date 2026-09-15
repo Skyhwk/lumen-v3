@@ -843,6 +843,7 @@ class AppsBasService
                 // Block fallback mewariskan dokumen dihapus atas permintaan user
 
                 if ($header) {
+                    $item['id_persiapan'] = $header->id;
                     if ($header->detail_bas_documents) {
                         $item['detail_bas_documents'] = json_decode($header->detail_bas_documents, true);
 
@@ -938,6 +939,7 @@ class AppsBasService
                     $item['waktu_mulai'] = '';
                     $item['waktu_selesai'] = '';
                     $item['tanda_tangan_bas'] = [];
+                    $item['id_persiapan'] = null;
                 }
             }
             unset($item);
@@ -1070,6 +1072,11 @@ class AppsBasService
                             }
                         }
                     }
+                    foreach ($matchedDetails as $matchIdx => $matchedDetail) {
+                        if (empty($matchedDetail['id_persiapan']) && !empty($value['id_persiapan'])) {
+                            $matchedDetails[$matchIdx]['id_persiapan'] = $value['id_persiapan'];
+                        }
+                    }
                     $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
                 }
             }
@@ -1100,6 +1107,8 @@ class AppsBasService
                             $parts = explode('/', $s);
                             return end($parts);
                         }, $item['no_sampel']);
+                    } else {
+                        $item['no_sampel'] = [];
                     }
 
                     $item['expectedNoSampel'] = array_map(function ($kode) use ($item) {
@@ -1287,7 +1296,8 @@ class AppsBasService
                         if ($request->input('is_final')) {
                             $error = \App\Services\BasSampelService::processFinalSamples(
                                 $item,
-                                fn($sample) => $this->getStatusSampling($sample)
+                                fn($sample) => $this->getStatusSampling($sample),
+                                $header->id
                             );
                             if (is_array($error)) {
                                 return response()->json($error, 200);
@@ -1336,7 +1346,6 @@ class AppsBasService
 
             $ccArray = [];
             $bcc = ['faidhah@intilab.com'];
-            
             if (!empty($cc)) {
                 if (is_array($cc)) {
                     $ccArray = $cc;
@@ -1344,6 +1353,7 @@ class AppsBasService
                     $ccArray = array_filter(array_map('trim', explode(',', $cc)));
                 }
             }
+
             $emailInstance = SendEmail::where('to', $to)
                 ->where('cc', $ccArray)
                 ->where('bcc', $bcc)
@@ -1355,12 +1365,6 @@ class AppsBasService
                 $validAttachments = [];
                 foreach ($attachments as $fileName) {
                     array_push($validAttachments, public_path() . '/dokumen/bas/' . $fileName);
-                    // $filePath = base_path('public/dokumen/bas/' . $fileName);
-                    // if (file_exists($filePath)) {
-                    //     $validAttachments[] = $filePath;
-                    // } else {
-                    //     error_log("Attachment file not found: " . $fileName);
-                    // }
                 }
 
                 if (!empty($validAttachments)) {
@@ -1368,8 +1372,11 @@ class AppsBasService
                 }
             }
 
+            // SMTP ke customer DIMATIKAN.
+            // Jangan panggil SendEmail::send() — $to adalah email PIC sampling.
+            // $sent = true;
             $sent = $emailInstance->send();
-            
+           
             if ($sent) {
 
                 $persiapanHeaders = PersiapanSampelHeader::where('no_quotation', $noDocument)
@@ -3636,38 +3643,24 @@ class AppsBasService
             ], 422);
         }
 
+        if ($request->status === 'Belum Selesai' && $request->alasan === 'Lainnya' && trim((string) $request->keterangan) === '') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Keterangan wajib diisi jika alasan Lainnya',
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
-            $id_persiapan = $request->id_persiapan ?? null;
+            $id_persiapan = $request->id_persiapan ?: BasSampelService::resolveIdPersiapan(
+                $request->no_sampel,
+                $request->no_order,
+                $request->tanggal_sampling
+            );
+
             if (!$id_persiapan) {
-                $psd = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
-                if ($psd) {
-                    $id_persiapan = $psd->id_persiapan_sampel_header;
-                }
-                else {
-                    // Fallback cari di PersiapanSampelHeader (untuk parameter Fisika/On-The-Spot seperti Kebisingan, Pencahayaan, dll yang tidak punya PSD)
-                    $psh = PersiapanSampelHeader::where('is_active', true)
-                        ->where(function ($query) use ($request) {
-                            $query->whereJsonContains('no_sampel', $request->no_sampel)
-                                  ->orWhere('no_sampel', 'LIKE', '%"' . $request->no_sampel . '"%')
-                                  ->orWhere('no_sampel', 'LIKE', '%' . $request->no_sampel . '%');
-                        })
-                        ->orderBy('id', 'desc')
-                        ->first();
-                
-                    if ($psh) {
-                        $id_persiapan = $psh->id;
-                    } elseif ($request->no_order) {
-                        $pshByOrder = PersiapanSampelHeader::where('no_order', $request->no_order)
-                            ->where('is_active', true)
-                            ->orderBy('id', 'desc')
-                            ->first();
-                
-                        if ($pshByOrder) {
-                            $id_persiapan = $pshByOrder->id;
-                        }
-                    }
-                }
+                $existing = SampelTidakSelesai::where('no_sampel', $request->no_sampel)->first();
+                $id_persiapan = $existing->id_persiapan ?? null;
             }
 
             SampelTidakSelesai::updateOrCreate(
@@ -3696,7 +3689,7 @@ class AppsBasService
             return response()->json([
                 'status' => 'error',
                 'message' => $th->getMessage(),
-            ]);
+            ], 500);
         }
     }
 
