@@ -184,8 +184,6 @@ class FdlKecerahanController extends Controller
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Observasi Kecerahan pada nomor sampel $data->no_sampel")->save();
             $data->delete();
 
-            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
-
             return response()->json([
                 'message' => "Data Sampling Observasi Kecerahan Dengan No Sampel $no_sample berhasil dihapus oleh $this->karyawan"
             ], 201);
