@@ -89,6 +89,7 @@ class CreateNonKontrakJob extends Job
             $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
 
             $data_sampling = [];
+            $promoFreeUsed = false;
             $harga_total = 0;
             $harga_air = 0;
             $harga_udara = 0;
@@ -144,6 +145,9 @@ class CreateNonKontrakJob extends Job
                         // }
                     }
 
+                    if ($payload->_promo ?? null) {
+                        [$harga_db, $volume_db] = \App\Services\QuotationPromo::parameterPrices($item, $payload->informasi_pelanggan->tgl_penawaran);
+                    }
                     $harga_pertitik = (object) [
                         'volume' => array_sum($volume_db),
                         'total_harga' => array_sum($harga_db)
@@ -182,6 +186,9 @@ class CreateNonKontrakJob extends Job
 
                     $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    if ($payload->_promo ?? null) {
+                        [$hargaPerTitik, $hargaAnalisa] = \App\Services\QuotationPromo::rowPrice($payload->_promo, $item, $hargaPerTitik, $harga_db, $promoFreeUsed, $hargaAnalisa);
+                    }
                     
                     $temp_preparasi = [];
                     if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
@@ -199,6 +206,7 @@ class CreateNonKontrakJob extends Job
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item->is_promo),
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
                         'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
@@ -262,6 +270,18 @@ class CreateNonKontrakJob extends Job
             $data->sales_id = $sales_id;
             $data->created_by = $this->karyawan;
             $data->created_at = DATE('Y-m-d H:i:s');
+            if ($payload->_promo ?? null) {
+                $promoDpp = $grand_total;
+                $promoOutside = 0;
+                $promoDiscount = 0;
+                $data->grand_total = $promoDpp;
+                \App\Services\QuotationPromo::percentage($payload->_promo, $data, $promoDpp, $promoOutside, $promoDiscount, ['preparasi' => 0], null);
+                $data->total_dpp = $promoDpp;
+                $data->total_discount = $promoDiscount;
+                $data->piutang = $promoDpp;
+                $data->biaya_akhir = $promoDpp;
+            }
+            $data->promo_id = $payload->_promo->id ?? null;
             $data->save();
 
             DB::commit();
