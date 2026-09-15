@@ -20,8 +20,13 @@ use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 use Mpdf\Output\Destination;
 
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
+
 class AtsInterviewHrdController extends Controller
 {
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
     /**
      * Get tab counts for HRD Interview schedule (today / upcoming / past)
      */
@@ -56,7 +61,7 @@ class AtsInterviewHrdController extends Controller
             ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -96,6 +101,33 @@ class AtsInterviewHrdController extends Controller
                     'is_rejected_kandidat_reason',
                     'rejected_decision_reason',
                 ], $keyword);
+            })
+            ->addColumn('decision_by', function ($row) {
+                $hrd = $row->hrdInterview;
+                if (!$hrd) {
+                    $hrdRaw = DB::table('recruitment_interviews')
+                        ->where('new_recruitment_id', $row->id)
+                        ->where('stage', 'hrd')
+                        ->where('is_active', 1)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if (!$hrdRaw) {
+                        $hrdRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'hrd')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
+
+                    return ($hrdRaw && !empty($hrdRaw->created_by)) ? $hrdRaw->created_by : '-';
+                }
+
+                return $hrd->created_by ?: '-';
+            })
+            ->filterColumn('decision_by', function ($q, $keyword) {
+                $q->whereHas('hrdInterview', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
+                });
             })
             ->addColumn('jadwal_interview', function ($row) {
                 $hrd = $row->hrdInterview;
@@ -227,8 +259,14 @@ class AtsInterviewHrdController extends Controller
                     ->where('stage', 'hrd')
                     ->count();
                 return $count > 1;
-            })
-            ->make(true);
+            });
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyHrdInterviewDataTableOrdering($datatable)->make(true);
     }
 
     /**

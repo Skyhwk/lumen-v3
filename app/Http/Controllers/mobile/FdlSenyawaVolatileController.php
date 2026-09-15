@@ -25,6 +25,7 @@ use App\Models\ParameterFdl;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -681,6 +682,9 @@ class FdlSenyawaVolatileController extends Controller
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Microbiologi Udara pada nomor sampel $no_sampel")->save();
 
+            FdlOrderDetailService::nullTanggalTerimaIfNoSenyawaVolatileRemaining($no_sampel);
+
+
             DB::commit();
 
             return response()->json([
@@ -722,6 +726,8 @@ class FdlSenyawaVolatileController extends Controller
                 ->target("parameter $parameter di nomor sampel {$request->no_sampel}")
                 ->save();
 
+            FdlOrderDetailService::finalizeSenyawaVolatilePartialDelete($request->no_sampel);
+
             DB::commit();
 
             return response()->json([
@@ -744,6 +750,8 @@ class FdlSenyawaVolatileController extends Controller
             ->delete();
             
             InsertActivityFdl::by($this->user_id)->action('delete')->target(" shift $request->shift di nomor sampel $request->no_sampel")->save();
+
+            FdlOrderDetailService::finalizeSenyawaVolatilePartialDelete($request->no_sampel);
 
             DB::commit();
 

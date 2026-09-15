@@ -14,15 +14,19 @@ use App\Models\{
 };
 
 use App\Http\Controllers\Controller;
+use App\Services\PsikologiHasilFormatter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
-
 class FdlPsikologiController extends Controller
 {
     public function index(Request $request)
@@ -297,39 +301,262 @@ class FdlPsikologiController extends Controller
 
     public function getDataAdmin(Request $request)
     {
-        if (isset($request->no_document) && $request->no_document != null) {
-            $qrPsikologi = QrPsikologi::where('token', $request->token)->first();
-            $data = DataLapanganPsikologi::where('no_order', $request->no_document)->where('periode', $qrPsikologi->periode)->get();
-            $header = DataLapanganPsikologi::where('no_order', $request->no_document)->first();
-
-            $noSampelTerkumpul = $data->pluck('no_sampel')->toArray();
-            $order_header = OrderHeader::where('no_order', $request->no_document)->first();
-            $order_detail = OrderDetail::where('no_order', $order_header->no_order)->where('periode', $qrPsikologi->periode)->where('is_active', true)->whereJsonContains('parameter', '318;Psikologi')->get();
+        if (!isset($request->no_document) || $request->no_document === null) {
             return response()->json([
-                'message' => 'Data Dengan No Order ' . $request->no_document,
-                'nama_pekerja' => $data->map(function ($item) {
-                    return [
-                        'id' => $item->id,
-                        'nama' => $item->nama_pekerja,
-                        'divisi' => $item->divisi,
-                        'lama_kerja' => $item->lama_kerja,
-                        'no_sampel' => $item->no_sampel,
-                        'jenis_kelamin' => $item->jenis_kelamin,
-                        'created_at' => $item->created_at,
-                        'hasil' => $item->hasil
-                    ];
-                }),
-                'nama_pt' => $header->nama_perusahaan ?? '-',
-                'no_order' => $header->no_order ?? '-',
-                'periode' => $qrPsikologi->periode ?? '-',
-                'order_detail' => $order_detail
-
-            ], 200);
-        } else {
-            return response()->json([
-                'message' => 'No Sampel tidak boleh kosong'
+                'message' => 'No order tidak boleh kosong'
             ], 401);
         }
+
+        $context = $this->resolveAdminPortalContext($request);
+        if ($context instanceof \Illuminate\Http\JsonResponse) {
+            return $context;
+        }
+
+        return response()->json([
+            'message' => 'Data Dengan No Order ' . $request->no_document,
+            'nama_pekerja' => $context['participants'],
+            'nama_pt' => $context['nama_pt'],
+            'no_order' => $context['no_order'],
+            'periode' => $context['periode'],
+            'order_detail' => $context['order_detail'],
+        ], 200);
+    }
+
+    public function exportExcelAdmin(Request $request)
+    {
+        if (!isset($request->no_document) || $request->no_document === null) {
+            return response()->json([
+                'message' => 'No order tidak boleh kosong'
+            ], 401);
+        }
+
+        $context = $this->resolveAdminPortalContext($request);
+        if ($context instanceof \Illuminate\Http\JsonResponse) {
+            return $context;
+        }
+
+        $participants = $context['participants'];
+        if (empty($participants)) {
+            return response()->json([
+                'message' => 'Tidak ada data psikologi untuk diekspor'
+            ], 404);
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Data Psikologi');
+
+        $nextRow = 1;
+        foreach ($participants as $index => $participant) {
+            $detail = $participant['detail'] ?? [];
+            $nextRow = $this->appendParticipantExcelBlock(
+                $sheet,
+                $nextRow,
+                $detail,
+                $index === 0
+            );
+        }
+
+        $this->applyPsikologiExcelColumnWidths($sheet);
+
+        $lastRow = max(1, $nextRow - 1);
+        $sheet->getPageSetup()
+            ->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)
+            ->setPaperSize(PageSetup::PAPERSIZE_A4)
+            ->setFitToPage(true)
+            ->setFitToWidth(1)
+            ->setFitToHeight(0);
+        $sheet->getPageSetup()->setPrintArea('A1:H' . $lastRow);
+        $sheet->getPageMargins()
+            ->setTop(0.5)
+            ->setRight(0.4)
+            ->setLeft(0.4)
+            ->setBottom(0.5)
+            ->setHeader(0.2)
+            ->setFooter(0.2);
+
+        $safeCompany = preg_replace('/[\\\\\\/\\?\\*\\[\\]:]/', '', (string) ($context['nama_pt'] ?? 'Data-Psikologi'));
+        $safeCompany = trim($safeCompany) !== '' ? trim($safeCompany) : 'Data-Psikologi';
+        $fileName = 'Data-Psikologi-' . mb_substr($safeCompany, 0, 40) . '.xlsx';
+
+        $writer = new Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean();
+
+        return response($content, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    protected function resolveAdminPortalContext(Request $request)
+    {
+        $qrPsikologi = QrPsikologi::where('token', $request->token)->first();
+        if (!$qrPsikologi) {
+            return response()->json(['message' => 'Token psikologi tidak valid'], 401);
+        }
+
+        $data = DataLapanganPsikologi::where('no_order', $request->no_document)
+            ->where('periode', $qrPsikologi->periode)
+            ->get();
+        $header = DataLapanganPsikologi::where('no_order', $request->no_document)->first();
+        $orderHeader = OrderHeader::where('no_order', $request->no_document)->first();
+
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Data order tidak ditemukan'], 404);
+        }
+
+        $orderDetail = OrderDetail::where('no_order', $orderHeader->no_order)
+            ->where('periode', $qrPsikologi->periode)
+            ->where('is_active', true)
+            ->whereJsonContains('parameter', '318;Psikologi')
+            ->get();
+
+        $samplingByNoSampel = $orderDetail->mapWithKeys(function ($item) {
+            return [$item->no_sampel => $item->tanggal_sampling];
+        });
+
+        $formatter = new PsikologiHasilFormatter();
+        $namaPt = $header->nama_perusahaan ?? '-';
+
+        $participants = $data->map(function ($item) use ($formatter, $samplingByNoSampel, $namaPt) {
+            $participant = [
+                'id' => $item->id,
+                'nama' => $item->nama_pekerja,
+                'divisi' => $item->divisi,
+                'lama_kerja' => $formatter->formatMasaKerja($item->lama_kerja),
+                'no_sampel' => $item->no_sampel,
+                'jenis_kelamin' => $item->jenis_kelamin,
+                'created_at' => $item->created_at,
+                'hasil' => $item->hasil,
+            ];
+
+            $tanggalSampling = $samplingByNoSampel->get($item->no_sampel);
+            $participant['detail'] = $formatter->buildParticipantDetail($participant, $tanggalSampling, $namaPt);
+
+            return $participant;
+        })->values()->all();
+
+        return [
+            'participants' => $participants,
+            'nama_pt' => $namaPt,
+            'no_order' => $header->no_order ?? $request->no_document,
+            'periode' => $qrPsikologi->periode ?? '-',
+            'order_detail' => $orderDetail,
+        ];
+    }
+
+    protected function appendParticipantExcelBlock(Worksheet $sheet, int $startRow, array $detail, bool $isFirst): int
+    {
+        $spacingRows = 4;
+
+        if (!$isFirst) {
+            $sheet->setBreak('A' . $startRow, Worksheet::BREAK_ROW);
+        }
+
+        $rows = [
+            ['Tanggal Sampling', $detail['tanggal_sampling'] ?? '-'],
+            ['Nama', $detail['nama'] ?? '-'],
+            ['Department', $detail['department'] ?? '-'],
+            [],
+            ['Kategori Stress', 'Nilai per Kategori', '', '', '', '', 'Total Skor', 'Kesimpulan'],
+        ];
+
+        foreach ($detail['detail_rows'] ?? [] as $row) {
+            $records = $row['records'] ?? [];
+            $rows[] = array_merge(
+                [$row['kategori'] ?? '-'],
+                array_slice($records, 0, 5),
+                [$row['total_skor'] ?? '-', $row['kesimpulan'] ?? '-']
+            );
+        }
+
+        $sheet->fromArray($rows, null, 'A' . $startRow);
+        $this->formatParticipantMetaSection($sheet, $startRow, $detail);
+
+        $headerRow = $startRow + 4;
+        $lastRow = $startRow + count($rows) - 1;
+
+        $sheet->mergeCells('B' . $headerRow . ':F' . $headerRow);
+        $sheet->getStyle('B' . $headerRow . ':F' . $headerRow)
+            ->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER);
+
+        $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->getFont()->setBold(true);
+        $sheet->getStyle('A' . $headerRow . ':H' . $lastRow)
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
+
+        if ($lastRow > $headerRow) {
+            $sheet->getStyle('B' . ($headerRow + 1) . ':F' . $lastRow)
+                ->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('G' . ($headerRow + 1) . ':G' . $lastRow)
+                ->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        }
+
+        return $lastRow + 1 + $spacingRows;
+    }
+
+    protected function formatParticipantMetaSection(Worksheet $sheet, int $startRow, array $detail): void
+    {
+        $metaRows = [
+            ['No Sampel', $detail['no_sampel'] ?? '-'],
+            ['Nama PT', $detail['nama_pt'] ?? '-'],
+            ['Masa Kerja', $detail['masa_kerja'] ?? '-'],
+        ];
+
+        for ($i = 0; $i < 3; $i++) {
+            $row = $startRow + $i;
+
+            $sheet->mergeCells('B' . $row . ':C' . $row);
+            $sheet->getStyle('B' . $row . ':C' . $row)
+                ->getAlignment()
+                ->setVertical(Alignment::VERTICAL_CENTER)
+                ->setWrapText(true);
+
+            $sheet->mergeCells('D' . $row . ':E' . $row);
+            $sheet->setCellValue('D' . $row, $metaRows[$i][0]);
+            $sheet->getStyle('D' . $row . ':E' . $row)->getFont()->setBold(true);
+            $sheet->getStyle('D' . $row . ':E' . $row)
+                ->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+                ->setVertical(Alignment::VERTICAL_CENTER);
+
+            $sheet->mergeCells('F' . $row . ':H' . $row);
+            $value = (string) $metaRows[$i][1];
+            if ($i === 2) {
+                $sheet->setCellValueExplicit('F' . $row, $value, DataType::TYPE_STRING);
+            } else {
+                $sheet->setCellValue('F' . $row, $value);
+            }
+            $sheet->getStyle('F' . $row . ':H' . $row)
+                ->getAlignment()
+                ->setVertical(Alignment::VERTICAL_CENTER)
+                ->setWrapText(true);
+        }
+
+        $sheet->getStyle('A' . $startRow . ':A' . ($startRow + 2))->getFont()->setBold(true);
+        $sheet->getStyle('A' . $startRow . ':H' . ($startRow + 2))
+            ->getAlignment()
+            ->setVertical(Alignment::VERTICAL_CENTER);
+    }
+
+    protected function applyPsikologiExcelColumnWidths(Worksheet $sheet): void
+    {
+        $sheet->getColumnDimension('A')->setWidth(20);
+        $sheet->getColumnDimension('B')->setWidth(16);
+        $sheet->getColumnDimension('C')->setWidth(10);
+        $sheet->getColumnDimension('D')->setWidth(8);
+        $sheet->getColumnDimension('E')->setWidth(10);
+        $sheet->getColumnDimension('F')->setWidth(9);
+        $sheet->getColumnDimension('G')->setWidth(12);
+        $sheet->getColumnDimension('H')->setWidth(18);
     }
 
     public function sendDataAdmin(Request $request)

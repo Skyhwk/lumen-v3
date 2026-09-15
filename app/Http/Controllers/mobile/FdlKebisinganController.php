@@ -19,6 +19,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -362,6 +363,8 @@ class FdlKebisinganController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoLapanganRemaining($no_sample, DataLapanganKebisingan::class);
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Kebisingan dengan nomor sampel $no_sample")->save();
 

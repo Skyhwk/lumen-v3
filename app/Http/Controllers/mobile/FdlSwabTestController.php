@@ -18,6 +18,7 @@ use App\Models\ParameterFdl;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -260,6 +261,8 @@ class FdlSwabTestController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
 
             return response()->json([
                 'message' => 'Data has ben Delete',

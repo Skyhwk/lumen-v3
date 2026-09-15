@@ -21,6 +21,7 @@ use App\Models\ParameterFdl;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -622,6 +623,8 @@ class FdlDirectLainController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoLapanganRemaining($no_sample, DataLapanganDirectLain::class);
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Direct Lain dengan nomor sampel $no_sample")->save();
 

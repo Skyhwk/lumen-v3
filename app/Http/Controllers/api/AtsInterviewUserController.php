@@ -17,9 +17,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
 
 class AtsInterviewUserController extends Controller
 {
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
     // ─── Helpers (same pattern as AtsInterviewHrdController) ─────────────────
 
     private function getTtlString($row)
@@ -310,7 +314,7 @@ class AtsInterviewUserController extends Controller
             ->with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -348,6 +352,33 @@ class AtsInterviewUserController extends Controller
                 if ($this->newRecruitmentHasColumn('created_at')) {
                     $q->where('created_at', 'like', "%{$keyword}%");
                 }
+            })
+            ->addColumn('decision_by', function ($row) {
+                $ui = $row->userInterview;
+                if (!$ui) {
+                    $uiRaw = DB::table('recruitment_interviews')
+                        ->where('new_recruitment_id', $row->id)
+                        ->where('stage', 'user')
+                        ->where('is_active', 1)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if (!$uiRaw) {
+                        $uiRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'user')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
+
+                    return ($uiRaw && !empty($uiRaw->created_by)) ? $uiRaw->created_by : '-';
+                }
+
+                return $ui->created_by ?: '-';
+            })
+            ->filterColumn('decision_by', function ($q, $keyword) {
+                $q->whereHas('userInterview', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
+                });
             })
             ->addColumn('jadwal_interview', function ($row) {
                 $ui = $row->userInterview;
@@ -485,8 +516,14 @@ class AtsInterviewUserController extends Controller
             ->addColumn('is_approved_interview_hrd', function ($row) {
                 return $row->is_approved_interview_hrd ?? 0;
             })
-            ->rawColumns([])
-            ->make(true);
+            ->rawColumns([]);
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyUserInterviewDataTableOrdering($datatable)->make(true);
     }
 
     // ─── Update user interview schedule detail ────────────────────────────────

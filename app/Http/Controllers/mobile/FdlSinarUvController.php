@@ -16,6 +16,7 @@ use App\Models\QuotationNonKontrak;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -268,6 +269,7 @@ class FdlSinarUvController extends Controller
                 
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Sinar UV pada nomor sampel $data->no_sampel")->save();
                 $data->delete();
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($data->no_sampel ?? $cek->no_sampel ?? null);
 
                 return response()->json([
                     'message' => 'Data has ben Delete',

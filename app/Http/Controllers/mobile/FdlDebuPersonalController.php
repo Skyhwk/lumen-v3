@@ -18,6 +18,7 @@ use App\Models\ParameterFdl;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -279,6 +280,8 @@ class FdlDebuPersonalController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoLapanganRemaining($no_sample, DataLapanganDebuPersonal::class);
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Debu Personal dengan nomor sampel $no_sample")->save();
 

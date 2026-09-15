@@ -23,6 +23,7 @@ use App\Models\WsValueUdara;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
@@ -361,6 +362,9 @@ class FdlMicrobiologiUdaraController extends Controller
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Microbiologi Udara pada nomor sampel $no_sampel")->save();
 
+            FdlOrderDetailService::nullTanggalTerimaIfNoMicrobiologiRemaining($no_sampel);
+
+
             DB::commit();
 
             return response()->json([
@@ -402,6 +406,8 @@ class FdlMicrobiologiUdaraController extends Controller
                 ->target("parameter $parameter di nomor sampel {$request->no_sampel}")
                 ->save();
 
+            FdlOrderDetailService::finalizeMicrobiologiPartialDelete($request->no_sampel);
+
             DB::commit();
 
             return response()->json([
@@ -424,6 +430,8 @@ class FdlMicrobiologiUdaraController extends Controller
             ->delete();
             
             InsertActivityFdl::by($this->user_id)->action('delete')->target(" shift $request->shift di nomor sampel $request->no_sampel")->save();
+
+            FdlOrderDetailService::finalizeMicrobiologiPartialDelete($request->no_sampel);
 
             DB::commit();
 

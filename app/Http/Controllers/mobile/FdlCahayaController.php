@@ -7,6 +7,7 @@ use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
 
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -251,6 +252,8 @@ class FdlCahayaController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sampel);
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("$kategori dengan nomor sampel $no_sampel")->save();
 
