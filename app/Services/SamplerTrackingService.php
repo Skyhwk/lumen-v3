@@ -258,6 +258,20 @@ class SamplerTrackingService
             }
         };
 
+        $dates = [$date];
+        if ($hasSamplerFilter) {
+            // Read only duration metadata for older work, not its full photo/event history.
+            $ongoing = SamplerTrackingMember::with('session')->where('is_active', true)->where($memberFilter)
+                ->whereHas('session', function ($query) use ($date) {
+                    $query->where('is_active', true)->whereDate('tanggal_sampling', '<', $date);
+                })->get();
+            foreach ($ongoing as $member) {
+                if (Carbon::parse($member->session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date) {
+                    $dates[] = $member->session->tanggal_sampling;
+                }
+            }
+        }
+
         $sessions = SamplerTrackingSession::with([
             'activeMembers.events' => function ($query) {
                 $query->orderBy('event_at')->orderBy('id');
@@ -266,31 +280,36 @@ class SamplerTrackingService
         ])
             ->where('is_active', true)
             ->whereHas('activeMembers', $memberFilter)
-            ->where(function ($query) use ($date, $hasSamplerFilter, $memberFilter) {
-                $query->whereDate('tanggal_sampling', $date);
-
-                if ($hasSamplerFilter) {
-                    $query->orWhere(function ($ongoingQuery) use ($date, $memberFilter) {
-                        $ongoingQuery->whereDate('tanggal_sampling', '<', $date)
-                            ->whereHas('activeMembers', function ($memberQuery) use ($date, $memberFilter) {
-                                $memberFilter($memberQuery);
-                                $memberQuery->whereRaw(
-                                    "DATE_ADD(sampler_tracking_sessions.tanggal_sampling, INTERVAL GREATEST(CAST(COALESCE(NULLIF(sampler_tracking_members.effective_duration, ''), NULLIF(sampler_tracking_members.durasi_personal, ''), NULLIF(sampler_tracking_members.duration, ''), 0) AS SIGNED) - 1, 0) DAY) >= ?",
-                                    [$date]
-                                );
-                                $memberQuery->whereDoesntHave('events', function ($eventQuery) {
-                                    $eventQuery->where('event_type', 'return');
-                                });
-                            });
-                    });
-                }
-            })
+            ->whereIn('tanggal_sampling', array_unique($dates))
             ->orderBy('tanggal_sampling')
             ->orderBy('jam_mulai')
             ->orderBy('nama_perusahaan')
             ->get();
 
-        return $this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName);
+        // Consolidate first so shorter orders at the same stop are not dropped during multi-day work.
+        return $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
+            ->filter(function ($session) use ($date, $samplerId, $samplerName) {
+                if ($session->tanggal_sampling === $date) return true;
+                return $session->activeMembers->contains(function ($member) use ($session, $date, $samplerId, $samplerName) {
+                    $own = $samplerId ? (string) $member->sampler_id === (string) $samplerId : $member->sampler_name === $samplerName;
+                    return $own && !SamplerTrackingActivity::hasEvent($member, 'return')
+                        && Carbon::parse($session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date;
+                });
+            })->values();
+    }
+    public function consolidateActivities($sessions)
+    {
+        if ($sessions->isEmpty()) return $sessions;
+        $orders = OrderHeader::whereIn('no_order', $sessions->pluck('no_order')->filter()->all())
+            ->where('is_active', true)->get()->keyBy('no_order');
+        $missingOrderSessions = $sessions->filter(function ($session) use ($orders) { return !$orders->has($session->no_order); });
+        $quotations = $missingOrderSessions->isEmpty() ? collect() : OrderHeader::whereIn('no_document', $missingOrderSessions->pluck('no_quotation')->filter()->all())
+            ->where('is_active', true)->get()->keyBy('no_document');
+        $customers = [];
+        foreach ($sessions as $session) {
+            $customers[$session->id] = optional($orders->get($session->no_order) ?: $quotations->get($session->no_quotation))->id_pelanggan;
+        }
+        return SamplerTrackingActivity::consolidate($sessions, $customers);
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
@@ -587,25 +606,45 @@ class SamplerTrackingService
     }
     public function storeEvent(array $payload)
     {
+        $source = SamplerTrackingMember::with('session')->where('id', $payload['member_id'])->where('is_active', true)->firstOrFail();
+        if (!$source->session || !$source->session->is_active) abort(422, 'Activity sampling sudah tidak aktif.');
+        // Run clearance outside the event transaction: a later validation failure must not undo it.
+        (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling);
         return DB::transaction(function () use ($payload) {
             $member = SamplerTrackingMember::with('session')
                 ->where('id', $payload['member_id'])
                 ->where('is_active', true)
+                ->lockForUpdate()
                 ->firstOrFail();
 
             $eventType = $payload['event_type'];
             $this->ensureEventSequence($member, $eventType);
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
-            $members = SamplerTrackingMember::where('sampler_tracking_session_id', $member->sampler_tracking_session_id)
+            $activities = $this->listByDate($member->session->tanggal_sampling, $member->sampler_id);
+            $activity = $activities->first(function ($item) use ($member) {
+                return in_array((int) $member->sampler_tracking_session_id, array_map('intval', $item->activity_session_ids ?? [$item->id]), true);
+            });
+            $members = SamplerTrackingMember::whereIn('sampler_tracking_session_id', $activity->activity_session_ids ?? [$member->sampler_tracking_session_id])
                 ->where('is_active', true)
                 // Anggota dengan durasi lebih pendek dapat menyelesaikan
                 // aktivitasnya sendiri. Checkout dan Pulang tidak boleh
                 // menutup anggota tim yang masih punya durasi lanjutan.
-                ->when(in_array($eventType, ['checkout', 'return'], true), function ($query) use ($member) {
-                    $query->where('effective_duration', $member->effective_duration);
-                })
                 ->get();
+            $ownActivityMember = $activity ? $this->sessionMemberForSampler($activity, $member) : $member;
+            $members = $members->filter(function ($target) use ($activity, $ownActivityMember, $eventType, $member) {
+                $logical = $activity ? $this->sessionMemberForSampler($activity, $target) : $target;
+                if (in_array($eventType, ['checkout', 'return'], true) && SamplerTrackingActivity::duration($logical) !== SamplerTrackingActivity::duration($ownActivityMember)) return false;
+                if ((string) $target->sampler_id !== (string) $member->sampler_id) {
+                    try {
+                        (new SamplerTrackingTroubleService())->assertAllowed($target->sampler_id, $member->session->tanggal_sampling);
+                    } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                        if ($e->getStatusCode() !== 423) throw $e;
+                        return false;
+                    }
+                }
+                return !$this->memberHasTrackingEvent($target->id, $eventType);
+            });
 
             $basWarning = $eventType === 'checkout' ? $this->checkoutBasWarning($member->id) : null;
             $forceBasCheckout = filter_var($payload['force_bas_checkout'] ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -659,7 +698,7 @@ class SamplerTrackingService
      */
     protected function ensureEventSequence(SamplerTrackingMember $member, string $eventType): void
     {
-        if (!$member->session || !in_array($eventType, ['checkin', 'return'], true)) {
+        if (!$member->session || !in_array($eventType, ['checkin', 'checkout', 'return'], true)) {
             return;
         }
 
@@ -669,15 +708,22 @@ class SamplerTrackingService
             $member->sampler_name
         )->values();
         $currentIndex = $sessions->search(function ($session) use ($member) {
-            return (int) $session->id === (int) $member->sampler_tracking_session_id;
+            return in_array((int) $member->sampler_tracking_session_id, array_map('intval', $session->activity_session_ids ?? [$session->id]), true);
         });
         if ($currentIndex === false) {
             return;
         }
 
+        if ($eventType === 'checkout') {
+            if (!SamplerTrackingActivity::hasEvent($this->sessionMemberForSampler($sessions->get($currentIndex), $member), 'checkin')) {
+                throw ValidationException::withMessages(['event_type' => ['Check in harus dilakukan sebelum check out.']]);
+            }
+            return;
+        }
+
         if ($eventType === 'checkin') {
             if ($currentIndex === 0) {
-                if (!$this->memberHasTrackingEvent($member->id, 'departure')) {
+                if (!SamplerTrackingActivity::hasEvent($this->sessionMemberForSampler($sessions->first(), $member), 'departure')) {
                     throw ValidationException::withMessages([
                         'event_type' => ['Berangkat sampling harus dilakukan sebelum check in lokasi pertama.'],
                     ]);
@@ -687,7 +733,7 @@ class SamplerTrackingService
 
             $previousSession = $sessions->get($currentIndex - 1);
             $previousMember = $this->sessionMemberForSampler($previousSession, $member);
-            if (!$previousMember || !$this->memberHasTrackingEvent($previousMember->id, 'checkout')) {
+            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi sebelumnya terlebih dahulu sebelum check in lokasi ini.'],
                 ]);
@@ -697,7 +743,7 @@ class SamplerTrackingService
 
         $unfinishedSessions = $sessions->filter(function ($session) use ($member) {
             $sessionMember = $this->sessionMemberForSampler($session, $member);
-            return !$sessionMember || !$this->memberHasTrackingEvent($sessionMember->id, 'checkout');
+            return !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout');
         });
         if ($unfinishedSessions->isNotEmpty()) {
             throw ValidationException::withMessages([
@@ -710,6 +756,12 @@ class SamplerTrackingService
     {
         if (!$session) {
             return null;
+        }
+
+        if ($session->relationLoaded('activeMembers')) {
+            return $session->activeMembers->first(function ($item) use ($member) {
+                return SamplerTrackingActivity::samplerKey($item) === SamplerTrackingActivity::samplerKey($member);
+            });
         }
 
         return SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)

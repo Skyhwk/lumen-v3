@@ -13,6 +13,7 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
+        Commands\CollectSamplerTrackingTroubles::class,
         Commands\CleanOldRequestLogs::class,
         Commands\ScheduleEverySecond::class,
         Commands\CacheCommand::class,
@@ -63,6 +64,8 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule)
     {
+        $schedule->command('sampler-tracking:collect-troubles')
+            ->dailyAt('00:00')->timezone('Asia/Jakarta')->withoutOverlapping();
         // $schedule->command('recruitment:send-pending-assessment-invitations')
         //     ->everyFiveMinutes()
         //     ->timezone('Asia/Jakarta')

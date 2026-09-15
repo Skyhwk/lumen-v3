@@ -35,8 +35,16 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             $isPreview = true;
         }
 
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $troubleService = new \App\Services\SamplerTrackingTroubleService();
+        $troubles = $troubleService->unresolved($samplerId);
+        // The device/legacy request date is not authoritative, including before 07:00 WIB.
+        $recovery = $troubles->first(function ($trouble) {
+            return $trouble->reopened_by && $trouble->reopened_at;
+        });
+        $date = $recovery ? $recovery->activity_date : $today;
         $data = $this->service->listByDate(
-            Carbon::now('Asia/Jakarta')->toDateString(),
+            $date,
             $samplerId,
             $samplerName
         );
@@ -63,6 +71,12 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         return response()->json([
             'success' => true,
             'data' => $data,
+            'activity_date' => $date,
+            'server_today' => $today,
+            'is_recovery' => $date !== $today,
+            'troubles' => $troubles,
+            'blocked' => $date === $today && $troubles->isNotEmpty(),
+            'blocked_message' => $troubles->isNotEmpty() ? $troubleService->message($troubles) : null,
             'can_preview_sampler' => (int) $this->user_id === self::PREVIEWER_USER_ID,
             'is_preview' => $isPreview,
             'preview_sampler' => $previewSampler ? [
@@ -85,6 +99,9 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         if (!$isOwner) {
             abort(403, 'Activity sampler lain hanya dapat dilihat melalui mode preview.');
         }
+
+        // Old-day recovery is recorded at the real submission time, not a client-supplied backdate.
+        $request->merge(['event_at' => Carbon::now('Asia/Jakarta')->toDateTimeString()]);
 
         return parent::storeEvent($request);
     }
@@ -132,6 +149,12 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
 
         $payload = $request->all();
         $payload['sampler_name'] = $this->karyawan;
+        $payload['sampler_id'] = $this->user_id;
+        (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($this->user_id, Carbon::now('Asia/Jakarta')->toDateString());
+        $allowedIds = $this->service->listByDate(null, $this->user_id)->pluck('id')->map('strval')->all();
+        foreach ($payload['items'] as $item) {
+            if (!in_array((string) $item['session_id'], $allowedIds, true)) abort(403, 'Tujuan sampling bukan milik Anda.');
+        }
 
         $data = $this->service->updateRouteOrder($payload, $this->karyawan);
 
@@ -140,5 +163,15 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             'message' => 'Urutan tujuan sampling berhasil disimpan.',
             'data' => $data,
         ]);
+    }
+
+    public function updateMovementGroup(Request $request)
+    {
+        abort(403, 'Perubahan tim dilakukan melalui kantor.');
+    }
+
+    public function sync(Request $request)
+    {
+        abort(403, 'Sinkronisasi jadwal dilakukan melalui kantor.');
     }
 }
