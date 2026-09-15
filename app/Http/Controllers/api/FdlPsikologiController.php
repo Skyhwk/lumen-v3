@@ -27,8 +27,6 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
-use Symfony\Component\HttpFoundation\StreamedResponse;
-
 class FdlPsikologiController extends Controller
 {
     public function index(Request $request)
@@ -381,10 +379,12 @@ class FdlPsikologiController extends Controller
         $safeCompany = trim($safeCompany) !== '' ? trim($safeCompany) : 'Data-Psikologi';
         $fileName = 'Data-Psikologi-' . mb_substr($safeCompany, 0, 40) . '.xlsx';
 
-        return new StreamedResponse(function () use ($spreadsheet) {
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-        }, 200, [
+        $writer = new Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean();
+
+        return response($content, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
             'Cache-Control' => 'max-age=0',
