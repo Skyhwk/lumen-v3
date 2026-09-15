@@ -19,6 +19,7 @@ use App\Models\CategoryValue;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Services\GenerateQrPsikologi;
+use App\Services\PsikologiHasilFormatter;
 use App\Services\RenderQrPsikologi;
 use Illuminate\Http\Request;
 use Auth;
@@ -443,7 +444,7 @@ class GenerateQrPsikologiController extends Controller
             $data->periode = $request->periode ?? null;
             $data->usia = $request->usia;
             $data->jenis_kelamin = $request->jenis_kelamin;
-            $data->lama_kerja = $request->lama_bekerja;
+            $data->lama_kerja = (new PsikologiHasilFormatter())->formatMasaKerja($request->lama_bekerja);
             $data->persetujuan = $request->persetujuan;
             $data->hasil = json_encode($hasil);
             $data->permission = 1;
