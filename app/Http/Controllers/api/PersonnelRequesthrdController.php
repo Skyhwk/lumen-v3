@@ -23,22 +23,38 @@ class PersonnelRequesthrdController extends Controller
     use BuildsCandidateAssessmentPreview;
 
     /**
+     * Get tab counts for personnel request list (on process / completed)
+     */
+    public function counts(Request $request)
+    {
+        try {
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'counts' => [
+                        'on_process' => $this->buildPersonnelRequestListQuery($request, 0)->count(),
+                        'completed' => $this->buildPersonnelRequestListQuery($request, 1)->count(),
+                    ],
+                ],
+                'message' => 'Personnel request tab counts retrieved successfully',
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 501);
+        }
+    }
+
+    /**
      * Get list of personal requests for DataTables
      */
     public function index(Request $request)
     {
         try {
-            $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
+            $query = $this->buildPersonnelRequestListQuery($request, (int) ($request->completed ?? 0))
+                ->with(['masterJabatan', 'masterDivisi'])
                 ->withCount(['newRecruitments as total_pelamar' => function ($query) {
                     $this->constrainCountedApplicants($query);
                 }])
-                ->where('is_active',1)
-                ->where('is_completed', $request->completed ?? 0)
                 ->orderBy('id', 'desc');
-
-            if ($request->has('year') && !empty($request->year)) {
-                $query->whereYear('created_at', $request->year);
-            }
 
             return Datatables::of($query)
                 ->editColumn('posisi', function ($row) {
@@ -414,10 +430,6 @@ class PersonnelRequesthrdController extends Controller
             return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
         }
 
-        if ((int) ($personnelRequest->is_publish ?? 0) !== 1) {
-            return response()->json(['message' => 'Preview kandidat hanya tersedia untuk request yang sudah dipublish'], 422);
-        }
-
         $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
             ->where('personnel_request_id', $id)
             ->where('is_active', 1)
@@ -427,6 +439,10 @@ class PersonnelRequesthrdController extends Controller
                 return !RecruitmentStatusService::isRejectedKandidat($candidate);
             })
             ->values();
+
+        if ((int) ($personnelRequest->is_publish ?? 0) !== 1 && $candidates->isEmpty()) {
+            return response()->json(['message' => 'Preview kandidat hanya tersedia untuk request yang sudah dipublish atau memiliki kandidat'], 422);
+        }
 
         $statusCounts = $candidates
             ->groupBy(function ($candidate) {
@@ -808,6 +824,8 @@ class PersonnelRequesthrdController extends Controller
                 ->select(
                     'nr.id',
                     'nr.nama_lengkap',
+                    'nr.email',
+                    'nr.no_telepon',
                     'nr.posisi_dilamar',
                     'pr.posisi as pr_posisi',
                     'mj.nama_jabatan'
@@ -826,6 +844,8 @@ class PersonnelRequesthrdController extends Controller
                 return [
                     'id' => (int) $row->id,
                     'nama_lengkap' => $row->nama_lengkap ?: '-',
+                    'email' => $row->email ?: '-',
+                    'no_telepon' => $row->no_telepon ?: '-',
                     'posisi_dilamar' => $position,
                 ];
             })->values();
@@ -900,6 +920,19 @@ class PersonnelRequesthrdController extends Controller
                 $q->whereYear('nr.created_at', $request->year)
                     ->orWhereNull('nr.created_at');
             });
+        }
+
+        return $query;
+    }
+
+    private function buildPersonnelRequestListQuery(Request $request, int $completed)
+    {
+        $query = PersonnelRequest::query()
+            ->where('is_active', 1)
+            ->where('is_completed', $completed);
+
+        if ($request->has('year') && !empty($request->year)) {
+            $query->whereYear('created_at', $request->year);
         }
 
         return $query;
