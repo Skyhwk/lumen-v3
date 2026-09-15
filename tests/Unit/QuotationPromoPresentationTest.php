@@ -43,7 +43,7 @@ class QuotationPromoPresentationTest extends TestCase
     {
         $source = (object) ['promo_id' => 1, 'total_discount_promo' => 180000, 'total_dpp' => 720000, 'grand_total' => 1000000];
         $view = QuotationPromoPresentation::forPdf($source, (object) ['metode' => 'persentase', 'nama_diskon' => 'Hemat 20%']);
-        $this->assertEquals('Diskon Hemat 20%', json_decode($view->discount_promo)->deskripsi_promo_discount);
+        $this->assertEquals('disc. Hemat 20%', json_decode($view->discount_promo)->deskripsi_promo_discount);
         $this->assertEquals(180000, $view->total_discount_promo);
         $this->assertEquals(720000, $view->total_dpp);
         $this->assertEquals(1000000, $view->grand_total);
@@ -59,7 +59,7 @@ class QuotationPromoPresentationTest extends TestCase
         $this->assertEquals(1980000, json_decode($view->data_pendukung_sampling)[0]->harga_total);
         $this->assertEquals(2380000, $view->grand_total);
         $this->assertEquals(220000, $view->total_discount_promo);
-        $this->assertEquals('Diskon Free COD', json_decode($view->discount_promo)->deskripsi_promo_discount);
+        $this->assertEquals('disc. Free COD', json_decode($view->discount_promo)->deskripsi_promo_discount);
         foreach (['total_dpp', 'total_ppn', 'biaya_akhir'] as $field) $this->assertEquals($source->$field, $view->$field);
         $this->assertEquals(1760000, json_decode($source->data_pendukung_sampling)[0]->harga_total);
         $this->assertEquals(2160000, $source->grand_total);

@@ -4,6 +4,74 @@ namespace App\Services;
 
 class QuotationPromoPresentation
 {
+    public static function forContractPdf($source, $details, $promo = null)
+    {
+        if (empty($source->promo_id)) return [$source, $details];
+        $promo = $promo ?? \Illuminate\Support\Facades\DB::table('promo_pengujian')->where('id', $source->promo_id)->first();
+        if (!$promo || $promo->metode === 'labeling') return [$source, $details];
+        $header = clone $source;
+        $views = [];
+        $headerRows = [];
+        $uplift = 0;
+        $discount = 0;
+        $label = null;
+        foreach ($details as $detail) {
+            $periods = json_decode($detail->data_pendukung_sampling, true);
+            if (!is_array($periods)) throw new \InvalidArgumentException('Data periode quotation tidak valid.');
+            $rows = [];
+            foreach ($periods as $period) {
+                if ((string) ($period['periode_kontrak'] ?? '') === (string) $detail->periode_kontrak) {
+                    $rows = array_merge($rows, $period['data_sampling'] ?? []);
+                }
+            }
+            $flat = clone $detail;
+            $flat->promo_id = $source->promo_id;
+            $flat->data_pendukung_sampling = json_encode($rows);
+            // Each detail is independently presented; never reapply a percentage to the header.
+            $view = self::forPdf($flat, $promo);
+            $displayRows = json_decode($view->data_pendukung_sampling, true);
+            foreach ($displayRows as $row) {
+                $row['periode'] = [$detail->periode_kontrak];
+                $row['penamaan_titik'] = QuotationPromo::headerPointNames($row['penamaan_titik'] ?? [], $row['jumlah_titik'] ?? 0);
+                $row['_promo_display_total'] = $row['harga_total'];
+                $headerRows[] = $row;
+            }
+            $view->data_pendukung_sampling = json_encode([[
+                'periode_kontrak' => $detail->periode_kontrak, 'data_sampling' => $displayRows,
+            ]]);
+            $uplift += (float) $view->grand_total - (float) $detail->grand_total;
+            $discount += (float) ($view->total_discount_promo ?? 0);
+            if ((float) ($view->total_discount_promo ?? 0) > 0) $label = $view->discount_promo;
+            $views[] = $view;
+        }
+        if (!$views) return [$source, $details];
+        $header->data_pendukung_sampling = json_encode($headerRows);
+        $header->grand_total = (float) $source->grand_total + $uplift;
+        $header->total_discount_promo = $discount;
+        $header->discount_promo = $label;
+        return [$header, collect($views)];
+    }
+
+    public static function discountLabel($model)
+    {
+        $discount = json_decode($model->discount_promo ?? '{}');
+        $rate = $discount->jumlah_promo_discount ?? '';
+        return ($discount->deskripsi_promo_discount ?? '') . ($rate !== '' && $rate !== null ? ' ' . $rate . '%' : '');
+    }
+
+    public static function contractDiscountRow($pdf, $model, $details = null)
+    {
+        if ((float) ($model->total_discount_promo ?? 0) <= 0) return;
+        $html = '<tr><td style="text-align:center;padding:5px;">' . self::discountLabel($model) . '</td>';
+        if ($details !== null) {
+            foreach ($details as $detail) {
+                $html .= '<td style="text-align:right;padding:5px;">Rp ' . number_format((float) ($detail->total_discount_promo ?? 0), 0, '.', ',') . '</td>';
+            }
+        }
+        $html .= '<td style="text-align:right;padding:5px;">Rp ' . number_format((float) $model->total_discount_promo, 0, '.', ',') . '</td></tr>';
+        $pdf->WriteHTML($html);
+    }
+
     // Presentation only: never save this clone or recalculate payable amounts.
     public static function forPdf($source, $promo = null)
     {
@@ -11,7 +79,7 @@ class QuotationPromoPresentation
         $promo = $promo ?? \Illuminate\Support\Facades\DB::table('promo_pengujian')->where('id', $source->promo_id)->first();
         if (!$promo) return $source;
         $label = json_encode([
-            'deskripsi_promo_discount' => htmlspecialchars('Diskon ' . $promo->nama_diskon, ENT_QUOTES, 'UTF-8'),
+            'deskripsi_promo_discount' => htmlspecialchars('disc. ' . $promo->nama_diskon, ENT_QUOTES, 'UTF-8'),
             'jumlah_promo_discount' => '',
         ]);
         if ($promo->metode === 'persentase') {

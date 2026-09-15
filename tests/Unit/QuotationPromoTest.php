@@ -100,6 +100,39 @@ class QuotationPromoTest extends TestCase
         $this->assertEquals(160000, $outside);
     }
 
+    public function testFourPercentageBasesOnlyDiscountTheirSelectedCosts()
+    {
+        // Values after manual discounts. Preparation and other costs are not eligible.
+        $costs = ['transportasi' => 180000, 'perdiem' => 90000, 'perdiem24jam' => 270000,
+            'preparasi' => 50000, 'biayalain' => 70000];
+        $selected = ['analisa' => ['analisa'], 'transport' => ['transportasi'],
+            'perdiem' => ['perdiem', 'perdiem24jam'], 'global' => ['analisa', 'transportasi', 'perdiem', 'perdiem24jam']];
+        foreach (range(0, 7) as $mask) {
+            $flags = ['transportasi' => (bool) ($mask & 1), 'perdiem' => (bool) ($mask & 2), 'perdiem24jam' => (bool) ($mask & 4)];
+            foreach ($selected as $basis => $keys) {
+                $dpp = 900000 + 50000 + 70000; $outside = 0;
+                foreach ($flags as $key => $isOutside) {
+                    if ($isOutside) $outside += $costs[$key]; else $dpp += $costs[$key];
+                }
+                $expectedDpp = $dpp; $expectedOutside = $outside; $expectedDiscount = 0;
+                foreach ($keys as $key) {
+                    $amount = ($key === 'analisa' ? 900000 : $costs[$key]) * 0.1;
+                    if ($flags[$key] ?? false) $expectedOutside -= $amount; else $expectedDpp -= $amount;
+                    $expectedDiscount += $amount;
+                }
+                $promo = (object) ['metode' => 'persentase', 'kode_promo' => 'TEST', 'nama_diskon' => 'Test',
+                    'konfigurasi' => ['persentase' => 10, 'dasar_diskon' => $basis]];
+                $model = new stdClass(); $discount = 100000; $originalCosts = $costs;
+                QuotationPromo::percentage($promo, $model, $dpp, $outside, $discount, $costs, $flags);
+                $this->assertEquals($expectedDpp, $dpp, $basis . ' taxable mask ' . $mask);
+                $this->assertEquals($expectedOutside, $outside, $basis . ' outside mask ' . $mask);
+                $this->assertEquals($expectedDiscount, $model->total_discount_promo);
+                $this->assertEquals(100000 + $expectedDiscount, $discount);
+                $this->assertSame($originalCosts, $costs);
+            }
+        }
+    }
+
     public function testPercentageDoesNotRepriceExistingAnalysisPackage()
     {
         $used = false;

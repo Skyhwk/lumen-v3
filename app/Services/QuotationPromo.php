@@ -84,22 +84,38 @@ class QuotationPromo
         return [$prices, $volumes];
     }
 
+    // Match the original contract header format; detail rows retain numbered point objects.
+    public static function headerPointNames($names, $quantity)
+    {
+        if (!is_array($names)) return $names ?? array_fill(0, (int) $quantity, '');
+        if (!$names) return array_fill(0, (int) $quantity, '');
+        return array_map(function ($item) {
+            return is_array($item) || is_object($item) ? (array_values((array) $item)[0] ?? '') : $item;
+        }, $names);
+    }
+
     public static function syncHeader($header)
     {
         if (!$header->promo_id) return;
-        $details = \App\Models\QuotationKontrakD::where('id_request_quotation_kontrak_h', $header->id)->get();
+        $details = $header->detail()->get();
         $rows = [];
         foreach ($details as $detail) {
             foreach (json_decode($detail->data_pendukung_sampling, true) ?: [] as $period) {
                 if (($period['periode_kontrak'] ?? null) != $detail->periode_kontrak) continue;
                 foreach ($period['data_sampling'] ?? [] as $row) {
                     $row['periode'] = [$detail->periode_kontrak];
+                    $row['penamaan_titik'] = self::headerPointNames($row['penamaan_titik'] ?? [], $row['jumlah_titik'] ?? 0);
                     $rows[] = $row;
                 }
             }
         }
         $header->data_pendukung_sampling = json_encode($rows, JSON_UNESCAPED_UNICODE);
-        foreach (['harga_air', 'harga_udara', 'harga_emisi', 'harga_padatan', 'harga_swab_test', 'harga_tanah', 'harga_pangan', 'grand_total', 'total_dpp', 'total_discount', 'total_discount_promo', 'total_ppn', 'total_pph', 'piutang', 'biaya_akhir'] as $field) {
+        // Category breakdowns have different names on the contract header.
+        // Pangan has no header breakdown column; its value remains in the financial totals.
+        foreach (['air', 'udara', 'emisi', 'padatan', 'swab_test', 'tanah'] as $category) {
+            $header->{'total_harga_' . $category} = $details->sum('harga_' . $category);
+        }
+        foreach (['grand_total', 'total_dpp', 'total_discount', 'total_discount_promo', 'total_ppn', 'total_pph', 'piutang', 'biaya_akhir'] as $field) {
             $header->$field = $details->sum($field);
         }
         $first = $details->first();
