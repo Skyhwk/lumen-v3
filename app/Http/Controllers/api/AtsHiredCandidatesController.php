@@ -24,9 +24,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
 
 class AtsHiredCandidatesController extends Controller
 {
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private function getTtlString($row)
@@ -166,7 +171,7 @@ class AtsHiredCandidatesController extends Controller
             })
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -331,8 +336,14 @@ class AtsHiredCandidatesController extends Controller
             ->addColumn('migration_block_reason', function ($row) {
                 return $this->migrationBlockReason($row);
             })
-            ->rawColumns([])
-            ->make(true);
+            ->rawColumns([]);
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyRecruitmentCoreDataTableOrdering($datatable)->make(true);
     }
 
     public function previewMigration(Request $request)

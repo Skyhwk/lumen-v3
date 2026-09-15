@@ -20,8 +20,13 @@ use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 use Mpdf\Output\Destination;
 
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
+
 class AtsInterviewHrdController extends Controller
 {
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
     /**
      * Get tab counts for HRD Interview schedule (today / upcoming / past)
      */
@@ -56,7 +61,7 @@ class AtsInterviewHrdController extends Controller
             ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -227,8 +232,14 @@ class AtsInterviewHrdController extends Controller
                     ->where('stage', 'hrd')
                     ->count();
                 return $count > 1;
-            })
-            ->make(true);
+            });
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyHrdInterviewDataTableOrdering($datatable)->make(true);
     }
 
     /**

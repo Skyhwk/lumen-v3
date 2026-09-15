@@ -17,9 +17,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
 
 class AtsInterviewUserController extends Controller
 {
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
     // ─── Helpers (same pattern as AtsInterviewHrdController) ─────────────────
 
     private function getTtlString($row)
@@ -310,7 +314,7 @@ class AtsInterviewUserController extends Controller
             ->with(['personalRequest.masterJabatan', 'userInterview', 'hrdInterview'])
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -485,8 +489,14 @@ class AtsInterviewUserController extends Controller
             ->addColumn('is_approved_interview_hrd', function ($row) {
                 return $row->is_approved_interview_hrd ?? 0;
             })
-            ->rawColumns([])
-            ->make(true);
+            ->rawColumns([]);
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyUserInterviewDataTableOrdering($datatable)->make(true);
     }
 
     // ─── Update user interview schedule detail ────────────────────────────────

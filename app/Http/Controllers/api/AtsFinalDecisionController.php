@@ -23,9 +23,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
 
 class AtsFinalDecisionController extends Controller
 {
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private function getTtlString($row)
@@ -426,7 +430,7 @@ class AtsFinalDecisionController extends Controller
             ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile'])
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -821,8 +825,14 @@ class AtsFinalDecisionController extends Controller
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'management_decision';
             })
-            ->rawColumns([])
-            ->make(true);
+            ->rawColumns([]);
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyFinalDecisionDataTableOrdering($datatable)->make(true);
     }
 
     private function isOfferingRejected($applicant): bool
