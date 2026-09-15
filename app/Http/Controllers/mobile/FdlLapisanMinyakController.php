@@ -17,6 +17,7 @@ use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
+use App\Services\FdlOrderDetailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -208,6 +209,8 @@ class FdlLapisanMinyakController extends Controller
                 unlink($foto_selatan);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
 
             return response()->json([
                 'message' => 'Data has ben Delete',

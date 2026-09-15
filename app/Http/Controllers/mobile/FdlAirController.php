@@ -19,6 +19,7 @@ use App\Models\QuotationNonKontrak;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -461,6 +462,8 @@ class FdlAirController extends Controller
                     unlink($foto_lain);
                 }
                 $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
 
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Air ($jenis_sampel) dengan nomor sampel $no_sample")->save();
                 

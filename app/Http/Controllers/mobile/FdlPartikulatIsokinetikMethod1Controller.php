@@ -21,6 +21,7 @@ use App\Models\QuotationNonKontrak;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -721,12 +722,15 @@ class FdlPartikulatIsokinetikMethod1Controller extends Controller
                 if (is_file($foto_lain)) {
                     unlink($foto_lain);
                 }
+                $noSampel = $cek->no_sampel;
+                $idLapangan = $cek->id;
                 $cek->delete();
-                DataLapanganIsokinetikPenentuanKecepatanLinier::where('id_lapangan', $cek->id)->delete();
-                DataLapanganIsokinetikBeratMolekul::where('id_lapangan', $cek->id)->delete();
-                DataLapanganIsokinetikKadarAir::where('id_lapangan', $cek->id)->delete();
-                DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id)->delete();
-                DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id)->delete();
+                DataLapanganIsokinetikPenentuanKecepatanLinier::where('id_lapangan', $idLapangan)->delete();
+                DataLapanganIsokinetikBeratMolekul::where('id_lapangan', $idLapangan)->delete();
+                DataLapanganIsokinetikKadarAir::where('id_lapangan', $idLapangan)->delete();
+                DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $idLapangan)->delete();
+                DataLapanganIsokinetikHasil::where('id_lapangan', $idLapangan)->delete();
+                FdlOrderDetailService::nullTanggalTerimaIfNoIsokinetikRemaining($noSampel);
             } else {
                 return response()->json([
                     'message' => 'Gagal Delete'

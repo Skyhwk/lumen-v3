@@ -19,6 +19,7 @@ use App\Models\QuotationNonKontrak;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -363,6 +364,8 @@ class FdlIklimPanasController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoLapanganRemaining($no_sample, DataLapanganIklimPanas::class);
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Iklim Panas dengan nomor sampel $no_sample")->save();
 

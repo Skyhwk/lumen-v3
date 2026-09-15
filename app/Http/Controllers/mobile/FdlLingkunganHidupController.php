@@ -16,6 +16,7 @@ use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\ParameterFdl;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 // SERVICE
 use App\Services\SendTelegram;
@@ -1038,6 +1039,9 @@ class FdlLingkunganHidupController extends Controller
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Lingkungan Hidup Udara pada nomor sampel $no_sampel")->save();
 
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sampel);
+
+
             DB::commit();
 
             return response()->json([
@@ -1073,6 +1077,8 @@ class FdlLingkunganHidupController extends Controller
                 ->target("parameter $parameter di nomor sampel {$request->no_sampel}")
                 ->save();
 
+            FdlOrderDetailService::finalizeLingkunganHidupPartialDelete($request->no_sampel);
+
             DB::commit();
 
             return response()->json([
@@ -1096,6 +1102,8 @@ class FdlLingkunganHidupController extends Controller
             ->delete();
             
             InsertActivityFdl::by($this->user_id)->action('delete')->target(" shift $request->shift di nomor sampel $request->no_sampel")->save();
+
+            FdlOrderDetailService::finalizeLingkunganHidupPartialDelete($request->no_sampel);
 
             DB::commit();
 
@@ -1123,13 +1131,14 @@ class FdlLingkunganHidupController extends Controller
                 'message' => $message,
                 'kategori' => 1
             ], 201);
-        } else {
-            DataLapanganLingkunganHidup::where('no_sampel', strtoupper(trim($noSampel)))->delete();
-            return response()->json([
-                'message' => $message,
-                'kategori' => 2
-            ], 201);
         }
+
+        FdlOrderDetailService::finalizeLingkunganHidupPartialDelete($noSampel);
+
+        return response()->json([
+            'message' => $message,
+            'kategori' => 2
+        ], 201);
     }
 
     /**
@@ -1141,26 +1150,22 @@ class FdlLingkunganHidupController extends Controller
         $detailToDelete = DetailLingkunganHidup::where('id', $request->id)->first();
 
         $header = DataLapanganLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
-        $header->is_rejected = 0;
-        $header->save();
-        
+        if ($header) {
+            $header->is_rejected = 0;
+            $header->save();
+        }
+
         $nama = $this->karyawan;
         $message = "Fdl LH parameter {$detail->first()->parameter} di no sample {$detail->first()->no_sampel} berhasil dihapus oleh {$nama}!";
-        
-        if ($detail->count() > 1) {
-            $detailToDelete->delete();
-            return response()->json([
-                'message' => $message,
-                'kategori' => 1
-            ], 201);
-        } else {
-            $header->delete();
-            $detailToDelete->delete();
-            return response()->json([
-                'message' => $message,
-                'kategori' => 2
-            ], 201);
-        }
+        $kategori = $detail->count() > 1 ? 1 : 2;
+
+        $detailToDelete->delete();
+        FdlOrderDetailService::finalizeLingkunganHidupPartialDelete($request->no_sampel);
+
+        return response()->json([
+            'message' => $message,
+            'kategori' => $kategori
+        ], 201);
     }
 
     public function convertImg($foto = '', $type = '', $user = '')

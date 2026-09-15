@@ -17,6 +17,7 @@ use App\Models\QuotationNonKontrak;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
@@ -696,6 +697,8 @@ class FdlMethodRulaController extends Controller
                 unlink($foto_belakang);
             }
             $cek->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoErgonomiRemaining($no_sample);
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Method R dengan nomor sampel $no_sample")->save();
             return response()->json([
                 'message' => 'Data has ben Deleted',
