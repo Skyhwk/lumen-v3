@@ -23,43 +23,37 @@ use Mpdf\Output\Destination;
 class AtsInterviewHrdController extends Controller
 {
     /**
+     * Get tab counts for HRD Interview schedule (today / upcoming / past)
+     */
+    public function counts(Request $request)
+    {
+        $year = $request->input('year');
+        $todayStr = Carbon::today()->toDateString();
+
+        return response()->json([
+            'data' => [
+                'counts' => [
+                    'today' => $this->buildHrdInterviewQuery('today', $year, $todayStr)->count(),
+                    'upcoming' => $this->buildHrdInterviewQuery('upcoming', $year, $todayStr)->count(),
+                    'past' => $this->buildHrdInterviewQuery('past', $year, $todayStr)->count(),
+                ],
+            ],
+            'message' => 'HRD Interview tab counts retrieved successfully',
+        ], 200);
+    }
+
+    /**
      * Get Datatable list of candidates in HRD Interview stage
-     * mode = 'today' for today's interviews, 'upcoming_past' for upcoming/past interviews
+     * mode = 'today' | 'upcoming' | 'past' (legacy: 'upcoming_past' = upcoming + past)
      */
     public function index(Request $request)
     {
         $mode = $request->input('mode', 'today');
         $todayStr = Carbon::today()->toDateString();
+        $year = $request->filled('year') ? $request->year : null;
 
-        $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
-            ->where('is_active', 1)
-            ->where('is_rejected_kandidat', 0)
-            ->whereNotNull('personnel_request_id')
-            ->where('personnel_request_id', '!=', '')
-            ->where(function ($q) {
-                $q->where('status', 'interview_hrd')
-                  ->orWhereHas('hrdInterview');
-            })
-            ->where('is_approved_interview_hrd', '!=', 1)
-            ->where(function ($q) use ($mode, $todayStr) {
-                if ($mode === 'today') {
-                    $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
-                        $sub->whereDate('tgl_interview', '=', $todayStr);
-                    });
-                } else {
-                    $q->where(function ($sub) use ($todayStr) {
-                        $sub->whereHas('hrdInterview', function ($sub2) use ($todayStr) {
-                            $sub2->whereDate('tgl_interview', '!=', $todayStr);
-                        })->orWhereDoesntHave('hrdInterview');
-                    });
-                }
-            })
-            ->when($request->filled('year'), function ($q) use ($request) {
-                return $q->where(function ($sub) use ($request) {
-                    $sub->whereYear('created_at', $request->year)
-                        ->orWhereNull('created_at');
-                });
-            })
+        $query = $this->buildHrdInterviewQuery($mode, $year, $todayStr)
+            ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
             ->orderBy('id', 'desc');
 
         return DataTables::of($query)
@@ -604,6 +598,60 @@ class AtsInterviewHrdController extends Controller
             'message' => 'Candidate application has been rejected.',
             'data' => $applicant,
         ], 200);
+    }
+
+    private function buildHrdInterviewQuery($mode, $year = null, $todayStr = null)
+    {
+        $todayStr = $todayStr ?: Carbon::today()->toDateString();
+
+        return NewRecruitment::query()
+            ->where('is_active', 1)
+            ->where('is_rejected_kandidat', 0)
+            ->whereNotNull('personnel_request_id')
+            ->where('personnel_request_id', '!=', '')
+            ->where(function ($q) {
+                $q->where('status', 'interview_hrd')
+                    ->orWhereHas('hrdInterview');
+            })
+            ->where('is_approved_interview_hrd', '!=', 1)
+            ->where(function ($q) use ($mode, $todayStr) {
+                if ($mode === 'today') {
+                    $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
+                        $sub->whereDate('tgl_interview', '=', $todayStr);
+                    });
+                    return;
+                }
+
+                if ($mode === 'upcoming') {
+                    $q->where(function ($sub) use ($todayStr) {
+                        $sub->whereDoesntHave('hrdInterview')
+                            ->orWhereHas('hrdInterview', function ($sub2) use ($todayStr) {
+                                $sub2->whereDate('tgl_interview', '>', $todayStr);
+                            });
+                    });
+                    return;
+                }
+
+                if ($mode === 'past') {
+                    $q->whereHas('hrdInterview', function ($sub) use ($todayStr) {
+                        $sub->whereDate('tgl_interview', '<', $todayStr);
+                    });
+                    return;
+                }
+
+                // Legacy mode: upcoming_past (everything except today)
+                $q->where(function ($sub) use ($todayStr) {
+                    $sub->whereHas('hrdInterview', function ($sub2) use ($todayStr) {
+                        $sub2->whereDate('tgl_interview', '!=', $todayStr);
+                    })->orWhereDoesntHave('hrdInterview');
+                });
+            })
+            ->when($year, function ($q) use ($year) {
+                return $q->where(function ($sub) use ($year) {
+                    $sub->whereYear('created_at', $year)
+                        ->orWhereNull('created_at');
+                });
+            });
     }
 
     private function newRecruitmentHasColumn($column)
