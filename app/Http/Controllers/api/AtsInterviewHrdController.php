@@ -102,6 +102,33 @@ class AtsInterviewHrdController extends Controller
                     'rejected_decision_reason',
                 ], $keyword);
             })
+            ->addColumn('decision_by', function ($row) {
+                $hrd = $row->hrdInterview;
+                if (!$hrd) {
+                    $hrdRaw = DB::table('recruitment_interviews')
+                        ->where('new_recruitment_id', $row->id)
+                        ->where('stage', 'hrd')
+                        ->where('is_active', 1)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if (!$hrdRaw) {
+                        $hrdRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'hrd')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
+
+                    return ($hrdRaw && !empty($hrdRaw->created_by)) ? $hrdRaw->created_by : '-';
+                }
+
+                return $hrd->created_by ?: '-';
+            })
+            ->filterColumn('decision_by', function ($q, $keyword) {
+                $q->whereHas('hrdInterview', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('jadwal_interview', function ($row) {
                 $hrd = $row->hrdInterview;
                 if ($hrd && $hrd->tgl_interview) {

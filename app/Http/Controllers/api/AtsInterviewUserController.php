@@ -353,6 +353,33 @@ class AtsInterviewUserController extends Controller
                     $q->where('created_at', 'like', "%{$keyword}%");
                 }
             })
+            ->addColumn('decision_by', function ($row) {
+                $ui = $row->userInterview;
+                if (!$ui) {
+                    $uiRaw = DB::table('recruitment_interviews')
+                        ->where('new_recruitment_id', $row->id)
+                        ->where('stage', 'user')
+                        ->where('is_active', 1)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if (!$uiRaw) {
+                        $uiRaw = DB::table('recruitment_interviews')
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('stage', 'user')
+                            ->orderBy('id', 'desc')
+                            ->first();
+                    }
+
+                    return ($uiRaw && !empty($uiRaw->created_by)) ? $uiRaw->created_by : '-';
+                }
+
+                return $ui->created_by ?: '-';
+            })
+            ->filterColumn('decision_by', function ($q, $keyword) {
+                $q->whereHas('userInterview', function ($sub) use ($keyword) {
+                    $sub->where('created_by', 'like', "%{$keyword}%");
+                });
+            })
             ->addColumn('jadwal_interview', function ($row) {
                 $ui = $row->userInterview;
                 if ($ui && $ui->tgl_interview) {
