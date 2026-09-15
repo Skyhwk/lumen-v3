@@ -15,9 +15,9 @@ use App\Models\Parameter;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
+use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
-use App\Services\FdlOrderDetailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -147,6 +147,7 @@ class FdlLapisanMinyakController extends Controller
 
             $this->resultx = "Data Sampling Observasi Lapisan Minyak Dengan No Sample $request->no_sampel berhasil disimpan oleh $this->karyawan";
 
+            InsertActivityFdl::by($this->user_id)->action('input')->target("Lapisan Minyak dengan nomor sampel $request->no_sampel")->save();
             DB::commit();
             return response()->json([
                 'message' => $this->resultx
@@ -210,7 +211,7 @@ class FdlLapisanMinyakController extends Controller
             }
             $data->delete();
 
-            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
+            InsertActivityFdl::by($this->user_id)->action('delete')->target("Lapisan Minyak dengan nomor sampel $no_sample")->save();
 
             return response()->json([
                 'message' => 'Data has ben Delete',

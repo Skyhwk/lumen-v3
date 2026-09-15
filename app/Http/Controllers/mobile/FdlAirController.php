@@ -463,8 +463,6 @@ class FdlAirController extends Controller
                 }
                 $data->delete();
 
-            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
-
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Air ($jenis_sampel) dengan nomor sampel $no_sample")->save();
                 
                 DB::commit();
