@@ -803,7 +803,7 @@ class JadwalServices
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
-            $this->syncMobilisasiOperasional((array) ($dataUpdate->batch_id ?? []), $newJadwalIds ?? []);
+            $this->syncMobilisasiOperasional((array) ($dataUpdate->batch_id ?? []), $newJadwalIds ?? [], $dataUpdate);
 
             DB::commit();
             return true;
@@ -815,7 +815,6 @@ class JadwalServices
 
     // tinggal di test
     public function updateJadwalSPKategori()
-}
     {
         
         $dataUpdate = $this->updateJadwalKategori;
@@ -1117,7 +1116,7 @@ class JadwalServices
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
-            $this->syncMobilisasiOperasional((array) ($dataUpdate->batch_id ?? []), $newJadwalIds ?? []);
+            $this->syncMobilisasiOperasional((array) ($dataUpdate->batch_id ?? []), $newJadwalIds ?? [], $dataUpdate);
 
             DB::commit();
             return true;
@@ -1127,12 +1126,17 @@ class JadwalServices
         }
     }
 
-    protected function syncMobilisasiOperasional(array $oldIds, array $newIds)
+    protected function syncMobilisasiOperasional(array $oldIds, array $newIds, $dataUpdate = null)
     {
         try {
+            $actor = !empty($dataUpdate->karyawan) ? $dataUpdate->karyawan : 'System';
             $service = app(MobilisasiOperasionalService::class);
-            $service->remapAfterJadwalReplace($oldIds, $newIds);
-            $service->syncSnapshots($newIds ?: $oldIds);
+            $service->remapAfterJadwalReplace(
+                $oldIds,
+                $newIds,
+                $actor,
+                'Update jadwal sampling plan'
+            );
         } catch (\Throwable $e) {
             Log::channel('sampling')->warning('Gagal sync MO setelah update jadwal: ' . $e->getMessage());
         }
