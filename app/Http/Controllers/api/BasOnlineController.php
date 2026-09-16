@@ -1487,7 +1487,7 @@ class BasOnlineController extends Controller
 
             if (!$persiapanHeaderKategori->is_emailed_bas) {
                 return response()->json([
-                    'message' => 'BAS belum dikirim. Generate ulang hanya bisa dilakukan setelah BAS sudah di-email.',
+                    'message' => 'Dokumen tidak dapat di-regenerate karena Sampler belum melakukan email BAS kepada customer.',
                 ], 422);
             }
 
