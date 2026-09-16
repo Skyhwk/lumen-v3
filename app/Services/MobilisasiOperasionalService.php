@@ -116,6 +116,7 @@ class MobilisasiOperasionalService
                                 'durasi' => $detail->durasi,
                                 'periode' => null,
                                 'note' => null,
+                                'kategori' => null,
                                 'driver' => $current->nama_driver,
                                 'kendaraan' => $current->plat_mobil,
                                 'parsial' => null,
@@ -609,6 +610,10 @@ class MobilisasiOperasionalService
                     return (int) $id;
                 })->unique()->values();
 
+                $kategoriItems = $group->flatMap(function ($item) {
+                    return $this->parseKategori($item->kategori ?? null);
+                })->unique()->values()->all();
+
                 $teamSamplers = $group->pluck('sampler')
                     ->map(function ($s) {
                         return trim($s);
@@ -639,6 +644,8 @@ class MobilisasiOperasionalService
                     'periode' => $first->periode,
                     'pic' => $first->pic,
                     'note' => $first->note,
+                    'kategori' => $kategoriItems,
+                    'ringkasan_kategori' => $this->summarizeKategori($kategoriItems),
                 ];
             })
             ->groupBy('team_sampler')
@@ -665,11 +672,64 @@ class MobilisasiOperasionalService
                             'periode' => $item['periode'],
                             'pic' => $item['pic'],
                             'note' => $item['note'],
+                            'kategori' => $item['kategori'],
+                            'ringkasan_kategori' => $item['ringkasan_kategori'],
                         ];
                     })->values(),
                 ];
             })
             ->values();
+    }
+
+    protected function parseKategori($raw)
+    {
+        if (is_array($raw)) {
+            return array_values(array_filter(array_map('trim', $raw)));
+        }
+
+        if (!is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            return array_values(array_filter(array_map('trim', $decoded)));
+        }
+
+        return [trim($raw)];
+    }
+
+    protected function summarizeKategori(array $items)
+    {
+        $counts = [];
+        foreach ($items as $item) {
+            $item = trim((string) $item);
+            if ($item === '') {
+                continue;
+            }
+
+            $parts = explode(' - ', $item, 2);
+            $nama = trim(preg_replace('/^\d+-/', '', $parts[0]));
+            if ($nama === '') {
+                continue;
+            }
+
+            if (!isset($counts[$nama])) {
+                $counts[$nama] = 0;
+            }
+            $counts[$nama]++;
+        }
+
+        $summary = [];
+        foreach ($counts as $nama => $titik) {
+            $summary[] = [
+                'nama' => $nama,
+                'titik' => $titik,
+                'label' => $nama . ' ' . $titik . ' titik',
+            ];
+        }
+
+        return $summary;
     }
 
     protected function isSamePerson($a, $b)
@@ -697,6 +757,7 @@ class MobilisasiOperasionalService
                 'durasi' => $detail->durasi,
                 'periode' => null,
                 'note' => null,
+                'kategori' => null,
                 'driver' => $mo->nama_driver,
                 'kendaraan' => $mo->plat_mobil,
                 'parsial' => null,
@@ -707,6 +768,10 @@ class MobilisasiOperasionalService
         });
 
         $tim = $this->groupJadwalAsTim($jadwalRows, $mo->nama_driver);
+
+        $listPt = collect($tim)->pluck('list_pt')->flatten(1);
+        $namaPerusahaan = $listPt->pluck('nama_perusahaan')->filter()->unique()->values()->all();
+        $allKategori = $listPt->pluck('kategori')->flatten()->filter()->unique()->values()->all();
 
         return [
             'id' => $mo->id,
@@ -725,6 +790,8 @@ class MobilisasiOperasionalService
                 return (int) $id;
             })->values()->all(),
             'tim' => $tim,
+            'nama_perusahaan' => $namaPerusahaan,
+            'ringkasan_kategori' => $this->summarizeKategori($allKategori),
             'created_by' => $mo->created_by,
             'created_at' => $mo->created_at,
         ];
