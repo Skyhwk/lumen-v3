@@ -53,11 +53,12 @@ class SamplerTrackingService
         });
 
         $teamKeys = $groups->keys()->values();
-        $existingSessions = SamplerTrackingSession::whereDate('tanggal_sampling', $date)->get();
+        $existingSessions = SamplerTrackingSession::with('activeMembers')->whereDate('tanggal_sampling', $date)->get();
         $activeSessions = $existingSessions->where('is_active', true)->values();
         $existingByTeamKey = $activeSessions->keyBy('team_key');
         $missing = collect();
         $existing = collect();
+        $changed = collect();
 
         foreach ($groups as $teamKey => $rows) {
             $first = $rows->first();
@@ -75,14 +76,18 @@ class SamplerTrackingService
                 $session = $existingByTeamKey->get($teamKey);
                 $item['session_id'] = $session->id;
                 $existing->push($item);
+                $reasons = $this->syncDifferences($session, $rows);
+                if ($reasons) {
+                    $item['sampler_sebelumnya'] = $session->activeMembers->pluck('sampler_name')->implode(', ');
+                    $item['perubahan'] = implode('; ', $reasons);
+                    $changed->push($item);
+                }
             } else {
                 $missing->push($item);
             }
         }
 
-        $willDeactivate = $groups->isEmpty()
-            ? collect()
-            : $activeSessions
+        $willDeactivate = $activeSessions
                 ->filter(function ($session) use ($teamKeys) {
                     return !$teamKeys->contains($session->team_key);
                 })
@@ -105,13 +110,35 @@ class SamplerTrackingService
             'total_team_jadwal' => $groups->count(),
             'total_session_aktif' => $activeSessions->count(),
             'sudah_ada' => $existing->count(),
+            'sudah_sesuai' => $existing->count() - $changed->count(),
+            'perlu_diperbarui' => $changed->count(),
             'belum_kebentuk' => $missing->count(),
             'akan_dinonaktifkan' => $willDeactivate->count(),
             'preview' => [
+                'perlu_diperbarui' => $changed->values(),
                 'belum_kebentuk' => $missing->take(20)->values(),
                 'akan_dinonaktifkan' => $willDeactivate->take(20)->values(),
             ],
         ];
+    }
+
+    protected function syncDifferences($session, $rows)
+    {
+        $expected = $rows->map(function ($row) {
+            return [(string) $row->userid, (string) $row->sampler, (int) $row->durasi,
+                (int) $row->durasi_personal, (int) $this->resolveEffectiveDuration($row->durasi_personal, $row->durasi)];
+        })->unique()->sort()->values()->all();
+        $actual = $session->activeMembers->map(function ($member) {
+            return [(string) $member->sampler_id, (string) $member->sampler_name, (int) ($member->duration ?? $member->durasi),
+                (int) $member->durasi_personal, (int) $member->effective_duration];
+        })->sort()->values()->all();
+        $reasons = $expected !== $actual ? ['Anggota atau durasi tim berubah'] : [];
+        $first = $rows->first();
+        foreach (['nama_perusahaan' => 'nama_perusahaan', 'alamat_sampling' => 'alamat', 'driver' => 'driver', 'durasi' => 'durasi'] as $target => $source) {
+            if ((string) $session->$target !== (string) $first->$source) $reasons[] = $target . ' berubah';
+        }
+        if (json_decode($session->kategori ?: 'null', true) != json_decode($this->normalizeJson($first->kategori) ?: 'null', true)) $reasons[] = 'Kategori berubah';
+        return $reasons;
     }
 
     public function syncByPersiapanHeader(PersiapanSampelHeader $psh)
@@ -120,23 +147,14 @@ class SamplerTrackingService
             return collect();
         }
 
-        $samplers = $this->parseSamplerNames($psh->sampler_jadwal ?? null);
         $date = Carbon::parse($psh->tanggal_sampling)->toDateString();
-
-        $jadwals = Jadwal::where('is_active', true)
-            ->where('no_quotation', $psh->no_quotation)
-            ->whereDate('tanggal', $date)
-            ->when(count($samplers) > 0, function ($query) use ($samplers) {
-                $query->whereIn('sampler', $samplers);
-            })
-            ->get();
-
-        return $this->syncJadwalRows($jadwals, $date, false);
+        // Include complete teams and the sampler's former team, never a filtered subset.
+        return $this->sync($date);
     }
 
     protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false)
     {
-        if ($jadwals->isEmpty()) {
+        if ($jadwals->isEmpty() && !$deactivateMissingSessions) {
             return collect();
         }
 
@@ -192,7 +210,7 @@ class SamplerTrackingService
                         'durasi' => $row->durasi,
                         'durasi_personal' => $row->durasi_personal,
                         'effective_duration' => $effectiveDuration,
-                        'current_movement_group' => $movementGroup,
+                        'current_movement_group' => $member->current_movement_group ?: $movementGroup,
                         'is_active' => true,
                     ]);
 
@@ -236,6 +254,10 @@ class SamplerTrackingService
                             $query->whereNotIn('team_key', $activeTeamKeys);
                         })
                         ->update($sessionInactiveUpdate);
+                    $inactiveSessionIds = SamplerTrackingSession::whereDate('tanggal_sampling', $date)
+                        ->where('is_active', false)->pluck('id');
+                    SamplerTrackingMember::whereIn('sampler_tracking_session_id', $inactiveSessionIds)
+                        ->update(['is_active' => false]);
                 }
             }
         }, 5);
