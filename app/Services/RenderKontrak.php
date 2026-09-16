@@ -273,6 +273,7 @@ class RenderKontrak
 
     public function renderBody($pdf, $data, $fileName, $detail, $lang)
     {
+        [$data, $detail] = QuotationPromoPresentation::forContractPdf($data, $detail);
         app()->setLocale($lang);
         Carbon::setLocale($lang);
         $NoOrder = $data && $data->order ? $data->order->no_order : null;
@@ -462,7 +463,7 @@ class RenderKontrak
                     </td>
                     <td style="vertical-align: middle;text-align:center;font-size: 13px;">' . (int) $a->jumlah_titik * count($a->periode) . '</td>
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan) . '</td>
-                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($totalHarga) . '</td>
+                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->_promo_display_total ?? $totalHarga) . '</td>
                     </tr>'
                 );
 
@@ -761,7 +762,7 @@ class RenderKontrak
                 $disc_promo = json_decode($data->discount_promo);
                 $pdf->WriteHTML(
                     ' <tr>
-                        <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'%</td>
+                        <td style="text-align:center;padding:5px;">' . QuotationPromoPresentation::discountLabel($data) . '</td>
                         <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
                     </tr> '
                 );
@@ -1557,7 +1558,7 @@ class RenderKontrak
                     $disc_promo = json_decode($v->discount_promo);
                     $pdf->WriteHTML(
                         ' <tr>
-                            <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'%</td>
+                            <td style="text-align:center;padding:5px;">' . QuotationPromoPresentation::discountLabel($v) . '</td>
                             <td style="text-align:right;padding:5px;">' . self::rupiah($v->total_discount_promo) . '</td>
                         </tr> '
                     );
@@ -1837,7 +1838,7 @@ class RenderKontrak
                     '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan) . "</td>"
                 );
                 $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($totalHarga) . "</td>"
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->_promo_display_total ?? $totalHarga) . "</td>"
                 );
                 $pdf->WriteHTML("</tr>");
                 $x_++;
@@ -2390,7 +2391,7 @@ class RenderKontrak
                 $disc_promo = json_decode($data->discount_promo);
                 $pdf->WriteHTML(
                     '<tr>
-                    <td style="text-align:center;font-size: 8px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'%</td>'
+                    <td style="text-align:center;font-size: 8px;">' . QuotationPromoPresentation::discountLabel($data) . '</td>'
                 );
                 $total_discount_promo = 0;
                 foreach ($detail as $key => $value) {

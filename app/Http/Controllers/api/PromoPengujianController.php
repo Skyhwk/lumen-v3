@@ -14,6 +14,44 @@ use App\Models\MasterSubKategori;
 use App\Models\Parameter;
 
 class PromoPengujianController extends Controller {
+    public function options(Request $request)
+    {
+        $promos = DB::table('promo_pengujian')->where('status', 'aktif')->orderBy('kode_promo')->get();
+        foreach ($promos as $promo) {
+            $promo->konfigurasi = json_decode($promo->konfigurasi, true) ?: [];
+            if (in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian'], true)) {
+                try {
+                    $promo->konfigurasi = $this->paketKonfigurasi($promo->konfigurasi, $promo->metode);
+                } catch (\InvalidArgumentException $e) {
+                    $promo->invalid = true;
+                }
+            }
+        }
+        return response()->json($promos->filter(fn($promo) => empty($promo->invalid))->values());
+    }
+
+    private function paketKonfigurasi($items, $metode)
+    {
+        if (is_string($items)) {
+            $items = json_decode($items, true);
+        }
+        $items = is_array($items) ? ($items['data_pendukung_sampling'] ?? $items) : [];
+        $minimum = $metode === 'pengujian_free_pengujian' ? 2 : 1;
+        if (count($items) < $minimum) {
+            throw new \InvalidArgumentException("Promo ini membutuhkan minimal {$minimum} data pengujian.");
+        }
+        foreach ($items as &$item) {
+            if (!is_array($item) || empty($item['kategori_1']) || empty($item['kategori_2']) || empty($item['parameter'])
+                || !isset($item['jumlah_titik']) || !ctype_digit((string) $item['jumlah_titik']) || (int) $item['jumlah_titik'] < 1
+                || !isset($item['harga_paket']) || !is_numeric($item['harga_paket']) || $item['harga_paket'] < 0) {
+                throw new \InvalidArgumentException('Lengkapi kategori, parameter, jumlah titik bulat positif, dan harga paket minimal 0.');
+            }
+            $item['is_promo'] = true;
+        }
+        unset($item);
+        return ['data_pendukung_sampling' => array_values($items)];
+    }
+
     public function index(Request $request) {
         $query = DB::table('promo_pengujian')
             ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi')
@@ -85,7 +123,11 @@ class PromoPengujianController extends Controller {
             //         'message' => 'Data template pengujian tidak boleh kosong'
             //     ], 422);
             // }
-            $konfigurasi = array_values((array) $dataPendukung);
+            try {
+                $konfigurasi = $this->paketKonfigurasi($dataPendukung, $metode);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } else if ($metode === 'labeling') {
             if (empty($kodePromo) || empty($namaDiskon)) {
                 return response()->json([
@@ -251,7 +293,11 @@ class PromoPengujianController extends Controller {
             if (is_string($dataPendukung)) {
                 $dataPendukung = json_decode($dataPendukung, true) ?? [];
             }
-            $konfigurasi = array_values((array) $dataPendukung);
+            try {
+                $konfigurasi = $this->paketKonfigurasi($dataPendukung, $metode);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } else if ($metode === 'labeling') {
             if (empty($kodePromo) || empty($namaDiskon)) {
                 return response()->json([
@@ -519,6 +565,66 @@ class PromoPengujianController extends Controller {
     {
         $data = MasterRegulasi::with(['bakumutu'])->where('is_active', true)->get();
         return response()->json($data);
+    }
+
+    public function updateStatus(Request $request)
+    {
+        $id = $request->input('id');
+        $status = $request->input('status');
+
+        if (empty($id)) {
+            return response()->json([
+                'message' => 'ID promo pengujian tidak ditemukan'
+            ], 422);
+        }
+
+        if (empty($status)) {
+            return response()->json([
+                'message' => 'Status tidak boleh kosong'
+            ], 422);
+        }
+
+        $promo = DB::table('promo_pengujian')->where('id', $id)->first();
+        if (!$promo) {
+            return response()->json([
+                'message' => 'Data promo pengujian tidak ditemukan'
+            ], 404);
+        }
+
+        if ($status === 'aktif' && $promo->metode !== 'labeling') {
+            $konfigurasi = json_decode($promo->konfigurasi, true);
+            $isEmpty = empty($konfigurasi);
+            if (!$isEmpty && is_array($konfigurasi) && count($konfigurasi) === 1 && isset($konfigurasi['data_pendukung_sampling'])) {
+                $isEmpty = empty($konfigurasi['data_pendukung_sampling']);
+            }
+            if ($isEmpty) {
+                return response()->json([
+                    'message' => 'Konfigurasi promo masih kosong. Silakan lengkapi konfigurasi terlebih dahulu.'
+                ], 422);
+            }
+        }
+
+        $normalized = null;
+        if ($status === 'aktif' && in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian'], true)) {
+            try {
+                $normalized = $this->paketKonfigurasi($promo->konfigurasi, $promo->metode);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
+        DB::table('promo_pengujian')->where('id', $id)->update(array_merge([
+            'status'     => $status,
+            'updated_by' => $this->karyawan,
+            'updated_at' => Carbon::now(),
+        ], $normalized === null ? [] : ['konfigurasi' => json_encode($normalized)]));
+
+        $statusText = $status === 'aktif' ? 'diaktifkan' : 'dinonaktifkan';
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Promo pengujian {$promo->kode_promo} berhasil {$statusText}",
+        ], 200);
     }
 }
 

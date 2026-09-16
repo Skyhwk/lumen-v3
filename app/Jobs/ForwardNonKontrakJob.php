@@ -37,6 +37,7 @@ class ForwardNonKontrakJob extends Job
         DB::beginTransaction();
 
         try {
+            $promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
             $tahun_chek = date('y', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit tahun (misal: 25)
             $bulan_chek = date('m', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit bulan (misal: 01)
             $bulan_chek = self::romawi($bulan_chek);
@@ -177,6 +178,7 @@ class ForwardNonKontrakJob extends Job
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item['is_promo']),
                         'kategori_1' => $item['kategori_1'],
                         'kategori_2' => $item['kategori_2'],
                         'regulasi' => isset($item['regulasi']) ? $item['regulasi'] : '',
@@ -240,6 +242,7 @@ class ForwardNonKontrakJob extends Job
             $data->sales_id = $sales_id;
             $data->created_by = $this->karyawan;
             $data->created_at = DATE('Y-m-d H:i:s');
+            \App\Services\QuotationPromo::finalizeRequestDraft($data, $promo, array_map(fn($r) => (object) $r, array_values($data_sampling)), $payload->informasi_pelanggan['tgl_penawaran']);
             $data->save();
 
             $data_request = RequestQr::where('id', $payload->informasi_pelanggan['id'])->first();
@@ -271,9 +274,9 @@ class ForwardNonKontrakJob extends Job
             Log::channel('quotation')->info('ForwardNonKontrakJob: Penawaran berhasil dibuat dengan nomor dokumen ' . $data->no_document);
 
         } catch (\Exception $e) {
-            dd($e);
             DB::rollBack();
             Log::channel('quotation')->info('ForwardNonKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
+            throw $e;
         }
     }
 
