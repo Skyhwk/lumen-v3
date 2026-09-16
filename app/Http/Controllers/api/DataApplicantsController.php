@@ -13,6 +13,8 @@ use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsCvPdfSectionsBuilder;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use App\Services\AtsNotificationService;
@@ -27,6 +29,8 @@ use Mpdf\Output\Destination;
 class DataApplicantsController extends Controller
 {
     use BuildsCandidateAssessmentPreview;
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
 
     /**
      * Get Datatable list of applicants (Initial Assessment Stage)
@@ -46,7 +50,7 @@ class DataApplicantsController extends Controller
             })
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -164,8 +168,14 @@ class DataApplicantsController extends Controller
             })
             ->addColumn('user_interview', function ($row) {
                 return $row->userInterview;
-            })
-            ->make(true);
+            });
+
+        $clientSide = $this->serveAtsClientSideList($datatable);
+        if ($clientSide) {
+            return $clientSide;
+        }
+
+        return $this->applyRecruitmentCoreDataTableOrdering($datatable)->make(true);
     }
 
     /**

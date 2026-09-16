@@ -8,7 +8,7 @@ use App\Models\{
 };
 use App\Jobs\CombineLHPJob;
 use App\Services\{
-    CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService
+    CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService,AppsBasService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -7103,5 +7103,145 @@ class TestingController extends Controller
             'message' => 'Portal notification test executed',
             'data' => $result,
         ]);
+    }
+
+    /**
+     * Tes payload log_bas tanpa kirim email.
+     *
+     * Body:
+     * - no_order (required)
+     * - no_document / no_quotation (required)
+     * - tanggal_sampling (required)
+     * - filename / attachments (optional; kosong = semua BAS di persiapan hari itu)
+     * - save: true = tulis ke log_bas / sampling log sesuai jendela waktu
+     * - force: true + save = paksa tulis ke tabel log_bas (abaikan jendela waktu)
+     */
+    public function testLogBas(Request $request)
+    {
+        try {
+            $noOrder = trim((string) ($request->input('no_order') ?? ''));
+            $noDocument = trim((string) ($request->input('no_document') ?? $request->input('no_quotation') ?? ''));
+            $tanggalSampling = trim((string) ($request->input('tanggal_sampling') ?? ''));
+            $save = filter_var($request->input('save', false), FILTER_VALIDATE_BOOLEAN);
+            $force = filter_var($request->input('force', false), FILTER_VALIDATE_BOOLEAN);
+
+            $attachments = $request->input('attachments', []);
+            if (!is_array($attachments)) {
+                $attachments = array_filter(array_map('trim', explode(',', (string) $attachments)));
+            }
+            if ($request->filled('filename')) {
+                $attachments[] = $request->input('filename');
+            }
+            $attachments = array_values(array_unique(array_filter($attachments)));
+
+            if ($noOrder === '' || $noDocument === '' || $tanggalSampling === '') {
+                return response()->json([
+                    'message' => 'no_order, no_document/no_quotation, dan tanggal_sampling wajib diisi',
+                    'status' => false,
+                ], 422);
+            }
+
+            $headers = PersiapanSampelHeader::where('no_quotation', $noDocument)
+                ->where('no_order', $noOrder)
+                ->where('tanggal_sampling', $tanggalSampling)
+                ->where('is_active', true)
+                ->whereNotNull('detail_bas_documents')
+                ->orderBy('id', 'desc')
+                ->get();
+
+            if ($headers->isEmpty()) {
+                return response()->json([
+                    'message' => 'Persiapan sampel tidak ditemukan',
+                    'status' => false,
+                    'data' => [
+                        'no_order' => $noOrder,
+                        'no_document' => $noDocument,
+                        'tanggal_sampling' => $tanggalSampling,
+                    ],
+                ], 404);
+            }
+
+            $service = new AppsBasService($this->karyawan, $this->user_id);
+            $results = [];
+
+            foreach ($headers as $header) {
+                $details = json_decode($header->detail_bas_documents, true);
+                if (!is_array($details)) {
+                    $details = [];
+                }
+                $availableFiles = [];
+                foreach ($details as $detail) {
+                    if (!is_array($detail) || empty($detail['filename'])) {
+                        continue;
+                    }
+                    $availableFiles[] = $detail['filename'];
+                }
+
+                $filesToTest = !empty($attachments)
+                    ? array_values(array_intersect($availableFiles, $attachments))
+                    : $availableFiles;
+
+                if (!empty($attachments) && empty($filesToTest)) {
+                    continue;
+                }
+
+                if (empty($filesToTest) && empty($attachments)) {
+                    $preview = $service->previewLogBas($header, []);
+                    if ($save) {
+                        if ($force) {
+                            $preview['window']['log_message'] = null;
+                            $preview['window']['target'] = 'log_bas';
+                            $preview['window']['forced'] = true;
+                        }
+                        $preview['persisted'] = $service->persistLogBas($preview);
+                    }
+                    $results[] = $preview;
+                    continue;
+                }
+
+                foreach ($filesToTest as $file) {
+                    $preview = $service->previewLogBas($header, [$file]);
+                    if ($save) {
+                        if ($force) {
+                            $preview['window']['log_message'] = null;
+                            $preview['window']['target'] = 'log_bas';
+                            $preview['window']['forced'] = true;
+                        }
+                        $preview['persisted'] = $service->persistLogBas($preview);
+                    }
+                    $results[] = $preview;
+                }
+            }
+
+            if (empty($results) && !empty($attachments)) {
+                $preview = $service->previewLogBas($headers->first(), $attachments);
+                if ($save) {
+                    if ($force) {
+                        $preview['window']['log_message'] = null;
+                        $preview['window']['target'] = 'log_bas';
+                        $preview['window']['forced'] = true;
+                    }
+                    $preview['persisted'] = $service->persistLogBas($preview);
+                }
+                $results[] = $preview;
+            }
+
+            return response()->json([
+                'message' => $save ? 'Test log_bas dijalankan (dengan persist)' : 'Test log_bas (preview saja, belum tulis DB)',
+                'status' => true,
+                'save' => $save,
+                'force' => $force,
+                'count' => count($results),
+                'data' => $results,
+            ], 200);
+        } catch (\Exception $e) {
+            
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'status' => false,
+            ], 500);
+        }
     }
 }

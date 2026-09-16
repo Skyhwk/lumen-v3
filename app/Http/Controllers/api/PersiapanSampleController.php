@@ -630,26 +630,37 @@ class PersiapanSampleController extends Controller
                     // Sehingga nanti pas di Grouping, yang muncul hanya yang belum selesai.
                     $schedule->sampler = implode(',', $pendingSamplers);
 
-                    $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
+                    $kategoriList = json_decode($schedule->kategori, true) ?? [];
+                    $kategoriList = array_values(array_filter(array_map('trim', is_array($kategoriList) ? $kategoriList : [])));
+                    sort($kategoriList);
+                    $kategori = implode(',', $kategoriList);
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
-                    // Key Unik untuk Grouping (Composite Key)
-                    $key = $orderHeader->no_document . '|' . 
-                        $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
-                        $schedule->id_cabang .'|'.
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                    $samplerKeyParts = array_values(array_filter(array_map('trim', $pendingSamplers)));
+                    sort($samplerKeyParts);
+                    $samplerKey = strtolower(implode(',', $samplerKeyParts));
+
+                    // Pecah tim (parsial) punya jam yang sama tapi sampler + kategori berbeda.
+                    // Jangan gabung jadi satu row; merge hanya untuk order_detail berulang di tim yang sama.
+                    $key = $orderHeader->no_document . '|' .
+                        $item->no_order . '|' .
+                        $schedule->tanggal . '|' .
+                        $schedule->id_cabang . '|' .
+                        $schedule->jam_mulai . '|' .
+                        $samplerKey . '|' .
+                        $kategori;
 
                     if (isset($groupedData[$key])) {
-                        // Jika data sudah ada, gabungkan Sampler-nya saja
                         $existingSamplers = explode(',', $groupedData[$key]['sampler']);
                         $newSamplers = explode(',', $schedule->sampler ?? '');
-                        
-                        // Merge & Unique
                         $merged = array_unique(array_merge($existingSamplers, $newSamplers));
                         $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
+
+                        $existingKategori = array_filter(array_map('trim', explode(',', $groupedData[$key]['kategori'] ?? '')));
+                        $mergedKategori = array_unique(array_merge($existingKategori, $kategoriList));
+                        sort($mergedKategori);
+                        $groupedData[$key]['kategori'] = implode(',', $mergedKategori);
                     } else {
-                        // Data Baru
                         $groupedData[$key] = [
                             'nomor_quotation'    => $orderHeader->no_document ?? '',
                             'nama_perusahaan'    => $orderHeader->nama_perusahaan ?? '',

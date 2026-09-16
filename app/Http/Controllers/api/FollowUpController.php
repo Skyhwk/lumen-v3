@@ -229,6 +229,7 @@ class FollowUpController extends Controller
             ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
+            ->orderColumn('pelanggan.nama_pelanggan', 'p.nama_pelanggan $1')
             ->filterColumn('keterangan_tambahan', function ($query, $value) {
                 $data = json_decode($value, true);
                 $kategori = $data['kategori'] ?? null;

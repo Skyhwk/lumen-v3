@@ -208,7 +208,7 @@ class BankDataCandidatController extends DataApplicantsController
             })
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->filterColumn('nama_lengkap', function ($q, $keyword) {
                 $q->where('nama_lengkap', 'like', "%{$keyword}%");
             })
@@ -295,7 +295,8 @@ class BankDataCandidatController extends DataApplicantsController
             })
             ->addColumn('user_interview', function ($row) {
                 return $row->userInterview;
-            })
-            ->make(true);
+            });
+
+        return $this->applyRecruitmentCoreDataTableOrdering($datatable)->make(true);
     }
 }

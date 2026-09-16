@@ -1342,4 +1342,34 @@ class RecruitmentStatusService
 
         return false;
     }
+
+    public static function matchesFinalDecisionStageTab($recruitment, string $stageTab): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        switch ($stageTab) {
+            case 'waiting_approval':
+                return self::isAwaitingIbuDirekturApproval($recruitment);
+
+            case 'waiting_approval_salary':
+                return self::isAwaitingDirectorSalaryApproval($recruitment);
+
+            case 'management_decision':
+                return $status === 'management_decision'
+                    && !self::isAwaitingIbuDirekturApproval($recruitment)
+                    && !self::isAwaitingDirectorSalaryApproval($recruitment);
+
+            case 'salary_offer':
+                return in_array($status, ['internal_sallary_offer', 'salary_offer'], true)
+                    && !self::isAwaitingDirectorSalaryApproval($recruitment);
+
+            case 'finance_review':
+                return $status === 'finance_review';
+
+            default:
+                return false;
+        }
+    }
 }

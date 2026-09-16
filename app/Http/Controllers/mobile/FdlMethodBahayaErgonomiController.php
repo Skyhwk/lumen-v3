@@ -19,6 +19,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -669,7 +670,10 @@ class FdlMethodBahayaErgonomiController extends Controller
                 unlink($video_dokumentasi);
             }
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Bahaya Ergonomi pada nomor sampel $cek->no_sampel")->save();
+            $noSampel = $cek->no_sampel;
             $cek->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoErgonomiRemaining($noSampel);
             return response()->json([
                 'message' => 'Data has ben Deleted',
                 'cat' => 1

@@ -8,6 +8,7 @@ use App\Services\GetBawahan;
 use App\Services\KaryawanProfileService;
 use App\Services\RenderKebijakanDocumentPdf;
 use App\Services\RequestKebijakanNotificationService;
+use App\Services\RequestKebijakanRevisionService;
 use App\Services\RequestKebijakanVerifierService;
 use App\Services\RequestKebijakanWorkflowService;
 use Carbon\Carbon;
@@ -17,12 +18,6 @@ use Illuminate\Support\Facades\DB;
 
 class RequestKebijakanController extends Controller
 {
-    private const ROMAN_MONTHS = [
-        '01' => 'I', '02' => 'II', '03' => 'III', '04' => 'IV',
-        '05' => 'V', '06' => 'VI', '07' => 'VII', '08' => 'VIII',
-        '09' => 'IX', '10' => 'X', '11' => 'XI', '12' => 'XII',
-    ];
-
     private const STATUS_LABELS = RequestKebijakanWorkflowService::STATUS_LABELS;
 
     private const KATEGORI_LABELS = RequestKebijakanWorkflowService::KATEGORI_LABELS;
@@ -143,6 +138,8 @@ class RequestKebijakanController extends Controller
 
         $this->ensureCanAccess($record, $employee);
 
+        $record->revision_meta = RequestKebijakanRevisionService::decodeRevisionMeta($record->revision_meta);
+
         return response()->json([
             'data' => [
                 'request_kebijakan' => $record,
@@ -152,6 +149,48 @@ class RequestKebijakanController extends Controller
                 'can_update' => $this->canUpdate($record, $employee),
             ],
             'message' => 'Detail request kebijakan berhasil diambil',
+        ], 200);
+    }
+
+    public function activeDocuments(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $this->ensureCanRequestKebijakan($employee);
+
+        $search = trim((string) $request->input('search', $request->input('keyword', '')));
+        $limit = (int) $request->input('limit', 30);
+
+        if ($search !== '' && mb_strlen($search) < 2) {
+            return response()->json([
+                'data' => [],
+                'message' => 'Ketik minimal 2 karakter untuk mencari dokumen ketetapan.',
+            ], 200);
+        }
+
+        return response()->json([
+            'data' => RequestKebijakanRevisionService::listActiveDocuments(
+                $search !== '' ? $search : null,
+                $limit
+            ),
+            'message' => 'Daftar dokumen ketetapan aktif berhasil diambil',
+        ], 200);
+    }
+
+    public function revisionBaseline(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $this->ensureCanRequestKebijakan($employee);
+
+        $dokumenId = (int) $request->input('dokumen_id', $request->input('id', 0));
+        $excludeRequestId = $request->input('exclude_request_id') ? (int) $request->input('exclude_request_id') : null;
+
+        if ($dokumenId <= 0) {
+            abort(422, 'ID dokumen ketetapan wajib diisi.');
+        }
+
+        return response()->json([
+            'data' => RequestKebijakanRevisionService::getRevisionBaseline($dokumenId, $excludeRequestId),
+            'message' => 'Baseline revisi berhasil diambil',
         ], 200);
     }
 
@@ -167,6 +206,10 @@ class RequestKebijakanController extends Controller
             $record = RequestKebijakan::create([
                 'no_request' => $this->generateNoRequest(),
                 'kategori' => $validated['kategori'],
+                'parent_kebijakan_dokumen_id' => $validated['parent_kebijakan_dokumen_id'] ?? null,
+                'revision_meta' => isset($validated['revision_meta'])
+                    ? json_encode($validated['revision_meta'])
+                    : null,
                 'judul' => $validated['judul'],
                 'tujuan' => $validated['tujuan'],
                 'ruang_lingkup' => $validated['ruang_lingkup'],
@@ -211,12 +254,16 @@ class RequestKebijakanController extends Controller
             ], 422);
         }
 
-        $validated = $this->validatePayload($request);
+        $validated = $this->validatePayload($request, (int) $record->id);
 
         DB::beginTransaction();
         try {
             $record->update([
                 'kategori' => $validated['kategori'],
+                'parent_kebijakan_dokumen_id' => $validated['parent_kebijakan_dokumen_id'] ?? null,
+                'revision_meta' => isset($validated['revision_meta'])
+                    ? json_encode($validated['revision_meta'])
+                    : null,
                 'judul' => $validated['judul'],
                 'tujuan' => $validated['tujuan'],
                 'ruang_lingkup' => $validated['ruang_lingkup'],
@@ -373,7 +420,7 @@ class RequestKebijakanController extends Controller
         }
     }
 
-    private function validatePayload(Request $request): array
+    private function validatePayload(Request $request, ?int $excludeRequestId = null): array
     {
         $kategori = strtolower(trim((string) $request->input('kategori', 'new')));
 
@@ -381,8 +428,12 @@ class RequestKebijakanController extends Controller
             abort(422, 'Kategori request tidak valid.');
         }
 
-        if ($kategori !== 'new') {
-            abort(422, 'Fitur kategori ini sedang dalam pengembangan. Saat ini hanya Kebijakan Baru yang dapat diajukan.');
+        if ($kategori === 'revision') {
+            return RequestKebijakanRevisionService::validateRevisionPayload($request, $excludeRequestId);
+        }
+
+        if ($kategori === 'termination') {
+            abort(422, 'Fitur terminasi ketetapan sedang dalam pengembangan.');
         }
 
         $judul = trim((string) $request->input('judul', ''));
@@ -414,6 +465,8 @@ class RequestKebijakanController extends Controller
 
         return [
             'kategori' => $kategori,
+            'parent_kebijakan_dokumen_id' => null,
+            'revision_meta' => null,
             'judul' => $judul,
             'tujuan' => $tujuan,
             'ruang_lingkup' => $ruangLingkup,
@@ -597,22 +650,10 @@ class RequestKebijakanController extends Controller
 
     private function generateNoRequest(): string
     {
-        $year = date('y');
-        $month = self::ROMAN_MONTHS[date('m')];
-        $prefix = "ISL/RK/{$year}-{$month}/";
+        do {
+            $noRequest = str_replace('.', '/', (string) microtime(true));
+        } while (RequestKebijakan::where('no_request', $noRequest)->exists());
 
-        $latest = RequestKebijakan::where('no_request', 'like', $prefix . '%')
-            ->orderByRaw('CAST(SUBSTRING_INDEX(no_request, "/", -1) AS UNSIGNED) DESC')
-            ->first();
-
-        $nextNumber = 1;
-        if ($latest) {
-            $lastPart = substr($latest->no_request, strrpos($latest->no_request, '/') + 1);
-            $nextNumber = (int) $lastPart + 1;
-        }
-
-        $padLength = max(4, strlen((string) $nextNumber));
-
-        return $prefix . str_pad($nextNumber, $padLength, '0', STR_PAD_LEFT);
+        return $noRequest;
     }
 }

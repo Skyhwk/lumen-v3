@@ -19,6 +19,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -227,6 +228,8 @@ class FdlSampahController extends Controller
             }
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Observasi Sampah pada nomor sampel $data->no_sampel")->save();
             $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
 
             return response()->json([
                 'message' => 'Data has ben Delete',

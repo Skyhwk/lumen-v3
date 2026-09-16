@@ -15,6 +15,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\ParameterFdl;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -662,7 +663,9 @@ class FdlEmisiCerobongController extends Controller
                     $data->save();
 
                     if($data->titik_koordinat == null && $data->T_Flue == null && $data->status_konstan == null){
+                        $noSampel = $data->no_sampel;
                         $data->delete();
+                        FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
                     }
                 }else if($request->tipe == 1) {
                     $data->metode                 = NULL;
@@ -684,7 +687,9 @@ class FdlEmisiCerobongController extends Controller
                     $data->save();
 
                     if($data->titik_koordinat == null && $data->T_Flue == null && $data->status_konstan == null){
+                        $noSampel = $data->no_sampel;
                         $data->delete();
+                        FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
                     }
                 }else if($request->tipe == 2) {
                     $data->titik_pengamatan       = NULL;
@@ -719,11 +724,15 @@ class FdlEmisiCerobongController extends Controller
                     $data->save();
 
                     if($data->titik_koordinat == null && $data->T_Flue == null && $data->status_konstan == null){
+                        $noSampel = $data->no_sampel;
                         $data->delete();
+                        FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
                     }
                 }
                 if($request->status == 'hapus_all') {
+                    $noSampel = $data->no_sampel;
                     $data->delete();
+                    FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
                 }
                 return response()->json([
                     'message' => 'Data Berhasil di Hapus',
@@ -743,7 +752,9 @@ class FdlEmisiCerobongController extends Controller
                 if (is_file($foto_lain)) {
                     unlink($foto_lain);
                 }
+                $noSampel = $cek->no_sampel;
                 $cek->delete();
+                FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
 
                 return response()->json([
                     'message' => 'Data has ben Delete',
@@ -783,7 +794,9 @@ class FdlEmisiCerobongController extends Controller
                 }
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Emisi Cerobong pada nomor sampel $data->no_sampel")->save();
 
+                $noSampel = $data->no_sampel;
                 $data->delete();
+                FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
 
                 return response()->json([
                     'message' => 'Data has ben Delete',
@@ -923,7 +936,9 @@ class FdlEmisiCerobongController extends Controller
             $data->T_Flue === null &&
             $data->status_konstan === null
         ) {
+            $noSampel = $data->no_sampel;
             $data->delete();
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
         }
 
         return response()->json([

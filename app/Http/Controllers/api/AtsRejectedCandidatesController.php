@@ -10,10 +10,12 @@ use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
 
 class AtsRejectedCandidatesController extends Controller
 {
     use BuildsCandidateAssessmentPreview;
+    use OrdersAtsDataTableColumns;
 
     private function getTtlString($row)
     {
@@ -102,7 +104,7 @@ class AtsRejectedCandidatesController extends Controller
             ->orderBy('is_rejected_kandidat_at', 'desc')
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -226,8 +228,9 @@ class AtsRejectedCandidatesController extends Controller
                     $sub->where('is_rejected_kandidat_reason', 'like', "%{$keyword}%")
                         ->orWhere('alasan_reject', 'like', "%{$keyword}%");
                 });
-            })
-            ->toJson();
+            });
+
+        return $this->applyRejectedCandidateDataTableOrdering($datatable)->toJson();
     }
 
     public function candidateDetail(Request $request)

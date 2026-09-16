@@ -21,6 +21,7 @@ use App\Models\QuotationNonKontrak;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -563,9 +564,12 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
                 if (is_file($foto_lain)) {
                     unlink($foto_lain);
                 }
+                $noSampel = $cek->no_sampel;
+                $idLapangan = $cek->id_lapangan;
                 $cek->delete();
-                DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id_lapangan)->delete();
-                DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id_lapangan)->delete();
+                DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $idLapangan)->delete();
+                DataLapanganIsokinetikHasil::where('id_lapangan', $idLapangan)->delete();
+                FdlOrderDetailService::nullTanggalTerimaIfNoIsokinetikRemaining($noSampel);
                 return response()->json([
                     'message' => 'Data has ben Delete',
                     'cat' => 1

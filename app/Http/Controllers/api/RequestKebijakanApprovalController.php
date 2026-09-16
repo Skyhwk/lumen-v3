@@ -7,6 +7,7 @@ use App\Models\RequestKebijakan;
 use App\Services\RenderKebijakanDocumentPdf;
 use App\Services\KebijakanDokumenService;
 use App\Services\RequestKebijakanNotificationService;
+use App\Services\RequestKebijakanRevisionService;
 use App\Services\RequestKebijakanVerifierService;
 use App\Services\RequestKebijakanWorkflowService;
 use Carbon\Carbon;
@@ -130,6 +131,8 @@ class RequestKebijakanApprovalController extends Controller
 
         $record = RequestKebijakan::with(['requester.jabatan', 'requester.divisi', 'drafting'])
             ->findOrFail($request->id);
+
+        $record->revision_meta = RequestKebijakanRevisionService::decodeRevisionMeta($record->revision_meta);
 
         return response()->json([
             'data' => [

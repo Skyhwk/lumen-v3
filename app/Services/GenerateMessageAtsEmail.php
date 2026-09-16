@@ -824,20 +824,31 @@ class GenerateMessageAtsEmail
                     <td style='padding: 6px 0; color: #1e293b;'><a href='{$linkGmeet}' target='_blank' style='color: #2563eb; text-decoration: underline; font-weight: 600;'>{$linkGmeet}</a></td>
                 </tr>";
         } else {
-            $alamat = nl2br(htmlspecialchars($data->alamat_cabang ?? 'Ruang HRD PT Inti Surya Laboratorium'));
+            // $alamat = nl2br(htmlspecialchars($data->alamat_cabang ?? 'Ruang HRD PT Inti Surya Laboratorium'));
+            // $locationDetail = "
+            //     <tr>
+            //         <td style='padding: 6px 0; color: #475569; font-weight: 600; width: 140px; vertical-align: top;'>Lokasi Ruangan</td>
+            //         <td style='padding: 6px 0; color: #1e293b; font-weight: 500;'>{$alamat}</td>
+            //     </tr>
+            //     <tr>
+            //         <td colspan='2' style='padding: 6px 0; color: #64748b; font-size: 13px;'>
+            //             * Harap hadir 10 menit sebelum jadwal dan membawa berkas pendukung (CV Terbaru, FC KTP & KK).
+            //         </td>
+            //     </tr>";
             $locationDetail = "
                 <tr>
-                    <td style='padding: 6px 0; color: #475569; font-weight: 600; width: 140px; vertical-align: top;'>Lokasi Ruangan</td>
-                    <td style='padding: 6px 0; color: #1e293b; font-weight: 500;'>{$alamat}</td>
-                </tr>
-                <tr>
                     <td colspan='2' style='padding: 6px 0; color: #64748b; font-size: 13px;'>
-                        * Harap hadir 10 menit sebelum jadwal dan membawa berkas pendukung (CV Terbaru, FC KTP & KK).
+                        * Harap hadir 30 menit sebelum jadwal dan membawa berkas pendukung (CV Terbaru, FC KTP & KK).
                     </td>
                 </tr>";
         }
 
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
+        $recruitmentEmail = 'recruitment.hrd@intilab.com';
+        $waNumber = (string) env('NUMBER', '');
+        $waNumberDisplay = htmlspecialchars($waNumber !== '' ? $waNumber : '-');
+        $waNumberDigits = preg_replace('/[^0-9]/', '', $waNumber);
+        $waLink = $waNumberDigits !== '' ? 'https://wa.me/' . $waNumberDigits : '#';
 
         return "
         <!DOCTYPE html>
@@ -888,6 +899,15 @@ class GenerateMessageAtsEmail
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
                             Mohon konfirmasi balasan ketersediaan Anda paling lambat <strong>24 jam</strong> setelah pesan ini diterima.
+                            Anda <strong>wajib melakukan konfirmasi kehadiran</strong> dengan membalas melalui email
+                            <a href='mailto:{$recruitmentEmail}' style='color: #2563eb; text-decoration: underline;'>{$recruitmentEmail}</a>
+                            atau WhatsApp ke nomor
+                            <a href='{$waLink}' target='_blank' style='color: #2563eb; text-decoration: underline;'>{$waNumberDisplay}</a>
+                            dengan format berikut:
+                        </p>
+
+                        <p style='font-size: 14px; line-height: 1.6; color: #dc2626; font-weight: 700; text-align: center; margin: 12px 0 20px 0;'>
+                            Bersedia / Tidak Bersedia_Nama Lengkap
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
