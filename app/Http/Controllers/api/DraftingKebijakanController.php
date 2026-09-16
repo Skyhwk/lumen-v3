@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DraftingKebijakan;
 use App\Models\RequestKebijakan;
 use App\Services\RequestKebijakanNotificationService;
+use App\Services\RequestKebijakanRevisionService;
 use App\Services\RequestKebijakanVerifierService;
 use App\Services\RequestKebijakanWorkflowService;
 use App\Services\RenderKebijakanDocumentPdf;
@@ -85,6 +86,8 @@ class DraftingKebijakanController extends Controller
         $record = RequestKebijakan::with(['requester.jabatan', 'requester.divisi', 'drafting'])
             ->findOrFail($request->id);
 
+        $record->revision_meta = RequestKebijakanRevisionService::decodeRevisionMeta($record->revision_meta);
+
         return response()->json([
             'data' => [
                 'request_kebijakan' => $record,
@@ -92,6 +95,7 @@ class DraftingKebijakanController extends Controller
                 'display_status' => RequestKebijakanWorkflowService::resolveDisplayStatus($record),
                 'display_kategori' => RequestKebijakanWorkflowService::resolveKategoriLabel($record->kategori),
                 'pipeline' => RequestKebijakanWorkflowService::buildPipeline($record),
+                'legal_final_defaults' => RequestKebijakanRevisionService::resolveLegalFinalDefaults($record),
             ],
             'message' => 'Detail drafting kebijakan berhasil diambil',
         ], 200);
@@ -104,6 +108,8 @@ class DraftingKebijakanController extends Controller
         if (!$record->drafting) {
             return response()->json(['message' => 'Draft kebijakan belum tersedia'], 404);
         }
+
+        $record->revision_meta = RequestKebijakanRevisionService::decodeRevisionMeta($record->revision_meta);
 
         return response()->json([
             'data' => [
@@ -129,13 +135,17 @@ class DraftingKebijakanController extends Controller
 
         DB::beginTransaction();
         try {
+            $initialContent = RequestKebijakanRevisionService::resolveDraftInitialContent($record);
+            $divisiBagian = RequestKebijakanRevisionService::resolveParentDivisiBagian($record);
+
             DraftingKebijakan::create([
                 'request_kebijakan_id' => $record->id,
-                'judul' => $record->judul,
-                'tujuan' => $record->tujuan,
-                'ruang_lingkup' => $record->ruang_lingkup,
-                'definisi' => $record->definisi,
-                'isi_ketetapan' => $record->isi_ketetapan,
+                'divisi_bagian' => $divisiBagian,
+                'judul' => $initialContent['judul'],
+                'tujuan' => $initialContent['tujuan'],
+                'ruang_lingkup' => $initialContent['ruang_lingkup'],
+                'definisi' => $initialContent['definisi'],
+                'isi_ketetapan' => $initialContent['isi_ketetapan'],
                 'catatan_legal' => $record->catatan,
                 'status' => 'in_progress',
                 'processed_by' => $employee->nama_lengkap,
@@ -187,8 +197,11 @@ class DraftingKebijakanController extends Controller
         if ($record->status === 'approved' && !$record->drafting && $record->is_active) {
             DB::beginTransaction();
             try {
+                $parentDivisi = RequestKebijakanRevisionService::resolveParentDivisiBagian($record);
+
                 DraftingKebijakan::create(array_merge($draftPayload, [
                     'request_kebijakan_id' => $record->id,
+                    'divisi_bagian' => $draftPayload['divisi_bagian'] ?: $parentDivisi,
                     'status' => 'in_progress',
                     'processed_by' => $employee->nama_lengkap,
                     'processed_at' => Carbon::now(),

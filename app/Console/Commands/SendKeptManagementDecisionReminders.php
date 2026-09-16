@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\NewRecruitment;
 use App\Models\PersonnelRequest;
 use App\Models\RecruitmentInterview;
+use App\Services\CandidateDocumentAttachmentService;
+use App\Services\GenerateAssessmentDocumentService;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
@@ -15,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 
 class SendKeptManagementDecisionReminders extends Command
 {
-    protected $signature = 'recruitment:send-kept-management-reminders';
+    protected $signature = 'reminderkeptkandidat';
 
     protected $description = 'Kirim ulang email Management Decision tujuh hari setelah kandidat di-keep';
 
@@ -41,6 +43,8 @@ class SendKeptManagementDecisionReminders extends Command
                         continue;
                     }
 
+                    $documents = [];
+
                     try {
                         $personnelRequest = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])
                             ->find($candidate->personnel_request_id);
@@ -54,18 +58,39 @@ class SendKeptManagementDecisionReminders extends Command
                             throw new \RuntimeException('Data personnel request atau interview user tidak ditemukan.');
                         }
 
+                        $assessmentService = app(GenerateAssessmentDocumentService::class);
+                        $documentService = app(CandidateDocumentAttachmentService::class);
+
+                        $assessmentData = $assessmentService->tryGenerateTempAttachments((int) $candidate->id);
+                        $documents = $assessmentData['documents'] ?? [];
+                        $assessmentAttachments = $assessmentService->mapDocumentsToAttachmentLabels($documents);
+                        $candidateDocumentAttachments = $documentService->listAttachmentLabels((int) $candidate->id);
+                        $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments((int) $candidate->id);
+
                         $body = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
                             $candidate,
                             $personnelRequest,
                             $interview,
-                            'approve'
+                            'approve',
+                            $assessmentAttachments,
+                            $candidateDocumentAttachments
                         );
 
-                        SendEmail::where('to', $targetEmail)
+                        $attachments = array_merge(
+                            $assessmentService->buildSendEmailAttachments($documents),
+                            $candidateDocumentSendAttachments
+                        );
+
+                        $emailQuery = SendEmail::where('to', $targetEmail)
                             ->where('subject', 'Reminder Permohonan Persetujuan Kandidat - ' . $candidate->nama_lengkap)
                             ->where('body', $body)
-                            ->noReply()
-                            ->send();
+                            ->noReply();
+
+                        if (!empty($attachments)) {
+                            $emailQuery->where('attachment', $attachments);
+                        }
+
+                        $emailQuery->send();
 
                         DB::transaction(function () use ($candidate, $keptAt) {
                             (new RecruitmentStatusService())->update(
@@ -84,6 +109,10 @@ class SendKeptManagementDecisionReminders extends Command
                             'recruitment_id' => $candidate->id,
                             'message' => $exception->getMessage(),
                         ]);
+                    } finally {
+                        if (!empty($documents)) {
+                            app(GenerateAssessmentDocumentService::class)->cleanupDocuments($documents);
+                        }
                     }
                 }
             });

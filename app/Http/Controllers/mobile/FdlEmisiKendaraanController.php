@@ -13,6 +13,7 @@ use App\Models\Parameter;
 use App\Models\MasterRegulasi;
 use App\Models\MasterBakumutu;
 use App\Http\Controllers\Controller;
+use App\Services\FdlOrderDetailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -648,8 +649,14 @@ class FdlEmisiKendaraanController extends Controller
     }
 
     public function delete(Request $request){
-        $data = DataLapanganEmisiKendaraan::where('id', $request->id)->delete();
-        $emisiOrder = DataLapanganEmisiOrder::where('id_fdl', $request->id)->delete();
+        $record = DataLapanganEmisiKendaraan::where('id', $request->id)->first();
+        $noSampel = $record ? $record->no_sampel : null;
+
+        DataLapanganEmisiKendaraan::where('id', $request->id)->delete();
+        DataLapanganEmisiOrder::where('id_fdl', $request->id)->delete();
+
+        FdlOrderDetailService::nullTanggalTerimaByNoSampel($noSampel);
+
         return response()->json(['message' => 'Data Berhasil dihapus'], 200);
     }
 

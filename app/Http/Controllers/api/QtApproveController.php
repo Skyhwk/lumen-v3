@@ -311,8 +311,21 @@ class QtApproveController extends Controller
 
             // $emails = GetAtasan::where('id', $data->sales_id)->get()->pluck('email');
             // Jika $request->cc adalah array dengan satu elemen kosong, ubah menjadi array kosong
-            if (is_array($request->cc) && count($request->cc) === 1 && $request->cc[0] === "") {
+            // Bersihkan $request->cc jika null, kosong, atau bukan email
+            if (is_null($request->cc) || $request->cc === "" || (is_array($request->cc) && count($request->cc) === 1 && $request->cc[0] === "")) {
                 $request->cc = [];
+            } elseif (is_array($request->cc)) {
+                // Validasi hanya alamat email valid yang boleh masuk
+                $request->cc = array_values(array_filter($request->cc, function($email) {
+                    return filter_var($email, FILTER_VALIDATE_EMAIL);
+                }));
+            } else {
+                // Jika cc berupa string, cek validitasnya, jika bukan email, jadikan array kosong
+                if (!filter_var($request->cc, FILTER_VALIDATE_EMAIL)) {
+                    $request->cc = [];
+                } else {
+                    $request->cc = [$request->cc];
+                }
             }
             
             $email = SendEmail::where('to', $request->to)

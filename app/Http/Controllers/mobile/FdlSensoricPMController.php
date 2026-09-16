@@ -17,6 +17,7 @@ use App\Models\ParameterFdl;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -406,6 +407,7 @@ class FdlSensoricPMController extends Controller
                     unlink($foto_lain);
                 }
                 $data->delete();
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($data->no_sampel ?? $cek->no_sampel ?? null);
 
                 return response()->json([
                     'message' => 'Data has ben Delete',

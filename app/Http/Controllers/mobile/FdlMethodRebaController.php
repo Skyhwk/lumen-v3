@@ -20,6 +20,7 @@ use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
+use App\Services\FdlOrderDetailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -696,7 +697,10 @@ class FdlMethodRebaController extends Controller
             if (is_file($foto_belakang)) {
                 unlink($foto_belakang);
             }
+            $noSampel = $cek->no_sampel;
             $cek->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaIfNoErgonomiRemaining($noSampel);
             return response()->json([
                 'message' => 'Data has ben Deleted',
                 'cat' => 1

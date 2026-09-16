@@ -10,10 +10,12 @@ use App\Services\RecruitmentPictureService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
 
 class AtsArchivedCandidatesController extends Controller
 {
     use BuildsCandidateAssessmentPreview;
+    use OrdersAtsDataTableColumns;
 
     private function getTtlString($row)
     {
@@ -101,7 +103,7 @@ class AtsArchivedCandidatesController extends Controller
             ->where('personnel_request_id', '!=', '')
             ->orderBy('id', 'desc');
 
-        return DataTables::of($query)
+        $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {
                 return optional($row->personalRequest)->no_request ?? '-';
             })
@@ -197,8 +199,9 @@ class AtsArchivedCandidatesController extends Controller
                             ->orWhere('matching_score', 'like', "%{$cleanVal}%");
                     });
                 }
-            })
-            ->toJson();
+            });
+
+        return $this->applyRecruitmentCoreDataTableOrdering($datatable)->toJson();
     }
 
     public function candidateDetail(Request $request)

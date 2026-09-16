@@ -23,6 +23,7 @@ use App\Models\ParameterFdl;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -312,6 +313,8 @@ class FdlGetaranController extends Controller
                 }
 
                 $data->delete();
+
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sample);
 
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Getaran dengan nomor sampel $no_sample")->save();
 

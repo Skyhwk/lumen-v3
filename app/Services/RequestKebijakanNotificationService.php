@@ -181,6 +181,19 @@ class RequestKebijakanNotificationService
         return in_array((int) $employee->id, self::getApprovalMenuUserIds(), true);
     }
 
+    public static function employeeHasMenuAccess($employee, string $menuPath, array $requiredAccessTypes = ['view']): bool
+    {
+        if (!$employee || empty($employee->id)) {
+            return false;
+        }
+
+        return in_array(
+            (int) $employee->id,
+            self::getUserIdsByMenuPath($menuPath, $requiredAccessTypes),
+            true
+        );
+    }
+
     private static function getDirectorUserIds(): array
     {
         return MasterKaryawan::query()
