@@ -258,7 +258,7 @@ class GenerateFeeSampling
                 if ($itemDriver) {
                     $driver = MasterKaryawan::where('nama_lengkap', $itemDriver->driver)->where('is_active', 1)->first();
                     if ($driver) {
-                        $feeDriver = MasterFeeDriver::where('driver_id', $driver->id)->where('is_active', 1)->first();
+                        $feeDriver = MasterFeeDriver::where('driver_id', $driver->user_id)->where('is_active', 1)->first();
                         if ($feeDriver) {
                             $feeTambahan += $feeDriver->fee;
                             $feeTambahanRincian['driver'] = $feeDriver->fee;
