@@ -47,13 +47,59 @@ class BiayaOperasionalController extends Controller
         ], 200);
     }
 
+    public function counts(Request $request)
+    {
+        $scopes = $request->input('scopes', ['create', 'ongoing', 'completed', 'void']);
+        if (!is_array($scopes)) {
+            $scopes = ['create', 'ongoing', 'completed', 'void'];
+        }
+
+        $counts = [];
+        foreach ($scopes as $scope) {
+            $counts[$scope] = $this->buildScopeQuery($request, (string) $scope)->count();
+        }
+
+        return response()->json([
+            'data' => ['counts' => $counts],
+            'message' => 'BO tab counts retrieved successfully',
+        ], 200);
+    }
+
     public function index(Request $request)
     {
         $scope = $request->input('scope', 'request');
+        $query = $this->buildScopeQuery($request, $scope)->with(['items', 'receipts']);
 
-        $query = BiayaOperasional::with(['items', 'receipts'])
-            ->latest('created_at');
+        return DataTables::of($query)
+            ->addColumn('needs_summary', fn($row) => $row->items->pluck('need_name')->join(', '))
+            ->addColumn('display_status', fn($row) => $this->displayStatus($row->status))
+            ->addColumn('total_prepared', fn($row) => $row->items->sum('prepared_amount'))
+            ->addColumn('total_used', fn($row) => $row->items->sum('used_amount'))
+            ->addColumn('balance', fn($row) => $row->items->sum('prepared_amount') - $row->items->sum('used_amount'))
+            ->filterColumn('needs_summary', function ($query, $keyword) {
+                $query->whereHas('items', fn($sub) => $sub->where('need_name', 'like', "%{$keyword}%"));
+            })
+            ->filterColumn('bo_number', fn($query, $keyword) => $query->where('bo_number', 'like', "%{$keyword}%"))
+            ->filterColumn('person_in_charge', fn($query, $keyword) => $query->where('person_in_charge', 'like', "%{$keyword}%"))
+            ->filterColumn('destination', fn($query, $keyword) => $query->where('destination', 'like', "%{$keyword}%"))
+            ->filterColumn('created_by', fn($query, $keyword) => $query->where('created_by', 'like', "%{$keyword}%"))
+            ->make(true);
+    }
 
+    private function buildScopeQuery(Request $request, string $scope)
+    {
+        $query = BiayaOperasional::query()->latest('created_at');
+        $this->applyScopeFilter($query, $scope);
+
+        if (in_array($scope, ['create', 'request', 'ongoing', 'completed', 'void'], true)) {
+            $query = $this->applyRequestEmployeeScope($query, $request);
+        }
+
+        return $query;
+    }
+
+    private function applyScopeFilter($query, string $scope): void
+    {
         switch ($scope) {
             case 'create':
             case 'request':
@@ -89,25 +135,6 @@ class BiayaOperasionalController extends Controller
                 $query->where('is_active', true)->whereIn('status', ['approved', 'prepared']);
                 break;
         }
-
-        if (in_array($scope, ['create', 'request', 'ongoing', 'completed', 'void'], true)) {
-            $query = $this->applyRequestEmployeeScope($query, $request);
-        }
-
-        return DataTables::of($query)
-            ->addColumn('needs_summary', fn($row) => $row->items->pluck('need_name')->join(', '))
-            ->addColumn('display_status', fn($row) => $this->displayStatus($row->status))
-            ->addColumn('total_prepared', fn($row) => $row->items->sum('prepared_amount'))
-            ->addColumn('total_used', fn($row) => $row->items->sum('used_amount'))
-            ->addColumn('balance', fn($row) => $row->items->sum('prepared_amount') - $row->items->sum('used_amount'))
-            ->filterColumn('needs_summary', function ($query, $keyword) {
-                $query->whereHas('items', fn($sub) => $sub->where('need_name', 'like', "%{$keyword}%"));
-            })
-            ->filterColumn('bo_number', fn($query, $keyword) => $query->where('bo_number', 'like', "%{$keyword}%"))
-            ->filterColumn('person_in_charge', fn($query, $keyword) => $query->where('person_in_charge', 'like', "%{$keyword}%"))
-            ->filterColumn('destination', fn($query, $keyword) => $query->where('destination', 'like', "%{$keyword}%"))
-            ->filterColumn('created_by', fn($query, $keyword) => $query->where('created_by', 'like', "%{$keyword}%"))
-            ->make(true);
     }
 
     private function applyRequestEmployeeScope($query, Request $request)

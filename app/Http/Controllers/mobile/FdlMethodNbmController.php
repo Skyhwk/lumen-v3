@@ -19,6 +19,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -589,7 +590,10 @@ class FdlMethodNbmController extends Controller
                 
                 InsertActivityFdl::by($this->user_id)->action('delete')->target("Mehtod NBM dengan nomor sampel $cek->no_sampel")->save();
 
+                $noSampel = $cek->no_sampel;
                 $cek->delete();
+
+                FdlOrderDetailService::nullTanggalTerimaIfNoErgonomiRemaining($noSampel);
                 DB::commit();
                 return response()->json([
                     'message' => 'Data has ben Deleted',

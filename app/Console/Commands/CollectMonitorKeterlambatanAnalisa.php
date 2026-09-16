@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class CollectMonitorKeterlambatanAnalisa extends Command
 {
-    protected $signature = 'collect:monitor-keterlambatan-analisa
+    protected $signature = 'monitorketerlambatananalisa
                             {--kategori= : Kategori spesifik, format id-nama (contoh: 1-Air)}
                             {--date= : Tanggal spesifik (Y-m-d)}
                             {--from= : Tanggal awal (Y-m-d)}

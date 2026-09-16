@@ -28,6 +28,8 @@ class KebijakanDokumenController extends Controller
                 'employee' => $employee,
                 'can_view' => $canView,
                 'can_director' => KebijakanDokumenService::canDirectorAct($employee),
+                'can_manual_create' => KebijakanDokumenService::canManualCreate($employee),
+                'is_programmer' => KebijakanDokumenService::isProgrammer($employee),
                 'counts' => $canView ? KebijakanDokumenService::getTabCounts() : [],
             ],
             'message' => 'Dokumen ketetapan perusahaan initialized successfully',
@@ -49,6 +51,8 @@ class KebijakanDokumenController extends Controller
         $employee = $request->attributes->get('user')->karyawan;
         $scope = $request->input('scope', 'pending_director');
         $query = KebijakanDokumenService::buildScopeQuery($scope);
+        $globalSearch = trim((string) $request->input('global_search', ''));
+        $query = KebijakanDokumenService::applyGlobalSearchToQuery($query, $globalSearch);
         $canDirector = KebijakanDokumenService::canDirectorAct($employee);
 
         return DataTables::of($query)
@@ -59,6 +63,8 @@ class KebijakanDokumenController extends Controller
             ->addColumn('terbitan', fn ($row) => $row->cetakan)
             ->addColumn('tanggal_terbit', fn ($row) => $row->tanggal_pengesahan)
             ->addColumn('can_director_act', fn () => $canDirector)
+            ->addColumn('is_manual', fn ($row) => KebijakanDokumenService::isManualDocument($row))
+            ->addColumn('can_manual_update', fn ($row) => KebijakanDokumenService::canUpdateManualDocument($employee, $row))
             ->filterColumn('no_dokumen', fn ($q, $keyword) => $q->where('kebijakan_dokumen.no_dokumen', 'like', "%{$keyword}%"))
             ->filterColumn('divisi_bagian', function ($q, $keyword) {
                 $q->whereHas('drafting', fn ($sub) => $sub->where('divisi_bagian', 'like', "%{$keyword}%"));
@@ -106,6 +112,100 @@ class KebijakanDokumenController extends Controller
             'data' => base64_encode($pdfString),
             'message' => 'PDF berhasil dibuat',
         ], 200);
+    }
+
+    public function manualCreateOptions(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+
+        if (!KebijakanDokumenService::canManualCreate($employee)) {
+            return response()->json([
+                'message' => 'Anda tidak memiliki akses membuat ketetapan perusahaan secara manual',
+            ], 403);
+        }
+
+        return response()->json([
+            'data' => KebijakanDokumenService::getManualCreateOptions(),
+            'message' => 'Opsi create manual berhasil diambil',
+        ], 200);
+    }
+
+    public function showManual(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $dokumen = KebijakanDokumen::with(['drafting', 'requestKebijakan'])->findOrFail($request->id);
+
+        if (!KebijakanDokumenService::canUpdateManualDocument($employee, $dokumen)) {
+            return response()->json([
+                'message' => 'Anda tidak memiliki akses mengubah ketetapan manual ini',
+            ], 403);
+        }
+
+        return response()->json([
+            'data' => KebijakanDokumenService::buildManualEditPayload($dokumen),
+            'message' => 'Detail ketetapan manual berhasil diambil',
+        ], 200);
+    }
+
+    public function updateManual(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+        $dokumenId = (int) $request->input('id', 0);
+
+        if ($dokumenId <= 0) {
+            return response()->json(['message' => 'ID dokumen wajib diisi'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $dokumen = KebijakanDokumenService::updateManualActiveDocument($employee, $dokumenId, $request->all());
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Ketetapan manual berhasil diperbarui',
+                'data' => [
+                    'id' => $dokumen->id,
+                    'no_dokumen' => $dokumen->no_dokumen,
+                    'revisian' => $dokumen->revisian,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json(['message' => $th->getMessage()], 422);
+        }
+    }
+
+    public function storeManual(Request $request)
+    {
+        $employee = $request->attributes->get('user')->karyawan;
+
+        if (!KebijakanDokumenService::canManualCreate($employee)) {
+            return response()->json([
+                'message' => 'Anda tidak memiliki akses membuat ketetapan perusahaan secara manual',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $dokumen = KebijakanDokumenService::createManualActiveDocument($employee, $request->all());
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Ketetapan perusahaan berhasil dibuat secara manual',
+                'data' => [
+                    'id' => $dokumen->id,
+                    'no_dokumen' => $dokumen->no_dokumen,
+                    'revisian' => $dokumen->revisian,
+                ],
+            ], 201);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
+            return response()->json(['message' => $th->getMessage()], 422);
+        }
     }
 
     public function process(Request $request)

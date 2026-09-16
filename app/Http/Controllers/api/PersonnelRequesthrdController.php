@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
@@ -16,11 +16,36 @@ use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentStatusService;
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
+use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
+use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
 use Illuminate\Support\Facades\Schema;
 
 class PersonnelRequesthrdController extends Controller
 {
     use BuildsCandidateAssessmentPreview;
+    use OrdersAtsDataTableColumns;
+    use ServesAtsClientSideList;
+
+    /**
+     * Get tab counts for personnel request list (on process / completed)
+     */
+    public function counts(Request $request)
+    {
+        try {
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'counts' => [
+                        'on_process' => $this->buildPersonnelRequestListQuery($request, 0)->count(),
+                        'completed' => $this->buildPersonnelRequestListQuery($request, 1)->count(),
+                    ],
+                ],
+                'message' => 'Personnel request tab counts retrieved successfully',
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 501);
+        }
+    }
 
     /**
      * Get list of personal requests for DataTables
@@ -28,19 +53,14 @@ class PersonnelRequesthrdController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = PersonnelRequest::with(['masterJabatan', 'masterDivisi'])
+            $query = $this->buildPersonnelRequestListQuery($request, (int) ($request->completed ?? 0))
+                ->with(['masterJabatan', 'masterDivisi'])
                 ->withCount(['newRecruitments as total_pelamar' => function ($query) {
                     $this->constrainCountedApplicants($query);
                 }])
-                ->where('is_active',1)
-                ->where('is_completed', $request->completed ?? 0)
                 ->orderBy('id', 'desc');
 
-            if ($request->has('year') && !empty($request->year)) {
-                $query->whereYear('created_at', $request->year);
-            }
-
-            return Datatables::of($query)
+            $datatable = DataTables::of($query)
                 ->editColumn('posisi', function ($row) {
                     if ($row->masterJabatan && !empty($row->masterJabatan->nama_jabatan)) {
                         return $row->masterJabatan->nama_jabatan;
@@ -160,7 +180,23 @@ class PersonnelRequesthrdController extends Controller
                 ->filterColumn('request_by', function ($q, $keyword) {
                     $q->where('created_by', 'like', "%{$keyword}%");
                 })
-                ->make(true);
+                ->filterColumn('created_at', function ($q, $keyword) {
+                    $keyword = trim($keyword);
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('created_at', 'like', "%{$keyword}%")
+                            ->orWhereRaw("DATE_FORMAT(created_at, '%d-%m-%Y') LIKE ?", ["%{$keyword}%"])
+                            ->orWhereRaw("DATE_FORMAT(created_at, '%d/%m/%Y') LIKE ?", ["%{$keyword}%"])
+                            ->orWhereRaw("DATE_FORMAT(created_at, '%d %b %Y') LIKE ?", ["%{$keyword}%"])
+                            ->orWhereRaw("DATE_FORMAT(created_at, '%d %M %Y') LIKE ?", ["%{$keyword}%"]);
+                    });
+                });
+
+            $clientSide = $this->serveAtsClientSideList($datatable);
+            if ($clientSide) {
+                return $clientSide;
+            }
+
+            return $this->applyPersonnelRequestDataTableOrdering($datatable)->make(true);
         } catch (\Throwable $th) {
             return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],501);
         }
@@ -414,10 +450,6 @@ class PersonnelRequesthrdController extends Controller
             return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
         }
 
-        if ((int) ($personnelRequest->is_publish ?? 0) !== 1) {
-            return response()->json(['message' => 'Preview kandidat hanya tersedia untuk request yang sudah dipublish'], 422);
-        }
-
         $candidates = NewRecruitment::with(['hrdInterview', 'userInterview'])
             ->where('personnel_request_id', $id)
             ->where('is_active', 1)
@@ -427,6 +459,10 @@ class PersonnelRequesthrdController extends Controller
                 return !RecruitmentStatusService::isRejectedKandidat($candidate);
             })
             ->values();
+
+        if ((int) ($personnelRequest->is_publish ?? 0) !== 1 && $candidates->isEmpty()) {
+            return response()->json(['message' => 'Preview kandidat hanya tersedia untuk request yang sudah dipublish atau memiliki kandidat'], 422);
+        }
 
         $statusCounts = $candidates
             ->groupBy(function ($candidate) {
@@ -808,6 +844,8 @@ class PersonnelRequesthrdController extends Controller
                 ->select(
                     'nr.id',
                     'nr.nama_lengkap',
+                    'nr.email',
+                    'nr.no_telepon',
                     'nr.posisi_dilamar',
                     'pr.posisi as pr_posisi',
                     'mj.nama_jabatan'
@@ -817,18 +855,9 @@ class PersonnelRequesthrdController extends Controller
                 ->unique('id')
                 ->values();
 
-            $candidates = $rows->map(function ($row) {
-                $position = $row->nama_jabatan
-                    ?: ((!is_numeric($row->pr_posisi) && !empty($row->pr_posisi)) ? $row->pr_posisi : null)
-                    ?: ((!is_numeric($row->posisi_dilamar) && !empty($row->posisi_dilamar)) ? $row->posisi_dilamar : null)
-                    ?: '-';
-
-                return [
-                    'id' => (int) $row->id,
-                    'nama_lengkap' => $row->nama_lengkap ?: '-',
-                    'posisi_dilamar' => $position,
-                ];
-            })->values();
+            $candidates = $step === 'join'
+                ? $this->mapPipelineJoinCandidates($rows)
+                : $this->mapPipelineDefaultCandidates($rows);
 
             return response()->json([
                 'status' => 'success',
@@ -844,6 +873,118 @@ class PersonnelRequesthrdController extends Controller
                 'message' => 'Gagal memuat daftar kandidat pipeline: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function mapPipelineDefaultCandidates($rows)
+    {
+        return $rows->map(function ($row) {
+            return [
+                'id' => (int) $row->id,
+                'nama_lengkap' => $row->nama_lengkap ?: '-',
+                'email' => $row->email ?: '-',
+                'no_telepon' => $row->no_telepon ?: '-',
+                'posisi_dilamar' => $this->resolvePipelineCandidatePosition($row),
+            ];
+        })->values();
+    }
+
+    private function mapPipelineJoinCandidates($rows)
+    {
+        if ($rows->isEmpty()) {
+            return collect();
+        }
+
+        $ids = $rows->pluck('id')->filter()->values()->all();
+        $profiles = Schema::hasTable('candidate_profiles')
+            ? DB::table('candidate_profiles')->whereIn('new_recruitment_id', $ids)->get()->keyBy('new_recruitment_id')
+            : collect();
+        $offers = Schema::hasTable('candidate_data_offers')
+            ? DB::table('candidate_data_offers')->whereIn('new_recruitment_id', $ids)->get()->keyBy('new_recruitment_id')
+            : collect();
+        $verifications = Schema::hasTable('candidate_onboarding_verification')
+            ? DB::table('candidate_onboarding_verification')->whereIn('new_recruitment_id', $ids)->get()->keyBy('new_recruitment_id')
+            : collect();
+
+        $emails = $rows->pluck('email')
+            ->map(fn($email) => strtolower(trim((string) $email)))
+            ->filter()
+            ->unique()
+            ->values();
+        $niks = $profiles->pluck('nik_ktp')
+            ->map(fn($nik) => trim((string) $nik))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $karyawanRows = collect();
+        if ($emails->isNotEmpty() || $niks->isNotEmpty()) {
+            $karyawanRows = DB::table('master_karyawan')
+                ->select('id', 'nama_lengkap', 'email', 'email_pribadi', 'nik_ktp', 'tgl_mulai_kerja', 'is_active')
+                ->where(function ($query) use ($emails, $niks) {
+                    if ($emails->isNotEmpty()) {
+                        $query->where(function ($sub) use ($emails) {
+                            foreach ($emails as $email) {
+                                $sub->orWhereRaw('LOWER(TRIM(email)) = ?', [$email])
+                                    ->orWhereRaw('LOWER(TRIM(email_pribadi)) = ?', [$email]);
+                            }
+                        });
+                    }
+
+                    if ($niks->isNotEmpty()) {
+                        $method = $emails->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                        $query->{$method}('nik_ktp', $niks->all());
+                    }
+                })
+                ->get();
+        }
+
+        return $rows->map(function ($row) use ($profiles, $offers, $verifications, $karyawanRows) {
+            $email = strtolower(trim((string) ($row->email ?? '')));
+            $nikKtp = trim((string) optional($profiles->get($row->id))->nik_ktp);
+            $karyawan = $this->resolvePipelineJoinKaryawan($karyawanRows, $email, $nikKtp);
+            $isActive = $karyawan ? ((int) ($karyawan->is_active ?? 0) === 1) : false;
+            $tanggalJoin = optional($karyawan)->tgl_mulai_kerja
+                ?: optional($verifications->get($row->id))->employee_migrated_at
+                ?: optional($offers->get($row->id))->tanggal_mulai_kerja;
+
+            return [
+                'id' => (int) $row->id,
+                'nama_lengkap' => $row->nama_lengkap ?: '-',
+                'posisi_dilamar' => $this->resolvePipelineCandidatePosition($row),
+                'tanggal_join' => $tanggalJoin ?: null,
+                'status_karyawan' => $isActive ? 'Aktif' : 'Tidak Aktif',
+                'karyawan_is_active' => $isActive,
+                'karyawan_id' => $karyawan ? (int) $karyawan->id : null,
+            ];
+        })->values();
+    }
+
+    private function resolvePipelineCandidatePosition($row)
+    {
+        $position = $row->nama_jabatan
+            ?: ((!is_numeric($row->pr_posisi) && !empty($row->pr_posisi)) ? $row->pr_posisi : null)
+            ?: ((!is_numeric($row->posisi_dilamar) && !empty($row->posisi_dilamar)) ? $row->posisi_dilamar : null)
+            ?: '-';
+
+        return $position ?: '-';
+    }
+
+    private function resolvePipelineJoinKaryawan($karyawanRows, string $email, string $nikKtp)
+    {
+        return $karyawanRows->first(function ($karyawan) use ($email, $nikKtp) {
+            $karyawanEmail = strtolower(trim((string) ($karyawan->email ?? '')));
+            $karyawanEmailPribadi = strtolower(trim((string) ($karyawan->email_pribadi ?? '')));
+
+            if ($email !== '' && ($karyawanEmail === $email || $karyawanEmailPribadi === $email)) {
+                return true;
+            }
+
+            if ($nikKtp !== '' && trim((string) ($karyawan->nik_ktp ?? '')) === $nikKtp) {
+                return true;
+            }
+
+            return false;
+        });
     }
 
     private function pipelineStepStatuses()
@@ -900,6 +1041,19 @@ class PersonnelRequesthrdController extends Controller
                 $q->whereYear('nr.created_at', $request->year)
                     ->orWhereNull('nr.created_at');
             });
+        }
+
+        return $query;
+    }
+
+    private function buildPersonnelRequestListQuery(Request $request, int $completed)
+    {
+        $query = PersonnelRequest::query()
+            ->where('is_active', 1)
+            ->where('is_completed', $completed);
+
+        if ($request->has('year') && !empty($request->year)) {
+            $query->whereYear('created_at', $request->year);
         }
 
         return $query;

@@ -21,6 +21,7 @@ use App\Models\ParameterFdl;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
+use App\Services\FdlOrderDetailService;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -854,6 +855,9 @@ class FdlLingkunganKerjaController extends Controller
 
             InsertActivityFdl::by($this->user_id)->action('delete')->target("Lingkungan Kerja Udara pada nomor sampel $no_sampel")->save();
 
+            FdlOrderDetailService::nullTanggalTerimaByNoSampel($no_sampel);
+
+
             DB::commit();
 
             return response()->json([
@@ -889,10 +893,12 @@ class FdlLingkunganKerjaController extends Controller
                 ->target("parameter $parameter di nomor sampel {$request->no_sampel}")
                 ->save();
 
+            FdlOrderDetailService::finalizeLingkunganKerjaPartialDelete($request->no_sampel);
+
             DB::commit();
 
             return response()->json([
-                'message' => "Fdl LH parameter $parameter di no sample {$request->no_sampel} berhasil dihapus oleh {$this->karyawan}.!",
+                'message' => "Fdl LK parameter $parameter di no sample {$request->no_sampel} berhasil dihapus oleh {$this->karyawan}.!",
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -913,10 +919,12 @@ class FdlLingkunganKerjaController extends Controller
             
             InsertActivityFdl::by($this->user_id)->action('delete')->target(" shift $request->shift di nomor sampel $request->no_sampel")->save();
 
+            FdlOrderDetailService::finalizeLingkunganKerjaPartialDelete($request->no_sampel);
+
             DB::commit();
 
             return response()->json([
-                'message' => "Fdl LH shift $request->shift di no sample $request->no_sampel berhasil dihapus oleh {$this->karyawan}.!",
+                'message' => "Fdl LK shift $request->shift di no sample $request->no_sampel berhasil dihapus oleh {$this->karyawan}.!",
             ]);
         } catch (\Exception $th) {
             return response()->json([
@@ -945,13 +953,14 @@ class FdlLingkunganKerjaController extends Controller
                 'message' => $message,
                 'kategori' => 1
             ], 201);
-        } else {
-            DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($noSampel)))->delete();
-            return response()->json([
-                'message' => $message,
-                'kategori' => 2
-            ], 201);
         }
+
+        FdlOrderDetailService::finalizeLingkunganKerjaPartialDelete($noSampel);
+
+        return response()->json([
+            'message' => $message,
+            'kategori' => 2
+        ], 201);
     }
 
     private function handleIndividualParameterDeletion($request)
@@ -959,26 +968,22 @@ class FdlLingkunganKerjaController extends Controller
         $detail = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sampel)))->get();
         $detailToDelete = DetailLingkunganKerja::where('id', $request->id)->first();
         $header = DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
-        $header->is_rejected = 0;
-        $header->save();
-        
+        if ($header) {
+            $header->is_rejected = 0;
+            $header->save();
+        }
+
         $nama = $this->karyawan;
         $message = "Fdl LK parameter {$detail->first()->parameter} di no sample {$detail->first()->no_sampel} berhasil dihapus oleh {$nama}!";
-        
-        if ($detail->count() > 1) {
-            $detailToDelete->delete();
-            return response()->json([
-                'message' => $message,
-                'kategori' => 1
-            ], 201);
-        } else {
-            $header->delete();
-            $detailToDelete->delete();
-            return response()->json([
-                'message' => $message,
-                'kategori' => 2
-            ], 201);
-        }
+        $kategori = $detail->count() > 1 ? 1 : 2;
+
+        $detailToDelete->delete();
+        FdlOrderDetailService::finalizeLingkunganKerjaPartialDelete($request->no_sampel);
+
+        return response()->json([
+            'message' => $message,
+            'kategori' => $kategori
+        ], 201);
     }
 
     public function convertImg($foto = '', $type = '', $user = '')
