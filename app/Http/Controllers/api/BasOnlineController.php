@@ -1485,6 +1485,12 @@ class BasOnlineController extends Controller
                 return response()->json(['message' => 'Data persiapan sampel tidak ditemukan.'], 404);
             }
 
+            if (!$persiapanHeaderKategori->is_emailed_bas) {
+                return response()->json([
+                    'message' => 'Dokumen tidak dapat di-regenerate karena Sampler belum melakukan email BAS kepada customer.',
+                ], 422);
+            }
+
             // ── Ambil entry terakhir dari detail_bas_documents ────────
             $allDocuments = json_decode($persiapanHeaderKategori->detail_bas_documents ?? '[]', true) ?? [];
 
