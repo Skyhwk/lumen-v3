@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\MasterKaryawan;
 use App\Models\SamplerTrackingSession;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -104,11 +103,11 @@ class SamplerTrackingTroubleService
         return DB::transaction(function () use ($troubleId, $actorId, $note) {
             $trouble = DB::table(self::TABLE)->where('id', $troubleId)->lockForUpdate()->first();
             if (!$trouble) throw new HttpException(404, 'Data trouble tidak ditemukan.');
-            $employee = MasterKaryawan::where('id', $trouble->sampler_id)->where('is_active', true)->first();
-            $superiors = $employee ? json_decode($employee->atasan_langsung, true) : [];
-            if (!$actorId || (string) $actorId === (string) $trouble->sampler_id || !in_array((string) $actorId, array_map('strval', is_array($superiors) ? $superiors : []), true)) {
-                throw new HttpException(403, 'Hanya atasan langsung sampler yang dapat membuka aktivitas ini.');
-            }
+            // The Tracking Sampler menu already determines who can use this
+            // action. Do not additionally hide or lock a trouble based on the
+            // sampler's direct-supervisor snapshot, because that data can be
+            // stale after a team/supervisor change.
+            if (!$actorId) throw new HttpException(403, 'Akses tidak diizinkan.');
             if ($trouble->is_clear) throw new HttpException(422, 'Aktivitas ini sudah selesai.');
             DB::table(self::TABLE)->where('id', $troubleId)->update([
                 'reopened_by' => $actorId, 'reopened_at' => Carbon::now('Asia/Jakarta'),
