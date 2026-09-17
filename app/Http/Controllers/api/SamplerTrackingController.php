@@ -4,7 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Services\SamplerTrackingService;
+use App\Services\SamplerTrackingTroubleService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SamplerTrackingController extends Controller
 {
@@ -19,6 +22,10 @@ class SamplerTrackingController extends Controller
     public function index(Request $request)
     {
         if ($request->has('draw')) {
+            if ($request->tracking_status === 'trouble') {
+                return response()->json($this->teamTroubleDataTable($request));
+            }
+
             return response()->json($this->service->dataTableByDate(
                 $request,
                 $request->sampler_id,
@@ -146,18 +153,89 @@ class SamplerTrackingController extends Controller
     public function teamTroubles(Request $request)
     {
         if (!$this->user_id) abort(403, 'Akses tidak diizinkan.');
-        $samplers = \App\Models\MasterKaryawan::where('is_active', true)
-            ->where(function ($query) {
-                $query->whereJsonContains('atasan_langsung', (string) $this->user_id)
-                    ->orWhereJsonContains('atasan_langsung', (int) $this->user_id);
-            })->get(['id', 'nama_lengkap']);
-        $service = new \App\Services\SamplerTrackingTroubleService();
-        $data = $samplers->flatMap(function ($sampler) use ($service) {
-            return $service->unresolved($sampler->id)->map(function ($trouble) use ($sampler) {
-                $trouble->sampler_name = $sampler->nama_lengkap;
-                return $trouble;
-            });
-        })->values();
-        return response()->json(['success' => true, 'data' => $data]);
+        return response()->json(['success' => true, 'data' => $this->teamTroubleRows()]);
+    }
+
+    protected function supervisedSamplers()
+    {
+        // Trouble is an operational queue for every user allowed to open the
+        // Tracking Sampler menu. It must not be filtered by atasan_langsung:
+        // that relation is a snapshot and can be stale after team changes.
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $samplerIds = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('is_clear', 0)
+            ->whereNull('reopened_at')
+            ->where('activity_date', '<', $today)
+            ->distinct()
+            ->pluck('sampler_id');
+
+        return \App\Models\MasterKaryawan::where('is_active', true)
+            ->whereIn('id', $samplerIds)
+            ->get(['id', 'nama_lengkap']);
+    }
+
+    protected function teamTroubleRows()
+    {
+        if (!$this->user_id) abort(403, 'Akses tidak diizinkan.');
+
+        $samplers = $this->supervisedSamplers();
+        $service = new SamplerTrackingTroubleService();
+        return $samplers->flatMap(function ($sampler) use ($service) {
+            return $service->unresolved($sampler->id)
+                // An opened trouble remains unresolved for the sampler until
+                // the old activity is completed, but no longer needs action
+                // from the supervisor and must leave this supervisor table.
+                ->filter(function ($trouble) {
+                    return empty($trouble->reopened_at);
+                })
+                ->map(function ($trouble) use ($sampler) {
+                    $trackingRows = $this->service->listTrackingRows(
+                        $trouble->activity_date,
+                        $sampler->id,
+                        $sampler->nama_lengkap
+                    )['data'];
+
+                    return $trackingRows->map(function ($row) use ($trouble) {
+                        $trouble->sampler_name = $row['sampler'] ?? null;
+                        $row['trouble'] = $trouble;
+                        $row['trouble_id'] = $trouble->id;
+                        return $row;
+                    });
+                });
+        })->flatten(1)->values();
+    }
+
+    protected function teamTroubleDataTable(Request $request)
+    {
+        $rows = $this->teamTroubleRows();
+        $recordsTotal = $rows->count();
+        $search = strtolower(trim((string) $request->input('search.value', '')));
+
+        if ($search !== '') {
+            $rows = $rows->filter(function ($row) use ($search) {
+                return strpos(strtolower(implode(' ', [
+                    $row['tanggal_sampling'] ?? '',
+                    $row['nama_perusahaan'] ?? '',
+                    $row['sampler'] ?? '',
+                    $row['no_order'] ?? '',
+                    $row['movement_group'] ?? '',
+                ])), $search) !== false;
+            })->values();
+        }
+
+        $recordsFiltered = $rows->count();
+        $start = (int) ($request->start ?? 0);
+        $length = (int) ($request->length ?? 25);
+        if ($length > -1) {
+            $rows = $rows->slice($start, $length)->values();
+        }
+
+        return [
+            'draw' => (int) ($request->draw ?? 0),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'tracking_status_counts' => [],
+            'data' => $rows,
+        ];
     }
 }
