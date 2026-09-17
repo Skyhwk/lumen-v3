@@ -26,15 +26,17 @@ class SamplerTrackingController extends Controller
             ));
         }
 
-        $data = $this->service->listByDate(
+        $data = $this->service->listTrackingRows(
             $request->tanggal,
             $request->sampler_id,
-            $request->sampler_name
+            $request->sampler_name,
+            $request->tracking_status
         );
 
         return response()->json([
             'success' => true,
-            'data' => $data,
+            'data' => $data['data'],
+            'tracking_status_counts' => $data['tracking_status_counts'],
         ]);
     }
 

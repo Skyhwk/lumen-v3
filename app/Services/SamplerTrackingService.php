@@ -343,6 +343,9 @@ class SamplerTrackingService
     {
         $date = $request->input('tanggal') ?: $this->today();
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
+        $trackingStatusCounts = $this->trackingStatusCounts($rows);
+
+        $rows = $this->filterByTrackingStatus($rows, $request->input('tracking_status'));
         $recordsTotal = $rows->count();
 
         $rows = $this->filterTrackingRows($rows, $request);
@@ -359,7 +362,20 @@ class SamplerTrackingService
             'draw' => (int) ($request->draw ?? 0),
             'recordsTotal' => $recordsTotal,
             'recordsFiltered' => $recordsFiltered,
+            'tracking_status_counts' => $trackingStatusCounts,
             'data' => $rows->values(),
+        ];
+    }
+
+    public function listTrackingRows($date = null, $samplerId = null, $samplerName = null, $trackingStatus = null)
+    {
+        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
+        $trackingStatusCounts = $this->trackingStatusCounts($rows);
+        $rows = $this->filterByTrackingStatus($rows, $trackingStatus);
+
+        return [
+            'data' => $rows->values(),
+            'tracking_status_counts' => $trackingStatusCounts,
         ];
     }
 
@@ -392,6 +408,7 @@ class SamplerTrackingService
                         'no_orders' => collect(),
                         'perusahaan' => collect(),
                         'durations' => collect(),
+                        'duration_values' => collect(),
                         'movement_groups' => collect(),
                         'statuses' => collect(),
                         'jam_mulai' => null,
@@ -406,6 +423,7 @@ class SamplerTrackingService
                 $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
                 $item['perusahaan']->push($session->nama_perusahaan ?: '-');
                 $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi])));
+                $item['duration_values']->push($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi]));
                 $item['movement_groups']->push($member->current_movement_group ?: '-');
                 $item['statuses']->push($session->status ?: '-');
 
@@ -429,6 +447,14 @@ class SamplerTrackingService
             $movementGroups = $this->uniqueValues($row['movement_groups']);
             $lastEvent = $this->latestEvent($row['events']);
             $sampler = $row['sampler'] ?: '-';
+            $durationValue = $row['duration_values']
+                ->map(function ($value) {
+                    return is_numeric($value) ? (int) $value : null;
+                })
+                ->filter(function ($value) {
+                    return $value !== null;
+                })
+                ->max();
 
             return [
                 'row_id' => $row['date'] . '-' . $row['member_key'],
@@ -453,6 +479,13 @@ class SamplerTrackingService
                 'total_event' => $row['events']->count(),
                 'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
                 'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
+                'tracking_status' => $this->resolveTrackingStatus(
+                    $row['events'],
+                    $row['date'],
+                    $row['jam_mulai'],
+                    $row['jam_selesai'],
+                    $durationValue
+                ),
             ];
         });
     }
@@ -472,6 +505,7 @@ class SamplerTrackingService
                 $row['movement_group'] ?? '',
                 $row['last_event'] ?? '',
                 $row['status'] ?? '',
+                $row['tracking_status'] ?? '',
             ]));
 
             if ($globalSearch && strpos($searchText, $globalSearch) === false) {
@@ -611,6 +645,171 @@ class SamplerTrackingService
         }
 
         return ($numberValue - 1) . ' x 24 Jam';
+    }
+
+    public function resolveTrackingStatus($events, $tanggalSampling = null, $jamMulai = null, $jamSelesai = null, $durationValue = null, $now = null)
+    {
+        $hasReturn = collect($events)->contains(function ($event) {
+            return $this->eventValue($event, 'event_type') === 'return';
+        });
+
+        if ($hasReturn) {
+            return 'completed';
+        }
+
+        $dueAt = $this->resolveTrackingDueAt($events, $tanggalSampling, $jamMulai, $jamSelesai, $durationValue);
+        $now = $now instanceof Carbon ? $now->copy() : $this->now();
+
+        if ($dueAt && $now->gt($dueAt)) {
+            return 'overdue';
+        }
+
+        return 'ongoing';
+    }
+
+    protected function normalizeTrackingStatus($value)
+    {
+        $status = strtolower(trim((string) $value));
+        $aliases = [
+            'ongoinh' => 'ongoing',
+            'on-going' => 'ongoing',
+            'on_going' => 'ongoing',
+            'selesai' => 'completed',
+            'belum_pulang' => 'overdue',
+        ];
+        $status = $aliases[$status] ?? $status;
+
+        return in_array($status, ['ongoing', 'completed', 'overdue'], true) ? $status : null;
+    }
+
+    protected function filterByTrackingStatus($rows, $trackingStatus)
+    {
+        $status = $this->normalizeTrackingStatus($trackingStatus);
+        if (!$status) {
+            return $rows;
+        }
+
+        return $rows->filter(function ($row) use ($status) {
+            return ($row['tracking_status'] ?? null) === $status;
+        })->values();
+    }
+
+    protected function trackingStatusCounts($rows)
+    {
+        $counts = [
+            'ongoing' => 0,
+            'completed' => 0,
+            'overdue' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $status = $row['tracking_status'] ?? null;
+            if (isset($counts[$status])) {
+                $counts[$status]++;
+            }
+        }
+
+        $counts['all'] = $rows->count();
+
+        return $counts;
+    }
+
+    protected function resolveTrackingDueAt($events, $tanggalSampling, $jamMulai, $jamSelesai, $durationValue)
+    {
+        $date = $this->parseTrackingDate($tanggalSampling);
+        if (!$date) {
+            return null;
+        }
+
+        $duration = is_numeric($durationValue) ? (int) $durationValue : null;
+        $start = $this->combineTrackingDateAndTime($date, $jamMulai)
+            ?: $this->firstEventAt($events, 'departure')
+            ?: $date->copy()->startOfDay();
+
+        if ($duration === null || $duration <= 1) {
+            $end = $this->combineTrackingDateAndTime($date, $jamSelesai);
+            if ($end) {
+                return $end;
+            }
+
+            if ($duration === 1) {
+                return $start->copy()->addHours(8);
+            }
+
+            return $date->copy()->endOfDay();
+        }
+
+        $endDate = $date->copy()->addDays($duration - 1);
+        $end = $this->combineTrackingDateAndTime($endDate, $jamSelesai);
+
+        return $end ?: $endDate->copy()->endOfDay();
+    }
+
+    protected function parseTrackingDate($value)
+    {
+        if ($value instanceof Carbon) {
+            return $value->copy()->timezone('Asia/Jakarta')->startOfDay();
+        }
+
+        if ($value === null || $value === '' || $value === '-') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value, 'Asia/Jakarta')->startOfDay();
+        } catch (\Exception $exception) {
+            return null;
+        }
+    }
+
+    protected function combineTrackingDateAndTime($date, $time)
+    {
+        if (!$date || $time === null || $time === '' || $time === '-') {
+            return null;
+        }
+
+        $time = trim((string) $time);
+
+        try {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}/', $time)) {
+                return Carbon::parse($time, 'Asia/Jakarta');
+            }
+
+            return Carbon::parse($date->toDateString() . ' ' . $time, 'Asia/Jakarta');
+        } catch (\Exception $exception) {
+            return null;
+        }
+    }
+
+    protected function firstEventAt($events, $eventType)
+    {
+        $event = collect($events)->first(function ($item) use ($eventType) {
+            return $this->eventValue($item, 'event_type') === $eventType;
+        });
+
+        $eventAt = $this->eventValue($event, 'event_at');
+        if (!$eventAt) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($eventAt, 'Asia/Jakarta');
+        } catch (\Exception $exception) {
+            return null;
+        }
+    }
+
+    protected function eventValue($event, $field)
+    {
+        if (!$event) {
+            return null;
+        }
+
+        if (is_array($event)) {
+            return $event[$field] ?? null;
+        }
+
+        return $event->{$field} ?? null;
     }
 
     protected function teamRouteKey($date, $sessions)
