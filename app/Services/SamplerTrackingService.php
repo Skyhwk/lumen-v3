@@ -231,6 +231,12 @@ class SamplerTrackingService
                         }
                     }
 
+                    // A sampler can be assigned after the team has already
+                    // departed or checked in. Give the new/current member the
+                    // same completed team milestones so their activity starts
+                    // from the team's actual progress, not from an empty form.
+                    $this->backfillTeamEventsForMember($member);
+
                     $activeMemberIds[] = $member->id;
                 }
 
@@ -367,10 +373,14 @@ class SamplerTrackingService
                 $memberKey = $member->sampler_id ?: $sampler;
                 $date = $session->tanggal_sampling ?: '-';
                 $key = $date . '|' . $memberKey;
+                // A member row remains useful for its own event history, but
+                // the movement identity shown by the fixing tool must follow
+                // the current session team, not the individual sampler.
+                $teamKey = $session->team_key ?: $key;
 
                 if (!$sessionsByMember->has($key)) {
                     $sessionsByMember->put($key, [
-                        'group_key' => $key,
+                        'group_key' => $teamKey,
                         'date' => $date,
                         'sampler' => $sampler,
                         'member_key' => $memberKey,
@@ -803,6 +813,67 @@ class SamplerTrackingService
         return SamplerTrackingEvent::where('sampler_tracking_member_id', $memberId)
             ->where('event_type', $eventType)
             ->exists();
+    }
+
+    /**
+     * Copy each already-completed milestone in a session to a member who was
+     * assigned later. The original event stays untouched and remains the
+     * source of its time, photo, coordinates, and actor.
+     */
+    protected function backfillTeamEventsForMember(SamplerTrackingMember $member): void
+    {
+        if (!$member->exists || !$member->sampler_tracking_session_id) {
+            return;
+        }
+
+        $existingTypes = SamplerTrackingEvent::where('sampler_tracking_member_id', $member->id)
+            ->pluck('event_type')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $sourceEvents = SamplerTrackingEvent::where('sampler_tracking_session_id', $member->sampler_tracking_session_id)
+            ->when($existingTypes->isNotEmpty(), function ($query) use ($existingTypes) {
+                $query->whereNotIn('event_type', $existingTypes->all());
+            })
+            ->orderBy('event_type')
+            ->orderBy('is_auto')
+            ->orderBy('event_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('event_type')
+            ->map(function ($events) {
+                // Prefer the manually recorded event over its automatic team copies.
+                return $events->first();
+            })
+            ->values();
+
+        if ($sourceEvents->isEmpty()) {
+            return;
+        }
+
+        $eventModel = new SamplerTrackingEvent();
+        foreach ($sourceEvents as $sourceEvent) {
+            SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
+                'sampler_tracking_session_id' => $member->sampler_tracking_session_id,
+                'sampler_tracking_member_id' => $member->id,
+                'triggered_by_member_id' => $sourceEvent->triggered_by_member_id,
+                'event_type' => $sourceEvent->event_type,
+                'movement_group' => $member->current_movement_group ?: $sourceEvent->movement_group,
+                'latitude' => $sourceEvent->latitude,
+                'longitude' => $sourceEvent->longitude,
+                'photo' => $sourceEvent->photo,
+                'photos' => $sourceEvent->photos,
+                'note' => $sourceEvent->note,
+                'vehicle_plate' => $sourceEvent->vehicle_plate,
+                'bas_not_completed' => $sourceEvent->bas_not_completed,
+                'bas_forced_checkout' => $sourceEvent->bas_forced_checkout,
+                'bas_warning_message' => $sourceEvent->bas_warning_message,
+                'is_auto' => true,
+                'sequence_no' => $this->nextSequence($member->id),
+                'event_at' => $sourceEvent->event_at,
+            ]));
+        }
     }
 
     protected function normalizeCoordinate($value)
