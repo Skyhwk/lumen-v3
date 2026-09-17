@@ -636,18 +636,14 @@ class PersiapanSampleController extends Controller
                     $kategori = implode(',', $kategoriList);
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
-                    $samplerKeyParts = array_values(array_filter(array_map('trim', $pendingSamplers)));
-                    sort($samplerKeyParts);
-                    $samplerKey = strtolower(implode(',', $samplerKeyParts));
-
-                    // Pecah tim (parsial) punya jam yang sama tapi sampler + kategori berbeda.
-                    // Jangan gabung jadi satu row; merge hanya untuk order_detail berulang di tim yang sama.
+                    // Pecah tim (parsial) = jam sama, kategori berbeda → row terpisah.
+                    // Satu tim (beberapa baris jadwal per sampler, kategori sama) → gabung nama sampler.
+                    // Jangan pakai nama sampler di kunci grouping.
                     $key = $orderHeader->no_document . '|' .
                         $item->no_order . '|' .
                         $schedule->tanggal . '|' .
                         $schedule->id_cabang . '|' .
                         $schedule->jam_mulai . '|' .
-                        $samplerKey . '|' .
                         $kategori;
 
                     if (isset($groupedData[$key])) {
