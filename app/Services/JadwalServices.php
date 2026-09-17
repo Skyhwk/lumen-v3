@@ -55,6 +55,32 @@ class JadwalServices
         throw new Exception("Method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n", 404);
     }
 
+    /**
+     * A schedule change may remove a team from one date and create it on
+     * another. Reconcile both dates only after the source transaction commits.
+     */
+    private function syncSamplerTrackingDates($dates): void
+    {
+        collect($dates)
+            ->filter()
+            ->map(function ($date) {
+                return Carbon::parse($date)->toDateString();
+            })
+            ->unique()
+            ->each(function ($date) {
+                try {
+                    app(SamplerTrackingService::class)->sync($date);
+                } catch (\Throwable $exception) {
+                    Log::warning('Gagal sync tracking sampler setelah perubahan jadwal.', [
+                        'tanggal_sampling' => $date,
+                        'message' => $exception->getMessage(),
+                        'line' => $exception->getLine(),
+                        'file' => $exception->getFile(),
+                    ]);
+                }
+            });
+    }
+
     public static function __callStatic($method, $arguments)
     {
         echo "Static method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n";
@@ -807,6 +833,7 @@ class JadwalServices
             // without changing the legacy selection/count used by lama == baru.
             $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
+            $this->syncSamplerTrackingDates([$dataUpdate->tanggal_lama, $dataUpdate->tanggal]);
             return true;
         } catch (Exception $ex) {
             DB::rollBack();
@@ -1120,6 +1147,7 @@ class JadwalServices
             // itself has no dirty fields. Do not create a new tracking session here.
             $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
+            $this->syncSamplerTrackingDates([$dataUpdate->tanggal_lama, $dataUpdate->tanggal]);
             return true;
         } catch (Exception $ex) {
             DB::rollback();
@@ -1167,7 +1195,8 @@ class JadwalServices
         if ($dataAdd->alamat == null) {
             throw new Exception("Alamat is required when add jadwal", 401);
         }
-        
+
+        $trackingDates = collect((array) $dataAdd->tanggal);
 
         DB::beginTransaction();
         try {
@@ -1208,6 +1237,9 @@ class JadwalServices
                         $updateQuery->where('no_quotation', $dataAdd->no_quotation);
                     }
 
+                    $trackingDates = $trackingDates->merge(
+                        (clone $updateQuery)->where('is_active', true)->pluck('tanggal')
+                    );
                     $updateQuery->update(['is_active' => false]);
                 }
             }
@@ -1348,6 +1380,7 @@ class JadwalServices
             $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
             $tracking->syncScheduleCreation($trackingBefore, $dataAdd->no_quotation);
             DB::commit();
+            $this->syncSamplerTrackingDates($trackingDates);
             return true;
         } catch (Exception $ex) {
             DB::rollback();

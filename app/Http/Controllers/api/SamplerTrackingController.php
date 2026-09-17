@@ -61,6 +61,9 @@ class SamplerTrackingController extends Controller
     }
     public function storeEvent(Request $request)
     {
+        $member = \App\Models\SamplerTrackingMember::with('session')->where('id', $request->member_id)->where('is_active', true)->firstOrFail();
+        if (!$member->session || !$member->session->is_active) abort(422, 'Activity sampling sudah tidak aktif.');
+        (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($member->sampler_id, $member->session->tanggal_sampling);
         $this->validate($request, [
             'member_id' => 'required',
             'event_type' => 'required|in:departure,checkin,checkout,return',
@@ -131,5 +134,30 @@ class SamplerTrackingController extends Controller
             'message' => 'Movement group berhasil diupdate.',
             'movement_group' => $movementGroup,
         ]);
+    }
+
+    public function reopenTrouble(Request $request)
+    {
+        $this->validate($request, ['trouble_id' => 'required|integer', 'note' => 'required|string|max:2000']);
+        $data = (new \App\Services\SamplerTrackingTroubleService())->reopen($request->trouble_id, $this->user_id, $request->note);
+        return response()->json(['success' => true, 'message' => 'Akses activity lama dibuka. Sampler wajib menyelesaikannya sebelum melanjutkan hari ini.', 'data' => $data]);
+    }
+
+    public function teamTroubles(Request $request)
+    {
+        if (!$this->user_id) abort(403, 'Akses tidak diizinkan.');
+        $samplers = \App\Models\MasterKaryawan::where('is_active', true)
+            ->where(function ($query) {
+                $query->whereJsonContains('atasan_langsung', (string) $this->user_id)
+                    ->orWhereJsonContains('atasan_langsung', (int) $this->user_id);
+            })->get(['id', 'nama_lengkap']);
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $data = $samplers->flatMap(function ($sampler) use ($service) {
+            return $service->unresolved($sampler->id)->map(function ($trouble) use ($sampler) {
+                $trouble->sampler_name = $sampler->nama_lengkap;
+                return $trouble;
+            });
+        })->values();
+        return response()->json(['success' => true, 'data' => $data]);
     }
 }
