@@ -460,8 +460,8 @@ class JadwalServices
         // ===============================SEARCH DATA======================
 
         $data = Jadwal::where('no_quotation', $dataUpdate->no_quotation)
-            ->whereIn('id', (array) $dataUpdate->batch_id)
-            ->where('tanggal', $dataUpdate->tanggal_lama)
+            ->where('tanggal', $dataUpdate->tanggal)
+            ->where('durasi', $dataUpdate->durasi_lama)
             ->where('is_active', true);
         if (!empty($dataUpdate->tipe_parsial)) {
             $data = $data->where('parsial', $dataUpdate->tipe_parsial);
@@ -803,6 +803,8 @@ class JadwalServices
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
+            // Reconcile existing activity after all schedule branches and PSHEADER,
+            // without changing the legacy selection/count used by lama == baru.
             $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
             return true;
@@ -847,8 +849,8 @@ class JadwalServices
 
         // ===============================SEARCH DATA======================
         $data = Jadwal::where('no_quotation', $dataUpdate->no_quotation)
-            ->whereIn('id', (array) $dataUpdate->batch_id)
-            ->where('tanggal', $dataUpdate->tanggal_lama)
+            ->where('tanggal', $dataUpdate->tanggal)
+            ->where('durasi', $dataUpdate->durasi_lama)
             ->where('is_active', true);
         if (!empty($dataUpdate->tipe_parsial)) {
             $data = $data->where('parsial', $dataUpdate->tipe_parsial);
@@ -1114,6 +1116,8 @@ class JadwalServices
                 // Tangkap error dengan detail yang cukup
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+            // Run for both lama == baru and changed team size, even when PSHEADER
+            // itself has no dirty fields. Do not create a new tracking session here.
             $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
             return true;
