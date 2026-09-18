@@ -50,7 +50,6 @@ class MobilisasiOperasionalController extends Controller
         ->whereNotNull('no_quotation')
         ->where('is_active', true)
         ->where('tanggal', $request->tanggal)
-        ->orderByRaw('MAX(kendaraan) ASC')
         ->orderBy('jam_mulai')
         ->get()
         ->map(function ($item) {
@@ -66,7 +65,7 @@ class MobilisasiOperasionalController extends Controller
             unset($item->quotationKontrakH, $item->quotationNonKontrak);
 
             $jadwalMobil = $item->jadwalMobil;
-            $item->jadwal_mobil = $jadwalMobil ? [
+            $jadwalMobilPayload = $jadwalMobil ? [
                 'jam_berangkat'     => $jadwalMobil->jam_berangkat,
                 'tanggal_berangkat' => $jadwalMobil->tanggal_berangkat,
                 'keterangan'        => $jadwalMobil->keterangan,
@@ -74,46 +73,34 @@ class MobilisasiOperasionalController extends Controller
 
             unset($item->jadwalMobil);
 
-            return $item;
-        })
-        ->groupBy('kendaraan')
-        ->map(function ($group) {
-            $first = $group->first();
-             
-            return [
-                'kendaraan'    => $first->kendaraan,
-                'jadwal_mobil' => $first->jadwal_mobil,
-                'list_pt'      => $group->map(function ($item) {
-                    $arraySamplers = collect(explode(',', $item->sampler))
-                        ->filter(fn($sampler) => trim($sampler) !== '')
-                        ->map(fn($sampler) => trim($sampler))
-                        ->when($item->driver !== null && $item->driver !== '', function ($collection) use ($item) {
-                            // tambahkan driver kalau belum ada
-                            if (!$collection->contains($item->driver)) {
-                                $collection->push($item->driver);
-                            }
+            $arraySamplers = collect(explode(',', $item->sampler))
+                ->filter(fn ($sampler) => trim($sampler) !== '')
+                ->map(fn ($sampler) => trim($sampler))
+                ->when($item->driver !== null && $item->driver !== '', function ($collection) use ($item) {
+                    if (!$collection->contains($item->driver)) {
+                        $collection->push($item->driver);
+                    }
 
-                            return $collection;
-                        })
-                        ->map(function ($sampler) use ($item) {
-                            return ($sampler == $item->driver)
-                                ? $sampler . ' (Driver)'
-                                : $sampler;
-                        })
-                        ->values();
-                    
-                    return [
-                        'no_quotation'    => $item->no_quotation,
-                        'nama_perusahaan' => $item->nama_perusahaan,
-                        'wilayah'         => $item->wilayah,
-                        'sampler'         => $arraySamplers->implode(', '),
-                        'jam_mulai'       => $item->jam_mulai,
-                        'jam_selesai'     => $item->jam_selesai,
-                        'durasi'          => $item->durasi,
-                        'periode'         => $item->periode,
-                        'pic'             => $item->pic
-                    ];
-                })->values(),
+                    return $collection;
+                })
+                ->map(function ($sampler) use ($item) {
+                    return ($sampler == $item->driver)
+                        ? $sampler . ' (Driver)'
+                        : $sampler;
+                })
+                ->values();
+
+            return [
+                'no_quotation'    => $item->no_quotation,
+                'nama_perusahaan' => $item->nama_perusahaan,
+                'wilayah'         => $item->wilayah,
+                'sampler'         => $arraySamplers->implode(', '),
+                'jam_mulai'       => $item->jam_mulai,
+                'jam_selesai'     => $item->jam_selesai,
+                'durasi'          => $item->durasi,
+                'periode'         => $item->periode,
+                'pic'             => $item->pic,
+                'jadwal_mobil'    => $jadwalMobilPayload,
             ];
         })
         ->values();
