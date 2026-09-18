@@ -12,6 +12,48 @@ class SamplerTrackingTroubleService
 {
     const TABLE = 'sampler_tracking_troubles';
 
+    const REOPEN_REASONS = [
+        'operational_delay' => 'Activity belum selesai (kendala operasional)',
+        'technical_issue' => 'Kendala teknis aplikasi / perangkat',
+        'force_majeure' => 'Force majeure (cuaca, lalu lintas, dll.)',
+        'sampler_procedure' => 'Kesalahan prosedur / kelalaian sampler',
+        'other' => 'Lainnya',
+    ];
+
+    const SAMPLER_FOLLOW_UP_ACTIONS = [
+        'verbal_reminder' => 'Teguran / pengingat lisan',
+        'verbal_warning' => 'Peringatan lisan',
+        'coaching_sop' => 'Coaching / arahan ulang SOP',
+        'written_warning' => 'Surat peringatan (SP)',
+        'none' => 'Tidak ada tindakan disiplin',
+        'other' => 'Lainnya',
+    ];
+
+    public static function reopenReasonLabel($key)
+    {
+        return self::REOPEN_REASONS[$key] ?? ($key ?: '-');
+    }
+
+    public static function samplerFollowUpLabel($key)
+    {
+        return self::SAMPLER_FOLLOW_UP_ACTIONS[$key] ?? ($key ?: '-');
+    }
+
+    public static function reopenReasonKeys()
+    {
+        return array_keys(self::REOPEN_REASONS);
+    }
+
+    public static function samplerFollowUpKeys()
+    {
+        return array_keys(self::SAMPLER_FOLLOW_UP_ACTIONS);
+    }
+
+    public static function startDate()
+    {
+        return env('SAMPLER_TRACKING_TROUBLE_START_DATE', '2026-09-21');
+    }
+
     protected function ready()
     {
         if (!Schema::hasTable(self::TABLE)) {
@@ -31,9 +73,16 @@ class SamplerTrackingTroubleService
     public function collect($day = null, array $samplerIds = [])
     {
         $this->ready();
+        $startDate = self::startDate();
         $day = $day ?: Carbon::now('Asia/Jakarta')->subDay()->toDateString();
+        if ($day < $startDate) {
+            return 0;
+        }
+
         // Also catches multi-day work whose deadline was yesterday, not just starts yesterday.
-        $dates = SamplerTrackingSession::where('is_active', true)->whereDate('tanggal_sampling', '<=', $day)
+        $dates = SamplerTrackingSession::where('is_active', true)
+            ->whereDate('tanggal_sampling', '>=', $startDate)
+            ->whereDate('tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) {
                 $query->whereHas('activeMembers', function ($members) use ($samplerIds) {
                     $members->whereIn('sampler_id', $samplerIds);
@@ -42,6 +91,9 @@ class SamplerTrackingTroubleService
             ->distinct()->orderBy('tanggal_sampling')->pluck('tanggal_sampling');
         $count = 0;
         foreach ($dates as $date) {
+            if (Carbon::parse($date)->toDateString() < $startDate) {
+                continue;
+            }
             $samplers = DB::table('sampler_tracking_members as m')->join('sampler_tracking_sessions as s', 's.id', '=', 'm.sampler_tracking_session_id')
                 ->where('s.is_active', true)->where('m.is_active', true)->where('s.tanggal_sampling', $date)
                 ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
@@ -97,10 +149,14 @@ class SamplerTrackingTroubleService
         if ($troubles->isNotEmpty()) throw new HttpException(423, $this->message($troubles));
     }
 
-    public function reopen($troubleId, $actorId, $note)
+    public function reopen($troubleId, $actorId, array $payload)
     {
         $this->ready();
-        return DB::transaction(function () use ($troubleId, $actorId, $note) {
+        $note = trim((string) ($payload['note'] ?? ''));
+        $reopenReason = (string) ($payload['reopen_reason'] ?? '');
+        $followUp = (string) ($payload['sampler_follow_up_action'] ?? '');
+
+        return DB::transaction(function () use ($troubleId, $actorId, $note, $reopenReason, $followUp) {
             $trouble = DB::table(self::TABLE)->where('id', $troubleId)->lockForUpdate()->first();
             if (!$trouble) throw new HttpException(404, 'Data trouble tidak ditemukan.');
             // The Tracking Sampler menu already determines who can use this
@@ -109,10 +165,22 @@ class SamplerTrackingTroubleService
             // stale after a team/supervisor change.
             if (!$actorId) throw new HttpException(403, 'Akses tidak diizinkan.');
             if ($trouble->is_clear) throw new HttpException(422, 'Aktivitas ini sudah selesai.');
-            DB::table(self::TABLE)->where('id', $troubleId)->update([
-                'reopened_by' => $actorId, 'reopened_at' => Carbon::now('Asia/Jakarta'),
-                'reopen_note' => $note, 'updated_at' => Carbon::now('Asia/Jakarta'),
-            ]);
+            $update = [
+                'reopened_by' => $actorId,
+                'reopened_at' => Carbon::now('Asia/Jakarta'),
+                'reopen_note' => $note,
+                'updated_at' => Carbon::now('Asia/Jakarta'),
+            ];
+
+            if (Schema::hasColumn(self::TABLE, 'reopen_reason')) {
+                $update['reopen_reason'] = $reopenReason;
+            }
+            if (Schema::hasColumn(self::TABLE, 'sampler_follow_up_action')) {
+                $update['sampler_follow_up_action'] = $followUp;
+            }
+
+            DB::table(self::TABLE)->where('id', $troubleId)->update($update);
+
             return DB::table(self::TABLE)->where('id', $troubleId)->first();
         });
     }

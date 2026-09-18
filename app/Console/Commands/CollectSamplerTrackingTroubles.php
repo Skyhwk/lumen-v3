@@ -9,8 +9,8 @@ use Illuminate\Console\Command;
 
 class CollectSamplerTrackingTroubles extends Command
 {
-    protected $signature = 'sampler-tracking:collect-troubles {--date= : Deadline date, defaults to yesterday (WIB)} {--sampler-id=* : Optional sampler IDs for a scoped manual run} {--sync-today : Reconcile today activity before collecting troubles}';
-    protected $description = 'Record unfinished sampler activities without clearing or modifying their events.';
+    protected $signature = 'sampler-tracking:collect-troubles {--date= : Tanggal deadline (YYYY-MM-DD), default kemarin (WIB)} {--sampler-id=* : Batasi ke sampler ID tertentu} {--sync-today : Sinkron activity hari ini sebelum collect trouble}';
+    protected $description = 'Catat activity sampler yang belum selesai (trouble). Activity sebelum SAMPLER_TRACKING_TROUBLE_START_DATE tidak diproses.';
 
     public function handle(SamplerTrackingTroubleService $service, SamplerTrackingService $trackingService)
     {
@@ -25,10 +25,15 @@ class CollectSamplerTrackingTroubles extends Command
             }
         }
 
+        $startDate = SamplerTrackingTroubleService::startDate();
         $date = $this->option('date') ?: $now->copy()->subDay()->toDateString();
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || Carbon::parse($date)->toDateString() !== $date || $date >= $now->toDateString()) {
             $this->error('Tanggal harus tanggal lampau dengan format YYYY-MM-DD.');
             return 1;
+        }
+        if ($date < $startDate) {
+            $this->warn("Collect trouble dilewati: deadline {$date} sebelum tanggal mulai ({$startDate}). Tidak ada activity yang dibaca.");
+            return 0;
         }
         $samplerIds = $this->option('sampler-id');
         foreach ($samplerIds as $id) {
@@ -37,6 +42,7 @@ class CollectSamplerTrackingTroubles extends Command
                 return 1;
             }
         }
+        $this->line("Deadline trouble: {$date} | Activity dari {$startDate} s/d {$date}.");
         $this->info('Trouble baru: ' . $service->collect($date, $samplerIds));
         return 0;
     }

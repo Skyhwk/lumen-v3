@@ -489,7 +489,7 @@ class SamplerTrackingService
             ];
         });
     }
-    protected function filterTrackingRows($rows, $request)
+    public function filterTrackingRows($rows, $request)
     {
         $globalSearch = strtolower(trim($request->input('search.value', '')));
         $columns = $request->input('columns', []);
@@ -530,7 +530,7 @@ class SamplerTrackingService
         })->values();
     }
 
-    protected function sortTrackingRows($rows, $request)
+    public function sortTrackingRows($rows, $request)
     {
         $order = $request->input('order.0');
         $columns = $request->input('columns', []);
