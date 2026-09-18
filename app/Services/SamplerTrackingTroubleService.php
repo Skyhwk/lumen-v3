@@ -133,13 +133,28 @@ class SamplerTrackingTroubleService
             . ' belum selesai. Silakan lapor kepada atasan untuk membuka aktivitas tersebut, lalu selesaikan sebelum melanjutkan aktivitas hari ini.';
     }
 
+    protected function normalizeActivityDate($activityDate)
+    {
+        return Carbon::parse($activityDate)->toDateString();
+    }
+
+    protected function troubleOnDate($troubles, $activityDate)
+    {
+        $target = $this->normalizeActivityDate($activityDate);
+
+        return $troubles->first(function ($trouble) use ($target) {
+            return Carbon::parse($trouble->activity_date)->toDateString() === $target;
+        });
+    }
+
     public function assertAllowed($samplerId, $activityDate)
     {
+        $activityDate = $this->normalizeActivityDate($activityDate);
         $troubles = $this->unresolved($samplerId);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         if ($activityDate > $today) throw new HttpException(422, 'Aktivitas hari mendatang belum dapat dijalankan.');
         if ($activityDate < $today) {
-            $trouble = $troubles->firstWhere('activity_date', $activityDate);
+            $trouble = $this->troubleOnDate($troubles, $activityDate);
             if ($trouble && $trouble->reopened_by && $trouble->reopened_at) return;
             // Legitimate multi-day work remains usable until its due date, unless older trouble blocks it.
             $progress = $this->progress($samplerId, $activityDate);
@@ -165,6 +180,9 @@ class SamplerTrackingTroubleService
             // stale after a team/supervisor change.
             if (!$actorId) throw new HttpException(403, 'Akses tidak diizinkan.');
             if ($trouble->is_clear) throw new HttpException(422, 'Aktivitas ini sudah selesai.');
+            if ($trouble->reopened_at) {
+                throw new HttpException(422, 'Activity ini sudah pernah di-unblock.');
+            }
             $update = [
                 'reopened_by' => $actorId,
                 'reopened_at' => Carbon::now('Asia/Jakarta'),

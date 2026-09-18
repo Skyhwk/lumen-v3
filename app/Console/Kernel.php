@@ -65,8 +65,8 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('sampler-tracking:collect-troubles --sync-today')
-            ->dailyAt('00:00')->timezone('Asia/Jakarta')->withoutOverlapping(60);
+        // $schedule->command('sampler-tracking:collect-troubles --sync-today')
+        //     ->dailyAt('00:00')->timezone('Asia/Jakarta')->withoutOverlapping(60);
         // $schedule->command('recruitment:send-pending-assessment-invitations')
         //     ->everyFiveMinutes()
         //     ->timezone('Asia/Jakarta')
