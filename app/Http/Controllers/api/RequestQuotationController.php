@@ -442,7 +442,26 @@ class RequestQuotationController extends Controller
     public function writeQuotation(Request $request)
     {
         $payload = json_decode(json_encode($request->all(), JSON_OBJECT_AS_ARRAY));
-        // dd($payload);
+        try {
+            $payload->_promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
+            $periods = $payload->informasi_pelanggan->modeQt === 'kontrak'
+                ? array_map(fn($period) => $period->data_sampling ?? [], $payload->data_pendukung ?? [])
+                : [$payload->data_pendukung ?? []];
+            foreach ($periods as $rows) {
+                \App\Services\QuotationPromo::validateRows($payload->_promo, $rows);
+                if ($payload->_promo) {
+                    foreach ($rows as $row) {
+                        \App\Services\QuotationPromo::parameterPrices($row, $payload->informasi_pelanggan->tgl_penawaran);
+                    }
+                }
+            }
+            if ($payload->_promo && isset($payload->data_diskon)) {
+                $payload->data_diskon->kode_promo_discount = '';
+                $payload->data_diskon->jumlah_promo_discount = 0;
+            }
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
         switch ($payload->informasi_pelanggan->modeQt) {
             case 'non_kontrak':
                 return $this->handleNonKontrak($payload);
@@ -594,6 +613,7 @@ class RequestQuotationController extends Controller
             $data->use_kuota = $payload->data_diskon->use_kuota;
 
             $data_sampling = [];
+            $promoFreeUsed = false;
             $harga_total = 0;
             $harga_air = 0;
             $harga_udara = 0;
@@ -671,6 +691,9 @@ class RequestQuotationController extends Controller
 
                     $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    if ($payload->_promo ?? null) {
+                        [$hargaPerTitik, $hargaAnalisa] = \App\Services\QuotationPromo::rowPrice($payload->_promo, $item, $hargaPerTitik, $harga_db, $promoFreeUsed, $hargaAnalisa);
+                    }
 
                     $temp_preparasi = [];
                     if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
@@ -688,6 +711,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item->is_promo),
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
                         'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
@@ -896,7 +920,7 @@ class RequestQuotationController extends Controller
                 $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
                 $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
 
-                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount ?? null;
                 $data->discount_promo = json_encode((object)[
                     'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
                     'jumlah_promo_discount' => $payload->data_diskon->jumlah_promo_discount
@@ -909,7 +933,7 @@ class RequestQuotationController extends Controller
                 // $data->discount_air = null;
                 $data->total_discount_promo = 0;
                 $data->discount_promo = null;
-                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount ?? null;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -1252,6 +1276,13 @@ class RequestQuotationController extends Controller
             //Grand total sebelum kena diskon
             // dd($grand_total, $harga_total, $total_diskon);
             $data->grand_total = $grand_total;
+            \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $data, $harga_total, $biaya_akhir, $total_diskon, [
+                        'transportasi' => (float) ($transport_ ?? 0),
+                        'perdiem' => (float) ($perdiem_ ?? 0),
+                        'perdiem24jam' => (float) ($jam_ ?? 0),
+                        'biayalain' => (float) ($biaya_lain ?? 0),
+                        'preparasi' => (float) ($biaya_preparasi ?? 0),
+                    ], $payload->data_diskon->diluar_pajak ?? null);
             $data->total_dpp = $harga_total;
             $data->total_discount = $total_diskon;
 
@@ -1291,6 +1322,7 @@ class RequestQuotationController extends Controller
             $data->updated_at = DATE('Y-m-d H:i:s');
             // $data->expired = $tgl;
 
+            $data->promo_id = $payload->_promo->id ?? null;
             $data->save();
 
             $message = "Penawaran dengan nomor $data->no_document berhasil di update.";
@@ -1541,6 +1573,7 @@ class RequestQuotationController extends Controller
             $data->use_kuota = $payload->data_diskon->use_kuota;
 
             $data_sampling = [];
+            $promoFreeUsed = false;
             $harga_total = 0;
             $harga_air = 0;
             $harga_udara = 0;
@@ -1617,6 +1650,9 @@ class RequestQuotationController extends Controller
 
                     $hargaAnalisa = $is_paket ? $hargaPaket : (floatval($harga_pertitik->total_harga) * (int) $titik);
                     $hargaPerTitik = $is_paket ? $hargaSatuan : $harga_pertitik->total_harga;
+                    if ($payload->_promo ?? null) {
+                        [$hargaPerTitik, $hargaAnalisa] = \App\Services\QuotationPromo::rowPrice($payload->_promo, $item, $hargaPerTitik, $harga_db, $promoFreeUsed, $hargaAnalisa);
+                    }
 
                     $temp_preparasi = [];
                     if (isset($item->biaya_preparasi) && $item->biaya_preparasi != null) {
@@ -1634,6 +1670,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item->is_promo),
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
                         'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
@@ -1837,7 +1874,7 @@ class RequestQuotationController extends Controller
                 $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
                 $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
 
-                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount ?? null;
                 $data->discount_promo = json_encode((object)[
                     'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
                     'jumlah_promo_discount' => $payload->data_diskon->jumlah_promo_discount
@@ -1850,7 +1887,7 @@ class RequestQuotationController extends Controller
                 // $data->discount_air = null;
                 $data->total_discount_promo = 0;
                 $data->discount_promo = null;
-                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount ?? null;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -2190,6 +2227,13 @@ class RequestQuotationController extends Controller
             //Grand total sebelum kena diskon
             // dd($grand_total);
             $data->grand_total = $grand_total;
+            \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $data, $harga_total, $biaya_akhir, $total_diskon, [
+                        'transportasi' => (float) ($transport_ ?? 0),
+                        'perdiem' => (float) ($perdiem_ ?? 0),
+                        'perdiem24jam' => (float) ($jam_ ?? 0),
+                        'biayalain' => (float) ($biaya_lain ?? 0),
+                        'preparasi' => (float) ($biaya_preparasi ?? 0),
+                    ], $payload->data_diskon->diluar_pajak ?? null);
             $data->total_dpp = $harga_total;
             $data->total_discount = $total_diskon;
 
@@ -2237,6 +2281,7 @@ class RequestQuotationController extends Controller
             ($dataOld->data_lama != null) ? $data_lama = json_decode($dataOld->data_lama) : $data_lama = null;
 
             ($data_lama != null) ? $data->data_lama = json_encode($data_lama) : null;
+            $data->promo_id = $payload->_promo->id ?? null;
             $data->save();
 
             $dataOld->document_status = 'Non Aktif';
@@ -2481,6 +2526,7 @@ class RequestQuotationController extends Controller
             $detailGrouped = [];
             foreach ($samplings as $sampling) {
                 $key = md5(json_encode([
+                    'is_promo'        => !empty($sampling->is_promo),
                     'kategori_1'      => $sampling->kategori_1,
                     'kategori_2'      => $sampling->kategori_2,
                     'parameter'       => $sampling->parameter,
@@ -2493,7 +2539,8 @@ class RequestQuotationController extends Controller
 
                 if (!isset($detailGrouped[$key])) {
                     $detailGrouped[$key] = (object)[
-                        'kategori_1'      => $sampling->kategori_1,
+                        'is_promo'        => !empty($sampling->is_promo),
+                    'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
                         'penamaan_titik'  => [], // default kosong
                         'parameter'       => $sampling->parameter,
@@ -2758,6 +2805,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item->is_promo),
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
                         'penamaan_titik' => $item->penamaan_titik,
@@ -2821,6 +2869,7 @@ class RequestQuotationController extends Controller
                 isset($syarat_ketentuan) ? $dataH->syarat_ketentuan = json_encode($syarat_ketentuan) : $dataH->syarat_ketentuan = null;
                 isset($keterangan_tambahan) ? $dataH->keterangan_tambahan = json_encode($keterangan_tambahan) : $dataH->keterangan_tambahan = null;
                 isset($data_diskon->diluar_pajak) ? $dataH->diluar_pajak = json_encode($data_diskon->diluar_pajak) : $dataH->diluar_pajak = null;
+                $dataH->promo_id = $payload->_promo->id ?? null;
                 $dataH->save();
 
                 // END HEADER DATA
@@ -2885,6 +2934,7 @@ class RequestQuotationController extends Controller
                     $harga_preparasi = 0;
 
                     $n = 0;
+                    $promoFreeUsed = false;
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
@@ -2955,11 +3005,14 @@ class RequestQuotationController extends Controller
 
                         $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
                         $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
+                        if ($payload->_promo ?? null) {
+                            [$hargaPerTitik, $hargaAnalisa] = \App\Services\QuotationPromo::rowPrice($payload->_promo, $sampling, $hargaPerTitik, $harga_parameter, $promoFreeUsed, $hargaAnalisa);
+                        }
 
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
-                        $pengujian->data_sampling[$i]->harga_satuan = $har_db;
-                        $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
+                        $pengujian->data_sampling[$i]->harga_satuan = ($payload->_promo ?? null) ? $hargaPerTitik : $har_db;
+                        $pengujian->data_sampling[$i]->harga_total = ($payload->_promo ?? null) ? $hargaAnalisa : ($har_db * $jumlah_titik);
                         $pengujian->data_sampling[$i]->volume = $vol_db;
 
                         if ($is_paket) {
@@ -2978,31 +3031,32 @@ class RequestQuotationController extends Controller
                         //bagian untuk di parsing keluar ke variable lain
                         switch ($id_kategori) {
                             case '1':
-                                $harga_air += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_air += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '4':
-                                $harga_udara += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_udara += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '5':
-                                $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_emisi += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '6':
-                                $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_padatan += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '7':
-                                $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_swab_test += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '8':
-                                $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_tanah += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '9':
-                                $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_pangan += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                         }
                     }
 
                     $dataD->periode_kontrak = $pengujian->periode_kontrak;
                     $grand_total += $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+                    if ($payload->_promo ?? null) $grand_total += $harga_pangan;
 
                     // $dataD->data_pendukung_sampling = json_encode($pengujian->data_sampling, JSON_UNESCAPED_UNICODE);
                     $data_sampling[$x] = [
@@ -3300,7 +3354,7 @@ class RequestQuotationController extends Controller
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
 
                         // $total_diskon += $total_discount_promo;
-                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount ?? null;
                         $dataD->discount_promo = json_encode((object)[
                             'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
                             'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
@@ -3313,7 +3367,7 @@ class RequestQuotationController extends Controller
                         // $data->discount_air = null;
                         $dataD->total_discount_promo = 0;
                         $dataD->discount_promo = null;
-                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount ?? null;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -3673,6 +3727,13 @@ class RequestQuotationController extends Controller
 
                     //Grand total sebelum kena diskon
                     $dataD->grand_total = $grand_total;
+                    \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $dataD, $harga_total, $biaya_akhir, $total_diskon, [
+                        'transportasi' => (float) ($transport_ ?? 0),
+                        'perdiem' => (float) ($perdiem_ ?? 0),
+                        'perdiem24jam' => (float) ($jam_ ?? 0),
+                        'biayalain' => (float) ($biaya_lain ?? 0),
+                        'preparasi' => (float) ($harga_preparasi ?? 0),
+                    ], $payload->data_diskon->diluar_pajak ?? null);
                     $dataD->total_dpp = $harga_total;
 
                     if (floatval($data_diskon->ppn) >= 0) {
@@ -3708,6 +3769,7 @@ class RequestQuotationController extends Controller
 
                     $dataD->biaya_akhir = $biaya_akhir;
                     //==========================END BIAYA DI LUAR PAJAK======================================
+                    $dataD->promo_id = $payload->_promo->id ?? null;
                     $dataD->save();
                 }
                 // =====================END PROSES DETAIL DATA=====================================
@@ -3862,6 +3924,7 @@ class RequestQuotationController extends Controller
                 $editH->updated_by = $this->karyawan;
                 $editH->updated_at = date('Y-m-d H:i:s');
                 $editH->save();
+                \App\Services\QuotationPromo::syncHeader($editH);
 
                 $data_lama = null;
                 if ($dataH->data_lama != null)
@@ -4302,6 +4365,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item->is_promo),
                         'kategori_1' => $item->kategori_1,
                         'kategori_2' => $item->kategori_2,
                         'penamaan_titik' => $item->penamaan_titik,
@@ -4371,6 +4435,7 @@ class RequestQuotationController extends Controller
                 ($data_lama != null) ? $dataH->data_lama = json_encode($data_lama) : $dataH->data_lama = null;
                 $dataH->created_by = $dataOld->created_by;
                 $dataH->created_at = $dataOld->created_at;
+                $dataH->promo_id = $payload->_promo->id ?? null;
                 $dataH->save();
 
                 // =====================PROSES DETAIL DATA=========================================
@@ -4394,6 +4459,7 @@ class RequestQuotationController extends Controller
                     $harga_preparasi = 0;
 
                     $n = 0;
+                    $promoFreeUsed = false;
 
                     // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
                     foreach ($pengujian->data_sampling as $i => $sampling) {
@@ -4459,11 +4525,14 @@ class RequestQuotationController extends Controller
 
                         $hargaAnalisa = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
                         $hargaPerTitik = $is_paket ? $hargaSatuan : $har_db;
+                        if ($payload->_promo ?? null) {
+                            [$hargaPerTitik, $hargaAnalisa] = \App\Services\QuotationPromo::rowPrice($payload->_promo, $sampling, $hargaPerTitik, $harga_parameter, $promoFreeUsed, $hargaAnalisa);
+                        }
 
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
-                        $pengujian->data_sampling[$i]->harga_satuan = $har_db;
-                        $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
+                        $pengujian->data_sampling[$i]->harga_satuan = ($payload->_promo ?? null) ? $hargaPerTitik : $har_db;
+                        $pengujian->data_sampling[$i]->harga_total = ($payload->_promo ?? null) ? $hargaAnalisa : ($har_db * $jumlah_titik);
                         $pengujian->data_sampling[$i]->volume = $vol_db;
 
                         if ($is_paket) {
@@ -4482,31 +4551,32 @@ class RequestQuotationController extends Controller
                         //bagian untuk di parsing keluar ke variable lain
                         switch ($id_kategori) {
                             case '1':
-                                $harga_air += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_air += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '4':
-                                $harga_udara += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_udara += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '5':
-                                $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_emisi += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '6':
-                                $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_padatan += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '7':
-                                $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_swab_test += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '8':
-                                $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_tanah += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                             case '9':
-                                $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                                $harga_pangan += ($payload->_promo ?? null) ? $hargaAnalisa : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
                                 break;
                         }
                     }
 
                     $dataD->periode_kontrak = $pengujian->periode_kontrak;
                     $grand_total += $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+                    if ($payload->_promo ?? null) $grand_total += $harga_pangan;
 
                     // $dataD->data_pendukung_sampling = json_encode($pengujian->data_sampling, JSON_UNESCAPED_UNICODE);
                     $data_sampling[$x] = [
@@ -4803,7 +4873,7 @@ class RequestQuotationController extends Controller
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
 
                         // $total_diskon += $total_discount_promo;
-                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount ?? null;
                         $dataD->discount_promo = json_encode((object)[
                             'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
                             'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
@@ -4816,7 +4886,7 @@ class RequestQuotationController extends Controller
                         // $data->discount_air = null;
                         $dataD->total_discount_promo = 0;
                         $dataD->discount_promo = null;
-                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount ?? null;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -5177,6 +5247,13 @@ class RequestQuotationController extends Controller
 
                     //Grand total sebelum kena diskon
                     $dataD->grand_total = $grand_total;
+                    \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $dataD, $harga_total, $biaya_akhir, $total_diskon, [
+                        'transportasi' => (float) ($transport_ ?? 0),
+                        'perdiem' => (float) ($perdiem_ ?? 0),
+                        'perdiem24jam' => (float) ($jam_ ?? 0),
+                        'biayalain' => (float) ($biaya_lain ?? 0),
+                        'preparasi' => (float) ($harga_preparasi ?? 0),
+                    ], $payload->data_diskon->diluar_pajak ?? null);
                     $dataD->total_dpp = $harga_total;
 
                     if (floatval($data_diskon->ppn) >= 0) {
@@ -5212,6 +5289,7 @@ class RequestQuotationController extends Controller
 
                     $dataD->biaya_akhir = $biaya_akhir;
                     //==========================END BIAYA DI LUAR PAJAK======================================
+                    $dataD->promo_id = $payload->_promo->id ?? null;
                     $dataD->save();
 
 
@@ -5392,6 +5470,7 @@ class RequestQuotationController extends Controller
                 $editH->updated_by = $this->karyawan;
                 $editH->updated_at = date('Y-m-d H:i:s');
                 $editH->save();
+                \App\Services\QuotationPromo::syncHeader($editH);
 
                 if ($data_lama != null) {
                     if ($data_lama->status_sp == 'true') { //merubah jadwal dalam arti menon aktifkan SP

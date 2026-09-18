@@ -268,6 +268,7 @@ class RenderKontrakCopy
 
     public function renderBody($pdf, $data, $fileName, $detail, $lang)
     {
+        [$data, $detail] = QuotationPromoPresentation::forContractPdf($data, $detail);
         app()->setLocale($lang);
         Carbon::setLocale($lang);
 
@@ -437,7 +438,7 @@ class RenderKontrakCopy
                     </td>
                     <td style="vertical-align: middle;text-align:center;font-size: 13px;">' . (int) $a->jumlah_titik * count($a->periode) . '</td>
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan) . '</td>
-                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . '</td>
+                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->_promo_display_total ?? ($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode)))) . '</td>
                     </tr>'
                 );*/
                 $pdf->WriteHTML(
@@ -448,7 +449,7 @@ class RenderKontrakCopy
                     </td>
                     <td style="vertical-align: middle;text-align:center;font-size: 13px;">' . (int) $a->jumlah_titik * count($a->periode) . '</td>
                     <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan) . '</td>
-                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . '</td>
+                    <td style="vertical-align: middle;text-align:right;font-size: 13px;">' . self::rupiah($a->_promo_display_total ?? ($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode)))) . '</td>
                     </tr>'
                 );
 
@@ -742,6 +743,7 @@ class RenderKontrakCopy
                     </tr> '
                 );
             }
+            QuotationPromoPresentation::contractDiscountRow($pdf, $data);
             if ($data->total_dpp != $data->grand_total) {
                 $pdf->WriteHTML(
                     ' <tr>
@@ -1530,6 +1532,7 @@ class RenderKontrakCopy
                     }
                 }
 
+                QuotationPromoPresentation::contractDiscountRow($pdf, $v);
                 if ($v->total_dpp != $v->grand_total) {
                     $pdf->WriteHTML(
                         ' <tr>
@@ -1843,7 +1846,7 @@ class RenderKontrakCopy
                     '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan) . "</td>"
                 );
                 $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode))) . "</td>"
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($a->_promo_display_total ?? ($a->harga_satuan * ((int) $a->jumlah_titik * count($a->periode)))) . "</td>"
                 );
                 $pdf->WriteHTML("</tr>");
                 $x_++;
@@ -2393,6 +2396,7 @@ class RenderKontrakCopy
             }
 
             // TOTAL HARGA SETELAH DISCOUNT
+            QuotationPromoPresentation::contractDiscountRow($pdf, $data, $detail);
             if ($data->total_dpp != $data->grand_total) {
                 $pdf->WriteHTML(
                     '<tr><td style="text-align:center;font-size: 8px;"><b>' . strtoupper(__('QTC.total.price_after_discount')) . '</b></td>'
