@@ -238,14 +238,22 @@ class SamplerTrackingService
             }
             $events = $donors->flatMap(function ($donor) use ($member) {
                 return $donor->events->filter(function ($event) use ($donor, $member) {
-                    return in_array($event->event_type, ['departure', 'checkin'], true)
-                        || (in_array($event->event_type, ['checkout', 'return'], true)
-                            && (string) $donor->effective_duration === (string) $member->effective_duration);
+                    return $this->canInheritTeamEvent(
+                        $event->event_type,
+                        $donor->effective_duration,
+                        $member->effective_duration
+                    );
                 });
             })->sortBy('id')->sortBy('event_at')->unique('event_type');
 
             foreach ($events as $event) {
-                if ($member->events()->where('event_type', $event->event_type)->exists()) {
+                $existing = $member->events()->where('event_type', $event->event_type)->first();
+                if ($existing) {
+                    if ((int) $existing->is_auto === 1
+                        && strpos((string) $existing->note, 'sumber event #' . $event->id) === false) {
+                        $existing->note = $this->inheritedTeamEventNote($event, 'Koreksi anggota sejak awal');
+                        $existing->save();
+                    }
                     continue;
                 }
                 $values = $event->getAttributes();
@@ -254,7 +262,7 @@ class SamplerTrackingService
                 $values['triggered_by_member_id'] = $event->triggered_by_member_id ?: $event->sampler_tracking_member_id;
                 $values['is_auto'] = true;
                 $values['sequence_no'] = $this->nextSequence($member->id);
-                $values['note'] = trim(($event->note ?: '') . "\nKoreksi anggota sejak awal; sumber event #" . $event->id . '.');
+                $values['note'] = $this->inheritedTeamEventNote($event, 'Koreksi anggota sejak awal');
                 SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), $values));
             }
         }
@@ -995,7 +1003,11 @@ class SamplerTrackingService
     public function storeEvent(array $payload)
     {
         $source = SamplerTrackingMember::with('session')->where('id', $payload['member_id'])->where('is_active', true)->firstOrFail();
-        if (!$source->session || !$source->session->is_active) abort(422, 'Activity sampling sudah tidak aktif.');
+        if (!$source->session || !$source->session->is_active) {
+            throw ValidationException::withMessages([
+                'member_id' => ['Activity sampling sudah tidak aktif.'],
+            ]);
+        }
         // Run clearance outside the event transaction: a later validation failure must not undo it.
         (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling);
         return DB::transaction(function () use ($payload) {
@@ -1185,6 +1197,24 @@ class SamplerTrackingService
             ->exists();
     }
 
+    protected function canInheritTeamEvent(string $eventType, $donorEffectiveDuration, $recipientEffectiveDuration): bool
+    {
+        if (in_array($eventType, ['departure', 'checkin'], true)) {
+            return true;
+        }
+
+        if (in_array($eventType, ['checkout', 'return'], true)) {
+            return (string) $donorEffectiveDuration === (string) $recipientEffectiveDuration;
+        }
+
+        return false;
+    }
+
+    protected function inheritedTeamEventNote($sourceEvent, string $reason): string
+    {
+        return trim(($sourceEvent->note ?: '') . "\n" . $reason . '; sumber event #' . $sourceEvent->id . '.');
+    }
+
     /**
      * Copy each already-completed milestone in a session to a member who was
      * assigned later. The original event stays untouched and remains the
@@ -1222,19 +1252,29 @@ class SamplerTrackingService
             return;
         }
 
+        $donorDurations = SamplerTrackingMember::whereIn(
+            'id',
+            $sourceEvents->pluck('sampler_tracking_member_id')->filter()->unique()->all()
+        )->pluck('effective_duration', 'id');
+
         $eventModel = new SamplerTrackingEvent();
         foreach ($sourceEvents as $sourceEvent) {
+            $donorDuration = $donorDurations->get($sourceEvent->sampler_tracking_member_id);
+            if (!$this->canInheritTeamEvent($sourceEvent->event_type, $donorDuration, $member->effective_duration)) {
+                continue;
+            }
+
             SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
                 'sampler_tracking_session_id' => $member->sampler_tracking_session_id,
                 'sampler_tracking_member_id' => $member->id,
-                'triggered_by_member_id' => $sourceEvent->triggered_by_member_id,
+                'triggered_by_member_id' => $sourceEvent->triggered_by_member_id ?: $sourceEvent->sampler_tracking_member_id,
                 'event_type' => $sourceEvent->event_type,
                 'movement_group' => $member->current_movement_group ?: $sourceEvent->movement_group,
                 'latitude' => $sourceEvent->latitude,
                 'longitude' => $sourceEvent->longitude,
                 'photo' => $sourceEvent->photo,
                 'photos' => $sourceEvent->photos,
-                'note' => $sourceEvent->note,
+                'note' => $this->inheritedTeamEventNote($sourceEvent, 'Salinan otomatis tim'),
                 'vehicle_plate' => $sourceEvent->vehicle_plate,
                 'bas_not_completed' => $sourceEvent->bas_not_completed,
                 'bas_forced_checkout' => $sourceEvent->bas_forced_checkout,
@@ -1287,7 +1327,7 @@ class SamplerTrackingService
 
         $headers = $query->get();
         $hasCompletedBas = $headers->contains(function ($header) {
-            return $this->isBasDocumentFilled($header->detail_bas_documents);
+            return (int) $header->is_emailed_bas === 1;
         });
 
         if ($hasCompletedBas) {
@@ -1364,6 +1404,23 @@ class SamplerTrackingService
         }
 
         DB::transaction(function () use ($table, $date, $samplerKey, $samplerId, $samplerName, $reason, $items, $now, $actorName) {
+            // Lock the same member rows used by storeEvent before checking the route.
+            $sessions = $this->listByDate($date, $samplerId, $samplerName);
+            $memberIds = $sessions->flatMap(function ($session) use ($samplerId, $samplerName) {
+                return $session->activeMembers->filter(function ($member) use ($samplerId, $samplerName) {
+                    return $samplerId ? (string) $member->sampler_id === (string) $samplerId
+                        : $member->sampler_name === $samplerName;
+                })->flatMap(function ($member) {
+                    return $member->activity_member_ids ?? [$member->id];
+                });
+            })->unique()->values();
+            SamplerTrackingMember::whereIn('id', $memberIds)->orderBy('id')->lockForUpdate()->get();
+            if (SamplerTrackingEvent::whereIn('sampler_tracking_member_id', $memberIds)
+                ->whereIn('event_type', ['departure', 'checkin'])->exists()) {
+                throw ValidationException::withMessages([
+                    'items' => ['Urutan tujuan tidak dapat diubah setelah berangkat atau check in.'],
+                ]);
+            }
             DB::table($table)
                 ->where('tanggal_sampling', $date)
                 ->where('sampler_key', $samplerKey)

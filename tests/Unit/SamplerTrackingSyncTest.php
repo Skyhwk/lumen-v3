@@ -77,12 +77,18 @@ class SamplerTrackingSyncTest extends TestCase
         });
         require_once __DIR__ . '/../../database/migrations/2026_06_29_100000_create_sampler_tracking_tables.php';
         (new \CreateSamplerTrackingTables())->up();
+        require_once __DIR__ . '/../../database/migrations/2026_09_15_100000_create_sampler_tracking_troubles.php';
+        (new \CreateSamplerTrackingTroubles())->up();
+        require_once __DIR__ . '/../../database/migrations/2026_09_18_120000_add_unblock_detail_to_sampler_tracking_troubles.php';
+        (new \AddUnblockDetailToSamplerTrackingTroubles())->up();
         $connection->table('sampling_plan')->insert(['id' => 1, 'no_quotation' => 'Q1']);
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:00:00', 'Asia/Jakarta'));
         $this->service = new SamplerTrackingService();
     }
 
     protected function tearDown(): void
     {
+        \Carbon\Carbon::setTestNow();
         if ($this->db) {
             $this->db->getDatabaseManager()->purge('mysql');
             if ($this->previousResolver) {
@@ -95,6 +101,56 @@ class SamplerTrackingSyncTest extends TestCase
             Container::setInstance($this->previousContainer);
         }
         parent::tearDown();
+    }
+
+    public function testCheckoutRequiresEmailedBasEvenWhenDraftExists(): void
+    {
+        $this->schedule();
+        $session = $this->prepare('2026-09-17')->first();
+        $member = $session->activeMembers()->firstOrFail();
+        $connection = $this->db->getConnection('mysql');
+        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('no_quotation');
+            $table->string('tanggal_sampling');
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_emailed_bas')->default(false);
+            $table->text('detail_bas_documents')->nullable();
+        });
+        $connection->table('persiapan_sampel_header')->insert([
+            'no_quotation' => 'Q1', 'tanggal_sampling' => '2026-09-17',
+            'detail_bas_documents' => '[{"filename":"draft.pdf"}]', 'is_emailed_bas' => 0,
+        ]);
+        $this->assertNotNull($this->service->checkoutBasWarning($member->id));
+        $connection->table('persiapan_sampel_header')->update(['is_emailed_bas' => 1]);
+        $this->assertNull($this->service->checkoutBasWarning($member->id));
+    }
+
+    public function testRouteCannotChangeAfterDeparture(): void
+    {
+        $today = \Carbon\Carbon::now('Asia/Jakarta')->toDateString();
+        $this->schedule(['tanggal' => $today]);
+        $session = $this->prepare($today)->first();
+        $member = $session->activeMembers()->firstOrFail();
+        $connection = $this->db->getConnection('mysql');
+        $connection->getSchemaBuilder()->create('sampler_tracking_route_overrides', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('tanggal_sampling');
+            $table->string('sampler_key');
+            $table->integer('sampler_tracking_session_id');
+            $table->integer('route_order');
+            $table->boolean('is_active')->default(true);
+        });
+        $connection->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $member->id,
+            'event_type' => 'departure', 'event_at' => $today . ' 08:00:00',
+        ]);
+        $this->expectException(ValidationException::class);
+        $this->service->updateRouteOrder([
+            'sampler_id' => 10, 'sampler_name' => 'A', 'reason' => 'Change route',
+            'items' => [['session_id' => $session->id, 'route_order' => 1]],
+        ], 'A');
     }
 
     private function schedule(array $values = [])
@@ -176,14 +232,23 @@ class SamplerTrackingSyncTest extends TestCase
         $this->schedule();
         $this->schedule(['userid' => 20, 'sampler' => 'B']);
         $session = $this->prepare('2026-09-17')->first();
-        $this->attendance($session);
+        $memberA = $this->attendance($session);
+        $originalEventIds = $memberA->events()->pluck('id')->all();
         $header = new PersiapanSampelHeader();
         $header->no_quotation = 'Q1';
         $header->tanggal_sampling = '2026-09-17';
         $header->sampler_jadwal = 'A';
         $this->service->syncByPersiapanHeader($header);
+        $memberB = $session->activeMembers()->where('sampler_name', 'B')->firstOrFail();
         $this->assertSame(2, $session->activeMembers()->count());
-        $this->assertSame(2, $session->events()->count());
+        $this->assertSame($originalEventIds, $memberA->fresh()->events()->pluck('id')->all());
+        $this->assertSame(['checkin', 'checkout'], $memberA->events()->orderBy('event_type')->pluck('event_type')->all());
+        $this->assertSame(2, $memberB->events()->count());
+        $this->assertEquals(1, $memberB->events()->first()->is_auto);
+        $this->assertStringContainsString('sumber event #', (string) $memberB->events()->first()->note);
+        $this->assertSame(4, $session->events()->count());
+        $this->service->syncByPersiapanHeader($header);
+        $this->assertSame(4, $session->events()->count());
     }
 
     public function testCorrectingOriginalSamplerCopiesTeamAttendanceWithoutDeletingOriginal(): void

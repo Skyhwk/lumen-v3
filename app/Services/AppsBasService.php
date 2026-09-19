@@ -363,6 +363,7 @@ class AppsBasService
                     }
                 }
 
+                $item['id_persiapan'] = $header ? $header->id : null;
                 if (isset($header)) {
                     if ($header->detail_bas_documents) {
                         $item['detail_bas_documents'] = json_decode($header->detail_bas_documents, true);
@@ -1684,7 +1685,7 @@ class AppsBasService
             // Get No Sample
             $noSample = [];
             if ($request->has('no_sampel') && is_array($request->no_sampel)) {
-                $noSample = $request->no_sampel;
+                $noSample = BasDocumentScope::samples($request->no_sampel, $request->no_order);
             } else {
                 foreach ($request->kategori as $item) {
                     $parts = explode(" - ", $item);
