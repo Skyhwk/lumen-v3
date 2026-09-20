@@ -6,100 +6,46 @@ use App\Models\OrderDetail;
 use App\Models\DataLapanganAir;
 use App\Models\BasSampelSelesai;
 use App\Models\SampelTidakSelesai;
-use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class BasSampelService
 {
-    /**
-     * Proses semua sampel saat Submit Final BAS.
-     * 
-     * Mengecek status setiap sampel (selesai / parsial / belum selesai),
-     * lalu memasukkannya ke bas_sampel_selesai atau sampel_tidak_selesai.
-     *
-     * @param array $item Data order (no_order, no_quotation, tanggal_sampling)
-     * @param callable $getStatusSampling Callback ke fungsi getStatusSampling di controller
-     * @return array|null Mengembalikan error array jika ada sampel parsial, null jika sukses
-     */
+    public static function isCompleted($sample, callable $getStatusSampling)
+    {
+        if ($sample->kategori_2 === '1-Air') {
+            return DataLapanganAir::where('no_sampel', $sample->no_sampel)
+                ->where('is_blocked', 0)->where('is_rejected', 0)->exists();
+        }
+        return $getStatusSampling($sample) === 'selesai';
+    }
+
     public static function processFinalSamples(array $item, callable $getStatusSampling)
     {
-        // Force OPcache invalidation
-        $fullExpectedNoSampel = OrderDetail::where('no_order', $item['no_order'])
-            ->where('is_active', true)
-            ->where('tanggal_sampling', $item['tanggal_sampling'])
-            ->pluck('no_sampel')
-            ->unique()
-            ->toArray();
-
-        if (!is_array($fullExpectedNoSampel) || count($fullExpectedNoSampel) === 0) {
-            return null;
-        }
-
-        // Log::info('Reaching BasSampelSelesai loop. expectedNoSampel: ' . json_encode($fullExpectedNoSampel));
-
-        foreach ($fullExpectedNoSampel as $fullNoSampel) {
-            $detailSample = OrderDetail::where('no_sampel', $fullNoSampel)->first();
-            $rawKategori = $detailSample ? ($detailSample->kategori_3 ?? $detailSample->kategori_2) : 'Umum';
-            $kategoriStr = preg_replace('/^\d+-/', '', $rawKategori);
-            $parts = explode(' ', $kategoriStr);
-            $mainKategori = $parts[0];
-            $subKategori = count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : null;
-
-            $isCompleted = false;
-            $statusSampling = 'belum selesai';
-
-            if ($detailSample && $detailSample->kategori_2 === "1-Air") {
-                $isCompleted = DataLapanganAir::where('no_sampel', $fullNoSampel)
-                    ->where('is_blocked', 0)
-                    ->where('is_rejected', 0)
-                    ->exists();
-                $statusSampling = $isCompleted ? 'selesai' : 'belum selesai';
-            } else if ($detailSample) {
-                $statusSampling = $getStatusSampling($detailSample);
-                if ($statusSampling === 'parsial') {
-                    return [
-                        'status' => 'error',
-                        'message' => 'Mohon isi data, data Anda belum lengkap untuk sampel ' . $fullNoSampel
-                    ];
+        $header = BasDocumentScope::resolve($item, true);
+        $samples = BasDocumentScope::samples($item['no_sampel'], $item['no_order']);
+        $details = OrderDetail::where('no_order', $item['no_order'])
+            ->where('tanggal_sampling', $item['tanggal_sampling'])->where('is_active', true)
+            ->whereIn('no_sampel', $samples)->lockForUpdate()->get()->unique('no_sampel');
+        foreach ($details as $sample) {
+            $decisionQuery = SampelTidakSelesai::where('no_order', $item['no_order'])
+                ->where('no_sampel', $sample->no_sampel)->where('id_persiapan', $header->id);
+            if (!self::isCompleted($sample, $getStatusSampling)) {
+                $decision = (clone $decisionQuery)->orderBy('id', 'desc')->lockForUpdate()->first();
+                if (!BasDocumentScope::validDecision($decision, $item['tanggal_sampling'])) {
+                    throw new \InvalidArgumentException('Simpan keputusan yang valid untuk sampel belum lengkap: ' . $sample->no_sampel);
                 }
-                $isCompleted = ($statusSampling === 'selesai');
+                continue;
             }
-
-            if (!$isCompleted) {
-                $existingCancel = SampelTidakSelesai::where('no_sampel', $fullNoSampel)->first();
-                if (!$existingCancel) {
-                    Log::info('Auto-cancelling sample: ' . $fullNoSampel);
-                    SampelTidakSelesai::create([
-                        'no_sampel' => $fullNoSampel,
-                        'no_order' => $item['no_order'],
-                        'kategori' => $kategoriStr,
-                        'alasan' => 'Dibatalkan otomatis dari Submit BAS',
-                        'status' => 'Belum Selesai',
-                        'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'created_by' => 'System'
-                    ]);
-                }
-            } else {
-                // Log::info('Inserting into bas_sampel_selesai: ' . $fullNoSampel);
-                BasSampelSelesai::updateOrCreate(
-                    [
-                        'no_order' => $item['no_order'],
-                        'no_sampel' => $fullNoSampel,
-                        'tanggal_sampling' => $item['tanggal_sampling'],
-                    ],
-                    [
-                        'no_quotation' => $item['no_quotation'],
-                        'kategori' => $mainKategori,
-                        'sub_kategori' => $subKategori,
-                        'status' => 'Selesai',
-                    ]
-                );
-
-                // Bersihkan dari sampel_tidak_selesai karena sekarang sudah diisi
-                SampelTidakSelesai::where('no_sampel', $fullNoSampel)->delete();
-            }
+            $category = preg_replace('/^\d+-/', '', $sample->kategori_3 ?? $sample->kategori_2);
+            $parts = explode(' ', $category, 2);
+            BasSampelSelesai::updateOrCreate([
+                'no_order' => $item['no_order'], 'no_sampel' => $sample->no_sampel,
+                'tanggal_sampling' => $item['tanggal_sampling'],
+            ], [
+                'no_quotation' => $header->no_quotation, 'kategori' => $parts[0],
+                'sub_kategori' => $parts[1] ?? null, 'status' => 'Selesai',
+            ]);
+            $decisionQuery->delete();
         }
-
-        return true; // Sukses, tidak ada error
+        return true;
     }
 }

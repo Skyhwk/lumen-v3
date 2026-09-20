@@ -363,12 +363,15 @@ class AppsBasService
                     }
                 }
 
+                $item['id_persiapan'] = $header ? $header->id : null;
                 if (isset($header)) {
                     if ($header->detail_bas_documents) {
                         $item['detail_bas_documents'] = json_decode($header->detail_bas_documents, true);
 
                         // Iterasi untuk setiap dokumen
                         foreach ($item['detail_bas_documents'] as $docIndex => $document) {
+                            $item['detail_bas_documents'][$docIndex]['email_pending'] = (bool) ($document['email_pending'] ?? false);
+                            $item['detail_bas_documents'][$docIndex]['email_sent_at'] = $document['email_sent_at'] ?? null;
                             if (isset($document['tanda_tangan']) && is_array($document['tanda_tangan'])) {
                                 foreach ($document['tanda_tangan'] as $key => $ttd) {
                                     if (strpos($ttd['tanda_tangan'], 'data:') === 0) {
@@ -801,44 +804,15 @@ class AppsBasService
             //     ->get()
             //     ->keyBy('no_order');
 
-            $dataList = PersiapanSampelHeader::with('psDetail')->where([
-                'no_order' => $orderNos,
-                'tanggal_sampling' => $request->tanggal_sampling,
-            ])->where('is_active', true)->orderBy('id', 'desc')
-                ->get();
-
-            if ($dataList->isEmpty()) {
-                $dataList = PersiapanSampelHeader::with('psDetail')->where([
-                    'no_order' => $orderNos,
-                ])->where('is_active', true)->orderBy('id', 'desc')
-                    ->get();
-            }
-
-            // Add detail_bas_documents to each item
+            // Resolve only an unambiguous header containing every requested sample.
             foreach ($finalResult as &$item) {
-                // Cari header yang memuat no_sampel dari item ini
-                $header = $dataList->where('no_order', $item['no_order'])->first(function ($h) use ($kodeList, $item) {
-                    $no_sampel = json_decode($h->no_sampel, true) ?? [];
-                    $no_sampel_clean = array_map(function ($s) {
-                        $parts = explode('/', $s);
-                        return end($parts);
-                    }, $no_sampel);
-
-                    // Jika ada $kodeList (dari request kategori), kita cocokkan dengan salah satu kode yang direquest
-                    if (!empty($kodeList)) {
-                        return count(array_intersect($kodeList, $no_sampel_clean)) > 0;
-                    }
-
-                    // Jika tidak ada kodeList, gunakan item_sample_clean seperti sebelumnya
-                    $item_sample_parts = explode('/', $item['no_sample']);
-                    $item_sample_clean = end($item_sample_parts);
-                    return in_array($item_sample_clean, $no_sampel_clean);
-                });
-
-                // Fallback ke header pertama dari order tersebut
-                if (!$header) {
-                    $header = $dataList->where('no_order', $item['no_order'])->first();
-                }
+                $header = BasDocumentScope::resolve([
+                    'id_persiapan' => $request->id_persiapan,
+                    'no_order' => $item['no_order'],
+                    'tanggal_sampling' => $request->tanggal_sampling,
+                    'no_sampel' => $kodeList,
+                ]);
+                $item['id_persiapan'] = $header->id;
 
                 // Block fallback mewariskan dokumen dihapus atas permintaan user
 
@@ -848,6 +822,8 @@ class AppsBasService
 
                         // Iterasi untuk setiap dokumen
                         foreach ($item['detail_bas_documents'] as $docIndex => $document) {
+                            $item['detail_bas_documents'][$docIndex]['email_pending'] = (bool) ($document['email_pending'] ?? false);
+                            $item['detail_bas_documents'][$docIndex]['email_sent_at'] = $document['email_sent_at'] ?? null;
                             if (isset($document['tanda_tangan']) && is_array($document['tanda_tangan'])) {
                                 foreach ($document['tanda_tangan'] as $key => $ttd) {
                                     // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)    
@@ -1005,41 +981,21 @@ class AppsBasService
 
                 foreach ($orderD as $key => $item) {
                     $item->no_sample = $item->no_sampel;
-                    $isSelesai = !is_null($item->bas_selesai_id);
+                    $isSelesai = BasSampelService::isCompleted($item, fn($sample) => $this->getStatusSampling($sample));
 
-                    if (!$isSelesai) {
-                        if ($item->kategori_2 === "1-Air") {
-                            $isSelesai = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
-                        } else {
-                            $status_sample = $this->getStatusSampling($item);
-                            $isSelesai = ($status_sample === 'parsial' || $status_sample === 'selesai');
-                        }
-                    }
-
-                    $dataSampelBelumSelesai = null;
-                    if (!is_null($item->ts_id)) {
-                        $dataSampelBelumSelesai = (object)[
-                            'id' => $item->ts_id,
-                            'no_order' => $item->ts_no_order,
-                            'no_sampel' => $item->no_sampel,
-                            'kategori' => $item->ts_kategori,
-                            'keterangan' => $item->ts_keterangan,
-                            'status' => $item->ts_status,
-                            'alasan' => $item->ts_alasan,
-                            'tanggal_dilanjutkan' => $item->ts_tanggal_dilanjutkan,
-                            'created_at' => $item->ts_created_at,
-                            'created_by' => $item->ts_created_by,
-                            'updated_at' => $item->ts_updated_at
-                        ];
-                    }
-
+                    $decisionHeader = $filteredResult[0]['id_persiapan'] ?? null;
+                    $savedDecision = SampelTidakSelesai::where('no_order', $request->no_order)
+                        ->where('no_sampel', $item->no_sampel)->where('id_persiapan', $decisionHeader)
+                        ->orderBy('id', 'desc')->first();
+                    $dataSampelBelumSelesai = $savedDecision;
                     $detail_sampling_sampel[$key]['status'] = $isSelesai ? 'selesai' : 'belum selesai';
                     $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
                     $detail_sampling_sampel[$key]['kategori_3'] = $item->kategori_3;
                     $detail_sampling_sampel[$key]['keterangan_1'] = $item->keterangan_1;
                     $detail_sampling_sampel[$key]['parameter'] = $item->parameter;
 
-                    $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
+                    $detail_sampling_sampel[$key]['id_persiapan'] = $decisionHeader;
+                    $detail_sampling_sampel[$key]['status_sampel'] = BasDocumentScope::validDecision($savedDecision, $request->tanggal_sampling);
                     if ($dataSampelBelumSelesai) {
                         $detail_sampling_sampel[$key]['detail_status'] = $dataSampelBelumSelesai;
                     }
@@ -1089,10 +1045,12 @@ class AppsBasService
         try {
             if ($request->has('data') && !empty($request->data)) {
                 $errors = [];
+                $emailRequired = false;
                 foreach ($request->data as $item) {
-                    if (!isset($item['no_quotation'])) {
-                        continue;
+                    if (!is_array($item) || empty($item['no_quotation'])) {
+                        throw new \InvalidArgumentException('Quotation wajib diisi.');
                     }
+                    $item['no_sampel'] = BasDocumentScope::samples($item['no_sampel'] ?? null, $item['no_order'] ?? null);
 
                     // Pastikan $item['no_sampel'] hanya berisi kode (tanpa no_order)
                     if (isset($item['no_sampel']) && is_array($item['no_sampel'])) {
@@ -1106,45 +1064,8 @@ class AppsBasService
                         return $item['no_order'] . '/' . $kode;
                     }, $item['no_sampel']);
 
-                    $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
-                        ->where('tanggal_sampling', $item['tanggal_sampling'])
-                        ->where('is_active', true)
-                        ->orderBy('id', 'desc')
-                        ->get();
-
-                    if ($dataList->isEmpty()) {
-                        $dataList = PersiapanSampelHeader::where('no_order', $item['no_order'])
-                            ->where('is_active', true)
-                            ->orderBy('id', 'desc')
-                            ->get();
-                    }
-
-                    if ($dataList->isEmpty()) {
-                        $dataList = PersiapanSampelHeader::where('no_quotation', $item['no_quotation'])
-                            ->where('is_active', true)
-                            ->orderBy('id', 'desc')
-                            ->get();
-                    }
-
-                    $header = $dataList->first(function ($data) use ($item) {
-                        $no_sampel = json_decode($data->no_sampel, true) ?? [];
-                        // Ekstrak kode sampel dari database (ambil bagian terakhir setelah '/')
-                        $dbSamples = array_map(function ($s) {
-                            $parts = explode('/', $s);
-                            return end($parts);
-                        }, $no_sampel);
-
-                        return count(array_intersect($dbSamples, $item['no_sampel'])) > 0;
-                    });
-
-                    if (!$header) {
-                        // Fallback ke header pertama jika tidak ada yang match no_sampel persis (meskipun seharusnya ada)
-                        $header = $dataList->first();
-                    }
-
-                    if (!$header) {
-                        return response()->json(['status' => 'error', 'message' => 'No quotation tidak ditemukan atau tidak sesuai dengan tanggal sampling dan no sampel.'], 404);
-                    }
+                    $header = BasDocumentScope::resolve($item, true);
+                    $item['id_persiapan'] = $header->id;
 
                     if ($header) {
                         $detailData = [
@@ -1206,21 +1127,30 @@ class AppsBasService
                         $detailData['no_sampel'] = array_values(array_unique($detailData['no_sampel']));
                         sort($detailData['no_sampel']);
 
-                        function compareNoSampel(array $a, array $b)
-                        {
-                            if (count($a) !== count($b)) {
-                                return false;
-                            }
-                            sort($a);
-                            sort($b);
-                            return $a == $b;
+                        if (!BasDocumentScope::filename($detailData['filename'])) {
+                            throw new \InvalidArgumentException('Filename BAS harus basename PDF yang valid.');
                         }
-
-                        // Cek apakah terdapat detail dengan no_sampel yang sama.
+                        $existingEmailSentAt = null;
                         $found = false;
                         foreach ($existingDetails as &$detail) {
-                            if (isset($detail['no_sampel']) && compareNoSampel($detail['no_sampel'], $detailData['no_sampel'])) {
-                                $detail = $detailData; // overwrite jika match
+                            $sameSamples = !empty($detail['no_sampel']) && BasDocumentScope::samples($detail['no_sampel'], $item['no_order']) === $item['expectedNoSampel'];
+                            if (!$sameSamples && ($detail['filename'] ?? null) === $detailData['filename']) {
+                                throw new \InvalidArgumentException('Filename sudah digunakan dokumen lain.');
+                            }
+                            if ($sameSamples) {
+                                if (!empty($detail['email_pending']) && empty($detail['email_sent_at'])) {
+                                    throw new \InvalidArgumentException('Kirim email dokumen pending sebelum mengubah BAS.');
+                                }
+                                $existingEmailSentAt = $detail['email_sent_at'] ?? null;
+                                if ($request->boolean('is_final')) {
+                                    $alreadyEmailed = !empty($existingEmailSentAt);
+                                    $detailData['email_pending'] = !$alreadyEmailed;
+                                    $detailData['email_sent_at'] = $alreadyEmailed ? $existingEmailSentAt : null;
+                                } else {
+                                    $detailData['email_pending'] = (bool) ($detail['email_pending'] ?? false);
+                                    $detailData['email_sent_at'] = $detail['email_sent_at'] ?? null;
+                                }
+                                $detail = $detailData;
                                 $found = true;
                                 break;
                             }
@@ -1228,84 +1158,50 @@ class AppsBasService
                         unset($detail);
 
                         if (!$found) {
-                            $existingDetails[] = $detailData; // tambahkan jika belum ada
+                            $detailData['email_pending'] = $request->boolean('is_final');
+                            $detailData['email_sent_at'] = null;
+                            $existingDetails[] = $detailData;
                         }
 
                         $header->detail_bas_documents = json_encode($existingDetails);
                         $header->save();
 
-                        // Hapus PDF lama agar dirender ulang dengan data terbaru
-                        if (isset($detailData['filename']) && !empty($detailData['filename'])) {
-                            $pdfPath = public_path('dokumen/bas/' . $detailData['filename']);
-                            if (file_exists($pdfPath)) {
-                                unlink($pdfPath);
+                        // Preview regenerates the PDF; do not delete files inside a DB transaction.
+
+                        if ($request->boolean('is_final')) {
+                            BasSampelService::processFinalSamples($item, fn($sample) => $this->getStatusSampling($sample));
+                            $emailRequired = !empty($detailData['email_pending']) && empty($detailData['email_sent_at']);
+                            if ($emailRequired) {
+                                $header->is_emailed_bas = 0;
+                                $header->emailed_bas_at = null;
                             }
                         }
-
-                        // =========================================================================
-                        // TAMBAHAN LOGIKA DETEKSI KELENGKAPAN PARAMETER (RUNS ON EVERY SUBMIT)
-                        // =========================================================================
-                        $allHeaderSamples = json_decode($header->no_sampel, true) ?? [];
-                        if (!is_array($allHeaderSamples)) {
-                            $allHeaderSamples = json_decode($allHeaderSamples, true) ?? [];
-                        }
-
-                        $headerIsCompleted = true;
-
-                        // Loop semua sampel di dalam header ini
-                        foreach ($allHeaderSamples as $ns) {
-                            $order = OrderDetail::where('no_sampel', $ns)->first();
-
-                            if (!$order) {
-                                $headerIsCompleted = false;
-                                continue;
-                            }
-
-                            $isSelesai = BasSampelSelesai::where('no_sampel', $ns)->exists();
-
-                            if (!$isSelesai) {
-                                if ($order->kategori_2 === "1-Air") {
-                                    $isSelesai = DataLapanganAir::where('no_sampel', $ns)->exists();
-                                } else {
-                                    $statusSampel = $this->getStatusSampling($order);
-                                    $isSelesai = ($statusSampel === 'parsial' || $statusSampel === 'selesai');
-                                }
-                            }
-
-                            if (!$isSelesai) {
-                                $headerIsCompleted = false;
-                            }
-                        }
-
-                        // Update is_completed di tabel persiapan_sampel_header
-                        $header->is_completed = $headerIsCompleted ? 1 : 0;
+                        $allSamples = json_decode($header->no_sampel, true);
+                        if (is_string($allSamples)) $allSamples = json_decode($allSamples, true);
+                        $allSamples = BasDocumentScope::samples($allSamples, $item['no_order']);
+                        $completed = BasSampelSelesai::where('no_order', $item['no_order'])
+                            ->where('tanggal_sampling', $item['tanggal_sampling'])
+                            ->whereIn('no_sampel', $allSamples)->pluck('no_sampel')->all();
+                        $header->is_completed = !array_diff($allSamples, $completed) ? 1 : 0;
                         $header->save();
-                        // =========================================================================
-                        // AKHIR TAMBAHAN LOGIKA
-                        // =========================================================================
-
-                        if ($request->input('is_final')) {
-                            $error = \App\Services\BasSampelService::processFinalSamples(
-                                $item,
-                                fn($sample) => $this->getStatusSampling($sample)
-                            );
-                            if (is_array($error)) {
-                                return response()->json($error, 200);
-                            }
-                        }
                     }
                 }
             }
 
-            DB::commit();
-
             if (!empty($errors)) {
-                return response()->json(['status' => 'error', 'errors' => $errors], 422);
+                throw new \InvalidArgumentException(implode('; ', array_column($errors, 'message')));
             }
-            return response()->json(['status' => 'success'], 200);
-        } catch (\Exception $ex) {
+            if (!is_array($request->data) || empty($request->data)) {
+                throw new \InvalidArgumentException('Data BAS wajib diisi.');
+            }
+            DB::commit();
+            return response()->json([
+                'status' => 'success',
+                'email_required' => $emailRequired,
+            ], 200);
+        } catch (\Throwable $ex) {
             DB::rollback();
-            return response()->json(['status' => 'error', 'message' => $ex->getMessage()], 500);
+            return response()->json(['status' => 'error', 'message' => $ex->getMessage()], $ex instanceof \InvalidArgumentException ? 422 : 500);
         }
     }
 
@@ -1344,6 +1240,39 @@ class AppsBasService
                     $ccArray = array_filter(array_map('trim', explode(',', $cc)));
                 }
             }
+            if (!is_string($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Recipient email tidak valid.');
+            }
+            foreach ($ccArray as $address) {
+                if (!is_string($address) || !filter_var($address, FILTER_VALIDATE_EMAIL)) {
+                    throw new \InvalidArgumentException('CC email tidak valid.');
+                }
+            }
+            if (!is_array($attachments) || count($attachments) !== 1 || empty($request->id_persiapan)
+                || !BasDocumentScope::date($request->tanggal_sampling) || !$noOrder || !$noDocument) {
+                throw new \InvalidArgumentException('Pilih satu dokumen dan header, order, quotation, tanggal yang tepat.');
+            }
+            $fileName = reset($attachments);
+            if (!BasDocumentScope::filename($fileName)) throw new \InvalidArgumentException('Attachment tidak valid.');
+            $base = realpath(public_path('dokumen/bas'));
+            $path = realpath(public_path('dokumen/bas/' . $fileName));
+            if (!$base || !$path || dirname($path) !== $base || !is_file($path) || !is_readable($path)) {
+                throw new \InvalidArgumentException('File attachment tidak ditemukan.');
+            }
+            $persiapanHeader = PersiapanSampelHeader::where('id', $request->id_persiapan)
+                ->where('no_order', $noOrder)->where('no_quotation', $noDocument)
+                ->where('tanggal_sampling', $request->tanggal_sampling)->where('is_active', true)
+                ->lockForUpdate()->first();
+            if (!$persiapanHeader) throw new \InvalidArgumentException('Header attachment tidak sesuai.');
+            $documents = json_decode($persiapanHeader->detail_bas_documents, true) ?? [];
+            $documentKeys = array_keys(array_filter($documents, function ($doc) use ($fileName) {
+                return ($doc['filename'] ?? null) === $fileName;
+            }));
+            if (count($documentKeys) !== 1) throw new \InvalidArgumentException('Attachment bukan dokumen unik pada header ini.');
+            $documentKey = $documentKeys[0];
+            if (empty($documents[$documentKey]['email_pending'])) {
+                throw new \InvalidArgumentException('Dokumen belum final atau email sudah terkirim.');
+            }
             $emailInstance = SendEmail::where('to', $to)
                 ->where('cc', $ccArray)
                 ->where('bcc', $bcc)
@@ -1370,37 +1299,12 @@ class AppsBasService
 
             $sent = $emailInstance->send();
             
-            if ($sent) {
-
-                $persiapanHeaders = PersiapanSampelHeader::where('no_quotation', $noDocument)
-                    ->where('no_order', $noOrder)
-                    ->where('tanggal_sampling', $request->input('tanggal_sampling'))
-                    ->where('is_active', true)
-                    ->whereNotNull('detail_bas_documents')
-                    ->get();
-
-                $persiapanHeader = null;
-                foreach ($persiapanHeaders as $header) {
-                    $details = json_decode($header->detail_bas_documents, true) ?? [];
-                    $found = false;
-                    foreach ($details as $detail) {
-                        if (isset($detail['filename']) && in_array($detail['filename'], $attachments)) {
-                            $found = true;
-                            break;
-                        }
-                    }
-                    if ($found) {
-                        $persiapanHeader = $header;
-                        break;
-                    }
-                }
-
-                if (!$persiapanHeader && $persiapanHeaders->isNotEmpty()) {
-                    $persiapanHeader = $persiapanHeaders->first();
-                }
-
+            if ($sent === true) {
+                $documents[$documentKey]['email_pending'] = false;
+                $documents[$documentKey]['email_sent_at'] = Carbon::now()->format('Y-m-d H:i:s');
+                $persiapanHeader->detail_bas_documents = json_encode($documents);
                 if ($persiapanHeader) {
-                    $persiapanHeader->is_emailed_bas = 1;
+                    $persiapanHeader->is_emailed_bas = count(array_filter($documents, fn($doc) => !empty($doc['email_pending']))) === 0 ? 1 : 0;
                     $persiapanHeader->emailed_bas_at = \Carbon\Carbon::now();
                     $persiapanHeader->save();
 
@@ -1415,6 +1319,11 @@ class AppsBasService
 
                 DB::commit();
                 return response()->json([
+                    'status' => 'success',
+                    'id_persiapan' => $persiapanHeader->id,
+                    'filename' => $fileName,
+                    'email_pending' => false,
+                    'email_sent_at' => $documents[$documentKey]['email_sent_at'],
                     'message' => 'Email berhasil dikirim',
                     'details' => [
                         'to' => $to,
@@ -1427,17 +1336,16 @@ class AppsBasService
             } else {
                 DB::rollBack();
                 return response()->json([
+                    'status' => 'error',
                     'message' => 'Email gagal dikirim'
                 ], 400);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-
-            error_log('Email sending error: ' . $e->getMessage());
-
             return response()->json([
+                'status' => 'error',
                 'message' => 'Gagal mengirim email: ' . $e->getMessage()
-            ], 500);
+            ], $e instanceof \InvalidArgumentException ? 422 : 500);
         }
     }
 
@@ -1777,7 +1685,7 @@ class AppsBasService
             // Get No Sample
             $noSample = [];
             if ($request->has('no_sampel') && is_array($request->no_sampel)) {
-                $noSample = $request->no_sampel;
+                $noSample = BasDocumentScope::samples($request->no_sampel, $request->no_order);
             } else {
                 foreach ($request->kategori as $item) {
                     $parts = explode(" - ", $item);
@@ -1855,55 +1763,13 @@ class AppsBasService
                 $expectednoSampel[] = $kode;
             }
 
-            // Ambil data PersiapanSampelHeader
-            $dataList = PersiapanSampelHeader::where('no_order', $request->no_order)
-                ->where('tanggal_sampling', $request->tanggal_sampling)
-                ->where('is_active', true)
-                ->orderBy('id', 'desc')
-                ->get();
-
-            if ($dataList->isEmpty()) {
-                $dataList = PersiapanSampelHeader::where('no_order', $request->no_order)
-                    ->where('is_active', true)
-                    ->orderBy('id', 'desc')
-                    ->get();
-            }
-
-            if ($dataList->isEmpty()) {
-                $dataList = PersiapanSampelHeader::where('no_quotation', $request->no_document)
-                    ->where('is_active', true)
-                    ->orderBy('id', 'desc')
-                    ->get();
-            }
-
-            $persiapanHeader = $dataList->first(function ($item) use ($request, $expectednoSampel) {
-                $no_sampel = json_decode($item->no_sampel, true) ?? [];
-                $dbSamples = array_map(function ($s) {
-                    $parts = explode('/', $s);
-                    return end($parts);
-                }, $no_sampel);
-
-                $reqSamplesRaw = $request->no_sampel ?? [];
-                $reqSamples = array_map(function ($s) {
-                    $parts = explode('/', $s);
-                    return end($parts);
-                }, $reqSamplesRaw);
-
-                // Jika $request->no_sampel kosong, gunakan $expectednoSampel yang didapat dari request->kategori
-                if (empty($reqSamples)) {
-                    $reqSamples = $expectednoSampel;
-                }
-
-                if (empty($reqSamples)) {
-                    return true;
-                }
-
-                return count(array_intersect($dbSamples, $reqSamples)) > 0;
-            });
-
-            if (!$persiapanHeader) {
-                $persiapanHeader = $dataList->first();
-            }
+            $persiapanHeader = BasDocumentScope::resolve([
+                'id_persiapan' => $request->id_persiapan,
+                'no_order' => $request->no_order,
+                'no_quotation' => $request->no_document,
+                'tanggal_sampling' => $request->tanggal_sampling,
+                'no_sampel' => $request->no_sampel ?: $expectednoSampel,
+            ]);
 
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
@@ -1989,6 +1855,20 @@ class AppsBasService
             // Gunakan nama file dari request agar sinkron dengan frontend
             $file_name_old = $request->filename_old ?? null;
             $file_name = $request->filename ?? null;
+            if ($file_name !== null && !BasDocumentScope::filename($file_name)) {
+                throw new \InvalidArgumentException('Filename BAS tidak valid.');
+            }
+            $previewSamples = BasDocumentScope::samples($request->no_sampel ?: $expectednoSampel, $request->no_order);
+            foreach (json_decode($persiapanHeader->detail_bas_documents, true) ?? [] as $doc) {
+                if (!empty($doc['no_sampel']) && BasDocumentScope::samples($doc['no_sampel'], $request->no_order) === $previewSamples) {
+                    $file_name = $doc['filename'] ?? $file_name;
+                    if (!empty($doc['email_pending']) && BasDocumentScope::filename($file_name) && is_file(public_path('dokumen/bas/' . $file_name))) {
+                        return response()->json([$file_name], 200);
+                    }
+                } elseif ($file_name && ($doc['filename'] ?? null) === $file_name) {
+                    throw new \InvalidArgumentException('Filename digunakan dokumen lain.');
+                }
+            }
 
             $generatedFilename = self::cetakBASPDF($orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal);
 
@@ -1997,7 +1877,7 @@ class AppsBasService
                 $existingDocs = json_decode($persiapanHeader->detail_bas_documents, true) ?? [];
                 $isMatched = false;
                 foreach ($existingDocs as &$doc) {
-                    if (!empty(array_intersect($doc['no_sampel'] ?? [], $expectednoSampel))) {
+                    if (!empty($doc['no_sampel']) && BasDocumentScope::samples($doc['no_sampel'], $request->no_order) === $previewSamples) {
                         $doc['filename'] = $generatedFilename;
                         $isMatched = true;
                         break;
@@ -2452,10 +2332,14 @@ class AppsBasService
                     }
                 } else {
                     if (isset($dataSampelTidakSelesai) && $dataSampelTidakSelesai->status == "Dilanjutkan") {
-                        $c = Carbon::parse($dataSampelTidakSelesai->tanggal_dilanjutkan)->locale('id');
-                        $hari2 = $c->translatedFormat('l');      // e.g. "Jumat"
-                        $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
-                        $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
+                        if (!empty($dataSampelTidakSelesai->tanggal_dilanjutkan)) {
+                            $c = Carbon::parse($dataSampelTidakSelesai->tanggal_dilanjutkan)->locale('id');
+                            $hari2 = $c->translatedFormat('l');
+                            $tgl2 = $c->translatedFormat('d F Y');
+                            $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
+                        } else {
+                            $tanggalHtml = "Hari/Tanggal : ....................................";
+                        }
                         $belumSelesaiBox = $boxUnchecked;
                     } else {
                         $tanggalHtml = "Hari/Tanggal : ....................................";
@@ -3232,10 +3116,14 @@ class AppsBasService
                     }
                 } else {
                     if (isset($dataSampelTidakSelesai) && $dataSampelTidakSelesai->status == "Dilanjutkan") {
-                        $c = Carbon::parse($dataSampelTidakSelesai->tanggal_dilanjutkan)->locale('id');
-                        $hari2 = $c->translatedFormat('l');      // e.g. "Jumat"
-                        $tgl2 = $c->translatedFormat('d F Y');  // e.g. "17 April 2025"
-                        $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
+                        if (!empty($dataSampelTidakSelesai->tanggal_dilanjutkan)) {
+                            $c = Carbon::parse($dataSampelTidakSelesai->tanggal_dilanjutkan)->locale('id');
+                            $hari2 = $c->translatedFormat('l');
+                            $tgl2 = $c->translatedFormat('d F Y');
+                            $tanggalHtml = "Hari/Tanggal : {$hari2} / {$tgl2}";
+                        } else {
+                            $tanggalHtml = "Hari/Tanggal : ....................................";
+                        }
                         $belumSelesaiBox = $boxUnchecked;
                     } else {
                         $tanggalHtml = "Hari/Tanggal : ....................................";
@@ -3768,13 +3656,6 @@ class AppsBasService
             ], 422);
         }
 
-        if ($request->status === 'Dilanjutkan' && (empty($request->tanggal_dilanjutkan) || trim($request->tanggal_dilanjutkan) === '')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tanggal dilanjutkan wajib diisi jika status Dilanjutkan',
-            ], 422);
-        }
-
         if ($request->status === 'Belum Selesai' && empty($request->alasan) && empty($request->keterangan)) {
             return response()->json([
                 'status' => 'error',
@@ -3784,40 +3665,25 @@ class AppsBasService
 
         DB::beginTransaction();
         try {
-            $id_persiapan = $request->id_persiapan ?? null;
-            if (!$id_persiapan) {
-                $psd = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
-                if ($psd) {
-                    $id_persiapan = $psd->id_persiapan_sampel_header;
-                }
-                else {
-                    // Fallback cari di PersiapanSampelHeader (untuk parameter Fisika/On-The-Spot seperti Kebisingan, Pencahayaan, dll yang tidak punya PSD)
-                    $psh = PersiapanSampelHeader::where('is_active', true)
-                        ->where(function ($query) use ($request) {
-                            $query->whereJsonContains('no_sampel', $request->no_sampel)
-                                  ->orWhere('no_sampel', 'LIKE', '%"' . $request->no_sampel . '"%')
-                                  ->orWhere('no_sampel', 'LIKE', '%' . $request->no_sampel . '%');
-                        })
-                        ->orderBy('id', 'desc')
-                        ->first();
-                
-                    if ($psh) {
-                        $id_persiapan = $psh->id;
-                    } elseif ($request->no_order) {
-                        $pshByOrder = PersiapanSampelHeader::where('no_order', $request->no_order)
-                            ->where('is_active', true)
-                            ->orderBy('id', 'desc')
-                            ->first();
-                
-                        if ($pshByOrder) {
-                            $id_persiapan = $pshByOrder->id;
-                        }
-                    }
+            if (!in_array($request->status, ['Dilanjutkan', 'Belum Selesai'], true)) {
+                throw new \InvalidArgumentException('Status sampel tidak valid.');
+            }
+            $scope = $request->all();
+            $scope['no_sampel'] = [$request->no_sampel];
+            $header = BasDocumentScope::resolve($scope, true);
+            $id_persiapan = $header->id;
+            $noSampel = BasDocumentScope::samples($scope['no_sampel'], $request->no_order)[0];
+            if (!BasDocumentScope::validDecision((object) $request->all(), $request->tanggal_sampling)) {
+                throw new \InvalidArgumentException('Alasan wajib diisi; Lainnya wajib keterangan. Jika tanggal dilanjutkan diisi, harus valid dan tidak sebelum sampling.');
+            }
+            foreach (json_decode($header->detail_bas_documents, true) ?? [] as $doc) {
+                if (!empty($doc['email_pending']) && in_array($noSampel, BasDocumentScope::samples($doc['no_sampel'], $request->no_order), true)) {
+                    throw new \InvalidArgumentException('Keputusan dokumen pending tidak dapat diubah sebelum email dikirim.');
                 }
             }
 
             SampelTidakSelesai::updateOrCreate(
-                ['no_sampel' => $request->no_sampel],
+                ['no_sampel' => $noSampel, 'no_order' => $request->no_order, 'id_persiapan' => $id_persiapan],
                 [
                     'no_order' => $request->no_order,
                     'id_persiapan' => $id_persiapan,
@@ -3825,7 +3691,7 @@ class AppsBasService
                     'keterangan' => ($request->status === 'Dilanjutkan') ? null : ($request->keterangan ?? null),
                     'status' => $request->status ?? null,
                     'alasan' => ($request->status === 'Dilanjutkan') ? null : ($request->alasan ?? null),
-                    'tanggal_dilanjutkan' => ($request->status === 'Belum Selesai') ? null : ($request->tanggal_dilanjutkan ?? null),
+                    'tanggal_dilanjutkan' => ($request->status === 'Belum Selesai') ? null : (trim((string) ($request->tanggal_dilanjutkan ?? '')) ?: null),
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'created_by' => $this->karyawan
                 ]
@@ -3842,7 +3708,7 @@ class AppsBasService
             return response()->json([
                 'status' => 'error',
                 'message' => $th->getMessage(),
-            ]);
+            ], $th instanceof \InvalidArgumentException ? 422 : 500);
         }
     }
 
