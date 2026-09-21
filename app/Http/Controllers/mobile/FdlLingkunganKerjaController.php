@@ -22,6 +22,7 @@ use App\Models\ParameterFdl;
 use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
 use App\Services\FdlOrderDetailService;
+use App\Support\FdlLingkunganSharedParameters;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -64,93 +65,24 @@ class FdlLingkunganKerjaController extends Controller
                 $dataLingkunganKerja = DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
                 
                 if ($detailLingkunganKerja !== NULL) {
-                    // if ($this->karyawan != $dataLingkunganKerja->created_by) {
-                    //     $user = MasterKaryawan::where('nama_lengkap', $dataLingkunganKerja->created_by)->first();
-                    //     if ($user) {
-                    //         $samplerName = $user->nama_lengkap;
-                    //     } else {
-                    //         $samplerName = "Unknown"; // atau sesuai kebutuhan Anda
-                    //     }
-
-                    //     return response()->json([
-                    //         'message' => "No Sample $request->no_sample harus di input oleh sampler $samplerName"
-                    //     ], 401);
-                    // } else {
-                        \DB::statement("SET SQL_MODE=''");
-                        $parameter = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))->groupBy('parameter')->get();
-                        $parNonSes = array();
-                        foreach ($parameter as $value) {
-                            if ($value->shift_pengambilan != 'Sesaat') {
-                                $p = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))->where('parameter', $value->parameter)->get();
-                                $l = $value->shift_pengambilan;
-                                $li = explode("-", $l);
-                                $shift = '';
-                                if (str_contains($value->parameter, 'PM')) {
-                                    if ($li[0] == '24 Jam') {
-                                        $shift = 25;
-                                    } else if ($li[0] == '8 Jam') {
-                                        $shift = 8;
-                                    } else if ($li[0] == '6 Jam') {
-                                        $shift = 6;
-                                    }
-                                } else if (str_contains($value->parameter, 'TSP')) {
-                                    if ($li[0] == '24 Jam') {
-                                        $shift = 25;
-                                    } else if ($li[0] == '8 Jam') {
-                                        $shift = 8;
-                                    } else if ($li[0] == '6 Jam') {
-                                        $shift = 6;
-                                    }
-                                } else {
-                                    if ($li[0] == '24 Jam') {
-                                        $shift = 4;
-                                    } else if ($li[0] == '8 Jam') {
-                                        $shift = 3;
-                                    } else if ($li[0] == '6 Jam') {
-                                        $shift = 6;
-                                    }
-                                }
-                                if ($shift > count($p)) {
-                                    $parNonSes[] = $value->parameter;
-                                }
-                            }
-                        }
-
-                        $p = json_decode($data->parameter);
-                        $nilai_param = array();
-                        $nilai_param2 = array();
-                        foreach ($parameter as $key => $value) {
-                            $nilai_param[] =  $value->parameter;
-                        }
-                        $param1 = array_diff($p, $nilai_param);
-                        foreach ($param1 as $ke => $val) {
-                            $nilai_param2[] =  $val;
-                        }
-                        $pp1 = str_replace("[", "", json_encode($nilai_param2));
-                        $pp2 = str_replace("]", "", $pp1);
-                        $pp3 = str_replace("[", "", json_encode($parNonSes));
-                        $pp4 = str_replace("]", "", $pp3);
-
-                        if ($pp2 == '') {
-                            $param_fin = json_encode($parNonSes);
-                        } else if ($pp4 == "") {
-                            $param_fin = '[' . $pp2 . ']';
-                        } else if ($pp2 !== "") {
-                            $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
-                        }
-
                         $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
+                        $orderLabels = FdlLingkunganSharedParameters::parseOrderParameterLabels($data->parameter);
                         return response()->json([
                             'no_sample'    => $data->no_sampel,
                             'jenis'        => $cek->nama_sub_kategori,
                             'keterangan' => $data->keterangan_1,
                             'id_ket' => explode('-', $data->kategori_3)[0],
-                            'param' => $param_fin,
-                            'list_parameter' => $listParameter
+                            'param' => $orderLabels,
+                            'list_parameter' => $listParameter,
+                            'available_shifts' => FdlLingkunganSharedParameters::getAvailableShifts(
+                                $data->no_sampel,
+                                $orderLabels,
+                                DetailLingkunganKerja::class
+                            ),
                         ], 200);
-                    // }
                 }else {
                     $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
+                    $orderLabels = FdlLingkunganSharedParameters::parseOrderParameterLabels($data->parameter);
                     return response()->json([
                         'no_sample'    => $data->no_sampel,
                         'jenis'        => $cek->nama_sub_kategori,
@@ -158,7 +90,12 @@ class FdlLingkunganKerjaController extends Controller
                         'id_ket' => explode('-', $data->kategori_3)[0],
                         'id_ket2' => explode('-', $data->kategori_2)[0],
                         'param' => $data->parameter,
-                        'list_parameter' => $listParameter
+                        'list_parameter' => $listParameter,
+                        'available_shifts' => FdlLingkunganSharedParameters::getAvailableShifts(
+                            $data->no_sampel,
+                            $orderLabels,
+                            DetailLingkunganKerja::class
+                        ),
                     ], 200);
                 }
             }
@@ -250,44 +187,21 @@ class FdlLingkunganKerjaController extends Controller
             $po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
             \DB::statement("SET SQL_MODE=''");
     
-            // Parameter dengan syarat durasi (24/8/6 Jam) yang jumlah datanya belum lengkap
-            $param = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->groupBy('parameter')->get();
-            $parNonSes = array();
-            foreach ($param as $value) {
-                $p = DetailLingkunganKerja::where('no_sampel', $request->no_sample)
-                    ->where('parameter', $value->parameter)
-                    ->get();
-    
-                $l = $value->kategori_pengujian;
-                $li = explode("-", $l);
-                $shiftThreshold = 1;
-    
-                if ($li[0] == '24 Jam') {
-                    $shiftThreshold = 25;
-                } else if ($li[0] == '8 Jam') {
-                    $shiftThreshold = 8;
-                } else if ($li[0] == '6 Jam') {
-                    $shiftThreshold = 6;
-                }
-    
-                if ($shiftThreshold > count($p)) {
-                    $parNonSes[] = $value->parameter;
-                }
+            $orderParameterLabels = FdlLingkunganSharedParameters::parseOrderParameterLabels($po->parameter);
+            $param_fin_array = FdlLingkunganSharedParameters::buildPendingParametersForShift(
+                $request->no_sample,
+                $request->shift,
+                $orderParameterLabels,
+                DetailLingkunganKerja::class
+            );
+
+            if (empty($param_fin_array)) {
+                return response()->json([
+                    'message' => 'Shift ' . $request->shift . ' sudah lengkap untuk no sample ini',
+                ], 422);
             }
-    
-            // Ambil daftar parameter dari order detail, bersihkan format "id;nama_param"
-            $p = json_decode($po->parameter);
-            $nilai_param2 = array();
-            foreach ($p as $item) {
-                $parts = explode(";", $item);
-                $nilai_param2[] = $parts[1] ?? '';
-            }
-            // Parameter TANPA syarat durasi -> cek apakah sudah pernah diinput di shift ini / Sesaat / L1
-            $filtered_param = array_values(array_diff($nilai_param2, $lk_parameter));
-    
-            // Gabungkan: parameter durasi yang belum lengkap + parameter non-durasi yang belum diinput
-            $param_fin_array = array_values(array_unique(array_merge($parNonSes, $filtered_param)));
-            $param_fin = json_encode($param_fin_array);
+
+            $param_fin = json_encode($param_fin_array, JSON_UNESCAPED_UNICODE);
     
             // Ganti 'lingkungan_kerja' di bawah kalau nama_fdl aslinya berbeda
             $parameterList = ParameterFdl::select("parameters")
@@ -370,7 +284,8 @@ class FdlLingkunganKerjaController extends Controller
                     'parameter_tsp'      => json_decode($parameter_tsp->parameters, true),
                     'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
                     'parameter_no2'      => $parameter_no2,
-                    'form_mappings'      => $form_mappings
+                    'form_mappings'                  => $form_mappings,
+                    'excluded_multiselect_parameters' => FdlLingkunganSharedParameters::excludedFromMultiselect(),
                 ], 200);
             } else {
                 return response()->json([
@@ -383,7 +298,8 @@ class FdlLingkunganKerjaController extends Controller
                     'parameter_tsp'      => json_decode($parameter_tsp->parameters, true),
                     'parameter_volatile' => json_decode($parameterVolatile->parameters, true),
                     'parameter_no2'      => $parameter_no2,
-                    'form_mappings'      => $form_mappings
+                    'form_mappings'                  => $form_mappings,
+                    'excluded_multiselect_parameters' => FdlLingkunganSharedParameters::excludedFromMultiselect(),
                 ], 200);
             }
         } catch (\Exception $th) {
@@ -405,6 +321,7 @@ class FdlLingkunganKerjaController extends Controller
     {
         DB::beginTransaction();
         try {
+            $savedDetailCount = 0;
             $fdl = DataLapanganLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
             if ($request->jam_pengambilan == '') {
                 return response()->json([
@@ -450,8 +367,13 @@ class FdlLingkunganKerjaController extends Controller
                     }
                 }
             }
-            if($request->param != null){
-                foreach ($request->param as $in => $a) {
+            $selectedParams = $request->param;
+            if (!is_array($selectedParams)) {
+                $selectedParams = ($selectedParams !== null && $selectedParams !== '') ? [$selectedParams] : [];
+            }
+
+            if (count($selectedParams) > 0) {
+                foreach ($selectedParams as $in => $a) {
                     $pengukuran = array();
                     $durasii = null;
                     if ($a == 'TSP (24 Jam)' || $a == 'Pb (24 Jam)' || $a == 'PM 10 (24 Jam)' || $a == 'PM 10 (8 Jam)' || $a == 'PM 2.5 (24 Jam)' || $a == 'PM 2.5 (8 Jam)') {
@@ -569,32 +491,16 @@ class FdlLingkunganKerjaController extends Controller
                             }
                         }
                     }
-                    $kategUji = $request->kateg_uji[$in] ?? null;
-                    if ($kategUji === null || $kategUji === '' || $kategUji === 0 || $kategUji === '0') {
-                        if (str_contains($a, '24 Jam') || str_contains($a, '24J')) {
-                            $kategUji = '24 Jam';
-                        } elseif (str_contains($a, '8 Jam') || str_contains($a, '8J')) {
-                            $kategUji = '8 Jam';
-                        } elseif (str_contains($a, '6 Jam') || str_contains($a, '6J')) {
-                            $kategUji = '6 Jam';
-                        } elseif (str_contains($a, '3 Jam')) {
-                            $kategUji = '3 Jam';
-                        }
-                    }
-
-                    $shift2 = $request->shift_pengambilan;
-                    if ($kategUji === null || $kategUji === '' || $kategUji === 0 || $kategUji === '0') {
-                        $shift_peng = 'Sesaat';
-                        $shift2 = 'Sesaat';
-                    } else if ($kategUji == '24 Jam') {
-                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
-                    } else if ($kategUji == '8 Jam') {
-                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
-                    } else if ($kategUji == '6 Jam') {
-                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
-                    } else if ($kategUji == '3 Jam') {
-                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
-                    }
+                    $kategUji = FdlLingkunganSharedParameters::resolveKategoriForStore(
+                        $request->kateg_uji[$in] ?? null,
+                        $a
+                    );
+                    $shiftFields = FdlLingkunganSharedParameters::resolveShiftFieldsForStore(
+                        $kategUji,
+                        $request->shift_pengambilan
+                    );
+                    $shift_peng = $shiftFields['kategori_pengujian'];
+                    $shift2 = $shiftFields['shift_pengambilan'];
                     
                     $existing = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))
                         ->where('parameter', $a)
@@ -652,59 +558,63 @@ class FdlLingkunganKerjaController extends Controller
                     $fdlvalue->created_by                                                  = $this->karyawan;
                     $fdlvalue->created_at                                                 = Carbon::now()->format('Y-m-d H:i:s');
                     $fdlvalue->save();
+                    $savedDetailCount++;
                 }
-            }else{
-                $order_detail = OrderDetail::select('parameter')->where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-                $parameter = [
-                    "Kelembaban",
-                    "Suhu",
-                    "Laju Ventilasi",
-                    "Laju Ventilasi (8 Jam)",
-                    "Tekanan Udara (LK)"
-                ];
+            }
 
-                $rawOrderParams = json_decode($order_detail->parameter, true);
+            $order_detail = OrderDetail::select('parameter')->where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            if ($order_detail) {
+                $rawOrderParams = json_decode($order_detail->parameter, true) ?? [];
 
                 $orderParameters = array_map(function ($item) {
                     $parts = explode(';', $item);
                     return isset($parts[1]) ? trim($parts[1]) : null;
                 }, $rawOrderParams);
 
-                $filteredParameters = array_filter($parameter, function ($p) use ($orderParameters) {
-                    return in_array($p, $orderParameters);
-                });
+                $filteredParameters = FdlLingkunganSharedParameters::matchAmbientParametersFromOrder($orderParameters);
 
-                if (empty($filteredParameters)) {
+                if (count($selectedParams) === 0 && empty($filteredParameters)) {
                     return response()->json([
                         'status' => false,
                         'message' => 'Parameter tidak ditemukan dalam order'
-                    ]);
+                    ], 401);
                 }
 
-                foreach($filteredParameters as $a){
+                foreach ($filteredParameters as $a) {
                     $satuan = '';
-                    $shift_pengujian = '';
 
-                    if ($a == 'Kelembaban') {
+                    if ($a == 'Kelembaban' || $a == 'Kelembaban (24 Jam)') {
                         $satuan = ' %';
-                    } else if ($a == 'Suhu') {
+                    } else if ($a == 'Suhu' || $a == 'Suhu (24 Jam)') {
                         $satuan = ' °C';
                     } else if ($a == 'Laju Ventilasi') {
                         $satuan = ' m/s';
                     } else if ($a == 'Laju Ventilasi (8 Jam)') {
                         $satuan = ' m/s';
-                        $shift_pengujian = '8 Jam-' . json_encode($request->shift_pengambilan);
                     } else if ($a == 'Pertukaran Udara') {
                         $satuan = ' m3';
                     } else if ($a == 'Tekanan Udara (LK)') {
                         $satuan = ' mmHg';
                     }
 
-                    // 🛑 Tambahkan filter agar parameter tanpa durasi tidak diproses jika shift L2
-                    $isDurasi = str_contains($a, '8 Jam') || str_contains($a, '6 Jam') || str_contains($a, '24 Jam');
+                    $isDurasi = FdlLingkunganSharedParameters::parameterHasDurasiInName($a);
 
                     if ($request->shift_pengambilan != 'L1' && !$isDurasi) {
                         continue; // skip parameter ini
+                    }
+
+                    $shiftAmbientFields = FdlLingkunganSharedParameters::resolveShiftFieldsForStore(
+                        FdlLingkunganSharedParameters::resolveKategoriFromParameterName($a),
+                        $request->shift_pengambilan
+                    );
+
+                    $alreadyStored = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))
+                        ->where('parameter', $a)
+                        ->where('kategori_pengujian', $shiftAmbientFields['kategori_pengujian'])
+                        ->where('shift_pengambilan', $shiftAmbientFields['shift_pengambilan'])
+                        ->exists();
+                    if ($alreadyStored) {
+                        continue;
                     }
 
                     $fdlvalue = new DetailLingkunganKerja();
@@ -724,8 +634,8 @@ class FdlLingkunganKerjaController extends Controller
                     if ($request->jam_pengambilan != '') $fdlvalue->waktu_pengukuran = $request->jam_pengambilan;
                     if ($request->kecepatan_angin != '') $fdlvalue->kecepatan_angin = $request->kecepatan_angin;
 
-                    $fdlvalue->kategori_pengujian = $shift_pengujian != '' ? $shift_pengujian : 'Sesaat';
-                    $fdlvalue->shift_pengambilan = $shift_pengujian != '' ? $request->shift_pengambilan : 'Sesaat';
+                    $fdlvalue->kategori_pengujian = $shiftAmbientFields['kategori_pengujian'];
+                    $fdlvalue->shift_pengambilan = $shiftAmbientFields['shift_pengambilan'];
 
                     if ($request->catatan_kondisi_lapangan != '') $fdlvalue->catatan_kondisi_lapangan = $request->catatan_kondisi_lapangan;
                     if ($request->suhu != '') $fdlvalue->suhu = $request->suhu;
@@ -750,7 +660,16 @@ class FdlLingkunganKerjaController extends Controller
                     $fdlvalue->created_by = $this->karyawan;
                     $fdlvalue->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $fdlvalue->save();
+                    $savedDetailCount++;
                 }
+            }
+
+            if ($savedDetailCount === 0) {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Tidak ada data baru untuk shift ' . $request->shift_pengambilan . '. Shift ini sudah lengkap.',
+                ], 422);
             }
 
             if (is_null($fdl)) {
