@@ -1147,6 +1147,7 @@ class PersiapanSampleController extends Controller
             
             $this->saveDetail($request, $psh);
             $this->saveQrDocument($psh);
+            app(SamplerTrackingService::class)->syncByPersiapanHeader($psh);
 
             JobTask::insert([
                 'job' => 'RenderPdfPersiapanSample',
@@ -1158,18 +1159,6 @@ class PersiapanSampleController extends Controller
             $this->dispatch(new RenderPdfPersiapanSample($psh->id));
 
             DB::commit();
-
-            try {
-                app(SamplerTrackingService::class)->syncByPersiapanHeader($psh);
-            } catch (\Throwable $trackingSyncException) {
-                \Illuminate\Support\Facades\Log::warning('Gagal sync tracking sampler dari persiapan sampel. ' . $trackingSyncException->getMessage(), [
-                    'no_document' => $psh->no_document ?? null,
-                    'no_quotation' => $psh->no_quotation ?? null,
-                    'tanggal_sampling' => $psh->tanggal_sampling ?? null,
-                    'line' => $trackingSyncException->getLine(),
-                    'file' => $trackingSyncException->getFile(),
-                ]);
-            }
 
             return response()->json(['message' => 'Saved successfully','status' => true], 200);
         } catch (\Throwable $th) {

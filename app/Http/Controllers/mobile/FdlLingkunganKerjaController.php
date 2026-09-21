@@ -138,6 +138,7 @@ class FdlLingkunganKerjaController extends Controller
                         } else if ($pp2 !== "") {
                             $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
                         }
+
                         $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
                         return response()->json([
                             'no_sample'    => $data->no_sampel,
@@ -568,18 +569,31 @@ class FdlLingkunganKerjaController extends Controller
                             }
                         }
                     }
+                    $kategUji = $request->kateg_uji[$in] ?? null;
+                    if ($kategUji === null || $kategUji === '' || $kategUji === 0 || $kategUji === '0') {
+                        if (str_contains($a, '24 Jam') || str_contains($a, '24J')) {
+                            $kategUji = '24 Jam';
+                        } elseif (str_contains($a, '8 Jam') || str_contains($a, '8J')) {
+                            $kategUji = '8 Jam';
+                        } elseif (str_contains($a, '6 Jam') || str_contains($a, '6J')) {
+                            $kategUji = '6 Jam';
+                        } elseif (str_contains($a, '3 Jam')) {
+                            $kategUji = '3 Jam';
+                        }
+                    }
+
                     $shift2 = $request->shift_pengambilan;
-                    if ($request->kateg_uji[$in] == null) {
+                    if ($kategUji === null || $kategUji === '' || $kategUji === 0 || $kategUji === '0') {
                         $shift_peng = 'Sesaat';
                         $shift2 = 'Sesaat';
-                    } else if ($request->kateg_uji[$in] == '24 Jam') {
-                        $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift_pengambilan);
-                    } else if ($request->kateg_uji[$in] == '8 Jam') {
-                        $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift_pengambilan);
-                    } else if ($request->kateg_uji[$in] == '6 Jam') {
-                        $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift_pengambilan);
-                    }else if ($request->kateg_uji[$in] == '3 Jam') {
-                        $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift_pengambilan);
+                    } else if ($kategUji == '24 Jam') {
+                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
+                    } else if ($kategUji == '8 Jam') {
+                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
+                    } else if ($kategUji == '6 Jam') {
+                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
+                    } else if ($kategUji == '3 Jam') {
+                        $shift_peng = $kategUji . '-' . json_encode($request->shift_pengambilan);
                     }
                     
                     $existing = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))

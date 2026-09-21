@@ -22,22 +22,19 @@ class BasOnlineTidakSelesaiController extends Controller
             $query = DB::table('sampel_tidak_selesai as sts')
                 ->leftJoin('persiapan_sampel_header as psh', 'psh.id', '=', 'sts.id_persiapan')
                 ->select([
+                    'psh.id as id_persiapan',
                     'psh.no_quotation as no_qt',
                     'sts.no_order',
                     'psh.nama_perusahaan',
                     'psh.tanggal_sampling',
                     'psh.sampler_jadwal',
                     'psh.detail_bas_documents',
-                    DB::raw("GROUP_CONCAT(CONCAT(sts.no_sampel, ' (', COALESCE(NULLIF(sts.keterangan, ''), sts.alasan, '-'), ')') SEPARATOR ', ') AS nosampel_tidak_selesai")
+                    DB::raw("GROUP_CONCAT(CONCAT(sts.no_sampel, ' (', COALESCE(sts.keterangan, sts.alasan, sts.status, ''), ')') SEPARATOR ', ') AS nosampel_tidak_selesai")
                 ])
-                ->where(function ($q) {
-                    $q->whereNull('sts.alasan')
-                        ->orWhere('sts.alasan', '!=', 'Sample di pick up');
+                ->where(function ($query) {
+                    $query->whereNull('sts.alasan')->orWhere('sts.alasan', '!=', 'Sample di pick up');
                 })
-                ->where(function ($q) {
-                    $q->where('psh.is_active', 1)
-                        ->orWhereNull('sts.id_persiapan');
-                });
+                ->where('psh.is_active', 1);
 
             if ($request->has('periode_awal') && $request->has('periode_akhir')) {
                 $query->whereBetween('psh.tanggal_sampling', [
