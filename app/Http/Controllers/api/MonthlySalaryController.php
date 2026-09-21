@@ -56,7 +56,7 @@ class MonthlySalaryController extends Controller
         }
 
         $user = $this->getCurrentUser();
-        return $user && in_array($user->grade, ['MANAGER', 'DIREKSI', 'SENIOR MANAGER']);
+        return $user && in_array($user->grade, ['MANAGER', 'DIRECTOR', 'SENIOR MANAGER']);
     }
 
     /**
@@ -74,7 +74,7 @@ class MonthlySalaryController extends Controller
         }
 
         $user = $this->getCurrentUser();
-        if ($user && $user->grade === 'DIREKSI' || $user->id === 131) {
+        if ($user && $user->grade === 'DIRECTOR' || $user->id === 131) {
             return null; // DIREKSI tidak memfilter bawahan, bisa melihat semua data salary
         }
 
