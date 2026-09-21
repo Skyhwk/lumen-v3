@@ -493,6 +493,160 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, $service->collect('2026-09-22', [10]));
     }
 
+
+    public function testTrackingSummaryGroupsDailyMemberSetsAndRetainsVisits(): void
+    {
+        [$first] = $this->troubleAssignment('first', '2026-09-21');
+        [$second] = $this->troubleAssignment('second', '2026-09-21');
+        [$third] = $this->troubleAssignment('third', '2026-09-21');
+        $sessions = SamplerTrackingSession::with('activeMembers.events')->get();
+        $rows = $this->service->buildTrackingRows($sessions);
+        $this->assertCount(1, $rows);
+        $this->assertSame('Asep', $rows->first()['sampler']);
+        $this->assertEquals([$first->id, $second->id, $third->id], $rows->first()['sessions']->pluck('id')->all());
+        $this->assertCount(3, $rows->first()['perusahaan_list']);
+        foreach ([$first, $second] as $session) {
+            SamplerTrackingMember::create([
+                'sampler_tracking_session_id' => $session->id, 'sampler_id' => 20,
+                'sampler_name' => 'Andik', 'effective_duration' => 1, 'is_active' => true,
+            ]);
+        }
+        $this->troubleAssignment('tomorrow', '2026-09-22');
+        $sessions = SamplerTrackingSession::with('activeMembers.events')->get();
+        $secondSession = $sessions->firstWhere('id', $second->id);
+        $secondSession->setRelation('activeMembers', $secondSession->activeMembers->reverse()->values());
+        $rows = $this->service->buildTrackingRows($sessions);
+        $this->assertCount(3, $rows);
+        $team = $rows->firstWhere('sampler', 'Asep, Andik');
+        $this->assertNotNull($team);
+        $this->assertEquals([$first->id, $second->id], $team['sessions']->pluck('id')->all());
+        $this->assertCount(4, $team['members']);
+        $this->assertSame(3, $rows->pluck('row_id')->unique()->count());
+        $this->assertSame(4, SamplerTrackingSession::count());
+    }
+
+
+    public function testJourneyDepartureReferenceRespectsSamplerReturnAndCheckinTime(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-21 12:00:00', 'Asia/Jakarta'));
+        [$first, $a] = $this->troubleAssignment('first-team');
+        [$second, $b] = $this->troubleAssignment('second-team');
+        $other = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $second->id, 'sampler_id' => 20,
+            'sampler_name' => 'Eko', 'is_active' => true,
+        ]);
+        $events = $this->db->getConnection('mysql')->table('sampler_tracking_events');
+        $departureId = $events->insertGetId([
+            'sampler_tracking_session_id' => $first->id, 'sampler_tracking_member_id' => $a->id,
+            'event_type' => 'departure', 'event_at' => '2026-09-21 08:00:00',
+        ]);
+        $this->assertEquals($departureId, $this->service->departureForMember($b->fresh(), '2026-09-21')->id);
+        $this->assertNull($this->service->departureForMember($other->fresh(), '2026-09-21'));
+        $visible = $this->service->listByDate('2026-09-21', 10, null, [$second->id]);
+        $reference = $visible->first()->activeMembers->firstWhere('sampler_id', 10)->events->first();
+        $this->assertTrue($reference->is_journey_reference);
+        $this->assertEquals($first->id, $reference->sampler_tracking_session_id);
+        $this->assertSame(1, $events->count());
+        $events->insert([
+            'sampler_tracking_session_id' => $first->id, 'sampler_tracking_member_id' => $a->id,
+            'event_type' => 'return', 'event_at' => '2026-09-21 10:00:00',
+        ]);
+        $this->assertNull($this->service->departureForMember($b->fresh(), '2026-09-21'));
+        $events->insert([
+            'sampler_tracking_session_id' => $second->id, 'sampler_tracking_member_id' => $b->id,
+            'event_type' => 'checkin', 'event_at' => '2026-09-21 09:00:00',
+        ]);
+        $this->assertEquals($departureId, $this->service->departureForMember($b->fresh(), '2026-09-21')->id);
+    }
+
+    public function testRecoveryClearsWithReferencedDepartureAndOwnReturn(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 12:00:00', 'Asia/Jakarta'));
+        [$first, $a] = $this->troubleAssignment('first');
+        [$second, $b] = $this->troubleAssignment('second');
+        $events = $this->db->getConnection('mysql')->table('sampler_tracking_events');
+        $events->insert([
+            'sampler_tracking_session_id' => $first->id, 'sampler_tracking_member_id' => $a->id,
+            'event_type' => 'departure', 'event_at' => '2026-09-21 08:00:00',
+        ]);
+        foreach (['checkin', 'checkout'] as $type) {
+            foreach ([[$first, $a], [$second, $b]] as [$session, $member]) {
+                $events->insert([
+                    'sampler_tracking_session_id' => $session->id, 'sampler_tracking_member_id' => $member->id,
+                    'event_type' => $type, 'event_at' => '2026-09-21 09:00:00',
+                ]);
+            }
+        }
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $service->collect('2026-09-22', [10]);
+        $trouble = $service->unresolved(10)->firstWhere('tracking_session_id', $second->id);
+        $service->reopen($trouble->id, 601, ['note' => 'Second team recovery']);
+        $events->insert([
+            'sampler_tracking_session_id' => $first->id, 'sampler_tracking_member_id' => $a->id,
+            'event_type' => 'return', 'event_at' => '2026-09-23 10:00:00',
+        ]);
+        $this->assertTrue($service->unresolved(10)->contains('tracking_session_id', $second->id));
+        $events->insert([
+            'sampler_tracking_session_id' => $second->id, 'sampler_tracking_member_id' => $b->id,
+            'event_type' => 'return', 'event_at' => '2026-09-23 11:00:00',
+        ]);
+        $this->assertCount(0, $service->unresolved(10));
+        $this->assertSame(0, $b->events()->where('event_type', 'departure')->count());
+    }
+
+
+    public function testCrossTeamMultidayCheckoutAndReturnUseOriginalDeparture(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('no_quotation');
+            $table->date('tanggal_sampling');
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_emailed_bas')->default(true);
+        });
+        foreach ([2, 3] as $duration) {
+            $date = $duration === 2 ? '2026-09-21' : '2026-09-25';
+            \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse($date . ' 08:00:00', 'Asia/Jakarta'));
+            foreach ([[10, 'A'], [20, 'Andik']] as [$id, $name]) {
+                $this->schedule(['tanggal' => $date, 'userid' => $id, 'sampler' => $name, 'durasi' => 0]);
+            }
+            foreach ([[10, 'A'], [30, 'Eko']] as [$id, $name]) {
+                $this->schedule(['tanggal' => $date, 'no_quotation' => 'Q2', 'jam_mulai' => '11:00:00', 'userid' => $id, 'sampler' => $name, 'durasi' => $duration]);
+            }
+            $connection->table('persiapan_sampel_header')->insert([
+                ['no_quotation' => 'Q1', 'tanggal_sampling' => $date],
+                ['no_quotation' => 'Q2', 'tanggal_sampling' => $date],
+            ]);
+            $this->prepare($date);
+            $first = SamplerTrackingSession::where('tanggal_sampling', $date)->where('no_quotation', 'Q1')->firstOrFail();
+            $second = SamplerTrackingSession::where('tanggal_sampling', $date)->where('no_quotation', 'Q2')->firstOrFail();
+            $a = $first->activeMembers()->where('sampler_id', 10)->firstOrFail();
+            $b = $second->activeMembers()->where('sampler_id', 10)->firstOrFail();
+            foreach (['departure', 'checkin', 'checkout'] as $type) {
+                $this->service->storeEvent(['member_id' => $a->id, 'event_type' => $type]);
+            }
+            \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse($date . ' 11:00:00', 'Asia/Jakarta'));
+            $this->service->storeEvent(['member_id' => $b->id, 'event_type' => 'checkin']);
+            $due = \Carbon\Carbon::parse($date)->addDays($duration - 1);
+            \Carbon\Carbon::setTestNow($due->copy()->setTime(10, 0));
+            $troubles = new \App\Services\SamplerTrackingTroubleService();
+            $this->assertSame(0, $troubles->collect($due->copy()->subDay()->toDateString(), [10]));
+            $this->assertCount(0, $troubles->unresolved(10));
+            $visible = $this->service->listByDate($due->toDateString(), 10);
+            $this->assertTrue($visible->contains('id', $second->id));
+            $member = $visible->firstWhere('id', $second->id)->activeMembers->firstWhere('sampler_id', 10);
+            $this->assertTrue(\App\Services\SamplerTrackingActivity::hasEvent($member, 'departure'));
+            $this->assertTrue(\App\Services\SamplerTrackingActivity::hasEvent($member, 'checkin'));
+            $this->service->storeEvent(['member_id' => $b->id, 'event_type' => 'checkout']);
+            $this->service->storeEvent(['member_id' => $b->id, 'event_type' => 'return']);
+            $this->assertSame(1, $b->events()->where('event_type', 'checkout')->count());
+            $this->assertSame(1, $b->events()->where('event_type', 'return')->count());
+            $this->assertSame(0, $b->events()->where('event_type', 'departure')->count());
+            $this->assertCount(0, $troubles->unresolved(10));
+        }
+    }
+
     private function schedule(array $values = [])
     {
         $id = $this->db->getConnection('mysql')->table('jadwal')->insertGetId(array_merge([
