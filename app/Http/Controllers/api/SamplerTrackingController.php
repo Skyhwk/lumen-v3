@@ -358,7 +358,7 @@ class SamplerTrackingController extends Controller
             $row['trouble'] = $troubleObj;
             $row['trouble_id'] = $trouble->id;
             $row['tracking_session_id'] = $trouble->tracking_session_id;
-            $row['row_id'] = 'trouble-' . $trouble->id;
+            $row['row_id'] = 'trouble-session-' . $trouble->tracking_session_id;
             $row['session_id'] = $troubleObj['session_id'];
             $row['session_ids'] = $troubleObj['session_ids'];
 
@@ -543,6 +543,10 @@ class SamplerTrackingController extends Controller
 
     protected function trackingMergeKey($row)
     {
+        if (!empty($row['tracking_session_id'])) {
+            return 'trouble-session-' . $row['tracking_session_id'];
+        }
+
         if (!empty($row['row_id'])) {
             return $row['row_id'];
         }

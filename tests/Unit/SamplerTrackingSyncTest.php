@@ -647,6 +647,39 @@ class SamplerTrackingSyncTest extends TestCase
         }
     }
 
+
+    public function testBlockedRowsAndUnblockAreScopedToSession(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-22 10:00:00', 'Asia/Jakarta'));
+        [$first] = $this->troubleAssignment('Agung-Amru');
+        [$second] = $this->troubleAssignment('other-team');
+        $connection = $this->db->getConnection('mysql');
+        $ids = [];
+        foreach ([[$first->id, 10], [$first->id, 20], [$second->id, 10]] as [$sessionId, $samplerId]) {
+            $ids[] = $connection->table('sampler_tracking_troubles')->insertGetId([
+                'tracking_session_id' => $sessionId, 'sampler_id' => $samplerId,
+                'activity_date' => '2026-09-21', 'is_clear' => 0,
+            ]);
+        }
+        $reflection = new \ReflectionClass(\App\Http\Controllers\api\SamplerTrackingController::class);
+        $controller = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('uniqueTrackingRows');
+        $method->setAccessible(true);
+        $rows = collect([
+            ['row_id' => 'trouble-' . $ids[0], 'tracking_session_id' => $first->id, 'trouble_id' => $ids[0], 'sampler' => 'Agung, Amru'],
+            ['row_id' => 'trouble-' . $ids[1], 'tracking_session_id' => $first->id, 'trouble_id' => $ids[1], 'sampler' => 'Agung, Amru'],
+            ['row_id' => 'trouble-' . $ids[2], 'tracking_session_id' => $second->id, 'trouble_id' => $ids[2], 'sampler' => 'Agung'],
+        ]);
+        $grouped = $method->invoke($controller, $rows);
+        $this->assertCount(2, $grouped);
+        $this->assertSame('Agung, Amru', $grouped->first()['sampler']);
+        (new \App\Services\SamplerTrackingTroubleService())->reopen($grouped->first()['trouble_id'], 601, [
+            'session_id' => $first->id, 'note' => 'Open team',
+        ]);
+        $this->assertSame(2, $connection->table('sampler_tracking_troubles')->where('tracking_session_id', $first->id)->whereNotNull('reopened_at')->count());
+        $this->assertNull($connection->table('sampler_tracking_troubles')->find($ids[2])->reopened_at);
+    }
+
     private function schedule(array $values = [])
     {
         $id = $this->db->getConnection('mysql')->table('jadwal')->insertGetId(array_merge([
