@@ -443,9 +443,6 @@ class JadwalServices
         if ($dataUpdate->batch_id == null) {
             throw new Exception('Batch Id is required', 401);
         }
-        if ($dataUpdate->kendaraan == null) {
-            throw new Exception('Kendaraan is required', 401);
-        }
         if ($dataUpdate->sampling == null) {
             throw new Exception('Sampling is required', 401);
         }
@@ -860,7 +857,6 @@ class JadwalServices
             'durasi'          => 'Durasi',
             'status'          => 'Status',
             'batch_id'        => 'Batch Id',
-            'kendaraan'       => 'Kendaraan',
             'sampling'        => 'Sampling',
             'karyawan'        => 'Karyawan',
             'jadwal_id'       => 'Jadwal Id',
@@ -1426,12 +1422,11 @@ class JadwalServices
             $dataParsial->durasi == null ||
             $dataParsial->status == null ||
             $dataParsial->karyawan == null ||
-            $dataParsial->kendaraan == null ||
             $dataParsial->pendampingan_k3 == null ||
             $dataParsial->isokinetic == null 
             
         ) {
-            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, note, durasi, status, urutan, karyawan, kendaraan is required", 401);
+            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, note, durasi, status, urutan, karyawan is required", 401);
         }
 
         DB::beginTransaction();
@@ -1608,10 +1603,9 @@ class JadwalServices
             $dataParsial->status == null ||
             $dataParsial->karyawan == null ||
             $dataParsial->pendampingan_k3 == null ||
-            $dataParsial->isokinetic == null ||
-            $dataParsial->kendaraan == null
+            $dataParsial->isokinetic == null
         ) {
-            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, durasi, status, karyawan, kendaraan is required", 401);
+            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, durasi, status, karyawan is required", 401);
         }
 
         DB::beginTransaction();
