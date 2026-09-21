@@ -26,15 +26,15 @@ use Exception;
  * 3. Drop kolom jadwal.kendaraan setelah semua pembaca pindah
  * 4. DUAL_WRITE_DRIVER bisa dimatikan belakangan jika driver juga pindah penuh ke MO
  *
- * Tab Belum = jadwal tanggal itu yang driver DAN kendaraan masih kosong,
- * dan belum masuk tabel MO.
+ * Tab Belum = jadwal tanggal itu yang kendaraan masih kosong,
+ * dan belum masuk tabel MO. Driver kosong tidak membuatnya "belum diatur".
  */
 class MobilisasiOperasionalService
 {
     public const DUAL_WRITE_KENDARAAN = true;
     public const DUAL_WRITE_DRIVER = true;
 
-    /** jadwal_columns = driver & kendaraan masih kosong. mo_table = hanya cek tabel MO. */
+    /** jadwal_columns = kendaraan masih kosong. mo_table = hanya cek tabel MO. */
     public const UNASSIGNED_MODE = 'jadwal_columns';
 
     public function listBelumDiatur($tanggal)
@@ -541,8 +541,6 @@ class MobilisasiOperasionalService
 
         if (self::UNASSIGNED_MODE === 'jadwal_columns') {
             $query->where(function ($q) {
-                $q->whereNull('driver')->orWhereRaw("TRIM(driver) = ''");
-            })->where(function ($q) {
                 $q->whereNull('kendaraan')->orWhereRaw("TRIM(kendaraan) = ''");
             });
         }
@@ -565,12 +563,6 @@ class MobilisasiOperasionalService
             ->whereNotNull('no_quotation')
             ->where('is_active', true)
             ->where('tanggal', $tanggal)
-            ->where(function ($q) {
-                $q->whereNull('driver')->orWhereRaw("TRIM(driver) = ''");
-            })
-            ->where(function ($q) {
-                $q->whereNull('kendaraan')->orWhereRaw("TRIM(kendaraan) = ''");
-            })
             ->orderBy('jam_mulai');
     }
 
