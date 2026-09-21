@@ -489,6 +489,18 @@ class SamplerTrackingService
             ->orderBy('nama_perusahaan')
             ->get();
 
+        foreach ($sessions as $session) {
+            foreach ($session->activeMembers as $member) {
+                if (SamplerTrackingActivity::hasEvent($member, 'departure')) continue;
+                $departure = $this->departureForMember($member, $session->tanggal_sampling);
+                if ($departure) {
+                    $reference = clone $departure;
+                    $reference->is_journey_reference = true;
+                    $member->setRelation('events', $member->events->prepend($reference)->values());
+                }
+            }
+        }
+
         // Consolidate first so shorter orders at the same stop are not dropped during multi-day work.
         return $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
             ->filter(function ($session) use ($date, $samplerId, $samplerName) {
@@ -500,6 +512,34 @@ class SamplerTrackingService
                 });
             })->values();
     }
+    public function departureForMember($member, $date)
+    {
+        $own = $member->events->firstWhere('event_type', 'departure');
+        if ($own) return $own;
+        if (!$member->sampler_id) return null;
+        // A recorded check-in binds this visit to the journey active at arrival.
+        $checkin = $member->events->where('event_type', 'checkin')->sortBy('event_at')->first();
+        $at = $checkin ? $checkin->event_at : $this->now()->toDateTimeString();
+        $latest = SamplerTrackingEvent::whereIn('event_type', ['departure', 'return'])
+            ->where('event_at', '<=', $at)
+            ->whereHas('member', function ($query) use ($member, $date) {
+                $query->where('sampler_id', $member->sampler_id)->where('is_active', true)
+                    ->whereHas('session', function ($session) use ($date) {
+                        $session->where('is_active', true)->whereDate('tanggal_sampling', $date);
+                    });
+            })
+            ->when($checkin, function ($query) use ($checkin) {
+                $query->where(function ($before) use ($checkin) {
+                    $before->where('event_at', '<', $checkin->event_at)
+                        ->orWhere(function ($sameTime) use ($checkin) {
+                            $sameTime->where('event_at', $checkin->event_at)->where('id', '<', $checkin->id);
+                        });
+                });
+            })
+            ->orderByDesc('event_at')->orderByDesc('id')->first();
+        return $latest && $latest->event_type === 'departure' ? $latest : null;
+    }
+
     public function consolidateActivities($sessions)
     {
         if ($sessions->isEmpty()) return $sessions;
@@ -569,7 +609,15 @@ public function buildTrackingRows($sessions)
 
         $date = $session->tanggal_sampling ?: '-';
 
-        $teamKey = $session->team_key ?: ($date . '|session-' . $session->id);
+        // Display one daily route per member set; retain each source session below.
+        $memberKeys = $session->activeMembers->map(function ($member) {
+            return $member->sampler_id
+                ? 'id:' . $member->sampler_id
+                : 'name:' . mb_strtolower(trim((string) $member->sampler_name));
+        })->unique()->sort()->values()->all();
+        $teamKey = $memberKeys
+            ? json_encode([$date, $memberKeys])
+            : ($date . '|session-' . $session->id);
 
         if (!$sessionsByTeam->has($teamKey)) {
             $sessionsByTeam->put($teamKey, [
@@ -621,6 +669,7 @@ public function buildTrackingRows($sessions)
 
     // Map output per baris
     return $sessionsByTeam->values()->map(function ($row) {
+        $row['events'] = $row['events']->unique('id')->values();
         $noOrders = $this->uniqueValues($row['no_orders']);
         $perusahaan = $this->uniqueValues($row['perusahaan']);
         $samplers = $this->uniqueValues($row['samplers']);
@@ -1243,6 +1292,9 @@ public function buildTrackingRows($sessions)
         }
 
         if ($eventType === 'checkin') {
+            if (!$this->departureForMember($this->sessionMemberForSampler($sessions->get($currentIndex), $member), $member->session->tanggal_sampling)) {
+                throw ValidationException::withMessages(['event_type' => ['Berangkat sampling harus dilakukan sebelum check in.']]);
+            }
             if ($currentIndex === 0) {
                 if (!SamplerTrackingActivity::hasEvent($this->sessionMemberForSampler($sessions->first(), $member), 'departure')) {
                     throw ValidationException::withMessages([

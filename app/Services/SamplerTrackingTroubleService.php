@@ -91,7 +91,9 @@ class SamplerTrackingTroubleService
             return SamplerTrackingActivity::hasEvent($member, 'checkin')
                 && SamplerTrackingActivity::hasEvent($member, 'checkout');
         });
-        $complete = $stopsComplete && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'departure'); })
+        $complete = $stopsComplete && $members->every(function ($member) use ($date) {
+            return (new SamplerTrackingService())->departureForMember($member, $date) !== null;
+        })
            && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'return'); });
         $sessionDue = $this->dueDate($date, $members->max(function ($member) {
             return SamplerTrackingActivity::duration($member);
