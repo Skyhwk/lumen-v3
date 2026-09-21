@@ -325,7 +325,7 @@ class LemburController extends Controller
 
         return Datatables::of($data)
             ->addColumn('can_approve', function ($row) {
-                return $this->grade == 'MANAGER' ? true : false;
+                return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER' ? true : false;
             })
             ->make(true);
     }
@@ -392,7 +392,7 @@ class LemburController extends Controller
 
         return Datatables::of($data)
             ->addColumn('can_approve', function ($row) {
-                return $this->grade == 'MANAGER' ? true : false;
+                return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER' ? true : false;
             })
             ->make(true);
     }

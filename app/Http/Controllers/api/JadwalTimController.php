@@ -8,6 +8,7 @@ use App\Models\Jadwal;
 
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
@@ -181,57 +182,50 @@ class JadwalTimController extends Controller
                 'note'
             )
             ->whereNotNull('no_quotation')
-            ->where('is_active',true)
-            ->where('tanggal',$request->tanggal)
+            ->where('is_active', true)
+            ->where('tanggal', $request->tanggal)
             ->orderBy('jam_mulai', 'asc')
             ->get()
-
             ->map(function ($item) {
-                $quotation = strpos($item->no_quotation,'QTC') !== false
-                        ? $item->quotationKontrakH
-                        : $item->quotationNonKontrak;
+                $quotation = strpos($item->no_quotation, 'QTC') !== false
+                    ? $item->quotationKontrakH
+                    : $item->quotationNonKontrak;
                 $item->pic = $quotation ? [
-                        'nama_pic_sampling'=> $quotation->nama_pic_sampling,
-                        'no_tlp_pic_sampling'=> $quotation->no_tlp_pic_sampling,
-                    ]: null;
-                unset($item->quotationKontrakH,$item->quotationNonKontrak);
-                $teamSamplers = collect(
-                    explode(',', $item->sampler)
-                )->map(fn($s) => trim($s))->filter()->unique()->values();
+                    'nama_pic_sampling' => $quotation->nama_pic_sampling,
+                    'no_tlp_pic_sampling' => $quotation->no_tlp_pic_sampling,
+                ] : null;
+                unset($item->quotationKontrakH, $item->quotationNonKontrak);
 
-                // tambahkan driver jika belum ada
-                if (
-                    !empty($item->driver)
-                    && !$teamSamplers->contains(
-                        $item->driver
-                    )
-                ) {
-                    $teamSamplers->push(
-                        $item->driver
-                    );
-                }
-
-                // sort biar konsisten
-                $normalizedTeam =$teamSamplers
-                    ->sort()
-                    ->values()
-                    ->implode(', ');
-
-                $displaySampler = $teamSamplers->map(function ($sampler)use ($item) {
-                    return $sampler ==$item->driver ? $sampler .' (Driver)': $sampler;
-                })->implode(', ');
-
-                $item->team_sampler = $normalizedTeam;
-                $item->display_sampler = $displaySampler;
+                $item->team_sampler = $this->normalizedTeamKey($item);
+                $item->display_sampler = $this->displayTeamSampler($item);
                 return $item;
-            })
-            // GROUP BY TIM
-            ->groupBy(
-                'team_sampler'
-            )
+            });
 
             ->map(function ($group) use ($kategoriSummaryByKey) {
                 $first = $group->first();
+
+                $listPt = $group->map(function ($item) use ($rawJadwalForKategori) {
+                    $identity = $this->jadwalRowIdentity($item);
+                    $kategoriRingkasan = $this->ringkasanKategoriPerPt(
+                        $rawJadwalForKategori,
+                        $identity
+                    );
+
+                    return [
+                        'no_quotation' => $item->no_quotation,
+                        'nama_perusahaan' => $item->nama_perusahaan,
+                        'wilayah' => $item->wilayah,
+                        'sampler' => $item->display_sampler,
+                        'jam_mulai' => $item->jam_mulai,
+                        'jam_selesai' => $item->jam_selesai,
+                        'durasi' => $item->durasi,
+                        'periode' => $item->periode,
+                        'pic' => $item->pic,
+                        'note' => $item->note,
+                        'kategori_ringkasan' => $kategoriRingkasan,
+                    ];
+                })->values();
+
                 return [
                     'tim_sampler' => $first->display_sampler,
                     'list_pt' =>
@@ -254,7 +248,6 @@ class JadwalTimController extends Controller
                     )->values(),
                 ];
             })
-
             ->values();
 
         return Datatables::of($data)
