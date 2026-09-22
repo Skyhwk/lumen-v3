@@ -62,7 +62,10 @@ class TemplatePaketAnalisaController extends Controller
         
                 ->make(true);
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'message' => 'Gagal mengambil data template paket analisa: ' . $th->getMessage(),
+                'status'  => '401',
+            ], 401);
         }
     }
 
