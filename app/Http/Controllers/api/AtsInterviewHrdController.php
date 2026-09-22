@@ -547,19 +547,6 @@ class AtsInterviewHrdController extends Controller
 
         $applicant->update($updatePayload);
 
-        RecruitmentInterview::updateOrCreate(
-            [
-                'new_recruitment_id' => $applicant->id,
-                'stage'              => 'hrd',
-                'is_active'          => 1,
-            ],
-            [
-                'status_result'     => 'passed',
-                'catatan_interview'   => 'Bypass HRD Interview: ' . $reason,
-                'updated_by'        => $user,
-            ]
-        );
-
         try {
             $this->sendHrdStageAdvanceNotifications($applicant, $user, false, null, true);
         } catch (\Exception $e) {
