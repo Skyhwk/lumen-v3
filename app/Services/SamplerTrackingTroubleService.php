@@ -92,8 +92,32 @@ class SamplerTrackingTroubleService
                 && SamplerTrackingActivity::hasEvent($member, 'checkout');
         }) && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'departure'); })
            && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'return'); });
-        $duration = $members->max(function ($member) { return SamplerTrackingActivity::duration($member); });
-        return ['complete' => $complete, 'due_date' => Carbon::parse($date)->addDays(max(0, $duration - 1))->toDateString()];
+        $sessionDue = $this->dueDate($date, $members->max(function ($member) {
+            return SamplerTrackingActivity::duration($member);
+        }));
+        // Departure/return are one daily journey. Sesaat + 1x24 jam on the same
+        // date must not be overdue until the longest assignment is due.
+        $dailyDue = $wasReopened ? $sessionDue : $sessions->max(function ($item) use ($samplerId, $date) {
+            $own = $item->activeMembers->filter(function ($member) use ($samplerId) {
+                return (string) $member->sampler_id === (string) $samplerId;
+            });
+
+            return $this->dueDate($date, $own->max(function ($member) {
+                return SamplerTrackingActivity::duration($member);
+            }));
+        });
+
+        return ['complete' => $complete, 'due_date' => $dailyDue ?: $sessionDue];
+    }
+
+    protected function dueDate($date, $duration)
+    {
+        return Carbon::parse($date)->addDays(max(0, (int) $duration - 1))->toDateString();
+    }
+
+    protected function isPastDue($progress, $day)
+    {
+        return !empty($progress['due_date']) && $progress['due_date'] <= $day;
     }
 
     public function collect($day = null, array $samplerIds = [])
@@ -126,7 +150,7 @@ class SamplerTrackingTroubleService
                 ->exists();
             if ($exists) continue;
             $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id);
-            if ($progress['complete'] || !$progress['due_date'] || $progress['due_date'] > $day) continue;
+            if ($progress['complete'] || !$this->isPastDue($progress, $day)) continue;
             $count += DB::table(self::TABLE)->insertOrIgnore([
                 'sampler_id' => $assignment->sampler_id,
                 'tracking_session_id' => $assignment->tracking_session_id,
@@ -149,9 +173,12 @@ class SamplerTrackingTroubleService
             })
             ->whereNotNull('tracking_session_id')
             ->where('activity_date', '<', $today)->orderBy('activity_date')->get();
-        return $troubles->filter(function ($trouble) {
+        return $troubles->filter(function ($trouble) use ($today) {
             $progress = $this->progress($trouble->sampler_id, $trouble->activity_date, $trouble->tracking_session_id);
             if (!$progress['complete']) {
+                if (!$this->isPastDue($progress, Carbon::parse($today, 'Asia/Jakarta')->subDay()->toDateString())) {
+                    return false;
+                }
                 // Recover assignments prematurely cleared using another team's return.
                 if ($trouble->is_clear) {
                     DB::table(self::TABLE)->where('id', $trouble->id)->where('is_clear', 1)->update([

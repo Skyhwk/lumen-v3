@@ -263,26 +263,6 @@ class SamplerTrackingController extends Controller
         return $parsed;
     }
 
-    protected function supervisedSamplerIds($date = null, $reopenedOnly = false)
-    {
-        $date = $this->normalizeTroubleFilterDate($date);
-        $today = Carbon::now('Asia/Jakarta')->toDateString();
-        $query = DB::table(SamplerTrackingTroubleService::TABLE)
-            ->where('activity_date', '<=', $today);
-
-        if ($reopenedOnly) {
-            $query->whereNotNull('reopened_at');
-        } else {
-            $query->where('is_clear', 0)->whereNull('reopened_at');
-        }
-
-        if ($date) {
-            $query->whereDate('activity_date', $date);
-        }
-
-        return $query->distinct()->pluck('sampler_id');
-    }
-
     protected function resolveSampler($samplerId)
     {
         $sampler = \App\Models\MasterKaryawan::where('id', $samplerId)->first();
@@ -458,31 +438,27 @@ class SamplerTrackingController extends Controller
             return $this->teamTroubleRowsFromQuery($date);
         }
 
-        $service = new SamplerTrackingTroubleService();
-        $samplerIds = $this->supervisedSamplerIds($date, false);
-        $samplers = \App\Models\MasterKaryawan::where('is_active', true)
-            ->whereIn('id', $samplerIds)
-            ->get();
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('activity_date', '<=', $today)
+            ->where('is_clear', 0)
+            ->whereNull('reopened_at')
+            ->whereNotNull('tracking_session_id');
 
-        $rows = $samplers->flatMap(function ($sampler) use ($service, $date) {
-            return $service->unresolved($sampler->id)
-                ->filter(function ($trouble) use ($date) {
-                    if (!empty($trouble->reopened_at)) {
-                        return false;
-                    }
+        if ($date) {
+            $query->whereDate('activity_date', $date);
+        }
 
-                    if (!$date) {
-                        return true;
-                    }
+        $troubles = $query->orderBy('activity_date')->orderBy('id')->get();
+        if ($troubles->isEmpty()) {
+            return collect();
+        }
 
-                    return Carbon::parse($trouble->activity_date)->toDateString()
-                        === Carbon::parse($date)->toDateString();
-                })
-                ->flatMap(function ($trouble) use ($sampler) {
-                    $troubleObj = $this->troublePayload($trouble);
+        $rows = $troubles->flatMap(function ($trouble) {
+            $sampler = $this->resolveSampler($trouble->sampler_id);
+            $troubleObj = $this->troublePayload($trouble);
 
-                    return $this->attachTroubleToTrackingRows($trouble, $sampler, $troubleObj);
-                });
+            return $this->attachTroubleToTrackingRows($trouble, $sampler, $troubleObj);
         })->filter(function ($row) {
             return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
         })->values();

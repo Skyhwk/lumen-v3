@@ -355,15 +355,30 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertEquals(1, $connection->table('sampler_tracking_troubles')->find($trouble->id)->is_clear);
     }
 
-    public function testLongerAssignmentCannotDelayAnotherTeamsTroubleDeadline(): void
+    public function testSameDayOvernightAssignmentDoesNotBlockSesaatUntilOvernightIsDue(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 10:00:00', 'Asia/Jakarta'));
-        [$short] = $this->troubleAssignment('short-team');
+        $this->troubleAssignment('sesaat-pt', '2026-09-21', 0);
+        $this->troubleAssignment('overnight-pt', '2026-09-21', 2);
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame(0, $service->collect('2026-09-21', [10]));
+        $this->assertCount(0, $service->unresolved(10));
+        $service->assertAllowed(10, '2026-09-23');
+        $this->assertSame(2, $service->collect('2026-09-22', [10]));
+        $this->assertCount(2, $service->unresolved(10));
+    }
+
+    public function testLongerAssignmentCannotDelayAnotherTeamsTroubleDeadline(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-25 10:00:00', 'Asia/Jakarta'));
+        $this->troubleAssignment('short-team', '2026-09-21', 1);
         $this->troubleAssignment('long-team', '2026-09-21', 4);
         $service = new \App\Services\SamplerTrackingTroubleService();
-        $this->assertSame(1, $service->collect('2026-09-22', [10]));
-        $this->assertEquals($short->id, $service->unresolved(10)->first()->tracking_session_id);
-        $this->assertSame(1, $service->collect('2026-09-24', [10]));
+        $this->assertSame(0, $service->collect('2026-09-22', [10]));
+        $this->assertCount(0, $service->unresolved(10));
+        $service->assertAllowed(10, '2026-09-25');
+        $this->assertSame(2, $service->collect('2026-09-24', [10]));
+        $this->assertCount(2, $service->unresolved(10));
     }
 
     public function testUnblockingAndFinishingOneAssignmentDoesNotUnlockOrClearTheOther(): void
