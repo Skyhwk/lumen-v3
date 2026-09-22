@@ -644,6 +644,7 @@ trait BuildsCandidateAssessmentPreview
 
         return [
             'id' => $user->id,
+            'new_recruitment_id' => $user->new_recruitment_id ?? $candidate->id ?? null,
             'tgl_interview' => $user->tgl_interview,
             'jenis_interview' => $user->jenis_interview,
             'link_gmeet' => $user->link_gmeet,
