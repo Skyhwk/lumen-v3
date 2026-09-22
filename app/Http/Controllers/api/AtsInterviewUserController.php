@@ -12,6 +12,8 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use App\Services\AtsNotificationService;
+use App\Services\GenerateToken;
+use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -698,6 +700,118 @@ class AtsInterviewUserController extends Controller
             'message' => 'User interview schedule saved successfully.',
             'data'    => $interview->fresh(),
         ], 200);
+    }
+
+    /**
+     * Lewati proses User Interview dan pindahkan kandidat ke Final Decision.
+     * Email persetujuan Direktur tidak dikirim otomatis; HRD mengirimkannya
+     * dari modul Final Decision setelah bypass selesai.
+     */
+    public function bypassToFinalDecision(Request $request, $id = null)
+    {
+        $allowedGrades = ['MANAGER', 'DIREKSI', 'DIREKTUR'];
+        if (!in_array(strtoupper(trim((string) $this->grade)), $allowedGrades, true)) {
+            return response()->json([
+                'status' => 403,
+                'message' => 'Bypass User Interview hanya dapat dilakukan oleh Manager atau Direksi.',
+            ], 403);
+        }
+
+        $candidateId = $id ?: $request->input('id') ?: $request->header('id');
+        $applicant = NewRecruitment::find($candidateId);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found.',
+            ], 404);
+        }
+
+        if (strtolower(trim((string) $applicant->status)) !== 'interview_user') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Bypass hanya tersedia untuk kandidat pada tahap User Interview.',
+            ], 422);
+        }
+
+        $pr = $applicant->personalRequest;
+        if (!$pr) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Data personnel request tidak ditemukan.',
+            ], 422);
+        }
+
+        $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+        $description = trim((string) $request->input('description'));
+        if ($description === '') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Keterangan bypass wajib diisi.',
+            ], 422);
+        }
+        $now = Carbon::now();
+
+        DB::beginTransaction();
+        try {
+            $interview = RecruitmentInterview::where('new_recruitment_id', $applicant->id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->latest('id')
+                ->first();
+
+            if ($interview) {
+                $interview->update([
+                    'status_result' => 'bypassed',
+                    'updated_by' => $user,
+                ]);
+            }
+
+            $tokenService = new GenerateToken();
+            $tokenKey = $pr->id . $applicant->nama_lengkap . 'approval' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d')));
+
+            $history = RecruitmentStatusService::parseMetaHistory($applicant);
+            $history[] = [
+                'status' => 'user_interview_bypassed',
+                'at' => $now->toDateTimeString(),
+                'by' => $user,
+                'description' => $description,
+                'bypassed_processes' => ['user_interview'],
+            ];
+            // Tetap letakkan status tujuan sebagai entry terakhir agar pembacaan
+            // meta_history berbasis status terakhir tetap melihat Final Decision.
+            $history[] = [
+                'status' => 'management_decision',
+                'at' => $now->toDateTimeString(),
+                'by' => $user,
+                'source' => 'user_interview_bypass',
+            ];
+
+            $applicant->update([
+                'approved_interview_user' => $user,
+                'approved_interview_user_at' => $now,
+                'is_approve_interview_user' => 1,
+                'token_approval' => $token,
+                'status' => 'management_decision',
+                'meta_history' => json_encode(array_values($history)),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'User Interview berhasil dibypass. Kandidat siap dikirim ke Final Decision.',
+                'data' => $applicant->fresh(),
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 500,
+                'message' => 'Gagal melakukan bypass User Interview: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function salaryOffer(Request $request)
