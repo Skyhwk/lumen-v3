@@ -425,6 +425,33 @@ class LemburController extends Controller
         ]);
     }
 
+    public function tabCountsHrd(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+        $base = OvertimeRequest::on('intilab_apps')
+            ->whereNotNull('approved_atasan_by')
+            ->whereNull('rejected_atasan_by')
+            ->whereNull('rejected_hrd_by')
+            ->whereYear('start_date', $periode);
+
+        $onProgress = (clone $base)
+            ->whereNull('approved_hrd_by')
+            ->whereNull('approved_finance_by')
+            ->count();
+        $processed = (clone $base)
+            ->whereNotNull('approved_hrd_by')
+            ->whereNull('rejected_finance_by')
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress,
+                'processed' => $processed,
+            ],
+        ]);
+    }
+
     public function tabCountsFinance(Request $request)
     {
         $periode = $request->periode ?? date('Y');

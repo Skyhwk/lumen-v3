@@ -246,7 +246,7 @@ class PermohonanIzinController extends Controller
                     Notification::whereIn('id', $atasanIds)
                         ->title('Permohonan Izin Baru')
                         ->message('Permohonan izin dari ' . $this->karyawan . ' menunggu persetujuan Anda')
-                        ->url('/request/formulir/permohonan-izin')
+                        ->url('/request/permohonan/permohonan-izin')
                         ->send();
                 }
             }
@@ -361,7 +361,7 @@ class PermohonanIzinController extends Controller
                 Notification::whereIn('id', $userIds)
                     ->title('Permohonan Izin')
                     ->message('Permohonan izin Anda telah disetujui atasan oleh ' . $this->karyawan)
-                    ->url('/request/formulir/permohonan-izin')
+                    ->url('/request/permohonan/permohonan-izin')
                     ->send();
             }
 
@@ -409,7 +409,7 @@ class PermohonanIzinController extends Controller
                 Notification::whereIn('id', $userIds)
                     ->title('Permohonan Izin Ditolak')
                     ->message('Permohonan izin Anda ditolak atasan. Alasan: ' . $request->keterangan)
-                    ->url('/request/formulir/permohonan-izin')
+                    ->url('/request/permohonan/permohonan-izin')
                     ->send();
             }
 

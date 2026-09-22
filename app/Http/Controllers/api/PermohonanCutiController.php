@@ -312,7 +312,7 @@ class PermohonanCutiController extends Controller
                 Notification::whereIn('id', $userId)
                     ->title('Permohonan Cuti')
                     ->message($message . ' oleh ' . $this->karyawan)
-                    ->url('/request/formulir/permohonan-cuti')
+                    ->url('/request/permohonan/permohonan-cuti')
                     ->send();
             }
 
@@ -366,7 +366,7 @@ class PermohonanCutiController extends Controller
                 Notification::whereIn('id', $userId)
                     ->title('Permohonan Cuti')
                     ->message($message . ' oleh ' . $this->karyawan . '. Alasan: ' . ($request->keterangan ?? '-'))
-                    ->url('/request/formulir/permohonan-cuti')
+                    ->url('/request/permohonan/permohonan-cuti')
                     ->send();
             }
 
@@ -479,7 +479,7 @@ class PermohonanCutiController extends Controller
                 Notification::whereIn('id', $sendNotifTo)
                     ->title('Permohonan Cuti Baru!')
                     ->message('Permohonan cuti baru diajukan oleh ' . $this->karyawan)
-                    ->url('/request/formulir/permohonan-cuti')
+                    ->url('/request/permohonan/permohonan-cuti')
                     ->send();
             }
 
