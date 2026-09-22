@@ -73,7 +73,7 @@ class FdlLingkunganSharedParameters
 
         $lower = strtolower($parameterName);
         if ($kateg === '24 Jam') {
-            return (str_contains($lower, 'pm') || str_contains($lower, 'tsp')) ? 25 : 4;
+            return (str_contains($lower, 'pm') || str_contains($lower, 'tsp') || str_contains($lower, 'kelembapan') || str_contains($lower, 'suhu')) ? 25 : 4;
         }
         if ($kateg === '8 Jam') {
             return (str_contains($lower, 'pm') || str_contains($lower, 'tsp')) ? 8 : 3;
