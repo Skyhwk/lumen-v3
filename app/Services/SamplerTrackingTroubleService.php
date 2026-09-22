@@ -120,9 +120,28 @@ class SamplerTrackingTroubleService
         return $assignment->sampler_id . '|' . Carbon::parse($assignment->activity_date)->toDateString();
     }
 
+    protected function assignmentDurationColumns()
+    {
+        $columns = [
+            'm.sampler_id',
+            's.id as tracking_session_id',
+            's.tanggal_sampling as activity_date',
+        ];
+        foreach (['effective_duration', 'durasi_personal', 'duration', 'durasi'] as $column) {
+            if (Schema::hasColumn('sampler_tracking_members', $column)) {
+                $columns[] = 'm.' . $column;
+            }
+        }
+        if (Schema::hasColumn('sampler_tracking_sessions', 'durasi')) {
+            $columns[] = 's.durasi as session_durasi';
+        }
+
+        return $columns;
+    }
+
     protected function assignmentDuration($assignment)
     {
-        foreach (['effective_duration', 'durasi_personal', 'durasi', 'session_durasi'] as $field) {
+        foreach (['effective_duration', 'durasi_personal', 'duration', 'durasi', 'session_durasi'] as $field) {
             if (isset($assignment->$field) && $assignment->$field !== null && $assignment->$field !== '') {
                 return max(0, (int) $assignment->$field);
             }
@@ -155,15 +174,7 @@ class SamplerTrackingTroubleService
             ->whereDate('s.tanggal_sampling', '>=', $startDate)->whereDate('s.tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
             ->whereNotNull('m.sampler_id')
-            ->select(
-                'm.sampler_id',
-                's.id as tracking_session_id',
-                's.tanggal_sampling as activity_date',
-                'm.effective_duration',
-                'm.durasi_personal',
-                'm.durasi',
-                's.durasi as session_durasi'
-            )
+            ->select($this->assignmentDurationColumns())
             ->distinct()->orderBy('s.tanggal_sampling')->orderBy('s.id')->get();
 
         $journeyDueByKey = [];
