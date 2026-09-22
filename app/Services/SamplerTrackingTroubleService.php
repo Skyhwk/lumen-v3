@@ -115,6 +115,22 @@ class SamplerTrackingTroubleService
         return Carbon::parse($date)->addDays(max(0, (int) $duration - 1))->toDateString();
     }
 
+    protected function journeyKey($assignment)
+    {
+        return $assignment->sampler_id . '|' . Carbon::parse($assignment->activity_date)->toDateString();
+    }
+
+    protected function assignmentDuration($assignment)
+    {
+        foreach (['effective_duration', 'durasi_personal', 'durasi', 'session_durasi'] as $field) {
+            if (isset($assignment->$field) && $assignment->$field !== null && $assignment->$field !== '') {
+                return max(0, (int) $assignment->$field);
+            }
+        }
+
+        return 0;
+    }
+
     protected function isPastDue($progress, $day)
     {
         return !empty($progress['due_date']) && $progress['due_date'] <= $day;
@@ -139,8 +155,28 @@ class SamplerTrackingTroubleService
             ->whereDate('s.tanggal_sampling', '>=', $startDate)->whereDate('s.tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
             ->whereNotNull('m.sampler_id')
-            ->select('m.sampler_id', 's.id as tracking_session_id', 's.tanggal_sampling as activity_date')
+            ->select(
+                'm.sampler_id',
+                's.id as tracking_session_id',
+                's.tanggal_sampling as activity_date',
+                'm.effective_duration',
+                'm.durasi_personal',
+                'm.durasi',
+                's.durasi as session_durasi'
+            )
             ->distinct()->orderBy('s.tanggal_sampling')->orderBy('s.id')->get();
+
+        $journeyDueByKey = [];
+        $journeyCountByKey = [];
+        foreach ($assignments as $assignment) {
+            $key = $this->journeyKey($assignment);
+            $journeyCountByKey[$key] = ($journeyCountByKey[$key] ?? 0) + 1;
+            $due = $this->dueDate($assignment->activity_date, $this->assignmentDuration($assignment));
+            if (!isset($journeyDueByKey[$key]) || $due > $journeyDueByKey[$key]) {
+                $journeyDueByKey[$key] = $due;
+            }
+        }
+
         $count = 0;
         foreach ($assignments as $assignment) {
             if (!$assignment->sampler_id) continue;
@@ -149,6 +185,23 @@ class SamplerTrackingTroubleService
                 ->where('tracking_session_id', $assignment->tracking_session_id)
                 ->exists();
             if ($exists) continue;
+
+            $key = $this->journeyKey($assignment);
+            $journeyDue = $journeyDueByKey[$key] ?? null;
+            $journeyCount = $journeyCountByKey[$key] ?? 1;
+            // Sesaat + 1x24 jam (atau PT lain di hari yang sama) adalah 1 perjalanan.
+            // Jangan buat trouble selama PT terpanjang belum jatuh tempo, dan jangan
+            // buat tiket terpisah untuk PT pendek yang deadline-nya lebih awal.
+            if ($journeyCount > 1) {
+                if (!$journeyDue || $journeyDue > $day) {
+                    continue;
+                }
+                $ownDue = $this->dueDate($assignment->activity_date, $this->assignmentDuration($assignment));
+                if ($ownDue < $journeyDue) {
+                    continue;
+                }
+            }
+
             $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id);
             if ($progress['complete'] || !$this->isPastDue($progress, $day)) continue;
             $count += DB::table(self::TABLE)->insertOrIgnore([

@@ -364,8 +364,8 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, $service->collect('2026-09-21', [10]));
         $this->assertCount(0, $service->unresolved(10));
         $service->assertAllowed(10, '2026-09-23');
-        $this->assertSame(2, $service->collect('2026-09-22', [10]));
-        $this->assertCount(2, $service->unresolved(10));
+        $this->assertSame(1, $service->collect('2026-09-22', [10]));
+        $this->assertCount(1, $service->unresolved(10));
     }
 
     public function testLongerAssignmentCannotDelayAnotherTeamsTroubleDeadline(): void
@@ -377,8 +377,8 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, $service->collect('2026-09-22', [10]));
         $this->assertCount(0, $service->unresolved(10));
         $service->assertAllowed(10, '2026-09-25');
-        $this->assertSame(2, $service->collect('2026-09-24', [10]));
-        $this->assertCount(2, $service->unresolved(10));
+        $this->assertSame(1, $service->collect('2026-09-24', [10]));
+        $this->assertCount(1, $service->unresolved(10));
     }
 
     public function testUnblockingAndFinishingOneAssignmentDoesNotUnlockOrClearTheOther(): void
