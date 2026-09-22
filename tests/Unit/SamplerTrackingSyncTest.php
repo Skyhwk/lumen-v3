@@ -725,6 +725,34 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, SamplerTrackingSession::count());
     }
 
+    public function testInactiveOlderRevisionsDoNotBlockCurrentRevisionMigration(): void
+    {
+        $old = 'ISL/QT/26-IX/157R10';
+        $new = 'ISL/QT/26-IX/157R11';
+        $row = $this->schedule(['no_quotation' => $old, 'id_sampling' => 41396, 'parsial' => 201033]);
+        $session = $this->prepare('2026-09-17')->firstWhere('no_quotation', $old);
+        $this->attendance($session);
+
+        // These are old, superseded visits from the same sampling plan. They
+        // have evidence/history but are inactive, so a current QT revision
+        // must leave them untouched rather than attempting to migrate them.
+        $archived = SamplerTrackingSession::create([
+            'team_key' => 'archived-r9-session', 'no_quotation' => 'ISL/QT/26-IX/157R9',
+            'id_sampling' => 41396, 'parsial' => 199165, 'tanggal_sampling' => '2026-09-17',
+            'is_active' => false,
+        ]);
+        $archivedKey = $archived->team_key;
+
+        Jadwal::where('id', $row->id)->update(['no_quotation' => $new]);
+        $this->service->syncQuotation($new);
+
+        $this->assertSame($new, $session->fresh()->no_quotation);
+        $this->assertTrue((bool) $session->fresh()->is_active);
+        $this->assertSame('ISL/QT/26-IX/157R9', $archived->fresh()->no_quotation);
+        $this->assertSame($archivedKey, $archived->fresh()->team_key);
+        $this->assertFalse((bool) $archived->fresh()->is_active);
+    }
+
     public function testRevisionDoesNotMoveEvidenceToDifferentVisit(): void
     {
         $old = 'ISL/QT/26-IX/456R1';

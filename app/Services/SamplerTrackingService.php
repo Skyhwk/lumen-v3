@@ -204,7 +204,11 @@ class SamplerTrackingService
         $sessions = SamplerTrackingSession::where(function ($query) use ($quotation, $plans) {
             $query->where('no_quotation', $quotation);
             if ($plans) $query->orWhereIn('id_sampling', $plans);
-        })->lockForUpdate()->get();
+        // A superseded revision has already been archived. It must not be
+        // reconciled again merely because it shares the sampling-plan ID with
+        // the current preparation; doing so can roll back the real active
+        // session's revision update.
+        })->where('is_active', true)->lockForUpdate()->get();
         $revised = [];
         foreach ($sessions as $session) {
             if (!$session->id_sampling || !$session->no_quotation) continue;
