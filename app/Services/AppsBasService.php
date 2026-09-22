@@ -1068,6 +1068,30 @@ class AppsBasService
                     $item['id_persiapan'] = $header->id;
 
                     if ($header) {
+                        $isFinal = $request->boolean('is_final');
+                        $noteFields = [
+                            'catatan' => 'Catatan tambahan',
+                            'informasi_teknis' => 'Informasi teknis',
+                        ];
+                        foreach ($noteFields as $field => $label) {
+                            $raw = isset($item[$field]) ? trim((string) $item[$field]) : '';
+                            if ($raw === '-') {
+                                $raw = '';
+                            }
+                            if ($raw === '') {
+                                if ($isFinal) {
+                                    throw new \InvalidArgumentException($label . ' wajib diisi.');
+                                }
+                                $item[$field] = '';
+                                continue;
+                            }
+                            $noteError = BasDocumentScope::freeTextError($raw, $label);
+                            if ($noteError !== '') {
+                                throw new \InvalidArgumentException($noteError);
+                            }
+                            $item[$field] = $raw;
+                        }
+
                         $detailData = [
                             'catatan' => $item['catatan'] ?? '',
                             'informasi_teknis' => $item['informasi_teknis'] ?? $header->informasi_teknis,
@@ -1270,9 +1294,15 @@ class AppsBasService
             }));
             if (count($documentKeys) !== 1) throw new \InvalidArgumentException('Attachment bukan dokumen unik pada header ini.');
             $documentKey = $documentKeys[0];
-            if (empty($documents[$documentKey]['email_pending'])) {
-                throw new \InvalidArgumentException('Dokumen belum final atau email sudah terkirim.');
-            }
+            $document = $documents[$documentKey];
+            // if (!empty($document['email_sent_at'])) {
+            //     throw new \InvalidArgumentException(
+            //         'Email dokumen ini sudah terkirim pada ' . $document['email_sent_at'] . '.'
+            //     );
+            // }
+            // if (empty($document['email_pending'])) {
+            //     throw new \InvalidArgumentException('Dokumen belum final. Submit BAS final dulu sebelum kirim email.');
+            // }
             $emailInstance = SendEmail::where('to', $to)
                 ->where('cc', $ccArray)
                 ->where('bcc', $bcc)
@@ -1304,7 +1334,7 @@ class AppsBasService
                 $documents[$documentKey]['email_sent_at'] = Carbon::now()->format('Y-m-d H:i:s');
                 $persiapanHeader->detail_bas_documents = json_encode($documents);
                 if ($persiapanHeader) {
-                    $persiapanHeader->is_emailed_bas = count(array_filter($documents, fn($doc) => !empty($doc['email_pending']))) === 0 ? 1 : 0;
+                    $persiapanHeader->is_emailed_bas = 1;
                     $persiapanHeader->emailed_bas_at = \Carbon\Carbon::now();
                     $persiapanHeader->save();
 
@@ -3663,6 +3693,16 @@ class AppsBasService
             ], 422);
         }
 
+        if ($request->status === 'Belum Selesai' && $request->alasan === 'Lainnya') {
+            $lainnyaError = BasDocumentScope::lainnyaKeteranganError($request->keterangan);
+            if ($lainnyaError !== '') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $lainnyaError,
+                ], 422);
+            }
+        }
+
         DB::beginTransaction();
         try {
             if (!in_array($request->status, ['Dilanjutkan', 'Belum Selesai'], true)) {
@@ -3714,10 +3754,39 @@ class AppsBasService
 
 
 
+    private function ulkHygieneK3Names()
+    {
+        return ['K3-KB', 'K3-KFK', 'K3-KFPBP', 'K3-KFS', 'K3-KRU', 'K3-KTRTHK'];
+    }
+
+    private function isUlkHygieneK3Parameter($item, $kategori3)
+    {
+        if ($kategori3 !== '27-Udara Lingkungan Kerja') {
+            return false;
+        }
+
+        $tokens = ['570;K3-KB', '571;K3-KFK', '574;K3-KFPBP', '573;K3-KFS', '575;K3-KRU', '572;K3-KTRTHK'];
+        if (in_array($item, $tokens, true)) {
+            return true;
+        }
+
+        $name = explode(';', (string) $item)[1] ?? (string) $item;
+        return in_array($name, $this->ulkHygieneK3Names(), true);
+    }
+
+    private function isUlkHygieneK3Completed($noSampel)
+    {
+        return DataLapanganLingkunganKerja::where('no_sampel', $noSampel)->exists()
+            || DataLapanganPartikulatMeter::where('no_sampel', $noSampel)->exists();
+    }
+
     private function getStatusSampling($sample)
     {
         try {
             $parametersRaw = json_decode($sample->parameter);
+            if (!is_array($parametersRaw)) {
+                $parametersRaw = [];
+            }
 
             // 1. Panggil data Template ICP di luar loop (sekali saja agar query ringan)
             // Pastikan Anda sudah meng-import: use App\Models\TemplateStp; di atas class
@@ -3735,10 +3804,16 @@ class AppsBasService
             $requiredParameters = collect($this->getRequiredParameters())
                 ->where('category', $sample->kategori_2);
 
-            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample, $requiredParameters) {
+            $hasK3Hygiene = false;
+            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample, $requiredParameters, &$hasK3Hygiene) {
                 $parameterName = explode(";", $item)[1] ?? null;
 
                 if (!$parameterName) {
+                    return $carry;
+                }
+
+                if ($this->isUlkHygieneK3Parameter($item, $sample->kategori_3)) {
+                    $hasK3Hygiene = true;
                     return $carry;
                 }
 
@@ -3762,6 +3837,11 @@ class AppsBasService
                 }
                 return is_array($param) && isset($param['model']);
             });
+
+            if ($hasK3Hygiene && empty($parameters)) {
+                $sampleNumber = $sample->no_sampel ?? $sample->no_sample;
+                return $this->isUlkHygieneK3Completed($sampleNumber) ? 'selesai' : 'belum selesai';
+            }
 
             $status = 'selesai';
             if (!empty($parameters)) {
