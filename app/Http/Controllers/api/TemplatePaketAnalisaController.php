@@ -19,43 +19,51 @@ class TemplatePaketAnalisaController extends Controller
 {
     public function index(Request $request)
     {
-        $data = TemplatePaketAnalisa::where('is_active', true);
+        try {
+            $data = TemplatePaketAnalisa::where('is_active', true);
 
-        if(isset($request->kategori) && !empty($request->kategori)){
-            $data->where('kategori', $request->kategori);
+            if(isset($request->kategori) && !empty($request->kategori)){
+                $data->where('kategori', $request->kategori);
+            }
+
+            if(isset($request->sub_kategori) && !empty($request->sub_kategori)){
+                $data->where('sub_kategori', $request->sub_kategori);
+            }
+
+            return DataTables::of($data)
+                ->editColumn('data_pendukung_sampling', function ($item) {
+                    $data = json_decode($item->data_pendukung_sampling, true);
+
+                    if (empty($data) || ! is_array($data)) {
+                        return [];
+                    }
+
+                    foreach ($data as $i => &$row) {
+                        $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
+                    }
+
+                    return $data;
+                })
+                ->addColumn('harga_paket', function ($item) {
+                    $data = json_decode($item->data_pendukung_sampling, true);
+                    $harga_paket = 0;
+                    if (empty($data) || !is_array($data)) {
+                        return 0;
+                    }
+
+                    foreach ($data as $i => &$row) {
+                        // Tambahkan pengecekan harga_paket tidak kosong atau bukan string kosong
+                        if (isset($row['harga_paket']) && $row['harga_paket'] !== "" && $row['harga_paket'] !== null) {
+                            $harga_paket += $row['harga_paket'];
+                        }
+                    }
+                    return $harga_paket;
+                })
+        
+                ->make(true);
+        } catch (\Throwable $th) {
+            dd($th);
         }
-
-        if(isset($request->sub_kategori) && !empty($request->sub_kategori)){
-            $data->where('sub_kategori', $request->sub_kategori);
-        }
-
-        return DataTables::of($data)
-            ->editColumn('data_pendukung_sampling', function ($item) {
-                $data = json_decode($item->data_pendukung_sampling, true);
-
-                if (empty($data) || ! is_array($data)) {
-                    return [];
-                }
-
-                foreach ($data as $i => &$row) {
-                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
-                }
-
-                return $data;
-            })
-            ->addColumn('harga_paket', function ($item) {
-                $data = json_decode($item->data_pendukung_sampling, true);
-                $harga_paket = 0;
-                if (empty($data) || ! is_array($data)) {
-                    return 0;
-                }
-
-                foreach ($data as $i => &$row) {
-                    $harga_paket += $row['harga_paket'];
-                }
-                return $harga_paket;
-            })
-            ->make(true);
     }
 
     public function getKategori(Request $request)
