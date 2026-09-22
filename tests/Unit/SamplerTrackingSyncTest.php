@@ -128,6 +128,42 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertNull($this->service->checkoutBasWarning($member->id));
     }
 
+    public function testCheckoutIsRejectedUntilBasEmailIsSentEvenWhenForced(): void
+    {
+        $this->schedule();
+        $session = $this->prepare('2026-09-17')->first();
+        $member = $session->activeMembers()->firstOrFail();
+        $connection = $this->db->getConnection('mysql');
+        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('no_quotation');
+            $table->string('tanggal_sampling');
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_emailed_bas')->default(false);
+        });
+        $connection->table('persiapan_sampel_header')->insert([
+            'no_quotation' => 'Q1', 'tanggal_sampling' => '2026-09-17', 'is_emailed_bas' => 0,
+        ]);
+
+        $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'departure']);
+        $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'checkin']);
+        try {
+            $this->service->storeEvent([
+                'member_id' => $member->id,
+                'event_type' => 'checkout',
+                'force_bas_checkout' => true,
+            ]);
+            $this->fail('Checkout must require emailed BAS.');
+        } catch (ValidationException $exception) {
+            $this->assertSame('Anda tidak dapat checkout dikarenakan BAS belum disubmit.', $exception->errors()['event_type'][0]);
+        }
+        $this->assertSame(0, $member->events()->where('event_type', 'checkout')->count());
+
+        $connection->table('persiapan_sampel_header')->update(['is_emailed_bas' => 1]);
+        $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'checkout']);
+        $this->assertSame(1, $member->events()->where('event_type', 'checkout')->count());
+    }
+
     public function testRouteCannotChangeAfterDeparture(): void
     {
         $today = \Carbon\Carbon::now('Asia/Jakarta')->toDateString();
