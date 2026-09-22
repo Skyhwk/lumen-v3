@@ -505,7 +505,7 @@ class PenyesuaianGajiHrdController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => [
+            'data' => array_merge([
                 'id' => $record->id,
                 'no_document' => $record->no_document,
                 'nama_lengkap' => $employee->nama_lengkap ?? '-',
@@ -517,12 +517,11 @@ class PenyesuaianGajiHrdController extends Controller
                 'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
                 'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
                 'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
-                ...SalaryAdjustmentEvaluationService::formatAdjustmentSnapshot($record),
                 'bulan_efektif' => $record->bulan_efektif,
                 'catatan_tambahan' => $record->catatan_tambahan,
                 'status' => $record->status,
                 'status_label' => SalaryAdjustmentWorkflowService::statusLabel($record->status),
-                'kpi' => optional($record->kpi)->load('items'),
+                'kpi' => $record->kpi,
                 'assessment' => $record->assessment,
                 'assessment_report' => (new SalaryAdjustmentAssessmentReportService())
                     ->buildAssessmentReport($record->assessment),
@@ -530,7 +529,7 @@ class PenyesuaianGajiHrdController extends Controller
                     ->getAttendanceSummary((int) $record->employee_id),
                 'counseling' => $record->counseling,
                 'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
-            ],
+            ], SalaryAdjustmentEvaluationService::formatAdjustmentSnapshot($record)),
         ]);
     }
 

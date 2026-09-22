@@ -417,7 +417,7 @@ class PermohonanPenyesuaianGajiController extends Controller
         $employee = MasterKaryawan::with('jabatan')->find($record->employee_id);
         $namaJabatan = KaryawanProfileService::resolveJabatan($employee);
 
-        return [
+        return array_merge([
             'id' => $record->id,
             'no_document' => $record->no_document,
             'employee_id' => $record->employee_id,
@@ -429,7 +429,6 @@ class PermohonanPenyesuaianGajiController extends Controller
             'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
             'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
             'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
-            ...SalaryAdjustmentEvaluationService::formatAdjustmentSnapshot($record),
             'bulan_efektif' => $record->bulan_efektif,
             'catatan_tambahan' => $record->catatan_tambahan,
             'status' => $record->status,
@@ -441,9 +440,9 @@ class PermohonanPenyesuaianGajiController extends Controller
             'rejected_at' => $record->rejected_at,
             'created_by' => $record->created_by,
             'created_at' => $record->created_at,
-            'kpi' => optional($record->kpi)->load('items'),
+            'kpi' => $record->kpi,
             'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
-        ];
+        ], SalaryAdjustmentEvaluationService::formatAdjustmentSnapshot($record));
     }
 
     private function isAllowedSubordinate(int $employeeId): bool
