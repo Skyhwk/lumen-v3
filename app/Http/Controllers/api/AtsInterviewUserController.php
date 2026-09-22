@@ -744,7 +744,9 @@ class AtsInterviewUserController extends Controller
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
         $description = trim((string) $request->input('description'));
-        if ($description === '') {
+        $plainDescription = preg_replace('/[\s\x{00A0}]+/u', ' ', html_entity_decode(strip_tags($description), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $plainDescription = trim($plainDescription);
+        if ($plainDescription === '') {
             return response()->json([
                 'status' => 422,
                 'message' => 'Keterangan bypass wajib diisi.',
