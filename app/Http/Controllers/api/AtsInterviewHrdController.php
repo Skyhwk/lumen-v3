@@ -44,6 +44,7 @@ class AtsInterviewHrdController extends Controller
                     'upcoming' => $this->buildHrdInterviewQuery('upcoming', $year, $todayStr)->count(),
                     'past' => $this->buildHrdInterviewQuery('past', $year, $todayStr)->count(),
                 ],
+                'can_bypass_hrd_interview' => $this->canPerformHrdInterviewBypass(),
             ],
             'message' => 'HRD Interview tab counts retrieved successfully',
         ], 200);
@@ -479,7 +480,7 @@ class AtsInterviewHrdController extends Controller
 
     /**
      * Bypass HRD Interview evaluation — advance to profile completion with audit trail.
-     * Notifications use the same templates as passToUser; email routing may go to ATS_HRD_BYPASS_EMAIL.
+     * Notifications use the same templates and recipients as passToUser.
      */
     public function bypassToProfileCompletion(Request $request, $id)
     {
@@ -560,8 +561,7 @@ class AtsInterviewHrdController extends Controller
         );
 
         try {
-            $redirectEmail = $this->resolveAtsHrdBypassNotificationEmail();
-            $this->sendHrdStageAdvanceNotifications($applicant, $user, false, $redirectEmail, false);
+            $this->sendHrdStageAdvanceNotifications($applicant, $user, false, null, true);
         } catch (\Exception $e) {
             // Silence — notification/email failure must not block the bypass response
         }
@@ -812,9 +812,11 @@ class AtsInterviewHrdController extends Controller
         return null;
     }
 
-    protected function isManagerGrade(): bool
+    protected function isElevatedGradeForHrdInterviewBypass(): bool
     {
-        return strtoupper(trim((string) ($this->grade ?? ''))) === 'MANAGER';
+        $grade = strtoupper(trim((string) ($this->grade ?? '')));
+
+        return in_array($grade, ['MANAGER', 'DIRECTOR', 'SENIOR MANAGER'], true);
     }
 
     /**
@@ -853,8 +855,7 @@ class AtsInterviewHrdController extends Controller
 
     protected function canPerformHrdInterviewBypass(): bool
     {
-        return $this->isManagerGrade();
-        // return $this->isItProgrammingDivisionMember() || $this->isManagerGrade();
+        return $this->isElevatedGradeForHrdInterviewBypass();
     }
 
     protected function isItProgrammingDivisionName(string $name): bool
@@ -880,15 +881,8 @@ class AtsInterviewHrdController extends Controller
 
         return response()->json([
             'status'  => 403,
-            'message' => 'Bypass HR Interview hanya untuk GRADE MANAGER ',
+            'message' => 'Bypass HR Interview hanya untuk divisi IT Programming (semua grade) atau grade Manager / Senior Manager / Director.',
         ], 403);
-    }
-
-    private function resolveAtsHrdBypassNotificationEmail(): ?string
-    {
-        $email = trim((string) env('ATS_HRD_BYPASS_EMAIL', 'goni@intilab.com'));
-
-        return $email !== '' ? $email : null;
     }
 
     /**
