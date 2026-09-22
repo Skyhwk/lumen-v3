@@ -49,7 +49,7 @@
             <strong>Alasan Pengajuan Ulang</strong>
         </h3>
         <div style="margin:0 0 10px 0;font-size:13px;color:#475569;line-height:1.6;">
-            {!! nl2br(e($data->resubmit_reason)) !!}
+            {!! ($data->resubmit_reason) !!}
         </div>
         <table role="presentation" cellspacing="0" cellpadding="0" style="font-size:12px;color:#78716c;line-height:1.6;border-collapse:collapse;">
             <tr>
