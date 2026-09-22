@@ -126,13 +126,10 @@ class RenderSD
                 $periode = ($periode === 'null' || is_null($periode)) ? null : $periode;
             $detailSampelDatang = SampelDiantarDetail::where('id_header',$data->id)->first();
             // logic
-            $no_samples = array_filter($datas->pluck('no_sampel')->toArray(), fn($item) => !is_null($item));
-            $namaJenisSampel = $datas->pluck('kategori_3')
-            ->filter()
-            ->map(fn($item) => isset(explode('-', $item, 2)[1]) ? trim(explode('-', $item, 2)[1]) : '')
-            ->unique()
-            ->values()
-            ->toArray();
+            $no_samples = array_values(array_unique(array_filter(
+                $datas->pluck('no_sampel')->toArray(),
+                fn($item) => !is_null($item) && trim((string) $item) !== ''
+            )));
 
             if($detailSampelDatang != null){
                 $internal = json_decode($detailSampelDatang->internal_data ?? '[]', true);
@@ -334,7 +331,7 @@ class RenderSD
                                 </tr>
                                 <tr>
                                     <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong>Jumlah Sampel</strong></p></td>
-                                    <td style="word-wrap: break-word;">' . count($namaJenisSampel) . '</td>
+                                    <td style="word-wrap: break-word;">' . count($no_samples) . '</td>
                                     <td style="word-wrap: break-word;"><p style="font-size: 10px"><strong></strong></p></td>
                                     <td style="word-wrap: break-word;"></td>
                                 </tr>

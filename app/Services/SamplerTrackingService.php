@@ -204,7 +204,11 @@ class SamplerTrackingService
         $sessions = SamplerTrackingSession::where(function ($query) use ($quotation, $plans) {
             $query->where('no_quotation', $quotation);
             if ($plans) $query->orWhereIn('id_sampling', $plans);
-        })->lockForUpdate()->get();
+        // A superseded revision has already been archived. It must not be
+        // reconciled again merely because it shares the sampling-plan ID with
+        // the current preparation; doing so can roll back the real active
+        // session's revision update.
+        })->where('is_active', true)->lockForUpdate()->get();
         $revised = [];
         foreach ($sessions as $session) {
             if (!$session->id_sampling || !$session->no_quotation) continue;
@@ -651,62 +655,80 @@ public function buildTrackingRows($sessions)
 
         $date = $session->tanggal_sampling ?: '-';
 
-        // Display one daily route per member set; retain each source session below.
-        $memberKeys = $session->activeMembers->map(function ($member) {
-            return $member->sampler_id
-                ? 'id:' . $member->sampler_id
-                : 'name:' . mb_strtolower(trim((string) $member->sampler_name));
-        })->unique()->sort()->values()->all();
-        $teamKey = $memberKeys
-            ? json_encode([$date, $memberKeys])
-            : ($date . '|session-' . $session->id);
-
-        if (!$sessionsByTeam->has($teamKey)) {
-            $sessionsByTeam->put($teamKey, [
-                'group_key' => $teamKey,
-                'date' => $date,
-                'session' => $session,
-                'sessions' => collect(),
-                'members' => collect(),
-                'samplers' => collect(),
-                'events' => collect(),
-                'no_orders' => collect(),
-                'perusahaan' => collect(),
-                'durations' => collect(),
-                'duration_values' => collect(),
-                'movement_groups' => collect(),
-                'statuses' => collect(),
-                'jam_mulai' => null,
-                'jam_selesai' => null,
+        // A sampler with a different effective duration has an independent
+        // checkout/return lifecycle, so it must be a separate monitor row.
+        $session->activeMembers->groupBy(function ($member) {
+            return (string) $this->firstFilledValue([
+                $member->effective_duration,
+                $member->durasi_personal,
+                $member->duration,
+                $member->durasi,
             ]);
-        }
+        })->each(function ($members) use ($date, $session, $sessionsByTeam) {
+            // Retain daily-route consolidation, but only for team members
+            // whose effective duration is the same.
+            $memberKeys = $members->map(function ($member) {
+                return $member->sampler_id
+                    ? 'id:' . $member->sampler_id
+                    : 'name:' . mb_strtolower(trim((string) $member->sampler_name));
+            })->unique()->sort()->values()->all();
+            $duration = $this->firstFilledValue([
+                optional($members->first())->effective_duration,
+                optional($members->first())->durasi_personal,
+                optional($members->first())->duration,
+                optional($members->first())->durasi,
+            ]);
+            $teamKey = $memberKeys
+                ? json_encode([$date, $memberKeys, 'duration:' . (string) $duration])
+                : ($date . '|session-' . $session->id . '|duration:' . (string) $duration);
 
-        $item = $sessionsByTeam->get($teamKey);
-        $item['sessions']->push($session);
+            if (!$sessionsByTeam->has($teamKey)) {
+                $sessionsByTeam->put($teamKey, [
+                    'group_key' => $teamKey,
+                    'date' => $date,
+                    'session' => $session,
+                    'sessions' => collect(),
+                    'members' => collect(),
+                    'samplers' => collect(),
+                    'events' => collect(),
+                    'no_orders' => collect(),
+                    'perusahaan' => collect(),
+                    'durations' => collect(),
+                    'duration_values' => collect(),
+                    'movement_groups' => collect(),
+                    'statuses' => collect(),
+                    'jam_mulai' => null,
+                    'jam_selesai' => null,
+                ]);
+            }
 
-        foreach ($session->activeMembers as $member) {
-            $samplerName = $member->sampler_name ?: ($member->sampler_id ?: '-');
-            $item['members']->push($member);
-            $item['samplers']->push($samplerName);
-            $item['events'] = $item['events']->merge($member->events ?: collect());
-            $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi])));
-            $item['duration_values']->push($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi]));
-            $item['movement_groups']->push($member->current_movement_group ?: '-');
-        }
+            $item = $sessionsByTeam->get($teamKey);
+            $item['sessions']->push($session);
 
-        $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
-        $item['perusahaan']->push($session->nama_perusahaan ?: '-');
-        $item['statuses']->push($session->status ?: '-');
+            foreach ($members as $member) {
+                $samplerName = $member->sampler_name ?: ($member->sampler_id ?: '-');
+                $item['members']->push($member);
+                $item['samplers']->push($samplerName);
+                $item['events'] = $item['events']->merge($member->events ?: collect());
+                $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi])));
+                $item['duration_values']->push($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi]));
+                $item['movement_groups']->push($member->current_movement_group ?: '-');
+            }
 
-        if ($session->jam_mulai && (!$item['jam_mulai'] || $session->jam_mulai < $item['jam_mulai'])) {
-            $item['jam_mulai'] = $session->jam_mulai;
-        }
+            $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
+            $item['perusahaan']->push($session->nama_perusahaan ?: '-');
+            $item['statuses']->push($session->status ?: '-');
 
-        if ($session->jam_selesai && (!$item['jam_selesai'] || $session->jam_selesai > $item['jam_selesai'])) {
-            $item['jam_selesai'] = $session->jam_selesai;
-        }
+            if ($session->jam_mulai && (!$item['jam_mulai'] || $session->jam_mulai < $item['jam_mulai'])) {
+                $item['jam_mulai'] = $session->jam_mulai;
+            }
 
-        $sessionsByTeam->put($teamKey, $item);
+            if ($session->jam_selesai && (!$item['jam_selesai'] || $session->jam_selesai > $item['jam_selesai'])) {
+                $item['jam_selesai'] = $session->jam_selesai;
+            }
+
+            $sessionsByTeam->put($teamKey, $item);
+        });
     }
 
     // Map output per baris
@@ -1256,7 +1278,11 @@ public function buildTrackingRows($sessions)
             });
 
             $basWarning = $eventType === 'checkout' ? $this->checkoutBasWarning($member->id) : null;
-            $forceBasCheckout = filter_var($payload['force_bas_checkout'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($basWarning) {
+                throw ValidationException::withMessages([
+                    'event_type' => [$basWarning['message']],
+                ]);
+            }
 
             $events = [];
             $eventModel = new SamplerTrackingEvent();
@@ -1286,9 +1312,9 @@ public function buildTrackingRows($sessions)
                     'photos' => count($photos) > 0 ? json_encode($photos) : null,
                     'note' => $payload['note'] ?? null,
                     'vehicle_plate' => $payload['vehicle_plate'] ?? null,
-                    'bas_not_completed' => $basWarning ? 1 : 0,
-                    'bas_forced_checkout' => ($basWarning && $forceBasCheckout) ? 1 : 0,
-                    'bas_warning_message' => $basWarning['message'] ?? null,
+                    'bas_not_completed' => 0,
+                    'bas_forced_checkout' => 0,
+                    'bas_warning_message' => null,
                     'is_auto' => $targetMember->id !== $member->id,
                     'sequence_no' => $this->nextSequence($targetMember->id),
                     'event_at' => $payload['event_at'] ?? $this->now(),
@@ -1536,7 +1562,7 @@ public function buildTrackingRows($sessions)
         }
 
         return [
-            'message' => 'BAS untuk lokasi ini belum selesai. Kamu tetap bisa checkout, tapi akan tercatat sebagai checkout paksa tanpa BAS.',
+            'message' => 'Anda tidak dapat checkout dikarenakan BAS belum disubmit.',
             'no_order' => $session->no_order,
             'tanggal_sampling' => $session->tanggal_sampling,
             'sampler' => $member->sampler_name,

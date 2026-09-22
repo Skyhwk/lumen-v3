@@ -8,6 +8,7 @@ use App\Services\SamplerTrackingTroubleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class SamplerTrackingController extends Controller
 {
@@ -92,7 +93,16 @@ class SamplerTrackingController extends Controller
 
     public function sync(Request $request)
     {
-        $sessions = $this->service->sync($request->tanggal);
+        try {
+            $sessions = $this->service->sync($request->tanggal);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+
+            return response()->json([
+                'message' => collect($errors)->flatten()->first() ?: 'Sync tracking sampler gagal karena data jadwal tidak valid.',
+                'errors' => $errors,
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -114,20 +124,18 @@ class SamplerTrackingController extends Controller
             'photo' => 'nullable',
             'photos' => 'nullable',
             'note' => 'nullable',
-            'force_bas_checkout' => 'nullable',
             'vehicle_plate' => 'nullable',
             'event_at' => 'nullable',
         ]);
 
-        if ($request->event_type === 'checkout' && !filter_var($request->force_bas_checkout, FILTER_VALIDATE_BOOLEAN)) {
+        if ($request->event_type === 'checkout') {
             $basWarning = $this->service->checkoutBasWarning($request->member_id);
             if ($basWarning) {
                 return response()->json([
                     'success' => false,
-                    'requires_confirmation' => true,
                     'message' => $basWarning['message'],
                     'data' => $basWarning,
-                ], 409);
+                ], 422);
             }
         }
 

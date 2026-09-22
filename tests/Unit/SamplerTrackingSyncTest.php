@@ -128,6 +128,42 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertNull($this->service->checkoutBasWarning($member->id));
     }
 
+    public function testCheckoutIsRejectedUntilBasEmailIsSentEvenWhenForced(): void
+    {
+        $this->schedule();
+        $session = $this->prepare('2026-09-17')->first();
+        $member = $session->activeMembers()->firstOrFail();
+        $connection = $this->db->getConnection('mysql');
+        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('no_quotation');
+            $table->string('tanggal_sampling');
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_emailed_bas')->default(false);
+        });
+        $connection->table('persiapan_sampel_header')->insert([
+            'no_quotation' => 'Q1', 'tanggal_sampling' => '2026-09-17', 'is_emailed_bas' => 0,
+        ]);
+
+        $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'departure']);
+        $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'checkin']);
+        try {
+            $this->service->storeEvent([
+                'member_id' => $member->id,
+                'event_type' => 'checkout',
+                'force_bas_checkout' => true,
+            ]);
+            $this->fail('Checkout must require emailed BAS.');
+        } catch (ValidationException $exception) {
+            $this->assertSame('Anda tidak dapat checkout dikarenakan BAS belum disubmit.', $exception->errors()['event_type'][0]);
+        }
+        $this->assertSame(0, $member->events()->where('event_type', 'checkout')->count());
+
+        $connection->table('persiapan_sampel_header')->update(['is_emailed_bas' => 1]);
+        $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'checkout']);
+        $this->assertSame(1, $member->events()->where('event_type', 'checkout')->count());
+    }
+
     public function testRouteCannotChangeAfterDeparture(): void
     {
         $today = \Carbon\Carbon::now('Asia/Jakarta')->toDateString();
@@ -525,6 +561,36 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(4, SamplerTrackingSession::count());
     }
 
+    public function testTrackingSummarySeparatesTeamMembersByEffectiveDuration(): void
+    {
+        $this->schedule(['sampler' => 'Satrio', 'userid' => 10, 'durasi' => 1]);
+        $this->schedule(['sampler' => 'Hafizh', 'userid' => 20, 'durasi' => 2]);
+        $this->schedule(['sampler' => 'Marcellius', 'userid' => 30, 'durasi' => 2]);
+        $session = $this->prepare('2026-09-17')->first();
+        $satrio = $session->activeMembers()->where('sampler_name', 'Satrio')->firstOrFail();
+
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $satrio->id,
+            'event_type' => 'return',
+            'event_at' => '2026-09-17 18:00:00',
+        ]);
+
+        $rows = $this->service->buildTrackingRows(
+            SamplerTrackingSession::with('activeMembers.events')->where('id', $session->id)->get()
+        );
+
+        $this->assertCount(2, $rows);
+        $short = $rows->firstWhere('sampler', 'Satrio');
+        $long = $rows->firstWhere('sampler', 'Hafizh, Marcellius');
+        $this->assertSame('8 Jam', $short['durasi']);
+        $this->assertSame('completed', $short['tracking_status']);
+        $this->assertSame('1 x 24 Jam', $long['durasi']);
+        $this->assertSame('ongoing', $long['tracking_status']);
+        $this->assertCount(1, $short['members']);
+        $this->assertCount(2, $long['members']);
+    }
+
 
     public function testJourneyDepartureReferenceRespectsSamplerReturnAndCheckinTime(): void
     {
@@ -723,6 +789,34 @@ class SamplerTrackingSyncTest extends TestCase
         Jadwal::where('id', $row->id)->update(['no_quotation' => 'ISL/QT/26-IX/123R2']);
         $this->service->syncQuotation('ISL/QT/26-IX/123R2');
         $this->assertSame(0, SamplerTrackingSession::count());
+    }
+
+    public function testInactiveOlderRevisionsDoNotBlockCurrentRevisionMigration(): void
+    {
+        $old = 'ISL/QT/26-IX/157R10';
+        $new = 'ISL/QT/26-IX/157R11';
+        $row = $this->schedule(['no_quotation' => $old, 'id_sampling' => 41396, 'parsial' => 201033]);
+        $session = $this->prepare('2026-09-17')->firstWhere('no_quotation', $old);
+        $this->attendance($session);
+
+        // These are old, superseded visits from the same sampling plan. They
+        // have evidence/history but are inactive, so a current QT revision
+        // must leave them untouched rather than attempting to migrate them.
+        $archived = SamplerTrackingSession::create([
+            'team_key' => 'archived-r9-session', 'no_quotation' => 'ISL/QT/26-IX/157R9',
+            'id_sampling' => 41396, 'parsial' => 199165, 'tanggal_sampling' => '2026-09-17',
+            'is_active' => false,
+        ]);
+        $archivedKey = $archived->team_key;
+
+        Jadwal::where('id', $row->id)->update(['no_quotation' => $new]);
+        $this->service->syncQuotation($new);
+
+        $this->assertSame($new, $session->fresh()->no_quotation);
+        $this->assertTrue((bool) $session->fresh()->is_active);
+        $this->assertSame('ISL/QT/26-IX/157R9', $archived->fresh()->no_quotation);
+        $this->assertSame($archivedKey, $archived->fresh()->team_key);
+        $this->assertFalse((bool) $archived->fresh()->is_active);
     }
 
     public function testRevisionDoesNotMoveEvidenceToDifferentVisit(): void
