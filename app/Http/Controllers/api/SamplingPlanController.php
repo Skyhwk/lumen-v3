@@ -767,26 +767,7 @@ class SamplingPlanController extends Controller
             }
 
             if ($jadwal) {
-                // try {
-                //     $trackingDates = array_unique(array_filter([
-                //         $request->tanggal_lama,
-                //         $request->tanggal,
-                //     ]));
-
-                //     foreach ($trackingDates as $trackingDate) {
-                //         app(SamplerTrackingService::class)->sync(
-                //             Carbon::parse($trackingDate)->toDateString()
-                //         );
-                //     }
-                // } catch (\Throwable $trackingSyncException) {
-                //     Log::warning('Gagal sync activity sampler setelah update jadwal. ' . $trackingSyncException->getMessage(), [
-                //         'no_quotation' => $request->no_quotation,
-                //         'tanggal_lama' => $request->tanggal_lama,
-                //         'tanggal_baru' => $request->tanggal,
-                //         'line' => $trackingSyncException->getLine(),
-                //         'file' => $trackingSyncException->getFile(),
-                //     ]);
-                // }
+                // Tracking is reconciled atomically inside JadwalServices.
 
                 return response()->json([
                     'message' => 'Berhasil melakukan update Jadwal.!',
@@ -924,6 +905,11 @@ class SamplingPlanController extends Controller
             } else {
                 $batchId = $request->mode['batchId'];
             }
+            $tracking = app(SamplerTrackingService::class);
+            $trackingQuotations = Jadwal::whereIn('id', $batchId)->pluck('no_quotation')->unique();
+            foreach ($trackingQuotations as $quotation) {
+                $tracking->snapshotSchedules($quotation);
+            }
             $temptMessage = '';
             if ($request->mode['parsial'] !== "") { //menandakan data yg terpilih adalah partial
               
@@ -958,10 +944,7 @@ class SamplingPlanController extends Controller
                         ->update(['status' => 0, 'is_approved' => 0]);
                     $temptMessage = 'dan data sudah berada di req.sampling';
                 } else {
-                    return response()->json([
-                        'message' => 'Terdapat Jadwal Parsial yg belum di hapus.!',
-                        'status'  => '401',
-                    ], 401);
+                    throw new \Exception('Terdapat Jadwal Parsial yg belum di hapus.!', 401);
                 }
             }
             
@@ -971,6 +954,9 @@ class SamplingPlanController extends Controller
             $atasan = GetAtasan::where('id', $this->user_id)->get();
             Notification::whereIn('id', $atasan)->title('Cancel QT')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
 
+            foreach ($trackingQuotations as $quotation) {
+                $tracking->syncQuotation($quotation);
+            }
             DB::commit();
             return response()->json([
                 'message' => 'Jadwal berhasil dicancel',
@@ -979,9 +965,9 @@ class SamplingPlanController extends Controller
         } catch (\Exception $ex) {
             DB::rollback();
             $logData = [
-                'message' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'status'  => $e->getCode(),
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
+                'status'  => $ex->getCode(),
                 'status'  => '401',
             ];
             Log::channel('sampling')->error("=== cancelJadwal ===", $logData);

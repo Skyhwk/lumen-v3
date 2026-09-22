@@ -4,7 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Services\SamplerTrackingService;
+use App\Services\SamplerTrackingTroubleService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SamplerTrackingController extends Controller
 {
@@ -19,6 +22,45 @@ class SamplerTrackingController extends Controller
     public function index(Request $request)
     {
         if ($request->has('draw')) {
+            if ($request->tracking_status === 'trouble_selesai') {
+                return response()->json($this->teamTroubleDataTable($request));
+            }
+
+            if ($request->tracking_status === 'overdue') {
+                $this->ensurePastDueTroublesCollected(null);
+                $today = Carbon::now('Asia/Jakarta')->toDateString();
+                $trouble = $this->teamTroubleRows(null, 'trouble');
+                $overdue = $this->service->listTrackingRows($today, $request->sampler_id, $request->sampler_name, 'overdue')['data'];
+                $combined = $this->uniqueTrackingRows(
+                    $this->mergeOverdueWithTrouble($overdue, $trouble)->filter(function ($row) {
+                        return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+                    })
+                );
+                $combined = $this->excludeUnblockedFromBlockedTab($combined, null);
+
+                $recordsTotal = $combined->count();
+                $filteredRows = $this->service->filterTrackingRows($combined, $request);
+                $recordsFiltered = $filteredRows->count();
+                $sortedRows = $this->service->sortTrackingRows($filteredRows, $request)->values();
+                $start = (int) ($request->start ?? 0);
+                $length = (int) ($request->length ?? 25);
+                if ($length > -1) {
+                    $sortedRows = $sortedRows->slice($start, $length)->values();
+                }
+                return response()->json([
+                    'draw' => (int) ($request->draw ?? 0),
+                    'recordsTotal' => $recordsTotal,
+                    'recordsFiltered' => $recordsFiltered,
+                    'tracking_status_counts' => [
+                        'overdue' => $recordsTotal,
+                    ],
+                    'trouble_tab_counts' => [
+                        'trouble' => $recordsTotal,
+                    ],
+                    'data' => $sortedRows,
+                ]);
+            }
+
             return response()->json($this->service->dataTableByDate(
                 $request,
                 $request->sampler_id,
@@ -26,15 +68,17 @@ class SamplerTrackingController extends Controller
             ));
         }
 
-        $data = $this->service->listByDate(
+        $data = $this->service->listTrackingRows(
             $request->tanggal,
             $request->sampler_id,
-            $request->sampler_name
+            $request->sampler_name,
+            $request->tracking_status
         );
 
         return response()->json([
             'success' => true,
-            'data' => $data,
+            'data' => $data['data'],
+            'tracking_status_counts' => $data['tracking_status_counts'],
         ]);
     }
 
@@ -59,6 +103,9 @@ class SamplerTrackingController extends Controller
     }
     public function storeEvent(Request $request)
     {
+        $member = \App\Models\SamplerTrackingMember::with('session')->where('id', $request->member_id)->where('is_active', true)->firstOrFail();
+        if (!$member->session || !$member->session->is_active) abort(422, 'Activity sampling sudah tidak aktif.');
+        (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($member->sampler_id, $member->session->tanggal_sampling, $member->sampler_tracking_session_id);
         $this->validate($request, [
             'member_id' => 'required',
             'event_type' => 'required|in:departure,checkin,checkout,return',
@@ -129,5 +176,464 @@ class SamplerTrackingController extends Controller
             'message' => 'Movement group berhasil diupdate.',
             'movement_group' => $movementGroup,
         ]);
+    }
+
+    public function reopenTrouble(Request $request)
+    {
+        $allowedGradesConfig = env('SAMPLER_TRACKING_UNBLOCK_GRADES', 'MANAGER,SENIOR MANAGER');
+        $allowedGrades = array_filter(array_map('trim', explode(',', strtoupper((string) $allowedGradesConfig))));
+
+        $userGrade = strtoupper(trim((string) $this->grade));
+        if (!$userGrade || !in_array($userGrade, $allowedGrades, true)) {
+            $allowedStr = implode(', ', $allowedGrades);
+            return response()->json([
+                'success' => false,
+                'message' => "Akses ditolak. Fitur unblock activity sampler hanya dapat dilakukan oleh user dengan grade: {$allowedStr}.",
+            ], 403);
+        }
+
+        $reasonKeys = implode(',', SamplerTrackingTroubleService::reopenReasonKeys());
+        $followUpKeys = implode(',', SamplerTrackingTroubleService::samplerFollowUpKeys());
+
+        $this->validate($request, [
+            'trouble_id' => 'required|integer',
+            'session_id' => 'nullable|integer',
+            'session_ids' => 'nullable|array',
+            'session_ids.*' => 'integer',
+            'reopen_reason' => 'required|string|in:' . $reasonKeys,
+            'sampler_follow_up_action' => 'required|string|in:' . $followUpKeys,
+            'note' => 'required|string|max:2000',
+        ]);
+
+        $data = (new SamplerTrackingTroubleService())->reopen($request->trouble_id, $this->user_id, [
+            'note' => $request->note,
+            'reopen_reason' => $request->reopen_reason,
+            'sampler_follow_up_action' => $request->sampler_follow_up_action,
+            'session_id' => $request->session_id,
+            'session_ids' => $request->session_ids,
+        ]);
+
+        $actor = \App\Models\MasterKaryawan::find($this->user_id);
+        if ($actor && is_object($data)) {
+            $data->reopened_by_name = $actor->nama_lengkap;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Akses activity lama berhasil dibuka (unblocked) untuk seluruh anggota sesi. Sampler dapat menyelesaikannya.',
+            'data' => $data
+        ]);
+    }
+
+    public function teamTroubles(Request $request)
+    {
+        if (!$this->user_id) abort(403, 'Akses tidak diizinkan.');
+        $this->ensurePastDueTroublesCollected(null);
+        $active = $this->teamTroubleRows(null, 'trouble');
+        $selesai = $this->teamTroubleRows(null, 'trouble_selesai');
+
+        return response()->json([
+            'success' => true,
+            'data' => $active,
+            'trouble_selesai' => $selesai,
+            'counts' => [
+                'trouble' => $active->count(),
+                'trouble_selesai' => $selesai->count(),
+            ],
+        ]);
+    }
+
+    protected function normalizeTroubleFilterDate($date)
+    {
+        if (!$date) {
+            return null;
+        }
+
+        try {
+            $parsed = Carbon::parse($date)->toDateString();
+        } catch (\Exception $exception) {
+            return null;
+        }
+
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        if ($parsed > $today) {
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    protected function resolveSampler($samplerId)
+    {
+        $sampler = \App\Models\MasterKaryawan::where('id', $samplerId)->first();
+        if ($sampler) {
+            return $sampler;
+        }
+
+        return \App\Models\MasterKaryawan::where('id', (string) $samplerId)->first();
+    }
+
+    protected function troublePayload($trouble, $reopenedByMap = null)
+    {
+        $troubleObj = (array) $trouble;
+        $troubleObj['reopened_by_name'] = $reopenedByMap
+            ? ($reopenedByMap->get($trouble->reopened_by) ?? null)
+            : null;
+        $troubleObj['reopen_reason_label'] = SamplerTrackingTroubleService::reopenReasonLabel($trouble->reopen_reason ?? null);
+        $troubleObj['sampler_follow_up_action_label'] = SamplerTrackingTroubleService::samplerFollowUpLabel($trouble->sampler_follow_up_action ?? null);
+
+        return $troubleObj;
+    }
+
+    protected function attachTroubleToTrackingRows($trouble, $sampler, $troubleObj)
+    {
+        $samplerId = $sampler ? $sampler->id : $trouble->sampler_id;
+        $samplerName = $sampler ? $sampler->nama_lengkap : (string) $trouble->sampler_id;
+        $activityDate = Carbon::parse($trouble->activity_date)->toDateString();
+
+        $trackingRows = $this->service->listTrackingRows(
+            $activityDate,
+            $samplerId,
+            $samplerName,
+            null,
+            $trouble->tracking_session_id ? [$trouble->tracking_session_id] : []
+        )['data'];
+
+        $troubleSessionId = $trouble->tracking_session_id ?? null;
+        $trackingRows = $trackingRows->filter(function ($row) use ($activityDate, $troubleSessionId) {
+            $tanggal = $row['tanggal_sampling'] ?? null;
+            if (!$tanggal || $tanggal === '-') {
+                return false;
+            }
+
+            try {
+                if (Carbon::parse($tanggal)->toDateString() !== $activityDate) {
+                    return false;
+                }
+            } catch (\Exception $exception) {
+                return false;
+            }
+
+            if (!$troubleSessionId) {
+                return true;
+            }
+
+            $rowSessionIds = collect($row['sessions'] ?? [])
+                ->map(function ($session) {
+                    return is_object($session) ? ($session->id ?? null) : ($session['id'] ?? null);
+                })
+                ->merge([
+                    is_object($row['session'] ?? null) ? $row['session']->id : ($row['session']['id'] ?? null),
+                ])
+                ->filter()
+                ->map(function ($id) {
+                    return (string) $id;
+                });
+
+            return $rowSessionIds->contains((string) $troubleSessionId);
+        })->values();
+
+        if ($trackingRows->isEmpty()) {
+            $troubleObj['sampler_name'] = $samplerName;
+
+            return collect([$this->syntheticTroubleRow($trouble, $samplerName, $troubleObj)]);
+        }
+
+        return $trackingRows->map(function ($row) use ($trouble, $troubleObj, $samplerName, $troubleSessionId) {
+            $sessionIds = collect($row['sessions'] ?? [])
+                ->map(function ($session) {
+                    return is_object($session) ? ($session->id ?? null) : ($session['id'] ?? null);
+                })
+                ->merge([
+                    is_object($row['session'] ?? null) ? $row['session']->id : ($row['session']['id'] ?? null),
+                ])
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $troubleObj['sampler_name'] = $row['sampler'] ?? $samplerName;
+            $troubleObj['session_id'] = $troubleSessionId ?: ($sessionIds[0] ?? null);
+            $troubleObj['session_ids'] = $troubleSessionId ? [(int) $troubleSessionId] : $sessionIds;
+            $row['trouble'] = $troubleObj;
+            $row['trouble_id'] = $trouble->id;
+            $row['tracking_session_id'] = $trouble->tracking_session_id;
+            $row['row_id'] = 'trouble-session-' . $trouble->tracking_session_id;
+            $row['session_id'] = $troubleObj['session_id'];
+            $row['session_ids'] = $troubleObj['session_ids'];
+
+            return $row;
+        });
+    }
+
+    protected function syntheticTroubleRow($trouble, $samplerName, $troubleObj)
+    {
+        $activityDate = Carbon::parse($trouble->activity_date)->toDateString();
+
+        return [
+            'row_id' => 'trouble-' . $trouble->id,
+            'tanggal_sampling' => $activityDate,
+            'nama_perusahaan' => '-',
+            'perusahaan_list' => [],
+            'sampler' => $samplerName,
+            'sampler_list' => [$samplerName],
+            'durasi' => '-',
+            'jam' => '- - -',
+            'jam_mulai' => null,
+            'jam_selesai' => null,
+            'no_order' => '-',
+            'movement_group' => '-',
+            'last_event' => '-',
+            'total_event' => 0,
+            'tracking_status' => 'overdue',
+            'events' => [],
+            'sessions' => [],
+            'members' => [],
+            'trouble_id' => $trouble->id,
+            'trouble' => $troubleObj,
+        ];
+    }
+
+    protected function teamTroubleRowsFromQuery($date = null)
+    {
+        $date = $this->normalizeTroubleFilterDate($date);
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('activity_date', '<=', $today)
+            ->whereNotNull('reopened_at');
+
+        if ($date) {
+            $query->whereDate('activity_date', $date);
+        }
+
+        $troubles = $query->orderBy('reopened_at', 'desc')->get();
+        if ($troubles->isEmpty()) {
+            return collect();
+        }
+
+        $reopenedByIds = $troubles->pluck('reopened_by')->filter()->unique()->values();
+        $reopenedByMap = $reopenedByIds->isNotEmpty()
+            ? \App\Models\MasterKaryawan::whereIn('id', $reopenedByIds)->pluck('nama_lengkap', 'id')
+            : collect();
+
+        $rows = $troubles->flatMap(function ($trouble) use ($reopenedByMap) {
+            $sampler = $this->resolveSampler($trouble->sampler_id);
+            $troubleObj = $this->troublePayload($trouble, $reopenedByMap);
+
+            return $this->attachTroubleToTrackingRows($trouble, $sampler, $troubleObj);
+        })->filter(function ($row) {
+            return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+        })->values();
+
+        return $this->uniqueTrackingRows($rows);
+    }
+
+    protected function teamTroubleRows($date = null, $status = 'trouble')
+    {
+        if (!$this->user_id) abort(403, 'Akses tidak diizinkan.');
+
+        $date = $this->normalizeTroubleFilterDate($date);
+
+        if ($status === 'trouble_selesai') {
+            return $this->teamTroubleRowsFromQuery($date);
+        }
+
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('activity_date', '<=', $today)
+            ->where('is_clear', 0)
+            ->whereNull('reopened_at')
+            ->whereNotNull('tracking_session_id');
+
+        if ($date) {
+            $query->whereDate('activity_date', $date);
+        }
+
+        $troubles = $query->orderBy('activity_date')->orderBy('id')->get();
+        if ($troubles->isEmpty()) {
+            return collect();
+        }
+
+        $rows = $troubles->flatMap(function ($trouble) {
+            $sampler = $this->resolveSampler($trouble->sampler_id);
+            $troubleObj = $this->troublePayload($trouble);
+
+            return $this->attachTroubleToTrackingRows($trouble, $sampler, $troubleObj);
+        })->filter(function ($row) {
+            return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+        })->values();
+
+        return $this->uniqueTrackingRows($rows);
+    }
+
+    protected function uniqueTrackingRows($rows)
+    {
+        return collect($rows)
+            ->sortByDesc(function ($row) {
+                return $this->hasActiveTrouble($row) ? 1 : 0;
+            })
+            ->unique(function ($row) {
+                return $this->trackingMergeKey($row);
+            })
+            ->values();
+    }
+
+    protected function excludeUnblockedFromBlockedTab($rows, $date = null)
+    {
+        $rows = collect($rows)->reject(function ($row) {
+            return !empty($row['trouble']['reopened_at'] ?? null);
+        })->values();
+
+        if ($rows->isEmpty()) {
+            return $rows;
+        }
+
+        $date = $this->normalizeTroubleFilterDate($date);
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('activity_date', '<=', $today)
+            ->where('is_clear', 0)
+            ->whereNotNull('reopened_at');
+
+        if ($date) {
+            $query->whereDate('activity_date', $date);
+        }
+
+        $unblocked = $query->get(['sampler_id', 'activity_date']);
+        if ($unblocked->isEmpty()) {
+            return $rows;
+        }
+
+        $unblockedKeys = [];
+        foreach ($unblocked as $trouble) {
+            $unblockedKeys[(string) $trouble->sampler_id . '|' . Carbon::parse($trouble->activity_date)->toDateString()] = true;
+        }
+
+        return $rows->reject(function ($row) use ($unblockedKeys) {
+            if ($this->hasActiveTrouble($row)) {
+                return false;
+            }
+
+            $activityDate = $row['tanggal_sampling'] ?? null;
+            if (!$activityDate || $activityDate === '-') {
+                return false;
+            }
+
+            try {
+                $activityDate = Carbon::parse($activityDate)->toDateString();
+            } catch (\Exception $exception) {
+                return false;
+            }
+
+            foreach (collect($row['members'] ?? []) as $member) {
+                $samplerId = is_object($member) ? ($member->sampler_id ?? null) : ($member['sampler_id'] ?? null);
+                if ($samplerId && isset($unblockedKeys[(string) $samplerId . '|' . $activityDate])) {
+                    return true;
+                }
+            }
+
+            return false;
+        })->values();
+    }
+
+    protected function hasActiveTrouble($row)
+    {
+        return !empty($row['trouble_id']) && empty($row['trouble']['reopened_at'] ?? null);
+    }
+
+    protected function trackingMergeKey($row)
+    {
+        if (!empty($row['tracking_session_id'])) {
+            return 'trouble-session-' . $row['tracking_session_id'];
+        }
+
+        if (!empty($row['row_id'])) {
+            return $row['row_id'];
+        }
+
+        return implode('|', [
+            $row['tanggal_sampling'] ?? '',
+            $row['no_order'] ?? '',
+            $row['nama_perusahaan'] ?? '',
+            'trouble-' . ($row['trouble_id'] ?? spl_object_hash((object) $row)),
+        ]);
+    }
+
+    protected function mergeOverdueWithTrouble($overdue, $trouble)
+    {
+        $troubleByKey = collect($trouble)->keyBy(function ($row) {
+            return $this->trackingMergeKey($row);
+        });
+
+        $usedKeys = [];
+        $merged = collect($overdue)->map(function ($row) use ($troubleByKey, &$usedKeys) {
+            $key = $this->trackingMergeKey($row);
+            if (!$troubleByKey->has($key)) {
+                return $row;
+            }
+
+            $troubleRow = $troubleByKey->get($key);
+            $usedKeys[$key] = true;
+            $row['trouble_id'] = $troubleRow['trouble_id'] ?? $row['trouble_id'] ?? null;
+            $row['trouble'] = $troubleRow['trouble'] ?? $row['trouble'] ?? null;
+
+            return $row;
+        });
+
+        $remainingTrouble = collect($trouble)->reject(function ($row) use ($usedKeys) {
+            return isset($usedKeys[$this->trackingMergeKey($row)]);
+        })->values();
+
+        return $merged->concat($remainingTrouble)->values();
+    }
+
+    protected function ensurePastDueTroublesCollected($date)
+    {
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $deadline = $date && $date < $today
+            ? Carbon::parse($date)->toDateString()
+            : Carbon::now('Asia/Jakarta')->subDay()->toDateString();
+
+        if ($deadline >= $today) {
+            return;
+        }
+
+        try {
+            return true;
+        } catch (\Throwable $exception) {
+            return;
+        }
+    }
+
+    protected function teamTroubleDataTable(Request $request)
+    {
+        $status = $request->input('tracking_status', 'trouble');
+        $activeRows = $this->teamTroubleRows(null, 'trouble');
+        $selesaiRows = $this->teamTroubleRows(null, 'trouble_selesai');
+        $rows = $status === 'trouble_selesai' ? $selesaiRows : $activeRows;
+        $recordsTotal = $rows->count();
+
+        $rows = $this->service->filterTrackingRows($rows, $request);
+        $recordsFiltered = $rows->count();
+
+        $rows = $this->service->sortTrackingRows($rows, $request)->values();
+
+        $start = (int) ($request->start ?? 0);
+        $length = (int) ($request->length ?? 25);
+        if ($length > -1) {
+            $rows = $rows->slice($start, $length)->values();
+        }
+
+        return [
+            'draw' => (int) ($request->draw ?? 0),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'tracking_status_counts' => [],
+            'trouble_tab_counts' => [
+                'trouble' => $activeRows->count(),
+                'trouble_selesai' => $selesaiRows->count(),
+            ],
+            'data' => $rows,
+        ];
     }
 }

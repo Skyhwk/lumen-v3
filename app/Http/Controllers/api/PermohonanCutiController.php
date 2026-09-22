@@ -41,12 +41,12 @@ class PermohonanCutiController extends Controller
                 'leave_requests.end_date',
                 'leave_requests.start_date as tanggal',
                 'd.nama_divisi',
-                DB::raw('CASE 
-                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan" 
-                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan" 
-                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD" 
-                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD" 
-                        ELSE "Pending" 
+                DB::raw('CASE
+                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan"
+                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan"
+                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD"
+                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD"
+                        ELSE "Pending"
                     END as status'),
 
                 'karyawan.id as employee_id',
@@ -127,12 +127,12 @@ class PermohonanCutiController extends Controller
                 'leave_requests.end_date',
                 'leave_requests.start_date as tanggal',
                 'd.nama_divisi',
-                DB::raw('CASE 
-                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan" 
-                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan" 
-                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD" 
-                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD" 
-                        ELSE "Pending" 
+                DB::raw('CASE
+                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan"
+                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan"
+                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD"
+                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD"
+                        ELSE "Pending"
                     END as status'),
 
                 'karyawan.id as employee_id',
@@ -174,6 +174,49 @@ class PermohonanCutiController extends Controller
         $dt = $this->applyDatatablesFilter($dt);
 
         return $dt->make(true);
+    }
+
+    /**
+     * Jumlah data per tab On-Progress / Processed
+     */
+    public function tabCounts(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+        $bawahan = GetBawahan::where('id', $this->user_id)->get();
+        $bawahanIds = $bawahan->pluck('id')->toArray();
+        $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
+
+        $base = LeaveRequest::on('intilab_apps')
+            ->whereYear('leave_requests.start_date', $periode);
+
+        if (!empty($bawahanIds)) {
+            $base->where(function ($q) use ($bawahanIds, $bawahanNames) {
+                $q->whereIn('leave_requests.employee_id', $bawahanIds)
+                  ->orWhereIn('leave_requests.created_by', $bawahanNames);
+            });
+        }
+
+        $onProgress = (clone $base)
+            ->whereNull('leave_requests.approved_hrd_by')
+            ->whereNull('leave_requests.rejected_atasan_by')
+            ->whereNull('leave_requests.rejected_hrd_by')
+            ->count();
+
+        $processed = (clone $base)
+            ->where(function ($q) {
+                $q->whereNotNull('leave_requests.approved_hrd_by')
+                  ->orWhereNotNull('leave_requests.rejected_atasan_by')
+                  ->orWhereNotNull('leave_requests.rejected_hrd_by');
+            })
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress,
+                'processed' => $processed,
+            ],
+        ]);
     }
 
     /**
@@ -240,7 +283,7 @@ class PermohonanCutiController extends Controller
      */
     public function approveAtasan(Request $request)
     {
-        if ($this->grade !== 'MANAGER' || $this->grade !== 'SENIOR MANAGER') {
+        if ($this->grade !== 'MANAGER' && $this->grade !== 'SENIOR MANAGER') {
             return response()->json([
                 'success' => false,
                 'message' => 'Hanya level Manager yang berhak menyetujui permohonan cuti'
@@ -293,7 +336,7 @@ class PermohonanCutiController extends Controller
      */
     public function rejectAtasan(Request $request)
     {
-        if ($this->grade !== 'MANAGER' || $this->grade !== 'SENIOR MANAGER') {
+        if ($this->grade !== 'MANAGER' && $this->grade !== 'SENIOR MANAGER') {
             return response()->json([
                 'success' => false,
                 'message' => 'Hanya level Manager yang berhak menolak permohonan cuti'

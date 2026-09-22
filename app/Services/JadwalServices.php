@@ -55,6 +55,32 @@ class JadwalServices
         throw new Exception("Method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n", 404);
     }
 
+    /**
+     * A schedule change may remove a team from one date and create it on
+     * another. Reconcile both dates only after the source transaction commits.
+     */
+    private function syncSamplerTrackingDates($dates): void
+    {
+        collect($dates)
+            ->filter()
+            ->map(function ($date) {
+                return Carbon::parse($date)->toDateString();
+            })
+            ->unique()
+            ->each(function ($date) {
+                try {
+                    app(SamplerTrackingService::class)->sync($date);
+                } catch (\Throwable $exception) {
+                    Log::warning('Gagal sync tracking sampler setelah perubahan jadwal.', [
+                        'tanggal_sampling' => $date,
+                        'message' => $exception->getMessage(),
+                        'line' => $exception->getLine(),
+                        'file' => $exception->getFile(),
+                    ]);
+                }
+            });
+    }
+
     public static function __callStatic($method, $arguments)
     {
         echo "Static method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n";
@@ -477,6 +503,9 @@ class JadwalServices
         $baru = COUNT($dir);
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            // $tracking->syncQuotation($dataUpdate->no_quotation);
+            // $trackingBefore = $tracking->snapshotSchedules($dataUpdate->no_quotation);
             $jadw = Jadwal::where('id', $dataUpdate->jadwal_id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataUpdate->jadwal_id)->where('id', '!=', $dataUpdate->jadwal_id)->where('is_active', true)->get();
             if (!$jadw2->isEmpty()) {
@@ -720,7 +749,9 @@ class JadwalServices
             // LOGIC UPDATE PSHEADER
             try {
                 // 1. Validasi awal (Fail fast)
-                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+                if (empty($dataUpdate->kategori)) {
+                    throw new Exception('Kategori is required', 422);
+                }
 
                 $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
                     ->where('is_active', true)
@@ -796,11 +827,14 @@ class JadwalServices
                 }
             } catch (\Throwable $th) {
                 // Tangkap error dengan detail yang cukup
-                DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
+            // Reconcile existing activity after all schedule branches and PSHEADER,
+            // without changing the legacy selection/count used by lama == baru.
+            // $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
+            // $this->syncSamplerTrackingDates([$dataUpdate->tanggal_lama, $dataUpdate->tanggal]);
             return true;
         } catch (Exception $ex) {
             DB::rollBack();
@@ -860,6 +894,9 @@ class JadwalServices
         $baru = COUNT($dir);
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            // $tracking->syncQuotation($dataUpdate->no_quotation);
+            // $trackingBefore = $tracking->snapshotSchedules($dataUpdate->no_quotation);
             try {
                 $jadw = Jadwal::where('id', $dataUpdate->jadwal_id)->whereNull('parsial')->where('is_active', true)->first();
                 $jadw2 = Jadwal::where('parsial', $dataUpdate->jadwal_id)->where('id', '!=', $dataUpdate->jadwal_id)->where('is_active', true)->get();
@@ -1024,7 +1061,9 @@ class JadwalServices
             // LOGIC UPDATE PSHEADER
             try {
                 // 1. Validasi awal (Fail fast)
-                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+                if (empty($dataUpdate->kategori)) {
+                    throw new Exception('Kategori is required', 422);
+                }
 
                 $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
                     ->where('is_active', true)
@@ -1104,10 +1143,13 @@ class JadwalServices
                 }
             } catch (\Throwable $th) {
                 // Tangkap error dengan detail yang cukup
-                DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+            // Run for both lama == baru and changed team size, even when PSHEADER
+            // itself has no dirty fields. Do not create a new tracking session here.
+            // $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
+            // $this->syncSamplerTrackingDates([$dataUpdate->tanggal_lama, $dataUpdate->tanggal]);
             return true;
         } catch (Exception $ex) {
             DB::rollback();
@@ -1155,10 +1197,13 @@ class JadwalServices
         if ($dataAdd->alamat == null) {
             throw new Exception("Alamat is required when add jadwal", 401);
         }
-        
+
+        $trackingDates = collect((array) $dataAdd->tanggal);
 
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            // $trackingBefore = $tracking->snapshotSchedules($dataAdd->no_quotation);
             /* 
              *step non aktif jadwal sebelumnya jika ada
              *berlaku jika no dokumen sampling plan sudah naik menjadi R
@@ -1194,6 +1239,9 @@ class JadwalServices
                         $updateQuery->where('no_quotation', $dataAdd->no_quotation);
                     }
 
+                    $trackingDates = $trackingDates->merge(
+                        (clone $updateQuery)->where('is_active', true)->pluck('tanggal')
+                    );
                     $updateQuery->update(['is_active' => false]);
                 }
             }
@@ -1332,7 +1380,9 @@ class JadwalServices
             $sales = JadwalServices::on('no_quotation', $dataAdd->no_quotation)->getQuotation()->sales_id;
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
+            // $tracking->syncScheduleCreation($trackingBefore, $dataAdd->no_quotation);
             DB::commit();
+            // $this->syncSamplerTrackingDates($trackingDates);
             return true;
         } catch (Exception $ex) {
             DB::rollback();
@@ -1366,6 +1416,8 @@ class JadwalServices
 
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            // $trackingBefore = $tracking->snapshotSchedules($dataParsial->no_quotation);
             $jadw = Jadwal::where('id', $dataParsial->id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('id', '!=', $dataParsial->id)->where('is_active', true)->get();
             $jadw4 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
@@ -1510,6 +1562,7 @@ class JadwalServices
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah dilakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
             Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
+            // $tracking->syncScheduleCreation($trackingBefore, $dataParsial->no_quotation);
             DB::commit();
             return true;
         } catch (Exception $e) {
@@ -1543,6 +1596,8 @@ class JadwalServices
 
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            // $trackingBefore = $tracking->snapshotSchedules($dataParsial->no_quotation);
             $jadw = Jadwal::where('id', $dataParsial->id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('id', '!=', $dataParsial->id)->where('is_active', true)->get();
             $jadw4 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
@@ -1670,6 +1725,7 @@ class JadwalServices
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah dilakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
             Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
+            // $tracking->syncScheduleCreation($trackingBefore, $dataParsial->no_quotation);
             DB::commit();
             return true;
         } catch (Exception $e) {
