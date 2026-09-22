@@ -14,7 +14,7 @@ class SamplerTrackingTroubleService
 
     const REOPEN_REASONS = [
         'operational_delay' => 'Activity belum selesai (kendala operasional)',
-        'technical_issue' => 'Kendala teknis aplikasi / perangkat',
+        // 'technical_issue' => 'Kendala teknis aplikasi / perangkat',
         'force_majeure' => 'Force majeure (cuaca, lalu lintas, dll.)',
         'sampler_procedure' => 'Kesalahan prosedur / kelalaian sampler',
         'other' => 'Lainnya',
@@ -61,13 +61,24 @@ class SamplerTrackingTroubleService
         }
     }
 
-    protected function progress($samplerId, $date)
+    protected function progress($samplerId, $date, $sessionId = null)
     {
-        $sessions = SamplerTrackingSession::with('activeMembers.events')->where('is_active', true)
-            ->whereDate('tanggal_sampling', $date)->whereHas('activeMembers', function ($query) use ($samplerId) {
-                $query->where('sampler_id', $samplerId);
-            })->get();
-        return SamplerTrackingActivity::progress((new SamplerTrackingService())->consolidateActivities($sessions), $samplerId);
+        $query = SamplerTrackingSession::with('activeMembers.events')->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('nama_perusahaan')
+                    ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+            })
+            ->whereDate('tanggal_sampling', $date);
+
+        if ($sessionId) {
+            $query->where('id', $sessionId);
+        } else {
+            $query->whereHas('activeMembers', function ($members) use ($samplerId) {
+                $members->where('sampler_id', $samplerId);
+            });
+        }
+
+        return SamplerTrackingActivity::progress((new SamplerTrackingService())->consolidateActivities($query->get()), $samplerId);
     }
 
     public function collect($day = null, array $samplerIds = [])
@@ -79,8 +90,11 @@ class SamplerTrackingTroubleService
             return 0;
         }
 
-        // Also catches multi-day work whose deadline was yesterday, not just starts yesterday.
         $dates = SamplerTrackingSession::where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('nama_perusahaan')
+                    ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+            })
             ->whereDate('tanggal_sampling', '>=', $startDate)
             ->whereDate('tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) {
@@ -94,17 +108,41 @@ class SamplerTrackingTroubleService
             if (Carbon::parse($date)->toDateString() < $startDate) {
                 continue;
             }
-            $samplers = DB::table('sampler_tracking_members as m')->join('sampler_tracking_sessions as s', 's.id', '=', 'm.sampler_tracking_session_id')
+            $members = DB::table('sampler_tracking_members as m')->join('sampler_tracking_sessions as s', 's.id', '=', 'm.sampler_tracking_session_id')
                 ->where('s.is_active', true)->where('m.is_active', true)->where('s.tanggal_sampling', $date)
+                ->where(function ($q) {
+                    $q->whereNull('s.nama_perusahaan')
+                        ->orWhereRaw('LOWER(TRIM(s.nama_perusahaan)) != ?', ['cuti']);
+                })
                 ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
-                ->whereNotNull('m.sampler_id')->distinct()->pluck('m.sampler_id');
-            foreach ($samplers as $samplerId) {
-                if (!$samplerId || DB::table(self::TABLE)->where('sampler_id', $samplerId)->where('activity_date', $date)->exists()) continue;
-                $progress = $this->progress($samplerId, $date);
-                if ($progress['complete'] || $progress['due_date'] !== $day) continue;
+                ->whereNotNull('m.sampler_id')
+                ->select('m.sampler_id', 's.id as tracking_session_id')
+                ->distinct()
+                ->get();
+            foreach ($members as $member) {
+                $samplerId = $member->sampler_id;
+                $sessionId = $member->tracking_session_id;
+                if (!$samplerId || !$sessionId) {
+                    continue;
+                }
+                $exists = DB::table(self::TABLE)
+                    ->where('sampler_id', $samplerId)
+                    ->where('tracking_session_id', $sessionId)
+                    ->exists();
+                if ($exists) {
+                    continue;
+                }
+                $progress = $this->progress($samplerId, $date, $sessionId);
+                if ($progress['complete'] || $progress['due_date'] !== $day) {
+                    continue;
+                }
                 $count += DB::table(self::TABLE)->insertOrIgnore([
-                    'sampler_id' => $samplerId, 'activity_date' => $date, 'is_clear' => 0,
-                    'created_at' => Carbon::now('Asia/Jakarta'), 'updated_at' => Carbon::now('Asia/Jakarta'),
+                    'sampler_id' => $samplerId,
+                    'tracking_session_id' => $sessionId,
+                    'activity_date' => $date,
+                    'is_clear' => 0,
+                    'created_at' => Carbon::now('Asia/Jakarta'),
+                    'updated_at' => Carbon::now('Asia/Jakarta'),
                 ]);
             }
         }
@@ -116,9 +154,10 @@ class SamplerTrackingTroubleService
         $this->ready();
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $troubles = DB::table(self::TABLE)->where('sampler_id', $samplerId)->where('is_clear', 0)
-            ->where('activity_date', '<', $today)->orderBy('activity_date')->get();
+            ->where('activity_date', '<=', $today)->orderBy('activity_date')->get();
         return $troubles->filter(function ($trouble) {
-            $progress = $this->progress($trouble->sampler_id, $trouble->activity_date);
+            $sessionId = $trouble->tracking_session_id ?? null;
+            $progress = $this->progress($trouble->sampler_id, $trouble->activity_date, $sessionId);
             if (!$progress['complete']) return true;
             DB::table(self::TABLE)->where('id', $trouble->id)->where('is_clear', 0)->update([
                 'is_clear' => 1, 'cleared_at' => Carbon::now('Asia/Jakarta'), 'updated_at' => Carbon::now('Asia/Jakarta'),
@@ -138,26 +177,32 @@ class SamplerTrackingTroubleService
         return Carbon::parse($activityDate)->toDateString();
     }
 
-    protected function troubleOnDate($troubles, $activityDate)
+    protected function troubleOnDate($troubles, $activityDate, $sessionId = null)
     {
         $target = $this->normalizeActivityDate($activityDate);
 
-        return $troubles->first(function ($trouble) use ($target) {
-            return Carbon::parse($trouble->activity_date)->toDateString() === $target;
+        return $troubles->first(function ($trouble) use ($target, $sessionId) {
+            if (Carbon::parse($trouble->activity_date)->toDateString() !== $target) {
+                return false;
+            }
+            if ($sessionId && !empty($trouble->tracking_session_id)) {
+                return (string) $trouble->tracking_session_id === (string) $sessionId;
+            }
+
+            return true;
         });
     }
 
-    public function assertAllowed($samplerId, $activityDate)
+    public function assertAllowed($samplerId, $activityDate, $sessionId = null)
     {
         $activityDate = $this->normalizeActivityDate($activityDate);
         $troubles = $this->unresolved($samplerId);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         if ($activityDate > $today) throw new HttpException(422, 'Aktivitas hari mendatang belum dapat dijalankan.');
         if ($activityDate < $today) {
-            $trouble = $this->troubleOnDate($troubles, $activityDate);
+            $trouble = $this->troubleOnDate($troubles, $activityDate, $sessionId);
             if ($trouble && $trouble->reopened_by && $trouble->reopened_at) return;
-            // Legitimate multi-day work remains usable until its due date, unless older trouble blocks it.
-            $progress = $this->progress($samplerId, $activityDate);
+            $progress = $this->progress($samplerId, $activityDate, $sessionId);
             if (!$trouble && !$progress['complete'] && $progress['due_date'] >= $today && $troubles->isEmpty()) return;
             throw new HttpException(423, 'Aktivitas hari sebelumnya terkunci. Silakan lapor kepada atasan untuk membuka aktivitas pada tanggal ' . $activityDate . '.');
         }
@@ -171,18 +216,36 @@ class SamplerTrackingTroubleService
         $reopenReason = (string) ($payload['reopen_reason'] ?? '');
         $followUp = (string) ($payload['sampler_follow_up_action'] ?? '');
 
-        return DB::transaction(function () use ($troubleId, $actorId, $note, $reopenReason, $followUp) {
+        return DB::transaction(function () use ($troubleId, $actorId, $note, $reopenReason, $followUp, $payload) {
             $trouble = DB::table(self::TABLE)->where('id', $troubleId)->lockForUpdate()->first();
             if (!$trouble) throw new HttpException(404, 'Data trouble tidak ditemukan.');
-            // The Tracking Sampler menu already determines who can use this
-            // action. Do not additionally hide or lock a trouble based on the
-            // sampler's direct-supervisor snapshot, because that data can be
-            // stale after a team/supervisor change.
             if (!$actorId) throw new HttpException(403, 'Akses tidak diizinkan.');
             if ($trouble->is_clear) throw new HttpException(422, 'Aktivitas ini sudah selesai.');
             if ($trouble->reopened_at) {
                 throw new HttpException(422, 'Activity ini sudah pernah di-unblock.');
             }
+
+            $sessionIds = $this->normalizeSessionIds($payload['session_id'] ?? null, $payload['session_ids'] ?? []);
+            if (empty($sessionIds) && !empty($trouble->tracking_session_id)) {
+                $sessionIds = [(int) $trouble->tracking_session_id];
+            }
+
+            $targetQuery = DB::table(self::TABLE)
+                ->where('is_clear', 0)
+                ->whereNull('reopened_at');
+
+            if (!empty($sessionIds)) {
+                $targetQuery->whereIn('tracking_session_id', $sessionIds);
+            } else {
+                $targetQuery->where('id', $troubleId);
+            }
+
+            $targetIds = $targetQuery->lockForUpdate()->pluck('id')->all();
+
+            if (!in_array((int) $troubleId, array_map('intval', $targetIds), true)) {
+                $targetIds[] = $troubleId;
+            }
+
             $update = [
                 'reopened_by' => $actorId,
                 'reopened_at' => Carbon::now('Asia/Jakarta'),
@@ -197,9 +260,20 @@ class SamplerTrackingTroubleService
                 $update['sampler_follow_up_action'] = $followUp;
             }
 
-            DB::table(self::TABLE)->where('id', $troubleId)->update($update);
+            DB::table(self::TABLE)->whereIn('id', $targetIds)->update($update);
 
             return DB::table(self::TABLE)->where('id', $troubleId)->first();
         });
     }
+
+    protected function normalizeSessionIds($sessionId, $sessionIds)
+    {
+        $ids = is_array($sessionIds) ? $sessionIds : [];
+        if ($sessionId) {
+            $ids[] = $sessionId;
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
+    }
+
 }

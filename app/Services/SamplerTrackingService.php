@@ -456,7 +456,12 @@ class SamplerTrackingService
             // Read only duration metadata for older work, not its full photo/event history.
             $ongoing = SamplerTrackingMember::with('session')->where('is_active', true)->where($memberFilter)
                 ->whereHas('session', function ($query) use ($date) {
-                    $query->where('is_active', true)->whereDate('tanggal_sampling', '<', $date);
+                    $query->where('is_active', true)
+                        ->where(function ($q) {
+                            $q->whereNull('nama_perusahaan')
+                                ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+                        })
+                        ->whereDate('tanggal_sampling', '<', $date);
                 })->get();
             foreach ($ongoing as $member) {
                 if (Carbon::parse($member->session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date) {
@@ -472,6 +477,10 @@ class SamplerTrackingService
             'activeMembers.events.triggeredBy',
         ])
             ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('nama_perusahaan')
+                    ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+            })
             ->whereHas('activeMembers', $memberFilter)
             ->whereIn('tanggal_sampling', array_unique($dates))
             ->orderBy('tanggal_sampling')
@@ -507,7 +516,9 @@ class SamplerTrackingService
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
         $date = $request->input('tanggal') ?: $this->today();
-        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
+        $rows = $this->releaseUnblockedOverdueRows(
+            $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName))
+        );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
 
         $rows = $this->filterByTrackingStatus($rows, $request->input('tracking_status'));
@@ -534,7 +545,9 @@ class SamplerTrackingService
 
     public function listTrackingRows($date = null, $samplerId = null, $samplerName = null, $trackingStatus = null)
     {
-        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
+        $rows = $this->releaseUnblockedOverdueRows(
+            $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName))
+        );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
         $rows = $this->filterByTrackingStatus($rows, $trackingStatus);
 
@@ -544,116 +557,116 @@ class SamplerTrackingService
         ];
     }
 
-    protected function buildTrackingRows($sessions)
-    {
-        $sessionsByMember = collect();
+    // app/Services/SamplerTrackingService.php
 
-        foreach ($sessions as $session) {
-            foreach ($session->activeMembers as $member) {
-                $sampler = $member->sampler_name ?: ($member->sampler_id ?: '-');
-                $memberKey = $member->sampler_id ?: $sampler;
-                $date = $session->tanggal_sampling ?: '-';
-                $key = $date . '|' . $memberKey;
-                // A member row remains useful for its own event history, but
-                // the movement identity shown by the fixing tool must follow
-                // the current session team, not the individual sampler.
-                $teamKey = $session->team_key ?: $key;
+public function buildTrackingRows($sessions)
+{
+    $sessionsByTeam = collect();
 
-                if (!$sessionsByMember->has($key)) {
-                    $sessionsByMember->put($key, [
-                        'group_key' => $teamKey,
-                        'date' => $date,
-                        'sampler' => $sampler,
-                        'member_key' => $memberKey,
-                        'session' => $session,
-                        'member' => $member,
-                        'sessions' => collect(),
-                        'members' => collect(),
-                        'events' => collect(),
-                        'no_orders' => collect(),
-                        'perusahaan' => collect(),
-                        'durations' => collect(),
-                        'duration_values' => collect(),
-                        'movement_groups' => collect(),
-                        'statuses' => collect(),
-                        'jam_mulai' => null,
-                        'jam_selesai' => null,
-                    ]);
-                }
-
-                $item = $sessionsByMember->get($key);
-                $item['sessions']->push($session);
-                $item['members']->push($member);
-                $item['events'] = $item['events']->merge($member->events ?: collect());
-                $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
-                $item['perusahaan']->push($session->nama_perusahaan ?: '-');
-                $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi])));
-                $item['duration_values']->push($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi]));
-                $item['movement_groups']->push($member->current_movement_group ?: '-');
-                $item['statuses']->push($session->status ?: '-');
-
-                if ($session->jam_mulai && (!$item['jam_mulai'] || $session->jam_mulai < $item['jam_mulai'])) {
-                    $item['jam_mulai'] = $session->jam_mulai;
-                }
-
-                if ($session->jam_selesai && (!$item['jam_selesai'] || $session->jam_selesai > $item['jam_selesai'])) {
-                    $item['jam_selesai'] = $session->jam_selesai;
-                }
-
-                $sessionsByMember->put($key, $item);
-            }
+    foreach ($sessions as $session) {
+        if (strtolower(trim($session->nama_perusahaan ?? '')) === 'cuti') {
+            continue;
         }
 
-        return $sessionsByMember->values()->map(function ($row) {
-            $noOrders = $this->uniqueValues($row['no_orders']);
-            $perusahaan = $this->uniqueValues($row['perusahaan']);
-            $durations = $this->uniqueValues($row['durations']);
-            $statuses = $this->uniqueValues($row['statuses']);
-            $movementGroups = $this->uniqueValues($row['movement_groups']);
-            $lastEvent = $this->latestEvent($row['events']);
-            $sampler = $row['sampler'] ?: '-';
-            $durationValue = $row['duration_values']
-                ->map(function ($value) {
-                    return is_numeric($value) ? (int) $value : null;
-                })
-                ->filter(function ($value) {
-                    return $value !== null;
-                })
-                ->max();
+        $date = $session->tanggal_sampling ?: '-';
 
-            return [
-                'row_id' => $row['date'] . '-' . $row['member_key'],
-                'group_key' => $row['group_key'],
-                'session' => $row['session'],
-                'member' => $row['member'],
-                'sessions' => $row['sessions']->values(),
-                'members' => $row['members']->unique('id')->values(),
-                'events' => $row['events']->values(),
-                'tanggal_sampling' => $row['date'],
-                'jam' => ($row['jam_mulai'] ?: '-') . ' - ' . ($row['jam_selesai'] ?: '-'),
-                'jam_mulai' => $row['jam_mulai'],
-                'jam_selesai' => $row['jam_selesai'],
-                'no_order' => count($noOrders) > 0 ? implode(', ', $noOrders) : '-',
-                'perusahaan_list' => $perusahaan,
-                'nama_perusahaan' => count($perusahaan) > 0 ? implode(', ', $perusahaan) : '-',
-                'sampler_list' => [$sampler],
-                'sampler' => $sampler,
-                'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
-                'movement_group' => $this->teamMovementCode($row['date'], $row['group_key']),
-                'internal_movement_groups' => $movementGroups,
-                'total_event' => $row['events']->count(),
-                'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
-                'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
-                'tracking_status' => $this->resolveTrackingStatus(
-                    $row['events'],
-                    $row['date'],
-                    $row['jam_mulai'],
-                    $row['jam_selesai'],
-                    $durationValue
-                ),
-            ];
-        });
+        $teamKey = $session->team_key ?: ($date . '|session-' . $session->id);
+
+        if (!$sessionsByTeam->has($teamKey)) {
+            $sessionsByTeam->put($teamKey, [
+                'group_key' => $teamKey,
+                'date' => $date,
+                'session' => $session,
+                'sessions' => collect(),
+                'members' => collect(),
+                'samplers' => collect(),
+                'events' => collect(),
+                'no_orders' => collect(),
+                'perusahaan' => collect(),
+                'durations' => collect(),
+                'duration_values' => collect(),
+                'movement_groups' => collect(),
+                'statuses' => collect(),
+                'jam_mulai' => null,
+                'jam_selesai' => null,
+            ]);
+        }
+
+        $item = $sessionsByTeam->get($teamKey);
+        $item['sessions']->push($session);
+
+        foreach ($session->activeMembers as $member) {
+            $samplerName = $member->sampler_name ?: ($member->sampler_id ?: '-');
+            $item['members']->push($member);
+            $item['samplers']->push($samplerName);
+            $item['events'] = $item['events']->merge($member->events ?: collect());
+            $item['durations']->push($this->durationLabel($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi])));
+            $item['duration_values']->push($this->firstFilledValue([$member->effective_duration, $member->durasi_personal, $member->duration, $member->durasi]));
+            $item['movement_groups']->push($member->current_movement_group ?: '-');
+        }
+
+        $item['no_orders']->push($session->no_order ?: ($session->no_quotation ?: '-'));
+        $item['perusahaan']->push($session->nama_perusahaan ?: '-');
+        $item['statuses']->push($session->status ?: '-');
+
+        if ($session->jam_mulai && (!$item['jam_mulai'] || $session->jam_mulai < $item['jam_mulai'])) {
+            $item['jam_mulai'] = $session->jam_mulai;
+        }
+
+        if ($session->jam_selesai && (!$item['jam_selesai'] || $session->jam_selesai > $item['jam_selesai'])) {
+            $item['jam_selesai'] = $session->jam_selesai;
+        }
+
+        $sessionsByTeam->put($teamKey, $item);
     }
+
+    // Map output per baris
+    return $sessionsByTeam->values()->map(function ($row) {
+        $noOrders = $this->uniqueValues($row['no_orders']);
+        $perusahaan = $this->uniqueValues($row['perusahaan']);
+        $samplers = $this->uniqueValues($row['samplers']);
+        $durations = $this->uniqueValues($row['durations']);
+        $statuses = $this->uniqueValues($row['statuses']);
+        $movementGroups = $this->uniqueValues($row['movement_groups']);
+        $lastEvent = $this->latestEvent($row['events']);
+
+        return [
+            'row_id' => $row['date'] . '-' . md5($row['group_key']),
+            'group_key' => $row['group_key'],
+            'session' => $row['session'],
+            'member' => $row['members']->first(),
+            'sessions' => $row['sessions']->values(),
+            'members' => $row['members']->unique('id')->values(),
+            'events' => $row['events']->values(),
+            'tanggal_sampling' => $row['date'],
+            'jam' => ($row['jam_mulai'] ?: '-') . ' - ' . ($row['jam_selesai'] ?: '-'),
+            'jam_mulai' => $row['jam_mulai'],
+            'jam_selesai' => $row['jam_selesai'],
+            'no_order' => count($noOrders) > 0 ? implode(', ', $noOrders) : '-',
+            'perusahaan_list' => $perusahaan,
+            'nama_perusahaan' => count($perusahaan) > 0 ? implode(', ', $perusahaan) : '-',
+            'sampler_list' => $samplers,
+            'samplers' => $samplers,
+            'sampler' => count($samplers) > 0 ? implode(', ', $samplers) : '-',
+            'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
+            'movement_group' => $this->teamMovementCode($row['date'], $row['group_key']),
+            'internal_movement_groups' => $movementGroups,
+            'total_event' => $row['events']->count(),
+            'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
+            'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
+            'tracking_status' => $this->resolveTrackingStatus(
+                $row['events'],
+                $row['date'],
+                $row['jam_mulai'],
+                $row['jam_selesai'],
+                $row['duration_values']->max()
+            ),
+        ];
+    })->filter(function ($row) {
+        return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+    })->values();
+}
+
     public function filterTrackingRows($rows, $request)
     {
         $globalSearch = strtolower(trim($request->input('search.value', '')));
@@ -859,6 +872,107 @@ class SamplerTrackingService
         })->values();
     }
 
+    /**
+     * Activity yang sudah di-unblock atasan tidak boleh tetap berstatus overdue.
+     * Pindahkan ke ongoing agar hilang dari tab Data Blocked.
+     */
+    public function releaseUnblockedOverdueRows($rows)
+    {
+        $rows = collect($rows);
+        if ($rows->isEmpty() || !Schema::hasTable(SamplerTrackingTroubleService::TABLE)) {
+            return $rows->values();
+        }
+
+        $samplerIds = $rows->flatMap(function ($row) {
+            return $this->rowSamplerIds($row);
+        })->unique()->values();
+        $dates = $rows->map(function ($row) {
+            return $this->rowActivityDate($row);
+        })->filter()->unique()->values();
+
+        if ($samplerIds->isEmpty() || $dates->isEmpty()) {
+            return $rows->values();
+        }
+
+        $troubles = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->whereIn('sampler_id', $samplerIds)
+            ->whereIn('activity_date', $dates)
+            ->where('is_clear', 0)
+            ->get(['sampler_id', 'activity_date', 'reopened_at']);
+
+        $blocked = [];
+        $unblocked = [];
+        foreach ($troubles as $trouble) {
+            $date = Carbon::parse($trouble->activity_date)->toDateString();
+            $key = (string) $trouble->sampler_id . '|' . $date;
+            if (!empty($trouble->reopened_at)) {
+                $unblocked[$key] = true;
+            } else {
+                $blocked[$key] = true;
+            }
+        }
+
+        if (empty($unblocked)) {
+            return $rows->values();
+        }
+
+        return $rows->map(function ($row) use ($blocked, $unblocked) {
+            if (($row['tracking_status'] ?? null) !== 'overdue') {
+                return $row;
+            }
+
+            $date = $this->rowActivityDate($row);
+            $memberIds = $this->rowSamplerIds($row);
+            if (!$date || $memberIds->isEmpty()) {
+                return $row;
+            }
+
+            $hasBlocked = $memberIds->contains(function ($samplerId) use ($blocked, $date) {
+                return isset($blocked[(string) $samplerId . '|' . $date]);
+            });
+            if ($hasBlocked) {
+                return $row;
+            }
+
+            $hasUnblocked = $memberIds->contains(function ($samplerId) use ($unblocked, $date) {
+                return isset($unblocked[(string) $samplerId . '|' . $date]);
+            });
+            if ($hasUnblocked) {
+                $row['tracking_status'] = 'ongoing';
+            }
+
+            return $row;
+        })->values();
+    }
+
+    protected function rowSamplerIds($row)
+    {
+        return collect($row['members'] ?? [])
+            ->map(function ($member) {
+                return is_object($member) ? ($member->sampler_id ?? null) : ($member['sampler_id'] ?? null);
+            })
+            ->merge([
+                is_object($row['member'] ?? null) ? ($row['member']->sampler_id ?? null) : ($row['member']['sampler_id'] ?? null),
+            ])
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    protected function rowActivityDate($row)
+    {
+        $date = $row['tanggal_sampling'] ?? null;
+        if (!$date || $date === '-') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($date)->toDateString();
+        } catch (\Exception $exception) {
+            return null;
+        }
+    }
+
     protected function trackingStatusCounts($rows)
     {
         $counts = [
@@ -887,25 +1001,16 @@ class SamplerTrackingService
         }
 
         $duration = is_numeric($durationValue) ? (int) $durationValue : null;
-        $start = $this->combineTrackingDateAndTime($date, $jamMulai)
-            ?: $this->firstEventAt($events, 'departure')
-            ?: $date->copy()->startOfDay();
 
         if ($duration === null || $duration <= 1) {
-            $end = $this->combineTrackingDateAndTime($date, $jamSelesai);
+            $end = $this->combineTrackingDateAndTime($date, '23:59:59');
             if ($end) {
                 return $end;
             }
-
-            if ($duration === 1) {
-                return $start->copy()->addHours(8);
-            }
-
-            return $date->copy()->endOfDay();
         }
 
         $endDate = $date->copy()->addDays($duration - 1);
-        $end = $this->combineTrackingDateAndTime($endDate, $jamSelesai);
+        $end = $this->combineTrackingDateAndTime($endDate, '23:59:59');
 
         return $end ?: $endDate->copy()->endOfDay();
     }
@@ -1009,7 +1114,7 @@ class SamplerTrackingService
             ]);
         }
         // Run clearance outside the event transaction: a later validation failure must not undo it.
-        (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling);
+        (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling, $source->sampler_tracking_session_id);
         return DB::transaction(function () use ($payload) {
             $member = SamplerTrackingMember::with('session')
                 ->where('id', $payload['member_id'])
@@ -1051,7 +1156,7 @@ class SamplerTrackingService
                 if (in_array($eventType, ['checkout', 'return'], true) && SamplerTrackingActivity::duration($logical) !== SamplerTrackingActivity::duration($ownActivityMember)) return false;
                 if ((string) $target->sampler_id !== (string) $member->sampler_id) {
                     try {
-                        (new SamplerTrackingTroubleService())->assertAllowed($target->sampler_id, $member->session->tanggal_sampling);
+                        (new SamplerTrackingTroubleService())->assertAllowed($target->sampler_id, $member->session->tanggal_sampling, $target->sampler_tracking_session_id);
                     } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
                         if ($e->getStatusCode() !== 423) throw $e;
                         return false;
