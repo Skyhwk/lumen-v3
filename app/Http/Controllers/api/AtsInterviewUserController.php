@@ -13,6 +13,8 @@ use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
 use App\Services\AtsNotificationService;
 use App\Services\GenerateToken;
+use App\Services\CandidateDocumentAttachmentService;
+use App\Services\GenerateAssessmentDocumentService;
 use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -704,8 +706,7 @@ class AtsInterviewUserController extends Controller
 
     /**
      * Lewati proses User Interview dan pindahkan kandidat ke Final Decision.
-     * Email persetujuan Direktur tidak dikirim otomatis; HRD mengirimkannya
-     * dari modul Final Decision setelah bypass selesai.
+     * Pengiriman email persetujuan Direktur mengikuti alur approval User Interview.
      */
     public function bypassToFinalDecision(Request $request, $id = null)
     {
@@ -742,9 +743,19 @@ class AtsInterviewUserController extends Controller
             ], 422);
         }
 
+        $targetEmail = trim((string) env('EMAIL_DIREKTUR_IBU'));
+        if ($targetEmail === '') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Email Direktur (EMAIL_DIREKTUR_IBU) belum dikonfigurasi.',
+            ], 422);
+        }
+
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
         $description = trim((string) $request->input('description'));
-        if ($description === '') {
+        $plainDescription = preg_replace('/[\s\x{00A0}]+/u', ' ', html_entity_decode(strip_tags($description), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $plainDescription = trim($plainDescription);
+        if ($plainDescription === '') {
             return response()->json([
                 'status' => 422,
                 'message' => 'Keterangan bypass wajib diisi.',
@@ -788,20 +799,70 @@ class AtsInterviewUserController extends Controller
                 'source' => 'user_interview_bypass',
             ];
 
+            $bypass = is_array($applicant->bypass) ? $applicant->bypass : (json_decode($applicant->bypass ?? '{}', true) ?: []);
+            $bypass['user_interview'] = [
+                'description' => $description,
+                'by' => $user,
+                'at' => $now->toDateTimeString(),
+            ];
+
             $applicant->update([
                 'approved_interview_user' => $user,
                 'approved_interview_user_at' => $now,
                 'is_approve_interview_user' => 1,
                 'token_approval' => $token,
                 'status' => 'management_decision',
+                'bypass' => $bypass,
                 'meta_history' => json_encode(array_values($history)),
             ]);
+
+            $assessmentService = app(GenerateAssessmentDocumentService::class);
+            $documentService = app(CandidateDocumentAttachmentService::class);
+            $documents = [];
+
+            try {
+                $assessmentData = $assessmentService->tryGenerateTempAttachments((int) $applicant->id);
+                $documents = $assessmentData['documents'] ?? [];
+                $assessmentAttachments = $assessmentService->mapDocumentsToAttachmentLabels($documents);
+                $candidateDocumentAttachments = $documentService->listAttachmentLabels((int) $applicant->id);
+                $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments((int) $applicant->id);
+                $emailInterview = $interview ?: (object) [
+                    'catatan_interview' => '<i>User Interview dibypass.</i>',
+                ];
+
+                $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
+                    $applicant,
+                    $pr,
+                    $emailInterview,
+                    'approve',
+                    $assessmentAttachments,
+                    $candidateDocumentAttachments
+                );
+
+                $attachments = array_merge(
+                    $assessmentService->buildSendEmailAttachments($documents),
+                    $candidateDocumentSendAttachments
+                );
+
+                $emailQuery = SendEmail::where('to', $targetEmail)
+                    ->where('subject', 'Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap)
+                    ->where('body', $emailContent)
+                    ->noReply();
+
+                if (!empty($attachments)) {
+                    $emailQuery->where('attachment', $attachments);
+                }
+
+                $emailQuery->send();
+            } finally {
+                $assessmentService->cleanupDocuments($documents);
+            }
 
             DB::commit();
 
             return response()->json([
                 'status' => 200,
-                'message' => 'User Interview berhasil dibypass. Kandidat siap dikirim ke Final Decision.',
+                'message' => 'User Interview berhasil dibypass dan email Final Decision telah dikirim.',
                 'data' => $applicant->fresh(),
             ], 200);
         } catch (\Throwable $e) {
