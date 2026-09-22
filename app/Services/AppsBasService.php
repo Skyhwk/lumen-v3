@@ -1339,7 +1339,7 @@ class AppsBasService
                 $documents[$documentKey]['email_sent_at'] = Carbon::now()->format('Y-m-d H:i:s');
                 $persiapanHeader->detail_bas_documents = json_encode($documents);
                 if ($persiapanHeader) {
-                    $persiapanHeader->is_emailed_bas = count(array_filter($documents, fn($doc) => !empty($doc['email_pending']))) === 0 ? 1 : 0;
+                    $persiapanHeader->is_emailed_bas = 1;
                     $persiapanHeader->emailed_bas_at = \Carbon\Carbon::now();
                     $persiapanHeader->save();
 
