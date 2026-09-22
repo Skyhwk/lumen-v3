@@ -599,7 +599,7 @@ class SamplerTrackingController extends Controller
         }
 
         try {
-            (new SamplerTrackingTroubleService())->collect($deadline);
+            return true;
         } catch (\Throwable $exception) {
             return;
         }
