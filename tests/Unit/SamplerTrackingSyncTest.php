@@ -525,6 +525,36 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(4, SamplerTrackingSession::count());
     }
 
+    public function testTrackingSummarySeparatesTeamMembersByEffectiveDuration(): void
+    {
+        $this->schedule(['sampler' => 'Satrio', 'userid' => 10, 'durasi' => 1]);
+        $this->schedule(['sampler' => 'Hafizh', 'userid' => 20, 'durasi' => 2]);
+        $this->schedule(['sampler' => 'Marcellius', 'userid' => 30, 'durasi' => 2]);
+        $session = $this->prepare('2026-09-17')->first();
+        $satrio = $session->activeMembers()->where('sampler_name', 'Satrio')->firstOrFail();
+
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $satrio->id,
+            'event_type' => 'return',
+            'event_at' => '2026-09-17 18:00:00',
+        ]);
+
+        $rows = $this->service->buildTrackingRows(
+            SamplerTrackingSession::with('activeMembers.events')->where('id', $session->id)->get()
+        );
+
+        $this->assertCount(2, $rows);
+        $short = $rows->firstWhere('sampler', 'Satrio');
+        $long = $rows->firstWhere('sampler', 'Hafizh, Marcellius');
+        $this->assertSame('8 Jam', $short['durasi']);
+        $this->assertSame('completed', $short['tracking_status']);
+        $this->assertSame('1 x 24 Jam', $long['durasi']);
+        $this->assertSame('ongoing', $long['tracking_status']);
+        $this->assertCount(1, $short['members']);
+        $this->assertCount(2, $long['members']);
+    }
+
 
     public function testJourneyDepartureReferenceRespectsSamplerReturnAndCheckinTime(): void
     {
