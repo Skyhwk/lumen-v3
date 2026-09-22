@@ -827,4 +827,53 @@ class SamplerTrackingSyncTest extends TestCase
         $eko = $session->activeMembers()->where('sampler_name', 'Eko')->firstOrFail();
         $this->assertSame(['checkin'], $eko->events()->pluck('event_type')->all());
     }
+
+    public function testOvernightAssignmentKeepsCheckoutNotDepartureAfterDayChange(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-21 10:00:00', 'Asia/Jakarta'));
+        $short = SamplerTrackingSession::create([
+            'team_key' => 'short-pt', 'tanggal_sampling' => '2026-09-21',
+            'nama_perusahaan' => 'PT Sesaat', 'jam_mulai' => '08:00:00', 'is_active' => true,
+        ]);
+        $overnight = SamplerTrackingSession::create([
+            'team_key' => 'overnight-pt', 'tanggal_sampling' => '2026-09-21',
+            'nama_perusahaan' => 'RS ANANDA BEKASI', 'jam_mulai' => '10:00:00',
+            'durasi' => 2, 'is_active' => true,
+        ]);
+        $shortMember = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $short->id, 'sampler_id' => 10,
+            'sampler_name' => 'Asep', 'effective_duration' => 0, 'is_active' => true,
+        ]);
+        $overnightMember = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $overnight->id, 'sampler_id' => 10,
+            'sampler_name' => 'Asep', 'effective_duration' => 2, 'is_active' => true,
+        ]);
+        $connection = $this->db->getConnection('mysql');
+        foreach (['departure', 'checkin', 'checkout'] as $type) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $short->id,
+                'sampler_tracking_member_id' => $shortMember->id,
+                'event_type' => $type, 'event_at' => '2026-09-21 08:30:00',
+            ]);
+        }
+        $connection->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $overnight->id,
+            'sampler_tracking_member_id' => $overnightMember->id,
+            'event_type' => 'checkin', 'event_at' => '2026-09-21 10:30:00',
+        ]);
+
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-22 09:00:00', 'Asia/Jakarta'));
+        $journey = $this->service->activeJourney(10, 'Asep', '2026-09-22');
+        $this->assertSame('2026-09-21', $journey['date']);
+        $this->assertEquals([$overnight->id], $journey['session_ids']);
+
+        $sessions = $this->service->listByDate($journey['date'], 10, 'Asep', $journey['session_ids']);
+        $sessions = $this->service->inheritDailyDeparture($sessions, 10);
+        $member = $sessions->first()->activeMembers->first(function ($item) {
+            return (string) $item->sampler_id === '10';
+        });
+        $this->assertTrue(\App\Services\SamplerTrackingActivity::hasEvent($member, 'departure'));
+        $this->assertTrue(\App\Services\SamplerTrackingActivity::hasEvent($member, 'checkin'));
+        $this->assertSame('checkout', $this->service->nextActionForMember($member));
+    }
 }

@@ -38,17 +38,18 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $troubleService = new \App\Services\SamplerTrackingTroubleService();
         $troubles = $troubleService->unresolved($samplerId);
-        // The device/legacy request date is not authoritative, including before 07:00 WIB.
         $recovery = $troubles->first(function ($trouble) {
             return $trouble->reopened_by && $trouble->reopened_at;
         });
-        $date = $recovery ? $recovery->activity_date : $today;
-        $data = $this->service->listByDate(
-            $date,
-            $samplerId,
-            $samplerName,
-            $recovery ? [$recovery->tracking_session_id] : null
-        );
+        $journey = $recovery ? null : $this->service->activeJourney($samplerId, $samplerName, $today);
+        $date = $recovery
+            ? Carbon::parse($recovery->activity_date)->toDateString()
+            : ($journey ? $journey['date'] : $today);
+        $sessionIds = $recovery
+            ? [$recovery->tracking_session_id]
+            : ($journey ? $journey['session_ids'] : null);
+        $data = $this->service->listByDate($date, $samplerId, $samplerName, $sessionIds);
+        $data = $this->service->inheritDailyDeparture($data, $samplerId);
 
         // Aktivitas yang bisa dijalankan dari Apps FDL hanya milik sampler
         // yang sedang login. Informasi anggota tim tetap dikirim terpisah agar
@@ -67,6 +68,10 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
 
             $session->setRelation('teamMembers', $teamMembers);
             $session->setRelation('activeMembers', $ownMembers);
+            $session->next_action = $this->service->nextActionForMember($ownMembers->first());
+            $ownMembers->each(function ($member) use ($session) {
+                $member->next_action = $session->next_action;
+            });
         });
 
         return response()->json([
@@ -74,9 +79,10 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             'data' => $data,
             'activity_date' => $date,
             'server_today' => $today,
-            'is_recovery' => $date !== $today,
+            'is_recovery' => (bool) $recovery,
+            'is_ongoing' => !$recovery && !empty($journey),
             'troubles' => $troubles,
-            'blocked' => $date === $today && $troubles->isNotEmpty(),
+            'blocked' => !$recovery && $troubles->isNotEmpty(),
             'blocked_message' => $troubles->isNotEmpty() ? $troubleService->message($troubles) : null,
             'can_preview_sampler' => (int) $this->user_id === self::PREVIEWER_USER_ID,
             'is_preview' => $isPreview,

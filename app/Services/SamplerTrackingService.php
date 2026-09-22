@@ -500,6 +500,160 @@ class SamplerTrackingService
                 });
             })->values();
     }
+
+    public function activeJourney($samplerId, $samplerName = null, $today = null)
+    {
+        $today = $today ?: $this->today();
+        $members = SamplerTrackingMember::with(['session', 'events'])
+            ->where('is_active', true)
+            ->where(function ($query) use ($samplerId, $samplerName) {
+                if ($samplerId) {
+                    $query->where('sampler_id', $samplerId);
+                    return;
+                }
+                $query->where('sampler_name', $samplerName);
+            })
+            ->whereHas('session', function ($query) use ($today) {
+                $query->where('is_active', true)
+                    ->whereDate('tanggal_sampling', '<=', $today)
+                    ->where(function ($q) {
+                        $q->whereNull('nama_perusahaan')
+                            ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+                    });
+            })
+            ->get()
+            ->filter(function ($member) use ($today) {
+                $session = $member->session;
+                if (!$session) {
+                    return false;
+                }
+                $due = Carbon::parse($session->tanggal_sampling)
+                    ->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))
+                    ->toDateString();
+                if ($due < $today) {
+                    return false;
+                }
+                $started = SamplerTrackingActivity::hasEvent($member, 'departure')
+                    || SamplerTrackingActivity::hasEvent($member, 'checkin');
+
+                return $started && !SamplerTrackingActivity::hasEvent($member, 'return');
+            })
+            ->values();
+
+        if ($members->isEmpty()) {
+            return null;
+        }
+
+        $date = $members->min(function ($member) {
+            return Carbon::parse($member->session->tanggal_sampling)->toDateString();
+        });
+        $sessionIds = $members->filter(function ($member) use ($date) {
+            return Carbon::parse($member->session->tanggal_sampling)->toDateString() === $date;
+        })
+            ->pluck('sampler_tracking_session_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        return [
+            'date' => $date,
+            'session_ids' => $sessionIds,
+        ];
+    }
+
+    public function inheritDailyDeparture($sessions, $samplerId = null)
+    {
+        $sessions = collect($sessions);
+        if ($sessions->isEmpty() || !$samplerId) {
+            return $sessions->values();
+        }
+
+        foreach ($sessions as $session) {
+            $date = $session->tanggal_sampling
+                ? Carbon::parse($session->tanggal_sampling)->toDateString()
+                : null;
+            if (!$date) {
+                continue;
+            }
+            $source = $this->dailyDepartureEvent($samplerId, $date);
+            if (!$source) {
+                continue;
+            }
+            foreach ($session->activeMembers as $member) {
+                if ((string) $member->sampler_id !== (string) $samplerId) {
+                    continue;
+                }
+                if (SamplerTrackingActivity::hasEvent($member, 'departure')) {
+                    continue;
+                }
+                $inherited = $source->replicate();
+                $inherited->id = $source->id;
+                $inherited->sampler_tracking_member_id = $member->id;
+                $inherited->sampler_tracking_session_id = $member->sampler_tracking_session_id;
+                $inherited->exists = true;
+                $events = $member->relationLoaded('events') ? $member->events : $member->events()->get();
+                $member->setRelation('events', $events->prepend($inherited)->values());
+            }
+        }
+
+        return $sessions->values();
+    }
+
+    protected function dailyDepartureEvent($samplerId, $date)
+    {
+        $own = SamplerTrackingEvent::where('event_type', 'departure')
+            ->whereHas('member', function ($query) use ($samplerId, $date) {
+                $query->where('is_active', true)
+                    ->where('sampler_id', $samplerId)
+                    ->whereHas('session', function ($sessionQuery) use ($date) {
+                        $sessionQuery->where('is_active', true)
+                            ->whereDate('tanggal_sampling', $date);
+                    });
+            })
+            ->orderBy('event_at')
+            ->orderBy('id')
+            ->first();
+        if ($own) {
+            return $own;
+        }
+
+        return SamplerTrackingEvent::where('event_type', 'departure')
+            ->whereHas('member', function ($query) use ($date) {
+                $query->where('is_active', true)
+                    ->whereHas('session', function ($sessionQuery) use ($date) {
+                        $sessionQuery->where('is_active', true)
+                            ->whereDate('tanggal_sampling', $date);
+                    });
+            })
+            ->whereHas('member.session.activeMembers', function ($query) use ($samplerId) {
+                $query->where('is_active', true)->where('sampler_id', $samplerId);
+            })
+            ->orderBy('event_at')
+            ->orderBy('id')
+            ->first();
+    }
+
+    public function nextActionForMember($member)
+    {
+        if (!$member) {
+            return 'departure';
+        }
+        if (!SamplerTrackingActivity::hasEvent($member, 'departure')) {
+            return 'departure';
+        }
+        if (!SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+            return 'checkin';
+        }
+        if (!SamplerTrackingActivity::hasEvent($member, 'checkout')) {
+            return 'checkout';
+        }
+        if (!SamplerTrackingActivity::hasEvent($member, 'return')) {
+            return 'return';
+        }
+
+        return null;
+    }
+
     public function consolidateActivities($sessions)
     {
         if ($sessions->isEmpty()) return $sessions;
