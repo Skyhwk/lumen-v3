@@ -16,8 +16,8 @@ class IzinController extends Controller
     {
         $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('PR-', pr.id) as id"),
                 'pr.no_document',
@@ -66,8 +66,8 @@ class IzinController extends Controller
 
         $leaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('LR-', lr.id) as id"),
                 'lr.no_document',
@@ -123,8 +123,8 @@ class IzinController extends Controller
     {
          $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('PR-', pr.id) as id"),
                 'pr.no_document',
@@ -169,8 +169,8 @@ class IzinController extends Controller
 
         $leaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('LR-', lr.id) as id"),
                 'lr.no_document',
@@ -224,7 +224,7 @@ class IzinController extends Controller
 
         $onProgressPermissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
             ->whereNull('pr.rejected_atasan_by')
             ->whereNull('pr.rejected_hrd_by')
             ->where('pr.status', 'Approved Atasan')
@@ -239,7 +239,7 @@ class IzinController extends Controller
 
         $onProgressLeaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
             ->whereNull('lr.rejected_atasan_by')
             ->whereNull('lr.rejected_hrd_by')
             ->where('lr.status', 'Approved Atasan')

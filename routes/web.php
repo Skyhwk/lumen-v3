@@ -131,5 +131,17 @@ $router->get('/cs_tickets/conversation/{file}', 'CsTicketAssetController@show');
 $router->get('/r/{key}', 'external\RedirectLinkHandler@redirect');
 $router->get('/redirect/{key}', 'external\RedirectLinkHandler@redirect');
 
+$router->group(['prefix' => 'api/private/assessment', 'middleware' => ['cors']], function () use ($router) {
+    $router->post('overview', 'api\PenyesuaianGajiAssessmentPublicController@overview');
+    $router->post('start', 'api\PenyesuaianGajiAssessmentPublicController@start');
+    $router->post('state', 'api\PenyesuaianGajiAssessmentPublicController@state');
+    $router->post('answer', 'api\PenyesuaianGajiAssessmentPublicController@answer');
+});
+
+$router->group(['prefix' => 'api/private/decision', 'middleware' => ['cors']], function () use ($router) {
+    $router->post('overview', 'api\PenyesuaianGajiApprovalPublicController@overview');
+    $router->post('decide', 'api\PenyesuaianGajiApprovalPublicController@decide');
+});
+
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);

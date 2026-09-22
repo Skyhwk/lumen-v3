@@ -28,8 +28,8 @@ class PermohonanCutiController extends Controller
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
 
         $query = LeaveRequest::on('intilab_apps')
-            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
             ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
             ->select(
                 'leave_requests.id',
@@ -114,8 +114,8 @@ class PermohonanCutiController extends Controller
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
 
         $query = LeaveRequest::on('intilab_apps')
-            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
             ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
             ->select(
                 'leave_requests.id',
@@ -391,7 +391,7 @@ class PermohonanCutiController extends Controller
     public function getSpecialLeaveTypes()
     {
         try {
-            $types = DB::connection('intilab_apps')->table('special_leave_types')->where('is_active', 1)->get();
+            $types = DB::connection('mysql')->table('special_leave_types')->where('is_active', 1)->get();
             return response()->json([
                 'success' => true,
                 'data' => $types
