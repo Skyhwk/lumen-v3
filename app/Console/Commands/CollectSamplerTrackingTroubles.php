@@ -9,8 +9,8 @@ use Illuminate\Console\Command;
 
 class CollectSamplerTrackingTroubles extends Command
 {
-    protected $signature = 'sampler-tracking:collect-troubles {--date= : Tanggal deadline (YYYY-MM-DD), default kemarin (WIB)} {--sampler-id=* : Batasi ke sampler ID tertentu} {--sync-today : Sinkron activity hari ini sebelum collect trouble}';
-    protected $description = 'Catat activity sampler yang belum selesai (trouble). Activity sebelum SAMPLER_TRACKING_TROUBLE_START_DATE tidak diproses.';
+    protected $signature = 'activitysamplertrouble {--date= : Batas akhir deadline (YYYY-MM-DD), default kemarin (WIB)} {--sampler-id=* : Batasi ke sampler ID tertentu} {--sync-today : Sinkron activity hari ini sebelum collect trouble}';
+    protected $description = 'Catat activity belum selesai dengan deadline sampai tanggal target. Batas awal SAMPLER_TRACKING_TROUBLE_START_DATE, paling awal 2026-09-21.';
 
     public function handle(SamplerTrackingTroubleService $service, SamplerTrackingService $trackingService)
     {
@@ -42,7 +42,7 @@ class CollectSamplerTrackingTroubles extends Command
                 return 1;
             }
         }
-        $this->line("Deadline trouble: {$date} | Activity dari {$startDate} s/d {$date}.");
+        $this->line("Deadline trouble sampai: {$date} | Activity dari {$startDate} s/d {$date}.");
         $this->info('Trouble baru: ' . $service->collect($date, $samplerIds));
         return 0;
     }

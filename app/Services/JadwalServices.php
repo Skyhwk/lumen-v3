@@ -501,6 +501,7 @@ class JadwalServices
         DB::beginTransaction();
         try {
             $tracking = app(SamplerTrackingService::class);
+            $tracking->syncQuotation($dataUpdate->no_quotation);
             $trackingBefore = $tracking->snapshotSchedules($dataUpdate->no_quotation);
             $jadw = Jadwal::where('id', $dataUpdate->jadwal_id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataUpdate->jadwal_id)->where('id', '!=', $dataUpdate->jadwal_id)->where('is_active', true)->get();
@@ -893,6 +894,7 @@ class JadwalServices
         DB::beginTransaction();
         try {
             $tracking = app(SamplerTrackingService::class);
+            $tracking->syncQuotation($dataUpdate->no_quotation);
             $trackingBefore = $tracking->snapshotSchedules($dataUpdate->no_quotation);
             try {
                 $jadw = Jadwal::where('id', $dataUpdate->jadwal_id)->whereNull('parsial')->where('is_active', true)->first();
