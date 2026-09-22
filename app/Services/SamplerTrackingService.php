@@ -229,100 +229,11 @@ class SamplerTrackingService
                 throw ValidationException::withMessages(['jadwal' => ['Revisi QT memiliki beberapa kandidat activity. Riwayat tidak dipindahkan.']]);
             }
             $target = $candidates->first()->first();
-            $targetKey = $this->makeTeamKey($target);
-            $currentSession = SamplerTrackingSession::where('team_key', $targetKey)
-                ->lockForUpdate()
-                ->first();
-
-            if ($currentSession && $currentSession->id !== $session->id) {
-                // The newer QT already has an activity. It remains canonical;
-                // the previous QT can only fill milestones missing on it.
-                $this->mergeRevisionEventsIntoCurrentSession($session, $currentSession);
-                $this->archiveSupersededRevisionSession($session, $targetKey);
-                $revised[] = $target->no_quotation;
-                continue;
-            }
-
-            $this->rekeySessions([$session->team_key => $targetKey]);
+            $this->rekeySessions([$session->team_key => $this->makeTeamKey($target)]);
             SamplerTrackingSession::where('id', $session->id)->update(['no_quotation' => $target->no_quotation]);
             $revised[] = $target->no_quotation;
         }
         return array_values(array_unique($revised));
-    }
-
-    /**
-     * Keep the newer QT as the only current activity. Historical events are
-     * copied only when the same sampler has not recorded that event on it.
-     */
-    protected function mergeRevisionEventsIntoCurrentSession($previousSession, $currentSession): void
-    {
-        $previousMembers = $previousSession->members()->with('events')->get()
-            ->keyBy(function ($member) {
-                return SamplerTrackingActivity::samplerKey($member);
-            });
-        $currentMembers = $currentSession->activeMembers()->with('events')->get();
-        $eventModel = new SamplerTrackingEvent();
-
-        foreach ($currentMembers as $currentMember) {
-            $previousMember = $previousMembers->get(SamplerTrackingActivity::samplerKey($currentMember));
-            if (!$previousMember || $previousMember->events->isEmpty()) {
-                continue;
-            }
-
-            $existingTypes = $currentMember->events->pluck('event_type')->filter()->unique()->all();
-            $missingEvents = $previousMember->events
-                ->sortBy('id')
-                ->sortBy('event_at')
-                ->sortBy('is_auto')
-                ->groupBy('event_type')
-                ->map(function ($events) {
-                    return $events->first();
-                })
-                ->reject(function ($event) use ($existingTypes, $previousMember, $currentMember) {
-                    return in_array($event->event_type, $existingTypes, true)
-                        || !$this->canInheritTeamEvent(
-                            $event->event_type,
-                            $previousMember->effective_duration,
-                            $currentMember->effective_duration
-                        );
-                });
-
-            foreach ($missingEvents as $event) {
-                SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
-                    'sampler_tracking_session_id' => $currentSession->id,
-                    'sampler_tracking_member_id' => $currentMember->id,
-                    'triggered_by_member_id' => $currentMember->id,
-                    'event_type' => $event->event_type,
-                    'movement_group' => $currentMember->current_movement_group ?: $event->movement_group,
-                    'latitude' => $event->latitude,
-                    'longitude' => $event->longitude,
-                    'photo' => $event->photo,
-                    'photos' => $event->photos,
-                    'note' => $this->inheritedTeamEventNote(
-                        $event,
-                        'Pelengkap dari activity QT revisi sebelumnya (session #' . $previousSession->id . ')'
-                    ),
-                    'vehicle_plate' => $event->vehicle_plate,
-                    'bas_not_completed' => $event->bas_not_completed,
-                    'bas_forced_checkout' => $event->bas_forced_checkout,
-                    'bas_warning_message' => $event->bas_warning_message,
-                    'is_auto' => true,
-                    'sequence_no' => $this->nextSequence($currentMember->id),
-                    'event_at' => $event->event_at,
-                ]));
-            }
-        }
-    }
-
-    /** Archive the old revision so future syncs only use the current QT. */
-    protected function archiveSupersededRevisionSession($session, string $currentTeamKey): void
-    {
-        $session->team_key = sha1('superseded-revision|' . $session->id . '|' . $currentTeamKey);
-        $session->is_active = false;
-        $session->save();
-
-        SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)
-            ->update($this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]));
     }
 
     /** Call inside the schedule edit transaction, using its pre-edit snapshot. */
@@ -636,8 +547,8 @@ class SamplerTrackingService
             }
         }
 
-        // Keep every STPS/session as its own stop, even when the customer, date, and team match.
-        return $this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName)
+        // Consolidate first so shorter orders at the same stop are not dropped during multi-day work.
+        return $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
             ->filter(function ($session) use ($date, $samplerId, $samplerName) {
                 if ($session->tanggal_sampling === $date) return true;
                 return $session->activeMembers->contains(function ($member) use ($session, $date, $samplerId, $samplerName) {
@@ -744,8 +655,15 @@ public function buildTrackingRows($sessions)
 
         $date = $session->tanggal_sampling ?: '-';
 
-        // One tracking row represents one source STPS/session.
-        $teamKey = $date . '|session-' . $session->id;
+        // Display one daily route per member set; retain each source session below.
+        $memberKeys = $session->activeMembers->map(function ($member) {
+            return $member->sampler_id
+                ? 'id:' . $member->sampler_id
+                : 'name:' . mb_strtolower(trim((string) $member->sampler_name));
+        })->unique()->sort()->values()->all();
+        $teamKey = $memberKeys
+            ? json_encode([$date, $memberKeys])
+            : ($date . '|session-' . $session->id);
 
         if (!$sessionsByTeam->has($teamKey)) {
             $sessionsByTeam->put($teamKey, [
