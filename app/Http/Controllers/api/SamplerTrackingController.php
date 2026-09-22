@@ -8,6 +8,7 @@ use App\Services\SamplerTrackingTroubleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class SamplerTrackingController extends Controller
 {
@@ -92,7 +93,16 @@ class SamplerTrackingController extends Controller
 
     public function sync(Request $request)
     {
-        $sessions = $this->service->sync($request->tanggal);
+        try {
+            $sessions = $this->service->sync($request->tanggal);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+
+            return response()->json([
+                'message' => collect($errors)->flatten()->first() ?: 'Sync tracking sampler gagal karena data jadwal tidak valid.',
+                'errors' => $errors,
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,

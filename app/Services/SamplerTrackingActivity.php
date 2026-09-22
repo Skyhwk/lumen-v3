@@ -6,36 +6,11 @@ use Carbon\Carbon;
 
 class SamplerTrackingActivity
 {
-    // A logical stop retains all source sessions/orders and all historical events.
-    // No schedule, member or event is deleted by consolidation.
+    // Each source session/STPS remains one logical stop. No schedule, member,
+    // or event is deleted or merged with another STPS.
     public static function consolidate($sessions, array $customers)
     {
-        return $sessions->groupBy(function ($session) use ($customers) {
-            $customer = $customers[$session->id] ?? null;
-            if (!$customer) return 'session:' . $session->id;
-            $team = $session->activeMembers->map(function ($member) {
-                return self::samplerKey($member);
-            })->unique()->sort()->values()->all();
-            return json_encode([$session->tanggal_sampling, (string) $customer, $team]);
-        })->map(function ($group) {
-            $stop = clone $group->first();
-            $stop->activity_session_ids = $group->pluck('id')->values()->all();
-            $stop->activity_orders = $group->pluck('no_order')->filter()->unique()->values()->all();
-            $stop->no_order = implode(', ', $stop->activity_orders);
-            $members = $group->flatMap(function ($session) { return $session->activeMembers; });
-            $stop->setRelation('activeMembers', $members->groupBy(function ($member) {
-                return self::samplerKey($member);
-            })->map(function ($sameSampler) {
-                $member = clone $sameSampler->first();
-                $member->activity_member_ids = $sameSampler->pluck('id')->values()->all();
-                $member->effective_duration = $sameSampler->max(function ($item) { return self::duration($item); });
-                $member->setRelation('events', $sameSampler->flatMap(function ($item) {
-                    return $item->events;
-                })->unique('id')->sortBy('event_at')->values());
-                return $member;
-            })->values());
-            return $stop;
-        })->values();
+        return $sessions->values();
     }
 
     public static function samplerKey($member)
