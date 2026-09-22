@@ -1108,12 +1108,27 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Data interview user tidak ditemukan'], 404);
             }
 
+            $notes = trim((string) $request->catatan_interview_user);
+            $plain = trim(html_entity_decode(strip_tags($notes)));
+            if ($plain === '') {
+                return response()->json(['message' => 'Catatan interview user wajib diisi.'], 422);
+            }
+
             $interview->update([
-                'catatan_interview' => $request->catatan_interview_user
+                'catatan_interview' => $request->catatan_interview_user,
+                'updated_by' => $this->getEffectiveKaryawanName(),
             ]);
+            $interview->refresh();
 
             DB::commit();
-            return response()->json(['message' => 'Berhasil menyimpan catatan interview user!']);
+            return response()->json([
+                'message' => 'Berhasil menyimpan catatan interview user!',
+                'data' => [
+                    'catatan_interview' => $interview->catatan_interview,
+                    'updated_by' => $interview->updated_by,
+                    'updated_at' => $interview->updated_at,
+                ],
+            ]);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
