@@ -711,8 +711,7 @@ class AtsInterviewUserController extends Controller
     public function bypassToFinalDecision(Request $request, $id = null)
     {
         $allowedGrades = ['MANAGER', 'DIREKSI', 'DIREKTUR'];
-        $isBypassTester = (int) $this->user_id === 601;
-        if (!$isBypassTester && !in_array(strtoupper(trim((string) $this->grade)), $allowedGrades, true)) {
+        if (!in_array(strtoupper(trim((string) $this->grade)), $allowedGrades, true)) {
             return response()->json([
                 'status' => 403,
                 'message' => 'Bypass User Interview hanya dapat dilakukan oleh Manager atau Direksi.',

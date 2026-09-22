@@ -845,7 +845,7 @@ class AtsInterviewHrdController extends Controller
 
     protected function canPerformHrdInterviewBypass(): bool
     {
-        return (int) $this->user_id === 601 || $this->isElevatedGradeForHrdInterviewBypass();
+        return $this->isElevatedGradeForHrdInterviewBypass();
     }
 
     protected function isItProgrammingDivisionName(string $name): bool
