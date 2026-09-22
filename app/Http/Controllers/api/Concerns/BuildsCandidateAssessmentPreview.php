@@ -715,6 +715,7 @@ trait BuildsCandidateAssessmentPreview
             'applied_at' => $candidate->created_at,
             'updated_at' => $candidate->updated_at,
             'meta_history' => $this->decodeMetaHistory($candidate->meta_history),
+            'bypass' => $this->decodeCandidateBypass($candidate->bypass ?? null),
             'assessment' => $this->buildAssessmentProgress($candidate->id),
             'hrd_interview' => $this->formatHrdInterviewSummary($candidate),
             'user_interview' => $this->formatUserInterviewSummary($candidate),
@@ -727,6 +728,15 @@ trait BuildsCandidateAssessmentPreview
             'has_completed_profile' => $this->candidateHasCompletedProfile($candidate->id),
             'attachments' => $this->formatCandidateAttachments($candidate->id),
         ];
+    }
+
+    protected function decodeCandidateBypass($bypass): array
+    {
+        if (is_array($bypass)) {
+            return $bypass;
+        }
+
+        return json_decode((string) $bypass, true) ?: [];
     }
 
     protected function candidateHasCompletedProfile($candidateId): bool

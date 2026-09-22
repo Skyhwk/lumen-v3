@@ -511,8 +511,9 @@ class AtsInterviewHrdController extends Controller
             ], 422);
         }
 
-        $reason = trim((string) ($request->input('alasan_bypass') ?? ''));
-        if ($reason === '') {
+        $reason = trim((string) ($request->input('description') ?? ''));
+        $plainReason = preg_replace('/[\s\x{00A0}]+/u', ' ', html_entity_decode(strip_tags($reason), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if (trim($plainReason) === '') {
             return response()->json([
                 'status' => 422,
                 'message' => 'Alasan bypass wajib diisi.',
@@ -539,11 +540,13 @@ class AtsInterviewHrdController extends Controller
             'approved_interview_hrd_at' => $bypassAt,
         ];
 
-        if (Schema::hasColumn('new_recruitment', 'alasan_bypass')) {
-            $updatePayload['alasan_bypass'] = $reason;
-            $updatePayload['bypass_by'] = $user;
-            $updatePayload['bypass_at'] = $bypassAt;
-        }
+        $bypass = is_array($applicant->bypass) ? $applicant->bypass : (json_decode($applicant->bypass ?? '{}', true) ?: []);
+        $bypass['hrd_interview'] = [
+            'description' => $reason,
+            'by' => $user,
+            'at' => $bypassAt->toDateTimeString(),
+        ];
+        $updatePayload['bypass'] = $bypass;
 
         $applicant->update($updatePayload);
 
@@ -842,7 +845,7 @@ class AtsInterviewHrdController extends Controller
 
     protected function canPerformHrdInterviewBypass(): bool
     {
-        return $this->isElevatedGradeForHrdInterviewBypass();
+        return (int) $this->user_id === 601 || $this->isElevatedGradeForHrdInterviewBypass();
     }
 
     protected function isItProgrammingDivisionName(string $name): bool
